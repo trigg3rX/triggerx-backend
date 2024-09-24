@@ -35,14 +35,17 @@ function scheduleJob(job) {
     const intervalInSeconds = Number(timeInterval);
     const timeframeInSeconds = Number(timeframe);
 
-    if (intervalInSeconds < 60) {
-        console.warn(`Job ${jobId} has an interval less than 1 minute. Setting to 1 minute.`);
+    if (intervalInSeconds < 10) {
+        console.warn(`Job ${jobId} has an interval less than 10 seconds. Setting to 10 seconds.`);
     }
 
-    const cronExpression = `*/${Math.max(1, Math.floor(intervalInSeconds / 60))} * * * *`;
+    const cronExpression = `*/${Math.max(10, intervalInSeconds)} * * * * *`; // Use seconds granularity
 
     const task = cron.schedule(cronExpression, () => {
         sendJobToKeeper(job);
+    }, {
+        scheduled: true,
+        timezone: "UTC" // optional: set timezone if necessary
     });
 
     // Schedule job termination
@@ -56,10 +59,25 @@ function scheduleJob(job) {
     console.log(`Job ${jobId} scheduled with cron: ${cronExpression}`);
 }
 
+
+function convertBigIntToString(obj) {
+    if (typeof obj === 'bigint') {
+        return obj.toString();
+    } else if (Array.isArray(obj)) {
+        return obj.map(convertBigIntToString);
+    } else if (typeof obj === 'object' && obj !== null) {
+        return Object.fromEntries(
+            Object.entries(obj).map(([key, value]) => [key, convertBigIntToString(value)])
+        );
+    }
+    return obj;
+}
+
 // Function to send a job to the keeper
 async function sendJobToKeeper(job) {
     const keeperUrl = `http://localhost:${keeperPort}/execute-task`;
-    const taskData = {
+
+    const taskData = convertBigIntToString({
         jobId: job.jobId.toString(),
         jobType: job.jobType,
         contractAddress: job.contract_add,
@@ -67,9 +85,9 @@ async function sendJobToKeeper(job) {
         argType: job.argType, 
         argumentInfo: {
             type: job.argType, 
-            details: "Placeholder for argument details" 
+            details: "Placeholder for argument details"
         }
-    };
+    });
 
     try {
         const response = await axios.post(keeperUrl, taskData);
@@ -78,7 +96,6 @@ async function sendJobToKeeper(job) {
         console.error('Error sending task to keeper:', error.message);
     }
 }
-
 // Function to process a new job
 async function processJob(jobId) {
     try {
@@ -114,20 +131,6 @@ app.get('/process-job/:jobId', async (req, res) => {
 // Start the server
 app.listen(port, () => {
     console.log(`Job keeper backend listening at http://localhost:${port}`);
-});
-
-// Keeper service (for demonstration purposes)
-const keeperApp = express();
-keeperApp.use(express.json());
-
-keeperApp.post('/execute-task', (req, res) => {
-    const task = req.body;
-    console.log('Keeper received task:', task);
-    res.status(200).send('Task received and will be executed');
-});
-
-keeperApp.listen(keeperPort, () => {
-    console.log(`Keeper service listening at http://localhost:${keeperPort}`);
 });
 
 console.log('Script setup complete');
