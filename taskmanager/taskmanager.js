@@ -8,16 +8,15 @@ console.log('Script started');
 
 const app = express();
 const port = 3000;
-const keeperPort = 3001; // Port for the keeper service
-
+const keeperPort = 3001; 
 app.use(express.json());
 
 console.log('Express app created');
 
 // Address of the deployed JobListing contract
-const jobListingAddress = '0x532751b7e3A8bf2E08243Fc4052A68AE806a7422'; // Replace with actual address
+const jobListingAddress = '0xe94843C5fb22D6752049442Db3A03B7f8bfcAEe4'; 
 
-// Connect to an Ethereum node (replace with your node URL)
+// Connect to an Ethereum node 
 const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
 
 console.log('Provider created');
@@ -65,7 +64,11 @@ async function sendJobToKeeper(job) {
         jobType: job.jobType,
         contractAddress: job.contract_add,
         targetFunction: job.target_fnc,
-        // Add any other relevant job data here
+        argType: job.argType, 
+        argumentInfo: {
+            type: job.argType, 
+            details: "Placeholder for argument details" 
+        }
     };
 
     try {
@@ -120,7 +123,6 @@ keeperApp.use(express.json());
 keeperApp.post('/execute-task', (req, res) => {
     const task = req.body;
     console.log('Keeper received task:', task);
-    // Here, you would implement the actual task execution logic
     res.status(200).send('Task received and will be executed');
 });
 

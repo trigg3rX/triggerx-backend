@@ -25,6 +25,12 @@
                 "internalType": "uint256",
                 "name": "timeInterval",
                 "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "enum JobListing.ArgType",
+                "name": "argType",
+                "type": "uint8"
             }
         ],
         "name": "JobCreated",
@@ -97,6 +103,11 @@
                 "internalType": "uint256",
                 "name": "_timeInterval",
                 "type": "uint256"
+            },
+            {
+                "internalType": "enum JobListing.ArgType",
+                "name": "_argType",
+                "type": "uint8"
             }
         ],
         "name": "createJob",
@@ -189,6 +200,11 @@
                         "internalType": "uint256",
                         "name": "timeInterval",
                         "type": "uint256"
+                    },
+                    {
+                        "internalType": "enum JobListing.ArgType",
+                        "name": "argType",
+                        "type": "uint8"
                     }
                 ],
                 "internalType": "struct JobListing.Job",
@@ -263,6 +279,11 @@
                 "internalType": "uint256",
                 "name": "timeInterval",
                 "type": "uint256"
+            },
+            {
+                "internalType": "enum JobListing.ArgType",
+                "name": "argType",
+                "type": "uint8"
             }
         ],
         "stateMutability": "view",
@@ -319,6 +340,11 @@
                 "internalType": "uint256",
                 "name": "_timeInterval",
                 "type": "uint256"
+            },
+            {
+                "internalType": "enum JobListing.ArgType",
+                "name": "_argType",
+                "type": "uint8"
             }
         ],
         "name": "updateJob",
