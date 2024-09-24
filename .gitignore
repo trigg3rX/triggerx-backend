@@ -1,1 +1,4 @@
-node_modules\n.yarn\n*.log
+node_modules
+*.yarn
+*.log
+package-lock.json
