@@ -14,7 +14,7 @@ app.use(express.json());
 console.log('Express app created');
 
 // Address of the deployed JobListing contract
-const jobListingAddress = '0xe94843C5fb22D6752049442Db3A03B7f8bfcAEe4'; 
+const jobListingAddress = '0x2fe817d06a5fbe0cc50d2bc6f7c1f3cea42b204b'; 
 
 // Connect to an Ethereum node 
 const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
@@ -76,42 +76,116 @@ function convertBigIntToString(obj) {
 // Function to send a job to the keeper
 async function sendJobToKeeper(job) {
     const keeperUrl = `http://localhost:${keeperPort}/execute-task`;
-
-    const taskData = convertBigIntToString({
+    console.log("hhhhhhhhhhhhhhhhhhhhhhhg",job);
+    // Prepare taskData
+    const taskData = {
         jobId: job.jobId.toString(),
         jobType: job.jobType,
-        contractAddress: job.contract_add,
-        targetFunction: job.target_fnc,
-        argType: job.argType, 
+        contractAddress: job.contractAddress,
+        targetFunction: job.targetFunction,
+        argType: job.argType,  
         argumentInfo: {
-            type: job.argType, 
-            details: "Placeholder for argument details"
+            type: job.argType,
+            arguments: job.arguments
         }
-    });
+    };
+
+    // Log each property to identify the BigInt issue
+    console.log("TaskData before serialization:", taskData);
+
+    const convertNestedBigInt = (obj) => {
+        if (typeof obj === 'bigint') {
+            return obj.toString();
+        } else if (Array.isArray(obj)) {
+            return obj.map(convertNestedBigInt);
+        } else if (typeof obj === 'object' && obj !== null) {
+            return Object.fromEntries(
+                Object.entries(obj).map(([key, value]) => [key, convertNestedBigInt(value)])
+            );
+        }
+        return obj;
+    };
+
+    // Convert all BigInts in taskData
+    const convertedTaskData = convertNestedBigInt(taskData);
+    console.log("TaskData after conversion:", convertedTaskData);
 
     try {
-        const response = await axios.post(keeperUrl, taskData);
+        const response = await axios.post(keeperUrl, convertedTaskData);
         console.log(`Task sent to keeper. Response: ${response.status} ${response.statusText}`);
     } catch (error) {
         console.error('Error sending task to keeper:', error.message);
     }
 }
+
+
+
+// Function to fetch job arguments
+async function fetchJobArguments(jobId) {
+    const argumentCount = await jobListingContract.getJobArgumentCount(jobId);
+    const arguments = [];
+
+    for (let i = 0; i < argumentCount; i++) {
+        const arg = await jobListingContract.getJobArgument(jobId, i);
+        arguments.push(arg);
+    }
+
+    return arguments;
+}
+
 // Function to process a new job
 async function processJob(jobId) {
     try {
         const job = await jobListingContract.getJob(jobId);
+        console.log('Job fetched:', job); // Log the entire job object
 
         if (activeJobs[jobId]) {
             console.log(`Job ${jobId} is already active.`);
             return;
         }
 
-        scheduleJob(job);
+        // Fetch job arguments
+        const jobArguments = await fetchJobArguments(jobId);
+        job.arguments = jobArguments.map(arg => arg.toString());
 
+        // Log job properties to see their structure
+        console.log('Job properties:', {
+            jobId: job[0].toString(),
+            jobType: job[1],
+            status: job[2],
+            createdBy: job[3],
+            timeInterval: job[4].toString(),
+            timeframe: job[5].toString(),
+            blockNumber: job[6].toString(),
+            contractAddress: job[8],
+            targetFunction: job[9] 
+        });
+
+        // Extract contract address and target function
+        const contractAddress = job[8]?.toString(); // Convert to string if defined
+        const targetFunction = job[9]; // Target function can remain as is
+
+        console.log(`Contract Address: ${contractAddress}`); // Log the contract address
+        console.log(`Target Function: ${targetFunction}`); // Log the target function
+
+        if (!contractAddress || !targetFunction) {
+            console.error('Contract address or target function is missing:', job);
+            return; // Prevent sending the task
+        }
+
+        // Assign contract address and target function to job object
+        // job.contract_add = contractAddress;
+        // job.target_fnc = targetFunction;
+
+        scheduleJob(job);
     } catch (error) {
         console.error('Error processing job:', error);
     }
 }
+
+
+
+
 
 // Listen for JobCreated events
 jobListingContract.on('JobCreated', (jobId, jobType, contractAdd, timeInterval, event) => {

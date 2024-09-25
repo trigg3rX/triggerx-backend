@@ -16,21 +16,9 @@
             },
             {
                 "indexed": false,
-                "internalType": "string",
-                "name": "contract_add",
-                "type": "string"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "timeInterval",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "enum JobListing.ArgType",
-                "name": "argType",
-                "type": "uint8"
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
             }
         ],
         "name": "JobCreated",
@@ -66,48 +54,53 @@
         "inputs": [
             {
                 "internalType": "string",
-                "name": "_jobType",
+                "name": "jobType",
                 "type": "string"
             },
             {
                 "internalType": "string",
-                "name": "_jobDescription",
+                "name": "jobDescription",
                 "type": "string"
             },
             {
                 "internalType": "bytes",
-                "name": "_quorumNumbers",
+                "name": "quorumNumbers",
                 "type": "bytes"
             },
             {
                 "internalType": "uint32",
-                "name": "_quorumThresholdPercentage",
+                "name": "quorumThresholdPercentage",
                 "type": "uint32"
             },
             {
                 "internalType": "uint32",
-                "name": "_timeframe",
+                "name": "timeframe",
                 "type": "uint32"
             },
             {
-                "internalType": "string",
-                "name": "_contract_add",
-                "type": "string"
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
             },
             {
                 "internalType": "string",
-                "name": "_target_fnc",
+                "name": "targetFunction",
                 "type": "string"
             },
             {
                 "internalType": "uint256",
-                "name": "_timeInterval",
+                "name": "timeInterval",
                 "type": "uint256"
             },
             {
                 "internalType": "enum JobListing.ArgType",
-                "name": "_argType",
+                "name": "argType",
                 "type": "uint8"
+            },
+            {
+                "internalType": "bytes[]",
+                "name": "arguments",
+                "type": "bytes[]"
             }
         ],
         "name": "createJob",
@@ -125,7 +118,7 @@
         "inputs": [
             {
                 "internalType": "uint32",
-                "name": "_jobId",
+                "name": "jobId",
                 "type": "uint32"
             }
         ],
@@ -138,7 +131,7 @@
         "inputs": [
             {
                 "internalType": "uint32",
-                "name": "_jobId",
+                "name": "jobId",
                 "type": "uint32"
             }
         ],
@@ -187,13 +180,13 @@
                         "type": "uint256"
                     },
                     {
-                        "internalType": "string",
-                        "name": "contract_add",
-                        "type": "string"
+                        "internalType": "address",
+                        "name": "contractAddress",
+                        "type": "address"
                     },
                     {
                         "internalType": "string",
-                        "name": "target_fnc",
+                        "name": "targetFunction",
                         "type": "string"
                     },
                     {
@@ -205,11 +198,59 @@
                         "internalType": "enum JobListing.ArgType",
                         "name": "argType",
                         "type": "uint8"
+                    },
+                    {
+                        "internalType": "bytes[]",
+                        "name": "arguments",
+                        "type": "bytes[]"
                     }
                 ],
                 "internalType": "struct JobListing.Job",
                 "name": "",
                 "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "argIndex",
+                "type": "uint256"
+            }
+        ],
+        "name": "getJobArgument",
+        "outputs": [
+            {
+                "internalType": "bytes",
+                "name": "",
+                "type": "bytes"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            }
+        ],
+        "name": "getJobArgumentCount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -266,13 +307,13 @@
                 "type": "uint256"
             },
             {
-                "internalType": "string",
-                "name": "contract_add",
-                "type": "string"
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
             },
             {
                 "internalType": "string",
-                "name": "target_fnc",
+                "name": "targetFunction",
                 "type": "string"
             },
             {
@@ -293,58 +334,58 @@
         "inputs": [
             {
                 "internalType": "uint32",
-                "name": "_jobId",
+                "name": "jobId",
                 "type": "uint32"
             },
             {
                 "internalType": "string",
-                "name": "_jobType",
+                "name": "jobType",
                 "type": "string"
             },
             {
                 "internalType": "string",
-                "name": "_jobDescription",
-                "type": "string"
-            },
-            {
-                "internalType": "string",
-                "name": "_status",
+                "name": "jobDescription",
                 "type": "string"
             },
             {
                 "internalType": "bytes",
-                "name": "_quorumNumbers",
+                "name": "quorumNumbers",
                 "type": "bytes"
             },
             {
                 "internalType": "uint32",
-                "name": "_quorumThresholdPercentage",
+                "name": "quorumThresholdPercentage",
                 "type": "uint32"
             },
             {
                 "internalType": "uint32",
-                "name": "_timeframe",
+                "name": "timeframe",
                 "type": "uint32"
             },
             {
-                "internalType": "string",
-                "name": "_contract_add",
-                "type": "string"
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
             },
             {
                 "internalType": "string",
-                "name": "_target_fnc",
+                "name": "targetFunction",
                 "type": "string"
             },
             {
                 "internalType": "uint256",
-                "name": "_timeInterval",
+                "name": "timeInterval",
                 "type": "uint256"
             },
             {
                 "internalType": "enum JobListing.ArgType",
-                "name": "_argType",
+                "name": "argType",
                 "type": "uint8"
+            },
+            {
+                "internalType": "bytes[]",
+                "name": "arguments",
+                "type": "bytes[]"
             }
         ],
         "name": "updateJob",

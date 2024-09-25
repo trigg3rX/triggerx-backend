@@ -40,40 +40,30 @@ async function executeTask(task) {
     console.log(`Executing task ${jobId} of type ${jobType} for contract ${contractAddress}`);
     
     let args;
-    // Handle numeric argTypes (0 for None, 1 for Static, 2 for Dynamic)
     let argTypeString;
+    
+    // Fetch the ABI dynamically
+    const abi = await fetchABI(contractAddress);
+    const contract = new ethers.Contract(contractAddress, abi, provider);
+
     switch (argType) {
         case '0':
         case 'None':
             argTypeString = 'None';
             args = [];
             console.log('Executing without arguments.');
-
-            // Fetch the ABI dynamically
-            const abi = await fetchABI(contractAddress);
-            const contract = new ethers.Contract(contractAddress, abi, provider);
-
-            // Call the target function without arguments
-            try {
-                const result = await contract[targetFunction](); // Execute function with no arguments
-                console.log(`Function ${targetFunction} executed successfully:`, result);
-                return result;
-            } catch (error) {
-                console.error(`Error executing function ${targetFunction}:`, error.message);
-                throw error;
-            }
+            break;
 
         case '1':
         case 'Static':
             argTypeString = 'Static';
-            args = argumentInfo.details; // Static argument details provided
-            console.log(`Executing with static arguments: ${args}`);
+            args = argumentInfo.arguments || [];
+            console.log(`Executing with static arguments:`, args);
             break;
 
         case '2':
         case 'Dynamic':
             argTypeString = 'Dynamic';
-            // For dynamic arguments, fetch data from an external source
             const dynamicData = await fetchDynamicData();
             args = [dynamicData];
             console.log(`Executing with dynamic arguments: ${dynamicData}`);
@@ -84,10 +74,19 @@ async function executeTask(task) {
             throw new Error('Invalid argument type');
     }
 
-    // Simulate executing the target function on the contract (in reality, you'd interact with the blockchain)
-    const result = await simulateContractInteraction(contractAddress, targetFunction, args);
-    
-    return result;
+    try {
+        // Call the target function with the prepared arguments
+        const result = await contract[targetFunction](...args);
+        console.log(`Function ${targetFunction} executed successfully:`, result);
+        
+        // Convert BigInt to string
+        const serializedResult = result.toString();
+        
+        return serializedResult;
+    } catch (error) {
+        console.error(`Error executing function ${targetFunction}:`, error.message);
+        throw error;
+    }
 }
 
 
