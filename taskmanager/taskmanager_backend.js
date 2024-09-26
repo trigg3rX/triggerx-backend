@@ -14,7 +14,7 @@ app.use(express.json());
 console.log('Express app created');
 
 // Address of the deployed JobListing contract
-const jobListingAddress = '0x2fe817d06a5fbe0cc50d2bc6f7c1f3cea42b204b'; 
+const jobListingAddress = '0x5edB869670B0FF939F4Ad28972b4329af8f5ea33'; 
 
 // Connect to an Ethereum node 
 const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
@@ -60,23 +60,23 @@ function scheduleJob(job) {
 }
 
 
-function convertBigIntToString(obj) {
-    if (typeof obj === 'bigint') {
-        return obj.toString();
-    } else if (Array.isArray(obj)) {
-        return obj.map(convertBigIntToString);
-    } else if (typeof obj === 'object' && obj !== null) {
-        return Object.fromEntries(
-            Object.entries(obj).map(([key, value]) => [key, convertBigIntToString(value)])
-        );
-    }
-    return obj;
-}
+// function convertBigIntToString(obj) {
+//     if (typeof obj === 'bigint') {
+//         return obj.toString();
+//     } else if (Array.isArray(obj)) {
+//         return obj.map(convertBigIntToString);
+//     } else if (typeof obj === 'object' && obj !== null) {
+//         return Object.fromEntries(
+//             Object.entries(obj).map(([key, value]) => [key, convertBigIntToString(value)])
+//         );
+//     }
+//     return obj;
+// }
 
 // Function to send a job to the keeper
 async function sendJobToKeeper(job) {
     const keeperUrl = `http://localhost:${keeperPort}/execute-task`;
-    console.log("hhhhhhhhhhhhhhhhhhhhhhhg",job);
+    
     // Prepare taskData
     const taskData = {
         jobId: job.jobId.toString(),
@@ -87,12 +87,11 @@ async function sendJobToKeeper(job) {
         argumentInfo: {
             type: job.argType,
             arguments: job.arguments
-        }
+        },
+        apiEndpoint: job.apiEndpoint  // Add apiEndpoint to the task data
     };
 
-    // Log each property to identify the BigInt issue
-    console.log("TaskData before serialization:", taskData);
-
+    // Convert any BigInt in the taskData object to strings
     const convertNestedBigInt = (obj) => {
         if (typeof obj === 'bigint') {
             return obj.toString();

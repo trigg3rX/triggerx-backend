@@ -58,11 +58,6 @@
                 "type": "string"
             },
             {
-                "internalType": "string",
-                "name": "jobDescription",
-                "type": "string"
-            },
-            {
                 "internalType": "bytes",
                 "name": "quorumNumbers",
                 "type": "bytes"
@@ -101,6 +96,11 @@
                 "internalType": "bytes[]",
                 "name": "arguments",
                 "type": "bytes[]"
+            },
+            {
+                "internalType": "string",
+                "name": "apiEndpoint",
+                "type": "string"
             }
         ],
         "name": "createJob",
@@ -111,19 +111,6 @@
                 "type": "uint32"
             }
         ],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint32",
-                "name": "jobId",
-                "type": "uint32"
-            }
-        ],
-        "name": "deleteJob",
-        "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
     },
@@ -147,11 +134,6 @@
                     {
                         "internalType": "string",
                         "name": "jobType",
-                        "type": "string"
-                    },
-                    {
-                        "internalType": "string",
-                        "name": "jobDescription",
                         "type": "string"
                     },
                     {
@@ -203,6 +185,11 @@
                         "internalType": "bytes[]",
                         "name": "arguments",
                         "type": "bytes[]"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "apiEndpoint",
+                        "type": "string"
                     }
                 ],
                 "internalType": "struct JobListing.Job",
@@ -278,11 +265,6 @@
             },
             {
                 "internalType": "string",
-                "name": "jobDescription",
-                "type": "string"
-            },
-            {
-                "internalType": "string",
                 "name": "status",
                 "type": "string"
             },
@@ -325,6 +307,11 @@
                 "internalType": "enum JobListing.ArgType",
                 "name": "argType",
                 "type": "uint8"
+            },
+            {
+                "internalType": "string",
+                "name": "apiEndpoint",
+                "type": "string"
             }
         ],
         "stateMutability": "view",
@@ -340,11 +327,6 @@
             {
                 "internalType": "string",
                 "name": "jobType",
-                "type": "string"
-            },
-            {
-                "internalType": "string",
-                "name": "jobDescription",
                 "type": "string"
             },
             {
@@ -386,6 +368,11 @@
                 "internalType": "bytes[]",
                 "name": "arguments",
                 "type": "bytes[]"
+            },
+            {
+                "internalType": "string",
+                "name": "apiEndpoint",
+                "type": "string"
             }
         ],
         "name": "updateJob",
