@@ -14,10 +14,10 @@ app.use(express.json());
 console.log('Express app created');
 
 // Address of the deployed JobListing contract
-const jobListingAddress = '0x5edB869670B0FF939F4Ad28972b4329af8f5ea33'; 
+const jobListingAddress = '0x1a117625a22f5f36c780d52411bf5d4F326875F5'; 
 
 // Connect to an Ethereum node 
-const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
+const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
 
 console.log('Provider created');
 

@@ -7,17 +7,23 @@ const keeperApp = express();
 keeperApp.use(express.json());
 
 const aggregatorUrl = 'http://localhost:3002/receive-result'; 
-const etherscanApiKey = 'V332PZUHEE7V97ZP2V7YV3YPA6RXNR4XEV'; 
-const provider = new ethers.JsonRpcProvider('https://eth-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
+const etherscanApiKey = 'U5X9SJAFNJY7FS3TZWMWTVYJZ7Q1K6QJKM'; 
+const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
 const privateKey = process.env.PRIVATE_KEY;
 const wallet = new ethers.Wallet(privateKey, provider);
 
 // Middleware to fetch and standardize API data
 async function fetchAndStandardizeData(req, res, next) {
-    const { apiEndpoint } = req.body;
+    const { apiEndpoint, argType } = req.body;
+
+    // Skip API check for 'static' or 'none' argument types
+    if (argType === '0' || argType === '1' || argType === 'None' || argType === 'Static') {
+        req.standardizedData = { data: { value: null } };
+        return next();
+    }
 
     if (!apiEndpoint) {
-        return res.status(400).send('API endpoint is required.');
+        return res.status(400).send('API endpoint is required for dynamic arguments.');
     }
 
     try {
@@ -31,7 +37,7 @@ async function fetchAndStandardizeData(req, res, next) {
         // Standardize the response format
         req.standardizedData = {
             data: {
-                value: response.data.data.value // This extracts the value
+                value: response.data.data.value
             }
         };
         next();
@@ -43,31 +49,25 @@ async function fetchAndStandardizeData(req, res, next) {
 
 // Function to fetch ABI from Etherscan
 async function fetchABI(contractAddress) {
-    const url = `https://api-sepolia.etherscan.io/api?module=contract&action=getabi&address=${contractAddress}&apikey=${etherscanApiKey}`;
+    const url = `https://api-sepolia-optimistic.etherscan.io/api?module=contract&action=getabi&address=${contractAddress}&apikey=${etherscanApiKey}`;
+    
     try {
-        const response = await axios.get(url);
-        const data = response.data;
-
+        const response = await fetch(url);
+        const data = await response.json();
         if (data.status === '1') {
-            console.log('ABI fetched successfully');
-            return JSON.parse(data.result); // ABI is returned as a JSON string
+            console.log('ABI:', JSON.parse(data.result));
         } else {
-            console.error(`Failed to fetch ABI: ${data.message}`);
-            if (data.message === 'NOTOK') {
-                console.error(`Contract address ${contractAddress} might not be verified on Etherscan or there is another issue.`);
-            }
-            throw new Error(`Failed to fetch ABI: ${data.message}`);
+            console.error('Error fetching ABI:', data.message);
         }
     } catch (error) {
-        console.error('Error fetching ABI:', error.message);
-        throw error;
+        console.error('Fetch error:', error);
     }
 }
 
 // Function to handle task execution based on argument type
 async function executeTask(task) {
     const { jobId, jobType, contractAddress, targetFunction, argType, standardizedData } = task;
-    const dynamicData = standardizedData.data.value; // Get standardized data
+    const dynamicData = standardizedData.data.value;
 
     console.log(`Executing task ${jobId} of type ${jobType} for contract ${contractAddress}`);
 
@@ -76,54 +76,64 @@ async function executeTask(task) {
 
     // Fetch the ABI dynamically
     const abi = await fetchABI(contractAddress);
+    console.log('Fetched ABI:', JSON.stringify(abi, null, 2));
+
     const contract = new ethers.Contract(contractAddress, abi, wallet);
 
-    switch (argType) {
-        case '0':
-        case 'None':
-            argTypeString = 'None';
-            args = [];
-            console.log('Executing without arguments.');
-            break;
-
-        case '1':
-        case 'Static':
-            argTypeString = 'Static';
-            args = task.argumentInfo.arguments || [];
-            console.log(`Executing with static arguments:`, args);
-            break;
-
-        case '2':
-        case 'Dynamic':
-            console.log(`Executing with dynamic arguments: ${standardizedData.data.value}`);
-            args = [standardizedData.data.value]; // Use the value directly without conversion
-            break;
-
-        default:
-            console.error('Unknown argument type!');
-            throw new Error('Invalid argument type');
-    }
+    // ... [keep the switch statement for argType as is]
 
     try {
-        // Call the target function with the prepared arguments
-        const result = await contract[targetFunction](...args);
-        console.log(`Function ${targetFunction} executed successfully. Result:`, result);
+        console.log(`Calling function ${targetFunction} with arguments:`, args);
         
-        // If the result is a transaction response, wait for it to be mined
-        // if (result.wait && typeof result.wait === 'function') {
-        //     const receipt = await result.wait();
-        //     console.log(`Transaction mined. Block number:`, receipt.blockNumber);
+        if (typeof contract[targetFunction] !== 'function') {
+            throw new Error(`Function ${targetFunction} does not exist in the contract ABI`);
+        }
+
+        // Check if the contract is deployed
+        const code = await provider.getCode(contractAddress);
+        if (code === '0x') {
+            throw new Error(`No contract deployed at address ${contractAddress}`);
+        }
+
+        // Try calling as a read-only function first
+        try {
+            const result = await contract[targetFunction].staticCall(...args);
+            console.log(`Function ${targetFunction} executed successfully as read-only. Result:`, result);
+            return result;
+        } catch (staticCallError) {
+            console.log(`Static call failed, attempting as state-changing function:`, staticCallError.message);
             
-        //     // For state-changing functions, we might need to call a getter function to get the updated state
-        //     // This is just an example, adjust according to your contract's structure
-        //     const updatedState = await contract[`get${targetFunction.charAt(0).toUpperCase() + targetFunction.slice(1)}`]();
-        //     return updatedState;
-        // }
-        
-        // For non-state-changing functions, return the result directly
-        return result;
+            // If static call fails, try as a state-changing function
+            const tx = await contract[targetFunction](...args);
+            console.log('Transaction sent. Waiting for confirmation...');
+            const receipt = await tx.wait();
+            console.log(`Transaction mined. Block number:`, receipt.blockNumber);
+            
+            // Try to get the return value from the transaction receipt
+            const returnValue = receipt.logs[0]?.data;
+            console.log(`Function ${targetFunction} executed successfully as state-changing. Return value:`, returnValue);
+            return returnValue;
+        }
     } catch (error) {
-        console.error(`Error executing function ${targetFunction}:`, error.message);
+        console.error(`Error executing function ${targetFunction}:`, error);
+        console.error('Error details:', {
+            message: error.message,
+            code: error.code,
+            method: error.method,
+            transaction: error.transaction,
+        });
+
+        // If the error is due to execution reverted, try to get the revert reason
+        if (error.code === 'CALL_EXCEPTION') {
+            try {
+                const tx = await contract.populateTransaction[targetFunction](...args);
+                const result = await provider.call(tx);
+                console.error('Revert reason:', result);
+            } catch (revertError) {
+                console.error('Failed to get revert reason:', revertError.message);
+            }
+        }
+
         throw error;
     }
 }

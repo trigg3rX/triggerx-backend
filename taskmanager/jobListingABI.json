@@ -88,7 +88,7 @@
                 "type": "uint256"
             },
             {
-                "internalType": "enum JobListing.ArgType",
+                "internalType": "enum txJobCreator.ArgType",
                 "name": "argType",
                 "type": "uint8"
             },
@@ -177,7 +177,7 @@
                         "type": "uint256"
                     },
                     {
-                        "internalType": "enum JobListing.ArgType",
+                        "internalType": "enum txJobCreator.ArgType",
                         "name": "argType",
                         "type": "uint8"
                     },
@@ -192,7 +192,7 @@
                         "type": "string"
                     }
                 ],
-                "internalType": "struct JobListing.Job",
+                "internalType": "struct txJobCreator.Job",
                 "name": "",
                 "type": "tuple"
             }
@@ -304,7 +304,7 @@
                 "type": "uint256"
             },
             {
-                "internalType": "enum JobListing.ArgType",
+                "internalType": "enum txJobCreator.ArgType",
                 "name": "argType",
                 "type": "uint8"
             },
@@ -360,7 +360,7 @@
                 "type": "uint256"
             },
             {
-                "internalType": "enum JobListing.ArgType",
+                "internalType": "enum txJobCreator.ArgType",
                 "name": "argType",
                 "type": "uint8"
             },
