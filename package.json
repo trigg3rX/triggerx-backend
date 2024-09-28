@@ -6,7 +6,9 @@
   "author": "prapti1211 <praptishah@lampros.tech>",
   "license": "MIT",
   "dependencies": {
+    "@noble/bls12-381": "^1.4.0",
     "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
     "ethers": "^6.13.2",
     "express": "^4.21.0",
     "node-cron": "^3.0.3",

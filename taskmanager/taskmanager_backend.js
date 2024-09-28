@@ -17,7 +17,7 @@ console.log('Express app created');
 const jobListingAddress = '0x1a117625a22f5f36c780d52411bf5d4F326875F5'; 
 
 // Connect to an Ethereum node 
-const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
+const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/xd07TFzs6Ele-LHAffmzsBiuC8k32VZv');
 
 console.log('Provider created');
 

@@ -8,7 +8,7 @@ keeperApp.use(express.json());
 
 const aggregatorUrl = 'http://localhost:3002/receive-result'; 
 const etherscanApiKey = 'U5X9SJAFNJY7FS3TZWMWTVYJZ7Q1K6QJKM'; 
-const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
+const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/xd07TFzs6Ele-LHAffmzsBiuC8k32VZv'); 
 const privateKey = process.env.PRIVATE_KEY;
 const wallet = new ethers.Wallet(privateKey, provider);
 
@@ -52,15 +52,17 @@ async function fetchABI(contractAddress) {
     const url = `https://api-sepolia-optimistic.etherscan.io/api?module=contract&action=getabi&address=${contractAddress}&apikey=${etherscanApiKey}`;
     
     try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.status === '1') {
-            console.log('ABI:', JSON.parse(data.result));
+        const response = await axios.get(url);
+        const data = response.data;
+        if (data.status === '1' && data.result) {
+            return JSON.parse(data.result);
         } else {
-            console.error('Error fetching ABI:', data.message);
+            console.error('Error fetching ABI:', data.message || 'Unknown error');
+            return null;
         }
     } catch (error) {
-        console.error('Fetch error:', error);
+        console.error('Fetch error:', error.message);
+        return null;
     }
 }
 
@@ -71,16 +73,38 @@ async function executeTask(task) {
 
     console.log(`Executing task ${jobId} of type ${jobType} for contract ${contractAddress}`);
 
-    let args;
+    let args = [];
     let argTypeString;
 
     // Fetch the ABI dynamically
     const abi = await fetchABI(contractAddress);
+    if (!abi) {
+        throw new Error(`Failed to fetch ABI for contract ${contractAddress}`);
+    }
     console.log('Fetched ABI:', JSON.stringify(abi, null, 2));
 
     const contract = new ethers.Contract(contractAddress, abi, wallet);
 
-    // ... [keep the switch statement for argType as is]
+    // Determine arguments based on argType
+    switch (argType) {
+        case '0':
+        case 'None':
+            args = [];
+            argTypeString = 'None';
+            break;
+        case '1':
+        case 'Static':
+            args = task.argumentInfo.arguments;
+            argTypeString = 'Static';
+            break;
+        case '2':
+        case 'Dynamic':
+            args = [dynamicData];
+            argTypeString = 'Dynamic';
+            break;
+        default:
+            throw new Error(`Invalid argument type: ${argType}`);
+    }
 
     try {
         console.log(`Calling function ${targetFunction} with arguments:`, args);
@@ -116,24 +140,6 @@ async function executeTask(task) {
         }
     } catch (error) {
         console.error(`Error executing function ${targetFunction}:`, error);
-        console.error('Error details:', {
-            message: error.message,
-            code: error.code,
-            method: error.method,
-            transaction: error.transaction,
-        });
-
-        // If the error is due to execution reverted, try to get the revert reason
-        if (error.code === 'CALL_EXCEPTION') {
-            try {
-                const tx = await contract.populateTransaction[targetFunction](...args);
-                const result = await provider.call(tx);
-                console.error('Revert reason:', result);
-            } catch (revertError) {
-                console.error('Failed to get revert reason:', revertError.message);
-            }
-        }
-
         throw error;
     }
 }
@@ -159,8 +165,16 @@ keeperApp.post('/execute-task', fetchAndStandardizeData, async (req, res) => {
 
         res.status(200).send('Task executed and result sent to aggregator');
     } catch (error) {
-        console.error('Error executing task:', error.message);
-        res.status(500).send('Error executing task');
+        console.error('Error executing task:', error);
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack
+        });
+        res.status(500).json({
+            error: 'Error executing task',
+            details: error.message,
+            stack: error.stack
+        });
     }
 });
 
