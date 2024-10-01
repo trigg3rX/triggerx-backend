@@ -1,97 +1,116 @@
+require('dotenv').config();
 const express = require('express');
 const { ethers } = require('ethers');
 const cron = require('node-cron');
 const axios = require('axios');
-const jobListingABI = require('./jobListingABI.json');
+const TronWeb = require('tronweb');
+const taskManagerABI = require('./taskManagerABI.json');
 
-console.log('Script started');
+// Addresses for smart contracts
+const jobCreatorAddress = 'TJFouw53gKu5btB6MZ7kvsZ3NesefXgxTS';  // Tron contract address on Nile
+const taskManagerAddress = '0x781E170238288e57B08F269d6714E3a28dc345A8';  // Ethereum contract address on Holesky
 
+// Express app setup
 const app = express();
 const port = 3000;
-const keeperPort = 3001; 
+const keeperPort = 3001;
 app.use(express.json());
 
-console.log('Express app created');
+// TronWeb initialization
+const tronWeb = new TronWeb({
+    fullHost: 'https://nile.trongrid.io',
+    privateKey: process.env.NILE_PRIVATE_KEY
+});
 
-// Address of the deployed JobListing contract
-const jobListingAddress = '0x1a117625a22f5f36c780d52411bf5d4F326875F5'; 
+if (!tronWeb.defaultAddress.base58) {
+    console.error('TronWeb not properly initialized. Make sure NILE_PRIVATE_KEY is set correctly.');
+    process.exit(1);
+}
 
-// Connect to an Ethereum node 
-const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/xd07TFzs6Ele-LHAffmzsBiuC8k32VZv');
+// Ethereum Holesky testnet provider and Task Manager contract instance
+const holeskyProvider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
+const holeskyWallet = new ethers.Wallet(process.env.HOLESKY_PRIVATE_KEY, holeskyProvider);
 
-console.log('Provider created');
+// TaskManager contract instance
+const taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, holeskyWallet);
 
-// Create a contract instance
-const jobListingContract = new ethers.Contract(jobListingAddress, jobListingABI, provider);
-
-console.log('Contract instance created');
-
-// Object to store active jobs
+// Store active jobs to avoid duplicating tasks
 const activeJobs = {};
 
-// Function to schedule a job
-function scheduleJob(job) {
-    const { jobId, timeInterval, timeframe } = job;
-    const intervalInSeconds = Number(timeInterval);
-    const timeframeInSeconds = Number(timeframe);
+// Function to listen for JobCreated events on the Nile network
+async function listenForJobCreatedEvents() {
+    const eventListener = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+        contract.JobCreated().watch((err, event) => {
+            if (err) return console.error('Error with JobCreated event:', err);
 
-    if (intervalInSeconds < 10) {
-        console.warn(`Job ${jobId} has an interval less than 10 seconds. Setting to 10 seconds.`);
-    }
+            // Log the entire event object for debugging
+            console.log('JobCreated event received:', JSON.stringify(event, null, 2));
 
-    const cronExpression = `*/${Math.max(10, intervalInSeconds)} * * * * *`; // Use seconds granularity
-
-    const task = cron.schedule(cronExpression, () => {
-        sendJobToKeeper(job);
-    }, {
-        scheduled: true,
-        timezone: "UTC" // optional: set timezone if necessary
+            const jobId = event.result.jobId;  // Changed from toNumber() to direct access
+            console.log('New job created:', jobId);
+            processJob(jobId);
+        });
     });
 
-    // Schedule job termination
-    setTimeout(() => {
-        task.stop();
-        delete activeJobs[jobId];
-        console.log(`Job ${jobId} completed its timeframe and has been terminated.`);
-    }, timeframeInSeconds * 1000);
+    console.log('Listening for JobCreated events...');
+}
+
+// Function to schedule a job with cron
+function scheduleJob(job) {
+    const { jobId, timeInterval } = job;
+    const intervalInSeconds = Math.max(Number(timeInterval), 10); // Ensure a minimum interval of 10 seconds
+
+    const cronExpression = `*/${intervalInSeconds} * * * * *`;
+
+    // Schedule the job with cron
+    const task = cron.schedule(cronExpression, () => {
+        createTaskAndSendToKeeper(job);
+    }, {
+        scheduled: true,
+        timezone: "UTC"
+    });
 
     activeJobs[jobId] = task;
     console.log(`Job ${jobId} scheduled with cron: ${cronExpression}`);
 }
 
+// Function to create a task in the TaskManager contract and send it to the keeper
+async function createTaskAndSendToKeeper(job) {
+    try {
+        // Create task in the Ethereum TaskManager contract
+        const tx = await taskManagerContract.createTask(job.jobType, "Created");
+        const receipt = await tx.wait();
+        console.log(`Task created for job ${job.jobId}, transaction hash: ${receipt.hash}`);
 
-// function convertBigIntToString(obj) {
-//     if (typeof obj === 'bigint') {
-//         return obj.toString();
-//     } else if (Array.isArray(obj)) {
-//         return obj.map(convertBigIntToString);
-//     } else if (typeof obj === 'object' && obj !== null) {
-//         return Object.fromEntries(
-//             Object.entries(obj).map(([key, value]) => [key, convertBigIntToString(value)])
-//         );
-//     }
-//     return obj;
-// }
+        // Fetch the task count from the contract (this will be the new taskId)
+        const taskId = await taskManagerContract.taskCount();
 
-// Function to send a job to the keeper
-async function sendJobToKeeper(job) {
+        // Prepare task data to send to the keeper
+        const taskData = {
+            taskId: taskId.toString(),
+            jobId: job.jobId.toString(),
+            jobType: job.jobType,
+            contractAddress: job.contractAddress,
+            targetFunction: job.targetFunction,
+            argType: job.argType,
+            argumentInfo: {
+                type: job.argType,
+                arguments: job.arguments
+            },
+            apiEndpoint: job.apiEndpoint
+        };
+
+        // Send the task data to the keeper for execution
+        await sendTaskToKeeper(taskData);
+    } catch (error) {
+        console.error('Error creating task and sending to keeper:', error);
+    }
+}
+
+// Helper function to convert nested BigInt types before sending the task data
+async function sendTaskToKeeper(taskData) {
     const keeperUrl = `http://localhost:${keeperPort}/execute-task`;
-    
-    // Prepare taskData
-    const taskData = {
-        jobId: job.jobId.toString(),
-        jobType: job.jobType,
-        contractAddress: job.contractAddress,
-        targetFunction: job.targetFunction,
-        argType: job.argType,  
-        argumentInfo: {
-            type: job.argType,
-            arguments: job.arguments
-        },
-        apiEndpoint: job.apiEndpoint  // Add apiEndpoint to the task data
-    };
 
-    // Convert any BigInt in the taskData object to strings
     const convertNestedBigInt = (obj) => {
         if (typeof obj === 'bigint') {
             return obj.toString();
@@ -105,7 +124,6 @@ async function sendJobToKeeper(job) {
         return obj;
     };
 
-    // Convert all BigInts in taskData
     const convertedTaskData = convertNestedBigInt(taskData);
     console.log("TaskData after conversion:", convertedTaskData);
 
@@ -117,93 +135,72 @@ async function sendJobToKeeper(job) {
     }
 }
 
-
-
-// Function to fetch job arguments
-async function fetchJobArguments(jobId) {
-    const argumentCount = await jobListingContract.getJobArgumentCount(jobId);
-    const arguments = [];
-
-    for (let i = 0; i < argumentCount; i++) {
-        const arg = await jobListingContract.getJobArgument(jobId, i);
-        arguments.push(arg);
-    }
-
-    return arguments;
-}
-
-// Function to process a new job
+// Function to fetch and process job data from the Tron contract
 async function processJob(jobId) {
     try {
-        const job = await jobListingContract.getJob(jobId);
-        console.log('Job fetched:', job); // Log the entire job object
+        console.log('Fetching job with ID:', jobId);
 
+        // Fetch the job details
+        const job = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+            return contract.getJob(jobId).call();
+        });
+
+        console.log('Raw job data fetched:', job);
+
+        if (!job || Object.keys(job).length === 0) {
+            console.error(`Job ${jobId} not found or empty.`);
+            return;
+        }
+
+        // Check if the job is already active
         if (activeJobs[jobId]) {
             console.log(`Job ${jobId} is already active.`);
             return;
         }
 
-        // Fetch job arguments
-        const jobArguments = await fetchJobArguments(jobId);
-        job.arguments = jobArguments.map(arg => arg.toString());
-
-        // Log job properties to see their structure
-        console.log('Job properties:', {
-            jobId: job[0].toString(),
-            jobType: job[1],
-            status: job[2],
-            createdBy: job[3],
-            timeInterval: job[4].toString(),
-            timeframe: job[5].toString(),
-            blockNumber: job[6].toString(),
-            contractAddress: job[8],
-            targetFunction: job[9] 
+        // Fetch the arguments for the job
+        const argumentCount = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+            return contract.getJobArgumentCount(jobId).call();
         });
 
-        // Extract contract address and target function
-        const contractAddress = job[8]?.toString(); // Convert to string if defined
-        const targetFunction = job[9]; // Target function can remain as is
-
-        console.log(`Contract Address: ${contractAddress}`); // Log the contract address
-        console.log(`Target Function: ${targetFunction}`); // Log the target function
-
-        if (!contractAddress || !targetFunction) {
-            console.error('Contract address or target function is missing:', job);
-            return; // Prevent sending the task
+        const arguments = [];
+        for (let i = 0; i < argumentCount; i++) {
+            const arg = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+                return contract.getJobArgument(jobId, i).call();
+            });
+            arguments.push(arg);
         }
 
-        // Assign contract address and target function to job object
-        // job.contract_add = contractAddress;
-        // job.target_fnc = targetFunction;
-
-        scheduleJob(job);
+        // Only proceed if we have valid job data
+        const processedJob = {
+            jobId: job.jobId.toString(),
+            jobType: job.jobType,
+            status: job.status,
+            timeInterval: job.timeInterval.toString(),
+            timeframe: job.timeframe.toString(),
+            blockNumber: job.blockNumber.toString(),
+            contractAddress: job.contractAddress,
+            targetFunction: job.targetFunction,
+            argType: job.argType,
+            arguments: arguments,
+            apiEndpoint: job.apiEndpoint
+        };
+ 
+        console.log('Processed job data:', processedJob);
+        
+        // Schedule the job if it has valid arguments
+        if (arguments.length > 0) {
+            scheduleJob(processedJob);
+        } else {
+            console.error(`Job ${jobId} has no valid arguments.`);
+        }
     } catch (error) {
         console.error('Error processing job:', error);
     }
 }
 
-
-
-
-
-// Listen for JobCreated events
-jobListingContract.on('JobCreated', (jobId, jobType, contractAdd, timeInterval, event) => {
-    console.log('New job created:', jobId.toString());
-    processJob(jobId);
-});
-
-console.log('Event listener set up');
-
-// API endpoint to manually trigger job processing
-app.get('/process-job/:jobId', async (req, res) => {
-    const jobId = req.params.jobId;
-    await processJob(jobId);
-    res.send(`Processing job ${jobId}`);
-});
-
-// Start the server
+// Start the Express server and begin listening for JobCreated events
 app.listen(port, () => {
-    console.log(`Job keeper backend listening at http://localhost:${port}`);
+    console.log(`Task Manager backend listening on port ${port}`);
+    listenForJobCreatedEvents();
 });
-
-console.log('Script setup complete');
