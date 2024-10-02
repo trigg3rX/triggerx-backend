@@ -7,8 +7,10 @@ const TronWeb = require('tronweb');
 const taskManagerABI = require('./taskManagerABI.json');
 
 // Addresses for smart contracts
-const jobCreatorAddress = 'TJFouw53gKu5btB6MZ7kvsZ3NesefXgxTS';  // Tron contract address on Nile
-const taskManagerAddress = '0x781E170238288e57B08F269d6714E3a28dc345A8';  // Ethereum contract address on Holesky
+const jobCreatorAddress = 'TAjmTb3v6FDEQyxktBn9heYjSt5VGeNMVr';  // Tron contract address on Nile
+const taskManagerAddress = '0xa3aB4285c28b5B444ccc55d0F70f6ba5001a48B5';  // Ethereum contract address on Holesky
+let jobCreatorContract;
+let taskManagerContract;
 
 // Express app setup
 const app = express();
@@ -17,78 +19,141 @@ const keeperPort = 3001;
 app.use(express.json());
 
 // TronWeb initialization
-const tronWeb = new TronWeb({
-    fullHost: 'https://nile.trongrid.io',
-    privateKey: process.env.NILE_PRIVATE_KEY
-});
+function initializeWallets() {
+    // Initialize TronWeb
+    const tronWeb = new TronWeb({
+        fullHost: 'https://nile.trongrid.io',
+        privateKey: process.env.NILE_PRIVATE_KEY
+    });
 
-if (!tronWeb.defaultAddress.base58) {
-    console.error('TronWeb not properly initialized. Make sure NILE_PRIVATE_KEY is set correctly.');
-    process.exit(1);
+    if (!tronWeb) {
+        console.error("!!! Tron Wallet not initialization failed.");
+        process.exit(1);
+    }
+
+    // Initialize Ethereum Holesky wallet
+    const holeskyProvider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
+    let holeskyWallet;
+    try {
+        holeskyWallet = new ethers.Wallet(process.env.HOLESKY_PRIVATE_KEY, holeskyProvider);
+    } catch (error) {
+        console.error("!!! Holesky wallet initialization failed:", error.message);
+        process.exit(1);
+    }
+
+    console.log(">>> Wallets initialized.");
+
+    return { tronWeb, holeskyWallet };
 }
 
-// Ethereum Holesky testnet provider and Task Manager contract instance
-const holeskyProvider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
-const holeskyWallet = new ethers.Wallet(process.env.HOLESKY_PRIVATE_KEY, holeskyProvider);
+async function initializeContracts() {
+    // Fetch JobCreator ABI
+    let jobCreatorABI;
+    try {
+        jobCreatorContract = await tronWeb.contract().at(jobCreatorAddress);
+        jobCreatorABI = JSON.stringify(jobCreatorContract.abi);
+    } catch (error) {
+        console.error("!!! Error fetching JobCreator ABI:", error);
+        throw error;
+    }
 
-// TaskManager contract instance
-const taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, holeskyWallet);
+    // Create TaskManager contract instance
+    taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, holeskyWallet);
 
-// Store active jobs to avoid duplicating tasks
+    console.log(">>> Contracts initialized.");
+}
+
+const { tronWeb, holeskyWallet } = initializeWallets();
+// console.log(taskManagerContract);
 const activeJobs = {};
+
 
 // Function to listen for JobCreated events on the Nile network
 async function listenForJobCreatedEvents() {
-    const eventListener = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+    await tronWeb.contract().at(jobCreatorAddress).then(contract => {
         contract.JobCreated().watch((err, event) => {
-            if (err) return console.error('Error with JobCreated event:', err);
+            if (err) return console.error("!!! Error with JobCreated event:", err);
 
             // Log the entire event object for debugging
-            console.log('JobCreated event received:', JSON.stringify(event, null, 2));
+            console.log(">>> JobCreated event received:", JSON.stringify(event, null, 2));
 
             const jobId = event.result.jobId;  // Changed from toNumber() to direct access
-            console.log('New job created:', jobId);
-            processJob(jobId);
+            console.log(">>> New job created: #", jobId);
+
+            if (verifyJobData(jobId)) {
+                createTasks(jobId);
+            }
         });
     });
 
-    console.log('Listening for JobCreated events...');
+    console.log("Listening for JobCreated events...");
 }
 
-// Function to schedule a job with cron
-function scheduleJob(job) {
-    const { jobId, timeInterval } = job;
-    const intervalInSeconds = Math.max(Number(timeInterval), 10); // Ensure a minimum interval of 10 seconds
+async function verifyJobData(jobId) {
+    console.log('Verifying job data for jobID: #', jobId);
 
-    const cronExpression = `*/${intervalInSeconds} * * * * *`;
-
-    // Schedule the job with cron
-    const task = cron.schedule(cronExpression, () => {
-        createTaskAndSendToKeeper(job);
-    }, {
-        scheduled: true,
-        timezone: "UTC"
+    // Fetch the arguments for the job
+    const argumentCount = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+        return contract.getJobArgumentCount(jobId).call();
     });
 
-    activeJobs[jobId] = task;
-    console.log(`Job ${jobId} scheduled with cron: ${cronExpression}`);
+    const arguments = [];
+    for (let i = 0; i < argumentCount; i++) {
+        const arg = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
+            return contract.getJobArgument(jobId, i).call();
+        });
+        arguments.push(arg);
+    }
+
+    if (arguments.length > 0) {
+        console.log(`>>> JobID #${jobId} has valid arguments.`);
+        return true;
+    } else {
+        console.error(`!!! JobID #${jobId} has no valid arguments.`);
+        return false;
+    }
+}
+
+async function createTasks(jobId) {
+    try {
+        console.log(taskManagerContract);
+        // Create task in the Ethereum TaskManager contract
+        const tx = await taskManagerContract.createTask(jobId);
+        const receipt = await tx.wait();
+
+        // Get the taskId from the emitted event
+        const taskCreatedEvent = receipt.logs.find(log => log.eventName === 'TaskCreated');
+        const taskId = taskCreatedEvent.args.taskId;    
+
+        console.log(`>>> New task created for jobID #${jobId} with ID: #${taskId}.`);
+
+        // Call the JobCreator contract to add the taskId
+        try {
+            const result = await jobCreatorContract.addTaskId(jobId, taskId).send();
+            console.log(`>>> Added taskID #${taskId} to jobID #${jobId}.`);
+        } catch (error) {
+            console.error(`!!! Error adding taskID #${taskId} to jobID #${jobId}:`, error);
+        }
+
+        // Return the taskId for further use if needed
+        createTaskData(jobId, taskId);
+    } catch (error) {
+        console.error("!!! Error creating task:", error);
+        throw error;
+    }
 }
 
 // Function to create a task in the TaskManager contract and send it to the keeper
-async function createTaskAndSendToKeeper(job) {
+async function createTaskData(jobId, taskId) {
     try {
-        // Create task in the Ethereum TaskManager contract
-        const tx = await taskManagerContract.createTask(job.jobType, "Created");
-        const receipt = await tx.wait();
-        console.log(`Task created for job ${job.jobId}, transaction hash: ${receipt.hash}`);
+        const job = await jobCreatorContract.getJob(jobId);
 
-        // Fetch the task count from the contract (this will be the new taskId)
-        const taskId = await taskManagerContract.taskCount();
+        const { timeInterval } = job;
 
-        // Prepare task data to send to the keeper
+        // Create task data structure
         const taskData = {
             taskId: taskId.toString(),
-            jobId: job.jobId.toString(),
+            jobId: jobId.toString(),
             jobType: job.jobType,
             contractAddress: job.contractAddress,
             targetFunction: job.targetFunction,
@@ -100,10 +165,23 @@ async function createTaskAndSendToKeeper(job) {
             apiEndpoint: job.apiEndpoint
         };
 
+        const cronExpression = `*/${timeInterval} * * * * *`;
+
+        // Schedule the job with cron
+        const task = cron.schedule(cronExpression, () => {
+            sendTaskToKeeper(taskData);
+        }, {
+            scheduled: true,
+            timezone: "UTC"
+        });
+
+        activeJobs[taskId] = task;
+        console.log(`>>> Task #${taskData.taskId} scheduled with cron: ${cronExpression}`);
+
         // Send the task data to the keeper for execution
         await sendTaskToKeeper(taskData);
     } catch (error) {
-        console.error('Error creating task and sending to keeper:', error);
+        console.error("!!! Error creating task and sending to keeper:", error);
     }
 }
 
@@ -129,78 +207,15 @@ async function sendTaskToKeeper(taskData) {
 
     try {
         const response = await axios.post(keeperUrl, convertedTaskData);
-        console.log(`Task sent to keeper. Response: ${response.status} ${response.statusText}`);
+        console.log(`>>> Task sent to keeper. Response: ${response.status} ${response.statusText}`);
     } catch (error) {
-        console.error('Error sending task to keeper:', error.message);
-    }
-}
-
-// Function to fetch and process job data from the Tron contract
-async function processJob(jobId) {
-    try {
-        console.log('Fetching job with ID:', jobId);
-
-        // Fetch the job details
-        const job = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
-            return contract.getJob(jobId).call();
-        });
-
-        console.log('Raw job data fetched:', job);
-
-        if (!job || Object.keys(job).length === 0) {
-            console.error(`Job ${jobId} not found or empty.`);
-            return;
-        }
-
-        // Check if the job is already active
-        if (activeJobs[jobId]) {
-            console.log(`Job ${jobId} is already active.`);
-            return;
-        }
-
-        // Fetch the arguments for the job
-        const argumentCount = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
-            return contract.getJobArgumentCount(jobId).call();
-        });
-
-        const arguments = [];
-        for (let i = 0; i < argumentCount; i++) {
-            const arg = await tronWeb.contract().at(jobCreatorAddress).then(contract => {
-                return contract.getJobArgument(jobId, i).call();
-            });
-            arguments.push(arg);
-        }
-
-        // Only proceed if we have valid job data
-        const processedJob = {
-            jobId: job.jobId.toString(),
-            jobType: job.jobType,
-            status: job.status,
-            timeInterval: job.timeInterval.toString(),
-            timeframe: job.timeframe.toString(),
-            blockNumber: job.blockNumber.toString(),
-            contractAddress: job.contractAddress,
-            targetFunction: job.targetFunction,
-            argType: job.argType,
-            arguments: arguments,
-            apiEndpoint: job.apiEndpoint
-        };
- 
-        console.log('Processed job data:', processedJob);
-        
-        // Schedule the job if it has valid arguments
-        if (arguments.length > 0) {
-            scheduleJob(processedJob);
-        } else {
-            console.error(`Job ${jobId} has no valid arguments.`);
-        }
-    } catch (error) {
-        console.error('Error processing job:', error);
+        console.error("!!! Error sending task to keeper:", error.message);
     }
 }
 
 // Start the Express server and begin listening for JobCreated events
 app.listen(port, () => {
+    initializeContracts();
     console.log(`Task Manager backend listening on port ${port}`);
     listenForJobCreatedEvents();
 });
