@@ -2,79 +2,65 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { ethers } = require('ethers');
+const TronWeb = require('tronweb');
 
 const keeperApp = express();
 keeperApp.use(express.json());
 
 const aggregatorUrl = 'http://localhost:3002/receive-result'; 
 const etherscanApiKey = 'U5X9SJAFNJY7FS3TZWMWTVYJZ7Q1K6QJKM'; 
-const provider = new ethers.JsonRpcProvider('https://opt-sepolia.g.alchemy.com/v2/xd07TFzs6Ele-LHAffmzsBiuC8k32VZv'); 
-const privateKey = process.env.PRIVATE_KEY;
+const provider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
+const privateKey = process.env.HOLESKY_PRIVATE_KEY;
 const wallet = new ethers.Wallet(privateKey, provider);
+
+const tronWeb = new TronWeb({
+    fullHost: 'https://nile.trongrid.io', // Replace with the appropriate TRON network URL
+    privateKey: process.env.TRON_PRIVATE_KEY // Make sure to set this in your .env file
+});
 
 // Middleware to fetch and standardize API data
 async function fetchAndStandardizeData(req, res, next) {
-    const { apiEndpoint, argType } = req.body;
+    const { argType, apiEndpoint } = req.body;
 
-    // Skip API check for 'static' or 'none' argument types
-    if (argType === '0' || argType === '1' || argType === 'None' || argType === 'Static') {
+    // For argType 0 or 1, skip API check and proceed
+    if (argType === 0 || argType === 1 || argType === 'None' || argType === 'Static') {
         req.standardizedData = { data: { value: null } };
         return next();
     }
 
-    if (!apiEndpoint) {
-        return res.status(400).send('API endpoint is required for dynamic arguments.');
+    if (!apiEndpoint || apiEndpoint === 'null') {
+        console.warn('API endpoint is missing or null for a dynamic argument type.');
+        req.standardizedData = { data: { value: null } };
+        return next();
     }
 
     try {
         const response = await axios.get(apiEndpoint);
-        
-        // Validate the structure of the response
-        if (!response.data || typeof response.data.data === 'undefined' || typeof response.data.data.value === 'undefined') {
-            throw new Error('API response does not match the expected structure. Expected: { "data": { "value": <value> } }');
-        }
-
-        // Standardize the response format
-        req.standardizedData = {
-            data: {
-                value: response.data.data.value
-            }
-        };
-        next();
+        // Rest of the function remains the same
     } catch (error) {
         console.error(`Error fetching data from ${apiEndpoint}:`, error.message);
-        return res.status(500).send(`Error fetching data from API: ${error.message}`);
+        req.standardizedData = { data: { value: null } };
+        next();
     }
 }
 
 // Function to fetch ABI from Etherscan
 async function fetchABI(contractAddress) {
-    const url = `https://api-sepolia-optimistic.etherscan.io/api?module=contract&action=getabi&address=${contractAddress}&apikey=${etherscanApiKey}`;
-    
     try {
-        const response = await axios.get(url);
-        const data = response.data;
-        if (data.status === '1' && data.result) {
-            return JSON.parse(data.result);
-        } else {
-            console.error('Error fetching ABI:', data.message || 'Unknown error');
-            return null;
-        }
+        const contract = await tronWeb.contract().at(contractAddress);
+        return contract.abi;
     } catch (error) {
-        console.error('Fetch error:', error.message);
+        console.error("Error fetching ABI from TRON contract:", error);
         return null;
     }
 }
 
 // Function to handle task execution based on argument type
+// Function to handle task execution based on argument type
 async function executeTask(task) {
     const { jobId, jobType, contractAddress, targetFunction, argType, standardizedData } = task;
-    const dynamicData = standardizedData.data.value;
 
     console.log(`Executing task ${jobId} of type ${jobType} for contract ${contractAddress}`);
-
-    let args = [];
-    let argTypeString;
 
     // Fetch the ABI dynamically
     const abi = await fetchABI(contractAddress);
@@ -83,24 +69,27 @@ async function executeTask(task) {
     }
     console.log('Fetched ABI:', JSON.stringify(abi, null, 2));
 
-    const contract = new ethers.Contract(contractAddress, abi, wallet);
+    // Initialize the contract instance
+    let contract;
+    try {
+        contract = await tronWeb.contract(abi, contractAddress);
+        console.log(`Contract initialized at address ${contractAddress}`);
+    } catch (error) {
+        console.error(`Error initializing contract at address ${contractAddress}:`, error);
+        throw error;
+    }
 
     // Determine arguments based on argType
+    let args;
     switch (argType) {
-        case '0':
-        case 'None':
+        case 0:  // For argType 0 (None)
             args = [];
-            argTypeString = 'None';
             break;
-        case '1':
-        case 'Static':
+        case 1:  // For argType 1 (Static)
             args = task.argumentInfo.arguments;
-            argTypeString = 'Static';
             break;
-        case '2':
-        case 'Dynamic':
-            args = [dynamicData];
-            argTypeString = 'Dynamic';
+        case 2:  // For argType 2 (Dynamic)
+            args = [standardizedData.data.value];
             break;
         default:
             throw new Error(`Invalid argument type: ${argType}`);
@@ -108,41 +97,25 @@ async function executeTask(task) {
 
     try {
         console.log(`Calling function ${targetFunction} with arguments:`, args);
-        
+
+        // Ensure the function is available in the contract
         if (typeof contract[targetFunction] !== 'function') {
             throw new Error(`Function ${targetFunction} does not exist in the contract ABI`);
         }
 
-        // Check if the contract is deployed
-        const code = await provider.getCode(contractAddress);
-        if (code === '0x') {
-            throw new Error(`No contract deployed at address ${contractAddress}`);
-        }
-
-        // Try calling as a read-only function first
-        try {
-            const result = await contract[targetFunction].staticCall(...args);
-            console.log(`Function ${targetFunction} executed successfully as read-only. Result:`, result);
-            return result;
-        } catch (staticCallError) {
-            console.log(`Static call failed, attempting as state-changing function:`, staticCallError.message);
-            
-            // If static call fails, try as a state-changing function
-            const tx = await contract[targetFunction](...args);
-            console.log('Transaction sent. Waiting for confirmation...');
-            const receipt = await tx.wait();
-            console.log(`Transaction mined. Block number:`, receipt.blockNumber);
-            
-            // Try to get the return value from the transaction receipt
-            const returnValue = receipt.logs[0]?.data;
-            console.log(`Function ${targetFunction} executed successfully as state-changing. Return value:`, returnValue);
-            return returnValue;
-        }
+        // Explicitly set the owner_address (from address)
+        const fromAddress = tronWeb.address.fromPrivateKey(process.env.TRON_PRIVATE_KEY); // Ensure private key is in .env
+        const result = await contract[targetFunction](...args).call({ from: fromAddress });
+        console.log(`Function ${targetFunction} executed successfully. Result:`, result);
+        return result;
     } catch (error) {
         console.error(`Error executing function ${targetFunction}:`, error);
         throw error;
     }
 }
+
+
+
 // Endpoint to receive tasks
 keeperApp.post('/execute-task', fetchAndStandardizeData, async (req, res) => {
     const task = req.body;

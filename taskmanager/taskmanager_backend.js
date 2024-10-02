@@ -146,28 +146,34 @@ async function createTasks(jobId) {
 // Function to create a task in the TaskManager contract and send it to the keeper
 async function createTaskData(jobId, taskId) {
     try {
-        const job = await jobCreatorContract.getJob(jobId);
+        const encodedJobData = await jobCreatorContract.getJob(jobId).call();
+        console.log("Raw job data:", encodedJobData);
 
-        const { timeInterval } = job;
+        const decodedJob = decodeJobData(encodedJobData);
+        console.log("Decoded job data:", decodedJob);
 
-        // Create task data structure
         const taskData = {
             taskId: taskId.toString(),
             jobId: jobId.toString(),
-            jobType: job.jobType,
-            contractAddress: job.contractAddress,
-            targetFunction: job.targetFunction,
-            argType: job.argType,
+            jobType: decodedJob.jobType,
+            contractAddress: decodedJob.contractAddress,
+            targetFunction: decodedJob.targetFunction,
+            argType: decodedJob.argType,
             argumentInfo: {
-                type: job.argType,
-                arguments: job.arguments
+                type: decodedJob.argType,
+                arguments: decodedJob.arguments
             },
-            apiEndpoint: job.apiEndpoint
+            apiEndpoint: decodedJob.apiEndpoint,
+            timeInterval: decodedJob.timeInterval
         };
 
-        const cronExpression = `*/${timeInterval} * * * * *`;
+        console.log("Structured task data:", taskData);
 
-        // Schedule the job with cron
+        // Ensure timeInterval is at least 1 second
+        const timeIntervalSeconds = Math.max(1, decodedJob.timeInterval);
+        const cronExpression = `*/${timeIntervalSeconds} * * * * *`;
+        console.log("Cron expression:", cronExpression);
+
         const task = cron.schedule(cronExpression, () => {
             sendTaskToKeeper(taskData);
         }, {
@@ -178,12 +184,49 @@ async function createTaskData(jobId, taskId) {
         activeJobs[taskId] = task;
         console.log(`>>> Task #${taskData.taskId} scheduled with cron: ${cronExpression}`);
 
-        // Send the task data to the keeper for execution
         await sendTaskToKeeper(taskData);
     } catch (error) {
         console.error("!!! Error creating task and sending to keeper:", error);
     }
 }
+
+function decodeJobData(encodedJobData) {
+    const abiTypes = [
+        "uint256", // jobId
+        "string",  // jobType
+        "string",  // status
+        "uint32",  // timeframe
+        "uint256", // blockNumber
+        "address", // contractAddress
+        "string",  // targetFunction
+        "uint256", // timeInterval
+        "uint8",   // argType
+        "bytes[]", // arguments
+        "string",  // apiEndpoint
+        "uint32[]" // taskIds
+    ];
+
+    const decodedJob = tronWeb.utils.abi.decodeParams(abiTypes, encodedJobData);
+
+    return {
+        jobId: decodedJob[0] ? decodedJob[0].toString() : '',
+        jobType: decodedJob[1] || '',
+        status: decodedJob[2] || '',
+        timeframe: Number(decodedJob[3] || 0),
+        blockNumber: decodedJob[4] ? decodedJob[4].toString() : '',
+        contractAddress: tronWeb.address.fromHex(decodedJob[5]),
+        targetFunction: decodedJob[6] || '',
+        timeInterval: decodedJob[7] ? Number(decodedJob[7]) : 0,
+        argType: decodedJob[8] || 0,
+        arguments: Array.isArray(decodedJob[9]) ? decodedJob[9] : [],
+        apiEndpoint: decodedJob[10] || '',
+        taskIds: Array.isArray(decodedJob[11]) 
+            ? decodedJob[11].map(id => (typeof id === 'bigint' ? id.toString() : Number(id))) 
+            : []
+    };
+}
+
+
 
 // Helper function to convert nested BigInt types before sending the task data
 async function sendTaskToKeeper(taskData) {
