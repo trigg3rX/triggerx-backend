@@ -7,7 +7,7 @@ const TronWeb = require('tronweb');
 const keeperApp = express();
 keeperApp.use(express.json());
 
-const aggregatorUrl = 'http://localhost:3002/receive-result'; 
+const aggregatorUrl = 'http://localhost:3006/receive-result'; 
 const etherscanApiKey = 'U5X9SJAFNJY7FS3TZWMWTVYJZ7Q1K6QJKM'; 
 const provider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
 const privateKey = process.env.HOLESKY_PRIVATE_KEY;
@@ -62,24 +62,8 @@ async function executeTask(task) {
 
     console.log(`Executing task ${jobId} of type ${jobType} for contract ${contractAddress}`);
 
-    // Fetch the ABI dynamically
-    const abi = await fetchABI(contractAddress);
-    if (!abi) {
-        throw new Error(`Failed to fetch ABI for contract ${contractAddress}`);
-    }
-    console.log('Fetched ABI:', JSON.stringify(abi, null, 2));
-
-    // Initialize the contract instance
-    let contract;
-    try {
-        contract = await tronWeb.contract(abi, contractAddress);
-        console.log(`Contract initialized at address ${contractAddress}`);
-    } catch (error) {
-        console.error(`Error initializing contract at address ${contractAddress}:`, error);
-        throw error;
-    }
-
-    // Determine arguments based on argType
+    // Prepare the function selector and parameters
+    const functionSelector = targetFunction; // e.g., 'someFunction(bytes)'
     let args;
     switch (argType) {
         case 0:  // For argType 0 (None)
@@ -95,24 +79,38 @@ async function executeTask(task) {
             throw new Error(`Invalid argument type: ${argType}`);
     }
 
+    // Convert the arguments to `bytes` if necessary
+    const parameters = args.map(arg => ({
+        type: 'bytes', // Now handling `bytes` type
+        value: tronWeb.toHex(arg) // Convert the argument to hex if it's a dynamic value
+    }));
+
     try {
-        console.log(`Calling function ${targetFunction} with arguments:`, args);
+        console.log(`Calling function ${functionSelector} on contract ${contractAddress} with arguments:`, parameters);
 
-        // Ensure the function is available in the contract
-        if (typeof contract[targetFunction] !== 'function') {
-            throw new Error(`Function ${targetFunction} does not exist in the contract ABI`);
-        }
+        // Call the function using triggerConstantContract
+        const result = await tronWeb.transactionBuilder.triggerConstantContract(
+            contractAddress,
+            functionSelector,
+            {},  // No specific options required in this case
+            parameters
+        );
 
-        // Explicitly set the owner_address (from address)
-        const fromAddress = tronWeb.address.fromPrivateKey(process.env.TRON_PRIVATE_KEY); // Ensure private key is in .env
-        const result = await contract[targetFunction](...args).call({ from: fromAddress });
-        console.log(`Function ${targetFunction} executed successfully. Result:`, result);
-        return result;
+        // Extract the result from the constant_result field
+        const constantResult = result.constant_result[0];
+        console.log('Raw constant result (hex):', constantResult);
+
+        // Handle the result, converting from `bytes` (hex) to readable form if necessary
+        const decodedResult = tronWeb.toUtf8(constantResult); // Decoding from hex to UTF-8 string if applicable
+        console.log(`Function ${targetFunction} executed successfully. Decoded result:`, decodedResult);
+
+        return decodedResult;
     } catch (error) {
         console.error(`Error executing function ${targetFunction}:`, error);
         throw error;
     }
 }
+
 
 
 
@@ -152,7 +150,7 @@ keeperApp.post('/execute-task', fetchAndStandardizeData, async (req, res) => {
 });
 
 // Start the keeper server
-const keeperPort = 3001;
+const keeperPort = 3005;
 keeperApp.listen(keeperPort, () => {
     console.log(`Keeper service listening at http://localhost:${keeperPort}`);
 });

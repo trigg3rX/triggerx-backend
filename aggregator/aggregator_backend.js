@@ -76,7 +76,7 @@ aggregatorApp.post('/receive-result', async (req, res) => {
     }
 });
 
-const aggregatorPort = 3002;
+const aggregatorPort = 3006;
 aggregatorApp.listen(aggregatorPort, async () => {
     await initializeBLSKeyPair();
     console.log(`Aggregator service listening at http://localhost:${aggregatorPort}`);

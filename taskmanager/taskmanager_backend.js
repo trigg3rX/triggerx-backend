@@ -5,6 +5,7 @@ const cron = require('node-cron');
 const axios = require('axios');
 const TronWeb = require('tronweb');
 const taskManagerABI = require('./taskManagerABI.json');
+const keeperConfigs = require('./keeperConfig');
 
 // Addresses for smart contracts
 const jobCreatorAddress = 'TAjmTb3v6FDEQyxktBn9heYjSt5VGeNMVr';  // Tron contract address on Nile
@@ -15,7 +16,7 @@ let taskManagerContract;
 // Express app setup
 const app = express();
 const port = 3000;
-const keeperPort = 3001;
+const keeperPort = 3005;
 app.use(express.json());
 
 // TronWeb initialization
@@ -67,6 +68,21 @@ const { tronWeb, holeskyWallet } = initializeWallets();
 // console.log(taskManagerContract);
 const activeJobs = {};
 
+function initializeKeepers() {
+    const keepers = keeperConfigs.map(config => {
+        return {
+            id: config.id,
+            port: config.port,
+            publicKey: config.publicKey,
+            privateKey: config.privateKey,
+            trx: config.trx
+        };
+    });
+    return keepers;
+}
+
+const keepers = initializeKeepers();
+console.log(">>> Keepers initialized:", keepers);
 
 // Function to listen for JobCreated events on the Nile network
 async function listenForJobCreatedEvents() {
@@ -229,8 +245,15 @@ function decodeJobData(encodedJobData) {
 
 
 // Helper function to convert nested BigInt types before sending the task data
+function getRandomKeeper() {
+    const randomIndex = Math.floor(Math.random() * keepers.length);
+    return keepers[randomIndex];
+}
+
+// Function to send task to a random keeper
 async function sendTaskToKeeper(taskData) {
-    const keeperUrl = `http://localhost:${keeperPort}/execute-task`;
+    const keeper = getRandomKeeper(); // Select a random keeper
+    const keeperUrl = `http://localhost:${keeper.port}/execute-task`; // Keeper URL based on its port
 
     const convertNestedBigInt = (obj) => {
         if (typeof obj === 'bigint') {
@@ -239,14 +262,13 @@ async function sendTaskToKeeper(taskData) {
             return obj.map(convertNestedBigInt);
         } else if (typeof obj === 'object' && obj !== null) {
             return Object.fromEntries(
-                Object.entries(obj).map(([key, value]) => [key, convertNestedBigInt(value)])
-            );
+                Object.entries(obj).map(([key, value]) => [key, convertNestedBigInt(value)]));
         }
         return obj;
     };
 
     const convertedTaskData = convertNestedBigInt(taskData);
-    console.log("TaskData after conversion:", convertedTaskData);
+    console.log(`Sending task to keeper #${keeper.id} on port ${keeper.port}`);
 
     try {
         const response = await axios.post(keeperUrl, convertedTaskData);
@@ -255,7 +277,6 @@ async function sendTaskToKeeper(taskData) {
         console.error("!!! Error sending task to keeper:", error.message);
     }
 }
-
 // Start the Express server and begin listening for JobCreated events
 app.listen(port, () => {
     initializeContracts();
