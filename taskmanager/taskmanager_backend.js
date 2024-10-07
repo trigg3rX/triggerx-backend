@@ -7,8 +7,8 @@ const TronWeb = require('tronweb');
 const taskManagerABI = require('./taskManagerABI.json');
 
 // Addresses for smart contracts
-const jobCreatorAddress = 'TAjmTb3v6FDEQyxktBn9heYjSt5VGeNMVr';  // Tron contract address on Nile
-const taskManagerAddress = '0xa3aB4285c28b5B444ccc55d0F70f6ba5001a48B5';  // Ethereum contract address on Holesky
+const jobCreatorAddress = process.env.CONTRACT_ADDRESS;  // Tron contract address on Nile
+const taskManagerAddress = '0xDaa3d01f71F638952db924c9FE4f1CDa847A23Ad';  // Ethereum contract address on Holesky
 let jobCreatorContract;
 let taskManagerContract;
 
@@ -23,7 +23,7 @@ function initializeWallets() {
     // Initialize TronWeb
     const tronWeb = new TronWeb({
         fullHost: 'https://nile.trongrid.io',
-        privateKey: process.env.NILE_PRIVATE_KEY
+        privateKey: process.env.TRON_PRIVATE_KEY
     });
 
     if (!tronWeb) {
@@ -116,15 +116,22 @@ async function verifyJobData(jobId) {
 
 async function createTasks(jobId) {
     try {
-        console.log(taskManagerContract);
         // Create task in the Ethereum TaskManager contract
-        const tx = await taskManagerContract.createTask(jobId);
+        const tx = await taskManagerContract.createNewTask(jobId, '0x01');
         const receipt = await tx.wait();
 
-        // Get the taskId from the emitted event
-        const taskCreatedEvent = receipt.logs.find(log => log.eventName === 'TaskCreated');
-        const taskId = taskCreatedEvent.args.taskId;    
+        // Log the entire receipt to inspect the structure
+        console.log("Transaction receipt logs:", JSON.stringify(receipt.logs, null, 2));
 
+        // Search for the 'TaskCreated' event
+        const taskCreatedEvent = receipt.logs.find(log => log.eventName === 'TaskCreated');
+
+        // If taskCreatedEvent is not found, log an error
+        if (!taskCreatedEvent) {
+            throw new Error("TaskCreated event not found in logs.");
+        }
+
+        const taskId = taskCreatedEvent.args.taskId;    
         console.log(`>>> New task created for jobID #${jobId} with ID: #${taskId}.`);
 
         // Call the JobCreator contract to add the taskId
@@ -143,10 +150,11 @@ async function createTasks(jobId) {
     }
 }
 
+
 // Function to create a task in the TaskManager contract and send it to the keeper
 async function createTaskData(jobId, taskId) {
     try {
-        const encodedJobData = await jobCreatorContract.getJob(jobId).call();
+        const encodedJobData = await jobCreatorContract.jobs(jobId).call();
         console.log("Raw job data:", encodedJobData);
 
         const decodedJob = decodeJobData(encodedJobData);
@@ -203,7 +211,9 @@ function decodeJobData(encodedJobData) {
         "uint8",   // argType
         "bytes[]", // arguments
         "string",  // apiEndpoint
-        "uint32[]" // taskIds
+        "uint32[]",// taskIds
+        "address", // creator address
+        "uint256"  // stake amount
     ];
 
     const decodedJob = tronWeb.utils.abi.decodeParams(abiTypes, encodedJobData);
@@ -222,7 +232,9 @@ function decodeJobData(encodedJobData) {
         apiEndpoint: decodedJob[10] || '',
         taskIds: Array.isArray(decodedJob[11]) 
             ? decodedJob[11].map(id => (typeof id === 'bigint' ? id.toString() : Number(id))) 
-            : []
+            : [],
+        creatorAddress: tronWeb.address.fromHex(decodedJob[12]), // convert to readable address
+        stakeAmount: decodedJob[13] ? decodedJob[13].toString() : '0'  // convert BigInt to string
     };
 }
 

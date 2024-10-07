@@ -10,10 +10,34 @@
         "internalType": "uint32",
         "name": "_taskResponseWindowBlock",
         "type": "uint32"
+      },
+      {
+        "internalType": "contract TriggerXServiceManager",
+        "name": "_serviceManager",
+        "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "oldAggregator",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newAggregator",
+        "type": "address"
+      }
+    ],
+    "name": "AggregatorUpdated",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -26,6 +50,42 @@
       }
     ],
     "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "taskIndex",
+        "type": "uint32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "jobId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "taskCreatedBlock",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes",
+            "name": "quorumNumbers",
+            "type": "bytes"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct ITriggerXTaskManager.Task",
+        "name": "task",
+        "type": "tuple"
+      }
+    ],
+    "name": "NewTaskCreated",
     "type": "event"
   },
   {
@@ -90,39 +150,21 @@
     "inputs": [
       {
         "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint32",
-        "name": "taskId",
-        "type": "uint32"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "operator",
-        "type": "address"
+        "internalType": "bool",
+        "name": "value",
+        "type": "bool"
       }
     ],
-    "name": "TaskAssigned",
+    "name": "StaleStakesForbiddenUpdate",
     "type": "event"
   },
   {
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
-      },
-      {
         "indexed": true,
         "internalType": "uint32",
-        "name": "taskId",
+        "name": "taskIndex",
         "type": "uint32"
       },
       {
@@ -139,15 +181,28 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "taskIndex",
+        "type": "uint32"
       },
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "challenger",
+        "type": "address"
+      }
+    ],
+    "name": "TaskChallengedUnsuccessfully",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint32",
-        "name": "taskId",
+        "name": "taskIndex",
         "type": "uint32"
       }
     ],
@@ -158,71 +213,21 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint32",
-        "name": "taskId",
-        "type": "uint32"
-      }
-    ],
-    "name": "TaskCreated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint32",
-        "name": "taskId",
-        "type": "uint32"
-      }
-    ],
-    "name": "TaskDeleted",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint32",
-        "name": "taskId",
-        "type": "uint32"
-      },
-      {
         "components": [
           {
-            "internalType": "uint256",
-            "name": "referenceJobId",
-            "type": "uint256"
-          },
-          {
             "internalType": "uint32",
-            "name": "referenceTaskId",
+            "name": "referenceTaskIndex",
             "type": "uint32"
           },
           {
             "internalType": "address",
-            "name": "completionTransactionHash",
+            "name": "operator",
             "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "transactionHash",
+            "type": "bytes32"
           }
         ],
         "indexed": false,
@@ -233,19 +238,9 @@
       {
         "components": [
           {
-            "internalType": "uint256",
-            "name": "referenceJobId",
-            "type": "uint256"
-          },
-          {
             "internalType": "uint32",
-            "name": "referenceTaskId",
-            "type": "uint32"
-          },
-          {
-            "internalType": "uint256",
             "name": "taskResponsedBlock",
-            "type": "uint256"
+            "type": "uint32"
           },
           {
             "internalType": "bytes32",
@@ -260,31 +255,6 @@
       }
     ],
     "name": "TaskResponded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "jobId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint32",
-        "name": "taskId",
-        "type": "uint32"
-      },
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "status",
-        "type": "string"
-      }
-    ],
-    "name": "TaskStatusUpdated",
     "type": "event"
   },
   {
@@ -309,79 +279,184 @@
   {
     "inputs": [],
     "name": "TASK_CHALLENGE_WINDOW_BLOCK",
-    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "TASK_RESPONSE_WINDOW_BLOCK",
-    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "aggregator",
-    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "uint32", "name": "taskId", "type": "uint32" },
-      { "internalType": "address", "name": "operator", "type": "address" }
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
     ],
-    "name": "assignTask",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "jobId", "type": "uint256" }
+    "name": "allTaskHashes",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
     ],
-    "name": "createTask",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "uint32", "name": "taskId", "type": "uint32" }
-    ],
-    "name": "deleteTask",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
       {
-        "internalType": "contract IRegistryCoordinator",
-        "name": "registryCoordinator",
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "name": "allTaskResponses",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "blsApkRegistry",
+    "outputs": [
+      {
+        "internalType": "contract IBLSApkRegistry",
+        "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "msgHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "quorumNumbers",
+        "type": "bytes"
       },
       {
         "internalType": "uint32",
         "name": "referenceBlockNumber",
         "type": "uint32"
       },
-      { "internalType": "bytes", "name": "quorumNumbers", "type": "bytes" },
-      {
-        "internalType": "bytes32[]",
-        "name": "nonSignerOperatorIds",
-        "type": "bytes32[]"
-      }
-    ],
-    "name": "getCheckSignaturesIndices",
-    "outputs": [
       {
         "components": [
           {
             "internalType": "uint32[]",
             "name": "nonSignerQuorumBitmapIndices",
             "type": "uint32[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "X",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "Y",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct BN254.G1Point[]",
+            "name": "nonSignerPubkeys",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "X",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "Y",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct BN254.G1Point[]",
+            "name": "quorumApks",
+            "type": "tuple[]"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256[2]",
+                "name": "X",
+                "type": "uint256[2]"
+              },
+              {
+                "internalType": "uint256[2]",
+                "name": "Y",
+                "type": "uint256[2]"
+              }
+            ],
+            "internalType": "struct BN254.G2Point",
+            "name": "apkG2",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "X",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "Y",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct BN254.G1Point",
+            "name": "sigma",
+            "type": "tuple"
           },
           {
             "internalType": "uint32[]",
@@ -399,39 +474,34 @@
             "type": "uint32[][]"
           }
         ],
-        "internalType": "struct OperatorStateRetriever.CheckSignaturesIndices",
-        "name": "",
+        "internalType": "struct IBLSSignatureChecker.NonSignerStakesAndSignature",
+        "name": "params",
         "type": "tuple"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "contract IRegistryCoordinator",
-        "name": "registryCoordinator",
-        "type": "address"
-      },
-      { "internalType": "bytes", "name": "quorumNumbers", "type": "bytes" },
-      { "internalType": "uint32", "name": "blockNumber", "type": "uint32" }
-    ],
-    "name": "getOperatorState",
+    "name": "checkSignatures",
     "outputs": [
       {
         "components": [
-          { "internalType": "address", "name": "operator", "type": "address" },
           {
-            "internalType": "bytes32",
-            "name": "operatorId",
-            "type": "bytes32"
+            "internalType": "uint96[]",
+            "name": "signedStakeForQuorum",
+            "type": "uint96[]"
           },
-          { "internalType": "uint96", "name": "stake", "type": "uint96" }
+          {
+            "internalType": "uint96[]",
+            "name": "totalStakeForQuorum",
+            "type": "uint96[]"
+          }
         ],
-        "internalType": "struct OperatorStateRetriever.Operator[][]",
+        "internalType": "struct IBLSSignatureChecker.QuorumStakeTotals",
         "name": "",
-        "type": "tuple[][]"
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -440,51 +510,43 @@
   {
     "inputs": [
       {
-        "internalType": "contract IRegistryCoordinator",
-        "name": "registryCoordinator",
-        "type": "address"
+        "internalType": "uint32",
+        "name": "jobId",
+        "type": "uint32"
       },
-      { "internalType": "bytes32", "name": "operatorId", "type": "bytes32" },
-      { "internalType": "uint32", "name": "blockNumber", "type": "uint32" }
-    ],
-    "name": "getOperatorState",
-    "outputs": [
-      { "internalType": "uint256", "name": "", "type": "uint256" },
       {
-        "components": [
-          { "internalType": "address", "name": "operator", "type": "address" },
-          {
-            "internalType": "bytes32",
-            "name": "operatorId",
-            "type": "bytes32"
-          },
-          { "internalType": "uint96", "name": "stake", "type": "uint96" }
-        ],
-        "internalType": "struct OperatorStateRetriever.Operator[][]",
+        "internalType": "bytes",
+        "name": "quorumNumbers",
+        "type": "bytes"
+      }
+    ],
+    "name": "createNewTask",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "delegation",
+    "outputs": [
+      {
+        "internalType": "contract IDelegationManager",
         "name": "",
-        "type": "tuple[][]"
+        "type": "address"
       }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "contract IRegistryCoordinator",
-        "name": "registryCoordinator",
-        "type": "address"
-      },
-      {
-        "internalType": "bytes32[]",
-        "name": "operatorIds",
-        "type": "bytes32[]"
-      },
-      { "internalType": "uint32", "name": "blockNumber", "type": "uint32" }
-    ],
-    "name": "getQuorumBitmapsAtBlockNumber",
+    "inputs": [],
+    "name": "getTaskResponseWindowBlock",
     "outputs": [
-      { "internalType": "uint256[]", "name": "", "type": "uint256[]" }
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
     ],
     "stateMutability": "view",
     "type": "function"
@@ -496,8 +558,16 @@
         "name": "_pauserRegistry",
         "type": "address"
       },
-      { "internalType": "address", "name": "initialOwner", "type": "address" },
-      { "internalType": "address", "name": "_aggregator", "type": "address" }
+      {
+        "internalType": "address",
+        "name": "initialOwner",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_aggregator",
+        "type": "address"
+      }
     ],
     "name": "initialize",
     "outputs": [],
@@ -507,14 +577,26 @@
   {
     "inputs": [],
     "name": "latestTaskNum",
-    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "owner",
-    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
@@ -539,16 +621,34 @@
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "uint8", "name": "index", "type": "uint8" }],
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "index",
+        "type": "uint8"
+      }
+    ],
     "name": "paused",
-    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "paused",
-    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "view",
     "type": "function"
   },
@@ -587,23 +687,44 @@
   },
   {
     "inputs": [
-      { "internalType": "uint32", "name": "taskId", "type": "uint32" },
       {
         "components": [
           {
-            "internalType": "uint256",
-            "name": "referenceJobId",
-            "type": "uint256"
+            "internalType": "uint32",
+            "name": "jobId",
+            "type": "uint32"
           },
           {
             "internalType": "uint32",
-            "name": "referenceTaskId",
+            "name": "taskCreatedBlock",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes",
+            "name": "quorumNumbers",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct ITriggerXTaskManager.Task",
+        "name": "task",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "referenceTaskIndex",
             "type": "uint32"
           },
           {
             "internalType": "address",
-            "name": "completionTransactionHash",
+            "name": "operator",
             "type": "address"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "transactionHash",
+            "type": "bytes32"
           }
         ],
         "internalType": "struct ITriggerXTaskManager.TaskResponse",
@@ -613,41 +734,126 @@
       {
         "components": [
           {
-            "internalType": "uint256",
-            "name": "referenceJobId",
-            "type": "uint256"
+            "internalType": "uint32[]",
+            "name": "nonSignerQuorumBitmapIndices",
+            "type": "uint32[]"
           },
           {
-            "internalType": "uint32",
-            "name": "referenceTaskId",
-            "type": "uint32"
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "X",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "Y",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct BN254.G1Point[]",
+            "name": "nonSignerPubkeys",
+            "type": "tuple[]"
           },
           {
-            "internalType": "uint256",
-            "name": "taskResponsedBlock",
-            "type": "uint256"
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "X",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "Y",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct BN254.G1Point[]",
+            "name": "quorumApks",
+            "type": "tuple[]"
           },
           {
-            "internalType": "bytes32",
-            "name": "hashOfNonSigners",
-            "type": "bytes32"
+            "components": [
+              {
+                "internalType": "uint256[2]",
+                "name": "X",
+                "type": "uint256[2]"
+              },
+              {
+                "internalType": "uint256[2]",
+                "name": "Y",
+                "type": "uint256[2]"
+              }
+            ],
+            "internalType": "struct BN254.G2Point",
+            "name": "apkG2",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "X",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "Y",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct BN254.G1Point",
+            "name": "sigma",
+            "type": "tuple"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "quorumApkIndices",
+            "type": "uint32[]"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "totalStakeIndices",
+            "type": "uint32[]"
+          },
+          {
+            "internalType": "uint32[][]",
+            "name": "nonSignerStakeIndices",
+            "type": "uint32[][]"
           }
         ],
-        "internalType": "struct ITriggerXTaskManager.TaskResponseMetadata",
-        "name": "taskResponseMetadata",
+        "internalType": "struct IBLSSignatureChecker.NonSignerStakesAndSignature",
+        "name": "nonSignerStakesAndSignature",
         "type": "tuple"
-      },
-      {
-        "components": [
-          { "internalType": "uint256", "name": "X", "type": "uint256" },
-          { "internalType": "uint256", "name": "Y", "type": "uint256" }
-        ],
-        "internalType": "struct BN254.G1Point[]",
-        "name": "pubkeysOfNonSigningOperators",
-        "type": "tuple[]"
       }
     ],
     "name": "respondToTask",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "serviceManager",
+    "outputs": [
+      {
+        "internalType": "contract TriggerXServiceManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newAggregator",
+        "type": "address"
+      }
+    ],
+    "name": "setAggregator",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -666,24 +872,162 @@
     "type": "function"
   },
   {
-    "inputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
-    "name": "tasks",
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "value",
+        "type": "bool"
+      }
+    ],
+    "name": "setStaleStakesForbidden",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "stakeRegistry",
     "outputs": [
-      { "internalType": "uint256", "name": "jobId", "type": "uint256" },
-      { "internalType": "uint32", "name": "taskId", "type": "uint32" },
-      { "internalType": "string", "name": "status", "type": "string" },
-      { "internalType": "uint256", "name": "blockNumber", "type": "uint256" }
+      {
+        "internalType": "contract IStakeRegistry",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "staleStakesForbidden",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "taskNumber",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "newOwner", "type": "address" }
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "name": "taskSuccesfullyChallenged",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
     ],
     "name": "transferOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "msgHash",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "X",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "Y",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct BN254.G1Point",
+        "name": "apk",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256[2]",
+            "name": "X",
+            "type": "uint256[2]"
+          },
+          {
+            "internalType": "uint256[2]",
+            "name": "Y",
+            "type": "uint256[2]"
+          }
+        ],
+        "internalType": "struct BN254.G2Point",
+        "name": "apkG2",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "X",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "Y",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct BN254.G1Point",
+        "name": "sigma",
+        "type": "tuple"
+      }
+    ],
+    "name": "trySignatureAndApkVerification",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "pairingSuccessful",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "siganatureIsValid",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -695,16 +1039,6 @@
       }
     ],
     "name": "unpause",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      { "internalType": "uint32", "name": "taskId", "type": "uint32" },
-      { "internalType": "string", "name": "status", "type": "string" }
-    ],
-    "name": "updateTaskStatus",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

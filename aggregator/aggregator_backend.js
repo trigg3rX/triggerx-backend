@@ -1,83 +1,116 @@
+require('dotenv').config();
 const express = require('express');
-const bls = require('@noble/bls12-381');
 const { ethers } = require('ethers');
-const crypto = require('crypto');
+const bls = require('noble-bls12-381');
 
-const aggregatorApp = express();
-aggregatorApp.use(express.json());
+const app = express();
+app.use(express.json());
 
-const jobResults = new Map();
-let blsKeyPair;
+// Configure ethers.js provider and wallet for Holesky
+const provider = new ethers.providers.JsonRpcProvider('https://holesky.infura.io/v3/' + process.env.INFURA_PROJECT_ID);
+const wallet = new ethers.Wallet(process.env.ETH_PRIVATE_KEY, provider);
 
-async function initializeBLSKeyPair() {
-    const privateKey = crypto.randomBytes(32);
-    const publicKey = await bls.getPublicKey(privateKey);
-    blsKeyPair = { privateKey, publicKey };
-    console.log('BLS key pair initialized');
-}
+// Load the contract ABI and address
+const contractABI = require('./contractABI.json');
+const contractAddress = '0xDaa3d01f71F638952db924c9FE4f1CDa847A23Ad';
 
-async function aggregateAndSign(jobId) {
-    const results = jobResults.get(jobId) || [];
-    if (results.length === 0) return null;
+// BLS key pair (in production, use secure key management)
+const blsSecretKey = process.env.BLS_SECRET_KEY;
+// Convert hex string to Uint8Array
+const blsSecretKeyBytes = Uint8Array.from(Buffer.from(blsSecretKey, 'hex'));
+const blsPublicKey = bls.getPublicKey(blsSecretKeyBytes);
 
-    const aggregatedResult = results.join(',');
-    console.log('Aggregated result:', aggregatedResult);
+console.log('BLS Public Key:', Buffer.from(blsPublicKey).toString('hex'));
 
-    // Use ethers v6 utilities
-    const messageHash = ethers.keccak256(ethers.toUtf8Bytes(aggregatedResult));
-    console.log('Message hash:', messageHash);
-    console.log('Private key:', Buffer.from(blsKeyPair.privateKey).toString('hex'));
+// Mock data for demonstration (replace with actual data in production)
+const quorumInfo = {
+    quorumNumbers: [1], // Single quorum
+    quorumThresholdPercentage: 66,
+    signerPubkeys: [blsPublicKey], // Use the actual BLS public key
+    signerStakes: [[1000]] // Single keeper's stake
+};
 
-    const signature = await bls.sign(blsKeyPair.privateKey, ethers.getBytes(messageHash));
-    console.log('Signature:', Buffer.from(signature).toString('hex'));
+// Initialize contract instance
+const contract = new ethers.Contract(contractAddress, contractABI, wallet);
 
-    const signedResult = {
-        jobId,
-        aggregatedResult,
-        signature: Buffer.from(signature).toString('hex'),
-        publicKey: Buffer.from(blsKeyPair.publicKey).toString('hex')
-    };
+app.post('/receive-result', async (req, res) => {
+    try {
+        const { jobId, result } = req.body;
+        console.log(`Received result for job ${jobId}:`, result);
 
-    console.log('Signed Result:', signedResult);
+        // Get the current block number
+        const currentBlock = await provider.getBlockNumber();
+        const taskCreatedBlock = currentBlock;
 
-    return signedResult;
-}
+        // Create Task struct
+        const task = {
+            taskId: ethers.utils.hexlify(jobId),
+            taskCreatedBlock: ethers.utils.hexlify(taskCreatedBlock),
+            quorumNumbers: ethers.utils.hexlify(quorumInfo.quorumNumbers),
+            quorumThresholdPercentage: ethers.utils.hexlify(quorumInfo.quorumThresholdPercentage)
+        };
 
-aggregatorApp.post('/receive-result', async (req, res) => {
-    const { jobId, result } = req.body;
-    
-    console.log(`Aggregator received result for job ${jobId}:`, result);
+        // Create TaskResponse struct
+        const taskResponse = {
+            referenceTaskIndex: ethers.utils.hexlify(jobId),
+            dataHash: ethers.utils.keccak256(ethers.utils.toUtf8Bytes(JSON.stringify(result)))
+        };
 
-    if (!jobResults.has(jobId)) {
-        jobResults.set(jobId, []);
-    }
-    jobResults.get(jobId).push(result);
-    console.log("JOB ID: ", jobId);
+        // Generate BLS signature
+        const messageToSign = taskResponse.dataHash;
+        const signature = await bls.sign(messageToSign, blsSecretKeyBytes);
 
-    if (jobResults.get(jobId).length >= 3) {
-        console.log("Processing aggregation...");
-        try {
-            const aggregatedData = await aggregateAndSign(jobId);
-            console.log('Aggregated and signed data:');
-            console.log(JSON.stringify(aggregatedData, null, 2));
+        // Convert signature to hex string
+        const signatureHex = Buffer.from(signature).toString('hex');
 
-            jobResults.delete(jobId);
+        // Create NonSignerStakesAndSignature struct
+        const nonSignerStakesAndSignature = {
+            nonSignerQuorumBitmapIndices: [],
+            nonSignerPubkeys: [],
+            quorumApks: [{
+                X: ethers.utils.hexlify(Buffer.from(blsPublicKey.slice(0, 48))),
+                Y: ethers.utils.hexlify(Buffer.from(blsPublicKey.slice(48)))
+            }],
+            apkG2: { X: [ethers.utils.hexlify(0), ethers.utils.hexlify(0)], Y: [ethers.utils.hexlify(0), ethers.utils.hexlify(0)] },
+            sigma: {
+                X: ethers.utils.hexlify(Buffer.from(signature.slice(0, 48))),
+                Y: ethers.utils.hexlify(Buffer.from(signature.slice(48)))
+            },
+            quorumApkIndices: [ethers.utils.hexlify(0)],
+            totalStakeIndices: [ethers.utils.hexlify(0)],
+            nonSignerStakeIndices: [[]]
+        };
 
-            res.status(200).json({
-                message: `Results for job ${jobId} aggregated and signed.`,
-                data: aggregatedData
-            });
-        } catch (error) {
-            console.error('Error in aggregation and signing:', error);
-            res.status(500).json({ error: 'Failed to aggregate and sign results', details: error.message });
-        }
-    } else {
-        res.status(200).send(`Result for job ${jobId} received and stored. Current count: ${jobResults.get(jobId).length}`);
+        console.log('Task:', task);
+        console.log('TaskResponse:', taskResponse);
+        console.log('NonSignerStakesAndSignature:', nonSignerStakesAndSignature);
+
+        // Call the respondToTask function on the Holesky contract
+        const tx = await contract.respondToTask(
+            task,
+            taskResponse,
+            nonSignerStakesAndSignature,
+            { gasLimit: 1000000 }
+        );
+
+        console.log('Transaction sent, tx:', tx.hash);
+
+        // Wait for the transaction to be mined
+        const receipt = await tx.wait();
+        console.log('Transaction receipt:', receipt);
+
+        res.status(200).json({ 
+            message: 'Result received, signed with BLS, and sent to Holesky contract', 
+            transactionHash: tx.hash,
+            receipt
+        });
+    } catch (error) {
+        console.error('Error processing result:', error);
+        res.status(500).json({ error: 'Error processing result', details: error.message });
     }
 });
 
-const aggregatorPort = 3002;
-aggregatorApp.listen(aggregatorPort, async () => {
-    await initializeBLSKeyPair();
-    console.log(`Aggregator service listening at http://localhost:${aggregatorPort}`);
+const port = process.env.AGGREGATOR_PORT || 3002;
+app.listen(port, () => {
+    console.log(`Aggregator backend listening at http://localhost:${port}`);
 });

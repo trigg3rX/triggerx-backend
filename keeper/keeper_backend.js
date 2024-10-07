@@ -12,11 +12,17 @@ const etherscanApiKey = 'U5X9SJAFNJY7FS3TZWMWTVYJZ7Q1K6QJKM';
 const provider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
 const privateKey = process.env.HOLESKY_PRIVATE_KEY;
 const wallet = new ethers.Wallet(privateKey, provider);
+const tronPrivateKey = process.env.TRON_PRIVATE_KEY;
+if (!tronPrivateKey) {
+    throw new Error('TRON_PRIVATE_KEY is not set in the environment variables');
+}
 
 const tronWeb = new TronWeb({
     fullHost: 'https://nile.trongrid.io', // Replace with the appropriate TRON network URL
-    privateKey: process.env.TRON_PRIVATE_KEY // Make sure to set this in your .env file
+    privateKey: tronPrivateKey // Make sure to set this in your .env file
 });
+tronWeb.setAddress(tronWeb.address.fromPrivateKey(tronPrivateKey));
+console.log('TronWeb initialized with address:', tronWeb.defaultAddress.base58);
 
 // Middleware to fetch and standardize API data
 async function fetchAndStandardizeData(req, res, next) {
@@ -104,8 +110,20 @@ async function executeTask(task) {
         }
 
         // Explicitly set the owner_address (from address)
-        const fromAddress = tronWeb.address.fromPrivateKey(process.env.TRON_PRIVATE_KEY); // Ensure private key is in .env
-        const result = await contract[targetFunction](...args).call({ from: fromAddress });
+        const method = contract[targetFunction](...args);
+
+        // Set the caller's address (owner_address)
+        const callerAddress = tronWeb.defaultAddress.base58;
+        if (!callerAddress) {
+            throw new Error('TronWeb default address is not set');
+        }
+
+        // Call the function
+        let result = await method.call({
+            from: callerAddress,
+            callValue: 0
+        });
+
         console.log(`Function ${targetFunction} executed successfully. Result:`, result);
         return result;
     } catch (error) {
