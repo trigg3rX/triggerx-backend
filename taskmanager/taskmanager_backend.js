@@ -7,7 +7,7 @@ const TronWeb = require('tronweb');
 const taskManagerABI = require('./taskManagerABI.json');
 
 // Addresses for smart contracts
-const jobCreatorAddress = process.env.CONTRACT_ADDRESS;  // Tron contract address on Nile
+const jobCreatorAddress = 'TEsKaf2n8aF6pta7wyG5gwukzR4NoHre59';  // Tron contract address on Nile
 const taskManagerAddress = '0xDaa3d01f71F638952db924c9FE4f1CDa847A23Ad';  // Ethereum contract address on Holesky
 let jobCreatorContract;
 let taskManagerContract;
