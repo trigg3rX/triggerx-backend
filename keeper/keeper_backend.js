@@ -54,7 +54,8 @@ async function fetchAndStandardizeData(req, res, next) {
 async function fetchABI(contractAddress) {
     try {
         const contract = await tronWeb.contract().at(contractAddress);
-        return contract.abi;
+        const abi = JSON.stringify(contract.abi, null, 2)
+        return abi;
     } catch (error) {
         console.error("Error fetching ABI from TRON contract:", error);
         return null;
@@ -73,15 +74,15 @@ async function executeTask(task) {
     if (!abi) {
         throw new Error(`Failed to fetch ABI for contract ${contractAddress}`);
     }
-    console.log('Fetched ABI:', JSON.stringify(abi, null, 2));
 
     // Initialize the contract instance
     let contract;
+    const baseAddress = tronWeb.address.fromHex(contractAddress);
     try {
-        contract = await tronWeb.contract(abi, contractAddress);
-        console.log(`Contract initialized at address ${contractAddress}`);
+        contract = await tronWeb.contract().at(baseAddress);
+        console.log(`Contract initialized at address ${baseAddress}`);
     } catch (error) {
-        console.error(`Error initializing contract at address ${contractAddress}:`, error);
+        console.error(`Error initializing contract at address ${baseAddress}:`, error);
         throw error;
     }
 
@@ -119,13 +120,16 @@ async function executeTask(task) {
         }
 
         // Call the function
-        let result = await method.call({
+        let result = await method.send({
             from: callerAddress,
-            callValue: 0
+            callValue: 1
         });
 
-        console.log(`Function ${targetFunction} executed successfully. Result:`, result);
-        return result;
+        const serializedResult = result.toString();
+
+        console.log(`Function call ${targetFunction} executed successfully.`);
+        console.log(`-------------------------------------------------------------------------`);
+        return serializedResult;
     } catch (error) {
         console.error(`Error executing function ${targetFunction}:`, error);
         throw error;
@@ -144,15 +148,15 @@ keeperApp.post('/execute-task', fetchAndStandardizeData, async (req, res) => {
     try {
         const result = await executeTask(task);
         
-        // Convert BigInt to string if necessary
-        const serializedResult = typeof result === 'bigint' ? result.toString() : result;
+        console.log(`Result: `, result);
+        console.log(`-------------------------------------------------------------------------`);
         
         // Send the result to the aggregator
         await axios.post(aggregatorUrl, { 
             jobId: task.jobId, 
-            result: serializedResult
+            result: result
         });
-        console.log('Task result sent to aggregator:', serializedResult);
+        console.log('Task result sent to aggregator');
 
         res.status(200).send('Task executed and result sent to aggregator');
     } catch (error) {

@@ -7,8 +7,8 @@ const app = express();
 app.use(express.json());
 
 // Configure ethers.js provider and wallet for Holesky
-const provider = new ethers.providers.JsonRpcProvider('https://holesky.infura.io/v3/' + process.env.INFURA_PROJECT_ID);
-const wallet = new ethers.Wallet(process.env.ETH_PRIVATE_KEY, provider);
+const provider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc'); 
+const wallet = new ethers.Wallet(process.env.HOLESKY_PRIVATE_KEY, provider);
 
 // Load the contract ABI and address
 const contractABI = require('./contractABI.json');
@@ -37,6 +37,7 @@ app.post('/receive-result', async (req, res) => {
     try {
         const { jobId, result } = req.body;
         console.log(`Received result for job ${jobId}:`, result);
+        console.log(`-------------------------------------------------------------------------`);
 
         // Get the current block number
         const currentBlock = await provider.getBlockNumber();

@@ -124,14 +124,14 @@ async function createTasks(jobId) {
         console.log("Transaction receipt logs:", JSON.stringify(receipt.logs, null, 2));
 
         // Search for the 'TaskCreated' event
-        const taskCreatedEvent = receipt.logs.find(log => log.eventName === 'TaskCreated');
+        const taskCreatedEvent = receipt.logs.find(log => log.eventName === 'NewTaskCreated');
 
         // If taskCreatedEvent is not found, log an error
         if (!taskCreatedEvent) {
             throw new Error("TaskCreated event not found in logs.");
         }
 
-        const taskId = taskCreatedEvent.args.taskId;    
+        const taskId = taskCreatedEvent.args.latestTasknum;    
         console.log(`>>> New task created for jobID #${jobId} with ID: #${taskId}.`);
 
         // Call the JobCreator contract to add the taskId
@@ -218,24 +218,58 @@ function decodeJobData(encodedJobData) {
 
     const decodedJob = tronWeb.utils.abi.decodeParams(abiTypes, encodedJobData);
 
-    return {
-        jobId: decodedJob[0] ? decodedJob[0].toString() : '',
-        jobType: decodedJob[1] || '',
-        status: decodedJob[2] || '',
-        timeframe: Number(decodedJob[3] || 0),
-        blockNumber: decodedJob[4] ? decodedJob[4].toString() : '',
-        contractAddress: tronWeb.address.fromHex(decodedJob[5]),
-        targetFunction: decodedJob[6] || '',
-        timeInterval: decodedJob[7] ? Number(decodedJob[7]) : 0,
-        argType: decodedJob[8] || 0,
-        arguments: Array.isArray(decodedJob[9]) ? decodedJob[9] : [],
-        apiEndpoint: decodedJob[10] || '',
-        taskIds: Array.isArray(decodedJob[11]) 
-            ? decodedJob[11].map(id => (typeof id === 'bigint' ? id.toString() : Number(id))) 
-            : [],
-        creatorAddress: tronWeb.address.fromHex(decodedJob[12]), // convert to readable address
-        stakeAmount: decodedJob[13] ? decodedJob[13].toString() : '0'  // convert BigInt to string
-    };
+    if (Array.isArray(encodedJobData)) {
+        return {
+            jobId: encodedJobData[0] ? encodedJobData[0].toString() : '',
+            jobType: encodedJobData[1] || '',
+            status: encodedJobData[2] || '',
+            timeframe: Number(encodedJobData[3] || 0),
+            blockNumber: encodedJobData[4] && encodedJobData[4]._isBigNumber ? 
+                        encodedJobData[4].toString() : 
+                        (encodedJobData[4] || '').toString(),
+            contractAddress: typeof encodedJobData[5] === 'string' ? 
+                            tronWeb.address.fromHex(encodedJobData[5]) : 
+                            encodedJobData[5],
+            targetFunction: encodedJobData[6] || '',
+            timeInterval: encodedJobData[7] && encodedJobData[7]._isBigNumber ? 
+                         Number(encodedJobData[7].toString()) : 
+                         Number(encodedJobData[7] || 0),
+            argType: Number(encodedJobData[8] || 0),
+            arguments: encodedJobData[9] === 'null' ? [] : [encodedJobData[9]],
+            apiEndpoint: encodedJobData[10] || '',
+            creatorAddress: typeof encodedJobData[11] === 'string' ? 
+                           tronWeb.address.fromHex(encodedJobData[11]) : 
+                           encodedJobData[11],
+            stakeAmount: encodedJobData[12] && encodedJobData[12]._isBigNumber ? 
+                        encodedJobData[12].toString() : 
+                        (encodedJobData[12] || '0').toString()
+        };
+    }
+
+    try {
+        const decodedJob = tronWeb.utils.abi.decodeParams(abiTypes, encodedJobData);
+        return {
+            jobId: decodedJob[0] ? decodedJob[0].toString() : '',
+            jobType: decodedJob[1] || '',
+            status: decodedJob[2] || '',
+            timeframe: Number(decodedJob[3] || 0),
+            blockNumber: decodedJob[4] ? decodedJob[4].toString() : '',
+            contractAddress: tronWeb.address.fromHex(decodedJob[5]),
+            targetFunction: decodedJob[6] || '',
+            timeInterval: decodedJob[7] ? Number(decodedJob[7]) : 0,
+            argType: decodedJob[8] || 0,
+            arguments: Array.isArray(decodedJob[9]) ? decodedJob[9] : [],
+            apiEndpoint: decodedJob[10] || '',
+            taskIds: Array.isArray(decodedJob[11]) 
+                ? decodedJob[11].map(id => (typeof id === 'bigint' ? id.toString() : Number(id))) 
+                : [],
+            creatorAddress: tronWeb.address.fromHex(decodedJob[12]),
+            stakeAmount: decodedJob[13] ? decodedJob[13].toString() : '0'
+        };
+    } catch (error) {
+        console.error("Error decoding job data:", error);
+        throw error;
+    }
 }
 
 
