@@ -4,12 +4,13 @@ const { ethers } = require('ethers');
 const cron = require('node-cron');
 const axios = require('axios');
 const TronWeb = require('tronweb');
-const taskManagerABI = require('./taskManagerABI.json');
-const keeperConfigs = require('./keeperConfig');
+const taskManagerABI = require('../utils/abi/TaskManager.json');
+const keeperConfigs = require('../utils/keeperConfig');
 
 // Addresses for smart contracts
-const jobCreatorAddress = 'TAjmTb3v6FDEQyxktBn9heYjSt5VGeNMVr';  // Tron contract address on Nile
-const taskManagerAddress = '0xa3aB4285c28b5B444ccc55d0F70f6ba5001a48B5';  // Ethereum contract address on Holesky
+const jobCreatorAddress = 'TAjmTb3v6FDEQyxktBn9heYjSt5VGeNMVr';
+const taskManagerAddress = '0xa3aB4285c28b5B444ccc55d0F70f6ba5001a48B5';
+
 let jobCreatorContract;
 let taskManagerContract;
 
@@ -23,20 +24,20 @@ app.use(express.json());
 function initializeWallets() {
     // Initialize TronWeb
     const tronWeb = new TronWeb({
-        fullHost: 'https://nile.trongrid.io',
-        privateKey: process.env.NILE_PRIVATE_KEY
+        fullHost: process.env.TRON_FULL_HOST,
+        privateKey: process.env.TRON_PRIVATE_KEY
     });
 
     if (!tronWeb) {
-        console.error("!!! Tron Wallet not initialization failed.");
+        console.error("!!! Tron Wallet initialization failed.");
         process.exit(1);
     }
 
     // Initialize Ethereum Holesky wallet
-    const holeskyProvider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
+    const holeskyProvider = new ethers.JsonRpcProvider(process.env.ETHEREUM_RPC_URL);
     let holeskyWallet;
     try {
-        holeskyWallet = new ethers.Wallet(process.env.HOLESKY_PRIVATE_KEY, holeskyProvider);
+        holeskyWallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, holeskyProvider);
     } catch (error) {
         console.error("!!! Holesky wallet initialization failed:", error.message);
         process.exit(1);
@@ -68,24 +69,9 @@ const { tronWeb, holeskyWallet } = initializeWallets();
 // console.log(taskManagerContract);
 const activeJobs = {};
 
-function initializeKeepers() {
-    const keepers = keeperConfigs.map(config => {
-        return {
-            id: config.id,
-            port: config.port,
-            publicKey: config.publicKey,
-            privateKey: config.privateKey,
-            trx: config.trx
-        };
-    });
-    return keepers;
-}
-
-const keepers = initializeKeepers();
-console.log(">>> Keepers initialized:", keepers);
-
 // Function to listen for JobCreated events on the Nile network
 async function listenForJobCreatedEvents() {
+    console.log(`Task Manager backend listening on port ${port}`);
     await tronWeb.contract().at(jobCreatorAddress).then(contract => {
         contract.JobCreated().watch((err, event) => {
             if (err) return console.error("!!! Error with JobCreated event:", err);
@@ -246,8 +232,10 @@ function decodeJobData(encodedJobData) {
 
 // Helper function to convert nested BigInt types before sending the task data
 function getRandomKeeper() {
-    const randomIndex = Math.floor(Math.random() * keepers.length);
-    return keepers[randomIndex];
+    const keeperIds = Object.keys(keeperConfigs);
+    const randomIndex = Math.floor(Math.random() * keeperIds.length);
+    const randomKeeperId = keeperIds[randomIndex];
+    return keeperConfigs[randomKeeperId];
 }
 
 // Function to send task to a random keeper
@@ -278,8 +266,8 @@ async function sendTaskToKeeper(taskData) {
     }
 }
 // Start the Express server and begin listening for JobCreated events
-app.listen(port, () => {
-    initializeContracts();
-    console.log(`Task Manager backend listening on port ${port}`);
-    listenForJobCreatedEvents();
+app.listen(port, async () => {
+    await initializeContracts();
+    
+    await listenForJobCreatedEvents();
 });
