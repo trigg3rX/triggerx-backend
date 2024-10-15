@@ -54,33 +54,41 @@ async function initializeContracts() {
     console.log(">>> Contracts initialized.");
 }
 
-async function getEventsOfLatestBlock() {
-    const events = await tronWeb.event.getEventsOfLatestBlock({
-        only_confirmed: false
-    });
-
-    if (events.data.length > 0) {
-        console.log(events.data[0].block_number);
-    } else {
-        console.log('No events');
-    }
-    return events.data.filter(event => event.contract_address === jobManagerAddress);
+async function getEventsOfLatestBlock(jobLimit) {
+    const events = await tronWeb.event.getEventsByContractAddress(
+        jobManagerAddress,
+        {
+            // onlyConfirmed: true,
+            orderBy: 'block_timestamp,desc',
+            limit: jobLimit,
+            // minBlockTimestamp: Date.now() - 60000,
+            // maxBlockTimestamp: Date.now()
+        }
+      );
+    return events.data;
 }
 
 async function listenForJobManagerEvents() {
-    console.log(`JobManager listener running on port ${port}`);
+    console.log(`JobManager listener running on port ${port}...`);
 
+    let jobLimit = 1;
+    let lastJobId = 0;
+    
     setInterval(async () => {
-        const jobManagerEvents = await getEventsOfLatestBlock();
+        const jobManagerEvents = await getEventsOfLatestBlock(jobLimit);
         
         for (const event of jobManagerEvents) {
-            console.log(event.block_number);
+            // console.log(event);
+            const jobId = event.result.jobId;
             if (event.event_name === 'JobCreated') {
-                const jobId = event.result.jobId;
-                console.log(">>> New job created: #", jobId);
+                if (jobId > lastJobId) {
+                    lastJobId = jobId;
+                
+                    console.log(">>> New job created: #", jobId);
 
-                if (await verifyJobData(jobId)) {
-                    createTasks(jobId);
+                    // if (await verifyJobData(jobId)) {
+                    //     createTasks(jobId);
+                    // }
                 }
             }
             if (event.event_name === 'JobDeleted') {
@@ -90,9 +98,8 @@ async function listenForJobManagerEvents() {
                 console.log(">>> Job Updated: #", jobId);
             }
         }
-    }, 2500);
-
-    console.log("Listening for JobManager events...");
+        jobLimit = 5;
+    }, 6000);
 }
 
 async function verifyJobData(jobId) {
