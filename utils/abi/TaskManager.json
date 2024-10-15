@@ -63,21 +63,13 @@
       },
       {
         "components": [
-          {
-            "internalType": "uint32",
-            "name": "jobId",
-            "type": "uint32"
-          },
+          { "internalType": "uint32", "name": "jobId", "type": "uint32" },
           {
             "internalType": "uint32",
             "name": "taskCreatedBlock",
             "type": "uint32"
           },
-          {
-            "internalType": "bytes",
-            "name": "quorumNumbers",
-            "type": "bytes"
-          }
+          { "internalType": "bytes", "name": "quorumNumbers", "type": "bytes" }
         ],
         "indexed": false,
         "internalType": "struct ITriggerXTaskManager.Task",
@@ -219,11 +211,7 @@
             "name": "referenceTaskIndex",
             "type": "uint32"
           },
-          {
-            "internalType": "address",
-            "name": "operator",
-            "type": "address"
-          },
+          { "internalType": "address", "name": "operator", "type": "address" },
           {
             "internalType": "bytes32",
             "name": "transactionHash",
@@ -279,77 +267,35 @@
   {
     "inputs": [],
     "name": "TASK_CHALLENGE_WINDOW_BLOCK",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "TASK_RESPONSE_WINDOW_BLOCK",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "aggregator",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "inputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "name": "allTaskHashes",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "inputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "name": "allTaskResponses",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -368,16 +314,8 @@
   },
   {
     "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "msgHash",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "quorumNumbers",
-        "type": "bytes"
-      },
+      { "internalType": "bytes32", "name": "msgHash", "type": "bytes32" },
+      { "internalType": "bytes", "name": "quorumNumbers", "type": "bytes" },
       {
         "internalType": "uint32",
         "name": "referenceBlockNumber",
@@ -392,16 +330,8 @@
           },
           {
             "components": [
-              {
-                "internalType": "uint256",
-                "name": "X",
-                "type": "uint256"
-              },
-              {
-                "internalType": "uint256",
-                "name": "Y",
-                "type": "uint256"
-              }
+              { "internalType": "uint256", "name": "X", "type": "uint256" },
+              { "internalType": "uint256", "name": "Y", "type": "uint256" }
             ],
             "internalType": "struct BN254.G1Point[]",
             "name": "nonSignerPubkeys",
@@ -409,16 +339,8 @@
           },
           {
             "components": [
-              {
-                "internalType": "uint256",
-                "name": "X",
-                "type": "uint256"
-              },
-              {
-                "internalType": "uint256",
-                "name": "Y",
-                "type": "uint256"
-              }
+              { "internalType": "uint256", "name": "X", "type": "uint256" },
+              { "internalType": "uint256", "name": "Y", "type": "uint256" }
             ],
             "internalType": "struct BN254.G1Point[]",
             "name": "quorumApks",
@@ -443,16 +365,8 @@
           },
           {
             "components": [
-              {
-                "internalType": "uint256",
-                "name": "X",
-                "type": "uint256"
-              },
-              {
-                "internalType": "uint256",
-                "name": "Y",
-                "type": "uint256"
-              }
+              { "internalType": "uint256", "name": "X", "type": "uint256" },
+              { "internalType": "uint256", "name": "Y", "type": "uint256" }
             ],
             "internalType": "struct BN254.G1Point",
             "name": "sigma",
@@ -498,27 +412,15 @@
         "name": "",
         "type": "tuple"
       },
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
+      { "internalType": "bytes32", "name": "", "type": "bytes32" }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      {
-        "internalType": "uint32",
-        "name": "jobId",
-        "type": "uint32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "quorumNumbers",
-        "type": "bytes"
-      }
+      { "internalType": "uint32", "name": "jobId", "type": "uint32" },
+      { "internalType": "bytes", "name": "quorumNumbers", "type": "bytes" }
     ],
     "name": "createNewTask",
     "outputs": [],
@@ -541,13 +443,7 @@
   {
     "inputs": [],
     "name": "getTaskResponseWindowBlock",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -558,16 +454,8 @@
         "name": "_pauserRegistry",
         "type": "address"
       },
-      {
-        "internalType": "address",
-        "name": "initialOwner",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_aggregator",
-        "type": "address"
-      }
+      { "internalType": "address", "name": "initialOwner", "type": "address" },
+      { "internalType": "address", "name": "_aggregator", "type": "address" }
     ],
     "name": "initialize",
     "outputs": [],
@@ -577,26 +465,14 @@
   {
     "inputs": [],
     "name": "latestTaskNum",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -621,34 +497,16 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "index",
-        "type": "uint8"
-      }
-    ],
+    "inputs": [{ "internalType": "uint8", "name": "index", "type": "uint8" }],
     "name": "paused",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "paused",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -689,21 +547,13 @@
     "inputs": [
       {
         "components": [
-          {
-            "internalType": "uint32",
-            "name": "jobId",
-            "type": "uint32"
-          },
+          { "internalType": "uint32", "name": "jobId", "type": "uint32" },
           {
             "internalType": "uint32",
             "name": "taskCreatedBlock",
             "type": "uint32"
           },
-          {
-            "internalType": "bytes",
-            "name": "quorumNumbers",
-            "type": "bytes"
-          }
+          { "internalType": "bytes", "name": "quorumNumbers", "type": "bytes" }
         ],
         "internalType": "struct ITriggerXTaskManager.Task",
         "name": "task",
@@ -716,11 +566,7 @@
             "name": "referenceTaskIndex",
             "type": "uint32"
           },
-          {
-            "internalType": "address",
-            "name": "operator",
-            "type": "address"
-          },
+          { "internalType": "address", "name": "operator", "type": "address" },
           {
             "internalType": "bytes32",
             "name": "transactionHash",
@@ -740,16 +586,8 @@
           },
           {
             "components": [
-              {
-                "internalType": "uint256",
-                "name": "X",
-                "type": "uint256"
-              },
-              {
-                "internalType": "uint256",
-                "name": "Y",
-                "type": "uint256"
-              }
+              { "internalType": "uint256", "name": "X", "type": "uint256" },
+              { "internalType": "uint256", "name": "Y", "type": "uint256" }
             ],
             "internalType": "struct BN254.G1Point[]",
             "name": "nonSignerPubkeys",
@@ -757,16 +595,8 @@
           },
           {
             "components": [
-              {
-                "internalType": "uint256",
-                "name": "X",
-                "type": "uint256"
-              },
-              {
-                "internalType": "uint256",
-                "name": "Y",
-                "type": "uint256"
-              }
+              { "internalType": "uint256", "name": "X", "type": "uint256" },
+              { "internalType": "uint256", "name": "Y", "type": "uint256" }
             ],
             "internalType": "struct BN254.G1Point[]",
             "name": "quorumApks",
@@ -791,16 +621,8 @@
           },
           {
             "components": [
-              {
-                "internalType": "uint256",
-                "name": "X",
-                "type": "uint256"
-              },
-              {
-                "internalType": "uint256",
-                "name": "Y",
-                "type": "uint256"
-              }
+              { "internalType": "uint256", "name": "X", "type": "uint256" },
+              { "internalType": "uint256", "name": "Y", "type": "uint256" }
             ],
             "internalType": "struct BN254.G1Point",
             "name": "sigma",
@@ -847,11 +669,7 @@
   },
   {
     "inputs": [
-      {
-        "internalType": "address",
-        "name": "newAggregator",
-        "type": "address"
-      }
+      { "internalType": "address", "name": "newAggregator", "type": "address" }
     ],
     "name": "setAggregator",
     "outputs": [],
@@ -872,13 +690,7 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bool",
-        "name": "value",
-        "type": "bool"
-      }
-    ],
+    "inputs": [{ "internalType": "bool", "name": "value", "type": "bool" }],
     "name": "setStaleStakesForbidden",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -900,55 +712,27 @@
   {
     "inputs": [],
     "name": "staleStakesForbidden",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "taskNumber",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
+    "inputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
     "name": "taskSuccesfullyChallenged",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
-      {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
+      { "internalType": "address", "name": "newOwner", "type": "address" }
     ],
     "name": "transferOwnership",
     "outputs": [],
@@ -957,23 +741,11 @@
   },
   {
     "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "msgHash",
-        "type": "bytes32"
-      },
+      { "internalType": "bytes32", "name": "msgHash", "type": "bytes32" },
       {
         "components": [
-          {
-            "internalType": "uint256",
-            "name": "X",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "Y",
-            "type": "uint256"
-          }
+          { "internalType": "uint256", "name": "X", "type": "uint256" },
+          { "internalType": "uint256", "name": "Y", "type": "uint256" }
         ],
         "internalType": "struct BN254.G1Point",
         "name": "apk",
@@ -981,16 +753,8 @@
       },
       {
         "components": [
-          {
-            "internalType": "uint256[2]",
-            "name": "X",
-            "type": "uint256[2]"
-          },
-          {
-            "internalType": "uint256[2]",
-            "name": "Y",
-            "type": "uint256[2]"
-          }
+          { "internalType": "uint256[2]", "name": "X", "type": "uint256[2]" },
+          { "internalType": "uint256[2]", "name": "Y", "type": "uint256[2]" }
         ],
         "internalType": "struct BN254.G2Point",
         "name": "apkG2",
@@ -998,16 +762,8 @@
       },
       {
         "components": [
-          {
-            "internalType": "uint256",
-            "name": "X",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "Y",
-            "type": "uint256"
-          }
+          { "internalType": "uint256", "name": "X", "type": "uint256" },
+          { "internalType": "uint256", "name": "Y", "type": "uint256" }
         ],
         "internalType": "struct BN254.G1Point",
         "name": "sigma",
@@ -1016,16 +772,8 @@
     ],
     "name": "trySignatureAndApkVerification",
     "outputs": [
-      {
-        "internalType": "bool",
-        "name": "pairingSuccessful",
-        "type": "bool"
-      },
-      {
-        "internalType": "bool",
-        "name": "siganatureIsValid",
-        "type": "bool"
-      }
+      { "internalType": "bool", "name": "pairingSuccessful", "type": "bool" },
+      { "internalType": "bool", "name": "siganatureIsValid", "type": "bool" }
     ],
     "stateMutability": "view",
     "type": "function"

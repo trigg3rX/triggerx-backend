@@ -100,18 +100,21 @@ app.post('/receive-result', async (req, res) => {
         const receipt = await tx.wait();
         console.log('Transaction receipt:', receipt);
 
-        res.status(200).json({ 
-            message: 'Result received, signed with BLS, and sent to Holesky contract', 
-            transactionHash: tx.hash,
-            receipt
-        });
-    } catch (error) {
-        console.error('Error processing result:', error);
-        res.status(500).json({ error: 'Error processing result', details: error.message });
+            res.status(200).json({
+                message: `Results for job ${jobId} aggregated and signed.`,
+                data: aggregatedData
+            });
+        } catch (error) {
+            console.error('Error in aggregation and signing:', error);
+            res.status(500).json({ error: 'Failed to aggregate and sign results', details: error.message });
+        }
+    } else {
+        res.status(200).send(`Result for job ${jobId} received and stored. Current count: ${jobResults.get(jobId).length}`);
     }
 });
 
-const port = process.env.AGGREGATOR_PORT || 3002;
-app.listen(port, () => {
-    console.log(`Aggregator backend listening at http://localhost:${port}`);
+const aggregatorPort = 3006;
+aggregatorApp.listen(aggregatorPort, async () => {
+    await initializeBLSKeyPair();
+    console.log(`Aggregator service listening at http://localhost:${aggregatorPort}`);
 });
