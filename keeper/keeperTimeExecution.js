@@ -32,9 +32,12 @@ async function executeTask(task) {
 
     let args;
     switch (argType) {
-        case 0: args = []; break;
-        case 1: args = task.argumentInfo.arguments; break;
-        case 2: args = [standardizedData.data.value]; break;
+        case '0':
+        case 'None': args = []; break;
+        case '1':
+        case 'Static': args = task.argumentInfo.arguments; break;
+        case '2':
+        case 'Dynamic': args = [standardizedData.data.value]; break;
         default: throw new Error(`Invalid argument type: ${argType}`);
     }
 
@@ -51,10 +54,8 @@ async function executeTask(task) {
             throw new Error('TronWeb default address is not set');
         }
 
-        let result = await method.send({
-            from: callerAddress,
-            callValue: 1
-        });
+        const result = await contract[targetFunction](...args).call();  // Use .call() for pure/view functions
+        console.log("Function result:", result);
 
         const serializedResult = result.toString();
 

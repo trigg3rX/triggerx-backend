@@ -6,7 +6,8 @@ const axios = require('axios');
 const { TronWeb } = require('tronweb');
 const taskManagerABI = require('../utils/abi/TaskManager.json');
 const { jobManagerABI } = require('../utils/abi/JobManager');
-const keeperConfigs = require('../utils/keeperConfig');
+const { keeperConfig: keeperConfigs } = require('../utils/keeperConfig');
+
 
 // Addresses for smart contracts
 const jobManagerAddress = 'TEsKaf2n8aF6pta7wyG5gwukzR4NoHre59';
@@ -86,20 +87,20 @@ async function listenForJobManagerEvents() {
                 
                     console.log(">>> New job created: #", jobId);
 
-                    // if (await verifyJobData(jobId)) {
-                    //     createTasks(jobId);
-                    // }
+                    if (await verifyJobData(jobId)) {
+                        createTasks(jobId);
+                    }
                 }
             }
-            if (event.event_name === 'JobDeleted') {
-                console.log(">>> Job Deleted: #", jobId);
-            }
-            if (event.event_name === 'JobUpdated') {
-                console.log(">>> Job Updated: #", jobId);
-            }
+            // if (event.event_name === 'JobDeleted') {
+            //     console.log(">>> Job Deleted: #", jobId);
+            // }
+            // if (event.event_name === 'JobUpdated') {
+            //     console.log(">>> Job Updated: #", jobId);
+            // }
         }
         jobLimit = 5;
-    }, 6000);
+    }, 3000);
 }
 
 async function verifyJobData(jobId) {
@@ -128,54 +129,77 @@ async function verifyJobData(jobId) {
 
 async function createTasks(jobId) {
     try {
+        console.log(`Creating task for jobID #${jobId}`);
         const tx = await taskManagerContract.createNewTask(jobId, "0x01");
+        console.log('Transaction sent, waiting for receipt...');
         const receipt = await tx.wait();
+        console.log('Transaction receipt received:', receipt);
 
-        const taskCreatedEvent = receipt.logs.find(log => log.eventName === 'TaskCreated');
-        const taskId = taskCreatedEvent.args.taskId;    
+        console.log('Events in the receipt:');
+        receipt.logs.forEach((log, index) => {
+            console.log(`Event ${index}:`, log);
+        });
 
-        console.log(`>>> New task created for jobID #${jobId} with ID: #${taskId}.`);
+        const taskCreatedEvent = receipt.logs.find(log => log.fragment && log.fragment.name === 'NewTaskCreated');
+        
+        if (taskCreatedEvent && taskCreatedEvent.args) {
+            const taskId = taskCreatedEvent.args[0];  // The first argument is the taskId
+            console.log(`>>> New task created for jobID #${jobId} with ID: #${taskId}.`);
 
-        try {
-            const result = await jobManagerContract.addTaskId(jobId, taskId).send();
-            console.log(`>>> Added taskID #${taskId} to jobID #${jobId}.`);
-        } catch (error) {
-            console.error(`!!! Error adding taskID #${taskId} to jobID #${jobId}:`, error);
+            try {
+                const result = await jobManagerContract.addTaskId(jobId, taskId).send();
+                console.log(`>>> Added taskID #${taskId} to jobID #${jobId}.`);
+            } catch (error) {
+                console.error(`!!! Error adding taskID #${taskId} to jobID #${jobId}:`, error);
+            }
+
+            await createTaskData(jobId, taskId);
+        } else {
+            console.error('!!! NewTaskCreated event not found in transaction receipt');
+            console.log('All events in receipt:', receipt.logs);
         }
-
-        createTaskData(jobId, taskId);
     } catch (error) {
         console.error("!!! Error creating task:", error);
+        console.log('Full error object:', error);
+    }
+}
+
+async function getJobData(jobId) {
+    try {
+        const jobData = await jobManagerContract.jobs(jobId).call();
+        return jobData;
+    } catch (error) {
+        console.error(`Error fetching job data for jobID #${jobId}:`, error);
         throw error;
     }
 }
 
 async function createTaskData(jobId, taskId) {
     try {
-        const encodedJobData = await jobManagerListener.getJobData(jobId);
-        console.log("Raw job data:", encodedJobData);
+        const rawJobData = await getJobData(jobId);
+        console.log("Raw job data:", rawJobData);
 
-        const decodedJob = decodeJobData(encodedJobData);
-        console.log("Decoded job data:", decodedJob);
+        const formattedJob = formatJobData(rawJobData);
+        console.log("Decoded job data:", formattedJob);
 
         const taskData = {
             taskId: taskId.toString(),
             jobId: jobId.toString(),
-            jobType: decodedJob.jobType,
-            contractAddress: decodedJob.contractAddress,
-            targetFunction: decodedJob.targetFunction,
-            argType: decodedJob.argType,
+            jobType: formattedJob.jobType,
+            contractAddress: formattedJob.contractAddress,
+            targetFunction: formattedJob.targetFunction,
+            argType: formattedJob.argType,
             argumentInfo: {
-                type: decodedJob.argType,
-                arguments: decodedJob.arguments
+                type: formattedJob.argType,
+                arguments: formattedJob.arguments
             },
-            apiEndpoint: decodedJob.apiEndpoint,
-            timeInterval: decodedJob.timeInterval
+            apiEndpoint: formattedJob.apiEndpoint,
+            timeInterval: formattedJob.timeInterval
         };
 
         console.log("Structured task data:", taskData);
 
-        const timeIntervalSeconds = Math.max(1, decodedJob.timeInterval);
+        const timeIntervalSeconds = Math.max(1, formattedJob.timeInterval);
         const cronExpression = `*/${timeIntervalSeconds} * * * * *`;
         console.log("Cron expression:", cronExpression);
 
@@ -195,42 +219,52 @@ async function createTaskData(jobId, taskId) {
     }
 }
 
-function decodeJobData(encodedJobData) {
-    const abiTypes = [
-        "uint256", "string", "string", "uint32", "uint256", "address", 
-        "string", "uint256", "uint8", "bytes[]", "string", "uint32[]"
-    ];
+function formatJobData(rawJobData) {
+    if (!Array.isArray(rawJobData) || rawJobData.length < 12) {
+        console.error('!!! Invalid job data format:', rawJobData);
+        return {};
+    }
 
-    const decodedJob = tronWeb.utils.abi.decodeParams(abiTypes, encodedJobData);
+    const [
+        jobId, jobType, status, timeframe, blockNumber, contractAddress,
+        targetFunction, timeInterval, argType, arguments, apiEndpoint, stakeAmount
+    ] = rawJobData;
+
+    // Find jobCreator in the additional fields
+    const jobCreator = rawJobData.find(item => item === 'jobCreator');
+    const jobCreatorValue = jobCreator ? rawJobData[rawJobData.indexOf(jobCreator) + 1] : null;
 
     return {
-        jobId: decodedJob[0] ? decodedJob[0].toString() : '',
-        jobType: decodedJob[1] || '',
-        status: decodedJob[2] || '',
-        timeframe: Number(decodedJob[3] || 0),
-        blockNumber: decodedJob[4] ? decodedJob[4].toString() : '',
-        contractAddress: tronWeb.address.fromHex(decodedJob[5]),
-        targetFunction: decodedJob[6] || '',
-        timeInterval: decodedJob[7] ? Number(decodedJob[7]) : 0,
-        argType: decodedJob[8] || 0,
-        arguments: Array.isArray(decodedJob[9]) ? decodedJob[9] : [],
-        apiEndpoint: decodedJob[10] || '',
-        taskIds: Array.isArray(decodedJob[11]) 
-            ? decodedJob[11].map(id => (typeof id === 'bigint' ? id.toString() : Number(id))) 
-            : []
+        jobId: typeof jobId === 'bigint' ? Number(jobId) : jobId,
+        jobType: jobType || '',
+        status: status || '',
+        timeframe: typeof timeframe === 'bigint' ? Number(timeframe) : timeframe,
+        blockNumber: typeof blockNumber === 'bigint' ? blockNumber.toString() : blockNumber,
+        contractAddress: contractAddress ? tronWeb.address.fromHex(contractAddress) : '',
+        targetFunction: targetFunction || '',
+        timeInterval: typeof timeInterval === 'bigint' ? Number(timeInterval) : timeInterval,
+        argType: ['None', 'Static', 'Dynamic'][Number(argType) || 0],
+        arguments: Array.isArray(arguments) && arguments !== 'null' ? arguments : [],
+        apiEndpoint: apiEndpoint === 'null' ? null : apiEndpoint,
+        taskIds: [], // Not present in the raw data, initialize as empty array
+        jobCreator: jobCreatorValue ? tronWeb.address.fromHex(jobCreatorValue) : '',
+        stakeAmount: typeof stakeAmount === 'bigint' ? stakeAmount.toString() : stakeAmount
     };
 }
 
-function getRandomKeeper() {
-    const keeperIds = Object.keys(keeperConfigs);
-    const randomIndex = Math.floor(Math.random() * keeperIds.length);
-    const randomKeeperId = keeperIds[randomIndex];
-    // return keeperConfigs[randomKeeperId];
-    return keeperConfigs[1];
-}  
+// function getRandomKeeper() {
+//     const keeperIds = Object.keys(keeperConfigs);
+//     const randomIndex = Math.floor(Math.random() * keeperIds.length);
+//     const randomKeeperId = keeperIds[randomIndex];
+//     // return keeperConfigs[randomKeeperId];
+//     return keeperConfigs[1];
+// }  
 
 async function sendTaskToKeeper(taskData) {
-    const keeper = getRandomKeeper();
+    console.log('Keeper Configurations:', keeperConfigs);
+    const keeper = keeperConfigs[1];
+
+    
     const keeperUrl = `http://localhost:${keeper.port}/execute-task`;
 
     const convertNestedBigInt = (obj) => {
