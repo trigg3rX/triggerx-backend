@@ -47,6 +47,9 @@ function createRPCClient(aggregatorUrl) {
             
             await axios.post(aggregatorUrl, { 
                 jobId: task.jobId, 
+                taskId: task.taskId,
+                blockNumber: task.blockNumber,
+                quorumNumbers: task.quorumNumbers,
                 result: result
             });
             console.log('Task result sent to aggregator');

@@ -12,7 +12,7 @@ const wallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, provider);
 
 // Load the contract ABI and address
 const contractABI = require('./contractABI.json');
-const contractAddress = '0xDaa3d01f71F638952db924c9FE4f1CDa847A23Ad';
+const contractAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
 
 // BLS key pair (in production, use secure key management)
 const blsSecretKey = process.env.BLS_SECRET_KEY;
@@ -35,66 +35,68 @@ const contract = new ethers.Contract(contractAddress, contractABI, wallet);
 
 app.post('/receive-result', async (req, res) => {
     try {
-        const { jobId, result } = req.body;
-        console.log(`Received result for job ${jobId}:`, result);
+        const { jobId, taskId, blockNumber, quorumNumbers, result } = req.body;
+        console.log(`Received result for task ${taskId}:`, result);
         console.log(`-------------------------------------------------------------------------`);
 
-        // Get the current block number
-        const currentBlock = await provider.getBlockNumber();
-        const taskCreatedBlock = currentBlock;
-
         console.log("JOB ID: ", jobId);
-        console.log("TASK CREATED BLOCK: ", taskCreatedBlock);
-        console.log("Quorum Numbers: ", quorumInfo.quorumNumbers);
-
-        // Convert quorum numbers to bytes
-        const quorumNumbersBytes = ethers.zeroPadValue(ethers.toBeHex(quorumInfo.quorumNumbers[0]), 32);
-        console.log("Quorum Numbers Bytes: ", quorumNumbersBytes);
+        console.log("TASK ID:", taskId);
+        console.log("TASK CREATED BLOCK: ", blockNumber);
+        console.log("Quorum Numbers: ", quorumNumbers);
 
         // Create Task struct
         const task = {
             jobId: ethers.toBigInt(jobId),
-            taskCreatedBlock: ethers.toBigInt(taskCreatedBlock),
-            quorumNumbers: quorumNumbersBytes
+            taskCreatedBlock: ethers.toBigInt(blockNumber),
+            quorumNumbers: quorumNumbers
         };
 
         // Create TaskResponse struct
         const taskResponse = {
-            referenceTaskIndex: ethers.toBigInt(jobId),
-            dataHash: ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(result))),
-            operator: wallet.address
+            referenceTaskIndex: ethers.toBigInt(taskId),
+            operator: wallet.address,
+            transactionHash: ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(result)))
         };
 
         // Generate BLS signature
-        const messageToSign = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['tuple(uint32 referenceTaskIndex, bytes32 dataHash, address operator)'], [taskResponse]));
-        const signature = await bls.sign(messageToSign, blsSecretKeyBytes);
+        const messageToSign = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+            ['tuple(uint32 referenceTaskIndex, address operator, bytes32 transactionHash)'],
+            [taskResponse]
+        ));
+        const signature = await bls.sign(messageToSign, blsSecretKeyBytes);      
+        
+        console.log('BLS Signature:', signature);
+        console.log('BLS PUBLIC KEY:', blsPublicKey);
 
-        // Create NonSignerStakesAndSignature struct
+        const signatureX = `0x${signature.slice(0, 64)}`;
+        const signatureY = `0x${signature.slice(128, 192)}`;
+        
+        // Create NonSignerStakesAndSignature struct here
         const nonSignerStakesAndSignature = {
             nonSignerQuorumBitmapIndices: [],
             nonSignerPubkeys: [],
-            quorumApks: [{
-                X: ethers.hexlify(Buffer.from(blsPublicKey.slice(0, 48))),
-                Y: ethers.hexlify(Buffer.from(blsPublicKey.slice(48)))
+            quorumApks: [{ 
+                X: ethers.hexlify(Buffer.from(blsPublicKey.slice(0, 24))), 
+                Y: ethers.hexlify(Buffer.from(blsPublicKey.slice(24))) 
             }],
-            apkG2: { X: [ethers.ZeroHash, ethers.ZeroHash], Y: [ethers.ZeroHash, ethers.ZeroHash] },
-            sigma: {
-                X: ethers.hexlify(Buffer.from(signature.slice(0, 48))),
-                Y: ethers.hexlify(Buffer.from(signature.slice(48)))
+            apkG2: {
+                X: [ethers.ZeroHash, ethers.ZeroHash],
+                Y: [ethers.ZeroHash, ethers.ZeroHash]
+            },
+            sigma: { 
+                X: signatureX,
+                Y: signatureY
             },
             quorumApkIndices: [ethers.toBigInt(0)],
             totalStakeIndices: [ethers.toBigInt(0)],
-            nonSignerStakeIndices: [[]],
-            transactionHash: ethers.keccak256(ethers.toUtf8Bytes('dummyTransactionHash')) // Add this line
+            nonSignerStakeIndices: []
         };
-
 
         console.log('Task:', task);
         console.log('TaskResponse:', taskResponse);
         console.log('NonSignerStakesAndSignature:', nonSignerStakesAndSignature);
 
         // Write transaction path
-        console.log('Calling respondToTask with parameters:');
         console.log(JSON.stringify({
             task: {
                 ...task,
@@ -108,8 +110,7 @@ app.post('/receive-result', async (req, res) => {
             nonSignerStakesAndSignature: {
                 ...nonSignerStakesAndSignature,
                 quorumApkIndices: nonSignerStakesAndSignature.quorumApkIndices.map(i => i.toString()),
-                totalStakeIndices: nonSignerStakesAndSignature.totalStakeIndices.map(i => i.toString()),
-                transactionHash: nonSignerStakesAndSignature.transactionHash // Add this line
+                totalStakeIndices: nonSignerStakesAndSignature.totalStakeIndices.map(i => i.toString())
             }
         }, null, 2));
 
@@ -119,15 +120,8 @@ app.post('/receive-result', async (req, res) => {
             nonSignerStakesAndSignature
         );
 
-        console.log('Transaction sent, tx:', tx);
-
-        // Wait for the transaction to be mined
-        try {
-            const receipt = await tx.wait();
-            console.log('Transaction mined, receipt:', receipt);
-        } catch (error) {
-            console.error('Error while waiting for transaction to be mined:', error);
-        }
+        const receipt = await tx.wait();
+        
 
     } catch (error) {
         console.error('Error in aggregation and signing:', error);
@@ -137,7 +131,6 @@ app.post('/receive-result', async (req, res) => {
         if (error.method) console.error('Error method:', error.method);
         if (error.transaction) console.error('Error transaction:', error.transaction);
         
-        // Convert BigInt fields to strings for the error response
         res.status(500).json({ 
             error: 'Failed to aggregate and sign results', 
             details: error.message,

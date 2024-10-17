@@ -11,7 +11,7 @@ const { keeperConfig: keeperConfigs } = require('../utils/keeperConfig');
 
 // Addresses for smart contracts
 const jobManagerAddress = 'TEsKaf2n8aF6pta7wyG5gwukzR4NoHre59';
-const taskManagerAddress = '0xDaa3d01f71F638952db924c9FE4f1CDa847A23Ad';
+const taskManagerAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
 
 let taskManagerContract;
 let jobManagerContract;
@@ -72,8 +72,8 @@ async function getEventsOfLatestBlock(jobLimit) {
 async function listenForJobManagerEvents() {
     console.log(`JobManager listener running on port ${port}...`);
 
-    let jobLimit = 1;
-    let lastJobId = 0;
+    let jobLimit = 5;
+    let lastJobId = 133;
     
     setInterval(async () => {
         const jobManagerEvents = await getEventsOfLatestBlock(jobLimit);
@@ -87,9 +87,9 @@ async function listenForJobManagerEvents() {
                 
                     console.log(">>> New job created: #", jobId);
 
-                    if (await verifyJobData(jobId)) {
-                        createTasks(jobId);
-                    }
+                    // if (await verifyJobData(jobId)) {
+                        // createTasks(jobId);
+                    // }
                 }
             }
             // if (event.event_name === 'JobDeleted') {
@@ -130,34 +130,38 @@ async function verifyJobData(jobId) {
 async function createTasks(jobId) {
     try {
         console.log(`Creating task for jobID #${jobId}`);
-        const tx = await taskManagerContract.createNewTask(jobId, "0x01");
+        const tx = await taskManagerContract.createNewTask(jobId, "0x0000000000000000000000000000000000000000000000000000000000000001");
         console.log('Transaction sent, waiting for receipt...');
         const receipt = await tx.wait();
-        console.log('Transaction receipt received:', receipt);
+        // console.log('Transaction receipt received:', receipt);
 
-        console.log('Events in the receipt:');
-        receipt.logs.forEach((log, index) => {
-            console.log(`Event ${index}:`, log);
-        });
+        // console.log('Events in the receipt:');
+        // receipt.logs.forEach((log, index) => {
+        //     console.log(`Event ${index}:`, log);
+        // });
 
-        const taskCreatedEvent = receipt.logs.find(log => log.fragment && log.fragment.name === 'NewTaskCreated');
-        
-        if (taskCreatedEvent && taskCreatedEvent.args) {
-            const taskId = taskCreatedEvent.args[0];  // The first argument is the taskId
-            console.log(`>>> New task created for jobID #${jobId} with ID: #${taskId}.`);
-
-            try {
-                const result = await jobManagerContract.addTaskId(jobId, taskId).send();
-                console.log(`>>> Added taskID #${taskId} to jobID #${jobId}.`);
-            } catch (error) {
-                console.error(`!!! Error adding taskID #${taskId} to jobID #${jobId}:`, error);
+        const taskCreatedEvent = {
+            event_name: receipt.logs[0].fragment.name,
+            taskId: receipt.logs[0].args[0].toString(),
+            task: {
+                jobId: receipt.logs[0].args[1][0].toString(),
+                taskCreatedBlock: Number(receipt.logs[0].args[1][1]),
+                quorumNumbers: receipt.logs[0].args[1][2],
             }
+        };
 
-            await createTaskData(jobId, taskId);
-        } else {
-            console.error('!!! NewTaskCreated event not found in transaction receipt');
-            console.log('All events in receipt:', receipt.logs);
+        console.log('Task created event:', taskCreatedEvent);
+        
+        console.log(`>>> New task created for jobID #${jobId} with ID: #${taskCreatedEvent.taskId}.`);
+
+        try {
+            const result = await jobManagerContract.addTaskId(taskCreatedEvent.task.jobId, taskCreatedEvent.taskId).send();
+            console.log(`>>> Added taskID #${taskCreatedEvent.taskId} to jobID #${taskCreatedEvent.task.jobId}.`);
+        } catch (error) {
+            console.error(`!!! Error adding taskID #${taskCreatedEvent.taskId} to jobID #${taskCreatedEvent.task.jobId}:`, error);
         }
+
+        await createTaskData(taskCreatedEvent.taskId, taskCreatedEvent.task);
     } catch (error) {
         console.error("!!! Error creating task:", error);
         console.log('Full error object:', error);
@@ -174,9 +178,9 @@ async function getJobData(jobId) {
     }
 }
 
-async function createTaskData(jobId, taskId) {
+async function createTaskData(taskId, taskCreated) {
     try {
-        const rawJobData = await getJobData(jobId);
+        const rawJobData = await getJobData(taskCreated.jobId);
         console.log("Raw job data:", rawJobData);
 
         const formattedJob = formatJobData(rawJobData);
@@ -184,8 +188,10 @@ async function createTaskData(jobId, taskId) {
 
         const taskData = {
             taskId: taskId.toString(),
-            jobId: jobId.toString(),
+            jobId: taskCreated.jobId.toString(),
             jobType: formattedJob.jobType,
+            blockNumber: taskCreated.taskCreatedBlock,
+            quorumNumbers: taskCreated.quorumNumbers,
             contractAddress: formattedJob.contractAddress,
             targetFunction: formattedJob.targetFunction,
             argType: formattedJob.argType,
@@ -261,7 +267,7 @@ function formatJobData(rawJobData) {
 // }  
 
 async function sendTaskToKeeper(taskData) {
-    console.log('Keeper Configurations:', keeperConfigs);
+    // console.log('Keeper Configurations:', keeperConfigs);
     const keeper = keeperConfigs[1];
 
     
