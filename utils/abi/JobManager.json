@@ -1,0 +1,392 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "creator",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "stakeAmount",
+                "type": "uint256"
+            }
+        ],
+        "name": "JobCreated",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "creator",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "stakeRefunded",
+                "type": "uint256"
+            }
+        ],
+        "name": "JobDeleted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            }
+        ],
+        "name": "JobUpdated",
+        "type": "event"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint32",
+                "name": "taskId",
+                "type": "uint32"
+            }
+        ],
+        "name": "addTaskId",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "jobType",
+                "type": "string"
+            },
+            {
+                "internalType": "uint32",
+                "name": "timeframe",
+                "type": "uint32"
+            },
+            {
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
+            },
+            {
+                "internalType": "string",
+                "name": "targetFunction",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "timeInterval",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TriggerXJobManager.ArgType",
+                "name": "argType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "bytes[]",
+                "name": "arguments",
+                "type": "bytes[]"
+            },
+            {
+                "internalType": "string",
+                "name": "apiEndpoint",
+                "type": "string"
+            }
+        ],
+        "name": "createJob",
+        "outputs": [
+            {
+                "internalType": "uint32",
+                "name": "",
+                "type": "uint32"
+            }
+        ],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "stakeConsumed",
+                "type": "uint256"
+            }
+        ],
+        "name": "deleteJob",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "argIndex",
+                "type": "uint256"
+            }
+        ],
+        "name": "getJobArgument",
+        "outputs": [
+            {
+                "internalType": "bytes",
+                "name": "",
+                "type": "bytes"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            }
+        ],
+        "name": "getJobArgumentCount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "",
+                "type": "uint32"
+            }
+        ],
+        "name": "jobs",
+        "outputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "string",
+                "name": "jobType",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "status",
+                "type": "string"
+            },
+            {
+                "internalType": "uint32",
+                "name": "timeframe",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint256",
+                "name": "blockNumber",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
+            },
+            {
+                "internalType": "string",
+                "name": "targetFunction",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "timeInterval",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TriggerXJobManager.ArgType",
+                "name": "argType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "string",
+                "name": "apiEndpoint",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "jobCreator",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "stakeAmount",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "string",
+                "name": "jobType",
+                "type": "string"
+            },
+            {
+                "internalType": "uint32",
+                "name": "timeframe",
+                "type": "uint32"
+            },
+            {
+                "internalType": "address",
+                "name": "contractAddress",
+                "type": "address"
+            },
+            {
+                "internalType": "string",
+                "name": "targetFunction",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "timeInterval",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum TriggerXJobManager.ArgType",
+                "name": "argType",
+                "type": "uint8"
+            },
+            {
+                "internalType": "bytes[]",
+                "name": "arguments",
+                "type": "bytes[]"
+            },
+            {
+                "internalType": "string",
+                "name": "apiEndpoint",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "stakeAmount",
+                "type": "uint256"
+            }
+        ],
+        "name": "updateJob",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "name": "userJobs",
+        "outputs": [
+            {
+                "internalType": "uint32",
+                "name": "",
+                "type": "uint32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "name": "userJobsCount",
+        "outputs": [
+            {
+                "internalType": "uint32",
+                "name": "",
+                "type": "uint32"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "name": "userTotalStake",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]

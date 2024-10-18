@@ -7,30 +7,39 @@ function createRPCClient(aggregatorUrl) {
     app.use(express.json());
 
     async function fetchAndStandardizeData(req, res, next) {
-        const { argType, apiEndpoint } = req.body;
-
-        if (argType === 0 || argType === 1 || argType === 'None' || argType === 'Static') {
+        const { apiEndpoint, argType } = req.body;
+    
+        // Skip API check for 'static' or 'none' argument types
+        if (argType === '0' || argType === '1' || argType === 'None' || argType === 'Static') {
             req.standardizedData = { data: { value: null } };
             return next();
         }
-
-        if (!apiEndpoint || apiEndpoint === 'null') {
-            console.warn('API endpoint is missing or null for a dynamic argument type.');
-            req.standardizedData = { data: { value: null } };
-            return next();
+    
+        if (!apiEndpoint) {
+            return res.status(400).send('API endpoint is required for dynamic arguments.');
         }
-
+    
         try {
             const response = await axios.get(apiEndpoint);
-            // Implement standardization logic here
-            req.standardizedData = response.data;
+            
+            // Validate the structure of the response
+            if (!response.data || typeof response.data.data === 'undefined' || typeof response.data.data.value === 'undefined') {
+                throw new Error('API response does not match the expected structure. Expected: { "data": { "value": <value> } }');
+            }
+    
+            // Standardize the response format
+            req.standardizedData = {
+                data: {
+                    value: response.data.data.value
+                }
+            };
             next();
         } catch (error) {
             console.error(`Error fetching data from ${apiEndpoint}:`, error.message);
-            req.standardizedData = { data: { value: null } };
-            next();
+            return res.status(500).send(`Error fetching data from API: ${error.message}`);
         }
     }
+    
 
     app.post('/execute-task', fetchAndStandardizeData, async (req, res) => {
         const task = req.body;

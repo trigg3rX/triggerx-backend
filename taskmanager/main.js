@@ -3,20 +3,17 @@ const express = require('express');
 const { ethers } = require('ethers');
 const cron = require('node-cron');
 const axios = require('axios');
-const { TronWeb } = require('tronweb');
 const taskManagerABI = require('../utils/abi/TaskManager.json');
-const { jobManagerABI } = require('../utils/abi/JobManager');
+const jobManagerABI = require('../utils/abi/JobManager.json');
 const { keeperConfig: keeperConfigs } = require('../utils/keeperConfig');
 
-
 // Addresses for smart contracts
-const jobManagerAddress = 'TEsKaf2n8aF6pta7wyG5gwukzR4NoHre59';
+const jobManagerAddress = '0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d';
 const taskManagerAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
 
 let taskManagerContract;
 let jobManagerContract;
-let holeskyWallet;
-let tronWeb;
+let opSepoliaWallet;
 
 const app = express();
 const port = 3000;
@@ -26,91 +23,107 @@ app.use(express.json());
 const activeJobs = {};
 
 function initializeWallets() {
-    tronWeb = new TronWeb({
-        fullHost: process.env.TRON_FULL_HOST,
-        privateKey: process.env.TRON_PRIVATE_KEY
-    });
-
+    const opSepoliaProvider = new ethers.JsonRpcProvider(process.env.OP_SEPOLIA_RPC_URL);
     const holeskyProvider = new ethers.JsonRpcProvider(process.env.ETHEREUM_RPC_URL);
+    try {
+        opSepoliaWallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, opSepoliaProvider);
+    } catch (error) {
+        console.error("!!! OP-Sepolia wallet initialization failed:", error.message);
+        process.exit(1);
+    }
+
     try {
         holeskyWallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, holeskyProvider);
     } catch (error) {
         console.error("!!! Holesky wallet initialization failed:", error.message);
         process.exit(1);
     }
-
-    console.log(">>> Wallets initialized.");
+    console.log(">>> Wallet initialized.");
 }
 
 async function initializeContracts() {
     try {
-        jobManagerContract = await tronWeb.contract(jobManagerABI, jobManagerAddress);
+        // Fix 3: Add error checking for ABI imports
+        if (!jobManagerABI || !taskManagerABI) {
+            throw new Error("ABI files not loaded properly");
+        }
+
+        console.log("Job Manager ABI:", typeof jobManagerABI);
+        console.log("Task Manager ABI:", typeof taskManagerABI);
+
+        // Fix 4: Initialize contracts with proper error handling
+        try {
+            jobManagerContract = new ethers.Contract(
+                jobManagerAddress, 
+                jobManagerABI, 
+                opSepoliaWallet
+            );
+        } catch (error) {
+            console.error("Failed to initialize Job Manager contract:", error);
+            throw error;
+        }
+
+        try {
+            taskManagerContract = new ethers.Contract(
+                taskManagerAddress, 
+                taskManagerABI, 
+                holeskyWallet
+            );
+        } catch (error) {
+            console.error("Failed to initialize Task Manager contract:", error);
+            throw error;
+        }
+
+        console.log(">>> Contracts initialized successfully.");
     } catch (error) {
-        console.error("!!! Error initializing JobManager:", error);
+        console.error("!!! Error initializing contracts:", error);
         throw error;
     }
-
-    taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, holeskyWallet);
-
-    console.log(">>> Contracts initialized.");
 }
-
 async function getEventsOfLatestBlock(jobLimit) {
-    const events = await tronWeb.event.getEventsByContractAddress(
-        jobManagerAddress,
-        {
-            // onlyConfirmed: true,
-            orderBy: 'block_timestamp,desc',
-            limit: jobLimit,
-            // minBlockTimestamp: Date.now() - 60000,
-            // maxBlockTimestamp: Date.now()
-        }
-      );
-    return events.data;
+    try {
+         // Set up a filter for JobCreated events
+
+        const provider = new ethers.JsonRpcProvider(process.env.OP_SEPOLIA_RPC_URL);
+        const latestBlock = await provider.getBlockNumber();
+        
+         // Adjust the block range as needed
+
+        // console.log(`Found ${events.length} JobCreated events from the last 100 blocks:`);
+        // events.forEach((event) => {
+        //     console.log("EVENTTTT:: ", event);
+        //     const jobId = event.args[0];
+        //     console.log(">>> JobCreated Event: JobID =", jobId.toString());
+        // });
+
+        return {};
+    } catch (error) {
+        console.error("Error fetching JobCreated events:", error);
+        throw error;
+    }
 }
 
 async function listenForJobManagerEvents() {
     console.log(`JobManager listener running on port ${port}...`);
-
-    let jobLimit = 5;
-    let lastJobId = 133;
+    const filter = jobManagerContract.filters.JobCreated;
     
-    setInterval(async () => {
-        const jobManagerEvents = await getEventsOfLatestBlock(jobLimit);
+    jobManagerContract.on("JobCreated", async (jobId, creator, amt, event) => {
+        console.log("Job Created for #", jobId);
         
-        for (const event of jobManagerEvents) {
-            // console.log(event);
-            const jobId = event.result.jobId;
-            if (event.event_name === 'JobCreated') {
-                if (jobId > lastJobId) {
-                    lastJobId = jobId;
-                
-                    console.log(">>> New job created: #", jobId);
-
-                    // if (await verifyJobData(jobId)) {
-                        // createTasks(jobId);
-                    // }
-                }
-            }
-            // if (event.event_name === 'JobDeleted') {
-            //     console.log(">>> Job Deleted: #", jobId);
-            // }
-            // if (event.event_name === 'JobUpdated') {
-            //     console.log(">>> Job Updated: #", jobId);
-            // }
+        if (await verifyJobData(jobId)) {
+            createTasks(jobId);
         }
-        jobLimit = 5;
-    }, 3000);
+    });
 }
 
 async function verifyJobData(jobId) {
     console.log('Verifying job data for jobID: #', jobId);
 
     try {
-        const argumentCount = await jobManagerContract.getJobArgumentCount(jobId).call();
+        const argumentCount = await jobManagerContract.getJobArgumentCount(jobId);
         const arguments = [];
         for (let i = 0; i < argumentCount; i++) {
-            const arg = await jobManagerContract.getJobArgument(jobId, i).call();
+            const arg = await jobManagerContract.getJobArgument(jobId, i);
             arguments.push(arg);
         }
 
@@ -133,15 +146,9 @@ async function createTasks(jobId) {
         const tx = await taskManagerContract.createNewTask(jobId, "0x0000000000000000000000000000000000000000000000000000000000000001");
         console.log('Transaction sent, waiting for receipt...');
         const receipt = await tx.wait();
-        // console.log('Transaction receipt received:', receipt);
-
-        // console.log('Events in the receipt:');
-        // receipt.logs.forEach((log, index) => {
-        //     console.log(`Event ${index}:`, log);
-        // });
 
         const taskCreatedEvent = {
-            event_name: receipt.logs[0].fragment.name,
+            eventName: receipt.logs[0].fragment.name,
             taskId: receipt.logs[0].args[0].toString(),
             task: {
                 jobId: receipt.logs[0].args[1][0].toString(),
@@ -151,11 +158,11 @@ async function createTasks(jobId) {
         };
 
         console.log('Task created event:', taskCreatedEvent);
-        
         console.log(`>>> New task created for jobID #${jobId} with ID: #${taskCreatedEvent.taskId}.`);
 
         try {
-            const result = await jobManagerContract.addTaskId(taskCreatedEvent.task.jobId, taskCreatedEvent.taskId).send();
+            const result = await jobManagerContract.addTaskId(taskCreatedEvent.task.jobId, taskCreatedEvent.taskId);
+            await result.wait();
             console.log(`>>> Added taskID #${taskCreatedEvent.taskId} to jobID #${taskCreatedEvent.task.jobId}.`);
         } catch (error) {
             console.error(`!!! Error adding taskID #${taskCreatedEvent.taskId} to jobID #${taskCreatedEvent.task.jobId}:`, error);
@@ -170,7 +177,7 @@ async function createTasks(jobId) {
 
 async function getJobData(jobId) {
     try {
-        const jobData = await jobManagerContract.jobs(jobId).call();
+        const jobData = await jobManagerContract.jobs(jobId);
         return jobData;
     } catch (error) {
         console.error(`Error fetching job data for jobID #${jobId}:`, error);
@@ -236,41 +243,26 @@ function formatJobData(rawJobData) {
         targetFunction, timeInterval, argType, arguments, apiEndpoint, stakeAmount
     ] = rawJobData;
 
-    // Find jobCreator in the additional fields
-    const jobCreator = rawJobData.find(item => item === 'jobCreator');
-    const jobCreatorValue = jobCreator ? rawJobData[rawJobData.indexOf(jobCreator) + 1] : null;
-
+    // Using ethers address format instead of TronWeb
     return {
         jobId: typeof jobId === 'bigint' ? Number(jobId) : jobId,
         jobType: jobType || '',
         status: status || '',
         timeframe: typeof timeframe === 'bigint' ? Number(timeframe) : timeframe,
         blockNumber: typeof blockNumber === 'bigint' ? blockNumber.toString() : blockNumber,
-        contractAddress: contractAddress ? tronWeb.address.fromHex(contractAddress) : '',
+        contractAddress: contractAddress || ethers.ZeroAddress,
         targetFunction: targetFunction || '',
         timeInterval: typeof timeInterval === 'bigint' ? Number(timeInterval) : timeInterval,
         argType: ['None', 'Static', 'Dynamic'][Number(argType) || 0],
         arguments: Array.isArray(arguments) && arguments !== 'null' ? arguments : [],
         apiEndpoint: apiEndpoint === 'null' ? null : apiEndpoint,
-        taskIds: [], // Not present in the raw data, initialize as empty array
-        jobCreator: jobCreatorValue ? tronWeb.address.fromHex(jobCreatorValue) : '',
+        taskIds: [],
         stakeAmount: typeof stakeAmount === 'bigint' ? stakeAmount.toString() : stakeAmount
     };
 }
 
-// function getRandomKeeper() {
-//     const keeperIds = Object.keys(keeperConfigs);
-//     const randomIndex = Math.floor(Math.random() * keeperIds.length);
-//     const randomKeeperId = keeperIds[randomIndex];
-//     // return keeperConfigs[randomKeeperId];
-//     return keeperConfigs[1];
-// }  
-
 async function sendTaskToKeeper(taskData) {
-    // console.log('Keeper Configurations:', keeperConfigs);
     const keeper = keeperConfigs[1];
-
-    
     const keeperUrl = `http://localhost:${keeper.port}/execute-task`;
 
     const convertNestedBigInt = (obj) => {
