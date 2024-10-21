@@ -158,19 +158,14 @@
                 "internalType": "uint32",
                 "name": "jobId",
                 "type": "uint32"
-            },
-            {
-                "internalType": "uint256",
-                "name": "argIndex",
-                "type": "uint256"
             }
         ],
-        "name": "getJobArgument",
+        "name": "getJobArgs",
         "outputs": [
             {
-                "internalType": "bytes",
+                "internalType": "bytes[]",
                 "name": "",
-                "type": "bytes"
+                "type": "bytes[]"
             }
         ],
         "stateMutability": "view",
@@ -184,12 +179,12 @@
                 "type": "uint32"
             }
         ],
-        "name": "getJobArgumentCount",
+        "name": "getTaskIds",
         "outputs": [
             {
-                "internalType": "uint256",
+                "internalType": "uint32[]",
                 "name": "",
-                "type": "uint256"
+                "type": "uint32[]"
             }
         ],
         "stateMutability": "view",
@@ -267,6 +262,24 @@
             }
         ],
         "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "jobId",
+                "type": "uint32"
+            },
+            {
+                "internalType": "string",
+                "name": "status",
+                "type": "string"
+            }
+        ],
+        "name": "setJobStatus",
+        "outputs": [],
+        "stateMutability": "nonpayable",
         "type": "function"
     },
     {

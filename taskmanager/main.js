@@ -8,7 +8,7 @@ const jobManagerABI = require('../utils/abi/JobManager.json');
 const { keeperConfig: keeperConfigs } = require('../utils/keeperConfig');
 
 // Addresses for smart contracts
-const jobManagerAddress = '0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d';
+const jobManagerAddress = '0xF8807170167F28FE7bF6ba36cA311b553D47C926';
 const taskManagerAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
 
 let taskManagerContract;
@@ -192,7 +192,6 @@ async function createTaskData(taskId, taskCreated) {
 
         const formattedJob = formatJobData(rawJobData);
         console.log("Decoded job data:", formattedJob);
-
         const taskData = {
             taskId: taskId.toString(),
             jobId: taskCreated.jobId.toString(),
