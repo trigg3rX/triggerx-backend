@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { ethers } = require('ethers');
 const bls = require('noble-bls12-381');
+const taskManagerABI = require('../utils/abi/TaskManager.json');
 
 const app = express();
 app.use(express.json());
@@ -11,16 +12,16 @@ const provider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v
 const wallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, provider);
 
 // Load the contract ABI and address
-const contractABI = require('./contractABI.json');
-const contractAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
+const taskManagerAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
 
 // BLS key pair (in production, use secure key management)
 const blsSecretKey = process.env.BLS_SECRET_KEY;
+
 // Convert hex string to Uint8Array
 const blsSecretKeyBytes = Uint8Array.from(Buffer.from(blsSecretKey, 'hex'));
 const blsPublicKey = bls.getPublicKey(blsSecretKeyBytes);
 
-console.log('BLS Public Key:', Buffer.from(blsPublicKey).toString('hex'));
+// console.log('BLS Public Key:', Buffer.from(blsPublicKey).toString('hex'));
 
 // Mock data for demonstration (replace with actual data in production)
 const quorumInfo = {
@@ -31,18 +32,18 @@ const quorumInfo = {
 };
 
 // Initialize contract instance
-const contract = new ethers.Contract(contractAddress, contractABI, wallet);
+const taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, wallet);
 
 app.post('/receive-result', async (req, res) => {
     try {
         const { jobId, taskId, blockNumber, quorumNumbers, result } = req.body;
         console.log(`Received result for task ${taskId}:`, result);
-        console.log(`-------------------------------------------------------------------------`);
 
-        console.log("JOB ID: ", jobId);
-        console.log("TASK ID:", taskId);
-        console.log("TASK CREATED BLOCK: ", blockNumber);
+        console.log("Job ID: ", jobId);
+        console.log("Task ID:", taskId);
+        console.log("Task Created Block: ", blockNumber);
         console.log("Quorum Numbers: ", quorumNumbers);
+        console.log(`-------------------------------------------------------------------------`);
 
         // Create Task struct
         const task = {
@@ -65,8 +66,8 @@ app.post('/receive-result', async (req, res) => {
         ));
         const signature = await bls.sign(messageToSign, blsSecretKeyBytes);      
         
-        console.log('BLS Signature:', signature);
-        console.log('BLS PUBLIC KEY:', blsPublicKey);
+        // console.log('BLS Signature:', signature);
+        // console.log('BLS PUBLIC KEY:', blsPublicKey);
 
         const signatureX = `0x${signature.slice(0, 64)}`;
         const signatureY = `0x${signature.slice(128, 192)}`;
@@ -92,37 +93,46 @@ app.post('/receive-result', async (req, res) => {
             nonSignerStakeIndices: []
         };
 
-        console.log('Task:', task);
-        console.log('TaskResponse:', taskResponse);
-        console.log('NonSignerStakesAndSignature:', nonSignerStakesAndSignature);
+        // console.log('Task:', task);
+        // console.log('TaskResponse:', taskResponse);
+        // console.log('NonSignerStakesAndSignature:', nonSignerStakesAndSignature);
 
         // Write transaction path
-        console.log(JSON.stringify({
-            task: {
-                ...task,
-                jobId: task.jobId.toString(),
-                taskCreatedBlock: task.taskCreatedBlock.toString()
-            },
-            taskResponse: {
-                ...taskResponse,
-                referenceTaskIndex: taskResponse.referenceTaskIndex.toString()
-            },
-            nonSignerStakesAndSignature: {
-                ...nonSignerStakesAndSignature,
-                quorumApkIndices: nonSignerStakesAndSignature.quorumApkIndices.map(i => i.toString()),
-                totalStakeIndices: nonSignerStakesAndSignature.totalStakeIndices.map(i => i.toString())
-            }
-        }, null, 2));
+        // console.log(JSON.stringify({
+        //     task: {
+        //         ...task,
+        //         jobId: task.jobId.toString(),
+        //         taskCreatedBlock: task.taskCreatedBlock.toString()
+        //     },
+        //     taskResponse: {
+        //         ...taskResponse,
+        //         referenceTaskIndex: taskResponse.referenceTaskIndex.toString()
+        //     },
+        //     nonSignerStakesAndSignature: {
+        //         ...nonSignerStakesAndSignature,
+        //         quorumApkIndices: nonSignerStakesAndSignature.quorumApkIndices.map(i => i.toString()),
+        //         totalStakeIndices: nonSignerStakesAndSignature.totalStakeIndices.map(i => i.toString())
+        //     }
+        // }, null, 2));
 
-        const tx = await contract.respondToTask(
+        const tx = await taskManagerContract.respondToTask(
             task,
             taskResponse,
             nonSignerStakesAndSignature
         );
 
         const receipt = await tx.wait();
-        
 
+        // check if the transaction is successful
+        if (receipt.status === 1) {
+            console.log('Transaction successful');
+            console.log('Transaction hash:', tx.hash);
+            console.log(`-------------------------------------------------------------------------`);
+        } else {
+            console.error('Transaction failed');
+            console.log(`-------------------------------------------------------------------------`);
+        }
+        
     } catch (error) {
         console.error('Error in aggregation and signing:', error);
         console.error('Error details:', error.stack);

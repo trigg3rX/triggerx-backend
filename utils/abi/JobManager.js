@@ -57,21 +57,18 @@ const jobManagerABI = [
       "type": "Function"
     },
     {
-      "outputs": [{ "type": "bytes" }],
-      "inputs": [
-        { "name": "jobId", "type": "uint32" },
-        { "name": "argIndex", "type": "uint256" }
-      ],
-      "name": "getJobArgument",
-      "stateMutability": "View",
-      "type": "Function"
+      "outputs": [{ "type": "bytes[]" }],
+      "inputs": [{ "name": "jobId", "type": "uint32" }],
+      "name": "getJobArgs",
+      "stateMutability": "view",
+      "type": "function"
     },
     {
-      "outputs": [{ "type": "uint256" }],
+      "outputs": [{ "type": "uint32[]" }],
       "inputs": [{ "name": "jobId", "type": "uint32" }],
-      "name": "getJobArgumentCount",
-      "stateMutability": "View",
-      "type": "Function"
+      "name": "getTaskIds",
+      "stateMutability": "view",
+      "type": "function"
     },
     {
       "outputs": [
@@ -90,7 +87,16 @@ const jobManagerABI = [
       ],
       "inputs": [{ "type": "uint32" }],
       "name": "jobs",
-      "stateMutability": "View",
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "name": "jobId", "type": "uint32" },
+        { "name": "status", "type": "string" }
+      ],
+      "name": "setJobStatus",
+      "stateMutability": "Nonpayable",
       "type": "Function"
     },
     {
@@ -114,23 +120,23 @@ const jobManagerABI = [
       "outputs": [{ "type": "uint32" }],
       "inputs": [{ "type": "address" }, { "type": "uint256" }],
       "name": "userJobs",
-      "stateMutability": "View",
-      "type": "Function"
+      "stateMutability": "view",
+      "type": "function"
     },
     {
       "outputs": [{ "type": "uint32" }],
       "inputs": [{ "type": "address" }],
       "name": "userJobsCount",
-      "stateMutability": "View",
-      "type": "Function"
+      "stateMutability": "view",
+      "type": "function"
     },
     {
       "outputs": [{ "type": "uint256" }],
       "inputs": [{ "type": "address" }],
       "name": "userTotalStake",
-      "stateMutability": "View",
-      "type": "Function"
+      "stateMutability": "view",
+      "type": "function"
     }
-];
+  ];
 
 module.exports = { jobManagerABI };
