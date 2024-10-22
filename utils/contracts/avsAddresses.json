@@ -1,5 +1,5 @@
 {
-    "taskManager": "0xDaa3d01f71F638952db924c9FE4f1CDa847A23Ad",
-    "serviceManager": "0x2AF281f3a292543B8c80Cb087e19671db534a9ee",
-    "ecdsaStakeRegistry":"0xF8A8C6830d6198aEeFe0A99a04E29769D1A73641"
+    "taskManager": "0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503",
+    "serviceManager": "0x80b10ceb848F9F8fc133C7CACb9139E604761Cbf",
+    "ecdsaStakeRegistry":"0xDE4e022a62506aDF7ac052Bcd6FE8486761F7c42"
 }

@@ -43,7 +43,7 @@ app.post('/receive-result', async (req, res) => {
         console.log("Task ID:", taskId);
         console.log("Task Created Block: ", blockNumber);
         console.log("Quorum Numbers: ", quorumNumbers);
-        console.log(`-------------------------------------------------------------------------`);
+        console.log(`---------------------------------------------------------------------------------------------------------------`);
 
         // Create Task struct
         const task = {
@@ -125,12 +125,12 @@ app.post('/receive-result', async (req, res) => {
 
         // check if the transaction is successful
         if (receipt.status === 1) {
-            console.log('Transaction successful');
+            console.log('Transaction successful for task:', taskId);
             console.log('Transaction hash:', tx.hash);
-            console.log(`-------------------------------------------------------------------------`);
+            console.log(`---------------------------------------------------------------------------------------------------------------`);
         } else {
-            console.error('Transaction failed');
-            console.log(`-------------------------------------------------------------------------`);
+            console.error('Transaction failed for task:', taskId);
+            console.log(`---------------------------------------------------------------------------------------------------------------`);
         }
         
     } catch (error) {

@@ -30,14 +30,14 @@ function createRPCClient(aggregatorUrl) {
         const task = req.body;
         task.standardizedData = req.standardizedData;
 
-        console.log('Keeper received task:', task);
+        console.log('>>> Keeper received task:', task);
 
         try {
             // This function should be imported from keeperTimeExecution.js
             const result = await executeTask(task);
             
             console.log(`Result: `, result);
-            console.log(`-------------------------------------------------------------------------`);
+            console.log(`---------------------------------------------------------------------------------------------------------------`);
             
             await axios.post(aggregatorUrl, { 
                 jobId: task.jobId, 
@@ -63,48 +63,3 @@ function createRPCClient(aggregatorUrl) {
 }
 
 module.exports = { createRPCClient };
-
-
-// require('dotenv').config();
-// const { ethers } = require('ethers');
-// const TronWeb = require('tronweb');
-// const fs = require('fs');
-// const path = require('path');
-
-// const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-// const wallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, provider);
-
-// const tronWeb = new TronWeb({
-//     fullHost: process.env.TRON_FULL_NODE,
-//     privateKey: process.env.TRON_PRIVATE_KEY
-// });
-
-// const avsAddresses = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/contracts/avsAddresses.json'), 'utf8'));
-
-// const serviceManagerAddress = avsAddresses.serviceManager;
-// const taskManagerAddress = avsAddresses.taskManager;
-
-// const serviceManagerABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/ServiceManager.json'), 'utf8'));
-// const taskManagerAbi = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/TaskManager.json'), 'utf8'));
-
-// const serviceManager = new ethers.Contract(serviceManagerAddress, serviceManagerABI, wallet);
-// const taskManager = new ethers.Contract(taskManagerAddress, taskManagerAbi, wallet);
-
-// const listenToTaskManager = async () => {
-//     taskManager.on('NewTaskCreated', async (task) => {
-//         console.log('Task created:', task);
-        
-//         // Step 4: Task Execution
-//         const taskData = await taskManager.getTaskData(task);
-//         console.log('Task data:', taskData);
-        
-//         const keeper = await getKeeper(taskData);
-//         console.log('Keeper:', keeper);
-        
-//         await keeper.executeTask(taskData);
-//     });
-// }
-
-
-
-// listenToTaskManager().catch(console.error);
