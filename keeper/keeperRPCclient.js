@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const { executeTask } = require('./keeperTimeExecution');
 
 function createRPCClient(aggregatorUrl) {
     const app = express();
@@ -8,13 +9,7 @@ function createRPCClient(aggregatorUrl) {
     async function fetchAndStandardizeData(req, res, next) {
         const { argType, apiEndpoint } = req.body;
 
-        if (argType === 0 || argType === 1 || argType === 'None' || argType === 'Static') {
-            req.standardizedData = { data: { value: null } };
-            return next();
-        }
-
-        if (!apiEndpoint || apiEndpoint === 'null') {
-            console.warn('API endpoint is missing or null for a dynamic argument type.');
+        if (argType !== 'Dynamic') {
             req.standardizedData = { data: { value: null } };
             return next();
         }
@@ -46,6 +41,9 @@ function createRPCClient(aggregatorUrl) {
             
             await axios.post(aggregatorUrl, { 
                 jobId: task.jobId, 
+                taskId: task.taskId,
+                blockNumber: task.blockNumber,
+                quorumNumbers: task.quorumNumbers,
                 result: result
             });
             console.log('Task result sent to aggregator');

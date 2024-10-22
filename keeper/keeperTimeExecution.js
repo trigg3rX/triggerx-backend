@@ -18,39 +18,37 @@ async function fetchABI(contractAddress) {
 }
 
 async function executeTask(task) {
-    const { jobId, jobType, contractAddress, targetFunction, argType, standardizedData } = task;
+    const { taskId, jobId, jobType, contractAddress, targetFunction, argType, argumentInfo, apiEndpoint, standardizedData } = task;
 
-    console.log(`Executing task ${jobId} of type ${jobType} for contract ${contractAddress}`);
-
-    const abi = await fetchABI(contractAddress);
-    if (!abi) {
-        throw new Error(`Failed to fetch ABI for contract ${contractAddress}`);
-    }
+    console.log(`Executing task ${taskId} of type ${jobType} for contract ${contractAddress}`);
 
     const baseAddress = tronWeb.address.fromHex(contractAddress);
     const contract = await tronWeb.contract().at(baseAddress);
 
     let args;
     switch (argType) {
-        case 0: args = []; break;
-        case 1: args = task.argumentInfo.arguments; break;
-        case 2: args = [standardizedData.data.value]; break;
-        default: throw new Error(`Invalid argument type: ${argType}`);
+        case '0':
+        case 'None': 
+            args = [];
+            break;
+        case '1':
+        case 'Static': 
+            args = argumentInfo;
+            break;
+        case '2':
+        case 'Dynamic': 
+            args = [standardizedData.data.value];
+            break;
+        default: 
+            throw new Error(`Invalid argument type: ${argType}`);
     }
 
     try {
         console.log(`Calling function ${targetFunction} with arguments:`, args);
 
-        if (typeof contract[targetFunction] !== 'function') {
-            throw new Error(`Function ${targetFunction} does not exist in the contract ABI`);
-        }
-
         const method = contract[targetFunction](...args);
         const callerAddress = tronWeb.defaultAddress.base58;
-        if (!callerAddress) {
-            throw new Error('TronWeb default address is not set');
-        }
-
+        
         let result = await method.send({
             from: callerAddress,
             callValue: 1
