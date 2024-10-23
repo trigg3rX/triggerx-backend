@@ -3,7 +3,7 @@ const express = require('express');
 const { ethers } = require('ethers');
 const bls = require('noble-bls12-381');
 const taskManagerABI = require('../utils/abi/TaskManager.json');
-const Queue = require('queue');
+const Queue = require('async-queue');
 
 const app = express();
 app.use(express.json());
