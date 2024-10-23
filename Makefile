@@ -11,8 +11,13 @@ start-taskmanager: ## Start the taskmanager
 start-aggregator: ## Start the aggregator
 	./utils/start-aggregator.sh
 
-start-keeper: ## Start the keeper 
-	./utils/start-keeper.sh
+start-keeper: ## Start the keeper on local
 
-start-docker: ## Start the Keeper in Docker
-	./utils/start-docker.sh
+start-single-keeper: ## Start a Keeper in Docker
+	./utils/start-single-keeper.sh
+
+start-multiple-keepers: ## Start 4 Keepers in Docker
+	./utils/start-multiple-keepers.sh
+
+clear-dockers: ## Stop all running dockers
+	./utils/clear-dockers.sh
