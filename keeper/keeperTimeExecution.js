@@ -5,25 +5,40 @@ async function fetchAndStandardizeAPIData(req, res, next) {
     const { argType, apiEndpoint } = req.body;
 
     if (argType !== 'Dynamic') {
-        req.standardizedData = { data: { value: null } };
+        req.standardizedData = { data: { value: '0' } };
         return next();
     }
 
     try {
         const response = await axios.get(apiEndpoint);
-        req.standardizedData = response.data;
+        
+        if (!response.data?.data?.value) {
+            throw new Error('Invalid API response format');
+        }
+        
+        // Ensure the value is converted to a string to avoid BigNumber issues
+        const value = response.data.data.value.toString();
+        
+        req.standardizedData = {
+            data: {
+                value: value
+            }
+        };
         next();
     } catch (error) {
         console.error(`Error fetching data from ${apiEndpoint}:`, error.message);
-        req.standardizedData = { data: { value: null } };
+        req.standardizedData = { data: { value: '0' } };
         next();
     }
 }
 
 async function executeTask(task) {
+    const fullNode = process.env.TRON_FULL_HOST;
     const tronWeb = new TronWeb({
-        fullHost: process.env.TRON_FULL_HOST,
-        privateKey: process.env.KEEPER_PRIVATE_KEY
+        fullHost: fullNode,
+        solidityNode: fullNode,
+        eventServer: fullNode,
+        privateKey: process.env.TRON_PRIVATE_KEY
     });
 
     const { taskId, jobId, jobType, contractAddress, targetFunction, argType, argumentInfo, apiEndpoint, standardizedData } = task;
@@ -45,15 +60,17 @@ async function executeTask(task) {
             break;
         case '2':
         case 'Dynamic': 
-            args = [standardizedData.data.value];
+            // Handle the value as a string and ensure it's properly formatted
+            const value = standardizedData.data.value || '0';
+            // Convert to string first, then to BigNumber to ensure proper formatting
+            const bigNumberValue = TronWeb.toHex(value);
+            args = [bigNumberValue];
             break;
         default: 
             throw new Error(`Invalid argument type: ${argType}`);
     }
 
     try {
-        // console.log(`Calling function ${targetFunction} with arguments:`, args);
-
         const method = contract[targetFunction](...args);
         const callerAddress = tronWeb.defaultAddress.base58;
         
@@ -63,9 +80,6 @@ async function executeTask(task) {
         });
 
         const serializedResult = result.toString();
-
-        // console.log(`Function call ${targetFunction} executed successfully.`);
-        // console.log(`---------------------------------------------------------------------------------------------------------------`);
         return serializedResult;
     } catch (error) {
         console.error(`Error executing function ${targetFunction}:`, error);

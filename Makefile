@@ -12,6 +12,7 @@ start-aggregator: ## Start the aggregator
 	./utils/start-aggregator.sh
 
 start-keeper: ## Start the keeper on local
+	./utils/start-keeper.sh
 
 start-single-keeper: ## Start a Keeper in Docker
 	./utils/start-single-keeper.sh

@@ -2,7 +2,7 @@ const keeperConfig = {
     '1': {
         id: 1,
         privateKey: '2d59f7ee79f234bcca8b64956b4ac4cedbc5d961d22b08c2e237a53bb92328e4',
-        port: 3000,
+        port: 3001,
         status: 'active',
         name: 'Frodo'
     },

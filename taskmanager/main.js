@@ -53,7 +53,7 @@ async function listenForJobManagerEvents() {
     console.log(`JobManager listener running on port ${port}...`);
 
     let jobLimit = 1;
-    let lastJobId = 3;
+    let lastJobId = 5;
     
     setInterval(async () => {
         const jobManagerEvents = await getEventsOfLatestBlock(jobLimit);
@@ -110,7 +110,7 @@ async function listenForJobManagerEvents() {
             }
         }
         jobLimit = 5;
-    }, 500);
+    }, 3000);
 }
 
 app.listen(port, async () => {

@@ -227,12 +227,15 @@ async function sendTaskRequest(taskCreatedEvent, jobData) {
     }
 
     const randomIndex = Math.floor(Math.random() * activeKeepers.length);
-    const keeper = activeKeepers[randomIndex];
+    // const keeper = activeKeepers[randomIndex];
+    const keeper = activeKeepers[0];
+
 
     console.log(`>>> Keeper: ${keeper.name} on port ${keeper.port}`);
 
-    const keeperUrl = `http://localhost:${keeper.port+keeper.id}/execute-task`;
-
+    // const keeperUrl = `http://localhost:${keeper.port+keeper.id}/execute-task`;
+    const keeperUrl = `http://localhost:3001/execute-task`;
+    
     // Set the keeper's status to "working"
     keeper.status = 'working';
 
