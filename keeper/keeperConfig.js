@@ -1,43 +1,35 @@
 require('dotenv').config();
 const { ethers } = require('ethers');
-const { TronWeb } = require('tronweb');
 const fs = require('fs');
 const path = require('path');
 const { keeperConfig } = require('../utils/keeperConfig');
 
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-const wallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, provider);
+// const eigenAddresses = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/contracts/eigenAddresses.json'), 'utf8'));
+// const avsAddresses = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/contracts/avsAddresses.json'), 'utf8'));
 
-const tronWeb = new TronWeb({
-    fullHost: process.env.TRON_FULL_HOST,
-    privateKey: process.env.TRON_PRIVATE_KEY
-});
+// const delegationManagerAddress = eigenAddresses.delegationManager;
+// const avsDirectoryAddress = eigenAddresses.avsDirectory;
 
-const eigenAddresses = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/contracts/eigenAddresses.json'), 'utf8'));
-const avsAddresses = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/contracts/avsAddresses.json'), 'utf8'));
+// const serviceManagerAddress = avsAddresses.serviceManager;
+// const ecdsaStakeRegistryAddress = avsAddresses.ecdsaStakeRegistry;
 
-const delegationManagerAddress = eigenAddresses.delegationManager;
-const avsDirectoryAddress = eigenAddresses.avsDirectory;
+// const delegationManagerABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/IDelegationManager.json'), 'utf8'));
+// const avsDirectoryABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/IAVSDirectory.json'), 'utf8'));
 
-const serviceManagerAddress = avsAddresses.serviceManager;
-const ecdsaStakeRegistryAddress = avsAddresses.ecdsaStakeRegistry;
+// const serviceManagerABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/ServiceManager.json'), 'utf8'));
+// const ecdsaStakeRegistryABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/ECDSAStakeRegistry.json'), 'utf8'));
 
-const delegationManagerABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/IDelegationManager.json'), 'utf8'));
-const avsDirectoryABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/IAVSDirectory.json'), 'utf8'));
-
-const serviceManagerABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/ServiceManager.json'), 'utf8'));
-const ecdsaStakeRegistryABI = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../utils/abi/ECDSAStakeRegistry.json'), 'utf8'));
-
-const delegationManager = new ethers.Contract(delegationManagerAddress, delegationManagerABI, wallet);
-const serviceManager = new ethers.Contract(serviceManagerAddress, serviceManagerABI, wallet);
-const ecdsaStakeRegistry = new ethers.Contract(ecdsaStakeRegistryAddress, ecdsaStakeRegistryABI, wallet);
-const avsDirectory = new ethers.Contract(avsDirectoryAddress, avsDirectoryABI, wallet);
+// const delegationManager = new ethers.Contract(delegationManagerAddress, delegationManagerABI, wallet);
+// const serviceManager = new ethers.Contract(serviceManagerAddress, serviceManagerABI, wallet);
+// const ecdsaStakeRegistry = new ethers.Contract(ecdsaStakeRegistryAddress, ecdsaStakeRegistryABI, wallet);
+// const avsDirectory = new ethers.Contract(avsDirectoryAddress, avsDirectoryABI, wallet);
 
 class Config{
-    constructor(privateKey, port, name) {
+    constructor(privateKey, port, name, status) {
         this.privateKey = privateKey;
         this.port = port;
         this.name = name;
+        this.status = status;
     }
 }
 
@@ -74,7 +66,7 @@ function getConfigById(id) {
         throw new Error(`Configuration with ID ${id} not found`);
     }
     
-    const config = new Config(configData.privateKey, configData.port, configData.name);
+    const config = new Config(configData.privateKey, configData.port, configData.name, configData.status);
     
     return config;
 }
@@ -94,58 +86,60 @@ function getConfigByData(data) {
         throw new Error('Invalid name. It should be an alphanumeric string with length 4-12 characters');
     }
 
-    return new Config(privateKey, port, name);
+    const status = 'active';
+
+    return new Config(privateKey, port, name, status);
 }
 
-const registerKeeperOnEigenLayer = async (privateKey, strategyAddress) => {
+// const registerKeeperOnEigenLayer = async (privateKey, strategyAddress) => {
     
-    try {
-        const tx1 = await delegationManager.registerAsOperator({
-            __deprecated_earningsReceiver: getEthWalletAddres(privateKey),
-            delegationApprover: strategyAddress,
-            stakerOptOutWindowBlocks: 0
-        }, "");
+//     try {
+//         const tx1 = await delegationManager.registerAsOperator({
+//             __deprecated_earningsReceiver: getEthWalletAddres(privateKey),
+//             delegationApprover: strategyAddress,
+//             stakerOptOutWindowBlocks: 0
+//         }, "");
 
-        await tx1.wait();
-        console.log("Registered as operator on Eigen Layer");
-    } catch (error) {
-        console.log("Error while registering as operator on Eigen Layer", error);
-    }
+//         await tx1.wait();
+//         console.log("Registered as operator on Eigen Layer");
+//     } catch (error) {
+//         console.log("Error while registering as operator on Eigen Layer", error);
+//     }
 
-    const salt = ethers.hexlify(ethers.randomBytes(32));
-    const expiry = Math.floor(Date.now() / 1000) + 3600;
+//     const salt = ethers.hexlify(ethers.randomBytes(32));
+//     const expiry = Math.floor(Date.now() / 1000) + 3600;
 
-    let operatorSignatureWithSaltAndExpiry = {
-        signature: "",
-        salt: salt,
-        expiry: expiry
-    };
+//     let operatorSignatureWithSaltAndExpiry = {
+//         signature: "",
+//         salt: salt,
+//         expiry: expiry
+//     };
 
-    const operatorDigestHash = await avsDirectory.calculateOperatorAVSRegistrationDigestHash(
-        wallet.address, 
-        await helloWorldServiceManager.getAddress(), 
-        salt, 
-        expiry
-    );
-    console.log(operatorDigestHash);
+//     const operatorDigestHash = await avsDirectory.calculateOperatorAVSRegistrationDigestHash(
+//         wallet.address, 
+//         await helloWorldServiceManager.getAddress(), 
+//         salt, 
+//         expiry
+//     );
+//     console.log(operatorDigestHash);
 
-    console.log("Signing digest hash with operator's private key");
+//     console.log("Signing digest hash with operator's private key");
 
-    const operatorSigningKey = new ethers.SigningKey(process.env.PRIVATE_KEY);
-    const operatorSignedDigestHash = operatorSigningKey.sign(operatorDigestHash);
+//     const operatorSigningKey = new ethers.SigningKey(process.env.PRIVATE_KEY);
+//     const operatorSignedDigestHash = operatorSigningKey.sign(operatorDigestHash);
 
-    // Encode the signature in the required format
-    operatorSignatureWithSaltAndExpiry.signature = ethers.Signature.from(operatorSignedDigestHash).serialized;
+//     // Encode the signature in the required format
+//     operatorSignatureWithSaltAndExpiry.signature = ethers.Signature.from(operatorSignedDigestHash).serialized;
 
-    console.log("Registering Operator to AVS Registry contract");
+//     console.log("Registering Operator to AVS Registry contract");
 
-    const tx2 = await ecdsaRegistryContract.registerOperatorWithSignature(
-        operatorSignatureWithSaltAndExpiry,
-        wallet.address
-    );
-    await tx2.wait();
-    console.log("Operator registered on AVS successfully");
-}
+//     const tx2 = await ecdsaRegistryContract.registerOperatorWithSignature(
+//         operatorSignatureWithSaltAndExpiry,
+//         wallet.address
+//     );
+//     await tx2.wait();
+//     console.log("Operator registered on AVS successfully");
+// }
 
 
 // console.log(getConfigById(1));

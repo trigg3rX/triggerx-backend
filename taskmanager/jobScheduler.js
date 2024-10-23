@@ -215,19 +215,26 @@ async function createTasks(jobId, jobData) {
     }
 }
 
-// function getRandomKeeper() {
-    // const keeperIds = Object.keys(keeperConfigs);
-    // const randomIndex = Math.floor(Math.random() * keeperIds.length);
-    // const randomKeeperId = keeperIds[randomIndex];
-    // return keeperConfigs[randomKeeperId];
-// }  
+function getActiveKeepers() {
+    return Object.values(keeperConfig).filter(keeper => keeper.status === 'active');
+}
 
 async function sendTaskRequest(taskCreatedEvent, jobData) {
-    const keeper = keeperConfig[1];
+    const activeKeepers = getActiveKeepers();
+    if (activeKeepers.length === 0) {
+        console.error("!!! No active keepers available to execute the task.");
+        return false;
+    }
+
+    const randomIndex = Math.floor(Math.random() * activeKeepers.length);
+    const keeper = activeKeepers[randomIndex];
 
     console.log(`>>> Keeper: ${keeper.name} on port ${keeper.port}`);
 
-    const keeperUrl = `http://localhost:${keeper.port}/execute-task`;
+    const keeperUrl = `http://localhost:${keeper.port+keeper.id}/execute-task`;
+
+    // Set the keeper's status to "working"
+    keeper.status = 'working';
 
     const convertNestedBigInt = (obj) => {
         if (typeof obj === 'bigint') {
@@ -260,9 +267,11 @@ async function sendTaskRequest(taskCreatedEvent, jobData) {
     try {
         const response = await axios.post(keeperUrl, convertedTaskData);
         console.log(`>>> Task sent to keeper. Response: ${response.status} ${response.statusText}`);
+        keeper.status = 'active';
         return true;
     } catch (error) {
         console.error("!!! Error sending task to keeper:", error.message);
+        keeper.status = 'active';
         return false;
     }
 }

@@ -3,11 +3,12 @@ FROM node:20
 WORKDIR /keeperApp
 
 COPY package.json ./
+COPY utils ./utils
+COPY keeper ./keeper
+COPY ./keeper/.env.example ./.env
 
 RUN yarn install
 
-COPY keeper /keeperApp
-
 EXPOSE 3000
 
-CMD ["node", "main.js"]
+CMD ["node", "keeper/main.js", "$KEEPER_ID"]

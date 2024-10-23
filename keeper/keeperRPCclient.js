@@ -1,32 +1,12 @@
 const express = require('express');
 const axios = require('axios');
-const { executeTask } = require('./keeperTimeExecution');
+const { executeTask, fetchAndStandardizeAPIData } = require('./keeperTimeExecution');
 
 function createRPCClient(aggregatorUrl) {
     const app = express();
     app.use(express.json());
 
-    async function fetchAndStandardizeData(req, res, next) {
-        const { argType, apiEndpoint } = req.body;
-
-        if (argType !== 'Dynamic') {
-            req.standardizedData = { data: { value: null } };
-            return next();
-        }
-
-        try {
-            const response = await axios.get(apiEndpoint);
-            // Implement standardization logic here
-            req.standardizedData = response.data;
-            next();
-        } catch (error) {
-            console.error(`Error fetching data from ${apiEndpoint}:`, error.message);
-            req.standardizedData = { data: { value: null } };
-            next();
-        }
-    }
-
-    app.post('/execute-task', fetchAndStandardizeData, async (req, res) => {
+    app.post('/execute-task', fetchAndStandardizeAPIData, async (req, res) => {
         const task = req.body;
         task.standardizedData = req.standardizedData;
 

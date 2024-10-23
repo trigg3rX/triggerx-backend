@@ -3,6 +3,7 @@ const express = require('express');
 const { ethers } = require('ethers');
 const bls = require('noble-bls12-381');
 const taskManagerABI = require('../utils/abi/TaskManager.json');
+const Queue = require('queue');
 
 const app = express();
 app.use(express.json());
@@ -33,6 +34,8 @@ const quorumInfo = {
 
 // Initialize contract instance
 const taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, wallet);
+
+const txQueue = new Queue({ autostart: true, concurrency: 1 });
 
 app.post('/receive-result', async (req, res) => {
     try {
@@ -115,23 +118,9 @@ app.post('/receive-result', async (req, res) => {
         //     }
         // }, null, 2));
 
-        const tx = await taskManagerContract.respondToTask(
-            task,
-            taskResponse,
-            nonSignerStakesAndSignature
-        );
+        txQueue.push(() => sendTransaction(task, taskResponse, nonSignerStakesAndSignature));
 
-        const receipt = await tx.wait();
-
-        // check if the transaction is successful
-        if (receipt.status === 1) {
-            console.log('Transaction successful for task:', taskId);
-            console.log('Transaction hash:', tx.hash);
-            console.log(`---------------------------------------------------------------------------------------------------------------`);
-        } else {
-            console.error('Transaction failed for task:', taskId);
-            console.log(`---------------------------------------------------------------------------------------------------------------`);
-        }
+        res.status(200).json({ message: 'Result received and transaction queued' });
         
     } catch (error) {
         console.error('Error in aggregation and signing:', error);
@@ -156,6 +145,35 @@ app.post('/receive-result', async (req, res) => {
     }
 });
 
+async function sendTransaction(task, taskResponse, nonSignerStakesAndSignature) {
+    let Nonce = await wallet.getNonce();
+
+    while (true) {
+        try {
+            const tx = await taskManagerContract.respondToTask(
+                task,
+                taskResponse,
+                nonSignerStakesAndSignature,
+                { nonce: Nonce }
+            );
+    
+            const receipt = await tx.wait();
+    
+            // check if the transaction is successful
+            if (receipt.status === 1) {
+                console.log('Transaction successful for task:', taskId);
+                console.log('Transaction hash:', tx.hash);
+                console.log(`---------------------------------------------------------------------------------------------------------------`);
+            } else {
+                console.error('Transaction failed for task:', taskId);
+                console.log(`---------------------------------------------------------------------------------------------------------------`);
+            }
+        } catch (error) {
+            console.error('Error sending transaction:', error);
+            Nonce++;
+        }
+    }
+}
 
 const aggregatorPort = 3006;
 app.listen(aggregatorPort, () => {

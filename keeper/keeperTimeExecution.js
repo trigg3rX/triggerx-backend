@@ -1,12 +1,31 @@
 const axios = require('axios');
 const { TronWeb } = require('tronweb');
 
-const tronWeb = new TronWeb({
-    fullHost: process.env.TRON_FULL_HOST,
-    privateKey: process.env.TRON_PRIVATE_KEY
-});
+async function fetchAndStandardizeAPIData(req, res, next) {
+    const { argType, apiEndpoint } = req.body;
+
+    if (argType !== 'Dynamic') {
+        req.standardizedData = { data: { value: null } };
+        return next();
+    }
+
+    try {
+        const response = await axios.get(apiEndpoint);
+        req.standardizedData = response.data;
+        next();
+    } catch (error) {
+        console.error(`Error fetching data from ${apiEndpoint}:`, error.message);
+        req.standardizedData = { data: { value: null } };
+        next();
+    }
+}
 
 async function executeTask(task) {
+    const tronWeb = new TronWeb({
+        fullHost: process.env.TRON_FULL_HOST,
+        privateKey: process.env.KEEPER_PRIVATE_KEY
+    });
+
     const { taskId, jobId, jobType, contractAddress, targetFunction, argType, argumentInfo, apiEndpoint, standardizedData } = task;
 
     console.log(`>>> Executing Task #${taskId} of Job #${jobId} for contract ${contractAddress}`);
@@ -54,4 +73,4 @@ async function executeTask(task) {
     }
 }
 
-module.exports = { executeTask };
+module.exports = { executeTask, fetchAndStandardizeAPIData };
