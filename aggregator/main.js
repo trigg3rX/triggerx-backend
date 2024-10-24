@@ -3,7 +3,8 @@ const express = require('express');
 const { ethers } = require('ethers');
 const bls = require('noble-bls12-381');
 const taskManagerABI = require('../utils/abi/TaskManager.json');
-
+const serviceManagerABI = require('../utils/abi/ServiceManager.json');
+const multiCallABI = require('../utils/abi/MultiCall.json');
 const app = express();
 app.use(express.json());
 
@@ -17,27 +18,153 @@ const blsPublicKey = bls.getPublicKey(blsSecretKeyBytes);
 
 const taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, wallet);
 
+let serviceManagerContract;
+
 // Batch processing configuration
 const BATCH_TIMEOUT = 20000; // 20 seconds
 const MAX_BATCH_SIZE = 10;   // Maximum number of transactions in a batch
 let pendingTasks = [];
 let batchTimer = null;
 
+async function initializeServiceManager() {
+    const serviceManagerAddress = await taskManagerContract.serviceManager();
+    serviceManagerContract = new ethers.Contract(serviceManagerAddress, serviceManagerABI, wallet);
+}
+
+async function validateTask(taskData) {
+    try {
+        // Initialize ServiceManager if not already initialized
+        if (!serviceManagerContract) {
+            await initializeServiceManager();
+        }
+
+        // Check if task exists first
+        const taskHash = await taskManagerContract.allTaskHashes(
+            taskData.taskResponse.referenceTaskIndex
+        );
+        if (taskHash === ethers.ZeroHash) {
+            throw new Error('Task does not exist');
+        }
+
+        // Check if task already has a response
+        const taskResponse = await taskManagerContract.allTaskResponses(
+            taskData.taskResponse.referenceTaskIndex
+        );
+        if (taskResponse !== ethers.ZeroHash) {
+            throw new Error('Task already has a response');
+        }
+
+        // Check if operator is blacklisted using the correct public view function
+        const isBlacklisted = await serviceManagerContract.isOperatorBlacklisted(
+            taskData.taskResponse.operator
+        );
+        if (isBlacklisted) {
+            throw new Error('Operator is blacklisted');
+        }
+
+        // Verify task data integrity
+        if (!taskData.task || !taskData.taskResponse || !taskData.nonSignerStakesAndSignature) {
+            throw new Error('Missing required task data');
+        }
+
+        // Calculate and verify task hash matches
+        const encodedTask = ethers.AbiCoder.defaultAbiCoder().encode(
+            ['tuple(uint32 jobId, uint32 taskCreatedBlock, bytes quorumNumbers)'],
+            [taskData.task]
+        );
+        const calculatedTaskHash = ethers.keccak256(encodedTask);
+        
+        if (calculatedTaskHash !== taskHash) {
+            throw new Error('Task hash mismatch');
+        }
+
+        // Check if we're still within the response window
+        const currentBlock = await provider.getBlockNumber();
+        const responseWindow = await taskManagerContract.getTaskResponseWindowBlock();
+        
+        if (currentBlock > taskData.task.taskCreatedBlock + responseWindow) {
+            throw new Error('Response window expired');
+        }
+
+        // Simulate the call with explicit gas limit
+        await taskManagerContract.respondToTask.staticCall(
+            taskData.task,
+            taskData.taskResponse,
+            taskData.nonSignerStakesAndSignature,
+            { gasLimit: 500000 }
+        );
+        
+        return true;
+    } catch (error) {
+        console.error(`Task validation failed for task ${taskData.taskResponse.referenceTaskIndex}:`, error.message);
+        return false;
+    }
+}
+
+async function processSingleTask(taskData) {
+    try {
+        const tx = await taskManagerContract.respondToTask(
+            taskData.task,
+            taskData.taskResponse,
+            taskData.nonSignerStakesAndSignature,
+            { gasLimit: 500000 }
+        );
+        const receipt = await tx.wait();
+        return { success: true, txHash: receipt.hash };
+    } catch (error) {
+        console.error('Single task processing failed:', error);
+        throw error;
+    }
+}
+
 async function processTaskBatch() {
     if (pendingTasks.length === 0) return;
 
     console.log(`Processing batch of ${pendingTasks.length} tasks`);
-    const currentBatch = [...pendingTasks];
+    
+    // Validate tasks first
+    const validTasks = [];
+    const invalidTasks = [];
+    
+    for (const task of pendingTasks) {
+        const isValid = await validateTask(task);
+        if (isValid) {
+            validTasks.push(task);
+        } else {
+            invalidTasks.push(task);
+        }
+    }
+
+    // Clear pending tasks
     pendingTasks = [];
 
-    try {
-        // Create multicall interface
-        const multicallInterface = new ethers.Interface([
-            'function aggregate((address target, bytes callData)[] calls) returns (uint256 blockNumber, bytes[] returnData)'
-        ]);
+    if (validTasks.length === 0) {
+        console.log('No valid tasks to process');
+        return;
+    }
 
-        // Prepare batch calls
-        const calls = currentBatch.map(taskData => ({
+    // If only one task, process it directly
+    if (validTasks.length === 1) {
+        try {
+            const result = await processSingleTask(validTasks[0]);
+            validTasks[0].resolve(result);
+            return;
+        } catch (error) {
+            validTasks[0].reject({
+                success: false,
+                message: 'Task processing failed',
+                error: error.message
+            });
+            return;
+        }
+    }
+
+    try {
+        const multicallAddress = '0xcA11bde05977b3631167028862bE2a173976CA11';
+        const multicall = new ethers.Contract( multicallAddress, multiCallABI, wallet);
+
+        // Use tryAggregate instead of aggregate3
+        const calls = validTasks.map(taskData => ({
             target: taskManagerAddress,
             callData: taskManagerContract.interface.encodeFunctionData(
                 'respondToTask',
@@ -45,44 +172,112 @@ async function processTaskBatch() {
             )
         }));
 
-        // Execute batch transaction
-        const multicallAddress = '0xcA11bde05977b3631167028862bE2a173976CA11'; // Multicall3 address
-        const multicall = new ethers.Contract(
-            multicallAddress,
-            multicallInterface,
-            wallet
-        );
+        // First try with requireSuccess = true
+        //const gasEstimate = await multicall.aggregate.estimateGas(true, calls);
+        
+        // Add 30% buffer to the gas estimate
+        //const gasLimit = (gasEstimate * BigInt(17)) / BigInt(10);
 
+        // Execute the batch with the estimated gas limit
         const tx = await multicall.aggregate(calls);
+        
         const receipt = await tx.wait();
 
         if (receipt.status === 1) {
-            console.log('Batch transaction successful');
-            console.log('Transaction hash:', tx.hash);
+            console.log('Batch transaction successful:', tx.hash);
             
-            // Resolve all promises in the batch
-            currentBatch.forEach(taskData => {
-                taskData.resolve({ 
+            // Parse the results to check individual call success
+            const events = receipt.logs.map(log => {
+                try {
+                    return taskManagerContract.interface.parseLog(log);
+                } catch (e) {
+                    return null;
+                }
+            }).filter(Boolean);
+
+            validTasks.forEach((task, index) => {
+                task.resolve({ 
                     success: true, 
-                    message: 'Task processed in batch', 
-                    transactionHash: tx.hash 
+                    message: 'Task processed', 
+                    txHash: tx.hash,
+                    events: events.filter(event => 
+                        event.args?.referenceTaskIndex === task.taskResponse.referenceTaskIndex
+                    )
                 });
             });
         } else {
-            throw new Error('Batch transaction failed');
+            throw new Error('Transaction failed');
         }
 
     } catch (error) {
-        console.error('Error processing batch:', error);
-        // Reject all promises in the batch
-        currentBatch.forEach(taskData => {
-            taskData.reject({
-                success: false,
-                message: 'Batch processing failed',
-                error: error.message
-            });
-        });
+        console.error('Batch processing error:', error);
+        
+        // If batch fails, try processing in smaller batches
+        console.log('Attempting to process tasks in smaller batches...');
+        
+        // Split tasks into smaller batches of 2
+        const batchSize = 2;
+        for (let i = 0; i < validTasks.length; i += batchSize) {
+            const batch = validTasks.slice(i, i + batchSize);
+            
+            try {
+                // Add delay between batches to prevent nonce issues
+                if (i > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                
+                // Process smaller batch
+                const calls = batch.map(taskData => ({
+                    target: taskManagerAddress,
+                    callData: taskManagerContract.interface.encodeFunctionData(
+                        'respondToTask',
+                        [taskData.task, taskData.taskResponse, taskData.nonSignerStakesAndSignature]
+                    )
+                }));
+
+                const tx = await multicall.tryAggregate(true, calls, {
+                    gasLimit: 1000000 // Use fixed higher gas limit for smaller batches
+                });
+                
+                const receipt = await tx.wait();
+                
+                if (receipt.status === 1) {
+                    batch.forEach((task) => {
+                        task.resolve({
+                            success: true,
+                            message: 'Task processed in smaller batch',
+                            txHash: receipt.hash
+                        });
+                    });
+                }
+            } catch (batchError) {
+                console.error('Small batch processing failed:', batchError);
+                
+                // If small batch fails, process tasks individually
+                for (const task of batch) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        const result = await processSingleTask(task);
+                        task.resolve(result);
+                    } catch (taskError) {
+                        task.reject({
+                            success: false,
+                            message: 'Individual task processing failed',
+                            error: taskError.message
+                        });
+                    }
+                }
+            }
+        }
     }
+
+    // Handle invalid tasks
+    invalidTasks.forEach(task => {
+        task.reject({
+            success: false,
+            message: 'Task validation failed'
+        });
+    });
 }
 
 function scheduleBatchProcessing() {
