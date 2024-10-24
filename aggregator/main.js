@@ -3,79 +3,122 @@ const express = require('express');
 const { ethers } = require('ethers');
 const bls = require('noble-bls12-381');
 const taskManagerABI = require('../utils/abi/TaskManager.json');
-const Queue = require('async-queue');
 
 const app = express();
 app.use(express.json());
 
-// Configure ethers.js provider and wallet for Holesky
 const provider = new ethers.JsonRpcProvider('https://eth-holesky.g.alchemy.com/v2/9eCzjtGExJJ6c_WwQ01h6Hgmj8bjAdrc');
 const wallet = new ethers.Wallet(process.env.ETHEREUM_PRIVATE_KEY, provider);
 
-// Load the contract ABI and address
 const taskManagerAddress = '0x2FE0D258fb2eF69BAa3DD8c17469ea23B1952503';
-
-// BLS key pair (in production, use secure key management)
 const blsSecretKey = process.env.BLS_SECRET_KEY;
-
-// Convert hex string to Uint8Array
 const blsSecretKeyBytes = Uint8Array.from(Buffer.from(blsSecretKey, 'hex'));
 const blsPublicKey = bls.getPublicKey(blsSecretKeyBytes);
 
-// console.log('BLS Public Key:', Buffer.from(blsPublicKey).toString('hex'));
-
-// Mock data for demonstration (replace with actual data in production)
-const quorumInfo = {
-    quorumNumbers: [1], // Single quorum
-    quorumThresholdPercentage: 66,
-    signerPubkeys: [blsPublicKey], // Use the actual BLS public key
-    signerStakes: [[1000]] // Single keeper's stake
-};
-
-// Initialize contract instance
 const taskManagerContract = new ethers.Contract(taskManagerAddress, taskManagerABI, wallet);
 
-const txQueue = new Queue({ autostart: true, concurrency: 1 });
+// Batch processing configuration
+const BATCH_TIMEOUT = 20000; // 20 seconds
+const MAX_BATCH_SIZE = 10;   // Maximum number of transactions in a batch
+let pendingTasks = [];
+let batchTimer = null;
+
+async function processTaskBatch() {
+    if (pendingTasks.length === 0) return;
+
+    console.log(`Processing batch of ${pendingTasks.length} tasks`);
+    const currentBatch = [...pendingTasks];
+    pendingTasks = [];
+
+    try {
+        // Create multicall interface
+        const multicallInterface = new ethers.Interface([
+            'function aggregate((address target, bytes callData)[] calls) returns (uint256 blockNumber, bytes[] returnData)'
+        ]);
+
+        // Prepare batch calls
+        const calls = currentBatch.map(taskData => ({
+            target: taskManagerAddress,
+            callData: taskManagerContract.interface.encodeFunctionData(
+                'respondToTask',
+                [taskData.task, taskData.taskResponse, taskData.nonSignerStakesAndSignature]
+            )
+        }));
+
+        // Execute batch transaction
+        const multicallAddress = '0xcA11bde05977b3631167028862bE2a173976CA11'; // Multicall3 address
+        const multicall = new ethers.Contract(
+            multicallAddress,
+            multicallInterface,
+            wallet
+        );
+
+        const tx = await multicall.aggregate(calls);
+        const receipt = await tx.wait();
+
+        if (receipt.status === 1) {
+            console.log('Batch transaction successful');
+            console.log('Transaction hash:', tx.hash);
+            
+            // Resolve all promises in the batch
+            currentBatch.forEach(taskData => {
+                taskData.resolve({ 
+                    success: true, 
+                    message: 'Task processed in batch', 
+                    transactionHash: tx.hash 
+                });
+            });
+        } else {
+            throw new Error('Batch transaction failed');
+        }
+
+    } catch (error) {
+        console.error('Error processing batch:', error);
+        // Reject all promises in the batch
+        currentBatch.forEach(taskData => {
+            taskData.reject({
+                success: false,
+                message: 'Batch processing failed',
+                error: error.message
+            });
+        });
+    }
+}
+
+function scheduleBatchProcessing() {
+    if (batchTimer) clearTimeout(batchTimer);
+    
+    batchTimer = setTimeout(() => {
+        processTaskBatch();
+    }, BATCH_TIMEOUT);
+}
 
 app.post('/receive-result', async (req, res) => {
     try {
-        const { jobId, taskId, blockNumber, quorumNumbers, result } = req.body;
-        console.log(`Received result for task ${taskId}:`, result);
+        const { jobId, taskId, blockNumber, quorumNumbers, result: taskResult } = req.body;
+        console.log(`Queuing result for task ${taskId}:`, taskResult);
 
-        console.log("Job ID: ", jobId);
-        console.log("Task ID:", taskId);
-        console.log("Task Created Block: ", blockNumber);
-        console.log("Quorum Numbers: ", quorumNumbers);
-        console.log(`---------------------------------------------------------------------------------------------------------------`);
-
-        // Create Task struct
         const task = {
             jobId: ethers.toBigInt(jobId),
             taskCreatedBlock: ethers.toBigInt(blockNumber),
             quorumNumbers: quorumNumbers
         };
 
-        // Create TaskResponse struct
         const taskResponse = {
             referenceTaskIndex: ethers.toBigInt(taskId),
             operator: wallet.address,
-            transactionHash: ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(result)))
+            transactionHash: ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(taskResult)))
         };
 
-        // Generate BLS signature
         const messageToSign = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
             ['tuple(uint32 referenceTaskIndex, address operator, bytes32 transactionHash)'],
             [taskResponse]
         ));
         const signature = await bls.sign(messageToSign, blsSecretKeyBytes);      
-        
-        // console.log('BLS Signature:', signature);
-        // console.log('BLS PUBLIC KEY:', blsPublicKey);
 
         const signatureX = `0x${signature.slice(0, 64)}`;
         const signatureY = `0x${signature.slice(128, 192)}`;
         
-        // Create NonSignerStakesAndSignature struct here
         const nonSignerStakesAndSignature = {
             nonSignerQuorumBitmapIndices: [],
             nonSignerPubkeys: [],
@@ -96,84 +139,41 @@ app.post('/receive-result', async (req, res) => {
             nonSignerStakeIndices: []
         };
 
-        // console.log('Task:', task);
-        // console.log('TaskResponse:', taskResponse);
-        // console.log('NonSignerStakesAndSignature:', nonSignerStakesAndSignature);
-
-        // Write transaction path
-        // console.log(JSON.stringify({
-        //     task: {
-        //         ...task,
-        //         jobId: task.jobId.toString(),
-        //         taskCreatedBlock: task.taskCreatedBlock.toString()
-        //     },
-        //     taskResponse: {
-        //         ...taskResponse,
-        //         referenceTaskIndex: taskResponse.referenceTaskIndex.toString()
-        //     },
-        //     nonSignerStakesAndSignature: {
-        //         ...nonSignerStakesAndSignature,
-        //         quorumApkIndices: nonSignerStakesAndSignature.quorumApkIndices.map(i => i.toString()),
-        //         totalStakeIndices: nonSignerStakesAndSignature.totalStakeIndices.map(i => i.toString())
-        //     }
-        // }, null, 2));
-
-        txQueue.push(() => sendTransaction(task, taskResponse, nonSignerStakesAndSignature));
-
-        res.status(200).json({ message: 'Result received and transaction queued' });
-        
-    } catch (error) {
-        console.error('Error in aggregation and signing:', error);
-        console.error('Error details:', error.stack);
-        if (error.reason) console.error('Error reason:', error.reason);
-        if (error.code) console.error('Error code:', error.code);
-        if (error.method) console.error('Error method:', error.method);
-        if (error.transaction) console.error('Error transaction:', error.transaction);
-        
-        res.status(500).json({ 
-            error: 'Failed to aggregate and sign results', 
-            details: error.message,
-            reason: error.reason,
-            code: error.code,
-            method: error.method,
-            transaction: error.transaction ? {
-                ...error.transaction,
-                jobId: error.transaction.jobId ? error.transaction.jobId.toString() : undefined,
-                taskCreatedBlock: error.transaction.taskCreatedBlock ? error.transaction.taskCreatedBlock.toString() : undefined
-            } : undefined
-        });
-    }
-});
-
-async function sendTransaction(task, taskResponse, nonSignerStakesAndSignature) {
-    let Nonce = await wallet.getNonce();
-
-    while (true) {
-        try {
-            const tx = await taskManagerContract.respondToTask(
+        // Create a promise for this task
+        const taskPromise = new Promise((resolve, reject) => {
+            pendingTasks.push({
                 task,
                 taskResponse,
                 nonSignerStakesAndSignature,
-                { nonce: Nonce }
-            );
-    
-            const receipt = await tx.wait();
-    
-            // check if the transaction is successful
-            if (receipt.status === 1) {
-                console.log('Transaction successful for task:', taskId);
-                console.log('Transaction hash:', tx.hash);
-                console.log(`---------------------------------------------------------------------------------------------------------------`);
-            } else {
-                console.error('Transaction failed for task:', taskId);
-                console.log(`---------------------------------------------------------------------------------------------------------------`);
-            }
-        } catch (error) {
-            console.error('Error sending transaction:', error);
-            Nonce++;
+                resolve,
+                reject
+            });
+        });
+
+        // Schedule batch processing if this is the first task
+        if (pendingTasks.length === 1) {
+            scheduleBatchProcessing();
         }
+
+        // Process immediately if batch size is reached
+        if (pendingTasks.length >= MAX_BATCH_SIZE) {
+            clearTimeout(batchTimer);
+            processTaskBatch();
+        }
+
+        // Wait for the task to be processed
+        const processedResult = await taskPromise;
+        res.status(200).json(processedResult);
+
+    } catch (error) {
+        console.error('Error in task processing:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error processing task', 
+            error: error.message 
+        });
     }
-}
+});
 
 const aggregatorPort = 3006;
 app.listen(aggregatorPort, () => {
