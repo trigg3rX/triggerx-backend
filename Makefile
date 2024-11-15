@@ -13,3 +13,18 @@ start-validator: ## Start the task validator
 
 start-quorumcreator: ## Start the quorum creator
 	./scripts/start-quorumcreator.sh
+
+############################# DATABASE #############################
+
+db-start: ## Start ScyllaDB container
+	docker-compose up -d
+
+db-init: ## Initialize database schema
+	./scripts/init-db.sh
+
+db-shell: ## Open CQL shell
+	docker exec -it triggerx-scylla cqlsh
+
+############################# FULL SETUP #############################
+
+setup: db-start db-init ## Setup everything
