@@ -14,6 +14,7 @@ start-validator: ## Start the task validator
 start-quorumcreator: ## Start the quorum creator
 	./scripts/start-quorumcreator.sh
 
+
 ############################# DATABASE #############################
 
 db-start: ## Start ScyllaDB container
@@ -28,3 +29,6 @@ db-shell: ## Open CQL shell
 ############################# FULL SETUP #############################
 
 setup: db-start db-init ## Setup everything
+
+start-api: ## Start the API server
+	./scripts/start-api.sh

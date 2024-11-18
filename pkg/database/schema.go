@@ -17,7 +17,7 @@ func InitSchema(session *gocql.Session) error {
 	}
 
 	// Drop existing tables if any
-	dropTables := []string{"tasks"}
+	dropTables := []string{"task_data", "keeper_data"}
 	for _, table := range dropTables {
 		if err := session.Query(`DROP TABLE IF EXISTS triggerx.` + table).Exec(); err != nil {
 			return err
@@ -37,18 +37,18 @@ func InitSchema(session *gocql.Session) error {
 	// Create Job_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.job_data (
-				job_id bigint PRIMARY KEY,
-				user_id bigint,
-				chain_id int,
-				stake bigint,
-				time_frame timestamp,
-				time_interval int,
-				contract_address text CHECK (contract_address MATCHES '^0x[0-9a-fA-F]{40}$'),
-				target_function text,
-				arg_type int,
-				arguments list<text>,
-				status boolean,
-				job_cost_prediction decimal
+			job_id bigint PRIMARY KEY,
+			jobType int,
+			user_id bigint,
+			chain_id int,
+			time_frame timestamp,
+			time_interval int,
+			contract_address text,
+			target_function text,
+			arg_type int,
+			arguments list<text>,
+			status boolean,
+			job_cost_prediction decimal
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -56,14 +56,35 @@ func InitSchema(session *gocql.Session) error {
 	// Create Task_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.task_data (
-			task_ref_no text PRIMARY KEY,
-			job_id bigint,
 			task_id bigint,
-			quorum_id int,
-			quorum_no int,
+			job_id bigint,
+			task_no int,
+			quorum_id bigint,
+			quorum_number int,
 			quorum_threshold decimal,
+			task_created_block bigint,
+			task_created_tx_hash text,
+			task_responded_block bigint,
+			task_responded_tx_hash text,
 			task_hash text,
-			task_response_hash text
+			task_response_hash text,
+			quorum_keeper_hash text,
+			PRIMARY KEY (task_id)
+		)`).Exec(); err != nil {
+		return err
+	}
+
+	// Create Quorum_data table
+	if err := session.Query(`
+		CREATE TABLE IF NOT EXISTS triggerx.quorum_data (
+			quorum_id bigint PRIMARY KEY,
+			quorum_no int,
+			quorum_creation_block bigint,
+			quorum_tx_hash text,
+			keepers list<text>,
+			quorum_stake_total bigint,
+			quorum_threshold decimal,
+			task_ids set<bigint>
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -73,11 +94,29 @@ func InitSchema(session *gocql.Session) error {
 		CREATE TABLE IF NOT EXISTS triggerx.keeper_data (
 			keeper_id bigint PRIMARY KEY,
 			withdrawal_address text CHECK (withdrawal_address MATCHES '^0x[0-9a-fA-F]{40}$'),
-			verified boolean,
-			stake_amount bigint,
+			stakes bigint,
 			strategies int,
-			quorum_id int,
-			status boolean
+			verified boolean,
+			status boolean,
+			current_quorum_no int,
+			registered_block_no bigint,
+			register_tx_hash text,
+			connection_address text,
+			keystore_data text
+		)`).Exec(); err != nil {
+		return err
+	}
+
+	// Create Task_history table
+	if err := session.Query(`
+		CREATE TABLE IF NOT EXISTS triggerx.task_history (
+			task_id bigint PRIMARY KEY,
+			quorum_id bigint,
+			keepers list<text>,
+			responses list<text>,
+			consensus_method text,
+			validation_status boolean,
+			tx_hash text
 		)`).Exec(); err != nil {
 		return err
 	}
