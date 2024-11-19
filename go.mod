@@ -4,7 +4,10 @@ go 1.23.3
 
 require github.com/gocql/gocql v1.7.0
 
-require github.com/shopspring/decimal v1.4.0 // indirect
+require (
+	github.com/rs/cors v1.11.1 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
+)
 
 require (
 	github.com/golang/snappy v0.0.3 // indirect
