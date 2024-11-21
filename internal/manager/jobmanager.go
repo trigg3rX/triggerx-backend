@@ -330,7 +330,7 @@ func (js *JobScheduler) cleanupExpiredJobs() {
             return
         case <-ticker.C:
             js.mu.Lock()
-            for id, job := range js.jobs {
+            for _, job := range js.jobs {
                 if time.Since(job.CreatedAt) > time.Duration(job.TimeFrame)*time.Second {
                     if job.Status != "completed" && job.Status != "failed" {
                         job.Status = "expired"
@@ -441,19 +441,28 @@ func (js *JobScheduler) calculateQuorumLoad(quorum *Quorum) float64 {
 
 // executeJob handles the actual execution of the job on the selected quorum
 func (js *JobScheduler) sendJobToQuorumHead(job *Job, quorum *Quorum) error {
-    // In a real implementation, this would send the job to the quorum head
-    // using some form of network communication (gRPC, HTTP, etc.)
-    
-    // For now, just log the attempt
-    log.Printf("Attempting to send job %s to quorum head %s of quorum %s", 
-        job.JobID, quorum.Head.ID, quorum.ID)
-    
-    // Simulate network communication delay
-    time.Sleep(100 * time.Millisecond)
-    
-    // Log successful sending
-    log.Printf("Successfully sent job %s to quorum head %s", job.JobID, quorum.Head.ID)
-    return nil
+    quorum.mu.RLock()
+    defer quorum.mu.RUnlock()
+
+    if quorum.Head == nil {
+        return fmt.Errorf("no head found for quorum %s", quorum.ID)
+    }
+
+    // Simulate job execution by the quorum head
+    log.Printf("Sending job %s to quorum head %s", job.JobID, quorum.Head.ID)
+
+    // Simulated execution: Add some delay to mimic job processing
+    processingTime := time.Duration(rand.Intn(3)+1) * time.Second
+    time.Sleep(processingTime)
+
+    // Randomly simulate job success or failure
+    if rand.Intn(10) < 8 { // 80% success rate
+        log.Printf("Job %s executed successfully by quorum head %s", job.JobID, quorum.Head.ID)
+        return nil
+    } else {
+        log.Printf("Job %s failed execution by quorum head %s", job.JobID, quorum.Head.ID)
+        return fmt.Errorf("execution failed for job %s", job.JobID)
+    }
 }
 
 // collectMetrics periodically updates system metrics
