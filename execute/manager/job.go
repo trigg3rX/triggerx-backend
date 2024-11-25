@@ -5,7 +5,16 @@ import (
     "log"
     "math/rand"
     "time"
+	"os"
+	"encoding/json"
+	
+	"github.com/trigg3rX/go-backend/pkg/network"
 )
+
+type JobMessage struct {
+    Job       *Job   `json:"job"`
+    Timestamp string `json:"timestamp"`
+}
 
 // Job represents a scheduled task with its properties
 type Job struct {
@@ -72,28 +81,69 @@ func (js *JobScheduler) processJob(job *Job) {
     
     job.Status = "processing"
     job.LastExecuted = time.Now()
+    
+    // Get a random keeper from the quorum
+    quorum := js.quorums["default"]
+    if len(quorum.ActiveNodes) == 0 {
+        job.Status = "failed"
+        job.Error = "no active keepers available"
+        js.mu.Unlock()
+        return
+    }
+    
+    // Select random keeper
+    keeperName := quorum.ActiveNodes[rand.Intn(len(quorum.ActiveNodes))]
     js.mu.Unlock()
 
-    // Simulate job execution with random success/failure
-    time.Sleep(time.Duration(2+rand.Intn(3)) * time.Second)
-    
-    js.mu.Lock()
-    defer js.mu.Unlock()
-
-    if rand.Float64() < 0.8 { // 80% success rate
-        job.Status = "completed"
-        log.Printf("Job %s completed successfully", job.JobID)
-    } else {
-        job.CurrentRetries++
-        if job.CurrentRetries >= job.MaxRetries {
-            job.Status = "failed"
-            job.Error = "maximum retries exceeded"
-            log.Printf("Job %s failed after %d retries", job.JobID, job.MaxRetries)
-        } else {
-            job.Status = "pending"
-            log.Printf("Job %s failed, will retry (%d/%d)", job.JobID, job.CurrentRetries, job.MaxRetries)
-        }
+    // Load keeper information
+    peerInfos := make(map[string]network.PeerInfo)
+    if err := js.loadPeerInfo(&peerInfos); err != nil {
+        log.Printf("Failed to load peer info: %v", err)
+        return
     }
+
+    keeperInfo, exists := peerInfos[keeperName]
+    if !exists {
+        log.Printf("Keeper %s not found in peer info", keeperName)
+        return
+    }
+
+    // Connect to the keeper
+    peerID, err := js.discovery.ConnectToPeer(keeperInfo)
+    if err != nil {
+        log.Printf("Failed to connect to keeper %s: %v", keeperName, err)
+        return
+    }
+
+    // Prepare job message
+    jobMsg := JobMessage{
+        Job:       job,
+        Timestamp: time.Now().UTC().Format(time.RFC3339),
+    }
+
+    // Send job to keeper
+    err = js.messaging.SendMessage(keeperName, *peerID, jobMsg)
+    if err != nil {
+        log.Printf("Failed to send job to keeper %s: %v", keeperName, err)
+        js.mu.Lock()
+        job.Status = "failed"
+        job.Error = err.Error()
+        js.mu.Unlock()
+        return
+    }
+
+    log.Printf("Job %s sent to keeper %s", job.JobID, keeperName)
+}
+
+func (js *JobScheduler) loadPeerInfo(peerInfos *map[string]network.PeerInfo) error {
+    file, err := os.Open(network.PeerInfoFilePath)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+
+    decoder := json.NewDecoder(file)
+    return decoder.Decode(peerInfos)
 }
 
 // GetSystemMetrics returns current system metrics

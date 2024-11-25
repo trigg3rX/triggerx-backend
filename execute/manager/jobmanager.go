@@ -9,6 +9,7 @@ import (
     "github.com/shirou/gopsutil/v3/cpu"
     "github.com/shirou/gopsutil/v3/mem"
     "github.com/robfig/cron/v3"
+    "github.com/trigg3rX/go-backend/pkg/network"
 )
 
 var (
@@ -43,10 +44,12 @@ type JobScheduler struct {
     workersCount      int
     metricsInterval   time.Duration
     waitingQueueMu    sync.RWMutex
+    messaging *network.Messaging
+	discovery *network.Discovery
 }
 
 // NewJobScheduler creates an enhanced scheduler with resource limits
-func NewJobScheduler(workersCount int) *JobScheduler {
+func NewJobScheduler(workersCount int, messaging *network.Messaging, discovery *network.Discovery) *JobScheduler {
     ctx, cancel := context.WithCancel(context.Background())
     cronInstance := cron.New(cron.WithSeconds())
     
@@ -64,6 +67,8 @@ func NewJobScheduler(workersCount int) *JobScheduler {
         cancel:          cancel,
         workersCount:    workersCount,
         metricsInterval: 5 * time.Second,
+        messaging: messaging,
+        discovery: discovery,
     }
 
     scheduler.initializeQuorums()
