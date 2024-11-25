@@ -1,182 +1,138 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"time"
+    "context"
+    "encoding/json"
+    "flag"
+    "fmt"
+    "log"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	"github.com/trigg3rX/go-backend/internal/manager"
+    "github.com/libp2p/go-libp2p"
+    "github.com/trigg3rX/go-backend/execute/manager"
+    "github.com/trigg3rX/go-backend/pkg/network"
 )
 
-// APIJobDetails represents the structure of the job details from the external API
-type APIJobDetails struct {
-	JobID              int      `json:"job_id"`
-	JobType            int      `json:"jobType"`
-	UserID             int      `json:"user_id"`
-	ChainID            int      `json:"chain_id"`
-	TimeFrame          int      `json:"time_frame"`
-	TimeInterval       int      `json:"time_interval"`
-	ContractAddress    string   `json:"contract_address"`
-	TargetFunction     string   `json:"target_function"`
-	ArgType            int      `json:"arg_type"`
-	Arguments          []string `json:"arguments"`
-	Status             bool     `json:"status"`
-	JobCostPrediction  float64  `json:"job_cost_prediction"`
-}
-
-// fetchJobDetailsFromAPI retrieves job details from an external API
-func fetchJobDetailsFromAPI(url string) (*APIJobDetails, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
-	}
-
-	req.Header.Add("Accept", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %v", err)
-	}
-
-	var jobDetails APIJobDetails
-	err = json.Unmarshal(body, &jobDetails)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing JSON: %v", err)
-	}
-
-	return &jobDetails, nil
-}
-
-// convertAPIJobToSchedulerJob converts external API job to internal scheduler job
-func convertAPIJobToSchedulerJob(apiJob *APIJobDetails) *manager.Job {
-    // Convert arguments to map[string]interface{}
-    arguments := make(map[string]interface{})
-    for i, arg := range apiJob.Arguments {
-        arguments[fmt.Sprintf("arg_%d", i)] = arg
-    }
-
-    return &manager.Job{
-        JobID:             fmt.Sprintf("job_%d", apiJob.JobID),
-        ArgType:           fmt.Sprintf("%d", apiJob.ArgType),
-        Arguments:         arguments,
-        ChainID:           fmt.Sprintf("%d", apiJob.ChainID),
-        ContractAddress:   apiJob.ContractAddress,
-        JobCostPrediction: apiJob.JobCostPrediction,
-        Stake:             0.0, // Set a default stake or derive from API if needed
-        Status:            "pending",
-        TargetFunction:    apiJob.TargetFunction,
-        TimeFrame:         apiJob.TimeFrame,
-        TimeInterval:      apiJob.TimeInterval,
-        UserID:            fmt.Sprintf("%d", apiJob.UserID),
-        CreatedAt:         time.Now(),
-        MaxRetries:        3, // Default max retries
-    }
-}
 func main() {
-	// Initialize the job scheduler with 5 worker threads
-	jobScheduler := manager.NewJobScheduler(5)
-	
-	// Start the cron scheduler
-	jobScheduler.Cron.Start()
+    // Command line flags
+    schedulerName := flag.String("name", "scheduler", "Name for this scheduler node")
+    listenAddr := flag.String("listen", "/ip4/0.0.0.0/tcp/9000", "Listen address for p2p connections")
+    httpAddr := flag.String("http", ":8080", "HTTP API address")
+    flag.Parse()
+
+    // Create a context that will be canceled on interrupt
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    // Create libp2p host
+    host, err := libp2p.New(
+        libp2p.ListenAddrStrings(*listenAddr),
+    )
+    if err != nil {
+        log.Fatalf("Failed to create libp2p host: %v", err)
+    }
+    defer host.Close()
+
+    // Initialize network components
+    discovery := network.NewDiscovery(ctx, host, *schedulerName)
+    messaging := network.NewMessaging(host, *schedulerName)
+
+    // Save scheduler's peer info
+    if err := discovery.SavePeerInfo(); err != nil {
+        log.Printf("Warning: Failed to save peer info: %v", err)
+    }
+
+    // Initialize the job scheduler with network components
+    jobScheduler := manager.NewJobScheduler(5, messaging, discovery)
+    jobScheduler.Cron.Start()
     defer jobScheduler.Stop()
 
-	// API URL for fetching job details
-	apiURL := "http://192.168.1.53:8080/api/jobs/2"
+    // Create example jobs
+    createExampleJobs(jobScheduler)
 
-	// Fetch job details from external API
-	apiJobDetails, err := fetchJobDetailsFromAPI(apiURL)
-	if err != nil {
-		log.Fatalf("Failed to fetch job details: %v", err)
-	}
+    // Set up HTTP API
+    setupHTTPAPI(jobScheduler, *httpAddr)
 
-	// Convert API job to scheduler job
-	schedulerJob := convertAPIJobToSchedulerJob(apiJobDetails)
+    // Log scheduler address
+    log.Printf("Scheduler is listening on:")
+    log.Printf("  P2P: %s/p2p/%s", host.Addrs()[0], host.ID())
+    log.Printf("  HTTP API: %s", *httpAddr)
 
-	// Add job to scheduler
-	if err := jobScheduler.AddJob(schedulerJob); err != nil {
-		log.Fatalf("Failed to add job to scheduler: %v", err)
-	}
+    // Wait for interrupt signal
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+    
+    // Block until signal is received
+    <-sigChan
+    fmt.Println("\nReceived interrupt signal, shutting down...")
+}
 
-	log.Printf("Job %s added to scheduler successfully", schedulerJob.JobID)
+func createExampleJobs(jobScheduler *manager.JobScheduler) {
+    for i := 1; i <= 5; i++ {
+        job := &manager.Job{
+            JobID:             fmt.Sprintf("job_%d", i),
+            ArgType:           "contract_call",
+            Arguments:         map[string]interface{}{"function": "transfer", "amount": 100 * i},
+            ChainID:           "chain_1",
+            ContractAddress:   fmt.Sprintf("0x123abc%d", i),
+            JobCostPrediction: 0.5,
+            Stake:            1.0,
+            Status:           "pending",
+            TargetFunction:   "execute",
+            TimeFrame:        60,
+            TimeInterval:     10,
+            UserID:           fmt.Sprintf("user_%d", i),
+            CreatedAt:        time.Now(),
+            MaxRetries:       3,
+        }
 
-	// HTTP server setup (similar to previous example)
-	http.HandleFunc("/job/create", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+        if err := jobScheduler.AddJob(job); err != nil {
+            log.Printf("Failed to add job %s: %v", job.JobID, err)
+        } else {
+            log.Printf("Added job %s to scheduler", job.JobID)
+        }
+    }
+}
 
-		// Decode incoming job request
-		var req manager.Job
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid request body", http.StatusBadRequest)
-			return
-		}
+func setupHTTPAPI(jobScheduler *manager.JobScheduler, addr string) {
+    // System metrics endpoint
+    http.HandleFunc("/system/metrics", func(w http.ResponseWriter, r *http.Request) {
+        metrics := jobScheduler.GetSystemMetrics()
+        json.NewEncoder(w).Encode(metrics)
+    })
 
-		// Add job to scheduler
-		if err := jobScheduler.AddJob(&req); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to schedule job: %v", err), http.StatusInternalServerError)
-			return
-		}
+    // Queue status endpoint
+    http.HandleFunc("/queue/status", func(w http.ResponseWriter, r *http.Request) {
+        status := jobScheduler.GetQueueStatus()
+        json.NewEncoder(w).Encode(status)
+    })
 
-		// Return success response
-		response := map[string]string{
-			"job_id": req.JobID,
-			"status": "scheduled",
-		}
-		json.NewEncoder(w).Encode(response)
-	})
+    // Job details endpoint
+    http.HandleFunc("/job/", func(w http.ResponseWriter, r *http.Request) {
+        jobID := r.URL.Path[len("/job/"):]
+        if jobID == "" {
+            http.Error(w, "Job ID required", http.StatusBadRequest)
+            return
+        }
 
-	http.HandleFunc("/job/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+        details, err := jobScheduler.GetJobDetails(jobID)
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusNotFound)
+            return
+        }
 
-		jobID := r.URL.Query().Get("job_id")
-		if jobID == "" {
-			http.Error(w, "Job ID is required", http.StatusBadRequest)
-			return
-		}
+        json.NewEncoder(w).Encode(details)
+    })
 
-		job, exists := jobScheduler.GetJob(jobID)
-		if !exists {
-			http.Error(w, "Job not found", http.StatusNotFound)
-			return
-		}
-
-		json.NewEncoder(w).Encode(job)
-	})
-
-	http.HandleFunc("/quorum/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		status := jobScheduler.GetQuorumsStatus()
-		json.NewEncoder(w).Encode(status)
-	})
-
-	// Start HTTP server
-	serverAddr := ":8080"
-	fmt.Printf("Server starting on %s\n", serverAddr)
-	log.Fatal(http.ListenAndServe(serverAddr, nil))
+    // Start HTTP server in a goroutine
+    go func() {
+        log.Printf("Starting HTTP server on %s", addr)
+        if err := http.ListenAndServe(addr, nil); err != nil {
+            log.Fatalf("HTTP server failed: %v", err)
+        }
+    }()
 }
