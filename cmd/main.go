@@ -1,6 +1,3 @@
-
-
-// file: cmd/main.go
 package main
 
 import (
@@ -14,16 +11,17 @@ import (
     "time"
 
     "github.com/libp2p/go-libp2p"
+    "github.com/libp2p/go-libp2p/core/peer"
     dht "github.com/libp2p/go-libp2p-kad-dht"
-    "github.com/trigg3rX/triggerx-keeper/pkg/execution"
+    "github.com/libp2p/go-libp2p/core/host"
     "github.com/trigg3rX/go-backend/pkg/network"
-    "github.com/trigg3rX/go-backend/execute/manager"
+    "github.com/trigg3rX/triggerx-keeper/pkg/execution"
 )
 
 const (
-    managerName = "manager"
+    managerName   = "manager"
     retryInterval = 5 * time.Second
-    maxRetries = 12
+    maxRetries    = 12
 )
 
 func main() {
@@ -35,7 +33,6 @@ func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    // Create libp2p host with DHT
     host, kdht, err := setupP2P(ctx, *listenAddr)
     if err != nil {
         log.Fatalf("Failed to create P2P host: %v", err)
@@ -43,39 +40,31 @@ func main() {
     defer host.Close()
     defer kdht.Close()
 
-    // Initialize discovery with DHT
-    discovery := network.NewDiscovery(ctx, host, keeperName, kdht)
-    messaging := network.NewMessaging(host, keeperName)
+    discovery := network.NewDiscovery(ctx, host, keeperName)
 
-    // Bootstrap DHT
     if err := kdht.Bootstrap(ctx); err != nil {
         log.Printf("Warning: DHT bootstrap failed: %v", err)
     }
 
-    // Save keeper's peer info
     if err := discovery.SavePeerInfo(); err != nil {
         log.Printf("Warning: Failed to save peer info: %v", err)
     }
 
-    // Find and connect to manager with retries
     managerID, err := connectToManager(ctx, discovery)
     if err != nil {
         log.Fatalf("Failed to connect to manager: %v", err)
     }
 
-    // Initialize keeper
-    k := keeper.NewKeeper(keeperName, messaging, *managerID)
+    k := execution.NewKeeper(keeperName, nil, *managerID) // Pass appropriate messaging
     if err := k.Start(); err != nil {
         log.Fatalf("Failed to start keeper: %v", err)
     }
     defer k.Stop()
 
-    // Log keeper addresses
     for _, addr := range host.Addrs() {
         log.Printf("Keeper %s listening on: %s/p2p/%s", keeperName, addr, host.ID())
     }
 
-    // Wait for interrupt
     waitForInterrupt()
 }
 
@@ -84,7 +73,6 @@ func connectToManager(ctx context.Context, discovery *network.Discovery) (*peer.
     var err error
 
     for i := 0; i < maxRetries; i++ {
-        // Try to find peers first
         if err := discovery.FindPeers(); err != nil {
             log.Printf("Warning: Peer discovery failed: %v", err)
         }
@@ -104,7 +92,6 @@ func connectToManager(ctx context.Context, discovery *network.Discovery) (*peer.
     return nil, fmt.Errorf("failed to connect to manager after %d attempts", maxRetries)
 }
 
-// Shared helper functions
 func setupP2P(ctx context.Context, listenAddr string) (host.Host, *dht.IpfsDHT, error) {
     host, err := libp2p.New(
         libp2p.ListenAddrStrings(listenAddr),

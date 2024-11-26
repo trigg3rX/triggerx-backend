@@ -9,7 +9,7 @@ import (
 
     "github.com/libp2p/go-libp2p/core/peer"
     "github.com/trigg3rX/go-backend/pkg/network"
-    "github.com/trigg3rX/go-backend/execute/manager"
+    //"github.com/trigg3rX/go-backend/execute/manager"
 )
 
 // MessageType for internal message handling
