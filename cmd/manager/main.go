@@ -1,3 +1,4 @@
+// github.com/trigg3rX/go-backend/cmd/manager/main.go
 package main
 
 import (
@@ -15,6 +16,7 @@ import (
     "github.com/libp2p/go-libp2p"
     "github.com/trigg3rX/go-backend/execute/manager"
     "github.com/trigg3rX/go-backend/pkg/network"
+    "github.com/trigg3rX/go-backend/pkg/types"
 )
 
 func main() {

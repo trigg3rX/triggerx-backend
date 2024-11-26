@@ -1,16 +1,17 @@
-// job.go
+// github.com/trigg3rX/go-backend/execute/manager/job.go
 package manager
 
 import (
     "log"
     "math/rand"
     "time"
-	"os"
-	"encoding/json"
-	
-	"github.com/trigg3rX/go-backend/pkg/network"
+    "os"
+    "encoding/json"
+    
+    "github.com/trigg3rX/go-backend/pkg/network"
+    "github.com/trigg3rX/go-backend/pkg/types"
+    "github.com/trigg3rX/triggerx-keeper/pkg/execution"
 )
-
 type JobMessage struct {
     Job       *Job   `json:"job"`
     Timestamp string `json:"timestamp"`
@@ -95,6 +96,15 @@ func (js *JobScheduler) processJob(job *Job) {
     keeperName := quorum.ActiveNodes[rand.Intn(len(quorum.ActiveNodes))]
     js.mu.Unlock()
 
+    // Prepare job message with proper KeeperMessage structure
+    keeperMsg := keeper.KeeperMessage{
+        Type: keeper.ExecuteJob,
+        Message: JobMessage{
+            Job:       job,
+            Timestamp: time.Now().UTC().Format(time.RFC3339),
+        },
+    }
+
     // Load keeper information
     peerInfos := make(map[string]network.PeerInfo)
     if err := js.loadPeerInfo(&peerInfos); err != nil {
@@ -115,14 +125,8 @@ func (js *JobScheduler) processJob(job *Job) {
         return
     }
 
-    // Prepare job message
-    jobMsg := JobMessage{
-        Job:       job,
-        Timestamp: time.Now().UTC().Format(time.RFC3339),
-    }
-
     // Send job to keeper
-    err = js.messaging.SendMessage(keeperName, *peerID, jobMsg)
+    err = js.messaging.SendMessage(keeperName, *peerID, keeperMsg)
     if err != nil {
         log.Printf("Failed to send job to keeper %s: %v", keeperName, err)
         js.mu.Lock()
