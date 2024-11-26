@@ -1,3 +1,4 @@
+// github.com/trigg3rX/triggerx-keeper/cmd/main.go
 package main
 
 import (
@@ -15,6 +16,7 @@ import (
     dht "github.com/libp2p/go-libp2p-kad-dht"
     "github.com/libp2p/go-libp2p/core/host"
     "github.com/trigg3rX/go-backend/pkg/network"
+    "github.com/trigg3rX/go-backend/pkg/types"
     "github.com/trigg3rX/triggerx-keeper/pkg/execution"
 )
 

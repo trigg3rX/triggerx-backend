@@ -1,3 +1,4 @@
+// github.com/trigg3rX/triggerx-keeper/pkg/execution/execution.go
 package execution
 
 import (
@@ -9,7 +10,7 @@ import (
 
     "github.com/libp2p/go-libp2p/core/peer"
     "github.com/trigg3rX/go-backend/pkg/network"
-    //"github.com/trigg3rX/go-backend/execute/manager"
+    "github.com/trigg3rX/go-backend/pkg/types"
 )
 
 // MessageType for internal message handling
@@ -23,15 +24,15 @@ const (
 
 // KeeperMessage wraps the message type with the job message
 type KeeperMessage struct {
-    Type    MessageType       `json:"type"`
-    Message manager.JobMessage `json:"message"`
+    Type    MessageType     `json:"type"`
+    Message types.JobMessage `json:"message"`
 }
 
 // Keeper represents a node that executes jobs
 type Keeper struct {
     name       string
     messaging  *network.Messaging
-    jobs       map[string]*manager.Job
+    jobs       map[string]*types.Job  // Use types.Job instead of manager.Job
     jobsMutex  sync.RWMutex
     ctx        context.Context
     cancel     context.CancelFunc
@@ -97,7 +98,7 @@ func (k *Keeper) handleMessage(msg network.Message) {
     }
 }
 
-func (k *Keeper) executeJob(job *manager.Job) {
+func (k *Keeper) executeJob(job *types.Job) {
     k.jobsMutex.Lock()
     k.jobs[job.JobID] = job
     k.jobsMutex.Unlock()
