@@ -45,7 +45,7 @@ func NewKeeper(name string, messaging *network.Messaging, managerID peer.ID) *Ke
     return &Keeper{
         name:      name,
         messaging: messaging,
-        jobs:      make(map[string]*manager.Job),
+        jobs:      make(map[string]*types.Job),
         ctx:       ctx,
         cancel:    cancel,
         managerID: managerID,
@@ -113,7 +113,7 @@ func (k *Keeper) executeJob(job *types.Job) {
     job.NextExecutionTime = time.Now().Add(time.Duration(job.TimeInterval) * time.Second)
 
     // Prepare result message
-    resultMsg := manager.JobMessage{
+    resultMsg := types.JobMessage{
         Job: job,
         Timestamp: time.Now().UTC().Format(time.RFC3339),
     }
