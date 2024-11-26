@@ -75,7 +75,7 @@ func main() {
 
 func createExampleJobs(jobScheduler *manager.JobScheduler) {
     for i := 1; i <= 5; i++ {
-        job := &manager.Job{
+        job := &types.Job{
             JobID:             fmt.Sprintf("job_%d", i),
             ArgType:           "contract_call",
             Arguments:         map[string]interface{}{"function": "transfer", "amount": 100 * i},
@@ -94,8 +94,6 @@ func createExampleJobs(jobScheduler *manager.JobScheduler) {
 
         if err := jobScheduler.AddJob(job); err != nil {
             log.Printf("Failed to add job %s: %v", job.JobID, err)
-        } else {
-            log.Printf("Added job %s to scheduler", job.JobID)
         }
     }
 }

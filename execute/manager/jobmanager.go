@@ -27,15 +27,15 @@ type SystemResources struct {
 
 // WaitingJob represents a job waiting in queue
 type WaitingJob struct {
-    Job           *Job
+    Job           *types.Job
     EstimatedTime time.Time
 }
 
 // JobScheduler enhanced with load balancing
 type JobScheduler struct {
-    jobs              map[string]*Job
+    jobs              map[string]*types.Job
     quorums           map[string]*Quorum
-    jobQueue          chan *Job
+    jobQueue          chan *types.Job
     waitingQueue      []WaitingJob
     resources         SystemResources
     Cron              *cron.Cron
@@ -55,9 +55,9 @@ func NewJobScheduler(workersCount int, messaging *network.Messaging, discovery *
     cronInstance := cron.New(cron.WithSeconds())
     
     scheduler := &JobScheduler{
-        jobs:             make(map[string]*Job),
+        jobs:             make(map[string]*types.Job),
         quorums:          make(map[string]*Quorum),
-        jobQueue:         make(chan *Job, 1000),
+        jobQueue:         make(chan *types.Job, 1000),
         waitingQueue:     make([]WaitingJob, 0),
         resources: SystemResources{
             MaxCPU:    10.0, // 10% CPU threshold
@@ -114,7 +114,7 @@ func (js *JobScheduler) checkResourceAvailability() bool {
 }
 
 // AddJob enhanced with resource checking
-func (js *JobScheduler) AddJob(job *Job) error {
+func (js *JobScheduler) AddJob(job *types.Job) error {
     if job.TimeFrame <= 0 {
         return ErrInvalidTimeframe
     }
@@ -144,7 +144,7 @@ func (js *JobScheduler) AddJob(job *Job) error {
 }
 
 // scheduleJob handles the actual job scheduling
-func (js *JobScheduler) scheduleJob(job *Job) error {
+func (js *JobScheduler) scheduleJob(job *types.Job) error {
     // Add to jobs map
     js.jobs[job.JobID] = job
     

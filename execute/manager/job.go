@@ -12,27 +12,11 @@ import (
     "github.com/trigg3rX/go-backend/pkg/types"
     "github.com/trigg3rX/triggerx-keeper/pkg/execution"
 )
-type JobMessage struct {
-    Job       *Job   `json:"job"`
-    Timestamp string `json:"timestamp"`
-}
 
 // Job represents a scheduled task with its properties
 type Job struct {
-    JobID             string
-    ArgType           string
-    Arguments         map[string]interface{}
-    ChainID           string
-    ContractAddress   string
-    JobCostPrediction float64
-    Stake             float64
-    Status            string
-    TargetFunction    string
-    TimeFrame         int64  // in seconds
-    TimeInterval      int64  // in seconds
-    UserID            string
-    CreatedAt         time.Time
-    MaxRetries        int
+    types.Job  // Embed the types.Job struct
+    // Additional fields specific to manager package
     CurrentRetries    int
     LastExecuted      time.Time
     NextExecutionTime time.Time
@@ -73,7 +57,7 @@ func (js *JobScheduler) initializeQuorums() {
 }
 
 // processJob handles the execution of a job
-func (js *JobScheduler) processJob(job *Job) {
+func (js *JobScheduler) processJob(job *types.Job) {
     js.mu.Lock()
     if job.Status == "completed" || job.Status == "failed" {
         js.mu.Unlock()
@@ -97,9 +81,9 @@ func (js *JobScheduler) processJob(job *Job) {
     js.mu.Unlock()
 
     // Prepare job message with proper KeeperMessage structure
-    keeperMsg := keeper.KeeperMessage{
-        Type: keeper.ExecuteJob,
-        Message: JobMessage{
+    keeperMsg := execution.KeeperMessage{
+        Type: execution.ExecuteJob,
+        Message: types.JobMessage{
             Job:       job,
             Timestamp: time.Now().UTC().Format(time.RFC3339),
         },

@@ -1,13 +1,19 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"log"
+    "fmt"
+    "time"
+    "os"
+    "os/signal"
+    "syscall"
 
 	"github.com/trigg3rX/go-backend/pkg/network"
 	"github.com/trigg3rX/go-backend/execute/manager"
 	"github.com/trigg3rX/triggerx-keeper/pkg/execution"
+	"github.com/libp2p/go-libp2p"
+	"context"
+	"github.com/trigg3rX/go-backend/pkg/types"
 )
 
 const (
@@ -16,24 +22,33 @@ const (
 )
 
 func main() {
+    // Create libp2p host
+    host, err := libp2p.New(
+        libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/9000"),
+    )
+    if err != nil {
+        log.Fatalf("Failed to create libp2p host: %v", err)
+    }
+    defer host.Close()
+
     // Initialize networking components
-    messaging := network.NewMessaging()
-    discovery := network.NewDiscovery()
+    messaging := network.NewMessaging(host, "keeper")
+    discovery := network.NewDiscovery(context.Background(), host, "keeper")
 
     // Initialize the job scheduler
-    scheduler := manager.NewJobScheduler(WORKERS_COUNT)
+    scheduler := manager.NewJobScheduler(WORKERS_COUNT, messaging, discovery)
     scheduler.SetResourceLimits(80.0, 80.0) // Set CPU and Memory thresholds to 80%
 
     // Initialize keepers
-    keepers := make([]*keeper.Keeper, KEEPER_COUNT)
+    keepers := make([]*execution.Keeper, KEEPER_COUNT)
     for i := 0; i < KEEPER_COUNT; i++ {
         keeperName := fmt.Sprintf("keeper-%d", i+1)
-        keepers[i] = keeper.NewKeeper(keeperName, messaging)
+        keepers[i] = execution.NewKeeper(keeperName, messaging, host.ID())
         keepers[i].Start()
     }
 
     // Example: Schedule a test job
-    testJob := &manager.Job{
+    testJob := &types.Job{
         JobID:           "test-job-1",
         ArgType:         "string",
         Arguments:       map[string]interface{}{"param1": "value1"},
@@ -47,7 +62,7 @@ func main() {
         Status:          "pending",
     }
 
-    err := scheduler.AddJob(testJob)
+    err = scheduler.AddJob(testJob)
     if err != nil {
         log.Printf("Failed to add test job: %v", err)
     }

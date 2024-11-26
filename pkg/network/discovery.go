@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
 const PeerInfoFilePath = "peer_info.json"
@@ -22,16 +23,19 @@ type PeerInfo struct {
 }
 
 type Discovery struct {
-	host    host.Host
-	name    string
-	context context.Context
+	host      host.Host
+	name      string
+	context   context.Context
+	dht       *dht.IpfsDHT
+	peerStore map[peer.ID]peer.AddrInfo
 }
 
 func NewDiscovery(ctx context.Context, h host.Host, name string) *Discovery {
 	return &Discovery{
-		host:    h,
-		name:    name,
-		context: ctx,
+		host:      h,
+		name:      name,
+		context:   ctx,
+		peerStore: make(map[peer.ID]peer.AddrInfo),
 	}
 }
 
@@ -81,4 +85,38 @@ func (d *Discovery) ConnectToPeer(info PeerInfo) (*peer.ID, error) {
 
 	log.Printf("Connected to peer %s with ID: %s", info.Name, peerInfo.ID)
 	return &peerInfo.ID, nil
+}
+
+func (d *Discovery) FindPeers() error {
+	// Load peer info from file and try to connect to each peer
+	peerInfos := make(map[string]PeerInfo)
+	if file, err := os.Open(PeerInfoFilePath); err == nil {
+		decoder := json.NewDecoder(file)
+		decoder.Decode(&peerInfos)
+		file.Close()
+	}
+
+	for _, info := range peerInfos {
+		if peerID, err := d.ConnectToPeer(info); err == nil {
+			addrInfo := d.host.Peerstore().PeerInfo(*peerID)
+			d.peerStore[*peerID] = addrInfo
+		}
+	}
+	return nil
+}
+
+func (d *Discovery) ConnectToPeerByName(name string) (*peer.ID, error) {
+	// Load peer info from file
+	peerInfos := make(map[string]PeerInfo)
+	if file, err := os.Open(PeerInfoFilePath); err == nil {
+		decoder := json.NewDecoder(file)
+		decoder.Decode(&peerInfos)
+		file.Close()
+	}
+
+	// Find and connect to peer
+	if info, exists := peerInfos[name]; exists {
+		return d.ConnectToPeer(info)
+	}
+	return nil, fmt.Errorf("peer %s not found", name)
 }
