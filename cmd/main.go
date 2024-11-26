@@ -10,13 +10,13 @@ import (
     "os/signal"
     "syscall"
     "time"
+    "encoding/json"
 
     "github.com/libp2p/go-libp2p"
     "github.com/libp2p/go-libp2p/core/peer"
     dht "github.com/libp2p/go-libp2p-kad-dht"
     "github.com/libp2p/go-libp2p/core/host"
     "github.com/trigg3rX/go-backend/pkg/network"
-    "github.com/trigg3rX/go-backend/pkg/types"
     "github.com/trigg3rX/triggerx-keeper/pkg/execution"
 )
 
@@ -75,14 +75,21 @@ func connectToManager(ctx context.Context, discovery *network.Discovery) (*peer.
     var err error
 
     for i := 0; i < maxRetries; i++ {
-        if err := discovery.FindPeers(); err != nil {
-            log.Printf("Warning: Peer discovery failed: %v", err)
+        // Load peer info from file
+        peerInfos := make(map[string]network.PeerInfo)
+        if file, err := os.Open(network.PeerInfoFilePath); err == nil {
+            decoder := json.NewDecoder(file)
+            decoder.Decode(&peerInfos)
+            file.Close()
         }
 
-        managerID, err = discovery.ConnectToPeerByName(managerName)
-        if err == nil {
-            log.Printf("Successfully connected to manager")
-            return managerID, nil
+        // Try to connect to manager peer if found
+        if managerInfo, exists := peerInfos[managerName]; exists {
+            managerID, err = discovery.ConnectToPeer(managerInfo)
+            if err == nil {
+                log.Printf("Successfully connected to manager")
+                return managerID, nil
+            }
         }
 
         log.Printf("Attempt %d: Failed to connect to manager: %v", i+1, err)
@@ -98,7 +105,6 @@ func setupP2P(ctx context.Context, listenAddr string) (host.Host, *dht.IpfsDHT, 
     host, err := libp2p.New(
         libp2p.ListenAddrStrings(listenAddr),
         libp2p.EnableRelay(),
-        libp2p.EnableAutoRelay(),
         libp2p.EnableHolePunching(),
     )
     if err != nil {

@@ -5,7 +5,7 @@ go 1.23.3
 require (
 	github.com/libp2p/go-libp2p v0.37.1
 	github.com/libp2p/go-libp2p-kad-dht v0.28.1
-	github.com/trigg3rX/go-backend v0.0.0-20241126055347-910bf5695ce9
+	github.com/trigg3rX/go-backend v0.0.0-20241126061959-8e4ac524ba6c
 )
 
 require (
