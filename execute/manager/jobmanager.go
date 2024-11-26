@@ -1,3 +1,4 @@
+// github.com/trigg3rX/go-backend/execute/manager/jobmanager.go
 package manager
 
 import (
@@ -10,8 +11,8 @@ import (
     "github.com/shirou/gopsutil/v3/mem"
     "github.com/robfig/cron/v3"
     "github.com/trigg3rX/go-backend/pkg/network"
+    "github.com/trigg3rX/go-backend/pkg/types"
 )
-
 var (
     ErrInvalidTimeframe = fmt.Errorf("invalid timeframe specified")
 )
