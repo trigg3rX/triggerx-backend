@@ -32,7 +32,7 @@ type KeeperMessage struct {
 type Keeper struct {
     name       string
     messaging  *network.Messaging
-    jobs       map[string]*types.Job  // Use types.Job instead of manager.Job
+    jobs       map[string]*types.Job
     jobsMutex  sync.RWMutex
     ctx        context.Context
     cancel     context.CancelFunc
