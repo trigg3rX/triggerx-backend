@@ -1,4 +1,3 @@
-// github.com/trigg3rX/go-backend/cmd/manager/main.go
 package main
 
 import (
@@ -21,7 +20,7 @@ import (
 
 func main() {
     // Command line flags
-    schedulerName := flag.String("name", "scheduler", "Name for this scheduler node")
+    schedulerName := flag.String("name", "manager", "Name for this manager node")
     listenAddr := flag.String("listen", "/ip4/0.0.0.0/tcp/9000", "Listen address for p2p connections")
     httpAddr := flag.String("http", ":8080", "HTTP API address")
     flag.Parse()
@@ -53,14 +52,20 @@ func main() {
     jobScheduler.Cron.Start()
     defer jobScheduler.Stop()
 
-    // Create example jobs
-    createExampleJobs(jobScheduler)
+    // Set up message handling for communication with keepers
+    messaging.InitMessageHandling(func(msg network.Message) {
+        log.Printf("Received message from %s: %+v", msg.From, msg)
+        // Add any specific message handling logic if needed
+    })
+
+    // Create and broadcast example jobs
+    createExampleJobs(messaging, jobScheduler)
 
     // Set up HTTP API
     setupHTTPAPI(jobScheduler, *httpAddr)
 
     // Log scheduler address
-    log.Printf("Scheduler is listening on:")
+    log.Printf("Manager is listening on:")
     log.Printf("  P2P: %s/p2p/%s", host.Addrs()[0], host.ID())
     log.Printf("  HTTP API: %s", *httpAddr)
 
@@ -73,7 +78,7 @@ func main() {
     fmt.Println("\nReceived interrupt signal, shutting down...")
 }
 
-func createExampleJobs(jobScheduler *manager.JobScheduler) {
+func createExampleJobs(messaging *network.Messaging, jobScheduler *manager.JobScheduler) {
     for i := 1; i <= 5; i++ {
         job := &types.Job{
             JobID:             fmt.Sprintf("job_%d", i),
@@ -92,8 +97,14 @@ func createExampleJobs(jobScheduler *manager.JobScheduler) {
             MaxRetries:       3,
         }
 
+        // Add job to local scheduler
         if err := jobScheduler.AddJob(job); err != nil {
-            log.Printf("Failed to add job %s: %v", job.JobID, err)
+            log.Printf("Failed to add job %s to scheduler: %v", job.JobID, err)
+        }
+
+        // Broadcast job to all registered peers
+        if err := messaging.BroadcastJob(job); err != nil {
+            log.Printf("Failed to broadcast job %s: %v", job.JobID, err)
         }
     }
 }

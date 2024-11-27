@@ -1,4 +1,4 @@
-// github.com/trigg3rX/go-backend/pkg/network/discovery.go 
+// github.com/trigg3rX/go-backend/pkg/network/message.go 
 package network
 
 import (
@@ -106,4 +106,25 @@ func (m *Messaging) SendMessage(to string, peerID peer.ID, content interface{}) 
 	}
 
 	return nil
+}
+
+func (m *Messaging) BroadcastJob(job *types.Job) error {
+    // Broadcast to all known peers
+    for name, peerID := range m.peers {
+        err := m.SendMessage(name, peerID, job)
+        if err != nil {
+            log.Printf("Failed to send job to %s: %v", name, err)
+        }
+    }
+    return nil
+}
+
+func (m *Messaging) SendJobToKeeper(keeperName string, job *types.Job) error {
+    // Find the specific keeper's peer ID
+    peerID, exists := m.peers[keeperName]
+    if !exists {
+        return fmt.Errorf("keeper %s not found", keeperName)
+    }
+
+    return m.SendMessage(keeperName, peerID, job)
 }
