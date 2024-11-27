@@ -5,14 +5,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/trigg3rX/go-backend/pkg/network"
-	"github.com/trigg3rX/go-backend/execute/manager"
-	"github.com/trigg3rX/triggerx-keeper/keeper"
-)
-
-const (
-    WORKERS_COUNT     = 5
-    KEEPER_COUNT     = 3
+	"github.com/trigg3rX/go-backend/execute/keeper"
 )
 
 func main() {

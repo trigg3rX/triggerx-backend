@@ -153,7 +153,7 @@ func (js *JobScheduler) scheduleJob(job *types.Job) error {
     
     // Schedule initial execution
     time.AfterFunc(2*time.Second, func() {
-        js.processJob(job)
+        js.processJob(0, job)
     })
     
     // Schedule recurring executions
