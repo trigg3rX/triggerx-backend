@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
-	"github.com/trigg3rX/triggerx-keeper/pkg/logger"
+	"github.com/trigg3rX/triggerx-keeper/pkg/core/logger"
 	"go.uber.org/zap"
 )
 
