@@ -2,14 +2,21 @@
 package manager
 
 import (
-    "context"
+    "encoding/json"
     "fmt"
     "log"
+    "os"
+    "strings"
     "sync"
     "time"
+
+    "context"
+    "github.com/libp2p/go-libp2p"
+    "github.com/libp2p/go-libp2p/core/peer"
     "github.com/shirou/gopsutil/v3/cpu"
     "github.com/shirou/gopsutil/v3/mem"
     "github.com/robfig/cron/v3"
+    "github.com/trigg3rX/go-backend/pkg/network"
 )
 
 var (
@@ -52,6 +59,13 @@ func NewJobScheduler(workersCount int) *JobScheduler {
     ctx, cancel := context.WithCancel(context.Background())
     cronInstance := cron.New(cron.WithSeconds())
     
+    host, err := libp2p.New()
+    if err != nil {
+        log.Fatalf("Failed to create libp2p host: %v", err)
+    }
+
+    networkClient := network.NewMessaging(host, "task_manager")
+    
     scheduler := &JobScheduler{
         jobs:             make(map[string]*Job),
         quorums:          make(map[string]*Quorum),
@@ -66,22 +80,16 @@ func NewJobScheduler(workersCount int) *JobScheduler {
         cancel:          cancel,
         workersCount:    workersCount,
         metricsInterval: 5 * time.Second,
+        networkClient: networkClient,
     }
 
-    host, err := libp2p.New()
-    if err != nil {
-        log.Fatalf("Failed to create libp2p host: %v", err)
-    }
-
-    networkClient := network.NewMessaging(host, "task_manager")
     
-    scheduler := &JobScheduler{
         scheduler.initializeQuorums()
         scheduler.startWorkers()
         go scheduler.monitorResources()
         go scheduler.processWaitingQueue()
-        networkClient: networkClient,
-    }
+        
+    
 
     discovery := network.NewDiscovery(ctx, host, "task_manager")
     if err := discovery.SavePeerInfo(); err != nil {
@@ -110,7 +118,8 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
     }
 
     // Convert peer address to peer ID
-    peerID, err := peer.IDB58Decode(strings.Split(peerInfo.Address, "/p2p/")[1])
+    peerID, err := peer.Decode(strings.Split(peerInfo.Address, "/p2p/")[1])
+
     if err != nil {
         return fmt.Errorf("invalid peer ID for keeper %s: %v", keeperName, err)
     }

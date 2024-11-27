@@ -18,8 +18,8 @@ const PeerInfoFilePath = "peer_info.json"
 const PeerConnectionTimeout = 30 * time.Second
 
 type PeerInfo struct {
-    Name    string json:"name"
-    Address string json:"address"
+    Name    string `json:"name"`
+    Address string `json:"address"`
 }
 
 type Discovery struct {
@@ -64,12 +64,12 @@ func (d *Discovery) SavePeerInfo() error {
 func (d Discovery) ConnectToPeer(info PeerInfo) (peer.ID, error) {
     maddr, err := multiaddr.NewMultiaddr(info.Address)
     if err != nil {
-        return nil, fmt.Errorf("invalid peer address: %v", err)
+        return "", fmt.Errorf("invalid peer address: %v", err)
     }
 
     peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
     if err != nil {
-        return nil, fmt.Errorf("invalid peer info: %v", err)
+        return "", fmt.Errorf("invalid peer info: %v", err)
     }
 
     ctx, cancel := context.WithTimeout(d.context, PeerConnectionTimeout)
@@ -77,9 +77,9 @@ func (d Discovery) ConnectToPeer(info PeerInfo) (peer.ID, error) {
 
     err = d.host.Connect(ctx, *peerInfo)
     if err != nil {
-        return nil, fmt.Errorf("failed to connect to peer: %v", err)
+        return "", fmt.Errorf("failed to connect to peer: %v", err)
     }
 
     log.Printf("Connected to peer %s with ID: %s", info.Name, peerInfo.ID)
-    return &peerInfo.ID, nil
+    return peerInfo.ID, nil
 }

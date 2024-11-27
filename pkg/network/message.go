@@ -19,11 +19,11 @@ import (
 const MessageProtocol = "/keeper/message/1.0.0"
 
 type Message struct {
-    From      string      json:"from"
-    To        string      json:"to"
-    Content   interface{} json:"content"
-    Type      string      json:"type"
-    Timestamp string      json:"timestamp"
+    From      string      `json:"from"`
+    To        string      `json:"to"`
+    Content   interface{} `json:"content"`
+    Type      string      `json:"type"`
+    Timestamp string      `json:"timestamp"`
 }
 
 type Messaging struct {
