@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/big"
 	"time"
-	"context"
+
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -13,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/go-backend/pkg/database"
-	"strings"
 )
 
 const (
@@ -88,7 +89,6 @@ func (qm *QuorumManager) RegisterKeeper(keeperID int64, operatorAddress string, 
 
 	// Create socket value (must be non-empty)
 	socket := "socket://localhost:8545"
-	
 
 	// Initialize G1 point
 	pubkeyG1 := struct {
@@ -143,7 +143,7 @@ func (qm *QuorumManager) RegisterKeeper(keeperID int64, operatorAddress string, 
 	}
 
 	// Call contract register operator function
-	tx, err := qm.contract.Transact(auth, "registerOperator", 
+	tx, err := qm.contract.Transact(auth, "registerOperator",
 		operatorBytes,
 		socket,
 		pubkeyRegistration,
@@ -269,8 +269,8 @@ func main() {
 
 	// Example usage
 	keeperID := int64(2)
-	operatorAddress := "0xC76EA60887CA82C474cf6dfc17f918DDd68D6cA2"                  // Replace with actual address
-	privateKey := "29b47d5446e76cdfc0fb55cfbddea308f3d5f0c4151105f39d262f7dd49e9600" // Replace with actual private key (without 0x prefix)
+	operatorAddress := "0xC76EA60887CA82C474cf6dfc17f918DDd68D6cA2" // Replace with actual address
+	privateKey := "Your private key"                                // Replace with actual private key (without 0x prefix)
 
 	// Example: Register a keeper
 	fmt.Println("Attempting to register keeper...")
