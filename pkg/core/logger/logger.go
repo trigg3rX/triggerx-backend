@@ -11,7 +11,9 @@ func init() {
 	config := zap.NewProductionConfig()
 	config.EncoderConfig.TimeKey = "timestamp"
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
+	config.Encoding = "console"
+	config.OutputPaths = []string{"stdout"}
+	config.ErrorOutputPaths = []string{"stderr"}
 	var err error
 	log, err = config.Build()
 	if err != nil {
