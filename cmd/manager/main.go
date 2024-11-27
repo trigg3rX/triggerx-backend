@@ -2,9 +2,7 @@
 package main
 
 import (
-    "context"
     "encoding/json"
-    "flag"
     "fmt"
     "log"
     "net/http"
@@ -48,7 +46,7 @@ func main() {
         job := &manager.Job{
             JobID:             jobConfig.jobID,
             ArgType:           "contract_call",
-            Arguments:         map[string]interface{}{"function": "transfer", "amount": 100 * i},
+            Arguments:         map[string]interface{}{"function": "transfer"},
             ChainID:           "chain_1",
             ContractAddress:   fmt.Sprintf("0x123...%s", jobConfig.jobID),
             JobCostPrediction: 0.5,
@@ -62,7 +60,6 @@ func main() {
             MaxRetries:        jobConfig.maxRetries,
         }
 
-        // Add job to local scheduler
         if err := jobScheduler.AddJob(job); err != nil {
             log.Printf("Failed to add job %s: %v", job.JobID, err)
         } else {
@@ -73,7 +70,6 @@ func main() {
         // Smaller delay to spread out job starts
         time.Sleep(1 * time.Second)
     }
-}
 
     // Wait to allow jobs to process
     time.Sleep(60 * time.Second)
@@ -101,7 +97,6 @@ func main() {
         json.NewEncoder(w).Encode(metrics)
     })
 
-    // Queue status endpoint
     http.HandleFunc("/queue/status", func(w http.ResponseWriter, r *http.Request) {
         status := jobScheduler.GetQueueStatus()
         json.NewEncoder(w).Encode(status)

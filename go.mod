@@ -10,7 +10,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/trigg3rX/triggerx-keeper v0.0.0-20241126063052-0632afd14322
 )
 
 require (

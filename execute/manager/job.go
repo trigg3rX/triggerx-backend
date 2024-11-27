@@ -5,18 +5,24 @@ import (
     "log"
     "math/rand"
     "time"
-    "os"
-    "encoding/json"
-    
-    "github.com/trigg3rX/go-backend/pkg/network"
-    "github.com/trigg3rX/go-backend/pkg/types"
-   // "github.com/trigg3rX/triggerx-keeper/pkg/execute"
 )
 
 // Job represents a scheduled task with its properties
 type Job struct {
-    types.Job  // Embed the types.Job struct
-    // Additional fields specific to manager package
+    JobID             string
+    ArgType           string
+    Arguments         map[string]interface{}
+    ChainID           string
+    ContractAddress   string
+    JobCostPrediction float64
+    Stake             float64
+    Status            string
+    TargetFunction    string
+    TimeFrame         int64  // in seconds
+    TimeInterval      int64  // in seconds
+    UserID            string
+    CreatedAt         time.Time
+    MaxRetries        int
     CurrentRetries    int
     LastExecuted      time.Time
     NextExecutionTime time.Time
@@ -57,25 +63,28 @@ func (js *JobScheduler) initializeQuorums() {
 }
 
 func (js *JobScheduler) selectRandomKeeper() (string, error) {
+    // Acquire a read lock to safely access quorums
     js.mu.RLock()
     defer js.mu.RUnlock()
 
+    // Check if any quorums exist
     if len(js.quorums) == 0 {
         return "", fmt.Errorf("no quorums available")
     }
 
-    // For now, just pick the first quorum and a random active node
+    // Iterate through available quorums
     for _, quorum := range js.quorums {
+        // Ensure the quorum has active nodes
         if len(quorum.ActiveNodes) > 0 {
-            // Randomly select a keeper from active nodes
+            // Randomly select a keeper from the active nodes in this quorum
             randomIndex := rand.Intn(len(quorum.ActiveNodes))
             return quorum.ActiveNodes[randomIndex], nil
         }
     }
 
+    // If no active nodes are found in any quorum
     return "", fmt.Errorf("no active keepers found")
 }
-
 // processJob handles the execution of a job
 func (js *JobScheduler) processJob(workerID int, job *Job) {
     js.mu.Lock()
@@ -86,40 +95,29 @@ func (js *JobScheduler) processJob(workerID int, job *Job) {
 
     job.Status = "processing"
     job.LastExecuted = time.Now()
-    
-    // Get a random keeper from the quorum
-    quorum := js.quorums["default"]
-    if len(quorum.ActiveNodes) == 0 {
-        job.Status = "failed"
-        job.Error = "no active keepers available"
-        js.mu.Unlock()
-        return
-    }
-    
-    // Select random keeper
-    keeperName := quorum.ActiveNodes[rand.Intn(len(quorum.ActiveNodes))]
     js.mu.Unlock()
+
+    
 
     // Enhanced logging with worker and job details
     log.Printf("[Worker %d] Starting to process Job %s (Target: %s, ChainID: %s)", 
         workerID, job.JobID, job.TargetFunction, job.ChainID)
 
         selectedKeeper, err := js.selectRandomKeeper()
-    if err != nil {
-        log.Printf("Failed to select keeper for job %s: %v", job.JobID, err)
-        return
-    }
+        if err != nil {
+            log.Printf("Failed to select keeper for job %s: %v", job.JobID, err)
+            // Handle failure - maybe retry or mark job as failed
+            return
+        }
 
-    // Transmit job to selected keeper using network package
-    // Note: This assumes you have a network client initialized
-    err = js.networkClient.SendJobToKeeper(selectedKeeper, job)
+        err = js.transmitJobToKeeper(selectedKeeper, job)
     if err != nil {
-        log.Printf("Failed to send job %s to keeper %s: %v", job.JobID, selectedKeeper, err)
+        log.Printf("Job transmission failed: %v", err)
     }
 
     // Simulate job execution with random success/failure
     executionTime := time.Duration(2+rand.Intn(3)) * time.Second
-    log.Printf("[Worker %d] Job %s will take approximately %v to complete", 
+    log.Printf("[Worker %d] ⏳ Job %s will take approximately %v to complete", 
         workerID, job.JobID, executionTime)
     time.Sleep(executionTime)
 
@@ -142,50 +140,7 @@ func (js *JobScheduler) processJob(workerID int, job *Job) {
                 workerID, job.JobID, job.CurrentRetries, job.MaxRetries)
         }
     }
-
-    // Load keeper information
-    peerInfos := make(map[string]network.PeerInfo)
-    if err := js.loadPeerInfo(&peerInfos); err != nil {
-        log.Printf("Failed to load peer info: %v", err)
-        return
-    }
-
-    keeperInfo, exists := peerInfos[keeperName]
-    if !exists {
-        log.Printf("Keeper %s not found in peer info", keeperName)
-        return
-    }
-
-    // Connect to the keeper
-    peerID, err := js.discovery.ConnectToPeer(keeperInfo)
-    if err != nil {
-        log.Printf("Failed to connect to keeper %s: %v", keeperName, err)
-        return
-    }
-
-    // Send job to keeper
-    err = js.messaging.SendMessage(keeperName, *peerID, keeperMsg)
-    if err != nil {
-        log.Printf("Failed to send job to keeper %s: %v", keeperName, err)
-        js.mu.Lock()
-        job.Status = "failed"
-        job.Error = err.Error()
-        js.mu.Unlock()
-        return
-    }
-
-    log.Printf("Job %s sent to keeper %s", job.JobID, keeperName)
-}
-
-func (js *JobScheduler) loadPeerInfo(peerInfos *map[string]network.PeerInfo) error {
-    file, err := os.Open(network.PeerInfoFilePath)
-    if err != nil {
-        return err
-    }
-    defer file.Close()
-
-    decoder := json.NewDecoder(file)
-    return decoder.Decode(peerInfos)
+    
 }
 
 

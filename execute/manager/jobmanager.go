@@ -10,9 +10,8 @@ import (
     "github.com/shirou/gopsutil/v3/cpu"
     "github.com/shirou/gopsutil/v3/mem"
     "github.com/robfig/cron/v3"
-    "github.com/trigg3rX/go-backend/pkg/network"
-    "github.com/trigg3rX/go-backend/pkg/types"
 )
+
 var (
     ErrInvalidTimeframe = fmt.Errorf("invalid timeframe specified")
 )
@@ -27,15 +26,15 @@ type SystemResources struct {
 
 // WaitingJob represents a job waiting in queue
 type WaitingJob struct {
-    Job           *types.Job
+    Job           *Job
     EstimatedTime time.Time
 }
 
 // JobScheduler enhanced with load balancing
 type JobScheduler struct {
-    jobs              map[string]*types.Job
+    jobs              map[string]*Job
     quorums           map[string]*Quorum
-    jobQueue          chan *types.Job
+    jobQueue          chan *Job
     waitingQueue      []WaitingJob
     resources         SystemResources
     Cron              *cron.Cron
@@ -45,19 +44,18 @@ type JobScheduler struct {
     workersCount      int
     metricsInterval   time.Duration
     waitingQueueMu    sync.RWMutex
-    messaging *network.Messaging
-	discovery *network.Discovery
+    networkClient *network.Messaging 
 }
 
 // NewJobScheduler creates an enhanced scheduler with resource limits
-func NewJobScheduler(workersCount int, messaging *network.Messaging, discovery *network.Discovery) *JobScheduler {
+func NewJobScheduler(workersCount int) *JobScheduler {
     ctx, cancel := context.WithCancel(context.Background())
     cronInstance := cron.New(cron.WithSeconds())
     
     scheduler := &JobScheduler{
-        jobs:             make(map[string]*types.Job),
+        jobs:             make(map[string]*Job),
         quorums:          make(map[string]*Quorum),
-        jobQueue:         make(chan *types.Job, 1000),
+        jobQueue:         make(chan *Job, 1000),
         waitingQueue:     make([]WaitingJob, 0),
         resources: SystemResources{
             MaxCPU:    10.0, // 10% CPU threshold
@@ -68,16 +66,89 @@ func NewJobScheduler(workersCount int, messaging *network.Messaging, discovery *
         cancel:          cancel,
         workersCount:    workersCount,
         metricsInterval: 5 * time.Second,
-        messaging: messaging,
-        discovery: discovery,
     }
 
-    scheduler.initializeQuorums()
-    scheduler.startWorkers()
-    go scheduler.monitorResources()
-    go scheduler.processWaitingQueue()
+    host, err := libp2p.New()
+    if err != nil {
+        log.Fatalf("Failed to create libp2p host: %v", err)
+    }
+
+    networkClient := network.NewMessaging(host, "task_manager")
     
+    scheduler := &JobScheduler{
+        scheduler.initializeQuorums()
+        scheduler.startWorkers()
+        go scheduler.monitorResources()
+        go scheduler.processWaitingQueue()
+        networkClient: networkClient,
+    }
+
+    discovery := network.NewDiscovery(ctx, host, "task_manager")
+    if err := discovery.SavePeerInfo(); err != nil {
+        log.Printf("Failed to save task manager peer info: %v", err)
+    }
+
     return scheduler
+}
+
+func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
+    // First, ensure we have a network client
+    if js.networkClient == nil {
+        return fmt.Errorf("network client not initialized")
+    }
+
+    // Load peer information from the peer_info.json file
+    peerInfos, err := js.loadPeerInfo()
+    if err != nil {
+        return fmt.Errorf("failed to load peer info: %v", err)
+    }
+
+    // Find the specific keeper's peer information
+    peerInfo, exists := peerInfos[keeperName]
+    if !exists {
+        return fmt.Errorf("keeper %s not found in peer information", keeperName)
+    }
+
+    // Convert peer address to peer ID
+    peerID, err := peer.IDB58Decode(strings.Split(peerInfo.Address, "/p2p/")[1])
+    if err != nil {
+        return fmt.Errorf("invalid peer ID for keeper %s: %v", keeperName, err)
+    }
+
+    // Create message to send
+    networkMessage := network.Message{
+        From:      "task_manager",
+        To:        keeperName,
+        Content:   job,
+        Type:      "JOB_TRANSMISSION",
+        Timestamp: time.Now().UTC().Format(time.RFC3339),
+    }
+
+    // Send the message using the network client
+    err = js.networkClient.SendMessage(keeperName, peerID, networkMessage)
+    if err != nil {
+        return fmt.Errorf("failed to send job to keeper %s: %v", keeperName, err)
+    }
+
+    log.Printf("Job %s transmitted to keeper %s", job.JobID, keeperName)
+    return nil
+}
+
+// Helper method to load peer information
+func (js *JobScheduler) loadPeerInfo() (map[string]network.PeerInfo, error) {
+    file, err := os.Open(network.PeerInfoFilePath)
+    if err != nil {
+        return nil, fmt.Errorf("unable to open peer info file: %v", err)
+    }
+    defer file.Close()
+
+    var peerInfos map[string]network.PeerInfo
+    decoder := json.NewDecoder(file)
+    if err := decoder.Decode(&peerInfos); err != nil {
+        return nil, fmt.Errorf("unable to decode peer info: %v", err)
+    }
+
+    return peerInfos, nil
 }
 
 // monitorResources continuously monitors system resources
@@ -114,7 +185,7 @@ func (js *JobScheduler) checkResourceAvailability() bool {
 }
 
 // AddJob enhanced with resource checking
-func (js *JobScheduler) AddJob(job *types.Job) error {
+func (js *JobScheduler) AddJob(job *Job) error {
     if job.TimeFrame <= 0 {
         return ErrInvalidTimeframe
     }
@@ -144,7 +215,7 @@ func (js *JobScheduler) AddJob(job *types.Job) error {
 }
 
 // scheduleJob handles the actual job scheduling
-func (js *JobScheduler) scheduleJob(job *types.Job) error {
+func (js *JobScheduler) scheduleJob(job *Job) error {
     // Add to jobs map
     js.jobs[job.JobID] = job
     
