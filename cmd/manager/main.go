@@ -75,10 +75,6 @@ func main() {
     }
 }
 
-<<<<<<< HEAD
-func setupHTTPAPI(jobScheduler *manager.JobScheduler, addr string) {
-    // System metrics endpoint
-=======
     // Wait to allow jobs to process
     time.Sleep(60 * time.Second)
 
@@ -100,7 +96,6 @@ func setupHTTPAPI(jobScheduler *manager.JobScheduler, addr string) {
     }()
 
     // API endpoints (same as before)
->>>>>>> new-task-manager
     http.HandleFunc("/system/metrics", func(w http.ResponseWriter, r *http.Request) {
         metrics := jobScheduler.GetSystemMetrics()
         json.NewEncoder(w).Encode(metrics)
@@ -128,18 +123,8 @@ func setupHTTPAPI(jobScheduler *manager.JobScheduler, addr string) {
         json.NewEncoder(w).Encode(details)
     })
 
-<<<<<<< HEAD
-    // Start HTTP server in a goroutine
-    go func() {
-        log.Printf("Starting HTTP server on %s", addr)
-        if err := http.ListenAndServe(addr, nil); err != nil {
-            log.Fatalf("HTTP server failed: %v", err)
-        }
-    }()
-=======
     // Start HTTP server
     serverAddr := ":8080"
     fmt.Printf("Server starting on %s\n", serverAddr)
     log.Fatal(http.ListenAndServe(serverAddr, nil))
->>>>>>> new-task-manager
 }
