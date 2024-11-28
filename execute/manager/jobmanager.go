@@ -100,12 +100,12 @@ func NewJobScheduler(workersCount int) *JobScheduler {
 }
 
 func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
-    // First, ensure we have a network client
+    // Ensure network client is initialized
     if js.networkClient == nil {
         return fmt.Errorf("network client not initialized")
     }
 
-    // Load peer information from the peer_info.json file
+    // Load peer information
     peerInfos, err := js.loadPeerInfo()
     if err != nil {
         return fmt.Errorf("failed to load peer info: %v", err)
@@ -119,12 +119,11 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
 
     // Convert peer address to peer ID
     peerID, err := peer.Decode(strings.Split(peerInfo.Address, "/p2p/")[1])
-
     if err != nil {
         return fmt.Errorf("invalid peer ID for keeper %s: %v", keeperName, err)
     }
 
-    // Create message to send
+    // Prepare network message
     networkMessage := network.Message{
         From:      "task_manager",
         To:        keeperName,
@@ -133,7 +132,7 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
         Timestamp: time.Now().UTC().Format(time.RFC3339),
     }
 
-    // Send the message using the network client
+    // Send the message
     err = js.networkClient.SendMessage(keeperName, peerID, networkMessage)
     if err != nil {
         return fmt.Errorf("failed to send job to keeper %s: %v", keeperName, err)
