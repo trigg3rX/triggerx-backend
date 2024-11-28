@@ -3,31 +3,21 @@ package crypto
 import (
 	"crypto/ecdsa"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
+	"github.com/trigg3rX/triggerx-keeper/pkg/core/errors"
 	"github.com/trigg3rX/triggerx-keeper/pkg/core/logger"
 	"go.uber.org/zap"
 )
 
-var (
-	// ErrInvalidCurve represents an unsupported cryptographic curve
-	ErrInvalidCurve = errors.New("invalid cryptographic curve")
-	
-	// ErrInvalidPassword represents password validation failures
-	ErrInvalidPassword = errors.New("invalid password")
-	
-	// ErrKeyFileExists prevents accidental overwrite of existing keystore
-	ErrKeyFileExists = errors.New("keystore file already exists")
-)
+
 
 type CryptoCurve string
 
@@ -43,6 +33,33 @@ type encryptedBLSKey struct {
 	Crypto keystore.CryptoJSON `json:"crypto"`
 }
 
+func validatePassword(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("%w: password must be at least 8 characters long", errors.ErrInvalidPassword)
+	}
+	
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(password)
+	hasDigit := regexp.MustCompile(`[0-9]`).MatchString(password)
+	hasSpecial := regexp.MustCompile(`[!@#$%^&*()]`).MatchString(password)
+	
+	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
+		return fmt.Errorf("%w: password must contain uppercase, lowercase, number, and special character", errors.ErrInvalidPassword)
+	}
+	
+	return nil
+}
+
+func checkKeystoreFileAvailability(filePath string) error {
+	if _, err := os.Stat(filePath); err == nil {
+		logger.ErrorWithFields("Keystore file already exists",
+			zap.String("filePath", filePath),
+		)
+		return fmt.Errorf("%w: file %s already exists", errors.ErrKeyFileExists, filePath)
+	}
+	return nil
+}
+
 func LoadPrivateKey(curve CryptoCurve, password, filePath string) ([]byte, error) {
 	// Validate file existence
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -50,7 +67,7 @@ func LoadPrivateKey(curve CryptoCurve, password, filePath string) ([]byte, error
 			zap.String("curve", string(curve)),
 			zap.String("filePath", filePath),
 		)
-		return nil, fmt.Errorf("keystore file not found: %s", filePath)
+		return nil, errors.ErrKeystoreNotFound
 	}
 
 	switch curve {
@@ -77,21 +94,47 @@ func LoadPrivateKey(curve CryptoCurve, password, filePath string) ([]byte, error
 		logger.ErrorWithFields("Unsupported curve for key loading", 
 			zap.String("curve", string(curve)),
 		)
-		return nil, ErrInvalidCurve
+		return nil, errors.ErrInvalidCurve
 	}
 }
 
-// ReadKeystorePasswordFromFile reads the password from the password file.
-func ReadKeystorePasswordFromFile(passwordFilePath string) (string, error) {
-	password, err := os.ReadFile(passwordFilePath)
+func loadBLSPrivateKey(password, filePath string) ([]byte, error) {
+	ksData, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", err
+		return nil, errors.ErrKeystoreNotFound
 	}
-	return strings.TrimSpace(string(password)), nil
+
+	encBLSStruct := &encryptedBLSKey{}
+	if err := json.Unmarshal(ksData, encBLSStruct); err != nil {
+		return nil, errors.ErrKeystoreDecryption
+	}
+
+	if encBLSStruct.PubKey == "" {
+		return nil, errors.ErrInvalidBLSKeyFile
+	}
+
+	privKey, err := keystore.DecryptDataV3(encBLSStruct.Crypto, password)
+	if err != nil {
+		return nil, errors.ErrKeystoreDecryption
+	}
+	return privKey, nil
+}
+
+func loadECDSAPrivateKey(password, filePath string) (*ecdsa.PrivateKey, error) {
+	ksData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.ErrKeystoreNotFound
+	}
+
+	key, err := keystore.DecryptKey(ksData, password)
+	if err != nil {
+		return nil, errors.ErrKeystoreDecryption
+	}
+
+	return key.PrivateKey, nil
 }
 
 func SaveKey(curve CryptoCurve, privKey []byte, password, filePath string) error {
-	// Validate password
 	if err := validatePassword(password); err != nil {
 		logger.ErrorWithFields("Password validation failed", 
 			zap.String("curve", string(curve)),
@@ -114,7 +157,7 @@ func SaveKey(curve CryptoCurve, privKey []byte, password, filePath string) error
 		logger.ErrorWithFields("Unsupported curve for key generation", 
 			zap.String("curve", string(curve)),
 		)
-		return ErrInvalidCurve
+		return errors.ErrInvalidCurve
 	}
 }
 
@@ -127,7 +170,7 @@ func saveBLSKey(curve BLSCurve, privKey []byte, password, filePath string) error
 
 	encryptedKey, err := keystore.EncryptDataV3(privKey, []byte(password), keystore.StandardScryptN, keystore.StandardScryptP)
 	if err != nil {
-		return err
+		return errors.ErrKeystoreEncryption
 	}
 
 	encKey := encryptedBLSKey{
@@ -136,42 +179,24 @@ func saveBLSKey(curve BLSCurve, privKey []byte, password, filePath string) error
 	}
 	encKeyData, err := json.Marshal(encKey)
 	if err != nil {
-		return err
+		return errors.ErrKeystoreEncryption
 	}
 	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-		return err
+		return errors.ErrDirectoryCreation
 	}
 
 	return os.WriteFile(filePath, encKeyData, 0644)
 }
 
-func loadBLSPrivateKey(password, filePath string) ([]byte, error) {
-	ksData, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	encBLSStruct := &encryptedBLSKey{}
-	if err := json.Unmarshal(ksData, encBLSStruct); err != nil {
-		return nil, err
-	}
-
-	if encBLSStruct.PubKey == "" {
-		return nil, errors.New("invalid bls key file, missing public key")
-	}
-
-	return keystore.DecryptDataV3(encBLSStruct.Crypto, password)
-}
-
 func saveECDSAKey(privKey []byte, password, filePath string) error {
 	privateKey, err := ecrypto.ToECDSA(privKey)
 	if err != nil {
-		return err
+		return errors.ErrInvalidPrivateKey
 	}
 
 	UUID, err := uuid.NewRandom()
 	if err != nil {
-		return err
+		return errors.ErrKeystoreEncryption
 	}
 
 	encKey := &keystore.Key{
@@ -181,50 +206,13 @@ func saveECDSAKey(privKey []byte, password, filePath string) error {
 	}
 	encKeyData, err := keystore.EncryptKey(encKey, password, keystore.StandardScryptN, keystore.StandardScryptP)
 	if err != nil {
-		return err
+		return errors.ErrKeystoreEncryption
 	}
 	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-		return err
+		return errors.ErrDirectoryCreation
 	}
 
 	return os.WriteFile(filePath, encKeyData, 0644)
-}
-
-func loadECDSAPrivateKey(password, filePath string) (*ecdsa.PrivateKey, error) {
-	ksData, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	key, err := keystore.DecryptKey(ksData, password)
-	if err != nil {
-		return nil, err
-	}
-
-	return key.PrivateKey, nil
-}
-
-func validatePassword(password string) error {
-	if len(password) < 8 {
-		return fmt.Errorf("%w: password must be at least 8 characters long", ErrInvalidPassword)
-	}
-	
-	// Check for at least one uppercase, one lowercase, one number, and one special character
-	if match, _ := regexp.MatchString(`^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()]).{8,}$`, password); !match {
-		return fmt.Errorf("%w: password must contain uppercase, lowercase, number, and special character", ErrInvalidPassword)
-	}
-	
-	return nil
-}
-
-func checkKeystoreFileAvailability(filePath string) error {
-	if _, err := os.Stat(filePath); err == nil {
-		logger.ErrorWithFields("Keystore file already exists",
-			zap.String("filePath", filePath),
-		)
-		return fmt.Errorf("%w: file %s already exists", ErrKeyFileExists, filePath)
-	}
-	return nil
 }
 
 func ListKeystoreFiles(directory string) ([]string, error) {
@@ -234,7 +222,7 @@ func ListKeystoreFiles(directory string) ([]string, error) {
 			zap.String("directory", directory),
 			zap.Error(err),
 		)
-		return nil, err
+		return nil, errors.ErrKeystoreListing
 	}
 	
 	var keystoreFiles []string
