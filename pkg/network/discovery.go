@@ -1,4 +1,3 @@
-// github.com/trigg3rX/go-backend/pkg/network/discovery.go
 package network
 
 import (
@@ -7,6 +6,8 @@ import (
     "fmt"
     "log"
     "os"
+    "path/filepath"
+    "sync"
     "time"
 
     "github.com/libp2p/go-libp2p/core/host"
@@ -14,8 +15,10 @@ import (
     "github.com/multiformats/go-multiaddr"
 )
 
-const PeerInfoFilePath = "peer_info.json"
-const PeerConnectionTimeout = 30 * time.Second
+const (
+    PeerInfoFilePath = "/home/prapti_shah/peer_info.json"
+    PeerConnectionTimeout = 30 * time.Second
+)
 
 type PeerInfo struct {
     Name    string `json:"name"`
@@ -26,6 +29,7 @@ type Discovery struct {
     host    host.Host
     name    string
     context context.Context
+    mutex   sync.RWMutex
 }
 
 func NewDiscovery(ctx context.Context, h host.Host, name string) *Discovery {
@@ -36,32 +40,99 @@ func NewDiscovery(ctx context.Context, h host.Host, name string) *Discovery {
     }
 }
 
-func (d *Discovery) SavePeerInfo() error {
-    peerInfos := make(map[string]PeerInfo)
+// expandHomePath expands the ~ to the user's home directory
+func expandHomePath(path string) (string, error) {
+    if len(path) > 1 && path[:2] == "~/" {
+        homeDir, err := os.UserHomeDir()
+        if err != nil {
+            return "", err
+        }
+        path = filepath.Join(homeDir, path[2:])
+    }
+    return path, nil
+}
 
-    if file, err := os.Open(PeerInfoFilePath); err == nil {
-        decoder := json.NewDecoder(file)
-        decoder.Decode(&peerInfos)
-        file.Close()
+// SavePeerInfo saves peer information to a JSON file
+func (d *Discovery) SavePeerInfo() error {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+
+    filePath, err := expandHomePath(PeerInfoFilePath)
+    if err != nil {
+        return fmt.Errorf("error expanding file path: %v", err)
     }
 
+    // Ensure directory exists
+    if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+        return fmt.Errorf("unable to create directory: %v", err)
+    }
+
+    // Read existing peer infos
+    peerInfos := make(map[string]PeerInfo)
+    
+    // Try to read existing file
+    if existingFile, err := os.Open(filePath); err == nil {
+        defer existingFile.Close()
+        decoder := json.NewDecoder(existingFile)
+        if err := decoder.Decode(&peerInfos); err != nil {
+            log.Printf("Warning: existing peer info file could not be decoded: %v", err)
+        }
+    }
+
+    // Create full address for current host
     fullAddr := fmt.Sprintf("%s/p2p/%s", d.host.Addrs()[0], d.host.ID().String())
+    
+    // Add or update peer info
     peerInfos[d.name] = PeerInfo{
         Name:    d.name,
         Address: fullAddr,
     }
 
-    file, err := os.Create(PeerInfoFilePath)
+    // Write updated peer infos
+    file, err := os.Create(filePath)
     if err != nil {
         return fmt.Errorf("unable to create peer info file: %v", err)
     }
     defer file.Close()
 
     encoder := json.NewEncoder(file)
-    return encoder.Encode(peerInfos)
+    if err := encoder.Encode(peerInfos); err != nil {
+        return fmt.Errorf("error writing peer info: %v", err)
+    }
+
+    log.Printf("Peer info saved to %s", filePath)
+    return nil
 }
 
-func (d Discovery) ConnectToPeer(info PeerInfo) (peer.ID, error) {
+// LoadPeerInfo loads peer information from the JSON file
+func LoadPeerInfo() (map[string]PeerInfo, error) {
+    filePath, err := expandHomePath(PeerInfoFilePath)
+    if err != nil {
+        return nil, fmt.Errorf("error expanding file path: %v", err)
+    }
+
+    // If file doesn't exist, return an empty map
+    if _, err := os.Stat(filePath); os.IsNotExist(err) {
+        return make(map[string]PeerInfo), nil
+    }
+
+    file, err := os.Open(filePath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open peer info file: %v", err)
+    }
+    defer file.Close()
+
+    var peerInfos map[string]PeerInfo
+    decoder := json.NewDecoder(file)
+    if err := decoder.Decode(&peerInfos); err != nil {
+        return nil, fmt.Errorf("failed to decode peer info: %v", err)
+    }
+
+    return peerInfos, nil
+}
+
+// ConnectToPeer connects to a specific peer
+func (d *Discovery) ConnectToPeer(info PeerInfo) (peer.ID, error) {
     maddr, err := multiaddr.NewMultiaddr(info.Address)
     if err != nil {
         return "", fmt.Errorf("invalid peer address: %v", err)
