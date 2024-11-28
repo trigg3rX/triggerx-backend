@@ -2,8 +2,10 @@ package handler
 
 import (
     "log"
+    "fmt"
+    
     "github.com/trigg3rX/triggerx-keeper/execute/executor"
-    "github.com/trigg3rX/go-backend/execute/manager"
+    "github.com/trigg3rX/go-backend/execute/manager" 
 )
 
 type JobHandler struct {
@@ -17,30 +19,31 @@ func NewJobHandler() *JobHandler {
 }
 
 func (h *JobHandler) HandleJob(job *manager.Job) error {
-    log.Printf("Received job %s for execution", job.JobID)
+    log.Printf("🔧 Received job %s for execution", job.JobID)
     
-    // Validate job before execution
+    // Validate job
     if err := h.validateJob(job); err != nil {
-        log.Printf("Job validation failed: %v", err)
+        log.Printf("❌ Job validation failed: %v", err)
         return err
     }
 
     // Execute job
     result, err := h.executor.Execute(job)
     if err != nil {
-        log.Printf("Job execution failed: %v", err)
+        log.Printf("❌ Job execution failed: %v", err)
         return err
     }
 
-    log.Printf("Job %s executed successfully. Result: %v", job.JobID, result)
+    log.Printf("✅ Job %s executed successfully. Result: %v", job.JobID, result)
     return nil
 }
 
 func (h *JobHandler) validateJob(job *manager.Job) error {
-    // Add job validation logic
+    if job == nil {
+        return fmt.Errorf("received nil job")
+    }
     if job.JobID == "" {
         return fmt.Errorf("invalid job: empty job ID")
     }
-    // Add more validation as needed
     return nil
 }
