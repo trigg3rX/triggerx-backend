@@ -21,7 +21,7 @@ func NewServer(db *database.Connection) *Server {
 
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"}, // Your frontend URL
+		AllowedOrigins:   []string{"https://www.triggerx.network"}, // Your frontend URL
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		AllowCredentials: true,
