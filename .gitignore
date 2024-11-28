@@ -1,4 +1,1 @@
 .env
-go.mod
-go.sum
-cmd/simulator
