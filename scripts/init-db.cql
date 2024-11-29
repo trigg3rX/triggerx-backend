@@ -9,7 +9,6 @@ WITH replication = {
 USE triggerx;
 
 -- Drop existing tables
-DROP TABLE IF EXISTS job_data;
 
 -- Create User_data table
 CREATE TABLE IF NOT EXISTS user_data (

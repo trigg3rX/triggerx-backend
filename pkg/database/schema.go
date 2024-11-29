@@ -17,12 +17,6 @@ func InitSchema(session *gocql.Session) error {
 	}
 
 	// Drop existing tables if any
-	dropTables := []string{"task_data", "keeper_data"}
-	for _, table := range dropTables {
-		if err := session.Query(`DROP TABLE IF EXISTS triggerx.` + table).Exec(); err != nil {
-			return err
-		}
-	}
 
 	// Create User_data table
 	if err := session.Query(`
