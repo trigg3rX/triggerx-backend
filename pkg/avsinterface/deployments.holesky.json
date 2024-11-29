@@ -1,0 +1,33 @@
+{
+  "proxyAdmin": "0x981D5997589b086d57668B5420235FFE242b00c1",
+  "pauserRegistry": "0xe8EE5bA14FaC5e24681b875d7720a5e2fB668dc8",
+  "indexRegistry": {
+    "proxy": "0x34083F20Ec671A0C68a4558400C1a7d7fB922651",
+    "implementation": "0xbc1EAB185EDC90ba1395576Be61ea03891a38031"
+  },
+  "stakeRegistry": {
+    "proxy": "0x25f38BB000EDdB89bA2547167aBCf6dc3996f568",
+    "implementation": "0x36e25b7e2acF6daca0Cd3Ab4E9Cf3DFb93871039"
+  },
+  "apkRegistry": {
+    "proxy": "0x7BF086541b1eB91ebDb35E96636233e34BaD0609",
+    "implementation": "0x9fe4a62bE591Af92908260160d6c344BBC83aeBa"
+  },
+  "socketRegistry": {
+    "proxy": "0xF6b24BA392f07CdcABD931004bf2257E573216BC",
+    "implementation": "0x3CC52B108a82fd035075Ec53c844a9fcc289d9a7"
+  },
+  "registryCoordinator": {
+    "proxy": "0x13a05d12b8061f8F12beCa62a42b981531021439",
+    "implementation": "0xDEd6e5757E48A7F06Fe0f8c1d6462468b816e1F7"
+  },
+  "operatorStateRetriever": "0x0bFAf958319205DDEE91881De142e3139A4E9730",
+  "triggerXServiceManager": {
+    "proxy": "0xD13cb4e9092D0c489819647E59B4CED2746b9980",
+    "implementation": "0xB03E8Cd7F4E339840CD973058FE75B099283e455"
+  },
+  "triggerXTaskManager": {
+    "proxy": "0xcA7e65Fe4f3FF3d23F30fa7ee78Ac375b7548fdA",
+    "implementation": "0xc85cd4A0Fb293de519fcca0CD147DE4a75d07632"
+  }
+}

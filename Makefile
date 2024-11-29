@@ -32,3 +32,8 @@ setup: db-start db-init ## Setup everything
 
 start-api: ## Start the API server
 	./scripts/start-api.sh
+
+############################# GENERATE BINDINGS #############################
+
+generate-bindings: ## Generate bindings
+	./pkg/avsinterface/generate-bindings.sh
