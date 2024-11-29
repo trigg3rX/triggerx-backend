@@ -46,6 +46,10 @@ func (m *Messaging) InitMessageHandling(onMessage func(Message)) {
     })
 }
 
+func (m *Messaging) GetHost() host.Host {
+    return m.host
+}
+
 func (m *Messaging) handleStream(stream network.Stream, onMessage func(Message)) {
     reader := bufio.NewReader(stream)
     defer stream.Close()

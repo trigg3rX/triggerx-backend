@@ -78,8 +78,8 @@ func (js *JobScheduler) selectRandomKeeper() (string, error) {
         // Ensure the quorum has active nodes
         if len(quorum.ActiveNodes) > 0 {
             // Randomly select a keeper from the active nodes in this quorum
-            randomIndex := rand.Intn(len(quorum.ActiveNodes))
-            return quorum.ActiveNodes[randomIndex], nil
+            //randomIndex := rand.Intn(len(quorum.ActiveNodes))
+            return quorum.ActiveNodes[0], nil
         }
     }
 

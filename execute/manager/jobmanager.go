@@ -17,6 +17,8 @@ import (
     "github.com/shirou/gopsutil/v3/mem"
     "github.com/robfig/cron/v3"
     "github.com/trigg3rX/go-backend/pkg/network"
+    "github.com/multiformats/go-multiaddr"
+
 )
 
 var (
@@ -128,7 +130,7 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
     defer cancel()
 
     // Attempt to connect to the peer before sending message
-    if err := js.networkClient.host.Connect(ctx, peer.AddrInfo{
+    if err := js.networkClient.GetHost().Connect(ctx, peer.AddrInfo{
         ID:    peerID,
         Addrs: []multiaddr.Multiaddr{}, // You may want to parse addresses from peerInfo
     }); err != nil {
