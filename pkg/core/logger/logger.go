@@ -1,54 +1,118 @@
 package logger
 
 import (
+	"fmt"
+
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-var log *zap.Logger
+type Logger interface {
+	Debug(msg string, tags ...any)
 
-func init() {
-	config := zap.NewProductionConfig()
-	config.EncoderConfig.TimeKey = "timestamp"
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	config.Encoding = "console"
-	config.OutputPaths = []string{"stdout"}
-	config.ErrorOutputPaths = []string{"stderr"}
-	var err error
-	log, err = config.Build()
+	Info(msg string, tags ...any)
+
+	Warn(msg string, tags ...any)
+
+	Error(msg string, tags ...any)
+
+	Fatal(msg string, tags ...any)
+
+	Debugf(template string, args ...interface{})
+
+	Infof(template string, args ...interface{})
+
+	Warnf(template string, args ...interface{})
+
+	Errorf(template string, args ...interface{})
+
+	Fatalf(template string, args ...interface{})
+
+	With(tags ...any) Logger
+}
+
+type LogLevel string
+
+const (
+	Development LogLevel = "development"
+	Production  LogLevel = "production"
+)
+
+type ZapLogger struct {
+	logger *zap.Logger
+}
+
+var _ Logger = (*ZapLogger)(nil)
+
+// NewZapLogger creates a new logger wrapped the zap.Logger
+func NewZapLogger(env LogLevel) (Logger, error) {
+	var config zap.Config
+
+	if env == Production {
+		config = zap.NewProductionConfig()
+	} else if env == Development {
+		config = zap.NewDevelopmentConfig()
+	} else {
+		panic(fmt.Sprintf("Unknown environment. Expected %s or %s. Received %s.", Development, Production, env))
+	}
+
+	return NewZapLoggerByConfig(config, zap.AddCallerSkip(1))
+}
+
+// NewZapLoggerByConfig creates a logger wrapped the zap.Logger
+// Note if the logger need to show the caller, need use `zap.AddCallerSkip(1)` ad options
+func NewZapLoggerByConfig(config zap.Config, options ...zap.Option) (Logger, error) {
+	logger, err := config.Build(options...)
 	if err != nil {
 		panic(err)
 	}
+
+	return &ZapLogger{
+		logger: logger,
+	}, nil
 }
 
-func Info(format string, v ...interface{}) {
-	log.Sugar().Infof(format, v...)
+func (z *ZapLogger) Debug(msg string, tags ...any) {
+	z.logger.Sugar().Debugw(msg, tags...)
 }
 
-func Event(format string, v ...interface{}) {
-	log.Sugar().Infof(format, v...)
+func (z *ZapLogger) Info(msg string, tags ...any) {
+	z.logger.Sugar().Infow(msg, tags...)
 }
 
-func Error(format string, v ...interface{}) {
-	log.Sugar().Errorf(format, v...)
+func (z *ZapLogger) Warn(msg string, tags ...any) {
+	z.logger.Sugar().Warnw(msg, tags...)
 }
 
-func Fatal(format string, v ...interface{}) {
-	log.Sugar().Fatalf(format, v...)
+func (z *ZapLogger) Error(msg string, tags ...any) {
+	z.logger.Sugar().Errorw(msg, tags...)
 }
 
-func InfoWithFields(msg string, fields ...zap.Field) {
-	log.Info(msg, fields...)
+func (z *ZapLogger) Fatal(msg string, tags ...any) {
+	z.logger.Sugar().Fatalw(msg, tags...)
 }
 
-func ErrorWithFields(msg string, fields ...zap.Field) {
-	log.Error(msg, fields...)
+func (z *ZapLogger) Debugf(template string, args ...interface{}) {
+	z.logger.Sugar().Debugf(template, args...)
 }
 
-func EventWithFields(msg string, fields ...zap.Field) {
-	log.Info(msg, fields...)
+func (z *ZapLogger) Infof(template string, args ...interface{}) {
+	z.logger.Sugar().Infof(template, args...)
 }
 
-func FatalWithFields(msg string, fields ...zap.Field) {
-	log.Fatal(msg, fields...)
+func (z *ZapLogger) Warnf(template string, args ...interface{}) {
+	z.logger.Sugar().Warnf(template, args...)
+}
+
+func (z *ZapLogger) Errorf(template string, args ...interface{}) {
+	z.logger.Sugar().Errorf(template, args...)
+}
+
+func (z *ZapLogger) Fatalf(template string, args ...interface{}) {
+	z.logger.Sugar().Fatalf(template, args...)
+}
+
+func (z *ZapLogger) With(tags ...any) Logger {
+	return &ZapLogger{
+		logger: z.logger.Sugar().With(tags...).Desugar(),
+	}
 }

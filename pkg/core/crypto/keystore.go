@@ -14,10 +14,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-keeper/pkg/core/errors"
 	"github.com/trigg3rX/triggerx-keeper/pkg/core/logger"
-	"go.uber.org/zap"
 )
 
+// Add a package-level logger variable
+var log logger.Logger
 
+// Initialize the logger (add this function)
+func InitLogger(l logger.Logger) {
+	log = l
+}
 
 type CryptoCurve string
 
@@ -52,8 +57,8 @@ func validatePassword(password string) error {
 
 func checkKeystoreFileAvailability(filePath string) error {
 	if _, err := os.Stat(filePath); err == nil {
-		logger.ErrorWithFields("Keystore file already exists",
-			zap.String("filePath", filePath),
+		log.Error("Keystore file already exists",
+			"filePath", filePath,
 		)
 		return fmt.Errorf("%w: file %s already exists", errors.ErrKeyFileExists, filePath)
 	}
@@ -61,11 +66,10 @@ func checkKeystoreFileAvailability(filePath string) error {
 }
 
 func LoadPrivateKey(curve CryptoCurve, password, filePath string) ([]byte, error) {
-	// Validate file existence
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		logger.ErrorWithFields("Keystore file not found", 
-			zap.String("curve", string(curve)),
-			zap.String("filePath", filePath),
+		log.Error("Keystore file not found",
+			"curve", string(curve),
+			"filePath", filePath,
 		)
 		return nil, errors.ErrKeystoreNotFound
 	}
@@ -74,9 +78,9 @@ func LoadPrivateKey(curve CryptoCurve, password, filePath string) ([]byte, error
 	case CryptoCurve(BLS12381), CryptoCurve(BN254):
 		privKey, err := loadBLSPrivateKey(password, filePath)
 		if err != nil {
-			logger.ErrorWithFields("Failed to load BLS private key", 
-				zap.String("curve", string(curve)),
-				zap.Error(err),
+			log.Error("Failed to load BLS private key",
+				"curve", string(curve),
+				"error", err,
 			)
 			return nil, err
 		}
@@ -84,15 +88,15 @@ func LoadPrivateKey(curve CryptoCurve, password, filePath string) ([]byte, error
 	case "ECDSA":
 		pk, err := loadECDSAPrivateKey(password, filePath)
 		if err != nil {
-			logger.ErrorWithFields("Failed to load ECDSA private key", 
-				zap.Error(err),
+			log.Error("Failed to load ECDSA private key",
+				"error", err,
 			)
 			return nil, err
 		}
 		return ecrypto.FromECDSA(pk), nil
 	default:
-		logger.ErrorWithFields("Unsupported curve for key loading", 
-			zap.String("curve", string(curve)),
+		log.Error("Unsupported curve for key loading",
+			"curve", string(curve),
 		)
 		return nil, errors.ErrInvalidCurve
 	}
@@ -136,9 +140,9 @@ func loadECDSAPrivateKey(password, filePath string) (*ecdsa.PrivateKey, error) {
 
 func SaveKey(curve CryptoCurve, privKey []byte, password, filePath string) error {
 	if err := validatePassword(password); err != nil {
-		logger.ErrorWithFields("Password validation failed", 
-			zap.String("curve", string(curve)),
-			zap.Error(err),
+		log.Error("Password validation failed",
+			"curve", string(curve),
+			"error", err,
 		)
 		return err
 	}
@@ -154,8 +158,8 @@ func SaveKey(curve CryptoCurve, privKey []byte, password, filePath string) error
 	case "ECDSA":
 		return saveECDSAKey(privKey, password, filePath)
 	default:
-		logger.ErrorWithFields("Unsupported curve for key generation", 
-			zap.String("curve", string(curve)),
+		log.Error("Unsupported curve for key generation",
+			"curve", string(curve),
 		)
 		return errors.ErrInvalidCurve
 	}
@@ -218,9 +222,9 @@ func saveECDSAKey(privKey []byte, password, filePath string) error {
 func ListKeystoreFiles(directory string) ([]string, error) {
 	files, err := filepath.Glob(filepath.Join(directory, "*"))
 	if err != nil {
-		logger.ErrorWithFields("Failed to list keystore files", 
-			zap.String("directory", directory),
-			zap.Error(err),
+		log.Error("Failed to list keystore files",
+			"directory", directory,
+			"error", err,
 		)
 		return nil, errors.ErrKeystoreListing
 	}
