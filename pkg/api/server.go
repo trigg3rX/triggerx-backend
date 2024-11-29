@@ -19,14 +19,12 @@ type Server struct {
 func NewServer(db *database.Connection) *Server {
 	router := mux.NewRouter()
 
-	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://www.triggerx.network"}, // Your frontend URL
+		AllowedOrigins:   []string{"*"},  // Allow all origins in development
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		AllowCredentials: true,
-		// Enable Debugging for testing, consider disabling in production
-		Debug: true,
+		Debug:           false, // Disable debug mode
 	})
 
 	s := &Server{
@@ -44,6 +42,7 @@ func (s *Server) routes() {
 
 	// Add the base /api prefix to all routes
 	api := s.router.PathPrefix("/api").Subrouter()
+	api.Use(mux.CORSMethodMiddleware(api)) // For preflight requests
 
 	// User routes
 	api.HandleFunc("/users", handler.CreateUserData).Methods("POST")

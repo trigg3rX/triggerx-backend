@@ -1,6 +1,8 @@
 module github.com/trigg3rX/go-backend
 
-go 1.23.3
+go 1.22.0
+
+toolchain go1.22.2
 
 require (
 	github.com/ethereum/go-ethereum v1.14.12
