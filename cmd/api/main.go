@@ -1,23 +1,26 @@
 package main
 
 import (
-	// "log"
-	"net/http"
+	"log"
 	"github.com/trigg3rX/go-backend/pkg/api"
 	"github.com/trigg3rX/go-backend/pkg/database"
 )
 
-func Handler(w http.ResponseWriter, r *http.Request) {
+func main() {
+	log.Println("Starting API server...")
+	
 	// Initialize database connection
 	config := database.NewConfig()
 	conn, err := database.NewConnection(config)
 	if err != nil {
-		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
-		return
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer conn.Close()
 
 	// Initialize and start server
 	server := api.NewServer(conn)
-	server.ServeHTTP(w, r)
+	log.Println("Server initialized, starting on port 8080...")
+	if err := server.Start("8080"); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 } 

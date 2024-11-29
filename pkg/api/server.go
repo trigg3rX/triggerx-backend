@@ -19,12 +19,14 @@ type Server struct {
 func NewServer(db *database.Connection) *Server {
 	router := mux.NewRouter()
 
+	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},  // Allow all origins in development
+		AllowedOrigins:   []string{"*"}, // Add your local frontend port
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		AllowCredentials: true,
-		Debug:           false, // Disable debug mode
+		// Enable Debugging for testing, consider disabling in production
+		Debug: true,
 	})
 
 	s := &Server{
