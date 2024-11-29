@@ -67,6 +67,8 @@ func (d *Discovery) SavePeerInfo() error {
         return fmt.Errorf("unable to create directory: %v", err)
     }
 
+    
+
     // Read existing peer infos
     peerInfos := make(map[string]PeerInfo)
     
@@ -80,14 +82,17 @@ func (d *Discovery) SavePeerInfo() error {
     }
 
     // Create full address for current host
-    fullAddr := fmt.Sprintf("%s/p2p/%s", d.host.Addrs()[0], d.host.ID().String())
+    var fullAddrs []string
+    for _, addr := range d.host.Addrs() {
+        fullAddr := fmt.Sprintf("%s/p2p/%s", addr, d.host.ID().String())
+        fullAddrs = append(fullAddrs, fullAddr)
+    }
     
     // Add or update peer info
     peerInfos[d.name] = PeerInfo{
         Name:    d.name,
-        Address: fullAddr,
+        Address: strings.Join(fullAddrs, ","), // Store multiple addresses
     }
-
     // Write updated peer infos
     file, err := os.Create(filePath)
     if err != nil {

@@ -123,6 +123,18 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
         return fmt.Errorf("invalid peer ID for keeper %s: %v", keeperName, err)
     }
 
+    // Additional connection attempt with timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+
+    // Attempt to connect to the peer before sending message
+    if err := js.networkClient.host.Connect(ctx, peer.AddrInfo{
+        ID:    peerID,
+        Addrs: []multiaddr.Multiaddr{}, // You may want to parse addresses from peerInfo
+    }); err != nil {
+        return fmt.Errorf("failed to connect to peer: %v", err)
+    }
+
     // Prepare network message
     networkMessage := network.Message{
         From:      "task_manager",
@@ -141,6 +153,8 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
     log.Printf("Job %s transmitted to keeper %s", job.JobID, keeperName)
     return nil
 }
+
+
 
 // Helper method to load peer information
 func (js *JobScheduler) loadPeerInfo() (map[string]network.PeerInfo, error) {
