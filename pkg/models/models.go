@@ -8,6 +8,7 @@ type UserData struct {
     UserID      int64   `json:"user_id"`
     UserAddress string  `json:"user_address"`
     JobIDs      []int64 `json:"job_ids"`
+    StakeAmount float64 `json:"stake_amount"`
 }
 
 type JobData struct {
@@ -53,17 +54,16 @@ type QuorumData struct {
 }
 
 type KeeperData struct {
-    KeeperID           int64  `json:"keeper_id"`
-    WithdrawalAddress  string `json:"withdrawal_address"`
-    Stakes             int64  `json:"stakes"`
-    Strategies         int    `json:"strategies"`
-    Verified           bool   `json:"verified"`
-    Status             bool   `json:"status"`
-    CurrentQuorumNo    int    `json:"current_quorum_no"`
-    RegisteredBlockNo  int64  `json:"registered_block_no"`
-    RegisterTxHash     string `json:"register_tx_hash"`
-    ConnectionAddress  string `json:"connection_address"`
-    KeystoreData      string `json:"keystore_data"`
+    KeeperID          int64     `json:"keeper_id"`
+    WithdrawalAddress string    `json:"withdrawal_address"`
+    Stakes            []float64 `json:"stakes"`
+    Strategies        []string  `json:"strategies"`
+    Verified          bool      `json:"verified"`
+    CurrentQuorumNo   int       `json:"current_quorum_no"`
+    RegisteredTx      string    `json:"registered_tx"`
+    Status            bool      `json:"status"`
+    BlsSigningKeys    []string  `json:"bls_signing_keys"`
+    ConnectionAddress string    `json:"connection_address"`
 }
 
 type TaskHistory struct {
