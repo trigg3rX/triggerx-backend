@@ -5,12 +5,23 @@ import (
     "log"
     "os"
     "os/signal"
+    "strconv"
     "syscall"
+    "fmt"
 
+    "github.com/joho/godotenv"
     "github.com/libp2p/go-libp2p"
-    "github.com/trigg3rX/go-backend/pkg/network" 
+    "github.com/multiformats/go-multiaddr"
+    "github.com/libp2p/go-libp2p/core/peer"
+
+    "github.com/trigg3rX/go-backend/pkg/network"
     "github.com/trigg3rX/triggerx-keeper/execute/handler"
-    "github.com/trigg3rX/go-backend/execute/manager" // Adjust import path
+    "github.com/trigg3rX/go-backend/execute/manager"
+    
+    // "github.com/ethereum/go-ethereum/accounts/abi"
+    // "github.com/ethereum/go-ethereum/accounts/abi/bind"
+    // "github.com/ethereum/go-ethereum/core/types"
+    "github.com/ethereum/go-ethereum/ethclient"
 )
 
 func main() {
@@ -30,36 +41,62 @@ func main() {
     defer host.Close()
 
     // Create network messaging
-    keeperName := "keeper-node-1"
+    keeperName := "node1"
     messaging := network.NewMessaging(host, keeperName)
+    err = godotenv.Load(".env")
+    if err != nil{
+        log.Fatalf("Error loading .env file: %s", err)
+    }
+    alchemyAPIKey := os.Getenv("ALCHEMY_API_KEY")
+    ethClient, err := ethclient.Dial(fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", alchemyAPIKey))
+    if err != nil {
+        log.Fatalf("Failed to create Ethereum client: %v", err)
+    }
+    defer ethClient.Close()
+    
+    
+    etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
+    if etherscanAPIKey == "" {
+        log.Fatalf("ETHERSCAN_API_KEY is required")
+    }
+    jobHandler := handler.NewJobHandler(ethClient, etherscanAPIKey)
 
-    // Create job handler
-    jobHandler := handler.NewJobHandler()
 
     // Setup message handling
     messaging.InitMessageHandling(func(msg network.Message) {
-        // Type assertion and job handling
-        if msg.Type != "JOB_TRANSMISSION" {
-            log.Printf("Received non-job message: %s", msg.Type)
-            return
-        }
+        // Check if it's a JOB_TRANSMISSION message
+        if nestedContent, ok := msg.Content.(map[string]interface{})["content"]; ok {
+            // Type assert the nested content
+            jobMap, ok := nestedContent.(map[string]interface{})
+            if !ok {
+                log.Printf("Invalid job content type")
+                return
+            }
 
-        job, ok := msg.Content.(map[string]interface{})
-        if !ok {
-            log.Printf("Invalid job content type")
-            return
-        }
+            // Convert map to Job struct
+            jobData, err := convertMapToJob(jobMap)
+            if err != nil {
+                log.Printf("Job conversion error: %v", err)
+                return
+            }
 
-        // Convert map to Job struct
-        jobData, err := convertMapToJob(job)
-        if err != nil {
-            log.Printf("Job conversion error: %v", err)
-            return
-        }
+            // Print the job in a formatted way
+            log.Printf("Received Job:")
+            log.Printf("Job ID: %s", jobData.JobID)
+            log.Printf("Chain ID: %s", jobData.ChainID)
+            log.Printf("Contract Address: %s", jobData.ContractAddress)
+            log.Printf("Target Function: %s", jobData.TargetFunction)
+            log.Printf("Status: %s", jobData.Status)
+            log.Printf("Arguments: %+v", jobData.Arguments)
+            log.Printf("Max Retries: %d", jobData.MaxRetries)
+            log.Printf("Current Retries: %d", jobData.CurrentRetries)
 
-        // Handle job
-        if err := jobHandler.HandleJob(jobData); err != nil {
-            log.Printf("Job handling error: %v", err)
+            // Handle job
+            if err := jobHandler.HandleJob(jobData); err != nil {
+                log.Printf("Job handling error: %v", err)
+            }
+        } else {
+            log.Printf("Received non-job message: %+v", msg.Type)
         }
     })
 
@@ -67,6 +104,26 @@ func main() {
     discovery := network.NewDiscovery(ctx, host, keeperName)
     if err := discovery.SavePeerInfo(); err != nil {
         log.Printf("Failed to save peer info: %v", err)
+    }
+
+    log.Println("Keeper addresses:", host.Addrs())
+
+    peerInfos, err := network.LoadPeerInfo()
+    if err != nil {
+        log.Printf("Error loading peer info: %v", err)
+    }
+
+    for name, info := range peerInfos {
+        if name != keeperName {
+            // Attempt to connect to other known peers
+            maddr, err := multiaddr.NewMultiaddr(info.Address)
+            if err == nil {
+                peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+                if err == nil {
+                    host.Connect(ctx, *peerInfo)
+                }
+            }
+        }
     }
 
     // Wait for interrupt
@@ -86,6 +143,9 @@ func convertMapToJob(jobMap map[string]interface{}) (*manager.Job, error) {
         ContractAddress: toString(jobMap["ContractAddress"]),
         TargetFunction:  toString(jobMap["TargetFunction"]),
         Status:          toString(jobMap["Status"]),
+        UserID:          toString(jobMap["UserID"]),
+        MaxRetries:      toInt(jobMap["MaxRetries"]),
+        CurrentRetries:  toInt(jobMap["CurrentRetries"]),
     }
 
     // Convert arguments
@@ -96,9 +156,37 @@ func convertMapToJob(jobMap map[string]interface{}) (*manager.Job, error) {
     return job, nil
 }
 
+// Helper functions for type conversion
 func toString(v interface{}) string {
     if s, ok := v.(string); ok {
         return s
     }
     return ""
+}
+
+func toInt(v interface{}) int {
+    switch val := v.(type) {
+    case int:
+        return val
+    case float64:
+        return int(val)
+    case string:
+        intVal, _ := strconv.Atoi(val)
+        return intVal
+    default:
+        return 0
+    }
+} 
+
+func toUint(v interface{}) uint {
+    switch val := v.(type) {
+    case uint:
+        return val
+    case int:
+        return uint(val)
+    case float64:
+        return uint(val)
+    default:
+        return 0
+    }
 }
