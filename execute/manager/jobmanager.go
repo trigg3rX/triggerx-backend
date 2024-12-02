@@ -119,8 +119,20 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
         return fmt.Errorf("keeper %s not found in peer information", keeperName)
     }
 
+    // Split multiple addresses and get the first one
+    addresses := strings.Split(peerInfo.Address, ",")
+    if len(addresses) == 0 {
+        return fmt.Errorf("no addresses found for keeper %s", keeperName)
+    }
+
+    // Extract peer ID from the first address
+    parts := strings.Split(addresses[0], "/p2p/")
+    if len(parts) < 2 {
+        return fmt.Errorf("invalid peer address format for keeper %s", keeperName)
+    }
+
     // Convert peer address to peer ID
-    peerID, err := peer.Decode(strings.Split(peerInfo.Address, "/p2p/")[1])
+    peerID, err := peer.Decode(parts[1])
     if err != nil {
         return fmt.Errorf("invalid peer ID for keeper %s: %v", keeperName, err)
     }
@@ -129,10 +141,16 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
 
+    // Parse multiaddress
+    maddr, err := multiaddr.NewMultiaddr(addresses[0])
+    if err != nil {
+        return fmt.Errorf("failed to parse multiaddress: %v", err)
+    }
+
     // Attempt to connect to the peer before sending message
     if err := js.networkClient.GetHost().Connect(ctx, peer.AddrInfo{
         ID:    peerID,
-        Addrs: []multiaddr.Multiaddr{}, // You may want to parse addresses from peerInfo
+        Addrs: []multiaddr.Multiaddr{maddr},
     }); err != nil {
         return fmt.Errorf("failed to connect to peer: %v", err)
     }
