@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     job_id bigint PRIMARY KEY,
     jobType int,
     user_id bigint,
+    user_address text,
     chain_id int,
     time_frame bigint,
     time_interval int,

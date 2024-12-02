@@ -123,29 +123,78 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rest of your handler code...
-	log.Printf("api is calling........")
+	// Check if user exists by user_address
+	var existingUserID int64
+	var existingJobIDs []int64
+	var existingStakeAmount float64
+	
+	err = h.db.Session().Query(`
+        SELECT user_id, job_ids, stake_amount 
+        FROM triggerx.user_data 
+        WHERE user_address = ? ALLOW FILTERING`, 
+        jobData.UserAddress).Scan(&existingUserID, &existingJobIDs, &existingStakeAmount)
+
+	if err != nil && err != gocql.ErrNotFound {
+		http.Error(w, "Error checking user existence: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Get new user ID if user doesn't exist
+	if err == gocql.ErrNotFound {
+		var maxUserID int64
+		if err := h.db.Session().Query(`
+            SELECT MAX(user_id) FROM triggerx.user_data
+        `).Scan(&maxUserID); err != nil && err != gocql.ErrNotFound {
+			http.Error(w, "Error getting max user ID: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		existingUserID = maxUserID + 1
+		existingJobIDs = []int64{}
+		existingStakeAmount = 0
+	}
+
+	// Create the job
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.job_data (
             job_id, jobType, user_id, chain_id, 
             time_frame, time_interval, contract_address, target_function, 
             arg_type, arguments, status, job_cost_prediction
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		jobData.JobID, jobData.JobType, jobData.UserID, jobData.ChainID,
-		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
-		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
-		jobData.Status, jobData.JobCostPrediction).Exec(); err != nil {
-		http.Error(w, "Error inserting data: "+err.Error(), http.StatusInternalServerError)
+        jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
+        jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
+        jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
+        jobData.Status, jobData.JobCostPrediction).Exec(); err != nil {
+		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(jobData)
+	// Update or create user data
+	updatedJobIDs := append(existingJobIDs, jobData.JobID)
+	if err == gocql.ErrNotFound {
+		// Create new user
+		if err := h.db.Session().Query(`
+            INSERT INTO triggerx.user_data (
+                user_id, user_address, job_ids, stake_amount
+            ) VALUES (?, ?, ?, ?)`,
+            existingUserID, jobData.UserAddress, updatedJobIDs, existingStakeAmount).Exec(); err != nil {
+			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Update existing user
+		if err := h.db.Session().Query(`
+            UPDATE triggerx.user_data 
+            SET job_ids = ?
+            WHERE user_id = ?`,
+            updatedJobIDs, existingUserID).Exec(); err != nil {
+			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 
 	// Return response
 	response := map[string]interface{}{

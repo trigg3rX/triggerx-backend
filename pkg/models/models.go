@@ -15,6 +15,7 @@ type JobData struct {
     JobID             int64    `json:"job_id"`
     JobType           int      `json:"jobType"`
     UserID            int64    `json:"user_id"`
+    UserAddress       string   `json:"user_address"`
     ChainID           int      `json:"chain_id"`
     TimeFrame         int64    `json:"time_frame"`
     TimeInterval      int      `json:"time_interval"`
