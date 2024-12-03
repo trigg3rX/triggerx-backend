@@ -153,8 +153,7 @@ func (h *JobHandler) HandleJob(job *manager.Job) error {
     case "Static":
         return h.executeStaticArgContract(job)
     case "Dynamic":
-        log.Printf("In Progress: Job %s with dynamic arguments", job.JobID)
-        return nil
+        return h.executeDynamicArgContract(job)
     default:
         return fmt.Errorf("unsupported argument type: %s", job.ArgType)
     }
@@ -272,8 +271,227 @@ func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
         "result":    decodedResults,
         "status":    "success",
     })
+    return nil
+}
+
+func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
+    log.Printf("Executing contract call for job %s with dynamic arguments", job.JobID)
+
+    contractAddress := common.HexToAddress(job.ContractAddress)
+    
+    // Prepare method call data
+    contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.ContractAddress)
+    if err != nil {
+        return err
+    }
+
+    // Fetch dynamic argument from API
+    dynamicValue, err := h.fetchDynamicArgument(job.Arguments)
+    if err != nil {
+        log.Printf("Error fetching dynamic argument: %v", err)
+        return err
+    }
+
+    // Convert arguments to match method input types
+    var convertedArgs []interface{}
+    for i, inputParam := range method.Inputs {
+        // Find corresponding argument from job
+        argKey := inputParam.Name
+        if argKey == "" {
+            argKey = fmt.Sprintf("arg%d", i)
+        }
+
+        var argValue interface{}
+        if argKey == "value" || argKey == "" {
+            // Use the dynamic value for the main argument
+            argValue = dynamicValue
+        } else {
+            // Try to get other arguments from job arguments
+            existingValue, exists := job.Arguments[argKey]
+            if !exists {
+                return fmt.Errorf("missing argument for parameter %s", argKey)
+            }
+            argValue = existingValue
+        }
+
+        // Convert argument to required type
+        convertedArg, err := h.argConverter.convertToType(argValue, inputParam.Type)
+        if err != nil {
+            return fmt.Errorf("error converting argument %s: %v", argKey, err)
+        }
+
+        convertedArgs = append(convertedArgs, convertedArg)
+    }
+
+    // Encode method call data with arguments
+    input, err := contractABI.Pack(method.Name, convertedArgs...)
+    if err != nil {
+        log.Printf("Error packing arguments: %v", err)
+        return err
+    }
+
+    // Perform contract call
+    callResult, err := h.ethClient.CallContract(context.Background(), ethereum.CallMsg{
+        To:   &contractAddress,
+        Data: input,
+    }, nil)
+    if err != nil {
+        log.Printf("Contract call error: %v", err)
+        return err
+    }
+
+    // Decode the result
+    decodedResults, err := h.decodeContractOutput(contractABI, method, callResult)
+    if err != nil {
+        log.Printf("Error decoding contract output: %v", err)
+        return err
+    }
+
+    log.Printf("✅ Job %s executed successfully. Result: %+v", job.JobID, map[string]interface{}{
+        "arguments": job.Arguments,
+        "chainID":   job.ChainID,
+        "contract":  job.ContractAddress,
+        "result":    decodedResults,
+        "status":    "success",
+    })
 
     return nil
+}
+
+func (h *JobHandler) sendToQuorumHead(originalValue interface{}) (interface{}, error) {
+    log.Printf("Sending value to Quorum Head: %v", originalValue)
+    
+    // Placeholder for Quorum Head processing
+    // In future, this will involve complex quorum head logic
+    receivedValue, err := h.receiveValueFromWorkers(originalValue)
+    if err != nil {
+        log.Printf("Error in Quorum Head processing: %v", err)
+        return nil, err
+    }
+
+    return receivedValue, nil
+}
+
+func (h *JobHandler) receiveValueFromWorkers(originalValue interface{}) (interface{}, error) {
+    log.Printf("Receiving value from workers: %v", originalValue)
+    
+    // Placeholder for worker value processing
+    consensusValue, err := h.runConsensus(originalValue)
+    if err != nil {
+        log.Printf("Error in worker value processing: %v", err)
+        return nil, err
+    }
+
+    return consensusValue, nil
+}
+
+func (h *JobHandler) runConsensus(originalValue interface{}) (interface{}, error) {
+    log.Printf("Running consensus on value: %v", originalValue)
+    
+    // Placeholder for consensus logic
+    // Currently just returns the original value
+    // In future, this will involve complex consensus mechanism
+    return originalValue, nil
+}
+
+// New method to fetch dynamic argument from API
+func (h *JobHandler) fetchDynamicArgument(arguments map[string]interface{}) (interface{}, error) {
+    // Check if URL is provided in arguments
+    urlInterface, exists := arguments["url"]
+    if !exists {
+        log.Printf("No URL provided for dynamic argument, returning default value 0")
+        return "0", nil
+    }
+
+    // Convert URL to string
+    url, ok := urlInterface.(string)
+    if !ok {
+        log.Printf("Invalid URL format, returning default value 0")
+        return "0", nil
+    }
+
+    log.Printf("Fetching dynamic argument from URL: %s", url)
+
+    // Attempt to fetch value from API
+    resp, err := http.Get(url)
+    if err != nil {
+        log.Printf("Error fetching dynamic argument: %v, returning default value 0", err)
+        return "0", nil
+    }
+    defer resp.Body.Close()
+
+    // Read response body
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        log.Printf("Error reading response body: %v, returning default value 0", err)
+        return "0", nil
+    }
+
+    log.Printf("Received API response body: %s", string(body))
+
+    // Flexible response parsing
+    var apiResponse map[string]interface{}
+    err = json.Unmarshal(body, &apiResponse)
+    if err != nil {
+        log.Printf("Error parsing API response: %v, returning default value 0", err)
+        return "0", nil
+    }
+
+    // Try to extract value from different possible nested structures
+    var value interface{}
+    
+    // Check for "data.value" structure
+    if data, ok := apiResponse["data"].(map[string]interface{}); ok {
+        value = data["value"]
+    }
+    
+    // If not found, check for direct "value" at root
+    if value == nil {
+        value = apiResponse["value"]
+        
+        // If still nil, try checking for "price"
+        if value == nil {
+            value = apiResponse["price"]
+        }
+    }
+
+    // Convert value to string
+    var stringValue string
+    switch v := value.(type) {
+    case string:
+        stringValue = v
+    case float64:
+        stringValue = fmt.Sprintf("%d", int(v))
+    case int:
+        stringValue = strconv.Itoa(v)
+    case int64:
+        stringValue = strconv.FormatInt(v, 10)
+    default:
+        log.Printf("Unexpected value type: %T, returning default value 0", value)
+        return "0", nil
+    }
+
+    // If no value is found or conversion fails, return "0"
+    if stringValue == "" {
+        log.Printf("No value found in API response, returning default value 0")
+        return "0", nil
+    }
+
+    // New workflow: Send fetched value through Quorum Head processing
+    processedValue, err := h.sendToQuorumHead(stringValue)
+    if err != nil {
+        log.Printf("Error in Quorum Head processing: %v, using original value", err)
+        processedValue = stringValue
+    }
+
+    // Update newPrice in arguments if it exists
+    if _, exists := arguments["data"]; exists {
+        arguments["data"] = processedValue
+        log.Printf("Updated data to: %v", processedValue)
+    }
+
+    log.Printf("Fetched and processed dynamic argument value: %v", processedValue)
+    return processedValue, nil
 }
 
 func (h *JobHandler) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
