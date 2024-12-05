@@ -21,7 +21,7 @@ func NewServer(db *database.Connection) *Server {
 
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"}, // Add your local frontend port
+		AllowedOrigins:   []string{"http://localhost:3000/","*"}, // Add your local frontend port
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		AllowCredentials: true,

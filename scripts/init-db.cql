@@ -1,3 +1,4 @@
+
 -- Create keyspace
 CREATE KEYSPACE IF NOT EXISTS triggerx
 WITH replication = {
@@ -32,7 +33,10 @@ CREATE TABLE IF NOT EXISTS job_data (
     arg_type int,
     arguments list<text>,
     status boolean,
-    job_cost_prediction double
+    job_cost_prediction decimal,
+    script_function text,
+    script_ipfs_url text,
+    time_check timestamp
 );
 
 -- Create Task_data table

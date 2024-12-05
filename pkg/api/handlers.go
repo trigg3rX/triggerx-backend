@@ -8,6 +8,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
+	"github.com/shopspring/decimal"
 	"github.com/trigg3rX/go-backend/pkg/database"
 	"github.com/trigg3rX/go-backend/pkg/models"
 )
@@ -28,6 +29,8 @@ func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	userData.StakeAmount = decimal.NewFromFloat(userData.StakeAmount.InexactFloat64())
 
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.user_data (user_id, user_address, job_ids, stake_amount)
@@ -55,7 +58,20 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(userData)
+	// Create a response struct to avoid type mismatch
+	response := struct {
+		UserID      int64           `json:"user_id"`
+		UserAddress string          `json:"user_address"`
+		JobIDs      []int64         `json:"job_ids"`
+		StakeAmount float64         `json:"stake_amount"` // Use float64 for JSON response
+	}{
+		UserID:      userData.UserID,
+		UserAddress: userData.UserAddress,
+		JobIDs:      userData.JobIDs,
+		StakeAmount: userData.StakeAmount.InexactFloat64(), // Convert to float64 for response
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handler) UpdateUserData(w http.ResponseWriter, r *http.Request) {
@@ -698,4 +714,3 @@ func (h *Handler) DeleteTaskHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
-

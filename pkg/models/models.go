@@ -1,14 +1,15 @@
+
 package models
 
 import (
-	// "time"
+	"github.com/shopspring/decimal"
 )
 
 type UserData struct {
-    UserID      int64   `json:"user_id"`
-    UserAddress string  `json:"user_address"`
-    JobIDs      []int64 `json:"job_ids"`
-    StakeAmount float64 `json:"stake_amount"`
+	UserID      int64           `json:"user_id"`
+	UserAddress string          `json:"user_address"`
+	JobIDs      []int64         `json:"job_ids"`
+	StakeAmount decimal.Decimal `json:"stake_amount"`
 }
 
 type JobData struct {
