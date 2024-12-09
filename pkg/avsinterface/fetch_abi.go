@@ -32,6 +32,10 @@ type DeploymentConfig struct {
     TriggerXTaskManager    ContractAddresses `json:"triggerXTaskManager"`
 }
 
+type StakeDeploymentConfig struct {
+    TriggerXStakeRegistry ContractAddresses `json:"triggerXStakeRegistry"`
+}
+
 const (
     OUTPUT_DIR = "pkg/avsinterface/abis"
 )
@@ -62,18 +66,48 @@ func main() {
         }
     }
 
+    stakeRegistry := "./pkg/avsinterface/stake.opsepolia.json"
+    var stakeRegistryData []byte
+    if _, err := os.Stat(stakeRegistry); err == nil {
+        stakeRegistryData, err = ioutil.ReadFile(stakeRegistry)
+        if err != nil {
+            panic(err)
+        }
+    } else {
+        resp, err := http.Get("https://raw.githubusercontent.com/trigg3rX/triggerx-contracts/main/contracts/script/output/stake.opsepolia.json")
+        if err != nil {
+            panic(err)
+        }
+        defer resp.Body.Close()
+
+        stakeRegistryData, err = ioutil.ReadAll(resp.Body)
+        if err != nil {
+            panic(err)
+        }
+    }
+
     err = ioutil.WriteFile("./pkg/avsinterface/deployments.holesky.json", deploymentData, 0644)
     if err != nil {
         panic(err)
     }
 
-    data, err := ioutil.ReadFile("./pkg/avsinterface/deployments.holesky.json")
+    err = ioutil.WriteFile("./pkg/avsinterface/stake.opsepolia.json", stakeRegistryData, 0644)
+    if err != nil {
+        panic(err)
+    }
+
+    holeskyData, err := ioutil.ReadFile("./pkg/avsinterface/deployments.holesky.json")
     if err != nil {
         panic(err)
     }
 
     var deployments DeploymentConfig
-    if err := json.Unmarshal(data, &deployments); err != nil {
+    if err := json.Unmarshal(holeskyData, &deployments); err != nil {
+        panic(err)
+    }
+
+    var stakeDeployments StakeDeploymentConfig
+    if err := json.Unmarshal(stakeRegistryData, &stakeDeployments); err != nil {
         panic(err)
     }
 
@@ -81,15 +115,21 @@ func main() {
     if alchemyKey == "" {
         panic("ALCHEMY_API_KEY not set in environment")
     }
-    client, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/" + alchemyKey)
+
+    holeskyClient, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/" + alchemyKey)
+    if err != nil {
+        panic(err)
+    }
+
+    opSepoliaClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/" + alchemyKey)
     if err != nil {
         panic(err)
     }
 
     os.MkdirAll(OUTPUT_DIR, 0755)
 
-    fetchBytecode := func(name string, address string) {
-        binPath := filepath.Join(OUTPUT_DIR, name+".bin")
+    fetchBytecode := func(name string, address string, client *ethclient.Client, network string) {
+        binPath := filepath.Join(OUTPUT_DIR, name+"."+network+".bin")
         if _, err := os.Stat(binPath); err == nil {
             return
         }
@@ -108,14 +148,13 @@ func main() {
         if err != nil {
             panic(err)
         }
-        fmt.Printf("Fetched bytecode for %s\n", name)
+        fmt.Printf("Fetched bytecode for %s on %s\n", name, network)
     }
 
-    contracts := map[string]string{
+    holeskyContracts := map[string]string{
         "ProxyAdmin":              deployments.ProxyAdmin,
         "PauserRegistry":          deployments.PauserRegistry,
         "IndexRegistry":           deployments.IndexRegistry.Implementation,
-        "StakeRegistry":          deployments.StakeRegistry.Implementation,
         "ApkRegistry":            deployments.ApkRegistry.Implementation,
         "SocketRegistry":         deployments.SocketRegistry.Implementation,
         "RegistryCoordinator":    deployments.RegistryCoordinator.Implementation,
@@ -124,17 +163,20 @@ func main() {
         "TriggerXTaskManager":    deployments.TriggerXTaskManager.Implementation,
     }
 
-    for name, addr := range contracts {
-        fetchBytecode(name, addr)
+    opSepoliaContracts := map[string]string{
+        "TriggerXStakeRegistry": stakeDeployments.TriggerXStakeRegistry.Implementation,
+    }
 
-        abiPath := filepath.Join(OUTPUT_DIR, name+".abi")
-        if _, err := os.Stat(abiPath); err == nil {
-            continue
-        }
-
-        abi, err := fetchABIFromEtherscan(addr)
+    for name, addr := range holeskyContracts {
+        fetchBytecode(name, addr, holeskyClient, "holesky")
+        abi, err := fetchABIFromBlockscout(addr, "holesky")
         if err != nil {
             panic(err)
+        }
+
+        abiPath := filepath.Join(OUTPUT_DIR, name+".holesky.abi")
+        if _, err := os.Stat(abiPath); err == nil {
+            continue
         }
 
         err = ioutil.WriteFile(
@@ -145,17 +187,45 @@ func main() {
         if err != nil {
             panic(err)
         }
-        fmt.Printf("Fetched ABI for %s\n", name)
+        fmt.Printf("Fetched ABI for %s on holesky\n", name)
+    }
+
+    for name, addr := range opSepoliaContracts {
+        fetchBytecode(name, addr, opSepoliaClient, "opsepolia")
+        abi, err := fetchABIFromBlockscout(addr, "opsepolia")
+        if err != nil {
+            panic(err)
+        }
+
+        abiPath := filepath.Join(OUTPUT_DIR, name+".opsepolia.abi")
+        if _, err := os.Stat(abiPath); err == nil {
+            continue
+        }
+
+        err = ioutil.WriteFile(
+            abiPath,
+            []byte(abi),
+            0644,
+        )
+        if err != nil {
+            panic(err)
+        }
+        fmt.Printf("Fetched ABI for %s on opsepolia\n", name)
     }
 }
 
-func fetchABIFromEtherscan(address string) (string, error) {
-    apiKey := os.Getenv("ETHERSCAN_API_KEY")
-    if apiKey == "" {
-        return "", fmt.Errorf("ETHERSCAN_API_KEY not set in environment")
+func fetchABIFromBlockscout(address string, network string) (string, error) {
+    var baseURL string
+    switch network {
+    case "holesky":
+        baseURL = "https://eth-holesky.blockscout.com/api"
+    case "opsepolia":
+        baseURL = "https://optimism-sepolia.blockscout.com/api"
+    default:
+        return "", fmt.Errorf("unsupported network: %s", network)
     }
 
-    url := fmt.Sprintf("https://api-holesky.etherscan.io/api?module=contract&action=getabi&address=%s&apikey=%s", address, apiKey)
+    url := fmt.Sprintf("%s?module=contract&action=getabi&address=%s", baseURL, address)
     
     resp, err := http.Get(url)
     if err != nil {
@@ -179,7 +249,7 @@ func fetchABIFromEtherscan(address string) (string, error) {
     }
 
     if result.Status != "1" {
-        return "", fmt.Errorf("etherscan API error: %s", result.Message)
+        return "", fmt.Errorf("blockscout API error: %s ||| %s" , result.Message, address)
     }
 
     return result.Result, nil
