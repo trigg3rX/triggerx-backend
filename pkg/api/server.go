@@ -21,7 +21,7 @@ func NewServer(db *database.Connection) *Server {
 
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"}, // Your frontend URL
+		AllowedOrigins:   []string{"http://localhost:3000/","*"}, // Add your local frontend port
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
 		AllowCredentials: true,
@@ -44,6 +44,7 @@ func (s *Server) routes() {
 
 	// Add the base /api prefix to all routes
 	api := s.router.PathPrefix("/api").Subrouter()
+	api.Use(mux.CORSMethodMiddleware(api)) // For preflight requests
 
 	// User routes
 	api.HandleFunc("/users", handler.CreateUserData).Methods("POST")
@@ -56,6 +57,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/{id}", handler.DeleteJobData).Methods("DELETE")
+	api.HandleFunc("/jobs/latest-id", handler.GetLatestJobID).Methods("GET")
 
 	// Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")

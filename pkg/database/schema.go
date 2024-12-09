@@ -1,3 +1,4 @@
+
 package database
 
 import (
@@ -17,19 +18,14 @@ func InitSchema(session *gocql.Session) error {
 	}
 
 	// Drop existing tables if any
-	dropTables := []string{"task_data", "keeper_data"}
-	for _, table := range dropTables {
-		if err := session.Query(`DROP TABLE IF EXISTS triggerx.` + table).Exec(); err != nil {
-			return err
-		}
-	}
 
 	// Create User_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.user_data (
 			user_id bigint PRIMARY KEY,
 			user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
-			job_ids set<bigint>
+			job_ids set<bigint>,
+			stake_amount decimal
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -94,15 +90,14 @@ func InitSchema(session *gocql.Session) error {
 		CREATE TABLE IF NOT EXISTS triggerx.keeper_data (
 			keeper_id bigint PRIMARY KEY,
 			withdrawal_address text CHECK (withdrawal_address MATCHES '^0x[0-9a-fA-F]{40}$'),
-			stakes bigint,
-			strategies int,
+			stakes list<decimal>,
+			strategies list<text>,
 			verified boolean,
-			status boolean,
 			current_quorum_no int,
-			registered_block_no bigint,
-			register_tx_hash text,
-			connection_address text,
-			keystore_data text
+			registered_tx text,
+			status boolean,
+			bls_signing_keys list<text>,
+			connection_address text
 		)`).Exec(); err != nil {
 		return err
 	}

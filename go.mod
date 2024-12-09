@@ -1,12 +1,13 @@
 module github.com/trigg3rX/go-backend
 
-go 1.23.3
+go 1.22.0
+
+toolchain go1.22.2
 
 require (
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gocql/gocql v1.7.0
 	github.com/gorilla/mux v1.8.1
-	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.37.2
 	github.com/multiformats/go-multiaddr v0.14.0
 	github.com/robfig/cron/v3 v3.0.1
