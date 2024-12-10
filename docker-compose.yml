@@ -9,6 +9,8 @@ services:
     volumes:
       - scylla_data:/var/lib/scylla
     command: --smp 1 --memory 750M --overprovisioned 1
+    logging:
+      driver: "json-file"
 
 volumes:
   scylla_data: 
