@@ -21,7 +21,7 @@ db-start: ## Start ScyllaDB container
 	docker-compose up -d
 
 db-init: ## Initialize database schema
-	./scripts/init-db.sh
+	nohup ./scripts/init-db.sh > api.log 2>&1 &
 
 db-shell: ## Open CQL shell
 	docker exec -it triggerx-scylla cqlsh
