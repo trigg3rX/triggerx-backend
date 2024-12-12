@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/rs/cors" // Add this import
+	"github.com/rs/cors"
 	"github.com/trigg3rX/go-backend/pkg/database"
 )
 
@@ -21,11 +21,13 @@ func NewServer(db *database.Connection) *Server {
 
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000/","*"}, // Add your local frontend port
+		AllowedOrigins:   []string{
+			"https://triggerx.network",
+			"http://localhost:3000",
+			},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token"},
 		AllowCredentials: true,
-		// Enable Debugging for testing, consider disabling in production
 		Debug: true,
 	})
 
@@ -53,11 +55,11 @@ func (s *Server) routes() {
 	api.HandleFunc("/users/{id}", handler.DeleteUserData).Methods("DELETE")
 
 	// Job routes
+	api.HandleFunc("/jobs/latest-id", handler.GetLatestJobID).Methods("GET")
 	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/{id}", handler.DeleteJobData).Methods("DELETE")
-	api.HandleFunc("/jobs/latest-id", handler.GetLatestJobID).Methods("GET")
 
 	// Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
