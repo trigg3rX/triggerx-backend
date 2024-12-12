@@ -55,11 +55,11 @@ func (s *Server) routes() {
 	api.HandleFunc("/users/{id}", handler.DeleteUserData).Methods("DELETE")
 
 	// Job routes
+	api.HandleFunc("/jobs/latest-id", handler.GetLatestJobID).Methods("GET")
 	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/{id}", handler.DeleteJobData).Methods("DELETE")
-	api.HandleFunc("/jobs/latest-id", handler.GetLatestJobID).Methods("GET")
 
 	// Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")

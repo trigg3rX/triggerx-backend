@@ -1,4 +1,3 @@
-
 package database
 
 import (
@@ -9,11 +8,11 @@ import (
 func InitSchema(session *gocql.Session) error {
 	// Create keyspace
 	if err := session.Query(`
-		CREATE KEYSPACE IF NOT EXISTS triggerx
-		WITH replication = {
-			'class': 'SimpleStrategy',
-			'replication_factor': 1
-		}`).Exec(); err != nil {
+			CREATE KEYSPACE IF NOT EXISTS triggerx
+			WITH replication = {
+				'class': 'SimpleStrategy',
+				'replication_factor': 1
+			}`).Exec(); err != nil {
 		return err
 	}
 
@@ -36,15 +35,19 @@ func InitSchema(session *gocql.Session) error {
 			job_id bigint PRIMARY KEY,
 			jobType int,
 			user_id bigint,
+			user_address text,
 			chain_id int,
-			time_frame timestamp,
+			time_frame bigint,
 			time_interval int,
 			contract_address text,
 			target_function text,
 			arg_type int,
 			arguments list<text>,
 			status boolean,
-			job_cost_prediction decimal
+			job_cost_prediction decimal,
+			script_function text,
+			script_ipfs_url text,
+			time_check timestamp
 		)`).Exec(); err != nil {
 		return err
 	}

@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
@@ -60,10 +62,10 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	// Create a response struct to avoid type mismatch
 	response := struct {
-		UserID      int64           `json:"user_id"`
-		UserAddress string          `json:"user_address"`
-		JobIDs      []int64         `json:"job_ids"`
-		StakeAmount float64         `json:"stake_amount"` // Use float64 for JSON response
+		UserID      int64   `json:"user_id"`
+		UserAddress string  `json:"user_address"`
+		JobIDs      []int64 `json:"job_ids"`
+		StakeAmount float64 `json:"stake_amount"` // Use float64 for JSON response
 	}{
 		UserID:      userData.UserID,
 		UserAddress: userData.UserAddress,
@@ -132,23 +134,68 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Received body: %s", string(body))
 
-	var jobData models.JobData
-	if err := json.Unmarshal(body, &jobData); err != nil {
+	// Create a temporary struct to handle string chain_id
+	type tempJobData struct {
+		JobID             int64    `json:"job_id"`
+		JobType           int64    `json:"jobType"`
+		UserAddress       string   `json:"user_address"`
+		ChainID           string   `json:"chain_id"` // Changed to string
+		TimeFrame         int64    `json:"time_frame"`
+		TimeInterval      int64    `json:"time_interval"`
+		ContractAddress   string   `json:"contract_address"`
+		TargetFunction    string   `json:"target_function"`
+		ArgType           int64    `json:"arg_type"`
+		Arguments         []string `json:"arguments"`
+		Status            bool     `json:"status"`
+		JobCostPrediction int64    `json:"job_cost_prediction"`
+		ScriptFunction    string   `json:"script_function"`
+		ScriptIpfsUrl     string   `json:"script_ipfs_url"`
+	}
+
+	var tempJob tempJobData
+	if err := json.Unmarshal(body, &tempJob); err != nil {
 		log.Printf("Error decoding JSON: %v", err)
 		http.Error(w, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Convert hex string to int64
+	chainID, err := strconv.ParseInt(tempJob.ChainID[2:], 16, 64) // Remove "0x" prefix and parse as hex
+	if err != nil {
+		log.Printf("Error parsing chain_id: %v", err)
+		http.Error(w, "Invalid chain_id format", http.StatusBadRequest)
+		return
+	}
+
+	// Create the actual JobData struct
+	jobData := models.JobData{
+		JobID:             tempJob.JobID,
+		JobType:           int(tempJob.JobType),
+		UserAddress:       tempJob.UserAddress,
+		ChainID:           int(chainID),
+		TimeFrame:         tempJob.TimeFrame,
+		TimeInterval:      int(tempJob.TimeInterval),
+		ContractAddress:   tempJob.ContractAddress,
+		TargetFunction:    tempJob.TargetFunction,
+		ArgType:           int(tempJob.ArgType),
+		Arguments:         tempJob.Arguments,
+		Status:            tempJob.Status,
+		JobCostPrediction: float64(tempJob.JobCostPrediction),
+		ScriptFunction:    tempJob.ScriptFunction,
+		ScriptIpfsUrl:     tempJob.ScriptIpfsUrl,
+		TimeCheck:         time.Now().UTC(),
 	}
 
 	// Check if user exists by user_address
 	var existingUserID int64
 	var existingJobIDs []int64
 	var existingStakeAmount float64
-	
+
 	err = h.db.Session().Query(`
         SELECT user_id, job_ids, stake_amount 
         FROM triggerx.user_data 
-        WHERE user_address = ? ALLOW FILTERING`, 
-        jobData.UserAddress).Scan(&existingUserID, &existingJobIDs, &existingStakeAmount)
+        WHERE user_address = ? ALLOW FILTERING`,
+		jobData.UserAddress).Scan(&existingUserID, &existingJobIDs, &existingStakeAmount)
 
 	if err != nil && err != gocql.ErrNotFound {
 		http.Error(w, "Error checking user existence: "+err.Error(), http.StatusInternalServerError)
@@ -176,10 +223,10 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             time_frame, time_interval, contract_address, target_function, 
             arg_type, arguments, status, job_cost_prediction
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
-        jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
-        jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
-        jobData.Status, jobData.JobCostPrediction).Exec(); err != nil {
+		jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
+		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
+		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
+		jobData.Status, jobData.JobCostPrediction).Exec(); err != nil {
 		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -192,7 +239,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             INSERT INTO triggerx.user_data (
                 user_id, user_address, job_ids, stake_amount
             ) VALUES (?, ?, ?, ?)`,
-            existingUserID, jobData.UserAddress, updatedJobIDs, existingStakeAmount).Exec(); err != nil {
+			existingUserID, jobData.UserAddress, updatedJobIDs, existingStakeAmount).Exec(); err != nil {
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -202,7 +249,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             UPDATE triggerx.user_data 
             SET job_ids = ?
             WHERE user_id = ?`,
-            updatedJobIDs, existingUserID).Exec(); err != nil {
+			updatedJobIDs, existingUserID).Exec(); err != nil {
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -315,26 +362,25 @@ func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
 
 // Get Latest JobID
 func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
-    var latestJobID int64
+	var latestJobID int64
 
-    // Query to get the maximum job_id
-    if err := h.db.Session().Query(`
+	// Query to get the maximum job_id
+	if err := h.db.Session().Query(`
         SELECT MAX(job_id) FROM triggerx.job_data
     `).Scan(&latestJobID); err != nil {
-        if err == gocql.ErrNotFound {
-            // If no jobs exist, start with job_id 1
-            latestJobID = 0
-            json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
-            return
-        }
-        http.Error(w, "Error fetching latest job ID: "+err.Error(), http.StatusInternalServerError)
-        return
-    }
+		if err == gocql.ErrNotFound {
+			// If no jobs exist, start with job_id 1
+			latestJobID = 0
+			json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
+			return
+		}
+		http.Error(w, "Error fetching latest job ID: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    // Return the latest job_id
-    json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
+	// Return the latest job_id
+	json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
 }
-
 
 // Task Handlers
 func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
@@ -541,101 +587,101 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
             verified, current_quorum_no, registered_tx, status, 
             bls_signing_keys, connection_address
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        keeperData.KeeperID, keeperData.WithdrawalAddress, keeperData.Stakes,
-        keeperData.Strategies, keeperData.Verified, keeperData.CurrentQuorumNo,
-        keeperData.RegisteredTx, keeperData.Status, keeperData.BlsSigningKeys,
-        keeperData.ConnectionAddress).Exec(); err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+		keeperData.KeeperID, keeperData.WithdrawalAddress, keeperData.Stakes,
+		keeperData.Strategies, keeperData.Verified, keeperData.CurrentQuorumNo,
+		keeperData.RegisteredTx, keeperData.Status, keeperData.BlsSigningKeys,
+		keeperData.ConnectionAddress).Exec(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(keeperData)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(keeperData)
 }
 
 func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    keeperID := vars["id"]
+	vars := mux.Vars(r)
+	keeperID := vars["id"]
 
-    var keeperData models.KeeperData
-    if err := h.db.Session().Query(`
+	var keeperData models.KeeperData
+	if err := h.db.Session().Query(`
         SELECT keeper_id, withdrawal_address, stakes, strategies, 
                verified, current_quorum_no, registered_tx, status, 
                bls_signing_keys, connection_address
         FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Scan(
-        &keeperData.KeeperID, &keeperData.WithdrawalAddress, &keeperData.Stakes,
-        &keeperData.Strategies, &keeperData.Verified, &keeperData.CurrentQuorumNo,
-        &keeperData.RegisteredTx, &keeperData.Status, &keeperData.BlsSigningKeys,
-        &keeperData.ConnectionAddress); err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+		&keeperData.KeeperID, &keeperData.WithdrawalAddress, &keeperData.Stakes,
+		&keeperData.Strategies, &keeperData.Verified, &keeperData.CurrentQuorumNo,
+		&keeperData.RegisteredTx, &keeperData.Status, &keeperData.BlsSigningKeys,
+		&keeperData.ConnectionAddress); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    json.NewEncoder(w).Encode(keeperData)
+	json.NewEncoder(w).Encode(keeperData)
 }
 
 func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
-    var keepers []models.KeeperData
-    iter := h.db.Session().Query(`SELECT * FROM triggerx.keeper_data`).Iter()
+	var keepers []models.KeeperData
+	iter := h.db.Session().Query(`SELECT * FROM triggerx.keeper_data`).Iter()
 
-    var keeper models.KeeperData
-    for iter.Scan(
-        &keeper.KeeperID, &keeper.WithdrawalAddress, &keeper.Stakes,
-        &keeper.Strategies, &keeper.Verified, &keeper.CurrentQuorumNo,
-        &keeper.RegisteredTx, &keeper.Status, &keeper.BlsSigningKeys,
-        &keeper.ConnectionAddress) {
-        keepers = append(keepers, keeper)
-    }
+	var keeper models.KeeperData
+	for iter.Scan(
+		&keeper.KeeperID, &keeper.WithdrawalAddress, &keeper.Stakes,
+		&keeper.Strategies, &keeper.Verified, &keeper.CurrentQuorumNo,
+		&keeper.RegisteredTx, &keeper.Status, &keeper.BlsSigningKeys,
+		&keeper.ConnectionAddress) {
+		keepers = append(keepers, keeper)
+	}
 
-    if err := iter.Close(); err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+	if err := iter.Close(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    json.NewEncoder(w).Encode(keepers)
+	json.NewEncoder(w).Encode(keepers)
 }
 
 func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    keeperID := vars["id"]
+	vars := mux.Vars(r)
+	keeperID := vars["id"]
 
-    var keeperData models.KeeperData
-    if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+	var keeperData models.KeeperData
+	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    if err := h.db.Session().Query(`
+	if err := h.db.Session().Query(`
         UPDATE triggerx.keeper_data 
         SET withdrawal_address = ?, stakes = ?, strategies = ?, 
             verified = ?, current_quorum_no = ?, registered_tx = ?, 
             status = ?, bls_signing_keys = ?, connection_address = ?
         WHERE keeper_id = ?`,
-        keeperData.WithdrawalAddress, keeperData.Stakes, keeperData.Strategies,
-        keeperData.Verified, keeperData.CurrentQuorumNo, keeperData.RegisteredTx,
-        keeperData.Status, keeperData.BlsSigningKeys, keeperData.ConnectionAddress,
-        keeperID).Exec(); err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+		keeperData.WithdrawalAddress, keeperData.Stakes, keeperData.Strategies,
+		keeperData.Verified, keeperData.CurrentQuorumNo, keeperData.RegisteredTx,
+		keeperData.Status, keeperData.BlsSigningKeys, keeperData.ConnectionAddress,
+		keeperID).Exec(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(keeperData)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(keeperData)
 }
 
 func (h *Handler) DeleteKeeperData(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    keeperID := vars["id"]
+	vars := mux.Vars(r)
+	keeperID := vars["id"]
 
-    if err := h.db.Session().Query(`
+	if err := h.db.Session().Query(`
         DELETE FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Exec(); err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // Task History Handlers

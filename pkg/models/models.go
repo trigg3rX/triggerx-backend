@@ -1,8 +1,8 @@
-
 package models
 
 import (
 	"github.com/shopspring/decimal"
+	"time"
 )
 
 type UserData struct {
@@ -26,6 +26,9 @@ type JobData struct {
     Arguments         []string `json:"arguments"`
     Status            bool     `json:"status"`
     JobCostPrediction float64  `json:"job_cost_prediction"`
+    ScriptFunction    string   `json:"script_function"`
+    ScriptIpfsUrl     string   `json:"script_ipfs_url"`
+    TimeCheck         time.Time `json:"time_check"`
 }
 
 type TaskData struct {
