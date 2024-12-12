@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/shopspring/decimal"
+    "math/big"
 	"time"
 )
 
@@ -9,7 +9,7 @@ type UserData struct {
 	UserID      int64           `json:"user_id"`
 	UserAddress string          `json:"user_address"`
 	JobIDs      []int64         `json:"job_ids"`
-	StakeAmount decimal.Decimal `json:"stake_amount"`
+	StakeAmount *big.Int        `json:"stake_amount"`
 }
 
 type JobData struct {
@@ -25,7 +25,7 @@ type JobData struct {
     ArgType           int      `json:"arg_type"`
     Arguments         []string `json:"arguments"`
     Status            bool     `json:"status"`
-    JobCostPrediction float64  `json:"job_cost_prediction"`
+    JobCostPrediction int  `json:"job_cost_prediction"`
     ScriptFunction    string   `json:"script_function"`
     ScriptIpfsUrl     string   `json:"script_ipfs_url"`
     TimeCheck         time.Time `json:"time_check"`

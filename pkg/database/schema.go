@@ -24,7 +24,7 @@ func InitSchema(session *gocql.Session) error {
 			user_id bigint PRIMARY KEY,
 			user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
 			job_ids set<bigint>,
-			stake_amount decimal
+			stake_amount varint
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func InitSchema(session *gocql.Session) error {
 			arg_type int,
 			arguments list<text>,
 			status boolean,
-			job_cost_prediction decimal,
+			job_cost_prediction int,
 			script_function text,
 			script_ipfs_url text,
 			time_check timestamp

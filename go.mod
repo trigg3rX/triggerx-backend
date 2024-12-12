@@ -13,7 +13,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/shopspring/decimal v1.4.0
 )
 
 require (

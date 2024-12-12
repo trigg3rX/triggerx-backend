@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint PRIMARY KEY,
     user_address text,
     job_ids set<bigint>,
-    stake_amount decimal
+    stake_amount varint
 );
 
 -- Create Job_data table
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     arg_type int,
     arguments list<text>,
     status boolean,
-    job_cost_prediction decimal,
+    job_cost_prediction int,
     script_function text,
     script_ipfs_url text,
     time_check timestamp
