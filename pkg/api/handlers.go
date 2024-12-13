@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"strconv"
 	"time"
-	"math/big"
 
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
@@ -34,7 +34,7 @@ func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Creating user with ID: %d, Address: %s", userData.UserID, userData.UserAddress)
-	
+
 	// Convert stake amount to Gwei and store as varint
 	stakeAmountGwei := new(big.Int)
 	stakeAmountGwei = userData.StakeAmount
@@ -85,15 +85,15 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	// Create a response struct with float64 stake amount
 	response := struct {
-		UserID      int64    `json:"user_id"`
-		UserAddress string   `json:"user_address"`
-		JobIDs      []int64  `json:"job_ids"`
-		StakeAmount float64  `json:"stake_amount"`
+		UserID      int64   `json:"user_id"`
+		UserAddress string  `json:"user_address"`
+		JobIDs      []int64 `json:"job_ids"`
+		StakeAmount float64 `json:"stake_amount"`
 	}{
 		UserID:      userData.UserID,
 		UserAddress: userData.UserAddress,
 		JobIDs:      userData.JobIDs,
-			StakeAmount: stakeAmountFloat64,
+		StakeAmount: stakeAmountFloat64,
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -251,7 +251,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existingUserID = maxUserID + 1
-		
+
 		// Convert stake amount to Gwei and store as varint
 		stakeAmountGwei := new(big.Float).SetFloat64(tempJob.StakeAmount)
 		stakeAmountInt, _ := stakeAmountGwei.Int(nil)
@@ -260,7 +260,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             INSERT INTO triggerx.user_data (
                 user_id, user_address, job_ids, stake_amount
             ) VALUES (?, ?, ?, ?)`,
-            existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt).Exec(); err != nil {
+			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt).Exec(); err != nil {
 			log.Printf("Error creating user data: %v", err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -269,17 +269,17 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Update existing user's job IDs and add to existing stake amount
 		updatedJobIDs := append(existingJobIDs, jobData.JobID)
-		
+
 		// Convert new stake amount to big.Int and add to existing
 		newStakeFloat := new(big.Float).SetFloat64(tempJob.StakeAmount)
 		newStakeInt, _ := newStakeFloat.Int(nil)
 		newStakeAmount := new(big.Int).Add(existingStakeAmount, newStakeInt)
-		
+
 		if err := h.db.Session().Query(`
             UPDATE triggerx.user_data 
             SET job_ids = ?, stake_amount = ?
             WHERE user_id = ?`,
-            updatedJobIDs, newStakeAmount, existingUserID).Exec(); err != nil {
+			updatedJobIDs, newStakeAmount, existingUserID).Exec(); err != nil {
 			log.Printf("Error updating user data: %v", err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -451,6 +451,74 @@ func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Latest job ID: %d", latestJobID)
 	// Return the latest job_id
 	json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
+}
+
+func (h *Handler) GetJobsByUserID(w http.ResponseWriter, r *http.Request) {
+    // Handle CORS preflight
+    if r.Method == http.MethodOptions {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+
+    // Set CORS headers
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+
+    // Extract user ID from the URL path
+    vars := mux.Vars(r)
+    userIDStr := vars["user_id"]
+    
+    // Convert user ID to int64
+    userID, err := strconv.ParseInt(userIDStr, 10, 64)
+    if err != nil {
+        log.Printf("Invalid user ID format: %v", err)
+        http.Error(w, "Invalid user ID format", http.StatusBadRequest)
+        return
+    }
+    
+    log.Printf("Handling GetJobsByUserID request for user ID: %d", userID)
+
+    // Struct to match exactly the fields we want to retrieve
+    type JobSummary struct {
+        JobID    int64 `json:"job_id"`
+        JobType  int   `json:"jobType"`
+        Status   bool  `json:"status"`
+    }
+
+    // Prepare a slice to store jobs for the user
+    var userJobs []JobSummary
+
+    // Query to fetch only job_id, jobType, and status for the specific user ID
+    iter := h.db.Session().Query(`
+        SELECT job_id, jobType, status 
+        FROM triggerx.job_data 
+        WHERE user_id = ? ALLOW FILTERING
+    `, userID).Iter()
+
+    var job JobSummary
+    for iter.Scan(&job.JobID, &job.JobType, &job.Status) {
+        userJobs = append(userJobs, job)
+    }
+
+    if err := iter.Close(); err != nil {
+        log.Printf("Error retrieving jobs for user ID: %v", err)
+        http.Error(w, "Error retrieving jobs: "+err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    log.Printf("Retrieved %d jobs for user ID %d", len(userJobs), userID)
+
+    // Set response headers
+    w.Header().Set("Content-Type", "application/json")
+    
+    // Encode and send the response
+    if err := json.NewEncoder(w).Encode(userJobs); err != nil {
+        log.Printf("Error encoding response: %v", err)
+        http.Error(w, "Error encoding response", http.StatusInternalServerError)
+        return
+    }
 }
 
 // Task Handlers

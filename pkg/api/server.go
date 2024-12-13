@@ -21,14 +21,14 @@ func NewServer(db *database.Connection) *Server {
 
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{
+		AllowedOrigins: []string{"*",
 			"https://triggerx.network",
 			"http://localhost:3000",
-			},
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token"},
 		AllowCredentials: true,
-		Debug: true,
+		Debug:            true,
 	})
 
 	s := &Server{
@@ -60,6 +60,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/{id}", handler.DeleteJobData).Methods("DELETE")
+	api.HandleFunc("/jobs/user/{user_id}", handler.GetJobsByUserID).Methods("GET")
 
 	// Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
