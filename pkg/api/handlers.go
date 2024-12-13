@@ -453,7 +453,7 @@ func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
 }
 
-func (h *Handler) GetJobsByUserID(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
     // Handle CORS preflight
     if r.Method == http.MethodOptions {
         w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -466,19 +466,11 @@ func (h *Handler) GetJobsByUserID(w http.ResponseWriter, r *http.Request) {
     // Set CORS headers
     w.Header().Set("Access-Control-Allow-Origin", "*")
 
-    // Extract user ID from the URL path
+    // Extract user address from the URL path
     vars := mux.Vars(r)
-    userIDStr := vars["user_id"]
-    
-    // Convert user ID to int64
-    userID, err := strconv.ParseInt(userIDStr, 10, 64)
-    if err != nil {
-        log.Printf("Invalid user ID format: %v", err)
-        http.Error(w, "Invalid user ID format", http.StatusBadRequest)
-        return
-    }
-    
-    log.Printf("Handling GetJobsByUserID request for user ID: %d", userID)
+    userAddress := vars["user_address"]
+
+    log.Printf("Handling GetJobsByUserAddress request for user address: %s", userAddress)
 
     // Struct to match exactly the fields we want to retrieve
     type JobSummary struct {
@@ -490,12 +482,12 @@ func (h *Handler) GetJobsByUserID(w http.ResponseWriter, r *http.Request) {
     // Prepare a slice to store jobs for the user
     var userJobs []JobSummary
 
-    // Query to fetch only job_id, jobType, and status for the specific user ID
+    // Query to fetch only job_id, jobType, and status for the specific user address
     iter := h.db.Session().Query(`
         SELECT job_id, jobType, status 
         FROM triggerx.job_data 
-        WHERE user_id = ? ALLOW FILTERING
-    `, userID).Iter()
+        WHERE user_address = ? ALLOW FILTERING
+    `, userAddress).Iter()
 
     var job JobSummary
     for iter.Scan(&job.JobID, &job.JobType, &job.Status) {
@@ -503,16 +495,16 @@ func (h *Handler) GetJobsByUserID(w http.ResponseWriter, r *http.Request) {
     }
 
     if err := iter.Close(); err != nil {
-        log.Printf("Error retrieving jobs for user ID: %v", err)
+        log.Printf("Error retrieving jobs for user address: %v", err)
         http.Error(w, "Error retrieving jobs: "+err.Error(), http.StatusInternalServerError)
         return
     }
 
-    log.Printf("Retrieved %d jobs for user ID %d", len(userJobs), userID)
+    log.Printf("Retrieved %d jobs for user address %s", len(userJobs), userAddress)
 
     // Set response headers
     w.Header().Set("Content-Type", "application/json")
-    
+
     // Encode and send the response
     if err := json.NewEncoder(w).Encode(userJobs); err != nil {
         log.Printf("Error encoding response: %v", err)
