@@ -28,6 +28,8 @@ type Job struct {
     LastExecuted      time.Time
     NextExecutionTime time.Time
     Error            string
+    Payload       map[string]interface{}
+    CodeURL       string
 }
 
 // Quorum represents a group of nodes that can execute jobs
@@ -117,18 +119,18 @@ func (js *JobScheduler) processJob(workerID int, job *Job) {
     }
 
     // Simulate job execution with random success/failure
-    executionTime := time.Duration(2+rand.Intn(3)) * time.Second
-    log.Printf("[Worker %d] ⏳ Job %s will take approximately %v to complete", 
-        workerID, job.JobID, executionTime)
-    time.Sleep(executionTime)
+    // executionTime := time.Duration(2+rand.Intn(3)) * time.Second
+    // log.Printf("[Worker %d] ⏳ Job %s will take approximately %v to complete", 
+    //     workerID, job.JobID, executionTime)
+    // time.Sleep(executionTime)
 
     js.mu.Lock()
     defer js.mu.Unlock()
 
-    if rand.Float64() < 0.8 { // 80% success rate
-        job.Status = "completed"
-        log.Printf("[Worker %d] Successfully completed Job %s", workerID, job.JobID)
-    } else {
+    // if rand.Float64() < 0.8 { // 80% success rate
+    //     job.Status = "completed"
+    //     log.Printf("[Worker %d] Successfully completed Job %s", workerID, job.JobID)
+    // } else {
         job.CurrentRetries++
         if job.CurrentRetries >= job.MaxRetries {
             job.Status = "failed"
@@ -140,7 +142,7 @@ func (js *JobScheduler) processJob(workerID int, job *Job) {
             log.Printf("[Worker %d] Job %s failed, scheduling retry (%d/%d)", 
                 workerID, job.JobID, job.CurrentRetries, job.MaxRetries)
         }
-    }
+    // }
     
 }
 

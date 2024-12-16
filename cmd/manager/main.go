@@ -65,19 +65,20 @@ func main() {
 	for _, jobConfig := range jobs {
 		job := &manager.Job{
 			JobID:             jobConfig.jobID,
-			ArgType:           "None",
+			ArgType:           "Dynamic",
 			Arguments:         map[string]interface{}{},
 			ChainID:           "chain_1",
-			ContractAddress:   "0xD7f53FaB497b80E0D39B5da92816e87312Eac455",
+			ContractAddress:   "0xa5854f4835769c3D84319DcB41cb449f6b858F83",
 			JobCostPrediction: 0.5,
 			Stake:             1.0,
 			Status:            "pending",
-			TargetFunction:    "sayHello",
+			TargetFunction:    "updatePrice",
 			TimeFrame:         jobConfig.timeFrame,
 			TimeInterval:      jobConfig.timeInterval,
 			UserID:            "system_test",
 			CreatedAt:         time.Now(),
 			MaxRetries:        jobConfig.maxRetries,
+			CodeURL:		   "QmPQcutXx7M4tPR1SkvNbosKcjFTaDxTZsizgKbZnVkA9e",
 		}
 
 		if err := jobScheduler.AddJob(job); err != nil {
