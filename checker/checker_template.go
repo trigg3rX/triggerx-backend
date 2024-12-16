@@ -34,7 +34,7 @@ func (ic *IntervalChecker) Checker(job *manager.Job, customLogic CustomLogicFunc
 	payload := make(map[string]interface{})
 
 	// Check job interval
-	if !ic.validateJobInterval(job) {
+	if !ic.ValidateJobInterval(job) {
 		log.Printf("Job %s not ready for execution", job.JobID)
 		return false, payload
 	}
@@ -68,29 +68,8 @@ func (ic *IntervalChecker) Checker(job *manager.Job, customLogic CustomLogicFunc
 	return true, payload
 }
 
-// fetchPrice retrieves the current price from the specified API endpoint
-func (ic *IntervalChecker) fetchPrice() (int64, error) {
-	apiEndpoint := "http://localhost:3005/get-price"
-	resp, err := http.Get(apiEndpoint)
-	if err != nil {
-		return 0, fmt.Errorf("failed to fetch price: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("received non-OK HTTP status: %s", resp.Status)
-	}
-
-	var priceResp PriceResponse
-	if err := json.NewDecoder(resp.Body).Decode(&priceResp); err != nil {
-		return 0, fmt.Errorf("failed to decode price response: %w", err)
-	}
-
-	return priceResp.Data.Value, nil
-}
-
-// validateJobInterval checks if a job is ready to be executed based on its time interval
-func (ic *IntervalChecker) validateJobInterval(job *manager.Job) bool {
+// ValidateJobInterval checks if a job is ready to be executed based on its time interval
+func (ic *IntervalChecker) ValidateJobInterval(job *manager.Job) bool {
 	if job.LastExecuted.IsZero() {
 		return true
 	}
@@ -115,6 +94,27 @@ func (ic *IntervalChecker) validateJobTimeFrame(job *manager.Job) (bool, string)
 		return false, reason
 	}
 	return true, ""
+}
+
+// fetchPrice retrieves the current price from the specified API endpoint
+func (ic *IntervalChecker) fetchPrice() (int64, error) {
+	apiEndpoint := "http://localhost:3005/get-price"
+	resp, err := http.Get(apiEndpoint)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch price: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("received non-OK HTTP status: %s", resp.Status)
+	}
+
+	var priceResp PriceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&priceResp); err != nil {
+		return 0, fmt.Errorf("failed to decode price response: %w", err)
+	}
+
+	return priceResp.Data.Value, nil
 }
 
 // CalculateNextExecutionTime determines the next time the job should be executed
