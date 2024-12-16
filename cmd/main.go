@@ -1,3 +1,5 @@
+// github.com/trigg3rX/triggerx-keeper/cmd/main
+
 package main
 
 import (
@@ -18,9 +20,6 @@ import (
     "github.com/trigg3rX/triggerx-keeper/execute/handler"
     "github.com/trigg3rX/go-backend/execute/manager"
     
-    // "github.com/ethereum/go-ethereum/accounts/abi"
-    // "github.com/ethereum/go-ethereum/accounts/abi/bind"
-    // "github.com/ethereum/go-ethereum/core/types"
     "github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -90,6 +89,7 @@ func main() {
             log.Printf("Arguments: %+v", jobData.Arguments)
             log.Printf("Max Retries: %d", jobData.MaxRetries)
             log.Printf("Current Retries: %d", jobData.CurrentRetries)
+            log.Printf("CodeURL: %s", jobData.CodeURL)
 
             // Handle job
             if err := jobHandler.HandleJob(jobData); err != nil {
@@ -146,6 +146,7 @@ func convertMapToJob(jobMap map[string]interface{}) (*manager.Job, error) {
         UserID:          toString(jobMap["UserID"]),
         MaxRetries:      toInt(jobMap["MaxRetries"]),
         CurrentRetries:  toInt(jobMap["CurrentRetries"]),
+        CodeURL:         toString(jobMap["CodeURL"]),
     }
 
     // Convert arguments
