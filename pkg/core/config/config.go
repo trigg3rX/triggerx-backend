@@ -12,7 +12,7 @@ import (
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/wallet"
 	"github.com/Layr-Labs/eigensdk-go/chainio/txmgr"
-	// "github.com/Layr-Labs/eigensdk-go/crypto/bls"
+	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
 	sdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 	"github.com/Layr-Labs/eigensdk-go/signerv2"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -27,9 +27,9 @@ const SEM_VER = "0.0.1"
 
 type Config struct {
 	EcdsaPrivateKey						*ecdsa.PrivateKey		// Keeper node's private key - used for signing transactions
-	// BlsPrivateKey						*bls.PrivateKey			// BLS private key - used for signing BLS messages
+	BlsPrivateKey						*bls.PrivateKey			// BLS private key - used for signing BLS messages
 	Logger								sdklogging.Logger
-	// EigenMetricsIpPortAddress 			string
+	EigenMetricsIpPortAddress 			string
 	// Needed for Communication:
 	EthHttpRpcUrl						string					// Ethereum HTTP RPC URL
 	EthWsRpcUrl							string					// Ethereum WebSocket RPC URL
@@ -177,12 +177,19 @@ var (
 		Required: true,
 		EnvVar:   "ECDSA_PRIVATE_KEY",
 	}
+	BlsPrivateKeyFlag = cli.StringFlag{
+		Name:     "bls-private-key",
+		Usage:    "BLS private key",
+		Required: true,
+		EnvVar:   "BLS_PRIVATE_KEY",
+	}
 )
 
 var requiredFlags = []cli.Flag{
 	ConfigFileFlag,
 	TriggerXDeploymentFileFlag,
 	EcdsaPrivateKeyFlag,
+	BlsPrivateKeyFlag,
 }
 
 var optionalFlags = []cli.Flag{}
