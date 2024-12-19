@@ -8,9 +8,9 @@ import (
 
 	sdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 
-	sdkcommon "github.com/Layr-Labs/triggerx-keeper/pkg/common"
+	sdkcommon "github.com/trigg3rX/triggerx-keeper/pkg/common"
 	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	"github.com/Layr-Labs/triggerx-keeper/pkg/core/config"
+	"github.com/trigg3rX/triggerx-keeper/pkg/core/config"
 )
 
 type AvsSubscriberer interface {
@@ -30,7 +30,7 @@ type AvsSubscriber struct {
 
 func BuildAvsSubscriberFromConfig(config *config.Config) (*AvsSubscriber, error) {
 	return BuildAvsSubscriber(
-		config.IncredibleSquaringRegistryCoordinatorAddr,
+		config.TriggerXServiceManagerAddr,
 		config.OperatorStateRetrieverAddr,
 		&config.EthWsClient,
 		config.Logger,
