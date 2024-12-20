@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/trigg3rX/triggerx-avs-cli/utils"
+	"github.com/trigg3rX/triggerx-keeper/cli/utils"
 )
 
 var (

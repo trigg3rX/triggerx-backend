@@ -1,1 +1,3 @@
-# triggerx-keeper
+# Register Keeper to EigenLayer and AVS
+
+Instructions to come soon ...

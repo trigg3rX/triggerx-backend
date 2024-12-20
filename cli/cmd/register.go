@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"github.com/spf13/cobra"
-	"github.com/trigg3rX/triggerx-avs-cli/utils"
+	"github.com/trigg3rX/triggerx-keeper/cli/utils"
 
 	"context"
 	"crypto/ecdsa"
