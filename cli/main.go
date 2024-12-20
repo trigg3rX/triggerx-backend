@@ -1,7 +1,26 @@
 package main
 
-import "github.com/trigg3rX/triggerx-avs-cli/cmd"
+import (
+	"log"
+	"os"
+
+	"github.com/trigg3rX/triggerx-keeper/cli/cmd"
+	"github.com/urfave/cli/v2"
+)
 
 func main() {
-	cmd.Execute()
+	app := &cli.App{
+		Name:  "triggerx",
+		Usage: "TriggerX AVS CLI - Tool for managing operators on AVS",
+		Commands: []*cli.Command{
+			cmd.RegisterCommand(),
+			cmd.DeregisterCommand(),
+			cmd.StatusCommand(),
+			cmd.VersionCommand(),
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
 }

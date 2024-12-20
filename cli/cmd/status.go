@@ -2,17 +2,19 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
+
+	"github.com/urfave/cli/v2"
 )
 
-func checkOperatorStatus() {
-	fmt.Println("Checking operator status...")
+func StatusCommand() *cli.Command {
+	return &cli.Command{
+		Name:   "status",
+		Usage:  "Check operator status",
+		Action: checkOperatorStatus,
+	}
 }
 
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Check operator status",
-	Run: func(cmd *cobra.Command, args []string) {
-		checkOperatorStatus()
-	},
+func checkOperatorStatus(c *cli.Context) error {
+	fmt.Println("Checking operator status...")
+	return nil
 }
