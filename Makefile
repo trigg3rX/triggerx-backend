@@ -5,7 +5,14 @@ help:
 
 ############################# CONTRACTS #############################
 
-build: ## Build the binary
-	go build -o triggerx
-	mv triggerx /home/nite-sky/bin/triggerx
-	# triggerx generate-keystore
+# build: ## Build the binary
+# 	go build -o triggerx
+# 	mv triggerx /home/nite-sky/bin/triggerx
+# 	# triggerx generate-keystore
+
+eigenlayer: ## Install the EigenLayer CLI and View Instructions
+	go install github.com/Layr-Labs/eigenlayer-cli/cmd/eigenlayer@latest
+	@echo "EigenLayer CLI installed. View instructions at https://github.com/Layr-Labs/eigenlayer-cli/blob/master/README.md#documentation"
+
+register: ## Register the Keeper to AVS
+	go run cli/main.go register
