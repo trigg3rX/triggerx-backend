@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/trigg3rX/go-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/execute/manager"
 )
 
 // toUint converts various types to uint
@@ -57,7 +57,7 @@ func main() {
 		job := &manager.Job{
 			JobID:             jobConfig.jobID,
 			ArgType:           "Static",
-			Arguments:         map[string]interface{}{"num":20},
+			Arguments:         map[string]interface{}{"num": 20},
 			ChainID:           "chain_1",
 			ContractAddress:   "0xf24fa68262887236279FBA020b0A2D21A10534aC",
 			JobCostPrediction: 0.5,
@@ -69,7 +69,7 @@ func main() {
 			UserID:            "system_test",
 			CreatedAt:         time.Now(),
 			MaxRetries:        jobConfig.maxRetries,
-			CodeURL:		   "https://gateway.lighthouse.storage/ipfs/bafkreicw3pf7sqfc2m75xbcr473626ksebhjef4joqhfzidha5z3mmcfri",
+			CodeURL:           "https://gateway.lighthouse.storage/ipfs/bafkreicw3pf7sqfc2m75xbcr473626ksebhjef4joqhfzidha5z3mmcfri",
 		}
 
 		if err := jobScheduler.AddJob(job); err != nil {

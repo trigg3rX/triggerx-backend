@@ -10,8 +10,8 @@ import (
 	"github.com/Layr-Labs/eigensdk-go/crypto/ecdsa"
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/trigg3rX/go-backend/pkg/keeper"
-	"github.com/trigg3rX/go-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/keeper"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func RegisterCommand() *cli.Command {

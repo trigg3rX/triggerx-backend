@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/trigg3rX/go-backend/cli/cmd"
+	"github.com/trigg3rX/triggerx-backend/cli/cmd"
 	"github.com/urfave/cli/v2"
 )
 

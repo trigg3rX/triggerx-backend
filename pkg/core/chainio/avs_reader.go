@@ -10,9 +10,9 @@ import (
 	logging "github.com/Layr-Labs/eigensdk-go/logging"
 
 	erc20mock "github.com/Layr-Labs/incredible-squaring-avs/contracts/bindings/ERC20Mock"
-	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	sdkcommon "github.com/trigg3rX/go-backend/pkg/common"
-	"github.com/trigg3rX/go-backend/pkg/core/config"
+	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
+	"github.com/trigg3rX/triggerx-backend/pkg/core/config"
 )
 
 type AvsReaderer interface {

@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/trigg3rX/go-backend/pkg/core/chainio"
+	"github.com/trigg3rX/triggerx-backend/pkg/core/chainio"
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients"
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/wallet"
@@ -34,11 +34,11 @@ import (
 
 	rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
 
-	"github.com/trigg3rX/go-backend/pkg/metrics"
-	"github.com/trigg3rX/go-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
-	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	sdkcommon "github.com/trigg3rX/go-backend/pkg/common"
+	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 
 	sdkelcontracts "github.com/Layr-Labs/eigensdk-go/chainio/clients/elcontracts"
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"

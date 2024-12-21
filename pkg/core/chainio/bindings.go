@@ -9,9 +9,9 @@ import (
 
 	regcoord "github.com/Layr-Labs/eigensdk-go/contracts/bindings/RegistryCoordinator"
 	erc20mock "github.com/Layr-Labs/incredible-squaring-avs/contracts/bindings/ERC20Mock"
-	txservicemanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
-	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	sdkcommon "github.com/trigg3rX/go-backend/pkg/common"
+	txservicemanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
+	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 )
 
 type AvsManagersBindings struct {

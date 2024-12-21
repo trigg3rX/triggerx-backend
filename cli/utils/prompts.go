@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/trigg3rX/go-backend/pkg/core/errors"
+	"github.com/trigg3rX/triggerx-backend/pkg/core/errors"
 	"golang.org/x/term"
 )
 

@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	sdkcommon "github.com/trigg3rX/go-backend/pkg/common"
+	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 	"github.com/Layr-Labs/eigensdk-go/chainio/txmgr"
@@ -17,8 +17,8 @@ import (
 	logging "github.com/Layr-Labs/eigensdk-go/logging"
 	eigenSdkTypes "github.com/Layr-Labs/eigensdk-go/types"
 
-	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	"github.com/trigg3rX/go-backend/pkg/core/config"
+	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	"github.com/trigg3rX/triggerx-backend/pkg/core/config"
 )
 
 type SignatureWithSaltAndExpiry struct {

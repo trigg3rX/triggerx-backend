@@ -1,10 +1,10 @@
 package main
 
 import (
+	"github.com/trigg3rX/triggerx-backend/execute/quorum"
 	"log"
-	"github.com/trigg3rX/go-backend/execute/quorum"
 
-	regcoord "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/RegistryCoordinator"
+	regcoord "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 		// Fill in the required fields
 	}
 	signature := regcoord.ISignatureUtilsSignatureWithSaltAndExpiry{
-    // Fill in the required fields
+		// Fill in the required fields
 	}
 	err = quorum.RegisterOperator([]byte{0, 1}, "socket-address", pubkeyParams, signature)
 	if err != nil {

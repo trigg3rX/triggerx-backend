@@ -1,4 +1,4 @@
-module github.com/trigg3rX/go-backend
+module github.com/trigg3rX/triggerx-backend
 
 go 1.22.0
 

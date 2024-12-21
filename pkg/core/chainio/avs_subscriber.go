@@ -8,10 +8,10 @@ import (
 
 	sdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 
-	txservicemanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
-	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	sdkcommon "github.com/trigg3rX/go-backend/pkg/common"
-	"github.com/trigg3rX/go-backend/pkg/core/config"
+	txservicemanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
+	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
+	"github.com/trigg3rX/triggerx-backend/pkg/core/config"
 )
 
 type AvsSubscriberer interface {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/trigg3rX/go-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 )
 
 type Server struct {
@@ -21,14 +21,14 @@ func NewServer(db *database.Connection) *Server {
 
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{
+		AllowedOrigins: []string{
 			"https://triggerx.network",
 			"http://localhost:3000",
-			},
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token"},
 		AllowCredentials: true,
-		Debug: true,
+		Debug:            true,
 	})
 
 	s := &Server{

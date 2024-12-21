@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"strconv"
 	"time"
-	"math/big"
 
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
-	"github.com/trigg3rX/go-backend/pkg/database"
-	"github.com/trigg3rX/go-backend/pkg/models"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/models"
 )
 
 type Handler struct {
@@ -34,7 +34,7 @@ func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Creating user with ID: %d, Address: %s", userData.UserID, userData.UserAddress)
-	
+
 	// Convert stake amount to Gwei and store as varint
 	stakeAmountGwei := new(big.Int)
 	stakeAmountGwei = userData.StakeAmount
@@ -85,15 +85,15 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	// Create a response struct with float64 stake amount
 	response := struct {
-		UserID      int64    `json:"user_id"`
-		UserAddress string   `json:"user_address"`
-		JobIDs      []int64  `json:"job_ids"`
-		StakeAmount float64  `json:"stake_amount"`
+		UserID      int64   `json:"user_id"`
+		UserAddress string  `json:"user_address"`
+		JobIDs      []int64 `json:"job_ids"`
+		StakeAmount float64 `json:"stake_amount"`
 	}{
 		UserID:      userData.UserID,
 		UserAddress: userData.UserAddress,
 		JobIDs:      userData.JobIDs,
-			StakeAmount: stakeAmountFloat64,
+		StakeAmount: stakeAmountFloat64,
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -251,7 +251,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existingUserID = maxUserID + 1
-		
+
 		// Convert stake amount to Gwei and store as varint
 		stakeAmountGwei := new(big.Float).SetFloat64(tempJob.StakeAmount)
 		stakeAmountInt, _ := stakeAmountGwei.Int(nil)
@@ -260,7 +260,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             INSERT INTO triggerx.user_data (
                 user_id, user_address, job_ids, stake_amount
             ) VALUES (?, ?, ?, ?)`,
-            existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt).Exec(); err != nil {
+			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt).Exec(); err != nil {
 			log.Printf("Error creating user data: %v", err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -269,17 +269,17 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Update existing user's job IDs and add to existing stake amount
 		updatedJobIDs := append(existingJobIDs, jobData.JobID)
-		
+
 		// Convert new stake amount to big.Int and add to existing
 		newStakeFloat := new(big.Float).SetFloat64(tempJob.StakeAmount)
 		newStakeInt, _ := newStakeFloat.Int(nil)
 		newStakeAmount := new(big.Int).Add(existingStakeAmount, newStakeInt)
-		
+
 		if err := h.db.Session().Query(`
             UPDATE triggerx.user_data 
             SET job_ids = ?, stake_amount = ?
             WHERE user_id = ?`,
-            updatedJobIDs, newStakeAmount, existingUserID).Exec(); err != nil {
+			updatedJobIDs, newStakeAmount, existingUserID).Exec(); err != nil {
 			log.Printf("Error updating user data: %v", err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return

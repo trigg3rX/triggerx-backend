@@ -7,7 +7,7 @@ Backend Utilities and APIs for TriggerX
 ### Directory Structure
 
 ```
-go-backend/
+triggerx-backend/
 ├── cmd/                    # Application entry points
 │   ├── keeper/            # Keeper service entry point
 │   ├── quorum/     # Quorum creation service

@@ -22,8 +22,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/go-backend/execute/keeper/executor"
-	"github.com/trigg3rX/go-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/execute/keeper/executor"
+	"github.com/trigg3rX/triggerx-backend/execute/manager"
 )
 
 type ArgumentConverter struct{}

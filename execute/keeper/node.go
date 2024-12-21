@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-    "github.com/libp2p/go-libp2p/core/peer"
-	"github.com/trigg3rX/go-backend/pkg/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
 type Node struct {

@@ -1,14 +1,14 @@
 package main
 
 import (
+	"github.com/trigg3rX/triggerx-backend/pkg/api"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"log"
-	"github.com/trigg3rX/go-backend/pkg/api"
-	"github.com/trigg3rX/go-backend/pkg/database"
 )
 
 func main() {
 	log.Println("Starting API server...")
-	
+
 	// Initialize database connection
 	config := database.NewConfig()
 	conn, err := database.NewConnection(config)
@@ -23,4 +23,4 @@ func main() {
 	if err := server.Start("8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
-} 
+}
