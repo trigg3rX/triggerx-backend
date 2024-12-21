@@ -12,10 +12,12 @@ import (
     "math/big"
     "net/http"
     "os"
-    "os/exec"
-    "path/filepath"
     "reflect"
     "strconv"
+    "os/exec"
+    "path/filepath"
+
+    shell "github.com/ipfs/go-ipfs-api"
 
     "github.com/ethereum/go-ethereum/accounts/abi"
     "github.com/ethereum/go-ethereum/common"
@@ -23,7 +25,6 @@ import (
     "github.com/ethereum/go-ethereum"
 
     "github.com/trigg3rX/triggerx-keeper/execute/executor"
-    "github.com/trigg3rX/triggerx-keeper/checker"
     "github.com/trigg3rX/go-backend/execute/manager"
 )
 
@@ -47,6 +48,7 @@ func (ac *ArgumentConverter) convertToType(value interface{}, targetType abi.Typ
         return nil, fmt.Errorf("unsupported type conversion: %v", targetType)
     }
 }
+ 
 
 func (ac *ArgumentConverter) convertToInteger(value interface{}, targetType abi.Type) (interface{}, error) {
     // Convert various numeric types to big.Int or big.Rat
@@ -129,7 +131,7 @@ type JobHandler struct {
     ethClient *ethclient.Client
     etherscanAPIKey string
     argConverter *ArgumentConverter
-    intervalChecker *checker.IntervalChecker 
+    ipfsShell *shell.Shell
 }
 
 func NewJobHandler(ethClient *ethclient.Client, etherscanAPIKey string) *JobHandler {
@@ -138,9 +140,10 @@ func NewJobHandler(ethClient *ethclient.Client, etherscanAPIKey string) *JobHand
         ethClient:       ethClient,
         etherscanAPIKey: etherscanAPIKey,
         argConverter:    &ArgumentConverter{},
-        intervalChecker: checker.NewIntervalChecker(), 
+        ipfsShell:      shell.NewShell("localhost:5001"),
     }
 }
+
 func (h *JobHandler) HandleJob(job *manager.Job) error {
     if h.ethClient == nil {
         return fmt.Errorf("ethereum client not initialized")
@@ -187,28 +190,83 @@ func (h *JobHandler) fetchCheckerTemplateFromIPFS(codeURL string) (string, error
         return "", nil
     }
 
-    // Create the "checker" directory if it doesn't exist
-    checkerDir := filepath.Join(".", "checker")
-    err := os.MkdirAll(checkerDir, 0755)
+    // Get user's home directory
+    homeDir, err := os.UserHomeDir()
     if err != nil {
-        return "", fmt.Errorf("failed to create checker directory: %v", err)
+        return "", fmt.Errorf("cannot find home directory: %v", err)
     }
 
-    // Construct the full path for the checker file
-    checkerPath := filepath.Join(checkerDir, "checker_template.go")
+    // Define output path for the checker template
+    checkerPath := filepath.Join(homeDir, "checker_template.go")
 
-    // Run IPFS get command
-    cmd := exec.Command("ipfs", "get", "-o", checkerPath, codeURL)
+    // Remove existing file if it exists
+    if _, err := os.Stat(checkerPath); err == nil {
+        if err := os.Remove(checkerPath); err != nil {
+            return "", fmt.Errorf("failed to remove existing file: %v", err)
+        }
+    }
+
+    // Construct IPFS gateway URL and fetch the file
+    ipfsUrl := codeURL
+    cmd := exec.Command("wget", "-q", "-O", checkerPath, ipfsUrl)
     output, err := cmd.CombinedOutput()
     if err != nil {
-        return "", fmt.Errorf("IPFS get failed: %v, output: %s", err, string(output))
+        return "", fmt.Errorf("failed to fetch file from IPFS: %v\nOutput: %s", err, string(output))
     }
 
-    log.Printf("Successfully fetched checker template from IPFS with CID: %s", codeURL)
+    // Read and log the fetched code
+    fetchedCode, err := ioutil.ReadFile(checkerPath)
+    if err != nil {
+        return "", fmt.Errorf("failed to read fetched code: %v", err)
+    }
+    log.Printf("Fetched Checker Template Code:\n%s", string(fetchedCode))
+
     return checkerPath, nil
 }
+
+
 func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
     log.Printf("Executing contract call for job %s with no arguments", job.JobID)
+
+    // Check IPFS code validation if CodeURL is provided
+    if job.CodeURL != "" {
+        // Fetch checker template from IPFS
+        checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+        if err != nil {
+            return fmt.Errorf("failed to fetch checker template: %v", err)
+        }
+        defer os.Remove(checkerPath)
+
+        // Compile the checker template
+        compiledPath := checkerPath + ".bin"
+        buildCmd := exec.Command("go", "build", "-o", compiledPath, checkerPath)
+        if output, err := buildCmd.CombinedOutput(); err != nil {
+            return fmt.Errorf("failed to compile checker: %v\nOutput: %s", err, string(output))
+        }
+        defer os.Remove(compiledPath)
+
+        // Execute the compiled checker
+        runCmd := exec.Command(compiledPath)
+        output, err := runCmd.CombinedOutput()
+        if err != nil {
+            return fmt.Errorf("failed to execute checker: %v\nOutput: %s", err, string(output))
+        }
+
+        // Parse the checker output
+        var result struct {
+            Success bool                    `json:"success"`
+            Payload map[string]interface{} `json:"payload"`
+        }
+        if err := json.Unmarshal(output, &result); err != nil {
+            return fmt.Errorf("failed to parse checker output: %v", err)
+        }
+
+        if !result.Success {
+            return fmt.Errorf("checker validation failed")
+        }
+
+        // Note: We don't modify arguments here since it's a no-arg contract
+    }
 
     contractAddress := common.HexToAddress(job.ContractAddress)
 
@@ -254,8 +312,49 @@ func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
     return nil
 }
 
+
 func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
     log.Printf("Executing contract call for job %s with static arguments", job.JobID)
+
+    // Check IPFS code validation if CodeURL is provided
+    if job.CodeURL != "" {
+        // Fetch checker template from IPFS
+        checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+        if err != nil {
+            return fmt.Errorf("failed to fetch checker template: %v", err)
+        }
+        defer os.Remove(checkerPath)
+
+        // Compile the checker template
+        compiledPath := checkerPath + ".bin"
+        buildCmd := exec.Command("go", "build", "-o", compiledPath, checkerPath)
+        if output, err := buildCmd.CombinedOutput(); err != nil {
+            return fmt.Errorf("failed to compile checker: %v\nOutput: %s", err, string(output))
+        }
+        defer os.Remove(compiledPath)
+
+        // Execute the compiled checker
+        runCmd := exec.Command(compiledPath)
+        output, err := runCmd.CombinedOutput()
+        if err != nil {
+            return fmt.Errorf("failed to execute checker: %v\nOutput: %s", err, string(output))
+        }
+
+        // Parse the checker output
+        var result struct {
+            Success bool                    `json:"success"`
+            Payload map[string]interface{} `json:"payload"`
+        }
+        if err := json.Unmarshal(output, &result); err != nil {
+            return fmt.Errorf("failed to parse checker output: %v", err)
+        }
+
+        if !result.Success {
+            return fmt.Errorf("checker validation failed")
+        }
+
+        // Note: We don't modify arguments here since they are static
+    }
 
     contractAddress := common.HexToAddress(job.ContractAddress)
     
@@ -323,60 +422,77 @@ func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
 }
 
 
+// Only showing the modified parts of job_handler.go for brevity
 
 func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
     log.Printf("Executing contract call for job %s with dynamic arguments", job.JobID)
 
+    // Fetch and compile the checker template if CodeURL is provided
+    var checkerResult map[string]interface{}
+    if job.CodeURL != "" {
+        // Fetch checker template from IPFS
+        checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+        if err != nil {
+            return fmt.Errorf("failed to fetch checker template: %v", err)
+        }
+        defer os.Remove(checkerPath)
+
+        // Compile the checker template
+        compiledPath := checkerPath + ".bin"
+        buildCmd := exec.Command("go", "build", "-o", compiledPath, checkerPath)
+        if output, err := buildCmd.CombinedOutput(); err != nil {
+            return fmt.Errorf("failed to compile checker: %v\nOutput: %s", err, string(output))
+        }
+        defer os.Remove(compiledPath)
+
+        // Execute the compiled checker
+        runCmd := exec.Command(compiledPath)
+        output, err := runCmd.CombinedOutput()
+        if err != nil {
+            return fmt.Errorf("failed to execute checker: %v\nOutput: %s", err, string(output))
+        }
+
+        // Parse the checker output
+        var result struct {
+            Success bool                    `json:"success"`
+            Payload map[string]interface{} `json:"payload"`
+        }
+        if err := json.Unmarshal(output, &result); err != nil {
+            return fmt.Errorf("failed to parse checker output: %v", err)
+        }
+
+        if !result.Success {
+            return fmt.Errorf("checker validation failed")
+        }
+
+        checkerResult = result.Payload
+        
+        // Merge checker results into job arguments
+        for k, v := range checkerResult {
+            job.Arguments[k] = v
+        }
+    }
+
+    // Continue with contract execution
     contractAddress := common.HexToAddress(job.ContractAddress)
-    
-    // Prepare method call data
     contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.ContractAddress)
     if err != nil {
         return err
     }
 
-    // Use the dynamic checker to validate and fetch payload
-    checkerFunc, err := h.loadCheckerFunction(job)
-    if err != nil {
-        log.Printf("Error loading checker function: %v", err)
-        return err
-    }
-
-    // Execute the checker function
-    isValid, payload := checkerFunc(job)
-    if !isValid {
-        return fmt.Errorf("job not ready for execution")
-    }
-
-    // Extract dynamic argument from payload
-    dynamicValue, ok := payload["price"]
-    if !ok {
-        return fmt.Errorf("no dynamic argument found in payload")
-    }
-
-    // Convert arguments to match method input types
+    // Convert and pack arguments
     var convertedArgs []interface{}
     for i, inputParam := range method.Inputs {
-        // Find corresponding argument from job
         argKey := inputParam.Name
         if argKey == "" {
             argKey = fmt.Sprintf("arg%d", i)
         }
 
-        var argValue interface{}
-        if argKey == "value" || argKey == "" {
-            // Use the dynamic value for the main argument
-            argValue = dynamicValue
-        } else {
-            // Try to get other arguments from job arguments
-            existingValue, exists := job.Arguments[argKey]
-            if !exists {
-                return fmt.Errorf("missing argument for parameter %s", argKey)
-            }
-            argValue = existingValue
+        argValue, exists := job.Arguments[argKey]
+        if !exists {
+            return fmt.Errorf("missing argument for parameter %s", argKey)
         }
 
-        // Convert argument to required type
         convertedArg, err := h.argConverter.convertToType(argValue, inputParam.Type)
         if err != nil {
             return fmt.Errorf("error converting argument %s: %v", argKey, err)
@@ -385,28 +501,24 @@ func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
         convertedArgs = append(convertedArgs, convertedArg)
     }
 
-    // Encode method call data with arguments
+    // Pack arguments and make contract call
     input, err := contractABI.Pack(method.Name, convertedArgs...)
     if err != nil {
-        log.Printf("Error packing arguments: %v", err)
-        return err
+        return fmt.Errorf("error packing arguments: %v", err)
     }
 
-    // Perform contract call
     callResult, err := h.ethClient.CallContract(context.Background(), ethereum.CallMsg{
         To:   &contractAddress,
         Data: input,
     }, nil)
     if err != nil {
-        log.Printf("Contract call error: %v", err)
-        return err
+        return fmt.Errorf("contract call error: %v", err)
     }
 
-    // Decode the result
+    // Decode and log results
     decodedResults, err := h.decodeContractOutput(contractABI, method, callResult)
     if err != nil {
-        log.Printf("Error decoding contract output: %v", err)
-        return err
+        return fmt.Errorf("error decoding contract output: %v", err)
     }
 
     log.Printf("✅ Job %s executed successfully. Result: %+v", job.JobID, map[string]interface{}{
@@ -420,70 +532,95 @@ func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
     return nil
 }
 
-func (h *JobHandler) loadCheckerFunction(job *manager.Job) (func(*manager.Job) (bool, map[string]interface{}), error) {
-    log.Printf("Loading checker function for job %s", job.JobID)
+// func (h *JobHandler) loadCheckerFunction(job *manager.Job) (func(*manager.Job) (bool, map[string]interface{}), error) {
+//     log.Printf("Loading checker function for job %s", job.JobID)
 
-    // If no code URL is provided, return a default checker
-    if job.CodeURL == "" {
-        log.Printf("No CodeURL provided, using default checker")
-        return h.defaultChecker(job.ArgType), nil
-    }
+//     // If no code URL is provided, return a default checker
+//     if job.CodeURL == "" {
+//         log.Printf("No CodeURL provided, using default checker")
+//         return h.defaultChecker(job.ArgType), nil
+//     }
 
-    // Fetch checker template from IPFS and get the file path
-    checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
-    if err != nil {
-        return nil, fmt.Errorf("failed to fetch checker template: %v", err)
-    }
+//     // Fetch checker template from IPFS and get the file path
+//     checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+//     if err != nil {
+//         return nil, fmt.Errorf("failed to fetch checker template: %v", err)
+//     }
 
-    // Compile the checker template using the path
-    cmd := exec.Command("go", "build", "-o", "/tmp/checker_template", checkerPath)
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return nil, fmt.Errorf("failed to compile checker template: %v, output: %s", err, string(output))
-    }
+//     // Cleanup - remove the compiled binary at the end
+//     compiledBinaryPath := "/tmp/checker_template"
+//     defer func() {
+//         if _, err := os.Stat(compiledBinaryPath); err == nil {
+//             os.Remove(compiledBinaryPath)
+//         }
+//     }()
 
-    // Depending on the argument type, return appropriate checker function
-    switch job.ArgType {
-    case "None", "Static":
-        return func(j *manager.Job) (bool, map[string]interface{}) {
-            // Simple time interval check for static and no-arg jobs
-            if h.intervalChecker.ValidateJobInterval(j) {
-                return true, make(map[string]interface{})
-            }
-            return false, make(map[string]interface{})
-        }, nil
-    case "Dynamic":
-        // For dynamic jobs, load payload directly from the compiled template
-        return func(j *manager.Job) (bool, map[string]interface{}) {
-            // Hypothetical payload loading - implementation would depend on the specific 
-            // mechanism used to pass data between the compiled template and the main application
-            payload := map[string]interface{}{
-                "price": "100", // Example dynamic value
-            }
-            return true, payload
-        }, nil
-    default:
-        return nil, fmt.Errorf("unsupported argument type for checker: %s", job.ArgType)
-    }
-}
+//     // Compile the checker template using the path
+//     cmd := exec.Command("go", "build", "-o", compiledBinaryPath, checkerPath)
+//     output, err := cmd.CombinedOutput()
+//     if err != nil {
+//         return nil, fmt.Errorf("failed to compile checker template: %v, output: %s", err, string(output))
+//     }
 
-func (h *JobHandler) defaultChecker(argType string) func(*manager.Job) (bool, map[string]interface{}) {
-    return func(j *manager.Job) (bool, map[string]interface{}) {
-        switch argType {
-        case "None", "Static":
-            if h.intervalChecker.ValidateJobInterval(j) {
-                return true, make(map[string]interface{})
-            }
-            return false, make(map[string]interface{})
-        case "Dynamic":
-            return true, map[string]interface{}{
-                "price": "0", // Default price for dynamic jobs
-            }
-        default:
-            return false, make(map[string]interface{})
-        }
-    }
-}
+//     // Depending on the argument type, return appropriate checker function
+//     switch job.ArgType {
+//     case "None", "Static":
+//         return func(j *manager.Job) (bool, map[string]interface{}) {
+//             // Simple time interval check for static and no-arg jobs
+//             if h.intervalChecker.ValidateJobInterval(j) {
+//                 return true, make(map[string]interface{})
+//             }
+//             return false, make(map[string]interface{})
+//         }, nil
+//     case "Dynamic":
+//         // For dynamic jobs, load payload directly from the compiled template
+//         return func(j *manager.Job) (bool, map[string]interface{}) {
+//             // Run the compiled checker to get payload
+//             cmd := exec.Command(compiledBinaryPath)
+//             output, err := cmd.CombinedOutput()
+//             if err != nil {
+//                 log.Printf("Error running checker template: %v", err)
+//                 return false, make(map[string]interface{})
+//             }
+
+//             // Parse the output
+//             var payload map[string]interface{}
+//             err = json.Unmarshal(output, &payload)
+//             if err != nil {
+//                 log.Printf("Error parsing checker output: %v", err)
+//                 return false, make(map[string]interface{})
+//             }
+
+//             // Check if payload contains a price
+//             if _, ok := payload["price"]; !ok {
+//                 log.Printf("No price found in payload")
+//                 return false, make(map[string]interface{})
+//             }
+
+//             return true, payload
+//         }, nil
+//     default:
+//         return nil, fmt.Errorf("unsupported argument type for checker: %s", job.ArgType)
+//     }
+// }
+
+// func (h *JobHandler) defaultChecker(argType string) func(*manager.Job) (bool, map[string]interface{}) {
+//     return func(j *manager.Job) (bool, map[string]interface{}) {
+//         switch argType {
+//         case "None", "Static":
+//             if h.intervalChecker.ValidateJobInterval(j) {
+//                 return true, make(map[string]interface{})
+//             }
+//             return false, make(map[string]interface{})
+//         case "Dynamic":
+//             return true, map[string]interface{}{
+//                 "price": "0", // Default price for dynamic jobs
+//             }
+//         default:
+//             return false, make(map[string]interface{})
+//         }
+//     }
+// }
 
 func (h *JobHandler) sendToQuorumHead(originalValue interface{}) (interface{}, error) {
     log.Printf("Sending value to Quorum Head: %v", originalValue)
