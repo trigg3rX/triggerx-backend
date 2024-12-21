@@ -50,35 +50,26 @@ func main() {
 		maxRetries   int
 	}{
 		{"job_1", 120, 15, 2},
-		{"job_2", 60, 5, 3},
-		{"job_3", 90, 30, 5},
-		{"job_4", 75, 20, 3},
-		{"job_5", 45, 10, 2},
-		{"job_6", 100, 25, 4},
-		{"job_7", 80, 15, 3},
-		{"job_8", 70, 20, 2},
-		{"job_9", 55, 10, 3},
-		{"job_10", 65, 25, 4},
 	}
 
 	// Add jobs to the scheduler
 	for _, jobConfig := range jobs {
 		job := &manager.Job{
 			JobID:             jobConfig.jobID,
-			ArgType:           "Dynamic",
-			Arguments:         map[string]interface{}{},
+			ArgType:           "Static",
+			Arguments:         map[string]interface{}{"num":20},
 			ChainID:           "chain_1",
-			ContractAddress:   "0xa5854f4835769c3D84319DcB41cb449f6b858F83",
+			ContractAddress:   "0xf24fa68262887236279FBA020b0A2D21A10534aC",
 			JobCostPrediction: 0.5,
 			Stake:             1.0,
 			Status:            "pending",
-			TargetFunction:    "updatePrice",
+			TargetFunction:    "increment",
 			TimeFrame:         jobConfig.timeFrame,
 			TimeInterval:      jobConfig.timeInterval,
 			UserID:            "system_test",
 			CreatedAt:         time.Now(),
 			MaxRetries:        jobConfig.maxRetries,
-			CodeURL:		   "QmPQcutXx7M4tPR1SkvNbosKcjFTaDxTZsizgKbZnVkA9e",
+			CodeURL:		   "https://gateway.lighthouse.storage/ipfs/bafkreicw3pf7sqfc2m75xbcr473626ksebhjef4joqhfzidha5z3mmcfri",
 		}
 
 		if err := jobScheduler.AddJob(job); err != nil {
