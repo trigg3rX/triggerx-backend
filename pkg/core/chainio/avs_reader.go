@@ -9,27 +9,32 @@ import (
 	sdkavsregistry "github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 	logging "github.com/Layr-Labs/eigensdk-go/logging"
 
-	"github.com/trigg3rX/triggerx-keeper/pkg/core/config"
-	sdkcommon "github.com/trigg3rX/triggerx-keeper/pkg/common"
 	erc20mock "github.com/Layr-Labs/incredible-squaring-avs/contracts/bindings/ERC20Mock"
 	txtaskmanager "github.com/trigg3rX/go-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	sdkcommon "github.com/trigg3rX/triggerx-keeper/pkg/common"
+	"github.com/trigg3rX/triggerx-keeper/pkg/core/config"
 )
 
 type AvsReaderer interface {
-	//sdkavsregistry.ChainReader
+	// TriggerXTaskManager methods
+	GetTaskHash(ctx context.Context, taskId [8]byte) ([32]byte, error)
+	GetTaskResponseHash(ctx context.Context, taskId [8]byte) ([32]byte, error)
+	GetJobToTaskCounter(ctx context.Context, jobId uint32) (uint32, error)
+	GenerateTaskId(jobId uint32, taskNum uint32) ([8]byte, error)
 
+	// TriggerXServiceManager methods
+	IsOperatorBlacklisted(ctx context.Context, operator common.Address) (bool, error)
+	GetTaskManager(ctx context.Context) (common.Address, error)
+	GetTaskValidator(ctx context.Context) (common.Address, error)
+	GetQuorumManager(ctx context.Context) (common.Address, error)
+
+	// Existing methods
 	CheckSignatures(
 		ctx context.Context, msgHash [32]byte, quorumNumbers []byte, referenceBlockNumber uint32, nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature,
 	) (txtaskmanager.IBLSSignatureCheckerQuorumStakeTotals, error)
 	GetErc20Mock(ctx context.Context, tokenAddr common.Address) (*erc20mock.ContractERC20Mock, error)
-	GetOperatorId(
-		opts *bind.CallOpts,
-		operatorAddress common.Address,
-	) ([32]byte, error)
-	IsOperatorRegistered(
-		opts *bind.CallOpts,
-		operatorAddress common.Address,
-	) (bool, error)
+	GetOperatorId(opts *bind.CallOpts, operatorAddress common.Address) ([32]byte, error)
+	IsOperatorRegistered(opts *bind.CallOpts, operatorAddress common.Address) (bool, error)
 }
 
 type AvsReader struct {
@@ -43,12 +48,13 @@ type AvsReader struct {
 func BuildAvsReaderFromConfig(c *config.Config) (*AvsReader, error) {
 	return BuildAvsReader(c.TriggerXServiceManagerAddr, c.OperatorStateRetrieverAddr, &c.EthHttpClient, c.Logger)
 }
-func BuildAvsReader(registryCoordinatorAddr, operatorStateRetrieverAddr common.Address, ethHttpClient sdkcommon.EthClientInterface, logger logging.Logger) (*AvsReader, error) {
-	avsManagersBindings, err := NewAvsManagersBindings(registryCoordinatorAddr, operatorStateRetrieverAddr, ethHttpClient, logger)
+
+func BuildAvsReader(serviceManagerAddr, operatorStateRetrieverAddr common.Address, ethHttpClient sdkcommon.EthClientInterface, logger logging.Logger) (*AvsReader, error) {
+	avsManagersBindings, err := NewAvsManagersBindings(serviceManagerAddr, operatorStateRetrieverAddr, ethHttpClient, logger)
 	if err != nil {
 		return nil, err
 	}
-	avsRegistryReader, err := sdkavsregistry.BuildAvsRegistryChainReader(registryCoordinatorAddr, operatorStateRetrieverAddr, ethHttpClient, logger)
+	avsRegistryReader, err := sdkavsregistry.BuildAvsRegistryChainReader(serviceManagerAddr, operatorStateRetrieverAddr, ethHttpClient, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -81,4 +87,36 @@ func (r *AvsReader) GetErc20Mock(ctx context.Context, tokenAddr common.Address) 
 		return nil, err
 	}
 	return erc20Mock, nil
+}
+
+func (r *AvsReader) GetTaskHash(ctx context.Context, taskId [8]byte) ([32]byte, error) {
+	return r.AvsServiceBindings.TaskManager.TaskHashes(&bind.CallOpts{}, taskId)
+}
+
+func (r *AvsReader) GetTaskResponseHash(ctx context.Context, taskId [8]byte) ([32]byte, error) {
+	return r.AvsServiceBindings.TaskManager.TaskResponseHashes(&bind.CallOpts{}, taskId)
+}
+
+func (r *AvsReader) GetJobToTaskCounter(ctx context.Context, jobId uint32) (uint32, error) {
+	return r.AvsServiceBindings.TaskManager.JobToTaskCounter(&bind.CallOpts{}, jobId)
+}
+
+func (r *AvsReader) GenerateTaskId(jobId uint32, taskNum uint32) ([8]byte, error) {
+	return r.AvsServiceBindings.TaskManager.GenerateTaskId(&bind.CallOpts{}, jobId, taskNum)
+}
+
+func (r *AvsReader) IsOperatorBlacklisted(ctx context.Context, operator common.Address) (bool, error) {
+	return r.AvsServiceBindings.ServiceManager.IsBlackListed(&bind.CallOpts{}, operator)
+}
+
+func (r *AvsReader) GetTaskManager(ctx context.Context) (common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.TaskManager(&bind.CallOpts{})
+}
+
+func (r *AvsReader) GetTaskValidator(ctx context.Context) (common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.TaskValidator(&bind.CallOpts{})
+}
+
+func (r *AvsReader) GetQuorumManager(ctx context.Context) (common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.QuorumManager(&bind.CallOpts{})
 }
