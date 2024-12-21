@@ -1,88 +1,193 @@
+// github.com/trigg3rX/triggerx-keeper/cmd/main
+
 package main
 
-// import (
-// 	"context"
-// 	"flag"
-// 	"log"
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 
-// 	"github.com/trigg3rX/go-backend/pkg/network"
-// 	"github.com/trigg3rX/go-backend/execute/manager"
-// 	"github.com/trigg3rX/triggerx-keeper/keeper"
-// )
+	"github.com/joho/godotenv"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 
-// const (
-//     WORKERS_COUNT     = 5
-//     KEEPER_COUNT     = 3
-// )
+	"github.com/trigg3rX/go-backend/execute/keeper/handler"
+	"github.com/trigg3rX/go-backend/execute/manager"
+	"github.com/trigg3rX/go-backend/pkg/network"
 
-// func main() {
-//     // Initialize networking components
-//     messaging := network.NewMessaging()
-//     discovery := network.NewDiscovery()
+	"github.com/ethereum/go-ethereum/ethclient"
+)
 
-//     // Initialize the job scheduler
-//     scheduler := manager.NewJobScheduler(WORKERS_COUNT)
-//     scheduler.SetResourceLimits(80.0, 80.0) // Set CPU and Memory thresholds to 80%
+func main() {
+    // Setup logging
+    log.SetOutput(os.Stdout)
+    log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
-//     // Initialize keepers
-//     keepers := make([]*keeper.Keeper, KEEPER_COUNT)
-//     for i := 0; i < KEEPER_COUNT; i++ {
-//         keeperName := fmt.Sprintf("keeper-%d", i+1)
-//         keepers[i] = keeper.NewKeeper(keeperName, messaging)
-//         keepers[i].Start()
-//     }
+    // Create context
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
 
-//     // Example: Schedule a test job
-//     testJob := &manager.Job{
-//         JobID:           "test-job-1",
-//         ArgType:         "string",
-//         Arguments:       map[string]interface{}{"param1": "value1"},
-//         ChainID:         "chain_1",
-//         ContractAddress: "0x123...",
-//         TimeFrame:       3600,    // 1 hour
-//         TimeInterval:    60,      // Execute every 60 seconds
-//         UserID:          "user1",
-//         CreatedAt:       time.Now(),
-//         MaxRetries:      3,
-//         Status:          "pending",
-//     }
+    // Create libp2p host
+    host, err := libp2p.New()
+    if err != nil {
+        log.Fatalf("Failed to create libp2p host: %v", err)
+    }
+    defer host.Close()
 
-//     err := scheduler.AddJob(testJob)
-//     if err != nil {
-//         log.Printf("Failed to add test job: %v", err)
-//     }
-
-//     // Set up graceful shutdown
-//     sigChan := make(chan os.Signal, 1)
-//     signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-//     // Start monitoring system metrics
-//     go monitorSystem(scheduler)
-
-//     // Wait for shutdown signal
-//     <-sigChan
-//     log.Println("Shutting down...")
+    // Create network messaging
+    keeperName := "node1"
+    messaging := network.NewMessaging(host, keeperName)
+    err = godotenv.Load(".env")
+    if err != nil{
+        log.Fatalf("Error loading .env file: %s", err)
+    }
+    alchemyAPIKey := os.Getenv("ALCHEMY_API_KEY")
+    ethClient, err := ethclient.Dial(fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", alchemyAPIKey))
+    if err != nil {
+        log.Fatalf("Failed to create Ethereum client: %v", err)
+    }
+    defer ethClient.Close()
     
-//     // Cleanup
-//     scheduler.Stop()
-// }
+    
+    etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
+    if etherscanAPIKey == "" {
+        log.Fatalf("ETHERSCAN_API_KEY is required")
+    }
+    jobHandler := handler.NewJobHandler(ethClient, etherscanAPIKey)
 
-// // monitorSystem periodically logs system status
-// func monitorSystem(scheduler *manager.JobScheduler) {
-//     ticker := time.NewTicker(30 * time.Second)
-//     defer ticker.Stop()
 
-//     for {
-//         select {
-//         case <-ticker.C:
-//             metrics := scheduler.GetSystemMetrics()
-//             queueStatus := scheduler.GetQueueStatus()
-            
-//             log.Printf("System Status:")
-//             log.Printf("  CPU Usage: %.2f%%", metrics.CPUUsage)
-//             log.Printf("  Memory Usage: %.2f%%", metrics.MemoryUsage)
-//             log.Printf("  Active Jobs: %d", queueStatus["active_jobs"])
-//             log.Printf("  Waiting Jobs: %d", queueStatus["waiting_jobs"])
-//         }
-//     }
-// }
+    // Setup message handling
+    messaging.InitMessageHandling(func(msg network.Message) {
+        // Check if it's a JOB_TRANSMISSION message
+        if nestedContent, ok := msg.Content.(map[string]interface{})["content"]; ok {
+            // Type assert the nested content
+            jobMap, ok := nestedContent.(map[string]interface{})
+            if !ok {
+                log.Printf("Invalid job content type")
+                return
+            }
+
+            // Convert map to Job struct
+            jobData, err := convertMapToJob(jobMap)
+            if err != nil {
+                log.Printf("Job conversion error: %v", err)
+                return
+            }
+
+            // Print the job in a formatted way
+            log.Printf("Received Job:")
+            log.Printf("Job ID: %s", jobData.JobID)
+            log.Printf("Chain ID: %s", jobData.ChainID)
+            log.Printf("Contract Address: %s", jobData.ContractAddress)
+            log.Printf("Target Function: %s", jobData.TargetFunction)
+            log.Printf("Status: %s", jobData.Status)
+            log.Printf("Arguments: %+v", jobData.Arguments)
+            log.Printf("Max Retries: %d", jobData.MaxRetries)
+            log.Printf("Current Retries: %d", jobData.CurrentRetries)
+            log.Printf("CodeURL: %s", jobData.CodeURL)
+
+            // Handle job
+            if err := jobHandler.HandleJob(jobData); err != nil {
+                log.Printf("Job handling error: %v", err)
+            }
+        } else {
+            log.Printf("Received non-job message: %+v", msg.Type)
+        }
+    })
+
+    // Save peer info for discovery
+    discovery := network.NewDiscovery(ctx, host, keeperName)
+    if err := discovery.SavePeerInfo(); err != nil {
+        log.Printf("Failed to save peer info: %v", err)
+    }
+
+    log.Println("Keeper addresses:", host.Addrs())
+
+    peerInfos, err := network.LoadPeerInfo()
+    if err != nil {
+        log.Printf("Error loading peer info: %v", err)
+    }
+
+    for name, info := range peerInfos {
+        if name != keeperName {
+            // Attempt to connect to other known peers
+            maddr, err := multiaddr.NewMultiaddr(info.Address)
+            if err == nil {
+                peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+                if err == nil {
+                    host.Connect(ctx, *peerInfo)
+                }
+            }
+        }
+    }
+
+    // Wait for interrupt
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+    
+    log.Printf("🚀 Keeper node started. Listening on %s", host.Addrs())
+    <-sigChan
+}
+
+// Helper function to convert map to Job struct
+func convertMapToJob(jobMap map[string]interface{}) (*manager.Job, error) {
+    job := &manager.Job{
+        JobID:           toString(jobMap["JobID"]),
+        ArgType:         toString(jobMap["ArgType"]),
+        ChainID:         toString(jobMap["ChainID"]),
+        ContractAddress: toString(jobMap["ContractAddress"]),
+        TargetFunction:  toString(jobMap["TargetFunction"]),
+        Status:          toString(jobMap["Status"]),
+        UserID:          toString(jobMap["UserID"]),
+        MaxRetries:      toInt(jobMap["MaxRetries"]),
+        CurrentRetries:  toInt(jobMap["CurrentRetries"]),
+        CodeURL:         toString(jobMap["CodeURL"]),
+    }
+
+    // Convert arguments
+    if args, ok := jobMap["Arguments"].(map[string]interface{}); ok {
+        job.Arguments = args
+    }
+
+    return job, nil
+}
+
+// Helper functions for type conversion
+func toString(v interface{}) string {
+    if s, ok := v.(string); ok {
+        return s
+    }
+    return ""
+}
+
+func toInt(v interface{}) int {
+    switch val := v.(type) {
+    case int:
+        return val
+    case float64:
+        return int(val)
+    case string:
+        intVal, _ := strconv.Atoi(val)
+        return intVal
+    default:
+        return 0
+    }
+} 
+
+func toUint(v interface{}) uint {
+    switch val := v.(type) {
+    case uint:
+        return val
+    case int:
+        return uint(val)
+    case float64:
+        return uint(val)
+    default:
+        return 0
+    }
+}

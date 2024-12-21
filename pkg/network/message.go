@@ -1,4 +1,3 @@
-// github.com/trigg3rX/go-backend/pkg/network/message.go
 package network
 
 import (

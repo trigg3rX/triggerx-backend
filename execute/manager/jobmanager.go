@@ -1,4 +1,3 @@
-// github.com/trigg3rX/go-backend/execute/manager/jobmanager.go
 package manager
 
 import (
