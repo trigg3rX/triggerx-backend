@@ -453,6 +453,66 @@ func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
 }
 
+func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
+    // Handle CORS preflight
+    if r.Method == http.MethodOptions {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+
+    // Set CORS headers
+    w.Header().Set("Access-Control-Allow-Origin", "*")
+
+    // Extract user address from the URL path
+    vars := mux.Vars(r)
+    userAddress := vars["user_address"]
+
+    log.Printf("Handling GetJobsByUserAddress request for user address: %s", userAddress)
+
+    // Struct to match exactly the fields we want to retrieve
+    type JobSummary struct {
+        JobID    int64 `json:"job_id"`
+        JobType  int   `json:"jobType"`
+        Status   bool  `json:"status"`
+    }
+
+    // Prepare a slice to store jobs for the user
+    var userJobs []JobSummary
+
+    // Query to fetch only job_id, jobType, and status for the specific user address
+    iter := h.db.Session().Query(`
+        SELECT job_id, jobType, status 
+        FROM triggerx.job_data 
+        WHERE user_address = ? ALLOW FILTERING
+    `, userAddress).Iter()
+
+    var job JobSummary
+    for iter.Scan(&job.JobID, &job.JobType, &job.Status) {
+        userJobs = append(userJobs, job)
+    }
+
+    if err := iter.Close(); err != nil {
+        log.Printf("Error retrieving jobs for user address: %v", err)
+        http.Error(w, "Error retrieving jobs: "+err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    log.Printf("Retrieved %d jobs for user address %s", len(userJobs), userAddress)
+
+    // Set response headers
+    w.Header().Set("Content-Type", "application/json")
+
+    // Encode and send the response
+    if err := json.NewEncoder(w).Encode(userJobs); err != nil {
+        log.Printf("Error encoding response: %v", err)
+        http.Error(w, "Error encoding response", http.StatusInternalServerError)
+        return
+    }
+}
+
 // Task Handlers
 func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Handling CreateTaskData request")

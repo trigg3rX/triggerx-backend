@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+
+
+# Change this to your application's metrics endpoint 
+        # !!!!!  THIS IS EXAMPLE CODE    !!!!!
+
+scrape_configs:
+  - job_name: 'mach-operator'
+    scrape_interval: 1m
+    static_configs:
+      - targets: ['localhost:9092']
+
+  - job_name: 'mach-verifier'
+    scrape_interval: 1m
+    static_configs:
+      - targets: ['localhost:9094']
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+
+      

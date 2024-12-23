@@ -1,0 +1,9 @@
+Waiting for ScyllaDB to be ready...
+Initializing database...
+
+Warnings :
+SimpleStrategy replication class is not recommended, but was used for keyspace triggerx. You may suppress this warning by delisting SimpleStrategy from replication_strategy_warn_list configuration option, or make it into an error by listing this replication strategy on replication_strategy_fail_list.
+
+Using Replication Factor replication_factor=1 lower than the minimum_replication_factor_warn_threshold=3 is not recommended.
+
+Database initialization completed!
