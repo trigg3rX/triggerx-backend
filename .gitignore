@@ -5,3 +5,5 @@ go.mod
 
 !pkg/avsinterface/abis/.gitkeep
 pkg/avsinterface/abis/*
+
+config-files/operator.yaml
