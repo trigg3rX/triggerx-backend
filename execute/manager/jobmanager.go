@@ -1,15 +1,14 @@
 package manager
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"context"
+
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -171,19 +170,30 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
 
 // Helper method to load peer information
 func (js *JobScheduler) loadPeerInfo() (map[string]network.PeerInfo, error) {
-	file, err := os.Open(network.PeerInfoFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("unable to open peer info file: %v", err)
-	}
-	defer file.Close()
+	// Use the existing LoadPeerInfo function from network package
+	return network.LoadPeerInfo()
 
-	var peerInfos map[string]network.PeerInfo
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&peerInfos); err != nil {
-		return nil, fmt.Errorf("unable to decode peer info: %v", err)
-	}
+	// Or if you want to keep the implementation here, expand the path first:
+	/*
+		expandedPath, err := network.expandHomePath(network.PeerInfoFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("unable to expand path: %v", err)
+		}
 
-	return peerInfos, nil
+		file, err := os.Open(expandedPath)
+		if err != nil {
+			return nil, fmt.Errorf("unable to open peer info file: %v", err)
+		}
+		defer file.Close()
+
+		var peerInfos map[string]network.PeerInfo
+		decoder := json.NewDecoder(file)
+		if err := decoder.Decode(&peerInfos); err != nil {
+			return nil, fmt.Errorf("unable to decode peer info: %v", err)
+		}
+
+		return peerInfos, nil
+	*/
 }
 
 // monitorResources continuously monitors system resources

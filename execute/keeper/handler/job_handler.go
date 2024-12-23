@@ -210,13 +210,12 @@ func (h *JobHandler) fetchCheckerTemplateFromIPFS(codeURL string) (string, error
 		return "", fmt.Errorf("failed to fetch file from IPFS: %v\nOutput: %s", err, string(output))
 	}
 
-	// Read and log the fetched code
-	fetchedCode, err := ioutil.ReadFile(checkerPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read fetched code: %v", err)
-	}
-	log.Printf("Fetched Checker Template Code:\n%s", string(fetchedCode))
-
+	// fetchedCode, err := ioutil.ReadFile(checkerPath)
+	// if err != nil {
+	// 	return "", fmt.Errorf("failed to read fetched code: %v", err)
+	// }
+	// log.Printf("Fetched Checker Template Code:\n%s", string(fetchedCode))
+	fmt.Println("Fetched Checker Template Code")
 	return checkerPath, nil
 }
 
@@ -236,7 +235,7 @@ func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
 		compiledPath := checkerPath + ".bin"
 		buildCmd := exec.Command("go", "build", "-o", compiledPath, checkerPath)
 		if output, err := buildCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to compile checker: %v\nOutput: %s", err, string(output))
+			return fmt.Errorf("	: %v\nOutput: %s", err, string(output))
 		}
 		defer os.Remove(compiledPath)
 

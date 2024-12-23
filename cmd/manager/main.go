@@ -69,7 +69,7 @@ func main() {
 			UserID:            "system_test",
 			CreatedAt:         time.Now(),
 			MaxRetries:        jobConfig.maxRetries,
-			CodeURL:           "https://gateway.lighthouse.storage/ipfs/bafkreicw3pf7sqfc2m75xbcr473626ksebhjef4joqhfzidha5z3mmcfri",
+			CodeURL:           "https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a",
 		}
 
 		if err := jobScheduler.AddJob(job); err != nil {
