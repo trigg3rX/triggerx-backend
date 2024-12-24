@@ -1,8 +1,9 @@
 package database
 
 import (
-	"github.com/gocql/gocql"
 	"log"
+
+	"github.com/gocql/gocql"
 )
 
 func InitSchema(session *gocql.Session) error {
@@ -24,7 +25,9 @@ func InitSchema(session *gocql.Session) error {
 			user_id bigint PRIMARY KEY,
 			user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
 			job_ids set<bigint>,
-			stake_amount varint
+			stake_amount varint,
+			created_at timestamp,
+			last_updated_at timestamp
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -39,7 +42,7 @@ func InitSchema(session *gocql.Session) error {
 			chain_id int,
 			time_frame bigint,
 			time_interval int,
-			contract_address text,
+			contract_address text CHECK (contract_address MATCHES '^0x[0-9a-fA-F]{40}$'),
 			target_function text,
 			arg_type int,
 			arguments list<text>,
@@ -47,7 +50,9 @@ func InitSchema(session *gocql.Session) error {
 			job_cost_prediction int,
 			script_function text,
 			script_ipfs_url text,
-			time_check timestamp
+			time_check timestamp,
+			created_at timestamp,
+			last_executed_at timestamp
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -121,4 +126,4 @@ func InitSchema(session *gocql.Session) error {
 
 	log.Println("Database schema initialized successfully")
 	return nil
-} 
+}

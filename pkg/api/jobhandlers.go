@@ -12,7 +12,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
-	"github.com/trigg3rX/triggerx-backend/pkg/models"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +67,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create the actual JobData struct
-	jobData := models.JobData{
+	jobData := types.JobData{
 		JobID:             tempJob.JobID,
 		JobType:           int(tempJob.JobType),
 		UserAddress:       tempJob.UserAddress,
@@ -123,9 +123,10 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.db.Session().Query(`
             INSERT INTO triggerx.user_data (
-                user_id, user_address, job_ids, stake_amount
-            ) VALUES (?, ?, ?, ?)`,
-			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt).Exec(); err != nil {
+                user_id, user_address, job_ids, stake_amount, created_at, last_updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)`,
+			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt,
+			time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
 			log.Printf("[CreateJobData] Error creating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -158,13 +159,15 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             job_id, jobType, user_id, chain_id, 
             time_frame, time_interval, contract_address, target_function, 
             arg_type, arguments, status, job_cost_prediction,
-            script_function, script_ipfs_url, time_check, user_address
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            script_function, script_ipfs_url, time_check, user_address,
+            created_at, last_executed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
 		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
 		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
 		jobData.Status, jobData.JobCostPrediction,
-		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.TimeCheck, jobData.UserAddress).Exec(); err != nil {
+		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.TimeCheck, jobData.UserAddress,
+		time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
 		log.Printf("[CreateJobData] Error inserting job data for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -212,7 +215,7 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 	jobID := vars["id"]
 	log.Printf("[GetJobData] Fetching data for job_id %s", jobID)
 
-	var jobData models.JobData
+	var jobData types.JobData
 	if err := h.db.Session().Query(`
         SELECT job_id, jobType, user_id, chain_id, time_frame, 
                time_interval, contract_address, target_function, 
@@ -234,10 +237,10 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetAllJobs(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[GetAllJobs] Fetching all jobs")
-	var jobs []models.JobData
+	var jobs []types.JobData
 	iter := h.db.Session().Query(`SELECT * FROM triggerx.job_data`).Iter()
 
-	var job models.JobData
+	var job types.JobData
 	for iter.Scan(
 		&job.JobID, &job.JobType, &job.UserID, &job.ChainID,
 		&job.TimeFrame, &job.TimeInterval, &job.ContractAddress,
@@ -261,7 +264,7 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 	jobID := vars["id"]
 	log.Printf("[UpdateJobData] Updating job_id %s", jobID)
 
-	var jobData models.JobData
+	var jobData types.JobData
 	if err := json.NewDecoder(r.Body).Decode(&jobData); err != nil {
 		log.Printf("[UpdateJobData] Error decoding request for job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -284,26 +287,24 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[UpdateJobData] Successfully updated job_id %s", jobID)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(jobData)
-}
-
-func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	jobID := vars["id"]
-	log.Printf("[DeleteJobData] Deleting job_id %s", jobID)
-
-	if err := h.db.Session().Query(`
-        DELETE FROM triggerx.job_data 
-        WHERE job_id = ?`, jobID).Exec(); err != nil {
-		log.Printf("[DeleteJobData] Error deleting job_id %s: %v", jobID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// Create and publish job updated event
+	jobUpdatedEvent := events.JobUpdatedEvent{
+		JobID:       jobData.JobID,
+		JobType:     jobData.JobType,
+		UserAddress: jobData.UserAddress,
+		ChainID:     jobData.ChainID,
+		Status:      jobData.Status,
+		TimeCheck:   time.Now().UTC(),
 	}
 
-	log.Printf("[DeleteJobData] Successfully deleted job_id %s", jobID)
-	w.WriteHeader(http.StatusNoContent)
+	h.eventBus.Publish(events.Event{
+		Type:    events.JobUpdated,
+		Payload: jobUpdatedEvent,
+	})
+
+	log.Printf("[UpdateJobData] Successfully updated and published event for job_id %s", jobID)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(jobData)
 }
 
 func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
@@ -330,19 +331,8 @@ func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
 	vars := mux.Vars(r)
 	userAddress := vars["user_address"]
-
 	log.Printf("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
@@ -380,3 +370,20 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	jobID := vars["id"]
+// 	log.Printf("[DeleteJobData] Deleting job_id %s", jobID)
+
+// 	if err := h.db.Session().Query(`
+//         DELETE FROM triggerx.job_data
+//         WHERE job_id = ?`, jobID).Exec(); err != nil {
+// 		log.Printf("[DeleteJobData] Error deleting job_id %s: %v", jobID, err)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	log.Printf("[DeleteJobData] Successfully deleted job_id %s", jobID)
+// 	w.WriteHeader(http.StatusNoContent)
+// }

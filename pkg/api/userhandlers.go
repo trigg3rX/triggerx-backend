@@ -5,13 +5,14 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/trigg3rX/triggerx-backend/pkg/models"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
-	var userData models.UserData
+	var userData types.UserData
 	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
 		log.Printf("[CreateUserData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -25,9 +26,11 @@ func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
 	stakeAmountGwei = userData.StakeAmount
 
 	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.user_data (user_id, user_address, job_ids, stake_amount)
-        VALUES (?, ?, ?, ?)`,
-		userData.UserID, userData.UserAddress, userData.JobIDs, stakeAmountGwei).Exec(); err != nil {
+        INSERT INTO triggerx.user_data (
+            user_id, user_address, job_ids, stake_amount, created_at, last_updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+		userData.UserID, userData.UserAddress, userData.JobIDs, stakeAmountGwei,
+		time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
 		log.Printf("[CreateUserData] Error creating user with ID %d: %v", userData.UserID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -45,18 +48,21 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		userData struct {
-			UserID      int64    `json:"user_id"`
-			UserAddress string   `json:"user_address"`
-			JobIDs      []int64  `json:"job_ids"`
-			StakeAmount *big.Int `json:"-"` // Use big.Int for database interaction
+			UserID        int64     `json:"user_id"`
+			UserAddress   string    `json:"user_address"`
+			JobIDs        []int64   `json:"job_ids"`
+			StakeAmount   *big.Int  `json:"stake_amount"`
+			CreatedAt     time.Time `json:"created_at"`
+			LastUpdatedAt time.Time `json:"last_updated_at"`
 		}
 	)
 
 	if err := h.db.Session().Query(`
-        SELECT user_id, user_address, job_ids, stake_amount 
+        SELECT user_id, user_address, job_ids, stake_amount, created_at, last_updated_at 
         FROM triggerx.user_data 
         WHERE user_id = ?`, userID).Scan(
-		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.StakeAmount); err != nil {
+		&userData.UserID, &userData.UserAddress, &userData.JobIDs,
+		&userData.StakeAmount, &userData.CreatedAt, &userData.LastUpdatedAt); err != nil {
 		log.Printf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -89,7 +95,7 @@ func (h *Handler) UpdateUserData(w http.ResponseWriter, r *http.Request) {
 	userID := vars["id"]
 	log.Printf("[UpdateUserData] Updating user with ID: %s", userID)
 
-	var userData models.UserData
+	var userData types.UserData
 	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
 		log.Printf("[UpdateUserData] Error decoding request body for user ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -98,9 +104,10 @@ func (h *Handler) UpdateUserData(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.db.Session().Query(`
         UPDATE triggerx.user_data 
-        SET user_address = ?, job_ids = ?, stake_amount = ?
+        SET user_address = ?, job_ids = ?, stake_amount = ?, last_updated_at = ?
         WHERE user_id = ?`,
-		userData.UserAddress, userData.JobIDs, userData.StakeAmount, userID).Exec(); err != nil {
+		userData.UserAddress, userData.JobIDs, userData.StakeAmount,
+		time.Now().UTC(), userID).Exec(); err != nil {
 		log.Printf("[UpdateUserData] Error updating user with ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -111,19 +118,19 @@ func (h *Handler) UpdateUserData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(userData)
 }
 
-func (h *Handler) DeleteUserData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID := vars["id"]
-	log.Printf("[DeleteUserData] Deleting user with ID: %s", userID)
+// func (h *Handler) DeleteUserData(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	userID := vars["id"]
+// 	log.Printf("[DeleteUserData] Deleting user with ID: %s", userID)
 
-	if err := h.db.Session().Query(`
-        DELETE FROM triggerx.user_data 
-        WHERE user_id = ?`, userID).Exec(); err != nil {
-		log.Printf("[DeleteUserData] Error deleting user with ID %s: %v", userID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+// 	if err := h.db.Session().Query(`
+//         DELETE FROM triggerx.user_data
+//         WHERE user_id = ?`, userID).Exec(); err != nil {
+// 		log.Printf("[DeleteUserData] Error deleting user with ID %s: %v", userID, err)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	log.Printf("[DeleteUserData] Successfully deleted user with ID: %s", userID)
-	w.WriteHeader(http.StatusNoContent)
-}
+// 	log.Printf("[DeleteUserData] Successfully deleted user with ID: %s", userID)
+// 	w.WriteHeader(http.StatusNoContent)
+// }

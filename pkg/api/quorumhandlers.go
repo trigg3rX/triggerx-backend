@@ -6,11 +6,11 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/trigg3rX/triggerx-backend/pkg/models"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateQuorumData(w http.ResponseWriter, r *http.Request) {
-	var quorumData models.QuorumData
+	var quorumData types.QuorumData
 	if err := json.NewDecoder(r.Body).Decode(&quorumData); err != nil {
 		log.Printf("[CreateQuorumData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -39,7 +39,7 @@ func (h *Handler) GetQuorumData(w http.ResponseWriter, r *http.Request) {
 	quorumID := vars["id"]
 	log.Printf("[GetQuorumData] Retrieving quorum with ID: %s", quorumID)
 
-	var quorumData models.QuorumData
+	var quorumData types.QuorumData
 	if err := h.db.Session().Query(`
         SELECT quorum_id, quorum_no, quorum_creation_block, quorum_tx_hash, keepers, quorum_stake_total, quorum_threshold, task_ids 
         FROM triggerx.quorum_data 
@@ -59,7 +59,7 @@ func (h *Handler) UpdateQuorumData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	quorumID := vars["id"]
 
-	var quorumData models.QuorumData
+	var quorumData types.QuorumData
 	if err := json.NewDecoder(r.Body).Decode(&quorumData); err != nil {
 		log.Printf("[UpdateQuorumData] Error decoding request body for quorum ID %s: %v", quorumID, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -84,19 +84,19 @@ func (h *Handler) UpdateQuorumData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(quorumData)
 }
 
-func (h *Handler) DeleteQuorumData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	quorumID := vars["id"]
-	log.Printf("[DeleteQuorumData] Deleting quorum with ID: %s", quorumID)
+// func (h *Handler) DeleteQuorumData(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	quorumID := vars["id"]
+// 	log.Printf("[DeleteQuorumData] Deleting quorum with ID: %s", quorumID)
 
-	if err := h.db.Session().Query(`
-        DELETE FROM triggerx.quorum_data 
-        WHERE quorum_id = ?`, quorumID).Exec(); err != nil {
-		log.Printf("[DeleteQuorumData] Error deleting quorum with ID %s: %v", quorumID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+// 	if err := h.db.Session().Query(`
+//         DELETE FROM triggerx.quorum_data
+//         WHERE quorum_id = ?`, quorumID).Exec(); err != nil {
+// 		log.Printf("[DeleteQuorumData] Error deleting quorum with ID %s: %v", quorumID, err)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	log.Printf("[DeleteQuorumData] Successfully deleted quorum with ID: %s", quorumID)
-	w.WriteHeader(http.StatusNoContent)
-}
+// 	log.Printf("[DeleteQuorumData] Successfully deleted quorum with ID: %s", quorumID)
+// 	w.WriteHeader(http.StatusNoContent)
+// }
