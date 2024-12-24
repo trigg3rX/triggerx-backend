@@ -53,7 +53,7 @@ func Create() error {
 
 	// Define minimum stake (example: 32 ETH in wei)
 	minimumStake := big.NewInt(0)
-	minimumStake.SetString("32000000000000000000", 10) // 32 ETH in wei
+	minimumStake.SetString("1000000000", 10) // 1 giga wei
 
 	// Define strategy parameters
 	// This is an example - adjust according to your needs

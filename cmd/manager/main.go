@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/pkg/api"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/events"
 )
 
 // toUint converts various types to uint
@@ -33,60 +36,64 @@ func toUint(v interface{}) uint {
 }
 
 func main() {
-	// Configure logging to show more details
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
+	// Initialize database connection
+	dbConfig := &database.Config{
+		Hosts:       []string{"localhost"}, // or your Cassandra host
+		Timeout:     time.Second * 30,
+		Retries:     3,
+		ConnectWait: time.Second * 20,
+	}
+
+	db, err := database.NewConnection(dbConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Initialize the API server
+	server := api.NewServer(db)
+
 	// Initialize the job scheduler with 5 workers
-	jobScheduler := manager.NewJobScheduler(5)
+	jobScheduler := manager.NewJobScheduler(5, db)
 	jobScheduler.Cron.Start()
 	defer jobScheduler.Stop()
 
-	// Create multiple test jobs with varied properties
-	jobs := []struct {
-		jobID        string
-		timeFrame    int64
-		timeInterval int64
-		maxRetries   int
-	}{
-		{"job_1", 120, 15, 2},
-	}
-
-	// Add jobs to the scheduler
-	for _, jobConfig := range jobs {
-		job := &manager.Job{
-			JobID:             jobConfig.jobID,
-			ArgType:           "Static",
-			Arguments:         map[string]interface{}{"num": 20},
-			ChainID:           "chain_1",
-			ContractAddress:   "0xf24fa68262887236279FBA020b0A2D21A10534aC",
-			JobCostPrediction: 0.5,
-			Stake:             1.0,
-			Status:            "pending",
-			TargetFunction:    "increment",
-			TimeFrame:         jobConfig.timeFrame,
-			TimeInterval:      jobConfig.timeInterval,
-			UserID:            "system_test",
-			CreatedAt:         time.Now(),
-			MaxRetries:        jobConfig.maxRetries,
-			CodeURL:           "https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a",
+	// Subscribe to job creation events
+	server.GetEventBus().Subscribe(events.JobCreated, func(event events.Event) {
+		jobEvent, ok := event.Payload.(events.JobCreatedEvent)
+		if !ok {
+			log.Printf("Error: Invalid event payload type")
+			return
 		}
 
-		if err := jobScheduler.AddJob(job); err != nil {
-			log.Printf("Failed to add job %s: %v", job.JobID, err)
-		} else {
-			log.Printf("Added job %s to scheduler with TimeFrame: %ds, Interval: %ds, MaxRetries: %d",
-				job.JobID, job.TimeFrame, job.TimeInterval, job.MaxRetries)
+		// Convert job ID to string and add to scheduler
+		jobID := strconv.FormatInt(jobEvent.JobID, 10)
+		if err := jobScheduler.AddJob(jobID); err != nil {
+			log.Printf("Failed to add job %s: %v", jobID, err)
+			return
 		}
 
-		// Smaller delay to spread out job starts
-		time.Sleep(1 * time.Second)
-	}
+		log.Printf("Added new job %s to scheduler from event", jobID)
+	})
 
-	// Wait to allow jobs to process
-	time.Sleep(60 * time.Second)
+	// Subscribe to job updated events and update the job in the scheduler
+	server.GetEventBus().Subscribe(events.JobUpdated, func(event events.Event) {
+		jobEvent, ok := event.Payload.(events.JobUpdatedEvent)
+		if !ok {
+			log.Printf("Error: Invalid event payload type")
+			return
+		}
+		status := "inactive"
+		if jobEvent.Status {
+			status = "active"
+		}
+		jobScheduler.UpdateJob(jobEvent.JobID, status)
+	})
 
-	// Keep the main goroutine alive and log system status periodically
+	// Start the status monitoring goroutine
 	statusTicker := time.NewTicker(10 * time.Second)
 	defer statusTicker.Stop()
 
@@ -130,8 +137,15 @@ func main() {
 		json.NewEncoder(w).Encode(details)
 	})
 
-	// Start HTTP server
-	serverAddr := ":8080"
-	fmt.Printf("Server starting on %s\n", serverAddr)
-	log.Fatal(http.ListenAndServe(serverAddr, nil))
+	// Start the API server
+	go func() {
+		if err := server.Start("8082"); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Start HTTP server for manager endpoints
+	managerAddr := ":8081"
+	fmt.Printf("Manager server starting on %s\n", managerAddr)
+	log.Fatal(http.ListenAndServe(managerAddr, nil))
 }

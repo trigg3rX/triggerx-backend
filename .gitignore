@@ -7,3 +7,5 @@ go.mod
 pkg/avsinterface/abis/*
 
 config-files/operator.yaml
+
+references/*
