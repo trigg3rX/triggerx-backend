@@ -1,3 +1,3 @@
 #! /bin/bash
 
-go run ./cmd/taskmanager/main.go
+go run ./cmd/manager/main.go

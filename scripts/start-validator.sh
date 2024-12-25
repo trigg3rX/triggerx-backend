@@ -1,3 +1,3 @@
 #! /bin/bash
 
-go run ./cmd/taskvalidator/main.go
+go run ./cmd/validator/main.go

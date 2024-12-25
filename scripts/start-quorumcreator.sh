@@ -1,3 +1,3 @@
 #! /bin/bash
 
-go run ./cmd/quorumcreator/main.go
+go run ./cmd/quorum/main.go
