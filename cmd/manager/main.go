@@ -76,7 +76,15 @@ func main() {
 			return
 		}
 
-		log.Printf("Added new job %s to scheduler from event", jobID)
+		// Print metrics when new job is added
+		queueStatus := jobScheduler.GetQueueStatus()
+		systemMetrics := jobScheduler.GetSystemMetrics()
+
+		log.Printf("New job %s added. Current System Status:", jobID)
+		log.Printf("  Active Jobs: %d", queueStatus["active_jobs"])
+		log.Printf("  Waiting Jobs: %d", queueStatus["waiting_jobs"])
+		log.Printf("  CPU Usage: %.2f%%", systemMetrics.CPUUsage)
+		log.Printf("  Memory Usage: %.2f%%", systemMetrics.MemoryUsage)
 	})
 
 	// Subscribe to job updated events and update the job in the scheduler
@@ -92,23 +100,6 @@ func main() {
 		}
 		jobScheduler.UpdateJob(jobEvent.JobID, status)
 	})
-
-	// Start the status monitoring goroutine
-	statusTicker := time.NewTicker(10 * time.Second)
-	defer statusTicker.Stop()
-
-	go func() {
-		for range statusTicker.C {
-			queueStatus := jobScheduler.GetQueueStatus()
-			systemMetrics := jobScheduler.GetSystemMetrics()
-
-			log.Printf("System Status:")
-			log.Printf("  Active Jobs: %d", queueStatus["active_jobs"])
-			log.Printf("  Waiting Jobs: %d", queueStatus["waiting_jobs"])
-			log.Printf("  CPU Usage: %.2f%%", systemMetrics.CPUUsage)
-			log.Printf("  Memory Usage: %.2f%%", systemMetrics.MemoryUsage)
-		}
-	}()
 
 	// API endpoints
 	http.HandleFunc("/system/metrics", func(w http.ResponseWriter, r *http.Request) {

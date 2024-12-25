@@ -61,9 +61,6 @@ func (lb *LoadBalancer) MonitorResources() {
 			if err == nil {
 				lb.resources.MemoryUsage = memInfo.UsedPercent
 			}
-
-			log.Printf("System Resources - CPU: %.2f%%, Memory: %.2f%%",
-				lb.resources.CPUUsage, lb.resources.MemoryUsage)
 		}
 	}
 }
