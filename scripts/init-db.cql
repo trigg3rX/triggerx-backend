@@ -1,4 +1,3 @@
-
 -- Create keyspace
 CREATE KEYSPACE IF NOT EXISTS triggerx
 WITH replication = {
@@ -11,12 +10,14 @@ USE triggerx;
 
 -- Drop existing tables
 
--- Create User_data table with new stake_amount field
+-- Create User_data table
 CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint PRIMARY KEY,
-    user_address text,
+    user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
     job_ids set<bigint>,
-    stake_amount varint
+    stake_amount varint,
+    created_at timestamp,
+    last_updated_at timestamp
 );
 
 -- Create Job_data table
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     chain_id int,
     time_frame bigint,
     time_interval int,
-    contract_address text,
+    contract_address text CHECK (contract_address MATCHES '^0x[0-9a-fA-F]{40}$'),
     target_function text,
     arg_type int,
     arguments list<text>,
@@ -36,7 +37,9 @@ CREATE TABLE IF NOT EXISTS job_data (
     job_cost_prediction int,
     script_function text,
     script_ipfs_url text,
-    time_check timestamp
+    time_check timestamp,
+    created_at timestamp,
+    last_executed_at timestamp
 );
 
 -- Create Task_data table
@@ -72,7 +75,7 @@ CREATE TABLE IF NOT EXISTS quorum_data (
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint PRIMARY KEY,
-    withdrawal_address text ,
+    withdrawal_address text CHECK (withdrawal_address MATCHES '^0x[0-9a-fA-F]{40}$'),
     stakes list<decimal>,
     strategies list<text>,
     verified boolean,
