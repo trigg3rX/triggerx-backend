@@ -19,9 +19,13 @@ start-quorumcreator: ## Start the quorum creator
 
 db-start: ## Start ScyllaDB container
 	docker-compose up -d
+	sleep 10
 
 db-init: ## Initialize database schema
-	nohup ./scripts/init-db.sh > api.log 2>&1 &
+	./scripts/init-db.sh
+
+db-seed: ## Seed database with initial data
+	./scripts/seed-db.sh
 
 db-shell: ## Open CQL shell
 	docker exec -it triggerx-scylla cqlsh
