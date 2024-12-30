@@ -6,7 +6,6 @@ import (
 	"log"
 	"math/big"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -32,12 +31,15 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	created_at := time.Now().UTC()
+	last_updated_at := time.Now().UTC()
+
 	// Create a temporary struct to handle string chain_id
 	type tempJobData struct {
 		JobID             int64    `json:"job_id"`
 		JobType           int64    `json:"jobType"`
 		UserAddress       string   `json:"user_address"`
-		ChainID           string   `json:"chain_id"` // Changed to string
+		ChainID           int64    `json:"chain_id"`
 		TimeFrame         int64    `json:"time_frame"`
 		TimeInterval      int64    `json:"time_interval"`
 		ContractAddress   string   `json:"contract_address"`
@@ -58,20 +60,12 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert hex string to int64
-	chainID, err := strconv.ParseInt(tempJob.ChainID[2:], 16, 64) // Remove "0x" prefix and parse as hex
-	if err != nil {
-		log.Printf("[CreateJobData] Error parsing chain_id for job_id %d: %v", tempJob.JobID, err)
-		http.Error(w, "Invalid chain_id format", http.StatusBadRequest)
-		return
-	}
-
 	// Create the actual JobData struct
 	jobData := types.JobData{
 		JobID:             tempJob.JobID,
 		JobType:           int(tempJob.JobType),
 		UserAddress:       tempJob.UserAddress,
-		ChainID:           int(chainID),
+		ChainID:           int(tempJob.ChainID),
 		TimeFrame:         tempJob.TimeFrame,
 		TimeInterval:      int(tempJob.TimeInterval),
 		ContractAddress:   tempJob.ContractAddress,
@@ -82,7 +76,6 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		JobCostPrediction: int(tempJob.JobCostPrediction),
 		ScriptFunction:    tempJob.ScriptFunction,
 		ScriptIpfsUrl:     tempJob.ScriptIpfsUrl,
-		TimeCheck:         time.Now().UTC(),
 	}
 
 	log.Printf("[CreateJobData] Processing job creation for job_id %d", jobData.JobID)
@@ -126,7 +119,8 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
                 user_id, user_address, job_ids, stake_amount, created_at, last_updated_at
             ) VALUES (?, ?, ?, ?, ?, ?)`,
 			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt,
-			time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
+			created_at, last_updated_at).Exec(); 
+			err != nil {
 			log.Printf("[CreateJobData] Error creating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -159,15 +153,14 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             job_id, jobType, user_id, chain_id, 
             time_frame, time_interval, contract_address, target_function, 
             arg_type, arguments, status, job_cost_prediction,
-            script_function, script_ipfs_url, time_check, user_address,
+            script_function, script_ipfs_url, user_address,
             created_at, last_executed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
-		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
-		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
-		jobData.Status, jobData.JobCostPrediction,
-		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.TimeCheck, jobData.UserAddress,
-		time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
+		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress, jobData.TargetFunction,
+		jobData.ArgType, jobData.Arguments, jobData.Status, jobData.JobCostPrediction,
+		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.UserAddress,
+		created_at, last_updated_at).Exec(); err != nil {
 		log.Printf("[CreateJobData] Error inserting job data for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -177,12 +170,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	// After successful job creation in database, create and publish event
 	jobCreatedEvent := events.JobCreatedEvent{
-		JobID:       jobData.JobID,
-		JobType:     jobData.JobType,
-		UserAddress: jobData.UserAddress,
-		ChainID:     jobData.ChainID,
-		Status:      jobData.Status,
-		TimeCheck:   jobData.TimeCheck,
+		JobID:        jobData.JobID,
+		JobType:      jobData.JobType,
+		ChainID:      jobData.ChainID,
 	}
 
 	// Publish the event
@@ -208,6 +198,51 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	jobID := vars["id"]
+	log.Printf("[UpdateJobData] Updating job_id %s", jobID)
+
+	var jobData types.JobData
+	if err := json.NewDecoder(r.Body).Decode(&jobData); err != nil {
+		log.Printf("[UpdateJobData] Error decoding request for job_id %s: %v", jobID, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.Session().Query(`
+        UPDATE triggerx.job_data 
+        SET jobType = ?, user_id = ?, chain_id = ?, 
+            time_frame = ?, time_interval = ?, contract_address = ?,
+            target_function = ?, arg_type = ?, arguments = ?,
+            status = ?, job_cost_prediction = ?, last_executed_at = ?
+        WHERE job_id = ?`,
+		jobData.JobType, jobData.UserID, jobData.ChainID,
+		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
+		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
+		jobData.Status, jobData.JobCostPrediction, jobData.LastExecutedAt, jobID).Exec(); err != nil {
+		log.Printf("[UpdateJobData] Error updating job_id %s: %v", jobID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Create and publish job updated event
+	jobUpdatedEvent := events.JobUpdatedEvent{
+		JobID:        jobData.JobID,
+		JobType:      jobData.JobType,
+		ChainID:      jobData.ChainID,
+	}
+
+	h.eventBus.Publish(events.Event{
+		Type:    events.JobUpdated,
+		Payload: jobUpdatedEvent,
+	})
+
+	log.Printf("[UpdateJobData] Successfully updated and published event for job_id %s", jobID)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(jobData)
 }
 
 func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
@@ -257,54 +292,6 @@ func (h *Handler) GetAllJobs(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[GetAllJobs] Successfully retrieved %d jobs", len(jobs))
 	json.NewEncoder(w).Encode(jobs)
-}
-
-func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	jobID := vars["id"]
-	log.Printf("[UpdateJobData] Updating job_id %s", jobID)
-
-	var jobData types.JobData
-	if err := json.NewDecoder(r.Body).Decode(&jobData); err != nil {
-		log.Printf("[UpdateJobData] Error decoding request for job_id %s: %v", jobID, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.db.Session().Query(`
-        UPDATE triggerx.job_data 
-        SET jobType = ?, user_id = ?, chain_id = ?, 
-            time_frame = ?, time_interval = ?, contract_address = ?,
-            target_function = ?, arg_type = ?, arguments = ?,
-            status = ?, job_cost_prediction = ?
-        WHERE job_id = ?`,
-		jobData.JobType, jobData.UserID, jobData.ChainID,
-		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
-		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
-		jobData.Status, jobData.JobCostPrediction, jobID).Exec(); err != nil {
-		log.Printf("[UpdateJobData] Error updating job_id %s: %v", jobID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Create and publish job updated event
-	jobUpdatedEvent := events.JobUpdatedEvent{
-		JobID:       jobData.JobID,
-		JobType:     jobData.JobType,
-		UserAddress: jobData.UserAddress,
-		ChainID:     jobData.ChainID,
-		Status:      jobData.Status,
-		TimeCheck:   time.Now().UTC(),
-	}
-
-	h.eventBus.Publish(events.Event{
-		Type:    events.JobUpdated,
-		Payload: jobUpdatedEvent,
-	})
-
-	log.Printf("[UpdateJobData] Successfully updated and published event for job_id %s", jobID)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(jobData)
 }
 
 func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {

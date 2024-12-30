@@ -9,11 +9,17 @@ WITH replication = {
 USE triggerx;
 
 -- Drop existing tables
+DROP TABLE IF EXISTS user_data;
+DROP TABLE IF EXISTS job_data;
+DROP TABLE IF EXISTS task_data;
+DROP TABLE IF EXISTS quorum_data;
+DROP TABLE IF EXISTS keeper_data;
+DROP TABLE IF EXISTS task_history;
 
 -- Create User_data table
 CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint PRIMARY KEY,
-    user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
+    user_address text,
     job_ids set<bigint>,
     stake_amount varint,
     created_at timestamp,
@@ -29,7 +35,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     chain_id int,
     time_frame bigint,
     time_interval int,
-    contract_address text CHECK (contract_address MATCHES '^0x[0-9a-fA-F]{40}$'),
+    contract_address text,
     target_function text,
     arg_type int,
     arguments list<text>,
@@ -37,14 +43,13 @@ CREATE TABLE IF NOT EXISTS job_data (
     job_cost_prediction int,
     script_function text,
     script_ipfs_url text,
-    time_check timestamp,
     created_at timestamp,
     last_executed_at timestamp
 );
 
 -- Create Task_data table
 CREATE TABLE IF NOT EXISTS task_data (
-    task_id bigint,
+    task_id bigint PRIMARY KEY,
     job_id bigint,
     task_no int,
     quorum_id bigint,
@@ -56,8 +61,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_responded_tx_hash text,
     task_hash text,
     task_response_hash text,
-    quorum_keeper_hash text,
-    PRIMARY KEY (task_id)
+    quorum_keeper_hash text
 );
 
 -- Create Quorum_data table
@@ -65,17 +69,18 @@ CREATE TABLE IF NOT EXISTS quorum_data (
     quorum_id bigint PRIMARY KEY,
     quorum_no int,
     quorum_creation_block bigint,
+    quorum_termination_block bigint,
     quorum_tx_hash text,
     keepers list<text>,
     quorum_stake_total bigint,
-    quorum_threshold decimal,
-    task_ids set<bigint>
+    task_ids set<bigint>,
+    quorum_status boolean
 );
 
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint PRIMARY KEY,
-    withdrawal_address text CHECK (withdrawal_address MATCHES '^0x[0-9a-fA-F]{40}$'),
+    withdrawal_address text,
     stakes list<decimal>,
     strategies list<text>,
     verified boolean,

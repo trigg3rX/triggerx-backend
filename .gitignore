@@ -7,5 +7,6 @@ go.mod
 pkg/avsinterface/abis/*
 
 config-files/operator.yaml
+config-files/triggerx_operator.yaml
 
 references/*

@@ -24,8 +24,8 @@ db-start: ## Start ScyllaDB container
 db-init: ## Initialize database schema
 	./scripts/init-db.sh
 
-db-seed: ## Seed database with initial data
-	./scripts/seed-db.sh
+create-job: ## Create a job
+	./scripts/create-job.sh
 
 db-shell: ## Open CQL shell
 	docker exec -it triggerx-scylla cqlsh
