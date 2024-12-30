@@ -31,7 +31,6 @@ type JobData struct {
 	JobCostPrediction int       `json:"job_cost_prediction"`
 	ScriptFunction    string    `json:"script_function"`
 	ScriptIpfsUrl     string    `json:"script_ipfs_url"`
-	TimeCheck         time.Time `json:"time_check"`
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	UserBalance       float64   `json:"user_balance"`
@@ -55,14 +54,15 @@ type TaskData struct {
 }
 
 type QuorumData struct {
-	QuorumID            int64    `json:"quorum_id"`
-	QuorumNo            int      `json:"quorum_no"`
-	QuorumCreationBlock int64    `json:"quorum_creation_block"`
-	QuorumTxHash        string   `json:"quorum_tx_hash"`
-	Keepers             []string `json:"keepers"`
-	QuorumStakeTotal    int64    `json:"quorum_stake_total"`
-	QuorumThreshold     float64  `json:"quorum_threshold"`
-	TaskIDs             []int64  `json:"task_ids"`
+	QuorumID               int64    `json:"quorum_id"`
+	QuorumNo               int      `json:"quorum_no"`
+	QuorumCreationBlock    int64    `json:"quorum_creation_block"`
+	QuorumTerminationBlock int64    `json:"quorum_termination_block"`
+	QuorumTxHash           string   `json:"quorum_tx_hash"`
+	Keepers                []string `json:"keepers"`
+	QuorumStakeTotal       int64    `json:"quorum_stake_total"`
+	TaskIDs                []int64  `json:"task_ids"`
+	QuorumStatus           bool     `json:"quorum_status"`
 }
 
 type KeeperData struct {

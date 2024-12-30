@@ -43,7 +43,7 @@ func InitSchema(session *gocql.Session) error {
 			chain_id int,
 			time_frame bigint,
 			time_interval int,
-			contract_address text CHECK (contract_address MATCHES '^0x[0-9a-fA-F]{40}$'),
+			contract_address text,
 			target_function text,
 			arg_type int,
 			arguments list<text>,
@@ -51,7 +51,6 @@ func InitSchema(session *gocql.Session) error {
 			job_cost_prediction int,
 			script_function text,
 			script_ipfs_url text,
-			time_check timestamp,
 			created_at timestamp,
 			last_executed_at timestamp
 		)`).Exec(); err != nil {
@@ -61,7 +60,7 @@ func InitSchema(session *gocql.Session) error {
 	// Create Task_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.task_data (
-			task_id bigint,
+			task_id bigint PRIMARY KEY,
 			job_id bigint,
 			task_no int,
 			quorum_id bigint,
@@ -86,11 +85,12 @@ func InitSchema(session *gocql.Session) error {
 			quorum_id bigint PRIMARY KEY,
 			quorum_no int,
 			quorum_creation_block bigint,
+			quorum_termination_block bigint,
 			quorum_tx_hash text,
 			keepers list<text>,
 			quorum_stake_total bigint,
-			quorum_threshold decimal,
-			task_ids set<bigint>
+			task_ids set<bigint>,
+			quorum_status boolean
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func InitSchema(session *gocql.Session) error {
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.keeper_data (
 			keeper_id bigint PRIMARY KEY,
-			withdrawal_address text CHECK (withdrawal_address MATCHES '^0x[0-9a-fA-F]{40}$'),
+			withdrawal_address text,
 			stakes list<decimal>,
 			strategies list<text>,
 			verified boolean,

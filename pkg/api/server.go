@@ -37,6 +37,9 @@ func NewServer(db *database.Connection) *Server {
 	// Create new event bus
 	eb := eventbus.New()
 
+	// Start WebSocket server on port 8081
+	eb.StartWebSocketServer("8081")
+
 	s := &Server{
 		router:   router,
 		db:       db,
@@ -80,6 +83,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/quorums", handler.CreateQuorumData).Methods("POST")
 	api.HandleFunc("/quorums/{id}", handler.GetQuorumData).Methods("GET")
 	api.HandleFunc("/quorums/{id}", handler.UpdateQuorumData).Methods("PUT")
+	api.HandleFunc("/quorums/free", handler.GetFreeQuorum).Methods("GET")
 	// api.HandleFunc("/quorums/{id}", handler.DeleteQuorumData).Methods("DELETE")
 
 	// Keeper routes
