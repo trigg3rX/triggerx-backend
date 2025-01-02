@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -135,38 +136,41 @@ func createDockerContainer(ctx context.Context, cli *client.Client, codePath str
 		return "", fmt.Errorf("failed to write setup script: %v", err)
 	}
 
+	absScriptPath, err := filepath.Abs(scriptPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for setup script: %v", err)
+	}
+
 	// Ensure the script has executable permissions
-	if err := os.Chmod(scriptPath, 0755); err != nil {
+	if err := os.Chmod(absScriptPath, 0755); err != nil {
 		return "", fmt.Errorf("failed to set permissions on setup script: %v", err)
 	}
 
-	// Debugging output to check the script's permissions
-	info, err := os.Stat(scriptPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to stat setup script: %v", err)
-	}
-	fmt.Printf("Setup script permissions: %v\n", info.Mode())
-
 	config := &container.Config{
 		Image:      "golang:latest",
-		Cmd:        []string{"/code/setup.sh"},
+		Cmd:        []string{"./setup.sh"},
 		Tty:        true,
 		WorkingDir: "/code",
 	}
+	fmt.Println("Code: ", absCodePath)
+	fmt.Println("Script: ", absScriptPath)
 
+	// Add HostConfig to mount the code and script into the container
 	hostConfig := &container.HostConfig{
 		Binds: []string{
-			fmt.Sprintf("%s:/code/code.go:ro", absCodePath),
-			fmt.Sprintf("%s:/code/setup.sh:ro", scriptPath),
+			fmt.Sprintf("%s:/code", filepath.Dir(absScriptPath)),
 		},
 	}
 
-	fmt.Printf("Mounting code file: %s\n", absCodePath)
-	fmt.Printf("Mounting setup script: %s\n", scriptPath)
-
+	// Create the container
 	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %v", err)
+	}
+
+	// Start the container
+	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+		return "", fmt.Errorf("failed to start container: %v", err)
 	}
 
 	return resp.ID, nil
