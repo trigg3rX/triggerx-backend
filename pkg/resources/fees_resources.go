@@ -83,6 +83,12 @@ type ResourceStats struct {
 	TxErrors      uint64  `json:"tx_errors"`
 	TxDropped     uint64  `json:"tx_dropped"`
 	BandwidthRate float64 `json:"bandwidth_rate"` // bytes per second
+	// Fee calculation fields
+	TotalFee          float64 `json:"total_fee"`
+	StaticComplexity  float64 `json:"static_complexity"`
+	DynamicComplexity float64 `json:"dynamic_complexity"`
+	ComplexityIndex   float64 `json:"complexity_index"`
+	GasFees           float64 `json:"gas_fees"`
 }
 
 func downloadIPFSFile(ipfsURL string) (string, error) {
@@ -176,11 +182,78 @@ func createDockerContainer(ctx context.Context, cli *client.Client, codePath str
 	return resp.ID, nil
 }
 
+func calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) {
+	// Constants for fee calculation
+	const (
+		Pcomplexity = 0.01 // Dollar value per unit complexity
+		Gbase       = 0.01 // Fixed operational overhead
+		Wstatic     = 0.3  // Weight for static complexity
+		Wdynamic    = 0.7  // Weight for dynamic complexity
+	)
+
+	// Convert content size to MB
+	contentSizeMB := float64(len(content)) / (1024 * 1024)
+
+	// Calculate static complexity based on the code content in MB
+	staticComplexity := contentSizeMB * 0.001 // Simple complexity based on code length in MB
+
+	// Calculate resource metrics
+	execTimeInSeconds := executionTime.Seconds()
+	memoryUsedGB := float64(stats.MemoryUsage) / (1024 * 1024 * 1024)          // Convert to GB
+	bandwidthGB := float64(stats.RxBytes+stats.TxBytes) / (1024 * 1024 * 1024) // Convert to GB
+
+	// Calculate Cdynamic using resource metrics
+	Cdynamic := (execTimeInSeconds * Wdynamic) +
+		(memoryUsedGB * Wdynamic) +
+		(bandwidthGB * Wdynamic)
+
+	// Calculate complexity index
+	Cindex := (Wstatic * staticComplexity) + (Wdynamic * Cdynamic)
+
+	// Calculate gas fees (using CPU percentage as gas units)
+	gasUnits := stats.CPUPercentage
+	Gfees := gasUnits * Pcomplexity
+
+	// Calculate total fee
+	totalFee := (Cindex * Pcomplexity) + Gfees + Gbase
+
+	// Update stats with fee information
+	stats.TotalFee = totalFee
+	stats.StaticComplexity = staticComplexity
+	stats.DynamicComplexity = Cdynamic
+	stats.ComplexityIndex = Cindex
+	stats.GasFees = Gfees
+}
+
 func monitorResources(ctx context.Context, cli *client.Client, containerID string) (*ResourceStats, error) {
 	stats := &ResourceStats{}
 
+	// Get container info to find the mounted directory
+	containerInfo, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container: %v", err)
+	}
+
+	// Find the mounted code file path
+	var codePath string
+	for _, mount := range containerInfo.Mounts {
+		if mount.Destination == "/code" {
+			codePath = filepath.Join(mount.Source, "code.go")
+			break
+		}
+	}
+
+	// Read the code content
+	content, err := os.ReadFile(codePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read code file: %v", err)
+	}
+
 	// Start container
-	err := cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
+	startTime := time.Now()
+
+	// Start container
+	err = cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start container: %v", err)
 	}
@@ -262,6 +335,10 @@ func monitorResources(ctx context.Context, cli *client.Client, containerID strin
 		return nil, fmt.Errorf("operation timed out: %v", ctx.Err())
 	}
 
+	// Calculate execution time
+	executionTime := time.Since(startTime) // Calculate the duration
+	fmt.Printf("Execution Time: %v\n", executionTime)
+
 	// Calculate final statistics
 	if lastStats.CPUStats.SystemUsage != 0 {
 		cpuDelta := float64(lastStats.CPUStats.CPUUsage.TotalUsage)
@@ -294,6 +371,9 @@ func monitorResources(ctx context.Context, cli *client.Client, containerID strin
 			stats.BlockWrite += bioStat.Value
 		}
 	}
+
+	// Calculate fees using the new function
+	calculateFees(content, stats, time.Since(startTime))
 
 	return stats, nil
 }
@@ -363,4 +443,11 @@ func main() {
 	fmt.Printf("Disk I/O:\n")
 	fmt.Printf("  Read: %.2f MB\n", float64(stats.BlockRead)/(1024*1024))
 	fmt.Printf("  Write: %.2f MB\n", float64(stats.BlockWrite)/(1024*1024))
+
+	fmt.Printf("\nFee Calculation:\n")
+	fmt.Printf("Static Complexity: %.6f\n", stats.StaticComplexity)
+	fmt.Printf("Dynamic Complexity: %.6f\n", stats.DynamicComplexity)
+	fmt.Printf("Complexity Index: %.6f\n", stats.ComplexityIndex)
+	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
+	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
 }
