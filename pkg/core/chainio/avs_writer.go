@@ -2,21 +2,19 @@ package chainio
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 	"github.com/Layr-Labs/eigensdk-go/chainio/txmgr"
-	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
 	logging "github.com/Layr-Labs/eigensdk-go/logging"
-	eigenSdkTypes "github.com/Layr-Labs/eigensdk-go/types"
 
+	registrycoordinator "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
+	txservicemanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
 	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
 	"github.com/trigg3rX/triggerx-backend/pkg/core/config"
 )
@@ -28,40 +26,85 @@ type SignatureWithSaltAndExpiry struct {
 }
 
 type AvsWriterer interface {
-	// Task Management
+	// TtiggerXTaskManager Functions
 	CreateNewTask(
 		ctx context.Context,
 		jobId uint32,
 		quorumNumbers []byte,
 		quorumThreshold uint8,
-	) ([8]byte, error)
-
+	) (*types.Transaction, error)
 	RespondToTask(
 		ctx context.Context,
 		task txtaskmanager.ITriggerXTaskManagerTask,
 		taskResponse txtaskmanager.ITriggerXTaskManagerTaskResponse,
 		nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature,
-	) (*types.Receipt, error)
+	) (*types.Transaction, error)
 
-	// Operator Management
-	RegisterOperatorInQuorumWithAVSRegistryCoordinator(
+	// ServiceManager - Keeper Management
+	RegisterKeeperToTriggerX(
 		ctx context.Context,
-		operatorEcdsaKeyPair *ecdsa.PrivateKey,
-		registrationSigSalt [32]byte,
-		registrationSigExpiry *big.Int,
-		blsKeyPair *bls.KeyPair,
-		quorumNumbers eigenSdkTypes.QuorumNums,
+		operator common.Address,
+		operatorSignature txservicemanager.ISignatureUtilsSignatureWithSaltAndExpiry,
+	) (*types.Transaction, error)
+	DeregisterKeeperFromTriggerX(ctx context.Context, operator common.Address) (*types.Transaction, error)
+	BlacklistKeeper(ctx context.Context, operator common.Address) (*types.Transaction, error)
+	UnblacklistKeeper(ctx context.Context, operator common.Address) (*types.Transaction, error)
+	RegisterOperatorToAVS(
+		ctx context.Context,
+		operator common.Address,
+		operatorSignature txservicemanager.ISignatureUtilsSignatureWithSaltAndExpiry,
+	) (*types.Transaction, error)
+	DeregisterOperatorFromAVS(ctx context.Context, operator common.Address) (*types.Transaction, error)
+	CreateAVSRewardsSubmission(
+		ctx context.Context,
+		rewardsSubmissions []txservicemanager.IRewardsCoordinatorRewardsSubmission,
+	) (*types.Transaction, error)
+	CreateOperatorDirectedAVSRewardsSubmission(
+		ctx context.Context,
+		operatorDirectedRewardsSubmissions []txservicemanager.IRewardsCoordinatorOperatorDirectedRewardsSubmission,
+	) (*types.Transaction, error)
+
+	// StakeRegistry Functions
+	Stake(ctx context.Context, amount *big.Int) (*types.Transaction, error)
+	Unstake(ctx context.Context, amount *big.Int) (*types.Transaction, error)
+	RemoveStake(ctx context.Context, user common.Address, amount *big.Int, reason string) (*types.Transaction, error)
+
+	// RegistryCoordinator Functions
+	RegisterOperator(
+		ctx context.Context,
+		quorumNumbers []byte,
 		socket string,
-		shouldWaitForConfirmation bool,
-	) (*types.Receipt, error)
-
-	DeregisterOperatorFromAVS(
+		params registrycoordinator.IBLSApkRegistryPubkeyRegistrationParams,
+		operatorSignature registrycoordinator.ISignatureUtilsSignatureWithSaltAndExpiry,
+	) (*types.Transaction, error)
+	DeregisterOperator(
 		ctx context.Context,
-		operatorAddr common.Address,
-	) (*types.Receipt, error)
-
-	// Utility
-	GetTxMgr() txmgr.TxManager
+		quorumNumbers []byte,
+	) (*types.Transaction, error)
+	RegisterOperatorWithChurn(
+		ctx context.Context,
+		quorumNumbers []byte,
+		socket string,
+		params registrycoordinator.IBLSApkRegistryPubkeyRegistrationParams,
+		operatorKickParams []registrycoordinator.IRegistryCoordinatorOperatorKickParam,
+		churnApproverSignature registrycoordinator.ISignatureUtilsSignatureWithSaltAndExpiry,
+		operatorSignature registrycoordinator.ISignatureUtilsSignatureWithSaltAndExpiry,
+	) (*types.Transaction, error)
+	EjectOperator(
+		ctx context.Context,
+		operator common.Address,
+		quorumNumbers []byte,
+	) (*types.Transaction, error)
+	UpdateOperatorSetParams(
+		ctx context.Context,
+		quorumNumber uint8,
+		operatorSetParams registrycoordinator.IRegistryCoordinatorOperatorSetParam,
+	) (*types.Transaction, error)
+	UpdateQuorumOperatorSetParams(
+		ctx context.Context,
+		quorumNumbers uint8,
+		operatorSetParams registrycoordinator.IRegistryCoordinatorOperatorSetParam,
+	) (*types.Transaction, error)
 }
 
 type AvsWriter struct {
@@ -98,159 +141,358 @@ func NewAvsWriter(avsRegistryWriter avsregistry.ChainWriter, avsServiceBindings 
 	}
 }
 
-func (w *AvsWriter) CreateNewTask(
-	ctx context.Context,
-	jobId uint32,
-	quorumNumbers []byte,
-	quorumThreshold uint8,
-) ([8]byte, error) {
+func (w *AvsWriter) CreateNewTask(ctx context.Context, jobId uint32, quorumNumbers []byte, quorumThreshold uint8) (*types.Transaction, error) {
+	w.logger.Info("Creating new task", "jobId", jobId, "quorumThreshold", quorumThreshold)
+
 	txOpts, err := w.TxMgr.GetNoSendTxOpts()
 	if err != nil {
-		w.logger.Errorf("Error getting tx opts")
-		return [8]byte{}, err
+		return nil, err
 	}
 
 	tx, err := w.AvsContractBindings.TaskManager.CreateNewTask(txOpts, jobId, quorumNumbers, quorumThreshold)
 	if err != nil {
-		w.logger.Errorf("Error assembling CreateNewTask tx")
-		return [8]byte{}, err
+		return nil, fmt.Errorf("failed to create new task: %w", err)
 	}
 
-	receipt, err := w.TxMgr.Send(ctx, tx, true)
-	if err != nil {
-		w.logger.Errorf("Error submitting CreateNewTask tx")
-		return [8]byte{}, err
-	}
-
-	taskCreatedEvent, err := w.AvsContractBindings.TaskManager.ParseTaskCreated(*receipt.Logs[0])
-	if err != nil {
-		w.logger.Error("Failed to parse new task created event", "err", err)
-		return [8]byte{}, err
-	}
-
-	return taskCreatedEvent.TaskId, nil
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
 }
 
-func (w *AvsWriter) RespondToTask(
-	ctx context.Context,
-	task txtaskmanager.ITriggerXTaskManagerTask,
-	taskResponse txtaskmanager.ITriggerXTaskManagerTaskResponse,
-	nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature,
-) (*types.Receipt, error) {
+func (w *AvsWriter) RespondToTask(ctx context.Context, task txtaskmanager.ITriggerXTaskManagerTask, taskResponse txtaskmanager.ITriggerXTaskManagerTaskResponse, nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature) (*types.Transaction, error) {
+	w.logger.Info("Responding to task", "taskId", taskResponse.TaskId)
+
 	txOpts, err := w.TxMgr.GetNoSendTxOpts()
 	if err != nil {
-		w.logger.Errorf("Error getting tx opts")
 		return nil, err
 	}
 
 	tx, err := w.AvsContractBindings.TaskManager.RespondToTask(txOpts, task, taskResponse, nonSignerStakesAndSignature)
 	if err != nil {
-		w.logger.Error("Error assembling RespondToTask tx", "err", err)
+		return nil, fmt.Errorf("failed to respond to task: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) RegisterKeeperToTriggerX(ctx context.Context, operator common.Address, operatorSignature txservicemanager.ISignatureUtilsSignatureWithSaltAndExpiry) (*types.Transaction, error) {
+	w.logger.Info("Registering keeper to TriggerX", "operator", operator.Hex())
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
 		return nil, err
 	}
 
-	receipt, err := w.TxMgr.Send(ctx, tx, true)
+	tx, err := w.AvsContractBindings.ServiceManager.RegisterKeeperToTriggerX(txOpts, operator, operatorSignature)
 	if err != nil {
-		w.logger.Errorf("Error submitting RespondToTask tx")
+		return nil, fmt.Errorf("failed to register keeper: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) DeregisterKeeperFromTriggerX(ctx context.Context, operator common.Address) (*types.Transaction, error) {
+	w.logger.Info("Deregistering keeper from TriggerX", "operator", operator.Hex())
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
 		return nil, err
 	}
 
-	return receipt, nil
+	tx, err := w.AvsContractBindings.ServiceManager.DeregisterKeeperFromTriggerX(txOpts, operator)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deregister keeper: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
 }
 
-func (w *AvsWriter) GetTxMgr() txmgr.TxManager {
-	return w.TxMgr
+func (w *AvsWriter) BlacklistKeeper(ctx context.Context, operator common.Address) (*types.Transaction, error) {
+	w.logger.Info("Blacklisting keeper", "operator", operator.Hex())
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.ServiceManager.BlacklistKeeper(txOpts, operator)
+	if err != nil {
+		return nil, fmt.Errorf("failed to blacklist keeper: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
 }
 
-func (w *AvsWriter) RegisterOperatorInQuorumWithAVSRegistryCoordinator(
-	ctx context.Context,
-	operatorEcdsaKeyPair *ecdsa.PrivateKey,
-	registrationSigSalt [32]byte,
-	registrationSigExpiry *big.Int,
-	blsKeyPair *bls.KeyPair,
-	quorumNumbers eigenSdkTypes.QuorumNums,
-	socket string,
-	shouldWaitForConfirmation bool,
-) (*types.Receipt, error) {
-	operatorAddr := crypto.PubkeyToAddress(operatorEcdsaKeyPair.PublicKey)
+func (w *AvsWriter) UnblacklistKeeper(ctx context.Context, operator common.Address) (*types.Transaction, error) {
+	w.logger.Info("Unblacklisting keeper", "operator", operator.Hex())
 
-	// Create the registration message hash
-	// This should match the contract's signing scheme
-	registrationData := []byte("triggerx-registration")
-	messageHash := crypto.Keccak256(
-		registrationData,
-		operatorAddr.Bytes(),
-		registrationSigSalt[:],
-		common.LeftPadBytes(registrationSigExpiry.Bytes(), 32),
-	)
-
-	// Sign the registration message
-	signature, err := crypto.Sign(messageHash, operatorEcdsaKeyPair)
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign registration message: %w", err)
+		return nil, err
 	}
 
-	// Create the signature struct
-	operatorSignature := SignatureWithSaltAndExpiry{
-		Signature: signature,
-		Salt:      registrationSigSalt,
-		Expiry:    registrationSigExpiry,
-	}
-
-	// Get transaction options
-	txOpts, err := w.GetTxMgr().GetNoSendTxOpts()
+	tx, err := w.AvsContractBindings.ServiceManager.UnblacklistKeeper(txOpts, operator)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get tx opts: %w", err)
+		return nil, fmt.Errorf("failed to unblacklist keeper: %w", err)
 	}
 
-	// Call the contract
-	tx, err := w.AvsContractBindings.ServiceManager.RegisterOperatorToAVS(
-		txOpts,
-		operatorAddr,
-		struct {
-			Signature []byte
-			Salt      [32]byte
-			Expiry    *big.Int
-		}{
-			Signature: operatorSignature.Signature,
-			Salt:      operatorSignature.Salt,
-			Expiry:    operatorSignature.Expiry,
-		},
-	)
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) RegisterOperatorToAVS(ctx context.Context, operator common.Address, operatorSignature txservicemanager.ISignatureUtilsSignatureWithSaltAndExpiry) (*types.Transaction, error) {
+	w.logger.Info("Registering operator to AVS", "operator", operator.Hex())
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.ServiceManager.RegisterOperatorToAVS(txOpts, operator, operatorSignature)
 	if err != nil {
 		return nil, fmt.Errorf("failed to register operator: %w", err)
 	}
 
-	// Send the transaction
-	receipt, err := w.GetTxMgr().Send(ctx, tx, shouldWaitForConfirmation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send registration tx: %w", err)
-	}
-
-	return receipt, nil
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
 }
 
-func (w *AvsWriter) DeregisterOperatorFromAVS(
-	ctx context.Context,
-	operatorAddr common.Address,
-) (*types.Receipt, error) {
+func (w *AvsWriter) DeregisterOperatorFromAVS(ctx context.Context, operator common.Address) (*types.Transaction, error) {
+	w.logger.Info("Deregistering operator from AVS", "operator", operator.Hex())
+
 	txOpts, err := w.TxMgr.GetNoSendTxOpts()
 	if err != nil {
-		w.logger.Error("Error getting tx opts", "err", err)
 		return nil, err
 	}
 
-	tx, err := w.AvsContractBindings.ServiceManager.DeregisterOperatorFromAVS(txOpts, operatorAddr)
+	tx, err := w.AvsContractBindings.ServiceManager.DeregisterOperatorFromAVS(txOpts, operator)
 	if err != nil {
-		w.logger.Error("Error assembling DeregisterOperatorFromAVS tx", "err", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to deregister operator: %w", err)
 	}
 
-	receipt, err := w.TxMgr.Send(ctx, tx, true)
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) CreateAVSRewardsSubmission(ctx context.Context, rewardsSubmissions []txservicemanager.IRewardsCoordinatorRewardsSubmission) (*types.Transaction, error) {
+	w.logger.Info("Creating AVS rewards submission")
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
 	if err != nil {
-		w.logger.Error("Error submitting DeregisterOperatorFromAVS tx", "err", err)
 		return nil, err
 	}
 
-	return receipt, nil
+	tx, err := w.AvsContractBindings.ServiceManager.CreateAVSRewardsSubmission(txOpts, rewardsSubmissions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create rewards submission: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) CreateOperatorDirectedAVSRewardsSubmission(ctx context.Context, operatorDirectedRewardsSubmissions []txservicemanager.IRewardsCoordinatorOperatorDirectedRewardsSubmission) (*types.Transaction, error) {
+	w.logger.Info("Creating operator directed AVS rewards submission")
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.ServiceManager.CreateOperatorDirectedAVSRewardsSubmission(txOpts, operatorDirectedRewardsSubmissions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operator directed rewards submission: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) Stake(ctx context.Context, amount *big.Int) (*types.Transaction, error) {
+	w.logger.Info("Staking tokens", "amount", amount)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.StakeRegistry.Stake(txOpts, amount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stake tokens: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) Unstake(ctx context.Context, amount *big.Int) (*types.Transaction, error) {
+	w.logger.Info("Unstaking tokens", "amount", amount)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.StakeRegistry.Unstake(txOpts, amount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unstake tokens: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) RemoveStake(ctx context.Context, user common.Address, amount *big.Int, reason string) (*types.Transaction, error) {
+	w.logger.Info("Removing stake", "user", user.Hex(), "amount", amount, "reason", reason)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.StakeRegistry.RemoveStake(txOpts, user, amount, reason)
+	if err != nil {
+		return nil, fmt.Errorf("failed to remove stake: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) RegisterOperator(ctx context.Context, quorumNumbers []byte, socket string, params registrycoordinator.IBLSApkRegistryPubkeyRegistrationParams, operatorSignature registrycoordinator.ISignatureUtilsSignatureWithSaltAndExpiry) (*types.Transaction, error) {
+	w.logger.Info("Registering operator", "quorumNumbers", quorumNumbers, "socket", socket)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.RegisterOperator(txOpts, quorumNumbers, socket, params, operatorSignature)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register operator: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) DeregisterOperator(ctx context.Context, quorumNumbers []byte) (*types.Transaction, error) {
+	w.logger.Info("Deregistering operator")
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.DeregisterOperator(txOpts, quorumNumbers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deregister operator: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) UpdateSocket(ctx context.Context, socket string) (*types.Transaction, error) {
+	w.logger.Info("Updating socket", "socket", socket)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.UpdateSocket(txOpts, socket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update socket: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) RegisterOperatorWithChurn(
+	ctx context.Context,
+	quorumNumbers []byte,
+	socket string,
+	params registrycoordinator.IBLSApkRegistryPubkeyRegistrationParams,
+	operatorKickParams []registrycoordinator.IRegistryCoordinatorOperatorKickParam,
+	churnApproverSignature registrycoordinator.ISignatureUtilsSignatureWithSaltAndExpiry,
+	operatorSignature registrycoordinator.ISignatureUtilsSignatureWithSaltAndExpiry,
+) (*types.Transaction, error) {
+	w.logger.Info("Registering operator with churn", "quorumNumbers", quorumNumbers, "socket", socket)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.RegisterOperatorWithChurn(
+		txOpts,
+		quorumNumbers,
+		socket,
+		params,
+		operatorKickParams,
+		churnApproverSignature,
+		operatorSignature,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to register operator with churn: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) EjectOperator(ctx context.Context, operator common.Address, quorumNumbers []byte) (*types.Transaction, error) {
+	w.logger.Info("Ejecting operator", "operator", operator.Hex())
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.EjectOperator(txOpts, operator, quorumNumbers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to eject operator: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) UpdateOperatorSetParams(ctx context.Context, quorumNumber uint8, operatorSetParams registrycoordinator.IRegistryCoordinatorOperatorSetParam) (*types.Transaction, error) {
+	w.logger.Info("Updating operator set params", "quorumNumber", quorumNumber)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.SetOperatorSetParams(txOpts, quorumNumber, operatorSetParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update operator set params: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
+}
+
+func (w *AvsWriter) UpdateQuorumOperatorSetParams(ctx context.Context, quorumNumbers uint8, operatorSetParams registrycoordinator.IRegistryCoordinatorOperatorSetParam) (*types.Transaction, error) {
+	w.logger.Info("Updating quorum operator set params", "quorumNumbers", quorumNumbers)
+
+	txOpts, err := w.TxMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := w.AvsContractBindings.RegistryCoordinator.SetOperatorSetParams(txOpts, quorumNumbers, operatorSetParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update quorum operator set params: %w", err)
+	}
+
+	_, err = w.TxMgr.Send(ctx, tx, true)
+	return tx, err
 }
