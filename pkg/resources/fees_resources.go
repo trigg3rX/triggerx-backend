@@ -189,6 +189,9 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 		Gbase       = 0.01 // Fixed operational overhead
 		Wstatic     = 0.3  // Weight for static complexity
 		Wdynamic    = 0.7  // Weight for dynamic complexity
+		WdynamicTime    = 0.050
+		WdynamicMemory  = 0.028
+		WdynamicBand    = 0.922
 	)
 
 	// Convert content size to MB
@@ -203,9 +206,9 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	bandwidthGB := float64(stats.RxBytes+stats.TxBytes) / (1024 * 1024 * 1024) // Convert to GB
 
 	// Calculate Cdynamic using resource metrics
-	Cdynamic := (execTimeInSeconds * Wdynamic) +
-		(memoryUsedGB * Wdynamic) +
-		(bandwidthGB * Wdynamic)
+	Cdynamic := (execTimeInSeconds * WdynamicTime) +
+		(memoryUsedGB * WdynamicMemory) +
+		(bandwidthGB * WdynamicBand)
 
 	// Calculate complexity index
 	Cindex := (Wstatic * staticComplexity) + (Wdynamic * Cdynamic)
