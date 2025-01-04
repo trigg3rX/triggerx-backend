@@ -186,7 +186,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	// Constants for fee calculation
 	const (
 		Pcomplexity = 0.01 // Dollar value per unit complexity
-		Gbase       = 0.01 // Fixed operational overhead
+		Fbase       = 0.01 // Fixed operational overhead
 		Wstatic     = 0.3  // Weight for static complexity
 		Wdynamic    = 0.7  // Weight for dynamic complexity
 		WdynamicTime    = 0.050
@@ -194,11 +194,11 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 		WdynamicBand    = 0.922
 	)
 
-	// Convert content size to MB
-	contentSizeMB := float64(len(content)) / (1024 * 1024)
+	// Convert content size to GB
+	contentSizeGB := float64(len(content)) / (1024 * 1024 * 1024) 
 
-	// Calculate static complexity based on the code content in MB
-	staticComplexity := contentSizeMB * 0.001 // Simple complexity based on code length in MB
+	// Calculate static complexity based on the code content in GB
+	staticComplexity := contentSizeGB // Simple complexity based on code length in GB
 
 	// Calculate resource metrics
 	execTimeInSeconds := executionTime.Seconds()
@@ -218,7 +218,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	Gfees := gasUnits * Pcomplexity
 
 	// Calculate total fee
-	totalFee := (Cindex * Pcomplexity) + Gfees + Gbase
+	totalFee := (Cindex * Pcomplexity) + Gfees + Fbase
 
 	// Update stats with fee information
 	stats.TotalFee = totalFee
@@ -454,3 +454,4 @@ func main() {
 	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
 	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
 }
+  
