@@ -186,47 +186,30 @@ func createDockerContainer(ctx context.Context, cli *client.Client, codePath str
 func calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) {
 	// Constants for fee calculation
 	const (
-		Pcomplexity = 0.01 // Dollar value per unit complexity
-		Fbase       = 0.01 // Fixed operational overhead
-		Wstatic     = 0.3  // Weight for static complexity
-		Wdynamic    = 0.7  // Weight for dynamic complexity
-		WdynamicTime    = 0.050
-		WdynamicMemory  = 0.028
-		WdynamicBand    = 0.922
+		PriceperTG            = 0.0001 // Price per TG unit
+		Fixedcost             = 1      // Fixed cost in TG
+		TransactionSimulation = 1      // Weight for TransactionSimulation in TG
+
 	)
 
-	// Convert content size to GB
-	contentSizeGB := float64(len(content)) / (1024 * 1024 * 1024) 
+	// Convert content size to KB for static complexity
+	contentSizeKB := float64(len(content)) / (1024)
 
-	// Calculate static complexity based on the code content in GB
-	staticComplexity := contentSizeGB // Simple complexity based on code length in GB
+	// Calculate static complexity based on the code content in KB
+	staticComplexity := contentSizeKB // Simple complexity based on code length
 
 	// Calculate resource metrics
 	execTimeInSeconds := executionTime.Seconds()
-	memoryUsedGB := float64(stats.MemoryUsage) / (1024 * 1024 * 1024)          // Convert to GB
-	bandwidthGB := float64(stats.RxBytes+stats.TxBytes) / (1024 * 1024 * 1024) // Convert to GB
+	memoryUsedMB := float64(stats.MemoryUsage) / (1024 * 1024) // Convert to MB
 
-	// Calculate Cdynamic using resource metrics
-	Cdynamic := (execTimeInSeconds * WdynamicTime) +
-		(memoryUsedGB * WdynamicMemory) +
-		(bandwidthGB * WdynamicBand)
+	// Calculate TotalTG using the new formula
+	TotalTG := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1) + Fixedcost + TransactionSimulation
 
-	// Calculate complexity index
-	Cindex := (Wstatic * staticComplexity) + (Wdynamic * Cdynamic)
-
-	// Calculate gas fees (using CPU percentage as gas units)
-	gasUnits := stats.CPUPercentage
-	Gfees := gasUnits * Pcomplexity
-
-	// Calculate total fee
-	totalFee := (Cindex * Pcomplexity) + Gfees + Fbase
+	// Calculate total fee based on TG units
+	totalFee := TotalTG * PriceperTG
 
 	// Update stats with fee information
 	stats.TotalFee = totalFee
-	stats.StaticComplexity = staticComplexity
-	stats.DynamicComplexity = Cdynamic
-	stats.ComplexityIndex = Cindex
-	stats.GasFees = Gfees
 }
 
 func monitorResources(ctx context.Context, cli *client.Client, containerID string) (*ResourceStats, error) {
@@ -486,4 +469,3 @@ func main() {
 	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
 	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
 }
-  
