@@ -9,4 +9,6 @@ pkg/avsinterface/abis/*
 config-files/operator.yaml
 config-files/triggerx_operator.yaml
 
+data/logs/*/*.log
+data/peer_registry/*.json
 references/*
