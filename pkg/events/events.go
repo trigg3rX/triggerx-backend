@@ -1,84 +1,70 @@
 package events
 
 import (
-	"time"
-)
+	"context"
+	"encoding/json"
+	"fmt"
 
-type EventType string
+	"github.com/redis/go-redis/v9"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+)
 
 const (
-	JobCreated EventType = "JOB_CREATED"
-	JobUpdated EventType = "JOB_UPDATED"
-
-	TaskCreated EventType = "TASK_CREATED"
-
-	UserCreated EventType = "USER_CREATED"
-	UserUpdated EventType = "USER_UPDATED"
-
-	KeeperRegistered EventType = "KEEPER_REGISTERED"
-	KeeperDeregistered EventType = "KEEPER_DEREGISTERED"
-
-	QuorumCreated EventType = "QUORUM_CREATED"
-	QuorumUpdated EventType = "QUORUM_UPDATED"
-
-	TaskHistoryCreated EventType = "TASK_HISTORY_CREATED"
-	// Add other event types as needed
+	JobEventChannel = "job_events"
 )
 
-type JobCreatedEvent struct {
-	JobID       int64     `json:"job_id"`
-	JobType     int       `json:"jobType"`
-	UserAddress string    `json:"user_address"`
-	ChainID     int       `json:"chain_id"`
-	Status      bool      `json:"status"`
-	TimeCheck   time.Time `json:"time_check"`
+type JobEvent struct {
+	Type    string `json:"type"`
+	JobID   int64  `json:"job_id"`
+	JobType int    `json:"job_type"`
+	ChainID int    `json:"chain_id"`
 }
 
-type JobUpdatedEvent struct {
-	JobID       int64     `json:"job_id"`
-	JobType     int       `json:"jobType"`
-	UserAddress string    `json:"user_address"`
-	ChainID     int       `json:"chain_id"`
-	Status      bool      `json:"status"`
-	TimeCheck   time.Time `json:"time_check"`
+type EventBus struct {
+	redis *redis.Client
 }
 
-type TaskCreatedEvent struct {
-	TaskID int64 `json:"task_id"`
+var globalEventBus *EventBus
+
+func InitEventBus(redisAddr string) error {
+	rdb := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+
+	globalEventBus = &EventBus{
+		redis: rdb,
+	}
+	return nil
 }
 
-type UserCreatedEvent struct {
-	UserID int64 `json:"user_id"`
+func GetEventBus() *EventBus {
+	return globalEventBus
 }
 
-type UserUpdatedEvent struct {
-	UserID int64 `json:"user_id"`
+func (eb *EventBus) PublishJobEvent(ctx context.Context, event JobEvent) error {
+	logger := logging.GetLogger()
+
+	// Marshal event to JSON
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	logger.Infof("Publishing event to channel %s: %s", JobEventChannel, string(eventJSON))
+
+	// Publish to Redis
+	result := eb.redis.Publish(ctx, JobEventChannel, eventJSON)
+	if err := result.Err(); err != nil {
+		return fmt.Errorf("failed to publish event: %w", err)
+	}
+
+	// Get number of clients that received the message
+	receivers := result.Val()
+	logger.Infof("Event published to %d subscribers", receivers)
+
+	return nil
 }
 
-type KeeperRegisteredEvent struct {
-	KeeperID int64 `json:"keeper_id"`
-}
-
-type KeeperDeregisteredEvent struct {
-	KeeperID int64 `json:"keeper_id"`
-}
-
-type QuorumCreatedEvent struct {
-	QuorumID     int64 `json:"quorum_id"`
-	QuorumNumber int   `json:"quorum_number"`
-}
-
-type QuorumUpdatedEvent struct {
-	QuorumID     int64 `json:"quorum_id"`
-	QuorumNumber int   `json:"quorum_number"`
-}
-
-type TaskHistoryCreatedEvent struct {
-	TaskID int64 `json:"task_id"`
-}
-
-// Event represents a generic event in the system
-type Event struct {
-	Type    EventType   `json:"type"`
-	Payload interface{} `json:"payload"`
+func (eb *EventBus) Redis() *redis.Client {
+	return eb.redis
 }
