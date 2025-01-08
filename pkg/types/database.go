@@ -84,3 +84,8 @@ type TaskHistory struct {
 	ValidationStatus bool     `json:"validation_status"`
 	TxHash           string   `json:"tx_hash"`
 }
+
+type PeerInfo struct {
+	ID        string `json:"id"`
+	Addresses []string `json:"addresses"`
+}
