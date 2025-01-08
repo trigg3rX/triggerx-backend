@@ -1,7 +1,6 @@
 package chainio
 
 import (
-	"context"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -9,45 +8,47 @@ import (
 
 	sdkavsregistry "github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 	logging "github.com/Layr-Labs/eigensdk-go/logging"
+	"github.com/Layr-Labs/eigensdk-go/types"
 
 	erc20mock "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/ERC20Mock"
 	txregistrycoordinator "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
 	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	opstateretriever "github.com/Layr-Labs/eigensdk-go/contracts/bindings/OperatorStateRetriever"
 	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 	"github.com/trigg3rX/triggerx-backend/pkg/core/config"
 )
 
 type AvsReaderer interface {
 	// TriggerXTaskManager methods
-	GetTaskHash(						// taskHashes, 0x304feba2
-		ctx context.Context,
+	GetTaskHash( // taskHashes, 0x304feba2
+		opts *bind.CallOpts,
 		taskId [8]byte,
 	) ([32]byte, error)
-	GetTaskResponseHash(				// taskResponseHashes, 0xd82c7b5c	
-		ctx context.Context,
+	GetTaskResponseHash( // taskResponseHashes, 0xd82c7b5c
+		opts *bind.CallOpts,
 		taskId [8]byte,
 	) ([32]byte, error)
-	GetJobToTaskCounter(				// jobToTaskCounter, 0x9f2d70df
-		ctx context.Context,
+	GetJobToTaskCounter( // jobToTaskCounter, 0x9f2d70df
+		opts *bind.CallOpts,
 		jobId uint32,
 	) (uint32, error)
-	GetTaskResponseWindowBlock(			// TASK_RESPONSE_WINDOW_BLOCK, 0x1ad43189
-		ctx context.Context,
+	GetTaskResponseWindowBlock( // TASK_RESPONSE_WINDOW_BLOCK, 0x1ad43189
+		opts *bind.CallOpts,
 	) (uint32, error)
-	GenerateTaskId(						// generateTaskId, 0x8e91269d
-		ctx context.Context,
+	GenerateTaskId( // generateTaskId, 0x8e91269d
+		opts *bind.CallOpts,
 		jobId uint32,
 		taskNum uint32,
 	) ([8]byte, error)
-	CheckSignatures(					// checkSignatures, 0x6efb4636
-		ctx context.Context,
+	CheckSignatures( // checkSignatures, 0x6efb4636
+		opts *bind.CallOpts,
 		msgHash [32]byte,
 		quorumNumbers []byte,
 		referenceBlockNumber uint32,
 		nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature,
 	) (txtaskmanager.IBLSSignatureCheckerQuorumStakeTotals, error)
-	TrySignatureAndApkVerification(		// trySignatureAndApkVerification, 0x171f1d5b
-		ctx context.Context,
+	TrySignatureAndApkVerification( // trySignatureAndApkVerification, 0x171f1d5b
+		opts *bind.CallOpts,
 		msgHash [32]byte,
 		apk txtaskmanager.BN254G1Point,
 		apkG2 txtaskmanager.BN254G2Point,
@@ -55,36 +56,36 @@ type AvsReaderer interface {
 	) (bool, bool, error)
 
 	// TriggerXServiceManager methods
-	GetOperatorRestakedStrategies(		// getOperatorRestakedStrategies, 0x33cfb7b7
-		ctx context.Context,
+	GetOperatorRestakedStrategies( // getOperatorRestakedStrategies, 0x33cfb7b7
+		opts *bind.CallOpts,
 		operator common.Address,
 	) ([]common.Address, error)
-	GetRestakeableStrategies(			// getRestakeableStrategies, 0xe481af9d
-		ctx context.Context,
+	GetRestakeableStrategies( // getRestakeableStrategies, 0xe481af9d
+		opts *bind.CallOpts,
 	) ([]common.Address, error)
-	IsBlackListed(						// isBlackListed, 0xe47d6060
-		ctx context.Context,
+	IsBlackListed( // isBlackListed, 0xe47d6060
+		opts *bind.CallOpts,
 		operator common.Address,
 	) (bool, error)
-	GetQuorumManager(					// quorumManager, 0xb5f7eb6b
-		ctx context.Context,
+	GetQuorumManager( // quorumManager, 0xb5f7eb6b
+		opts *bind.CallOpts,
 	) (common.Address, error)
-	GetTaskManager(						// taskManager, 0xa50a640e
-		ctx context.Context,
+	GetTaskManager( // taskManager, 0xa50a640e
+		opts *bind.CallOpts,
 	) (common.Address, error)
-	GetTaskValidator(					// taskValidator, 0xfd38ec8c
-		ctx context.Context,
+	GetTaskValidator( // taskValidator, 0xfd38ec8c
+		opts *bind.CallOpts,
 	) (common.Address, error)
 
 	// Misc
 	GetErc20Mock(
-		ctx context.Context,
+		opts *bind.CallOpts,
 		tokenAddr common.Address,
 	) (*erc20mock.ContractERC20Mock, error)
 
 	// TriggerXStakeRegistry read methods
-	GetStake(							// getStake, 0x7a766460
-		ctx context.Context, 
+	GetStake( // getStake, 0x7a766460
+		opts *bind.CallOpts,
 		user common.Address,
 	) (struct {
 		Amount *big.Int
@@ -92,77 +93,66 @@ type AvsReaderer interface {
 	}, error)
 
 	// RegistryCoordinator read methods
-	GetOperatorChurnApprovalDigestHash(
-		ctx context.Context,
-		registeringOperator common.Address,
-		registeringOperatorId [32]byte,
-		operatorKickParams []txregistrycoordinator.IRegistryCoordinatorOperatorKickParam,
-		salt [32]byte,
-		expiry *big.Int,
-	) ([32]byte, error)
-	GetCurrentQuorumBitmap(
-		ctx context.Context,
-		operatorId [32]byte,
-	) (*big.Int, error)
 	GetOperator(
-		ctx context.Context,
+		opts *bind.CallOpts,
 		operator common.Address,
 	) (txregistrycoordinator.IRegistryCoordinatorOperatorInfo, error)
-	GetOperatorFromId(
-		ctx context.Context,
-		operatorId [32]byte,
-	) (common.Address, error)
+	GetOperatorStatus(
+		opts *bind.CallOpts,
+		operator common.Address,
+	) (uint8, error)
+	GetQuorumCount(
+		opts *bind.CallOpts,
+	) (uint8, error)
+	GetOperatorsStakeInQuorumsAtCurrentBlock(
+		opts *bind.CallOpts,
+		quorumNumbers types.QuorumNums,
+	) ([][]opstateretriever.OperatorStateRetrieverOperator, error)
+	GetOperatorsStakeInQuorumsAtBlock(
+		opts *bind.CallOpts,
+		quorumNumbers types.QuorumNums,
+		blockNumber uint32,
+	) ([][]opstateretriever.OperatorStateRetrieverOperator, error)
+	GetOperatorAddrsInQuorumsAtCurrentBlock(
+		opts *bind.CallOpts,
+		quorumNumbers types.QuorumNums,
+	) ([][]common.Address, error)
+	GetOperatorsStakeInQuorumsOfOperatorAtBlock(
+		opts *bind.CallOpts,
+		operatorId types.OperatorId,
+		blockNumber uint32,
+	) (types.QuorumNums, [][]opstateretriever.OperatorStateRetrieverOperator, error)
+	GetOperatorsStakeInQuorumsOfOperatorAtCurrentBlock(
+		opts *bind.CallOpts,
+		operatorId types.OperatorId,
+	) (types.QuorumNums, [][]opstateretriever.OperatorStateRetrieverOperator, error)
+	GetOperatorStakeInQuorumsOfOperatorAtCurrentBlock(
+		opts *bind.CallOpts,
+		operatorId types.OperatorId,
+	) (map[types.QuorumNum]types.StakeAmount, error)
+	GetCheckSignaturesIndices(
+		opts *bind.CallOpts,
+		referenceBlockNumber uint32,
+		quorumNumbers types.QuorumNums,
+		nonSignerOperatorIds []types.OperatorId,
+	) (opstateretriever.OperatorStateRetrieverCheckSignaturesIndices, error)
 	GetOperatorId(
-		ctx context.Context,
+		opts *bind.CallOpts,
 		operator common.Address,
 	) ([32]byte, error)
-	GetOperatorSetParams(
-		ctx context.Context,
-		quorumNumber uint8,
-	) (txregistrycoordinator.IRegistryCoordinatorOperatorSetParam, error)
-	GetOperatorStatus(
-		ctx context.Context, 
+	GetOperatorFromId(
+		opts *bind.CallOpts,
+		operatorId [32]byte,
+	) (common.Address, error)
+	QueryRegistrationDetail(
+		opts *bind.CallOpts,
 		operator common.Address,
-	) (uint8, error)
-	GetQuorumBitmapAtBlockNumberByIndex(
-		ctx context.Context,
-		operatorId [32]byte,
-		blockNumber uint32,
-		index *big.Int,
-	) (*big.Int, error)
-	GetQuorumBitmapHistoryLength(
-		ctx context.Context,
-		operatorId [32]byte,
-	) (*big.Int, error)
-	GetQuorumBitmapIndicesAtBlockNumber(
-		ctx context.Context,
-		blockNumber uint32,
-		operatorIds [][32]byte,
-	) ([]uint32, error)
-	GetQuorumBitmapUpdateByIndex(
-		ctx context.Context,
-		operatorId [32]byte,
-		index *big.Int,
-	) (txregistrycoordinator.IRegistryCoordinatorQuorumBitmapUpdate, error)
-	IsChurnApproverSaltUsed(
-		ctx context.Context,
-		salt [32]byte,
+	) ([]bool, error)
+
+	IsOperatorRegistered(
+		opts *bind.CallOpts,
+		operator common.Address,
 	) (bool, error)
-	GetLastEjectionTimestamp(
-		ctx context.Context,
-		operator common.Address,
-	) (*big.Int, error)
-	GetPubkeyRegistrationMessageHash(
-		ctx context.Context,
-		operator common.Address,
-	) (txregistrycoordinator.BN254G1Point, error)
-	GetQuorumCount(
-		ctx context.Context,
-	) (uint8, error)
-	GetQuorumUpdateBlockNumber(
-		ctx context.Context,
-		quorumNumber uint8,
-	) (*big.Int, error)
 }
 
 type AvsReader struct {
@@ -197,10 +187,10 @@ func NewAvsReader(avsRegistryReader sdkavsregistry.ChainReader, avsServiceBindin
 }
 
 func (r *AvsReader) CheckSignatures(
-	ctx context.Context, msgHash [32]byte, quorumNumbers []byte, referenceBlockNumber uint32, nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature,
+	opts *bind.CallOpts, msgHash [32]byte, quorumNumbers []byte, referenceBlockNumber uint32, nonSignerStakesAndSignature txtaskmanager.IBLSSignatureCheckerNonSignerStakesAndSignature,
 ) (txtaskmanager.IBLSSignatureCheckerQuorumStakeTotals, error) {
 	stakeTotalsPerQuorum, _, err := r.AvsServiceBindings.TaskManager.CheckSignatures(
-		&bind.CallOpts{}, msgHash, quorumNumbers, referenceBlockNumber, nonSignerStakesAndSignature,
+		opts, msgHash, quorumNumbers, referenceBlockNumber, nonSignerStakesAndSignature,
 	)
 	if err != nil {
 		return txtaskmanager.IBLSSignatureCheckerQuorumStakeTotals{}, err
@@ -208,7 +198,7 @@ func (r *AvsReader) CheckSignatures(
 	return stakeTotalsPerQuorum, nil
 }
 
-func (r *AvsReader) GetErc20Mock(ctx context.Context, tokenAddr common.Address) (*erc20mock.ContractERC20Mock, error) {
+func (r *AvsReader) GetErc20Mock(opts *bind.CallOpts, tokenAddr common.Address) (*erc20mock.ContractERC20Mock, error) {
 	erc20Mock, err := r.AvsServiceBindings.GetErc20Mock(tokenAddr)
 	if err != nil {
 		r.logger.Error("Failed to fetch ERC20Mock contract", "err", err)
@@ -217,51 +207,51 @@ func (r *AvsReader) GetErc20Mock(ctx context.Context, tokenAddr common.Address) 
 	return erc20Mock, nil
 }
 
-func (r *AvsReader) GetTaskHash(ctx context.Context, taskId [8]byte) ([32]byte, error) {
-	return r.AvsServiceBindings.TaskManager.TaskHashes(&bind.CallOpts{}, taskId)
+func (r *AvsReader) GetTaskHash(opts *bind.CallOpts, taskId [8]byte) ([32]byte, error) {
+	return r.AvsServiceBindings.TaskManager.TaskHashes(opts, taskId)
 }
 
-func (r *AvsReader) GetTaskResponseHash(ctx context.Context, taskId [8]byte) ([32]byte, error) {
-	return r.AvsServiceBindings.TaskManager.TaskResponseHashes(&bind.CallOpts{}, taskId)
+func (r *AvsReader) GetTaskResponseHash(opts *bind.CallOpts, taskId [8]byte) ([32]byte, error) {
+	return r.AvsServiceBindings.TaskManager.TaskResponseHashes(opts, taskId)
 }
 
-func (r *AvsReader) GetJobToTaskCounter(ctx context.Context, jobId uint32) (uint32, error) {
-	return r.AvsServiceBindings.TaskManager.JobToTaskCounter(&bind.CallOpts{}, jobId)
+func (r *AvsReader) GetJobToTaskCounter(opts *bind.CallOpts, jobId uint32) (uint32, error) {
+	return r.AvsServiceBindings.TaskManager.JobToTaskCounter(opts, jobId)
 }
 
-func (r *AvsReader) GenerateTaskId(ctx context.Context, jobId uint32, taskNum uint32) ([8]byte, error) {
-	return r.AvsServiceBindings.TaskManager.GenerateTaskId(&bind.CallOpts{}, jobId, taskNum)
+func (r *AvsReader) GenerateTaskId(opts *bind.CallOpts, jobId uint32, taskNum uint32) ([8]byte, error) {
+	return r.AvsServiceBindings.TaskManager.GenerateTaskId(opts, jobId, taskNum)
 }
 
-func (r *AvsReader) IsOperatorBlacklisted(ctx context.Context, operator common.Address) (bool, error) {
-	return r.AvsServiceBindings.ServiceManager.IsBlackListed(&bind.CallOpts{}, operator)
+func (r *AvsReader) IsOperatorBlacklisted(opts *bind.CallOpts, operator common.Address) (bool, error) {
+	return r.AvsServiceBindings.ServiceManager.IsBlackListed(opts, operator)
 }
 
-func (r *AvsReader) GetTaskManager(ctx context.Context) (common.Address, error) {
-	return r.AvsServiceBindings.ServiceManager.TaskManager(&bind.CallOpts{})
+func (r *AvsReader) GetTaskManager(opts *bind.CallOpts) (common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.TaskManager(opts)
 }
 
-func (r *AvsReader) GetTaskValidator(ctx context.Context) (common.Address, error) {
-	return r.AvsServiceBindings.ServiceManager.TaskValidator(&bind.CallOpts{})
+func (r *AvsReader) GetTaskValidator(opts *bind.CallOpts) (common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.TaskValidator(opts)
 }
 
-func (r *AvsReader) GetQuorumManager(ctx context.Context) (common.Address, error) {
-	return r.AvsServiceBindings.ServiceManager.QuorumManager(&bind.CallOpts{})
+func (r *AvsReader) GetQuorumManager(opts *bind.CallOpts) (common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.QuorumManager(opts)
 }
 
-func (r *AvsReader) GetTaskResponseWindowBlock(ctx context.Context) (uint32, error) {
-	return r.AvsServiceBindings.TaskManager.TASKRESPONSEWINDOWBLOCK(&bind.CallOpts{})
+func (r *AvsReader) GetTaskResponseWindowBlock(opts *bind.CallOpts) (uint32, error) {
+	return r.AvsServiceBindings.TaskManager.TASKRESPONSEWINDOWBLOCK(opts)
 }
 
 func (r *AvsReader) TrySignatureAndApkVerification(
-	ctx context.Context,
+	opts *bind.CallOpts,
 	msgHash [32]byte,
 	apk txtaskmanager.BN254G1Point,
 	apkG2 txtaskmanager.BN254G2Point,
 	sigma txtaskmanager.BN254G1Point,
 ) (bool, bool, error) {
 	result, err := r.AvsServiceBindings.TaskManager.TrySignatureAndApkVerification(
-		&bind.CallOpts{},
+		opts,
 		msgHash,
 		apk,
 		apkG2,
@@ -273,99 +263,78 @@ func (r *AvsReader) TrySignatureAndApkVerification(
 	return result.PairingSuccessful, result.SiganatureIsValid, nil
 }
 
-func (r *AvsReader) GetOperatorRestakedStrategies(ctx context.Context, operator common.Address) ([]common.Address, error) {
-	return r.AvsServiceBindings.ServiceManager.GetOperatorRestakedStrategies(&bind.CallOpts{}, operator)
+func (r *AvsReader) GetOperatorRestakedStrategies(opts *bind.CallOpts, operator common.Address) ([]common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.GetOperatorRestakedStrategies(opts, operator)
 }
 
-func (r *AvsReader) GetRestakeableStrategies(ctx context.Context) ([]common.Address, error) {
-	return r.AvsServiceBindings.ServiceManager.GetRestakeableStrategies(&bind.CallOpts{})
+func (r *AvsReader) GetRestakeableStrategies(opts *bind.CallOpts) ([]common.Address, error) {
+	return r.AvsServiceBindings.ServiceManager.GetRestakeableStrategies(opts)
 }
 
-func (r *AvsReader) IsBlackListed(ctx context.Context, operator common.Address) (bool, error) {
-	return r.AvsServiceBindings.ServiceManager.IsBlackListed(&bind.CallOpts{}, operator)
+func (r *AvsReader) IsBlackListed(opts *bind.CallOpts, operator common.Address) (bool, error) {
+	return r.AvsServiceBindings.ServiceManager.IsBlackListed(opts, operator)
 }
 
-func (r *AvsReader) GetStake(ctx context.Context, user common.Address) (struct {
+func (r *AvsReader) GetStake(opts *bind.CallOpts, user common.Address) (struct {
 	Amount *big.Int
 	Exists bool
 }, error) {
-	return r.AvsServiceBindings.StakeRegistry.GetStake(&bind.CallOpts{}, user)
+	return r.AvsServiceBindings.StakeRegistry.GetStake(opts, user)
 }
 
-func (r *AvsReader) GetOperatorChurnApprovalDigestHash(
-	ctx context.Context,
-	registeringOperator common.Address,
-	registeringOperatorId [32]byte,
-	operatorKickParams []txregistrycoordinator.IRegistryCoordinatorOperatorKickParam,
-	salt [32]byte,
-	expiry *big.Int,
-) ([32]byte, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.CalculateOperatorChurnApprovalDigestHash(
-		&bind.CallOpts{},
-		registeringOperator,
-		registeringOperatorId,
-		operatorKickParams,
-		salt,
-		expiry,
-	)
+// RegistryCoordinator
+func (r *AvsReader) GetOperator(opts *bind.CallOpts, operator common.Address) (txregistrycoordinator.IRegistryCoordinatorOperatorInfo, error) {
+	return r.AvsServiceBindings.RegistryCoordinator.GetOperator(opts, operator)
 }
 
-func (r *AvsReader) GetCurrentQuorumBitmap(ctx context.Context, operatorId [32]byte) (*big.Int, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetCurrentQuorumBitmap(&bind.CallOpts{}, operatorId)
+func (r *AvsReader) GetOperatorStatus(opts *bind.CallOpts, operator common.Address) (uint8, error) {
+	return r.AvsServiceBindings.RegistryCoordinator.GetOperatorStatus(opts, operator)
 }
 
-func (r *AvsReader) GetOperator(ctx context.Context, operator common.Address) (txregistrycoordinator.IRegistryCoordinatorOperatorInfo, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetOperator(&bind.CallOpts{}, operator)
+func (r *AvsReader) GetQuorumCount(opts *bind.CallOpts) (uint8, error) {
+	return r.ChainReader.GetQuorumCount(opts)
 }
 
-func (r *AvsReader) GetOperatorFromId(ctx context.Context, operatorId [32]byte) (common.Address, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetOperatorFromId(&bind.CallOpts{}, operatorId)
+func (r *AvsReader) GetOperatorsStakeInQuorumsAtCurrentBlock(opts *bind.CallOpts, quorumNumbers types.QuorumNums) ([][]opstateretriever.OperatorStateRetrieverOperator, error) {
+	return r.ChainReader.GetOperatorsStakeInQuorumsAtCurrentBlock(opts, quorumNumbers)
 }
 
-func (r *AvsReader) GetOperatorId(ctx context.Context, operator common.Address) ([32]byte, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetOperatorId(&bind.CallOpts{}, operator)
+func (r *AvsReader) GetOperatorsStakeInQuorumsAtBlock(opts *bind.CallOpts, quorumNumbers types.QuorumNums, blockNumber uint32) ([][]opstateretriever.OperatorStateRetrieverOperator, error) {
+	return r.ChainReader.GetOperatorsStakeInQuorumsAtBlock(opts, quorumNumbers, blockNumber)
 }
 
-func (r *AvsReader) GetOperatorSetParams(ctx context.Context, quorumNumber uint8) (txregistrycoordinator.IRegistryCoordinatorOperatorSetParam, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetOperatorSetParams(&bind.CallOpts{}, quorumNumber)
+func (r *AvsReader) GetOperatorAddrsInQuorumsAtCurrentBlock(opts *bind.CallOpts, quorumNumbers types.QuorumNums) ([][]common.Address, error) {
+	return r.ChainReader.GetOperatorAddrsInQuorumsAtCurrentBlock(opts, quorumNumbers)
 }
 
-func (r *AvsReader) GetOperatorStatus(ctx context.Context, operator common.Address) (uint8, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetOperatorStatus(&bind.CallOpts{}, operator)
+func (r *AvsReader) GetOperatorsStakeInQuorumsOfOperatorAtBlock(opts *bind.CallOpts, operatorId types.OperatorId, blockNumber uint32) (types.QuorumNums, [][]opstateretriever.OperatorStateRetrieverOperator, error) {
+	return r.ChainReader.GetOperatorsStakeInQuorumsOfOperatorAtBlock(opts, operatorId, blockNumber)
 }
 
-func (r *AvsReader) GetQuorumBitmapAtBlockNumberByIndex(ctx context.Context, operatorId [32]byte, blockNumber uint32, index *big.Int) (*big.Int, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetQuorumBitmapAtBlockNumberByIndex(&bind.CallOpts{}, operatorId, blockNumber, index)
+func (r *AvsReader) GetOperatorsStakeInQuorumsOfOperatorAtCurrentBlock(opts *bind.CallOpts, operatorId types.OperatorId) (types.QuorumNums, [][]opstateretriever.OperatorStateRetrieverOperator, error) {
+	return r.ChainReader.GetOperatorsStakeInQuorumsOfOperatorAtCurrentBlock(opts, operatorId)
 }
 
-func (r *AvsReader) GetQuorumBitmapHistoryLength(ctx context.Context, operatorId [32]byte) (*big.Int, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetQuorumBitmapHistoryLength(&bind.CallOpts{}, operatorId)
+func (r *AvsReader) GetOperatorStakeInQuorumsOfOperatorAtCurrentBlock(opts *bind.CallOpts, operatorId types.OperatorId) (map[types.QuorumNum]types.StakeAmount, error) {
+	return r.ChainReader.GetOperatorStakeInQuorumsOfOperatorAtCurrentBlock(opts, operatorId)
 }
 
-func (r *AvsReader) GetQuorumBitmapIndicesAtBlockNumber(ctx context.Context, blockNumber uint32, operatorIds [][32]byte) ([]uint32, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetQuorumBitmapIndicesAtBlockNumber(&bind.CallOpts{}, blockNumber, operatorIds)
+func (r *AvsReader) GetCheckSignaturesIndices(opts *bind.CallOpts, referenceBlockNumber uint32, quorumNumbers types.QuorumNums, nonSignerOperatorIds []types.OperatorId) (opstateretriever.OperatorStateRetrieverCheckSignaturesIndices, error) {
+	return r.ChainReader.GetCheckSignaturesIndices(opts, referenceBlockNumber, quorumNumbers, nonSignerOperatorIds)
 }
 
-func (r *AvsReader) GetQuorumBitmapUpdateByIndex(ctx context.Context, operatorId [32]byte, index *big.Int) (txregistrycoordinator.IRegistryCoordinatorQuorumBitmapUpdate, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.GetQuorumBitmapUpdateByIndex(&bind.CallOpts{}, operatorId, index)
+func (r *AvsReader) GetOperatorId(opts *bind.CallOpts, operator common.Address) ([32]byte, error) {
+	return r.ChainReader.GetOperatorId(opts, operator)
 }
 
-func (r *AvsReader) IsChurnApproverSaltUsed(ctx context.Context, salt [32]byte) (bool, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.IsChurnApproverSaltUsed(&bind.CallOpts{}, salt)
+func (r *AvsReader) GetOperatorFromId(opts *bind.CallOpts, operatorId [32]byte) (common.Address, error) {
+	return r.ChainReader.GetOperatorFromId(opts, operatorId)
 }
 
-func (r *AvsReader) GetLastEjectionTimestamp(ctx context.Context, operator common.Address) (*big.Int, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.LastEjectionTimestamp(&bind.CallOpts{}, operator)
+func (r *AvsReader) QueryRegistrationDetails(opts *bind.CallOpts, operator common.Address) ([]bool, error) {
+	return r.ChainReader.QueryRegistrationDetail(opts, operator)
 }
 
-func (r *AvsReader) GetPubkeyRegistrationMessageHash(ctx context.Context, operator common.Address) (txregistrycoordinator.BN254G1Point, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.PubkeyRegistrationMessageHash(&bind.CallOpts{}, operator)
-}
-
-func (r *AvsReader) GetQuorumCount(ctx context.Context) (uint8, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.QuorumCount(&bind.CallOpts{})
-}
-
-func (r *AvsReader) GetQuorumUpdateBlockNumber(ctx context.Context, quorumNumber uint8) (*big.Int, error) {
-	return r.AvsServiceBindings.RegistryCoordinator.QuorumUpdateBlockNumber(&bind.CallOpts{}, quorumNumber)
+func (r *AvsReader) IsOperatorRegistered(opts *bind.CallOpts, operator common.Address) (bool, error) {
+	return r.ChainReader.IsOperatorRegistered(opts, operator)
 }
