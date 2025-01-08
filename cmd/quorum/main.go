@@ -1,35 +1,55 @@
 package main
 
 import (
-	"github.com/trigg3rX/triggerx-backend/execute/quorum"
-	"log"
+	"context"
+	"fmt"
 
-	regcoord "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
 func main() {
-	err := quorum.Create()
+	// Initialize logger
+	if err := logging.InitLogger(logging.Development, "quorum"); err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	logger := logging.GetLogger()
+
+	logger.Info("Starting quorum node...")
+
+	ctx := context.Background()
+
+	// Initialize registry
+	registry, err := network.NewPeerRegistry()
 	if err != nil {
-		log.Fatalf("Error creating quorum: %v", err)
+		logger.Fatalf("Failed to initialize peer registry: %v", err)
 	}
 
-	log.Println("Quorum created successfully")
-
-	// Example usage for registration
-	pubkeyParams := regcoord.IBLSApkRegistryPubkeyRegistrationParams{
-		// Fill in the required fields
-	}
-	signature := regcoord.ISignatureUtilsSignatureWithSaltAndExpiry{
-		// Fill in the required fields
-	}
-	err = quorum.RegisterOperator([]byte{0, 1}, "socket-address", pubkeyParams, signature)
-	if err != nil {
-		log.Fatal(err)
+	// Setup P2P with registry
+	config := network.P2PConfig{
+		Name:    network.ServiceQuorum,
+		Address: "/ip4/0.0.0.0/tcp/9002",
 	}
 
-	// Example usage for deregistration
-	err = quorum.DeregisterOperator([]byte{0, 1})
+	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatalf("Failed to setup P2P: %v", err)
 	}
+
+	// Initialize discovery service
+	discovery := network.NewDiscovery(ctx, host, config.Name)
+
+	// Initialize messaging
+	messaging := network.NewMessaging(host, config.Name)
+	messaging.InitMessageHandling(func(msg network.Message) {
+		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
+	})
+
+	// Try to connect to manager
+	if _, err := discovery.ConnectToPeer(network.ServiceManager); err != nil {
+		logger.Warnf("Failed to connect to manager: %v", err)
+	}
+
+	logger.Infof("Quorum node is running. Node ID: %s", host.ID().String())
+	select {}
 }
