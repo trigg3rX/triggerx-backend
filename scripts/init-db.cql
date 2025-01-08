@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
     job_ids set<bigint>,
     stake_amount varint,
+    account_balance decimal,
     created_at timestamp,
     last_updated_at timestamp
 );
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_hash text,
     task_response_hash text,
     quorum_keeper_hash text,
+    task_fee decimal,
     PRIMARY KEY (task_id)
 );
 

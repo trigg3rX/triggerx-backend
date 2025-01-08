@@ -6,12 +6,13 @@ import (
 )
 
 type UserData struct {
-	UserID        int64     `json:"user_id"`
-	UserAddress   string    `json:"user_address"`
-	JobIDs        []int64   `json:"job_ids"`
-	StakeAmount   *big.Int  `json:"stake_amount"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastUpdatedAt time.Time `json:"last_updated_at"`
+	UserID         int64     `json:"user_id"`
+	UserAddress    string    `json:"user_address"`
+	JobIDs         []int64   `json:"job_ids"`
+	StakeAmount    *big.Int  `json:"stake_amount"`
+	AccountBalance float64   `json:"account_balance"`
+	CreatedAt      time.Time `json:"created_at"`
+	LastUpdatedAt  time.Time `json:"last_updated_at"`
 }
 
 type JobData struct {
@@ -49,6 +50,7 @@ type TaskData struct {
 	TaskHash            string  `json:"task_hash"`
 	TaskResponseHash    string  `json:"task_response_hash"`
 	QuorumKeeperHash    string  `json:"quorum_keeper_hash"`
+	TaskFee             float64 `json:"task_fee"`
 }
 
 type QuorumData struct {

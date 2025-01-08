@@ -1,12 +1,19 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
+	"github.com/docker/docker/client"
 	"github.com/gorilla/mux"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/resources"
+	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/docker/docker/api/types"
+
 )
 
 /*
@@ -16,25 +23,77 @@ import (
 */
 
 func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
-	var taskData types.TaskData
+	var taskData ttypes.TaskData
 	if err := json.NewDecoder(r.Body).Decode(&taskData); err != nil {
 		log.Printf("[CreateTaskData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Get the associated job data to access the script content
+	var jobData ttypes.JobData
+	if err := h.db.Session().Query(`
+        SELECT script_ipfs_url FROM triggerx.job_data WHERE job_id = ?`,
+		taskData.JobID).Scan(&jobData.ScriptIpfsUrl); err != nil {
+		log.Printf("[CreateTaskData] Error fetching job data: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Create Docker client
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		log.Printf("[CreateTaskData] Error creating Docker client: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer cli.Close()
+
+	// Download and process the script
+	codePath, err := resources.DownloadIPFSFile(jobData.ScriptIpfsUrl)
+	if err != nil {
+		log.Printf("[CreateTaskData] Error downloading IPFS file: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer os.RemoveAll(filepath.Dir(codePath))
+
+	// Create and monitor container
+	containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
+	if err != nil {
+		log.Printf("[CreateTaskData] Error creating container: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer cli.ContainerRemove(context.Background(), containerID, types.ContainerRemoveOptions{Force: true})
+
+	// Monitor resources and get stats
+	stats, err := resources.MonitorResources(context.Background(), cli, containerID)
+	if err != nil {
+		log.Printf("[CreateTaskData] Error monitoring resources: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Set the task fee from the calculated value
+	taskData.TaskFee = stats.TotalFee
+
 	log.Printf("[CreateTaskData] Creating task with ID: %d", taskData.TaskID)
 
+	// Insert task data with the calculated fee
 	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.task_data (task_id, job_id, task_no, quorum_id,
-            quorum_number, quorum_threshold, task_created_block, task_created_tx_hash,
-            task_responded_block, task_responded_tx_hash, task_hash, 
-            task_response_hash, quorum_keeper_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        INSERT INTO triggerx.task_data (
+            task_id, job_id, task_no, quorum_id,
+            quorum_number, quorum_threshold, task_created_block,
+            task_created_tx_hash, task_responded_block,
+            task_responded_tx_hash, task_hash,
+            task_response_hash, quorum_keeper_hash, task_fee
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		taskData.TaskID, taskData.JobID, taskData.TaskNo, taskData.QuorumID,
 		taskData.QuorumNumber, taskData.QuorumThreshold, taskData.TaskCreatedBlock,
 		taskData.TaskCreatedTxHash, taskData.TaskRespondedBlock, taskData.TaskRespondedTxHash,
-		taskData.TaskHash, taskData.TaskResponseHash, taskData.QuorumKeeperHash).Exec(); err != nil {
+		taskData.TaskHash, taskData.TaskResponseHash, taskData.QuorumKeeperHash,
+		taskData.TaskFee).Exec(); err != nil {
 		log.Printf("[CreateTaskData] Error inserting task with ID %d: %v", taskData.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -50,7 +109,7 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 	taskID := vars["id"]
 	log.Printf("[GetTaskData] Fetching task with ID: %s", taskID)
 
-	var taskData types.TaskData
+	var taskData ttypes.TaskData
 	if err := h.db.Session().Query(`
         SELECT task_id, job_id, task_no, quorum_id, quorum_number, 
                quorum_threshold, task_created_block, task_created_tx_hash,

@@ -1,4 +1,4 @@
-package main
+package resources
 
 import (
 	"bufio"
@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"strings"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"time"
 
@@ -91,7 +91,7 @@ type ResourceStats struct {
 	GasFees           float64 `json:"gas_fees"`
 }
 
-func downloadIPFSFile(ipfsURL string) (string, error) {
+func DownloadIPFSFile(ipfsURL string) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "ipfs-code")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %v", err)
@@ -117,7 +117,7 @@ func downloadIPFSFile(ipfsURL string) (string, error) {
 	return filePath, nil
 }
 
-func createDockerContainer(ctx context.Context, cli *client.Client, codePath string) (string, error) {
+func CreateDockerContainer(ctx context.Context, cli *client.Client, codePath string) (string, error) {
 	// Get absolute path to ensure proper mounting
 	absCodePath, err := filepath.Abs(codePath)
 	if err != nil {
@@ -183,13 +183,12 @@ func createDockerContainer(ctx context.Context, cli *client.Client, codePath str
 	return resp.ID, nil
 }
 
-func calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) {
+func calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) float64 {
 	// Constants for fee calculation
 	const (
 		PriceperTG            = 0.0001 // Price per TG unit
 		Fixedcost             = 1      // Fixed cost in TG
 		TransactionSimulation = 1      // Weight for TransactionSimulation in TG
-
 	)
 
 	// Convert content size to KB for static complexity
@@ -210,190 +209,192 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 
 	// Update stats with fee information
 	stats.TotalFee = totalFee
+
+	return totalFee
 }
 
-func monitorResources(ctx context.Context, cli *client.Client, containerID string) (*ResourceStats, error) {
-    stats := &ResourceStats{}
-    var executionStartTime time.Time
-    var executionEndTime time.Time
-    var codeExecutionTime time.Duration
-    var dockerStartTime = time.Now() // Track when Docker operations begin
-    executionStarted := false
+func MonitorResources(ctx context.Context, cli *client.Client, containerID string) (*ResourceStats, error) {
+	stats := &ResourceStats{}
+	var executionStartTime time.Time
+	var executionEndTime time.Time
+	var codeExecutionTime time.Duration
+	var dockerStartTime = time.Now() // Track when Docker operations begin
+	executionStarted := false
 
-    // Get container info to find the mounted directory
-    containerInfo, err := cli.ContainerInspect(ctx, containerID)
-    if err != nil {
-        return nil, fmt.Errorf("failed to inspect container: %v", err)
-    }
+	// Get container info to find the mounted directory
+	containerInfo, err := cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect container: %v", err)
+	}
 
-    // Find the mounted code file path
-    var codePath string
-    for _, mount := range containerInfo.Mounts {
-        if mount.Destination == "/code" {
-            codePath = filepath.Join(mount.Source, "code.go")
-            break
-        }
-    }
+	// Find the mounted code file path
+	var codePath string
+	for _, mount := range containerInfo.Mounts {
+		if mount.Destination == "/code" {
+			codePath = filepath.Join(mount.Source, "code.go")
+			break
+		}
+	}
 
-    // Read the code content
-    content, err := os.ReadFile(codePath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read code file: %v", err)
-    }
+	// Read the code content
+	content, err := os.ReadFile(codePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read code file: %v", err)
+	}
 
-    // Start container
-    containerStartTime := time.Now()
-    err = cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
-    if err != nil {
-        return nil, fmt.Errorf("failed to start container: %v", err)
-    }
+	// Start container
+	containerStartTime := time.Now()
+	err = cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to start container: %v", err)
+	}
 
-    // Create context with timeout
-    ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-    defer cancel()
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 
-    // Enhanced log handling
-    logReader, err := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{
-        ShowStdout: true,
-        ShowStderr: true,
-        Follow:     true,
-        Timestamps: true,
-    })
-    if err != nil {
-        return nil, fmt.Errorf("failed to get container logs: %v", err)
-    }
-    defer logReader.Close()
+	// Enhanced log handling
+	logReader, err := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Timestamps: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container logs: %v", err)
+	}
+	defer logReader.Close()
 
-    // Create channels for error handling and completion
-    errChan := make(chan error, 1)
-    doneChan := make(chan bool)
-    var lastStats types.StatsJSON
+	// Create channels for error handling and completion
+	errChan := make(chan error, 1)
+	doneChan := make(chan bool)
+	var lastStats types.StatsJSON
 
-    // Start stats collection goroutine
-    go func() {
-        // Get initial stats
-        statsReader, err := cli.ContainerStats(ctx, containerID, true)
-        if err != nil {
-            errChan <- fmt.Errorf("failed to get stats stream: %v", err)
-            return
-        }
-        defer statsReader.Body.Close()
+	// Start stats collection goroutine
+	go func() {
+		// Get initial stats
+		statsReader, err := cli.ContainerStats(ctx, containerID, true)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to get stats stream: %v", err)
+			return
+		}
+		defer statsReader.Body.Close()
 
-        decoder := json.NewDecoder(statsReader.Body)
-        for {
-            select {
-            case <-doneChan:
-                return
-            default:
-                var statsJSON types.StatsJSON
-                if err := decoder.Decode(&statsJSON); err != nil {
-                    if err != io.EOF {
-                        errChan <- fmt.Errorf("failed to decode stats: %v", err)
-                    }
-                    return
-                }
-                lastStats = statsJSON
-            }
-        }
-    }()
+		decoder := json.NewDecoder(statsReader.Body)
+		for {
+			select {
+			case <-doneChan:
+				return
+			default:
+				var statsJSON types.StatsJSON
+				if err := decoder.Decode(&statsJSON); err != nil {
+					if err != io.EOF {
+						errChan <- fmt.Errorf("failed to decode stats: %v", err)
+					}
+					return
+				}
+				lastStats = statsJSON
+			}
+		}
+	}()
 
-    // Print container output and track execution time
-    go func() {
-        scanner := bufio.NewScanner(logReader)
-        for scanner.Scan() {
-            line := scanner.Text()
-            
-            // Check for timing markers
-            if strings.Contains(line, "START_EXECUTION") {
-                executionStartTime = time.Now()
-                executionStarted = true
-                fmt.Println("Code execution started")
-            } else if strings.Contains(line, "END_EXECUTION") && executionStarted {
-                executionEndTime = time.Now()
-                codeExecutionTime = executionEndTime.Sub(executionStartTime)
-                fmt.Printf("Code execution completed in: %v\n", codeExecutionTime)
-            }
-            
-            // Print all container logs
-            fmt.Printf("Container Log: %s\n", line)
-        }
-    }()
+	// Print container output and track execution time
+	go func() {
+		scanner := bufio.NewScanner(logReader)
+		for scanner.Scan() {
+			line := scanner.Text()
 
-    // Wait for container to finish
-    statusCh, errCh := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+			// Check for timing markers
+			if strings.Contains(line, "START_EXECUTION") {
+				executionStartTime = time.Now()
+				executionStarted = true
+				fmt.Println("Code execution started")
+			} else if strings.Contains(line, "END_EXECUTION") && executionStarted {
+				executionEndTime = time.Now()
+				codeExecutionTime = executionEndTime.Sub(executionStartTime)
+				fmt.Printf("Code execution completed in: %v\n", codeExecutionTime)
+			}
 
-    select {
-    case err := <-errCh:
-        close(doneChan)
-        return nil, fmt.Errorf("container wait error: %v", err)
-    case status := <-statusCh:
-        close(doneChan)
-        if status.StatusCode != 0 {
-            return nil, fmt.Errorf("container exited with status %d", status.StatusCode)
-        }
-    case err := <-errChan:
-        close(doneChan)
-        return nil, fmt.Errorf("error during stats collection: %v", err)
-    case <-ctx.Done():
-        close(doneChan)
-        return nil, fmt.Errorf("operation timed out: %v", ctx.Err())
-    }
+			// Print all container logs
+			fmt.Printf("Container Log: %s\n", line)
+		}
+	}()
 
-    // Calculate timing metrics
-    dockerTime := time.Since(dockerStartTime)
-    containerTime := time.Since(containerStartTime)
+	// Wait for container to finish
+	statusCh, errCh := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
 
-    // Print timing information
-    fmt.Printf("\nTiming Breakdown:\n")
-    fmt.Printf("Code Execution Time: %v\n", codeExecutionTime)
-    fmt.Printf("Container Runtime: %v\n", containerTime)
-    fmt.Printf("Total Docker Processing Time: %v\n", dockerTime)
-    fmt.Printf("Docker Overhead: %v\n", dockerTime-codeExecutionTime)
+	select {
+	case err := <-errCh:
+		close(doneChan)
+		return nil, fmt.Errorf("container wait error: %v", err)
+	case status := <-statusCh:
+		close(doneChan)
+		if status.StatusCode != 0 {
+			return nil, fmt.Errorf("container exited with status %d", status.StatusCode)
+		}
+	case err := <-errChan:
+		close(doneChan)
+		return nil, fmt.Errorf("error during stats collection: %v", err)
+	case <-ctx.Done():
+		close(doneChan)
+		return nil, fmt.Errorf("operation timed out: %v", ctx.Err())
+	}
 
-    // Calculate final statistics
-    if lastStats.CPUStats.SystemUsage != 0 {
-        cpuDelta := float64(lastStats.CPUStats.CPUUsage.TotalUsage)
-        systemDelta := float64(lastStats.CPUStats.SystemUsage)
-        stats.CPUPercentage = (cpuDelta / systemDelta) * float64(len(lastStats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
-    }
+	// Calculate timing metrics
+	dockerTime := time.Since(dockerStartTime)
+	containerTime := time.Since(containerStartTime)
 
-    stats.MemoryUsage = lastStats.MemoryStats.Usage
+	// Print timing information
+	fmt.Printf("\nTiming Breakdown:\n")
+	fmt.Printf("Code Execution Time: %v\n", codeExecutionTime)
+	fmt.Printf("Container Runtime: %v\n", containerTime)
+	fmt.Printf("Total Docker Processing Time: %v\n", dockerTime)
+	fmt.Printf("Docker Overhead: %v\n", dockerTime-codeExecutionTime)
 
-    // Network stats
-    for _, nw := range lastStats.Networks {
-        stats.RxBytes += nw.RxBytes
-        stats.RxPackets += nw.RxPackets
-        stats.RxErrors += nw.RxErrors
-        stats.RxDropped += nw.RxDropped
-        stats.TxBytes += nw.TxBytes
-        stats.TxPackets += nw.TxPackets
-        stats.TxErrors += nw.TxErrors
-        stats.TxDropped += nw.TxDropped
-    }
+	// Calculate final statistics
+	if lastStats.CPUStats.SystemUsage != 0 {
+		cpuDelta := float64(lastStats.CPUStats.CPUUsage.TotalUsage)
+		systemDelta := float64(lastStats.CPUStats.SystemUsage)
+		stats.CPUPercentage = (cpuDelta / systemDelta) * float64(len(lastStats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+	}
 
-    // Calculate bandwidth rate based on total transfer
-    stats.BandwidthRate = float64(stats.RxBytes + stats.TxBytes)
+	stats.MemoryUsage = lastStats.MemoryStats.Usage
 
-    // Block I/O stats
-    for _, bioStat := range lastStats.BlkioStats.IoServiceBytesRecursive {
-        if bioStat.Op == "Read" {
-            stats.BlockRead += bioStat.Value
-        } else if bioStat.Op == "Write" {
-            stats.BlockWrite += bioStat.Value
-        }
-    }
+	// Network stats
+	for _, nw := range lastStats.Networks {
+		stats.RxBytes += nw.RxBytes
+		stats.RxPackets += nw.RxPackets
+		stats.RxErrors += nw.RxErrors
+		stats.RxDropped += nw.RxDropped
+		stats.TxBytes += nw.TxBytes
+		stats.TxPackets += nw.TxPackets
+		stats.TxErrors += nw.TxErrors
+		stats.TxDropped += nw.TxDropped
+	}
 
-    // Use actual code execution time for fee calculation
-    if !executionStarted || codeExecutionTime == 0 {
-        // Fallback to container execution time if markers weren't found
-        codeExecutionTime = time.Since(executionStartTime)
-        fmt.Println("Warning: Could not determine precise code execution time, using container execution time instead")
-    }
+	// Calculate bandwidth rate based on total transfer
+	stats.BandwidthRate = float64(stats.RxBytes + stats.TxBytes)
 
-    // Calculate fees using the measured execution time
-    calculateFees(content, stats, codeExecutionTime)
+	// Block I/O stats
+	for _, bioStat := range lastStats.BlkioStats.IoServiceBytesRecursive {
+		if bioStat.Op == "Read" {
+			stats.BlockRead += bioStat.Value
+		} else if bioStat.Op == "Write" {
+			stats.BlockWrite += bioStat.Value
+		}
+	}
 
-    return stats, nil
+	// Use actual code execution time for fee calculation
+	if !executionStarted || codeExecutionTime == 0 {
+		// Fallback to container execution time if markers weren't found
+		codeExecutionTime = time.Since(executionStartTime)
+		fmt.Println("Warning: Could not determine precise code execution time, using container execution time instead")
+	}
+
+	// Calculate fees using the measured execution time
+	calculateFees(content, stats, codeExecutionTime)
+
+	return stats, nil
 }
 
 func main() {
@@ -420,7 +421,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	codePath, err := downloadIPFSFile(ipfsURL)
+	codePath, err := DownloadIPFSFile(ipfsURL)
 	if err != nil {
 		fmt.Printf("Failed to download IPFS file: %v\n", err)
 		os.Exit(1)
@@ -435,7 +436,7 @@ func main() {
 	fmt.Printf("File content length: %d bytes\n", len(content))
 	defer os.RemoveAll(filepath.Dir(codePath))
 
-	containerID, err := createDockerContainer(ctx, cli, codePath)
+	containerID, err := CreateDockerContainer(ctx, cli, codePath)
 	if err != nil {
 		fmt.Printf("Failed to create container: %v\n", err)
 		os.Exit(1)
@@ -443,7 +444,7 @@ func main() {
 	defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
 
 	fmt.Println("\nStarting container and monitoring resources...")
-	stats, err := monitorResources(ctx, cli, containerID)
+	stats, err := MonitorResources(ctx, cli, containerID)
 	if err != nil {
 		fmt.Printf("Failed to monitor resources: %v\n", err)
 		os.Exit(1)
