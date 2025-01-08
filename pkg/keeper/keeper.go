@@ -2,13 +2,14 @@ package keeper
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 
-	// "fmt"
 	// "math/big"
+	"io/ioutil"
 
-	// "math/big"
-	// "os"
+	"gopkg.in/yaml.v2"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -23,7 +24,8 @@ import (
 	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
 	sdkecdsa "github.com/Layr-Labs/eigensdk-go/crypto/ecdsa"
 
-	// "github.com/Layr-Labs/eigensdk-go/logging"
+	// "github.com/trigg3rX/triggerx-backend/pkg/core"
+
 	sdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 	sdkmetrics "github.com/Layr-Labs/eigensdk-go/metrics"
 	"github.com/Layr-Labs/eigensdk-go/metrics/collectors/economic"
@@ -42,6 +44,9 @@ import (
 
 	sdkelcontracts "github.com/Layr-Labs/eigensdk-go/chainio/clients/elcontracts"
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
+
+	"os"
+	"path/filepath"
 )
 
 type Keeper struct {
@@ -64,27 +69,47 @@ type Keeper struct {
 	TriggerxServiceManagerAddr common.Address
 }
 
-func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
-	// Load the YAML config first
-	config, err := loadConfig("triggerx_operator.yaml")
+type OperatorStatus struct {
+	EcdsaAddress      string
+	PubkeysRegistered bool
+	G1Pubkey          string
+	G2Pubkey          string
+	RegisteredWithAvs bool
+	OperatorId        string
+}
+
+func expandHomeDir(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path provided")
+	}
+
+	if path[0] == '~' {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %w", err)
+		}
+		return filepath.Join(home, path[1:]), nil
+	}
+	return path, nil
+}
+
+func NewKeeperFromConfigFile(configPath string) (*Keeper, error) {
+	// Read and parse the config file
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
 
-	// Update the URLs from the YAML config
-	c.EthRpcUrl = config.Environment.EthRpcUrl
-	c.EthWsUrl = config.Environment.EthWsUrl
-
-	// Update the addresses from the YAML config
-	c.ServiceManagerAddress = config.Addresses.ServiceManagerAddress
-	c.OperatorStateRetrieverAddress = config.Addresses.OperatorStateRetriever
-
-	// Update metrics configuration from YAML
-	if config.Prometheus.PortAddress != "" {
-		c.EigenMetricsIpPortAddress = config.Prometheus.PortAddress
+	var config types.NodeConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("error parsing config file: %w", err)
 	}
 
-	// Add validation for required fields
+	return NewKeeperFromConfig(config)
+}
+
+func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
+	// Validate required fields
 	if c.ServiceManagerAddress == "" {
 		return nil, fmt.Errorf("ServiceManagerAddress is empty in configuration")
 	}
@@ -112,15 +137,15 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 		return nil, err
 	}
 	reg := prometheus.NewRegistry()
-	eigenMetrics := sdkmetrics.NewEigenMetrics(config.AVS_NAME, c.EigenMetricsIpPortAddress, reg, logger)
-	avsAndEigenMetrics := metrics.NewAvsAndEigenMetrics(config.AVS_NAME, eigenMetrics, reg)
+	eigenMetrics := sdkmetrics.NewEigenMetrics(c.AvsName, c.EigenMetricsIpPortAddress, reg, logger)
+	avsAndEigenMetrics := metrics.NewAvsAndEigenMetrics(c.AvsName, eigenMetrics, reg)
 
 	// Setup Node Api
-	nodeApi := nodeapi.NewNodeApi(config.AVS_NAME, config.SEM_VER, c.NodeApiIpPortAddress, logger)
+	nodeApi := nodeapi.NewNodeApi(c.AvsName, c.SemVer, c.NodeApiIpPortAddress, logger)
 
 	var ethRpcClient, ethWsClient sdkcommon.EthClientInterface
 	if c.EnableMetrics {
-		rpcCallsCollector := rpccalls.NewCollector(config.AVS_NAME, reg)
+		rpcCallsCollector := rpccalls.NewCollector(c.AvsName, reg)
 		ethRpcClient, err = eth.NewInstrumentedClient(c.EthRpcUrl, rpcCallsCollector)
 		if err != nil {
 			logger.Errorf("Cannot create http ethclient", "err", err)
@@ -149,7 +174,12 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 	// 	logger.Warnf("OPERATOR_BLS_KEY_PASSWORD env var not set. using empty string")
 	// }
 	blsKeyPassword := "pL6!oK5@iJ4#"
-	blsKeyPair, err := bls.ReadPrivateKeyFromFile(c.BlsPrivateKeyStorePath, blsKeyPassword)
+	blsKeyPath, err := expandHomeDir(c.BlsPrivateKeyStorePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process BLS keystore path: %w", err)
+	}
+
+	blsKeyPair, err := bls.ReadPrivateKeyFromFile(blsKeyPath, blsKeyPassword)
 	if err != nil {
 		logger.Errorf("Cannot parse bls private key", "err", err)
 		return nil, err
@@ -168,9 +198,13 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 	// 	logger.Warnf("OPERATOR_ECDSA_KEY_PASSWORD env var not set. using empty string")
 	// }
 	ecdsaKeyPassword := "pL6!oK5@iJ4#"
+	ecdsaKeyPath, err := expandHomeDir(c.EcdsaPrivateKeyStorePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process ECDSA keystore path: %w", err)
+	}
 
 	signerV2, _, err := signerv2.SignerFromConfig(signerv2.Config{
-		KeystorePath: c.EcdsaPrivateKeyStorePath,
+		KeystorePath: ecdsaKeyPath,
 		Password:     ecdsaKeyPassword,
 	}, chainId)
 	if err != nil {
@@ -181,11 +215,11 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 		EthWsUrl:                   c.EthWsUrl,
 		RegistryCoordinatorAddr:    c.ServiceManagerAddress,
 		OperatorStateRetrieverAddr: c.OperatorStateRetrieverAddress,
-		AvsName:                    config.AVS_NAME,
+		AvsName:                    c.AvsName,
 		PromMetricsIpPortAddress:   c.EigenMetricsIpPortAddress,
 	}
 	operatorEcdsaPrivateKey, err := sdkecdsa.ReadKey(
-		c.EcdsaPrivateKeyStorePath,
+		ecdsaKeyPath,
 		ecdsaKeyPassword,
 	)
 	if err != nil {
@@ -200,7 +234,6 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 		panic(err)
 	}
 	txMgr := txmgr.NewSimpleTxManager(skWallet, ethRpcClient, logger, common.HexToAddress(c.KeeperAddress))
-
 	avsReader, err := chainio.BuildAvsReader(
 		common.HexToAddress(c.ServiceManagerAddress),
 		common.HexToAddress(c.OperatorStateRetrieverAddress),
@@ -208,6 +241,9 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 	if err != nil {
 		logger.Error("Cannot create AvsReader", "err", err)
 		return nil, err
+	}
+	if avsReader == nil {
+		return nil, fmt.Errorf("avsReader was not properly initialized")
 	}
 	avsWriter, err := chainio.BuildAvsWriter(txMgr, common.HexToAddress(c.ServiceManagerAddress),
 		common.HexToAddress(c.OperatorStateRetrieverAddress), ethRpcClient, logger,
@@ -231,7 +267,7 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 	}
 	economicMetricsCollector := economic.NewCollector(
 		sdkClients.ElChainReader, sdkClients.AvsRegistryChainReader,
-		config.AVS_NAME, logger, common.HexToAddress(c.KeeperAddress), quorumNames)
+		c.AvsName, logger, common.HexToAddress(c.KeeperAddress), quorumNames)
 	reg.MustRegister(economicMetricsCollector)
 
 	keeper := &Keeper{
@@ -272,114 +308,114 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 
 }
 
-// func (o *Keeper) Start(ctx context.Context) error {
-// 	operatorIsRegistered, err := o.avsReader.IsOperatorRegistered(&bind.CallOpts{}, o.keeperAddr)
-// 	if err != nil {
-// 		o.logger.Error("Error checking if operator is registered", "err", err)
-// 		return err
-// 	}
-// 	if !operatorIsRegistered {
-// 		// We bubble the error all the way up instead of using logger.Fatal because logger.Fatal prints a huge stack trace
-// 		// that hides the actual error message. This error msg is more explicit and doesn't require showing a stack trace to the user.
-// 		return fmt.Errorf("operator is not registered. Registering operator using the operator-cli before starting operator")
-// 	}
+func (k *Keeper) Start(ctx context.Context) error {
+	// Check if operator is registered using AvsReader interface
+	operatorIsRegistered, err := k.AvsReader.GetOperatorId(&bind.CallOpts{}, k.KeeperAddr)
+	if err != nil {
+		k.Logger.Error("Error checking if operator is registered", "err", err)
+		return err
+	}
+	if operatorIsRegistered == [32]byte{} {
+		return fmt.Errorf("operator is not registered. Register operator using the operator-cli before starting operator")
+	}
 
-// 	o.logger.Infof("Starting operator.")
+	k.Logger.Info("Starting keeper node")
 
-// 	if o.config.EnableNodeApi {
-// 		o.nodeApi.Start()
-// 	}
-// 	var metricsErrChan <-chan error
-// 	if o.config.EnableMetrics {
-// 		metricsErrChan = o.metrics.Start(ctx, o.metricsReg)
-// 	} else {
-// 		metricsErrChan = make(chan error, 1)
-// 	}
+	// Start Node API if enabled
+	if k.Config.EnableNodeApi {
+		k.NodeApi.Start()
+	}
 
-// 	// TODO(samlaf): wrap this call with increase in avs-node-spec metric
-// 	sub := o.avsSubscriber.SubscribeToNewTasks(o.newTaskCreatedChan)
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return nil
-// 		case err := <-metricsErrChan:
-// 			// TODO(samlaf); we should also register the service as unhealthy in the node api
-// 			// https://eigen.nethermind.io/docs/spec/api/
-// 			o.logger.Fatal("Error in metrics server", "err", err)
-// 		case err := <-sub.Err():
-// 			o.logger.Error("Error in websocket subscription", "err", err)
-// 			// TODO(samlaf): write unit tests to check if this fixed the issues we were seeing
-// 			sub.Unsubscribe()
-// 			// TODO(samlaf): wrap this call with increase in avs-node-spec metric
-// 			sub = o.avsSubscriber.SubscribeToNewTasks(o.newTaskCreatedChan)
-// 		case newTaskCreatedLog := <-o.newTaskCreatedChan:
-// 			o.metrics.IncNumTasksReceived()
-// 			taskResponse := o.ProcessNewTaskCreatedLog(newTaskCreatedLog)
-// 			signedTaskResponse, err := o.SignTaskResponse(taskResponse)
-// 			if err != nil {
-// 				continue
-// 			}
-// 			go o.aggregatorRpcClient.SendSignedTaskResponseToAggregator(signedTaskResponse)
-// 		}
-// 	}
-// }
+	// Start metrics if enabled
+	var metricsErrChan <-chan error
+	if k.Config.EnableMetrics {
+		metricsErrChan = k.Metrics.Start(ctx, k.MetricsReg)
+	} else {
+		metricsErrChan = make(chan error)
+	}
 
-// // Takes a NewTaskCreatedLog struct as input and returns a TaskResponseHeader struct.
-// // The TaskResponseHeader struct is the struct that is signed and sent to the contract as a task response.
-// func (o *Operator) ProcessNewTaskCreatedLog(newTaskCreatedLog *cstaskmanager.ContractIncredibleSquaringTaskManagerNewTaskCreated) *cstaskmanager.IIncredibleSquaringTaskManagerTaskResponse {
-// 	o.logger.Debug("Received new task", "task", newTaskCreatedLog)
-// 	o.logger.Info("Received new task",
-// 		"numberToBeSquared", newTaskCreatedLog.Task.NumberToBeSquared,
-// 		"taskIndex", newTaskCreatedLog.TaskIndex,
-// 		"taskCreatedBlock", newTaskCreatedLog.Task.TaskCreatedBlock,
-// 		"quorumNumbers", newTaskCreatedLog.Task.QuorumNumbers,
-// 		"QuorumThresholdPercentage", newTaskCreatedLog.Task.QuorumThresholdPercentage,
-// 	)
-// 	numberSquared := big.NewInt(0).Exp(newTaskCreatedLog.Task.NumberToBeSquared, big.NewInt(2), nil)
-// 	taskResponse := &cstaskmanager.IIncredibleSquaringTaskManagerTaskResponse{
-// 		ReferenceTaskIndex: newTaskCreatedLog.TaskIndex,
-// 		NumberSquared:      numberSquared,
-// 	}
-// 	return taskResponse
-// }
+	// Subscribe to new tasks using AvsSubscriber interface
+	sub := k.AvsSubscriber.SubscribeToNewTasks(k.NewTaskCreatedChan)
+	defer sub.Unsubscribe()
 
-// func (o *Operator) SignTaskResponse(taskResponse *cstaskmanager.IIncredibleSquaringTaskManagerTaskResponse) (*aggregator.SignedTaskResponse, error) {
+	// Main event loop
+	for {
+		select {
+		case <-ctx.Done():
+			k.Logger.Info("Context cancelled, shutting down")
+			return nil
+		case err := <-metricsErrChan:
+			k.Logger.Error("Metrics error", "err", err)
+			return err
+		case err := <-sub.Err():
+			k.Logger.Error("Subscription error", "err", err)
+			// Resubscribe on error
+			sub.Unsubscribe()
+			sub = k.AvsSubscriber.SubscribeToNewTasks(k.NewTaskCreatedChan)
+		case task := <-k.NewTaskCreatedChan:
+			k.handleNewTask(task)
+		}
+	}
+}
+
+func (k *Keeper) handleNewTask(task *txtaskmanager.ContractTriggerXTaskManagerTaskCreated) {
+	k.Metrics.IncNumTasksReceived()
+
+	// bleh bleh bleh
+}
+
+// func (k *Keeper) SignTaskResponse(taskResponse *txtaskmanager.ContractTriggerXTaskManagerTaskResponse) (*aggregator.SignedTaskResponse, error) {
 // 	taskResponseHash, err := core.GetTaskResponseDigest(taskResponse)
 // 	if err != nil {
-// 		o.logger.Error("Error getting task response header hash. skipping task (this is not expected and should be investigated)", "err", err)
+// 		k.Logger.Error("Error getting task response header hash. skipping task (this is not expected and should be investigated)", "err", err)
 // 		return nil, err
 // 	}
-// 	blsSignature := o.blsKeypair.SignMessage(taskResponseHash)
+// 	blsSignature := k.BlsKeypair.SignMessage(taskResponseHash)
 // 	signedTaskResponse := &aggregator.SignedTaskResponse{
 // 		TaskResponse: *taskResponse,
 // 		BlsSignature: *blsSignature,
-// 		OperatorId:   o.operatorId,
+// 		OperatorId:   k.KeeperId,
 // 	}
-// 	o.logger.Debug("Signed task response", "signedTaskResponse", signedTaskResponse)
+// 	k.Logger.Debug("Signed task response", "signedTaskResponse", signedTaskResponse)
 // 	return signedTaskResponse, nil
 // }
 
-// func (k *Keeper) registerKeeperOnStartup(
-// 	operatorEcdsaPrivateKey *sdkecdsa.PrivateKey,
-// 	mockTokenStrategyAddr common.Address,
-// ) {
-// 	err := k.RegisterOperatorWithEigenlayer()
-// 	if err != nil {
-// 		k.logger.Error("Error registering operator with eigenlayer", "err", err)
-// 	} else {
-// 		k.logger.Infof("Registered operator with eigenlayer")
-// 	}
+func loadConfig(filename string) (*types.NodeConfig, error) {
+	// Read YAML file
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("error reading config file: %w", err)
+	}
 
-// 	amount := big.NewInt(1000)
-// 	err = k.DepositIntoStrategy(mockTokenStrategyAddr, amount)
-// 	if err != nil {
-// 		k.logger.Fatal("Error depositing into strategy", "err", err)
-// 	}
-// 	k.logger.Infof("Deposited %s into strategy %s", amount, mockTokenStrategyAddr)
+	// Parse YAML
+	var config types.NodeConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("error parsing config file: %w", err)
+	}
 
-// 	err = k.RegisterOperatorWithAvs(operatorEcdsaPrivateKey)
-// 	if err != nil {
-// 		k.logger.Fatal("Error registering operator with avs", "err", err)
-// 	}
-// 	k.logger.Infof("Registered operator with avs")
-// }
+	return &config, nil
+}
+
+func (k *Keeper) PrintOperatorStatus() error {
+	fmt.Println("Printing operator status")
+	operatorId, err := k.AvsReader.GetOperatorId(&bind.CallOpts{}, k.KeeperAddr)
+	if err != nil {
+		return err
+	}
+	pubkeysRegistered := operatorId != [32]byte{}
+	registeredWithAvs := k.KeeperId != [32]byte{}
+	operatorStatus := OperatorStatus{
+		EcdsaAddress:      k.KeeperAddr.String(),
+		PubkeysRegistered: pubkeysRegistered,
+		G1Pubkey:          k.BlsKeypair.GetPubKeyG1().String(),
+		G2Pubkey:          k.BlsKeypair.GetPubKeyG2().String(),
+		RegisteredWithAvs: registeredWithAvs,
+		OperatorId:        hex.EncodeToString(k.KeeperId[:]),
+	}
+	operatorStatusJson, err := json.MarshalIndent(operatorStatus, "", " ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(operatorStatusJson))
+	return nil
+}
