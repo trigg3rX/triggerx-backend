@@ -4,7 +4,6 @@ import (
     "log"
     "math/rand"
     "time"
-    "fmt"
 )
 
 // Job represents a scheduled task with its properties
@@ -47,46 +46,6 @@ func init() {
     rand.Seed(time.Now().UnixNano())
 }
 
-// initializeQuorums sets up initial quorums for the scheduler
-func (js *JobScheduler) initializeQuorums() {
-    defaultQuorum := &Quorum{
-        QuorumID:    "default",
-        NodeCount:   3,
-        ActiveNodes: []string{"node1", "node2", "node3"},
-        Status:      "active",
-        ChainID:     "chain_1",
-        CreatedAt:   time.Now(),
-        UpdatedAt:   time.Now(),
-    }
-
-    js.mu.Lock()
-    js.quorums["default"] = defaultQuorum
-    js.mu.Unlock()
-}
-
-func (js *JobScheduler) selectRandomKeeper() (string, error) {
-    // Acquire a read lock to safely access quorums
-    js.mu.RLock()
-    defer js.mu.RUnlock()
-
-    // Check if any quorums exist
-    if len(js.quorums) == 0 {
-        return "", fmt.Errorf("no quorums available")
-    }
-
-    // Iterate through available quorums
-    for _, quorum := range js.quorums {
-        // Ensure the quorum has active nodes
-        if len(quorum.ActiveNodes) > 0 {
-            // Randomly select a keeper from the active nodes in this quorum
-            //randomIndex := rand.Intn(len(quorum.ActiveNodes))
-            return quorum.ActiveNodes[0], nil
-        }
-    }
-
-    // If no active nodes are found in any quorum
-    return "", fmt.Errorf("no active keepers found")
-}
 // processJob handles the execution of a job
 func (js *JobScheduler) processJob(workerID int, job *Job) {
     js.mu.Lock()
@@ -99,20 +58,22 @@ func (js *JobScheduler) processJob(workerID int, job *Job) {
     job.LastExecuted = time.Now()
     js.mu.Unlock()
 
-    
-
     // Enhanced logging with worker and job details
     log.Printf("[Worker %d] Starting to process Job %s (Target: %s, ChainID: %s)", 
         workerID, job.JobID, job.TargetFunction, job.ChainID)
 
-        selectedKeeper, err := js.selectRandomKeeper()
-        if err != nil {
-            log.Printf("Failed to select keeper for job %s: %v", job.JobID, err)
-            // Handle failure - maybe retry or mark job as failed
-            return
-        }
+    quorumID, err := GetQuorum()
+    if err != nil {
+        log.Printf("Failed to get quorum: %v", err)
+        return
+    }
+    keeperHead, err := AssignQuorumHead(quorumID)
+    if err != nil {
+        log.Printf("Failed to select keeper for job %s: %v", job.JobID, err)
+        return
+    }
 
-        err = js.transmitJobToKeeper(selectedKeeper, job)
+    err = js.transmitJobToKeeper(keeperHead, job)
     if err != nil {
         log.Printf("Job transmission failed: %v", err)
     }

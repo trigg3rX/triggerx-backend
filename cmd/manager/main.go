@@ -1,78 +1,39 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/execute/manager"
-	"github.com/trigg3rX/triggerx-backend/pkg/api"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
-// toUint converts various types to uint
-func toUint(v interface{}) uint {
-	switch val := v.(type) {
-	case uint:
-		return val
-	case int:
-		return uint(val)
-	case float64:
-		return uint(val)
-	case string:
-		// Convert string to uint, returning 0 if conversion fails
-		if uintVal, err := strconv.ParseUint(val, 10, 64); err == nil {
-			return uint(uintVal)
-		}
-	default:
-		return 0
-	}
-	return 0
-}
+// Add this as a package-level variable
+var (
+	db *database.Connection
+	logger logging.Logger
+)
 
-func main() {
-	log.SetOutput(os.Stdout)
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+func handleJobEvent(event events.JobEvent) {
+	logger.Infof("Received job event - Type: %s, JobID: %d, JobType: %d, ChainID: %d",
+		event.Type, event.JobID, event.JobType, event.ChainID)
 
-	// Initialize database connection
-	dbConfig := &database.Config{
-		Hosts:       []string{"localhost"}, // or your Cassandra host
-		Timeout:     time.Second * 30,
-		Retries:     3,
-		ConnectWait: time.Second * 20,
-	}
-
-	db, err := database.NewConnection(dbConfig)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close()
-
-	// Initialize the API server
-	server := api.NewServer(db)
-
-	// Initialize the job scheduler with 5 workers
+	// Initialize job scheduler with 5 workers
 	jobScheduler := manager.NewJobScheduler(5, db)
-	jobScheduler.Cron.Start()
-	defer jobScheduler.Stop()
 
-	// Subscribe to job creation events
-	server.GetEventBus().Subscribe(events.JobCreated, func(event events.Event) {
-		jobEvent, ok := event.Payload.(events.JobCreatedEvent)
-		if !ok {
-			log.Printf("Error: Invalid event payload type")
-			return
-		}
-
+	switch event.Type {
+	case "job_created":
+		logger.Infof("New job created: %d", event.JobID)
 		// Convert job ID to string and add to scheduler
-		jobID := strconv.FormatInt(jobEvent.JobID, 10)
+		jobID := strconv.FormatInt(event.JobID, 10)
 		if err := jobScheduler.AddJob(jobID); err != nil {
-			log.Printf("Failed to add job %s: %v", jobID, err)
+			logger.Errorf("Failed to add job %s: %v", jobID, err)
 			return
 		}
 
@@ -80,63 +41,133 @@ func main() {
 		queueStatus := jobScheduler.GetQueueStatus()
 		systemMetrics := jobScheduler.GetSystemMetrics()
 
-		log.Printf("New job %s added. Current System Status:", jobID)
-		log.Printf("  Active Jobs: %d", queueStatus["active_jobs"])
-		log.Printf("  Waiting Jobs: %d", queueStatus["waiting_jobs"])
-		log.Printf("  CPU Usage: %.2f%%", systemMetrics.CPUUsage)
-		log.Printf("  Memory Usage: %.2f%%", systemMetrics.MemoryUsage)
-	})
+		logger.Info("New job %s added. Current System Status:", jobID)
+		logger.Infof("  Job Details: ID=%d, Type=%d, ChainID=%d",
+			event.JobID, event.JobType, event.ChainID)
+		logger.Infof("  Active Jobs: %d", queueStatus["active_jobs"])
+		logger.Infof("  Waiting Jobs: %d", queueStatus["waiting_jobs"])
+		logger.Infof("  CPU Usage: %.2f%%", systemMetrics.CPUUsage)
+		logger.Infof("  Memory Usage: %.2f%%", systemMetrics.MemoryUsage)
 
-	// Subscribe to job updated events and update the job in the scheduler
-	server.GetEventBus().Subscribe(events.JobUpdated, func(event events.Event) {
-		jobEvent, ok := event.Payload.(events.JobUpdatedEvent)
-		if !ok {
-			log.Printf("Error: Invalid event payload type")
-			return
-		}
-		status := "inactive"
-		if jobEvent.Status {
-			status = "active"
-		}
-		jobScheduler.UpdateJob(jobEvent.JobID, status)
-	})
+	case "job_updated":
+		logger.Infof("Job updated: %d", event.JobID)
+		jobScheduler.UpdateJob(event.JobID)
 
-	// API endpoints
-	http.HandleFunc("/system/metrics", func(w http.ResponseWriter, r *http.Request) {
-		metrics := jobScheduler.GetSystemMetrics()
-		json.NewEncoder(w).Encode(metrics)
-	})
+	default:
+		logger.Warnf("Unknown event type: %s", event.Type)
+	}
+}
 
-	http.HandleFunc("/queue/status", func(w http.ResponseWriter, r *http.Request) {
-		status := jobScheduler.GetQueueStatus()
-		json.NewEncoder(w).Encode(status)
-	})
+func subscribeToEvents(ctx context.Context) error {
+	eventBus := events.GetEventBus()
+	if eventBus == nil {
+		return fmt.Errorf("event bus not initialized")
+	}
 
-	http.HandleFunc("/job/", func(w http.ResponseWriter, r *http.Request) {
-		jobID := r.URL.Path[len("/job/"):]
-		if jobID == "" {
-			http.Error(w, "Job ID required", http.StatusBadRequest)
-			return
-		}
+	// Subscribe to the job events channel
+	pubsub := eventBus.Redis().Subscribe(ctx, events.JobEventChannel)
 
-		details, err := jobScheduler.GetJobDetails(jobID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
+	logger.Info("Subscribed to job events channel")
 
-		json.NewEncoder(w).Encode(details)
-	})
-
-	// Start the API server
+	// Listen for messages in a separate goroutine
 	go func() {
-		if err := server.Start("8082"); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+		defer pubsub.Close() // Move defer inside the goroutine
+
+		logger.Info("Starting event subscription...")
+
+		// Wait for confirmation of subscription
+		_, err := pubsub.Receive(ctx)
+		if err != nil {
+			logger.Errorf("Failed to receive subscription confirmation: %v", err)
+			return
+		}
+
+		logger.Info("Successfully subscribed to job events channel")
+		ch := pubsub.Channel()
+
+		for msg := range ch {
+			var event events.JobEvent
+			if err := json.Unmarshal([]byte(msg.Payload), &event); err != nil {
+				logger.Errorf("Failed to unmarshal event: %v", err)
+				continue
+			}
+
+			handleJobEvent(event)
 		}
 	}()
 
-	// Start HTTP server for manager endpoints
-	managerAddr := ":8081"
-	fmt.Printf("Manager server starting on %s\n", managerAddr)
-	log.Fatal(http.ListenAndServe(managerAddr, nil))
+	return nil
+}
+
+func main() {
+	// Initialize logger
+	if err := logging.InitLogger(logging.Development, "manager"); err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	logger := logging.GetLogger()
+	logger.Info("Starting manager node...")
+
+	ctx := context.Background()
+
+	// Initialize event bus
+	if err := events.InitEventBus("localhost:6379"); err != nil {
+		logger.Fatalf("Failed to initialize event bus: %v", err)
+	}
+
+	// Initialize database connection
+	dbConfig := &database.Config{
+		Hosts:       []string{"localhost"},
+		Timeout:     time.Second * 30,
+		Retries:     3,
+		ConnectWait: time.Second * 20,
+	}
+
+	// Assign to the package-level variable
+	var err error
+	db, err = database.NewConnection(dbConfig)
+	if err != nil {
+		logger.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Initialize registry
+	registry, err := network.NewPeerRegistry()
+	if err != nil {
+		logger.Fatalf("Failed to initialize peer registry: %v", err)
+	}
+	// Setup P2P with registry
+	config := network.P2PConfig{
+		Name:    network.ServiceManager,
+		Address: "/ip4/0.0.0.0/tcp/9000",
+	}
+	logger.Info("--------------------444--------------------")
+	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
+	if err != nil {
+		logger.Fatalf("Failed to setup P2P: %v", err)
+	}
+	logger.Info("--------------------555--------------------")
+	// Initialize discovery service
+	discovery := network.NewDiscovery(ctx, host, config.Name)
+
+	// Initialize messaging
+	messaging := network.NewMessaging(host, config.Name)
+	messaging.InitMessageHandling(func(msg network.Message) {
+		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
+	})
+	logger.Info("--------------------666--------------------")
+
+	// Try to connect to other services
+	for _, service := range []string{network.ServiceValidator, network.ServiceQuorum} {
+		if _, err := discovery.ConnectToPeer(service); err != nil {
+			logger.Warnf("Failed to connect to %s: %v", service, err)
+		}
+	}
+	logger.Info("--------------------777--------------------")
+	// Subscribe to events
+	if err := subscribeToEvents(ctx); err != nil {
+		logger.Fatalf("Failed to subscribe to events: %v", err)
+	}
+	logger.Info("--------------------888--------------------")
+	logger.Infof("Manager node is running. Node ID: %s", host.ID().String())
+	select {} // Keep the service running
 }
