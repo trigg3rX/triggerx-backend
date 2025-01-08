@@ -1,22 +1,29 @@
 package types
 
 type NodeConfig struct {
-	// used to set the logger level (true = info, false = debug)
-	Passphrase                    string `yaml:"passphrase"`
-	Production                    bool   `yaml:"production"`
-	KeeperAddress                 string `yaml:"keeper_address"`
-	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever_address"`
+	// Core settings
+	Production bool   `yaml:"production"`
+	AvsName    string `yaml:"avs_name"`
+	SemVer     string `yaml:"sem_ver"`
+
+	// Keeper settings
+	KeeperAddress            string `yaml:"address"`
+	EcdsaPrivateKeyStorePath string `yaml:"ecdsa_keystore_path"`
+	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`
+
+	// Network settings
+	EthRpcUrl string `yaml:"ethrpcurl"`
+	EthWsUrl  string `yaml:"ethwsurl"`
+
+	// Contract addresses
 	ServiceManagerAddress         string `yaml:"service_manager_address"`
-	TokenStrategyAddr             string `yaml:"token_strategy_addr"`
-	EthRpcUrl                     string `yaml:"eth_rpc_url"`
-	EthWsUrl                      string `yaml:"eth_ws_url"`
-	BlsPrivateKeyStorePath        string `yaml:"bls_private_key_store_path"`
-	EcdsaPrivateKeyStorePath      string `yaml:"ecdsa_private_key_store_path"`
-	AggregatorServerIpPortAddress string `yaml:"aggregator_server_ip_port_address"`
-	EigenMetricsIpPortAddress     string `yaml:"prometheus_port_address"`
-	EnableMetrics                 bool   `yaml:"enable_metrics"`
-	NodeApiIpPortAddress          string `yaml:"node_api_ip_port_address"`
-	EnableNodeApi                 bool   `yaml:"enable_node_api"`
+	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
+
+	// Metrics and API settings
+	EnableMetrics             bool   `yaml:"enable_metrics"`
+	EigenMetricsIpPortAddress string `yaml:"port_address"`
+	EnableNodeApi             bool   `yaml:"enable_node_api"`
+	NodeApiIpPortAddress      string `yaml:"node_api_ip_port_address"`
 }
 
 type KeeperStatus struct {
