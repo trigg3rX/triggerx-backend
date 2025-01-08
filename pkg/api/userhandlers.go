@@ -8,38 +8,37 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
-	var userData types.UserData
-	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
-		log.Printf("[CreateUserData] Error decoding request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+// func (h *Handler) CreateUserData(w http.ResponseWriter, r *http.Request) {
+// 	var userData types.UserData
+// 	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
+// 		log.Printf("[CreateUserData] Error decoding request body: %v", err)
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
 
-	log.Printf("[CreateUserData] Creating user with ID: %d", userData.UserID)
+// 	log.Printf("[CreateUserData] Creating user with ID: %d", userData.UserID)
 
-	// Convert stake amount to Gwei and store as varint
-	stakeAmountGwei := new(big.Int)
-	stakeAmountGwei = userData.StakeAmount
+// 	// Convert stake amount to Gwei and store as varint
+// 	stakeAmountGwei := new(big.Int)
+// 	stakeAmountGwei = userData.StakeAmount
 
-	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.user_data (
-            user_id, user_address, job_ids, stake_amount, created_at, last_updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-		userData.UserID, userData.UserAddress, userData.JobIDs, stakeAmountGwei,
-		time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
-		log.Printf("[CreateUserData] Error creating user with ID %d: %v", userData.UserID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+// 	if err := h.db.Session().Query(`
+//         INSERT INTO triggerx.user_data (
+//             user_id, user_address, job_ids, stake_amount, created_at, last_updated_at
+//         ) VALUES (?, ?, ?, ?, ?, ?)`,
+// 		userData.UserID, userData.UserAddress, userData.JobIDs, stakeAmountGwei,
+// 		time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
+// 		log.Printf("[CreateUserData] Error creating user with ID %d: %v", userData.UserID, err)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	log.Printf("[CreateUserData] Successfully created user with ID: %d", userData.UserID)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(userData)
-}
+// 	log.Printf("[CreateUserData] Successfully created user with ID: %d", userData.UserID)
+// 	w.WriteHeader(http.StatusCreated)
+// 	json.NewEncoder(w).Encode(userData)
+// }
 
 func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -90,33 +89,33 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func (h *Handler) UpdateUserData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID := vars["id"]
-	log.Printf("[UpdateUserData] Updating user with ID: %s", userID)
+// func (h *Handler) UpdateUserData(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	userID := vars["id"]
+// 	log.Printf("[UpdateUserData] Updating user with ID: %s", userID)
 
-	var userData types.UserData
-	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
-		log.Printf("[UpdateUserData] Error decoding request body for user ID %s: %v", userID, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+// 	var userData types.UserData
+// 	if err := json.NewDecoder(r.Body).Decode(&userData); err != nil {
+// 		log.Printf("[UpdateUserData] Error decoding request body for user ID %s: %v", userID, err)
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
 
-	if err := h.db.Session().Query(`
-        UPDATE triggerx.user_data 
-        SET user_address = ?, job_ids = ?, stake_amount = ?, last_updated_at = ?
-        WHERE user_id = ?`,
-		userData.UserAddress, userData.JobIDs, userData.StakeAmount,
-		time.Now().UTC(), userID).Exec(); err != nil {
-		log.Printf("[UpdateUserData] Error updating user with ID %s: %v", userID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+// 	if err := h.db.Session().Query(`
+//         UPDATE triggerx.user_data 
+//         SET user_address = ?, job_ids = ?, stake_amount = ?, last_updated_at = ?
+//         WHERE user_id = ?`,
+// 		userData.UserAddress, userData.JobIDs, userData.StakeAmount,
+// 		time.Now().UTC(), userID).Exec(); err != nil {
+// 		log.Printf("[UpdateUserData] Error updating user with ID %s: %v", userID, err)
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	log.Printf("[UpdateUserData] Successfully updated user with ID: %s", userID)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(userData)
-}
+// 	log.Printf("[UpdateUserData] Successfully updated user with ID: %s", userID)
+// 	w.WriteHeader(http.StatusOK)
+// 	json.NewEncoder(w).Encode(userData)
+// }
 
 // func (h *Handler) DeleteUserData(w http.ResponseWriter, r *http.Request) {
 // 	vars := mux.Vars(r)

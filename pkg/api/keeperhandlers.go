@@ -16,6 +16,28 @@ import (
 		- Add GetTasksByKeeperId
 */
 
+func (h *Handler) GetKeeperPeerInfo(w http.ResponseWriter, r *http.Request) {
+	var peerInfo types.PeerInfo
+	if err := json.NewDecoder(r.Body).Decode(&peerInfo); err != nil {
+		log.Printf("[GetKeeperPeerInfo] Error decoding request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("[GetKeeperPeerInfo] Retrieving peer info for keeper ID: %s", peerInfo.ID)
+	if err := h.db.Session().Query(`
+		SELECT id, addresses FROM triggerx.keeper_data WHERE keeper_id = ?`, peerInfo.ID).Scan(
+		&peerInfo.ID, &peerInfo.Addresses); err != nil {
+		log.Printf("[GetKeeperPeerInfo] Error retrieving peer info for keeper ID %s: %v", peerInfo.ID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[GetKeeperPeerInfo] Successfully retrieved peer info for keeper ID: %s", peerInfo.ID)
+	json.NewEncoder(w).Encode(peerInfo)
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.KeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
@@ -24,7 +46,7 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[CreateKeeperData] Creating keeper with ID: %s", keeperData.KeeperID)
+	log.Printf("[CreateKeeperData] Creating keeper with ID: %d", keeperData.KeeperID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (
             keeper_id, withdrawal_address, stakes, strategies, 
@@ -35,12 +57,12 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 		keeperData.Strategies, keeperData.Verified, keeperData.CurrentQuorumNo,
 		keeperData.RegisteredTx, keeperData.Status, keeperData.BlsSigningKeys,
 		keeperData.ConnectionAddress).Exec(); err != nil {
-		log.Printf("[CreateKeeperData] Error creating keeper with ID %s: %v", keeperData.KeeperID, err)
+		log.Printf("[CreateKeeperData] Error creating keeper with ID %d: %v", keeperData.KeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[CreateKeeperData] Successfully created keeper with ID: %s", keeperData.KeeperID)
+	log.Printf("[CreateKeeperData] Successfully created keeper with ID: %d", keeperData.KeeperID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(keeperData)
 }
@@ -151,18 +173,18 @@ func (h *Handler) CreateTaskHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[CreateTaskHistory] Creating task history for task ID: %s", taskHistory.TaskID)
+	log.Printf("[CreateTaskHistory] Creating task history for task ID: %d", taskHistory.TaskID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.task_history (task_id, quorum_id, keepers, responses, consensus_method, validation_status, tx_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		taskHistory.TaskID, taskHistory.QuorumID, taskHistory.Keepers, taskHistory.Responses,
 		taskHistory.ConsensusMethod, taskHistory.ValidationStatus, taskHistory.TxHash).Exec(); err != nil {
-		log.Printf("[CreateTaskHistory] Error creating task history for task ID %s: %v", taskHistory.TaskID, err)
+		log.Printf("[CreateTaskHistory] Error creating task history for task ID %d: %v", taskHistory.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[CreateTaskHistory] Successfully created task history for task ID: %s", taskHistory.TaskID)
+	log.Printf("[CreateTaskHistory] Successfully created task history for task ID: %d", taskHistory.TaskID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(taskHistory)
 }
