@@ -50,21 +50,22 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		userData struct {
-			UserID        int64     `json:"user_id"`
-			UserAddress   string    `json:"user_address"`
-			JobIDs        []int64   `json:"job_ids"`
-			StakeAmount   *big.Int  `json:"stake_amount"`
-			CreatedAt     time.Time `json:"created_at"`
-			LastUpdatedAt time.Time `json:"last_updated_at"`
+			UserID         int64     `json:"user_id"`
+			UserAddress    string    `json:"user_address"`
+			JobIDs         []int64   `json:"job_ids"`
+			StakeAmount    *big.Int  `json:"stake_amount"`
+			AccountBalance float64   `json:"account_balance"`
+			CreatedAt      time.Time `json:"created_at"`
+			LastUpdatedAt  time.Time `json:"last_updated_at"`
 		}
 	)
 
 	if err := h.db.Session().Query(`
-        SELECT user_id, user_address, job_ids, stake_amount, created_at, last_updated_at 
+        SELECT user_id, user_address, job_ids, stake_amount, account_balance, created_at, last_updated_at 
         FROM triggerx.user_data 
         WHERE user_id = ?`, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs,
-		&userData.StakeAmount, &userData.CreatedAt, &userData.LastUpdatedAt); err != nil {
+		&userData.StakeAmount, &userData.AccountBalance, &userData.CreatedAt, &userData.LastUpdatedAt); err != nil {
 		log.Printf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -78,15 +79,17 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 	// Create a response struct with float64 stake amount
 	response := struct {
-		UserID      int64   `json:"user_id"`
-		UserAddress string  `json:"user_address"`
-		JobIDs      []int64 `json:"job_ids"`
-		StakeAmount float64 `json:"stake_amount"`
+		UserID         int64   `json:"user_id"`
+		UserAddress    string  `json:"user_address"`
+		JobIDs         []int64 `json:"job_ids"`
+		StakeAmount    float64 `json:"stake_amount"`
+		AccountBalance float64 `json:"account_balance"`
 	}{
-		UserID:      userData.UserID,
-		UserAddress: userData.UserAddress,
-		JobIDs:      userData.JobIDs,
-		StakeAmount: stakeAmountFloat64,
+		UserID:         userData.UserID,
+		UserAddress:    userData.UserAddress,
+		JobIDs:         userData.JobIDs,
+		StakeAmount:    stakeAmountFloat64,
+		AccountBalance: userData.AccountBalance,
 	}
 
 	json.NewEncoder(w).Encode(response)

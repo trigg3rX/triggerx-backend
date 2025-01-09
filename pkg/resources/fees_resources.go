@@ -189,6 +189,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 		PriceperTG            = 0.0001 // Price per TG unit
 		Fixedcost             = 1      // Fixed cost in TG
 		TransactionSimulation = 1      // Weight for TransactionSimulation in TG
+		quroum_no             = 4
 	)
 
 	// Convert content size to KB for static complexity
@@ -202,7 +203,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	memoryUsedMB := float64(stats.MemoryUsage) / (1024 * 1024) // Convert to MB
 
 	// Calculate TotalTG using the new formula
-	TotalTG := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1) + Fixedcost + TransactionSimulation
+	TotalTG := ((execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)*quroum_no) + Fixedcost + TransactionSimulation
 
 	// Calculate total fee based on TG units
 	totalFee := TotalTG * PriceperTG

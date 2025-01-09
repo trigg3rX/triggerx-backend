@@ -93,6 +93,9 @@ func (s *Server) routes() {
 	api.HandleFunc("/task_history/{id}", handler.GetTaskHistory).Methods("GET")
 	// api.HandleFunc("/task_history/{id}", handler.UpdateTaskHistory).Methods("PUT")
 	// api.HandleFunc("/task_history/{id}", handler.DeleteTaskHistory).Methods("DELETE")
+
+	// Fees routes
+	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
 }
 
 func (s *Server) Start(port string) error {

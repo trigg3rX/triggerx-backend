@@ -8,12 +8,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
-	"github.com/docker/docker/api/types"
-
 )
 
 /*
@@ -181,3 +180,62 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 // 	log.Printf("[DeleteTaskData] Successfully deleted task with ID: %s", taskID)
 // 	w.WriteHeader(http.StatusNoContent)
 // }
+
+func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
+	// Get IPFS URL from query parameter
+	ipfsURL := r.URL.Query().Get("ipfs_url")
+	if ipfsURL == "" {
+		http.Error(w, "Missing ipfs_url query parameter", http.StatusBadRequest)
+		return
+	}
+
+	ctx := context.Background()
+
+	// Create Docker client
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		log.Printf("[GetTaskFees] Error creating Docker client: %v", err)
+		http.Error(w, "Failed to create Docker client", http.StatusInternalServerError)
+		return
+	}
+	defer cli.Close()
+
+	// Download and process the IPFS file
+	codePath, err := resources.DownloadIPFSFile(ipfsURL)
+	if err != nil {
+		log.Printf("[GetTaskFees] Error downloading IPFS file: %v", err)
+		http.Error(w, "Failed to download IPFS file", http.StatusInternalServerError)
+		return
+	}
+	defer os.RemoveAll(filepath.Dir(codePath))
+
+	// Create container
+	containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
+	if err != nil {
+		log.Printf("[GetTaskFees] Error creating container: %v", err)
+		http.Error(w, "Failed to create container", http.StatusInternalServerError)
+		return
+	}
+	defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+
+	// Monitor resources and get stats
+	stats, err := resources.MonitorResources(ctx, cli, containerID)
+	if err != nil {
+		log.Printf("[GetTaskFees] Error monitoring resources: %v", err)
+		http.Error(w, "Failed to monitor resources", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the fee calculation
+	response := struct {
+		TotalFee float64 `json:"total_fee"`
+	}{
+		TotalFee: stats.TotalFee,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

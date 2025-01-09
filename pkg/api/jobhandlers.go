@@ -49,6 +49,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		ScriptFunction    string   `json:"script_function"`
 		ScriptIpfsUrl     string   `json:"script_ipfs_url"`
 		StakeAmount       float64  `json:"stake_amount"`
+		UserBalance       float64  `json:"user_balance"`
 	}
 
 	var tempJob tempJobData
@@ -91,12 +92,13 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var existingUserID int64
 	var existingJobIDs []int64
 	var existingStakeAmount *big.Int
+	var existingUserBalance float64
 
 	err = h.db.Session().Query(`
-        SELECT user_id, job_ids, stake_amount 
+        SELECT user_id, job_ids, stake_amount, account_balance 
         FROM triggerx.user_data 
         WHERE user_address = ? ALLOW FILTERING`,
-		jobData.UserAddress).Scan(&existingUserID, &existingJobIDs, &existingStakeAmount)
+		jobData.UserAddress).Scan(&existingUserID, &existingJobIDs, &existingStakeAmount, &existingUserBalance)
 
 	if err != nil && err != gocql.ErrNotFound {
 		log.Printf("[CreateJobData] Error checking user existence for address %s: %v", jobData.UserAddress, err)
@@ -119,14 +121,15 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		// Convert stake amount to Gwei and store as varint
 		stakeAmountGwei := new(big.Float).SetFloat64(tempJob.StakeAmount)
+
 		stakeAmountInt, _ := stakeAmountGwei.Int(nil)
 
 		if err := h.db.Session().Query(`
             INSERT INTO triggerx.user_data (
-                user_id, user_address, job_ids, stake_amount, created_at, last_updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)`,
+                user_id, user_address, job_ids, stake_amount, created_at, last_updated_at, account_balance
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt,
-			time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
+			time.Now().UTC(), time.Now().UTC(), tempJob.UserBalance).Exec(); err != nil {
 			log.Printf("[CreateJobData] Error creating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -135,6 +138,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Update existing user's job IDs and add to existing stake amount
 		updatedJobIDs := append(existingJobIDs, jobData.JobID)
+		updateaccountBalance := existingUserBalance + tempJob.UserBalance
 
 		// Convert new stake amount to big.Int and add to existing
 		newStakeFloat := new(big.Float).SetFloat64(tempJob.StakeAmount)
@@ -143,9 +147,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.db.Session().Query(`
             UPDATE triggerx.user_data 
-            SET job_ids = ?, stake_amount = ?
+            SET job_ids = ?, stake_amount = ?, account_balance = ?
             WHERE user_id = ?`,
-			updatedJobIDs, newStakeAmount, existingUserID).Exec(); err != nil {
+			updatedJobIDs, newStakeAmount, updateaccountBalance, existingUserID).Exec(); err != nil {
 			log.Printf("[CreateJobData] Error updating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return
