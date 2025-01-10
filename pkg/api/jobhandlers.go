@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"math/big"
@@ -51,7 +52,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		StakeAmount       float64  `json:"stake_amount"`
 		UserBalance       float64  `json:"user_balance"`
 	}
-	
+
 	var tempJob tempJobData
 	if err := json.Unmarshal(body, &tempJob); err != nil {
 		log.Printf("[CreateJobData] Error decoding JSON for job_id %d: %v", tempJob.JobID, err)
@@ -61,7 +62,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	// Convert UserBalance to big.Float for precise decimal handling
 	userBalanceDecimal := new(big.Float).SetFloat64(tempJob.UserBalance)
-	
+
 	// Convert to big.Int for storage as varint in the database
 	userBalanceInt, _ := userBalanceDecimal.Int(nil)
 
@@ -144,7 +145,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Update existing user's job IDs and add to existing stake amount
 		updatedJobIDs := append(existingJobIDs, jobData.JobID)
-		
+
 		// Convert new stake amount to big.Int and add to existing
 		updateaccountBalance := new(big.Int).Add(existingUserBalance, userBalanceInt)
 		newStakeFloat := new(big.Float).SetFloat64(tempJob.StakeAmount)
@@ -207,12 +208,32 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	// Return response
+	// Convert BigInt to string for JSON response
 	response := map[string]interface{}{
 		"message": "Job created successfully",
-		"job":     jobData,
+		"job": map[string]interface{}{
+			"job_id":              jobData.JobID,
+			"jobType":             jobData.JobType,
+			"user_id":             existingUserID,
+			"chain_id":            fmt.Sprintf("%d", jobData.ChainID), // Convert to string if needed
+			"time_frame":          jobData.TimeFrame,
+			"time_interval":       jobData.TimeInterval,
+			"contract_address":    jobData.ContractAddress,
+			"target_function":     jobData.TargetFunction,
+			"arg_type":            jobData.ArgType,
+			"arguments":           jobData.Arguments,
+			"status":              jobData.Status,
+			"job_cost_prediction": jobData.JobCostPrediction,
+			"script_function":     jobData.ScriptFunction,
+			"script_ipfs_url":     jobData.ScriptIpfsUrl,
+			"time_check":          jobData.TimeCheck,
+			"user_address":        jobData.UserAddress,
+			"created_at":          time.Now().UTC(),
+			"last_executed_at":    time.Now().UTC(),
+		},
 	}
 
+	// Return response
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("[CreateJobData] Error encoding response for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
