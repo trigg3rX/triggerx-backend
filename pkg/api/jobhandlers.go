@@ -51,13 +51,19 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		StakeAmount       float64  `json:"stake_amount"`
 		UserBalance       float64  `json:"user_balance"`
 	}
-
+	
 	var tempJob tempJobData
 	if err := json.Unmarshal(body, &tempJob); err != nil {
 		log.Printf("[CreateJobData] Error decoding JSON for job_id %d: %v", tempJob.JobID, err)
 		http.Error(w, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Convert UserBalance to big.Float for precise decimal handling
+	userBalanceDecimal := new(big.Float).SetFloat64(tempJob.UserBalance)
+	
+	// Convert to big.Int for storage as varint in the database
+	userBalanceInt, _ := userBalanceDecimal.Int(nil)
 
 	// Convert hex string to int64
 	chainID, err := strconv.ParseInt(tempJob.ChainID[2:], 16, 64) // Remove "0x" prefix and parse as hex
@@ -92,7 +98,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var existingUserID int64
 	var existingJobIDs []int64
 	var existingStakeAmount *big.Int
-	var existingUserBalance float64
+	var existingUserBalance *big.Int
 
 	err = h.db.Session().Query(`
         SELECT user_id, job_ids, stake_amount, account_balance 
@@ -129,7 +135,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
                 user_id, user_address, job_ids, stake_amount, created_at, last_updated_at, account_balance
             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt,
-			time.Now().UTC(), time.Now().UTC(), tempJob.UserBalance).Exec(); err != nil {
+			time.Now().UTC(), time.Now().UTC(), userBalanceInt).Exec(); err != nil {
 			log.Printf("[CreateJobData] Error creating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -138,9 +144,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Update existing user's job IDs and add to existing stake amount
 		updatedJobIDs := append(existingJobIDs, jobData.JobID)
-		updateaccountBalance := existingUserBalance + tempJob.UserBalance
-
+		
 		// Convert new stake amount to big.Int and add to existing
+		updateaccountBalance := new(big.Int).Add(existingUserBalance, userBalanceInt)
 		newStakeFloat := new(big.Float).SetFloat64(tempJob.StakeAmount)
 		newStakeInt, _ := newStakeFloat.Int(nil)
 		newStakeAmount := new(big.Int).Add(existingStakeAmount, newStakeInt)
