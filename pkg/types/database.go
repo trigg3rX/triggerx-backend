@@ -34,7 +34,7 @@ type JobData struct {
 	TimeCheck         time.Time `json:"time_check"`
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
-	UserBalance       int64     `json:"user_balance"`
+	UserBalance       float64   `json:"user_balance"`
 }
 
 type TaskData struct {
