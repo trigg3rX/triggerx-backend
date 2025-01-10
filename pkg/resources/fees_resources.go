@@ -399,9 +399,15 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Usage: program <ipfs-url>")
+	if err := run(); err != nil {
+		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func run() error {
+	if len(os.Args) != 2 {
+		return fmt.Errorf("Usage: program <ipfs-url>")
 	}
 
 	ipfsURL := os.Args[1]
@@ -412,45 +418,59 @@ func main() {
 		client.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
-		fmt.Printf("Failed to create Docker client: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
 	defer cli.Close()
 
 	if err := pullDockerImage(ctx, cli, "golang:latest"); err != nil {
-		fmt.Printf("Failed to pull Docker image: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to pull Docker image: %w", err)
 	}
 
 	codePath, err := DownloadIPFSFile(ipfsURL)
 	if err != nil {
-		fmt.Printf("Failed to download IPFS file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to download IPFS file: %w", err)
 	}
 
 	fmt.Printf("Downloaded file path: %s\n", codePath)
 	content, err := os.ReadFile(codePath)
 	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error reading file: %w", err)
 	}
 	fmt.Printf("File content length: %d bytes\n", len(content))
-	defer os.RemoveAll(filepath.Dir(codePath))
+	
+	// Move the defer after the error check to ensure cleanup
+	defer func() {
+		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
+		}
+	}()
 
 	containerID, err := CreateDockerContainer(ctx, cli, codePath)
 	if err != nil {
-		fmt.Printf("Failed to create container: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create container: %w", err)
 	}
-	defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+
+	// Create cleanup function with timeout context
+	cleanup := func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := cli.ContainerRemove(cleanupCtx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
+			fmt.Printf("Warning: failed to remove container %s: %v\n", containerID, err)
+		}
+	}
+	defer cleanup()
 
 	fmt.Println("\nStarting container and monitoring resources...")
 	stats, err := MonitorResources(ctx, cli, containerID)
 	if err != nil {
-		fmt.Printf("Failed to monitor resources: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to monitor resources: %w", err)
 	}
 
+	printResourceStats(stats)
+	return nil
+}
+
+func printResourceStats(stats *ResourceStats) {
 	fmt.Printf("\nResource Usage:\n")
 	fmt.Printf("Memory: %.2f MB\n", float64(stats.MemoryUsage)/(1024*1024))
 	fmt.Printf("CPU: %.2f%%\n", stats.CPUPercentage)
