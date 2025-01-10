@@ -251,7 +251,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	}
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
 	// Enhanced log handling
