@@ -26,7 +26,7 @@ func InitSchema(session *gocql.Session) error {
 			user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
 			job_ids set<bigint>,
 			stake_amount varint,
-			account_balance decimal,
+			account_balance varint,
 			created_at timestamp,
 			last_updated_at timestamp
 		)`).Exec(); err != nil {

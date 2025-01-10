@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_address text,
     job_ids set<bigint>,
     stake_amount varint,
-    account_balance decimal,
+    account_balance varint,
     created_at timestamp,
     last_updated_at timestamp
 );
