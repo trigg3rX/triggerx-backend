@@ -186,20 +186,26 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[CreateJobData] Successfully created job_id %d", jobData.JobID)
 
-	// After successful job creation in database, create and publish event
-	jobCreatedEvent := events.JobCreatedEvent{
-		JobID:        jobData.JobID,
-		JobType:      jobData.JobType,
-		ChainID:      jobData.ChainID,
+	// After successfully creating the job
+	eventBus := events.GetEventBus()
+	if eventBus == nil {
+		log.Printf("[CreateJobData] Warning: EventBus is nil, event will not be published")
+		return
 	}
 
-	// Publish the event
-	h.eventBus.Publish(events.Event{
-		Type:    events.JobCreated,
-		Payload: jobCreatedEvent,
-	})
+	log.Printf("[CreateJobData] Publishing job creation event for job_id %d", jobData.JobID)
+	event := events.JobEvent{
+		Type:    "job_created",
+		JobID:   jobData.JobID,
+		JobType: jobData.JobType,
+		ChainID: jobData.ChainID,
+	}
 
-	log.Printf("[CreateJobData] Published job creation event for job_id %d", jobData.JobID)
+	if err := eventBus.PublishJobEvent(r.Context(), event); err != nil {
+		log.Printf("[CreateJobData] Warning: Failed to publish job creation event: %v", err)
+	} else {
+		log.Printf("[CreateJobData] Successfully published job creation event for job_id %d", jobData.JobID)
+	}
 
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")
@@ -266,17 +272,21 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create and publish job updated event
-	jobUpdatedEvent := events.JobUpdatedEvent{
-		JobID:        jobData.JobID,
-		JobType:      jobData.JobType,
-		ChainID:      jobData.ChainID,
+	// After successfully updating the job
+	if eventBus := events.GetEventBus(); eventBus != nil {
+		event := events.JobEvent{
+			Type:    "job_updated",
+			JobID:   jobData.JobID,
+			JobType: jobData.JobType,
+			ChainID: jobData.ChainID,
+		}
+		if err := eventBus.PublishJobEvent(r.Context(), event); err != nil {
+			log.Printf("[UpdateJobData] Warning: Failed to publish job update event: %v", err)
+			// Continue execution - don't fail the request due to event publishing
+		} else {
+			log.Printf("[UpdateJobData] Successfully published job update event for job_id %d", jobData.JobID)
+		}
 	}
-
-	h.eventBus.Publish(events.Event{
-		Type:    events.JobUpdated,
-		Payload: jobUpdatedEvent,
-	})
 
 	log.Printf("[UpdateJobData] Successfully updated and published event for job_id %s", jobID)
 	w.WriteHeader(http.StatusOK)
@@ -395,20 +405,3 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
-// func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
-// 	vars := mux.Vars(r)
-// 	jobID := vars["id"]
-// 	log.Printf("[DeleteJobData] Deleting job_id %s", jobID)
-
-// 	if err := h.db.Session().Query(`
-//         DELETE FROM triggerx.job_data
-//         WHERE job_id = ?`, jobID).Exec(); err != nil {
-// 		log.Printf("[DeleteJobData] Error deleting job_id %s: %v", jobID, err)
-// 		http.Error(w, err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	log.Printf("[DeleteJobData] Successfully deleted job_id %s", jobID)
-// 	w.WriteHeader(http.StatusNoContent)
-// }

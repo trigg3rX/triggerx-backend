@@ -25,8 +25,8 @@ func (h *Handler) CreateQuorumData(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[CreateQuorumData] Creating quorum with ID: %d", quorumData.QuorumID)
 
 	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.quorum_data (quorum_id, quorum_no, quorum_creation_block, quorum_tx_hash, keepers, quorum_stake_total, quorum_threshold, task_ids, quorum_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        INSERT INTO triggerx.quorum_data (quorum_id, quorum_no, quorum_creation_block, quorum_tx_hash, keepers, quorum_stake_total, task_ids, quorum_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		quorumData.QuorumID, quorumData.QuorumNo, quorumData.QuorumCreationBlock, quorumData.QuorumTxHash,
 		quorumData.Keepers, quorumData.QuorumStakeTotal, quorumData.TaskIDs, quorumData.QuorumStatus).Exec(); err != nil {
 		log.Printf("[CreateQuorumData] Error creating quorum with ID %d: %v", quorumData.QuorumID, err)
@@ -46,7 +46,7 @@ func (h *Handler) GetQuorumData(w http.ResponseWriter, r *http.Request) {
 
 	var quorumData types.QuorumData
 	if err := h.db.Session().Query(`
-        SELECT quorum_id, quorum_no, quorum_creation_block, quorum_tx_hash, keepers, quorum_stake_total, quorum_threshold, task_ids, quorum_status 
+        SELECT quorum_id, quorum_no, quorum_creation_block, quorum_tx_hash, keepers, quorum_stake_total, task_ids, quorum_status 
         FROM triggerx.quorum_data 
         WHERE quorum_id = ?`, quorumID).Scan(
 		&quorumData.QuorumID, &quorumData.QuorumNo, &quorumData.QuorumCreationBlock, &quorumData.QuorumTxHash,
