@@ -14,4 +14,6 @@ data/peer_registry/*
 !data/logs/*/.gitkeep
 !data/peer_registry/.gitkeep
 
+data/logs/*/*.log
+data/peer_registry/*.json
 references/*

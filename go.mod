@@ -9,8 +9,7 @@ toolchain go1.23.4
 // replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98
 
 require (
-	github.com/Layr-Labs/eigensdk-go v0.1.13
-	github.com/Layr-Labs/incredible-squaring-avs v0.0.0-20241120151214-1d8d5915d011
+	github.com/Layr-Labs/eigensdk-go v0.2.0-beta
 	github.com/docker/docker v25.0.6+incompatible
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gocql/gocql v1.7.0
@@ -20,17 +19,21 @@ require (
 	github.com/libp2p/go-libp2p v0.38.1
 	github.com/multiformats/go-multiaddr v0.14.0
 	github.com/prometheus/client_golang v1.20.5
+	github.com/redis/go-redis/v9 v9.7.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
+	go.uber.org/zap v1.27.0
+	golang.org/x/crypto v0.31.0
 	golang.org/x/term v0.27.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.26.1 // indirect
@@ -65,6 +68,7 @@ require (
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -181,8 +185,6 @@ require (
 	go.uber.org/fx v1.23.0 // indirect
 	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/net v0.32.0 // indirect
