@@ -20,7 +20,6 @@ DROP TABLE IF EXISTS task_history;
 CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint PRIMARY KEY,
     user_address text,
-    user_address text,
     job_ids set<bigint>,
     stake_amount varint,
     account_balance varint,
@@ -37,7 +36,6 @@ CREATE TABLE IF NOT EXISTS job_data (
     chain_id int,
     time_frame bigint,
     time_interval int,
-    contract_address text,
     contract_address text,
     target_function text,
     arg_type int,
@@ -65,8 +63,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_hash text,
     task_response_hash text,
     quorum_keeper_hash text,
-    task_fee decimal,
-    PRIMARY KEY (task_id)
+    task_fee decimal
 );
 
 -- Create Quorum_data table

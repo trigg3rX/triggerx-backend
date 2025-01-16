@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"time"
-
+	"strconv"
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
@@ -40,7 +40,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		JobID             int64    `json:"job_id"`
 		JobType           int64    `json:"jobType"`
 		UserAddress       string   `json:"user_address"`
-		ChainID           int64    `json:"chain_id"`
+		ChainID           string    `json:"chain_id"`
 		TimeFrame         int64    `json:"time_frame"`
 		TimeInterval      int64    `json:"time_interval"`
 		ContractAddress   string   `json:"contract_address"`
@@ -81,7 +81,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		JobID:             tempJob.JobID,
 		JobType:           int(tempJob.JobType),
 		UserAddress:       tempJob.UserAddress,
-		ChainID:           int(tempJob.ChainID),
+		ChainID:           int(chainID),
 		TimeFrame:         tempJob.TimeFrame,
 		TimeInterval:      int(tempJob.TimeInterval),
 		ContractAddress:   tempJob.ContractAddress,
