@@ -16,7 +16,9 @@ type NodeConfig struct {
 	EthWsUrl  string `yaml:"ethwsurl"`
 
 	// Contract addresses
-	ServiceManagerAddress         string `yaml:"service_manager_address"`
+	AvsDirectoryAddress         string `yaml:"avs_directory_address"`
+	StrategyManagerAddress      string `yaml:"strategy_manager_address"`
+	ServiceManagerAddress       string `yaml:"service_manager_address"`
 	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
 
 	// Metrics and API settings
