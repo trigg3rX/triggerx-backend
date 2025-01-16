@@ -23,7 +23,7 @@ func InitSchema(session *gocql.Session) error {
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.user_data (
 			user_id bigint PRIMARY KEY,
-			user_address text CHECK (user_address MATCHES '^0x[0-9a-fA-F]{40}$'),
+			user_address text,
 			job_ids set<bigint>,
 			stake_amount varint,
 			account_balance varint,
@@ -73,8 +73,7 @@ func InitSchema(session *gocql.Session) error {
 			task_hash text,
 			task_response_hash text,
 			quorum_keeper_hash text,
-			task_fee decimal,
-			PRIMARY KEY (task_id)
+			task_fee decimal
 		)`).Exec(); err != nil {
 		return err
 	}
