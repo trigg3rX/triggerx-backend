@@ -1,7 +1,7 @@
 package keeper
 
 import (
-	// "context"
+	"context"
 	// "encoding/hex"
 	// "encoding/json"
 	"fmt"
@@ -13,81 +13,83 @@ import (
 
 	// "github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	// "github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/prometheus/client_golang/prometheus"
 
-	// "github.com/trigg3rX/triggerx-backend/pkg/core/chainio"
-
-	// "github.com/Layr-Labs/eigensdk-go/chainio/clients"
-	// "github.com/Layr-Labs/eigensdk-go/chainio/clients/wallet"
-	// "github.com/Layr-Labs/eigensdk-go/chainio/txmgr"
+	"github.com/Layr-Labs/eigensdk-go/chainio/clients"
+	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
+	"github.com/Layr-Labs/eigensdk-go/chainio/clients/wallet"
+	"github.com/Layr-Labs/eigensdk-go/chainio/txmgr"
 	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
-	// sdkecdsa "github.com/Layr-Labs/eigensdk-go/crypto/ecdsa"
 
-	// "github.com/trigg3rX/triggerx-backend/pkg/core"
+	sdkecdsa "github.com/Layr-Labs/eigensdk-go/crypto/ecdsa"
+
+	chainio "github.com/Layr-Labs/eigensdk-go/chainio/clients/avsregistry"
 
 	sdklogging "github.com/Layr-Labs/eigensdk-go/logging"
-	// sdkmetrics "github.com/Layr-Labs/eigensdk-go/metrics"
-	// "github.com/Layr-Labs/eigensdk-go/metrics/collectors/economic"
+	sdkmetrics "github.com/Layr-Labs/eigensdk-go/metrics"
+
+	"github.com/Layr-Labs/eigensdk-go/metrics/collectors/economic"
 
 	// "github.com/Layr-Labs/eigensdk-go/nodeapi"
-	// "github.com/Layr-Labs/eigensdk-go/signerv2"
+	"github.com/Layr-Labs/eigensdk-go/signerv2"
 	sdktypes "github.com/Layr-Labs/eigensdk-go/types"
 
-	// rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
+	rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
-	txtaskmanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXTaskManager"
 	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
+	// txtaskmanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXTaskManager"
 
 	// sdkelcontracts "github.com/Layr-Labs/eigensdk-go/chainio/clients/elcontracts"
-	// "github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
+	// sdketh "github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
 
 	"os"
 	"path/filepath"
+
+	"github.com/joho/godotenv"
 )
 
 type Keeper struct {
-	Config                     types.NodeConfig
-	Logger                     sdklogging.Logger
-	EthClient                  sdkcommon.EthClientInterface
-	MetricsReg                 *prometheus.Registry
-	Metrics                    *metrics.AvsAndEigenMetrics
-	BlsKeypair                 *bls.KeyPair
-	KeeperId                   sdktypes.OperatorId
-	KeeperAddr                 common.Address
-	NewTaskCreatedChan         chan *txtaskmanager.ContractTriggerXTaskManagerTaskCreated
+	EcdsaAddress      common.Address
+	PubkeysRegistered bool
+	BlsKeypair        *bls.KeyPair
+	RegisteredWithAvs bool
+	KeeperId          string
+
+	// Config                     types.NodeConfig
+	Logger        sdklogging.Logger
+	EthClient     sdkcommon.EthClientInterface
+	EthWsClient   sdkcommon.EthClientInterface
+	MetricsReg    *prometheus.Registry
+	Metrics       *metrics.AvsAndEigenMetrics
+	AvsReader     *chainio.ChainReader
+	AvsWriter     *chainio.ChainWriter
+	AvsSubscriber *chainio.ChainSubscriber
+
 	ValidatorServerIpPortAddr  string
 	TriggerxServiceManagerAddr common.Address
 }
 
-type OperatorStatus struct {
-	EcdsaAddress      string
-	PubkeysRegistered bool
-	G1Pubkey          string
-	G2Pubkey          string
-	RegisteredWithAvs bool
-	OperatorId        string
-}
-
-func expandHomeDir(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("empty path provided")
-	}
-
-	if path[0] == '~' {
-		home, err := os.UserHomeDir()
+func handleHomeDirPath(path string) string {
+	if len(path) >= 2 && path[:2] == "~/" {
+		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("failed to get home directory: %w", err)
+			return path
 		}
-		return filepath.Join(home, path[1:]), nil
+		return filepath.Join(homeDir, path[2:])
 	}
-	return path, nil
+	return path
 }
 
 func NewKeeperFromConfigFile(configPath string) (*Keeper, error) {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		return nil, fmt.Errorf("error loading .env file: %w", err)
+	}
+
 	// Read and parse the config file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -103,203 +105,202 @@ func NewKeeperFromConfigFile(configPath string) (*Keeper, error) {
 }
 
 func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
-	// Validate required fields
-	if c.ServiceManagerAddress == "" {
-		return nil, fmt.Errorf("ServiceManagerAddress is empty in configuration")
+	var logLevel sdklogging.LogLevel
+	if c.Production {
+		logLevel = sdklogging.Production
+	} else {
+		logLevel = sdklogging.Development
 	}
-	if c.OperatorStateRetrieverAddress == "" {
-		return nil, fmt.Errorf("OperatorStateRetriever address is empty in configuration")
-	}
-	if c.MetricsIpPortAddress == "" {
-		return nil, fmt.Errorf("Prometheus metrics ip port address is empty in configuration")
-	}
-	if c.EthRpcUrl == "" {
-		return nil, fmt.Errorf("EthRpcUrl is empty in configuration")
-	}
-	if c.EthWsUrl == "" {
-		return nil, fmt.Errorf("EthWsUrl is empty in configuration")
+	logger, err := sdklogging.NewZapLogger(logLevel)
+	if err != nil {
+		return nil, err
 	}
 
-// 	var logLevel sdklogging.LogLevel
-// 	if c.Production {
-// 		logLevel = sdklogging.Production
-// 	} else {
-// 		logLevel = sdklogging.Development
-// 	}
-// 	logger, err := sdklogging.NewZapLogger(logLevel)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	reg := prometheus.NewRegistry()
-// 	eigenMetrics := sdkmetrics.NewEigenMetrics(c.AvsName, c.EigenMetricsIpPortAddress, reg, logger)
-// 	avsAndEigenMetrics := metrics.NewAvsAndEigenMetrics(c.AvsName, eigenMetrics, reg)
+	err = ValidateConfig(c)
+	if err != nil {
+		logger.Errorf("Invalid config: %v", err)
+		return nil, err
+	}
 
-// 	// Setup Node Api
-// 	nodeApi := nodeapi.NewNodeApi(c.AvsName, c.SemVer, c.NodeApiIpPortAddress, logger)
+	reg := prometheus.NewRegistry()
+	eigenMetrics := sdkmetrics.NewEigenMetrics(c.AvsName, c.MetricsIpPortAddress, reg, logger)
+	avsAndEigenMetrics := metrics.NewAvsAndEigenMetrics(c.AvsName, eigenMetrics, reg)
 
-// 	var ethRpcClient, ethWsClient sdkcommon.EthClientInterface
-// 	if c.EnableMetrics {
-// 		rpcCallsCollector := rpccalls.NewCollector(c.AvsName, reg)
-// 		ethRpcClient, err = eth.NewInstrumentedClient(c.EthRpcUrl, rpcCallsCollector)
-// 		if err != nil {
-// 			logger.Errorf("Cannot create http ethclient", "err", err)
-// 			return nil, err
-// 		}
-// 		ethWsClient, err = eth.NewInstrumentedClient(c.EthWsUrl, rpcCallsCollector)
-// 		if err != nil {
-// 			logger.Errorf("Cannot create ws ethclient", "err", err)
-// 			return nil, err
-// 		}
-// 	} else {
-// 		ethRpcClient, err = ethclient.Dial(c.EthRpcUrl)
-// 		if err != nil {
-// 			logger.Errorf("Cannot create http ethclient", "err", err)
-// 			return nil, err
-// 		}
-// 		ethWsClient, err = ethclient.Dial(c.EthWsUrl)
-// 		if err != nil {
-// 			logger.Errorf("Cannot create ws ethclient", "err", err)
-// 			return nil, err
-// 		}
-// 	}
+	var ethRpcClient, ethWsClient sdkcommon.EthClientInterface
+	if c.EnableMetrics {
+		rpcCallsCollector := rpccalls.NewCollector(c.AvsName, reg)
+		ethRpcClient, err = eth.NewInstrumentedClient(c.EthRpcUrl, rpcCallsCollector)
+		if err != nil {
+			logger.Errorf("Cannot create http ethclient", "err", err)
+			return nil, err
+		}
+		ethWsClient, err = eth.NewInstrumentedClient(c.EthWsUrl, rpcCallsCollector)
+		if err != nil {
+			logger.Errorf("Cannot create ws ethclient", "err", err)
+			return nil, err
+		}
+	} else {
+		ethRpcClient, err = ethclient.Dial(c.EthRpcUrl)
+		if err != nil {
+			logger.Errorf("Cannot create http ethclient", "err", err)
+			return nil, err
+		}
+		ethWsClient, err = ethclient.Dial(c.EthWsUrl)
+		if err != nil {
+			logger.Errorf("Cannot create ws ethclient", "err", err)
+			return nil, err
+		}
+	}
 
-// 	// blsKeyPassword, ok := os.LookupEnv("OPERATOR_BLS_KEY_PASSWORD")
-// 	// if !ok {
-// 	// 	logger.Warnf("OPERATOR_BLS_KEY_PASSWORD env var not set. using empty string")
-// 	// }
-// 	blsKeyPassword := "pL6!oK5@iJ4#"
-// 	blsKeyPath, err := expandHomeDir(c.BlsPrivateKeyStorePath)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to process BLS keystore path: %w", err)
-// 	}
+	blsKeyPassword, ok := os.LookupEnv("OPERATOR_BLS_KEY_PASSWORD")
+	if !ok {
+		logger.Warnf("OPERATOR_BLS_KEY_PASSWORD env var not set. using empty string")
+	}
+	// blsKeyPassword := "pL6!oK5@iJ4#"
+	blsKeyPath := handleHomeDirPath(c.BlsPrivateKeyStorePath)
+	if blsKeyPath == "" {
+		return nil, fmt.Errorf("invalid bls keystore path")
+	}
 
-// 	blsKeyPair, err := bls.ReadPrivateKeyFromFile(blsKeyPath, blsKeyPassword)
-// 	if err != nil {
-// 		logger.Errorf("Cannot parse bls private key", "err", err)
-// 		return nil, err
-// 	}
-// 	// TODO(samlaf): should we add the chainId to the config instead?
-// 	// this way we can prevent creating a signer that signs on mainnet by mistake
-// 	// if the config says chainId=5, then we can only create a goerli signer
-// 	chainId, err := ethRpcClient.ChainID(context.Background())
-// 	if err != nil {
-// 		logger.Error("Cannot get chainId", "err", err)
-// 		return nil, err
-// 	}
+	blsKeyPair, err := bls.ReadPrivateKeyFromFile(blsKeyPath, blsKeyPassword)
+	if err != nil {
+		logger.Errorf("Cannot parse bls private key", "err", err)
+		return nil, err
+	}
+	chainId, err := ethRpcClient.ChainID(context.Background())
+	if err != nil {
+		logger.Error("Cannot get chainId", "err", err)
+		return nil, err
+	}
 
-// 	// ecdsaKeyPassword, ok := os.LookupEnv("OPERATOR_ECDSA_KEY_PASSWORD")
-// 	// if !ok {
-// 	// 	logger.Warnf("OPERATOR_ECDSA_KEY_PASSWORD env var not set. using empty string")
-// 	// }
-// 	ecdsaKeyPassword := "pL6!oK5@iJ4#"
-// 	ecdsaKeyPath, err := expandHomeDir(c.EcdsaPrivateKeyStorePath)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to process ECDSA keystore path: %w", err)
-// 	}
+	ecdsaKeyPassword, ok := os.LookupEnv("OPERATOR_ECDSA_KEY_PASSWORD")
+	if !ok {
+		logger.Warnf("OPERATOR_ECDSA_KEY_PASSWORD env var not set. using empty string")
+	}
+	// ecdsaKeyPassword := "pL6!oK5@iJ4#"
+	ecdsaKeyPath := handleHomeDirPath(c.EcdsaPrivateKeyStorePath)
+	if ecdsaKeyPath == "" {
+		return nil, fmt.Errorf("invalid ecdsa keystore path")
+	}
 
-// 	signerV2, _, err := signerv2.SignerFromConfig(signerv2.Config{
-// 		KeystorePath: ecdsaKeyPath,
-// 		Password:     ecdsaKeyPassword,
-// 	}, chainId)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	chainioConfig := clients.BuildAllConfig{
-// 		EthHttpUrl:                 c.EthRpcUrl,
-// 		EthWsUrl:                   c.EthWsUrl,
-// 		RegistryCoordinatorAddr:    c.ServiceManagerAddress,
-// 		OperatorStateRetrieverAddr: c.OperatorStateRetrieverAddress,
-// 		AvsName:                    c.AvsName,
-// 		PromMetricsIpPortAddress:   c.EigenMetricsIpPortAddress,
-// 	}
-// 	operatorEcdsaPrivateKey, err := sdkecdsa.ReadKey(
-// 		ecdsaKeyPath,
-// 		ecdsaKeyPassword,
-// 	)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	sdkClients, err := clients.BuildAll(chainioConfig, operatorEcdsaPrivateKey, logger)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	skWallet, err := wallet.NewPrivateKeyWallet(ethRpcClient, signerV2, common.HexToAddress(c.KeeperAddress), logger)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	txMgr := txmgr.NewSimpleTxManager(skWallet, ethRpcClient, logger, common.HexToAddress(c.KeeperAddress))
-// 	avsReader, err := chainio.BuildAvsReader(
-// 		common.HexToAddress(c.ServiceManagerAddress),
-// 		common.HexToAddress(c.OperatorStateRetrieverAddress),
-// 		ethRpcClient, logger)
-// 	if err != nil {
-// 		logger.Error("Cannot create AvsReader", "err", err)
-// 		return nil, err
-// 	}
-// 	if avsReader == nil {
-// 		return nil, fmt.Errorf("avsReader was not properly initialized")
-// 	}
-// 	avsWriter, err := chainio.BuildAvsWriter(txMgr, common.HexToAddress(c.ServiceManagerAddress),
-// 		common.HexToAddress(c.OperatorStateRetrieverAddress), ethRpcClient, logger,
-// 	)
-// 	if err != nil {
-// 		logger.Error("Cannot create AvsWriter", "err", err)
-// 		return nil, err
-// 	}
-// 	avsSubscriber, err := chainio.BuildAvsSubscriber(common.HexToAddress(c.ServiceManagerAddress),
-// 		common.HexToAddress(c.OperatorStateRetrieverAddress), ethWsClient, logger,
-// 	)
-// 	if err != nil {
-// 		logger.Error("Cannot create AvsSubscriber", "err", err)
-// 		return nil, err
-// 	}
+	signerV2, _, err := signerv2.SignerFromConfig(signerv2.Config{
+		KeystorePath: ecdsaKeyPath,
+		Password:     ecdsaKeyPassword,
+	}, chainId)
+	if err != nil {
+		panic(err)
+	}
 
-// 	// We must register the economic metrics separately because they are exported metrics (from jsonrpc or subgraph calls)
-// 	// and not instrumented metrics: see https://prometheus.io/docs/instrumenting/writing_clientlibs/#overall-structure
-// 	quorumNames := map[sdktypes.QuorumNum]string{
-// 		0: "quorum0",
-// 	}
-// 	economicMetricsCollector := economic.NewCollector(
-// 		sdkClients.ElChainReader, sdkClients.AvsRegistryChainReader,
-// 		c.AvsName, logger, common.HexToAddress(c.KeeperAddress), quorumNames)
-// 	reg.MustRegister(economicMetricsCollector)
+	// logger.Info("signerV2", "signerV2", signerV2)
+	chainioConfig := clients.BuildAllConfig{
+		EthHttpUrl:                 c.EthRpcUrl,
+		EthWsUrl:                   c.EthWsUrl,
+		RegistryCoordinatorAddr:    c.RegistryCoordinatorAddress,
+		OperatorStateRetrieverAddr: c.OperatorStateRetrieverAddress,
+		AvsName:                    c.AvsName,
+		PromMetricsIpPortAddress:   c.MetricsIpPortAddress,
+	}
+	operatorEcdsaPrivateKey, err := sdkecdsa.ReadKey(
+		ecdsaKeyPath,
+		ecdsaKeyPassword,
+	)
+	if err != nil {
+		return nil, err
+	}
+	sdkClients, err := clients.BuildAll(chainioConfig, operatorEcdsaPrivateKey, logger)
+	if err != nil {
+		panic(err)
+	}
+	skWallet, err := wallet.NewPrivateKeyWallet(ethRpcClient, signerV2, common.HexToAddress(c.KeeperAddress), logger)
+	if err != nil {
+		panic(err)
+	}
+	txMgr := txmgr.NewSimpleTxManager(skWallet, ethRpcClient, logger, common.HexToAddress(c.KeeperAddress))
+	avsReader, err := chainio.NewReaderFromConfig(
+		chainio.Config{
+			RegistryCoordinatorAddress:    common.HexToAddress(c.RegistryCoordinatorAddress),
+			OperatorStateRetrieverAddress: common.HexToAddress(c.OperatorStateRetrieverAddress),
+		},
+		ethRpcClient,
+		logger,
+	)
+	if err != nil {
+		logger.Error("Cannot create AvsReader", "err", err)
+		return nil, err
+	}
 
-// 	keeper := &Keeper{
-// 		Config:                     c,
-// 		Logger:                     logger,
-// 		EthClient:                  ethRpcClient,
-// 		MetricsReg:                 reg,
-// 		Metrics:                    avsAndEigenMetrics,
-// 		NodeApi:                    nodeApi,
-// 		AvsReader:                  avsReader,
-// 		AvsWriter:                  avsWriter,
-// 		AvsSubscriber:              avsSubscriber,
-// 		EigenlayerReader:           *sdkClients.ElChainReader,
-// 		EigenlayerWriter:           *sdkClients.ElChainWriter,
-// 		BlsKeypair:                 blsKeyPair,
-// 		KeeperId:                   [32]byte{0}, // this will be set after registration
-// 		KeeperAddr:                 common.HexToAddress(c.KeeperAddress),
-// 		NewTaskCreatedChan:         make(chan *txtaskmanager.ContractTriggerXTaskManagerTaskCreated),
-// 		ValidatorServerIpPortAddr:  "",
-// 		TriggerxServiceManagerAddr: common.HexToAddress(c.ServiceManagerAddress),
-// 	}
+	avsWriter, err := chainio.NewWriterFromConfig(
+		chainio.Config{
+			RegistryCoordinatorAddress:    common.HexToAddress(c.RegistryCoordinatorAddress),
+			OperatorStateRetrieverAddress: common.HexToAddress(c.OperatorStateRetrieverAddress),
+		},
+		ethRpcClient,
+		txMgr,
+		logger,
+	)
+	if err != nil {
+		logger.Error("Cannot create AvsWriter", "err", err)
+		return nil, err
+	}
 
-// 	// OperatorId is set in contract during registration so we get it after registering operator.
-// 	operatorId, err := sdkClients.AvsRegistryChainReader.GetOperatorId(&bind.CallOpts{}, keeper.KeeperAddr)
-// 	if err != nil {
-// 		logger.Error("Cannot get operator id", "err", err)
-// 		return nil, err
-// 	}
-// 	keeper.KeeperId = operatorId
-// 	logger.Info("Operator info",
-// 		"operatorId", operatorId,
-// 		"operatorAddr", c.KeeperAddress,
-// 		"operatorG1Pubkey", keeper.BlsKeypair.GetPubKeyG1(),
-// 		"operatorG2Pubkey", keeper.BlsKeypair.GetPubKeyG2(),
-// 	)
+	avsSubscriber, err := chainio.NewSubscriberFromConfig(
+		chainio.Config{
+			RegistryCoordinatorAddress:    common.HexToAddress(c.RegistryCoordinatorAddress),
+			OperatorStateRetrieverAddress: common.HexToAddress(c.OperatorStateRetrieverAddress),
+		},
+		ethWsClient,
+		logger,
+	)
+	if err != nil {
+		logger.Error("Cannot create AvsSubscriber", "err", err)
+		return nil, err
+	}
 
-	// return keeper, nil
-	return nil, nil
+	// We must register the economic metrics separately because they are exported metrics (from jsonrpc or subgraph calls)
+	// and not instrumented metrics: see https://prometheus.io/docs/instrumenting/writing_clientlibs/#overall-structure
+	quorumNames := map[sdktypes.QuorumNum]string{
+		0: "quorum0",
+	}
+	economicMetricsCollector := economic.NewCollector(
+		sdkClients.ElChainReader, sdkClients.AvsRegistryChainReader,
+		c.AvsName, logger, common.HexToAddress(c.KeeperAddress), quorumNames)
+	reg.MustRegister(economicMetricsCollector)
+
+	keeper := &Keeper{
+		EcdsaAddress:      common.HexToAddress(c.KeeperAddress),
+		PubkeysRegistered: false,
+		BlsKeypair:        blsKeyPair,
+		RegisteredWithAvs: false,
+		KeeperId:          "",
+		// Config: c,
+		Logger:                     logger,
+		EthClient:                  ethRpcClient,
+		EthWsClient:                ethWsClient,
+		MetricsReg:                 reg,
+		Metrics:                    avsAndEigenMetrics,
+		AvsReader:                  avsReader,
+		AvsWriter:                  avsWriter,
+		AvsSubscriber:              avsSubscriber,
+		ValidatorServerIpPortAddr:  "",
+		TriggerxServiceManagerAddr: common.HexToAddress(c.ServiceManagerAddress),
+	}
+
+	// 	// OperatorId is set in contract during registration so we get it after registering operator.
+	// 	operatorId, err := sdkClients.AvsRegistryChainReader.GetOperatorId(&bind.CallOpts{}, keeper.KeeperAddr)
+	// 	if err != nil {
+	// 		logger.Error("Cannot get operator id", "err", err)
+	// 		return nil, err
+	// 	}
+	// 	keeper.KeeperId = operatorId
+	// 	logger.Info("Operator info",
+	// 		"operatorId", operatorId,
+	// 		"operatorAddr", c.KeeperAddress,
+	// 		"operatorG1Pubkey", keeper.BlsKeypair.GetPubKeyG1(),
+	// 		"operatorG2Pubkey", keeper.BlsKeypair.GetPubKeyG2(),
+	// 	)
+
+	return keeper, nil
+	// return nil, nil
 }
 
 // func (k *Keeper) Start(ctx context.Context) error {
@@ -374,6 +375,70 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 // 	return signedTaskResponse, nil
 // }
 
+func ValidateConfig(c types.NodeConfig) error {
+	// Check if required fields are present and valid
+	if c.AvsName == "" {
+		return fmt.Errorf("avs_name is required")
+	}
+
+	if c.SemVer == "" {
+		return fmt.Errorf("sem_ver is required")
+	}
+
+	// Validate Ethereum addresses
+	if !common.IsHexAddress(c.KeeperAddress) {
+		return fmt.Errorf("invalid keeper address: %s", c.KeeperAddress)
+	}
+
+	if !common.IsHexAddress(c.AvsDirectoryAddress) {
+		return fmt.Errorf("invalid avs directory address: %s", c.AvsDirectoryAddress)
+	}
+
+	if !common.IsHexAddress(c.StrategyManagerAddress) {
+		return fmt.Errorf("invalid strategy manager address: %s", c.StrategyManagerAddress)
+	}
+
+	if !common.IsHexAddress(c.ServiceManagerAddress) {
+		return fmt.Errorf("invalid service manager address: %s", c.ServiceManagerAddress)
+	}
+
+	if !common.IsHexAddress(c.OperatorStateRetrieverAddress) {
+		return fmt.Errorf("invalid operator state retriever address: %s", c.OperatorStateRetrieverAddress)
+	}
+
+	// Validate and expand keystore paths
+	ecdsaPath := handleHomeDirPath(c.EcdsaPrivateKeyStorePath)
+	if ecdsaPath == "" {
+		return fmt.Errorf("invalid ecdsa keystore path")
+	}
+	if _, err := os.Stat(ecdsaPath); os.IsNotExist(err) {
+		return fmt.Errorf("ecdsa keystore file does not exist at path: %s", ecdsaPath)
+	}
+
+	blsPath := handleHomeDirPath(c.BlsPrivateKeyStorePath)
+	if blsPath == "" {
+		return fmt.Errorf("invalid bls keystore path")
+	}
+	if _, err := os.Stat(blsPath); os.IsNotExist(err) {
+		return fmt.Errorf("bls keystore file does not exist at path: %s", blsPath)
+	}
+
+	// Basic URL format validation
+	if c.EthRpcUrl == "" {
+		return fmt.Errorf("eth rpc url is required")
+	}
+
+	if c.EthWsUrl == "" {
+		return fmt.Errorf("eth websocket url is required")
+	}
+
+	// Port address validation
+	if c.MetricsIpPortAddress == "" {
+		return fmt.Errorf("port address is required")
+	}
+
+	return nil
+}
 
 // func (k *Keeper) PrintOperatorStatus() error {
 // 	fmt.Println("Printing operator status")

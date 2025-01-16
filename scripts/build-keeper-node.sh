@@ -1,5 +1,8 @@
 #!/bin/bash
 
+docker stop triggerx-keeper
+docker rm triggerx-keeper
+
 # Set variables
 DOCKER_USERNAME="praptishah"
 IMAGE_NAME="triggerx-keeper"

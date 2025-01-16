@@ -19,19 +19,11 @@ type NodeConfig struct {
 	// Contract addresses
 	AvsDirectoryAddress         string `yaml:"avs_directory_address"`
 	StrategyManagerAddress      string `yaml:"strategy_manager_address"`
+	RegistryCoordinatorAddress  string `yaml:"registry_coordinator_address"`
 	ServiceManagerAddress       string `yaml:"service_manager_address"`
 	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
 
 	// Metrics and API settings
 	EnableMetrics        bool   `yaml:"enable_metrics"`
 	MetricsIpPortAddress string `yaml:"port_address"`
-}
-
-type KeeperStatus struct {
-	EcdsaAddress      string
-	PubkeysRegistered bool
-	G1Pubkey          string
-	G2Pubkey          string
-	RegisteredWithAvs bool
-	KeeperId          string
 }

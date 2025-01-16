@@ -7,12 +7,13 @@ go 1.23.3
 // replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98
 
 require (
-	github.com/Layr-Labs/eigensdk-go v0.2.0-beta
+	github.com/Layr-Labs/eigensdk-go v0.1.13
 	github.com/docker/docker v25.0.6+incompatible
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gocql/gocql v1.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/ipfs/go-ipfs-api v0.7.0
+	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.38.1
 	github.com/multiformats/go-multiaddr v0.14.0
 	github.com/prometheus/client_golang v1.20.5
@@ -118,6 +119,7 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/moby/term v0.5.2 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
