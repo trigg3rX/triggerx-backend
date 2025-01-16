@@ -17,3 +17,4 @@ data/peer_registry/*
 data/logs/*/*.log
 data/peer_registry/*.json
 references/*
+cosign.key
