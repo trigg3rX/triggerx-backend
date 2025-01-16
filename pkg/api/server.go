@@ -15,9 +15,6 @@ type Server struct {
 	router *mux.Router
 	db     *database.Connection
 	cors   *cors.Cors
-	router *mux.Router
-	db     *database.Connection
-	cors   *cors.Cors
 }
 
 func NewServer(db *database.Connection) *Server {
@@ -50,9 +47,6 @@ func NewServer(db *database.Connection) *Server {
 		router: router,
 		db:     db,
 		cors:   corsHandler,
-		router: router,
-		db:     db,
-		cors:   corsHandler,
 	}
 
 	s.routes()
@@ -61,11 +55,9 @@ func NewServer(db *database.Connection) *Server {
 
 func (s *Server) routes() {
 	handler := NewHandler(s.db)
-	handler := NewHandler(s.db)
 
 	// Add the base /api prefix to all routes
 	api := s.router.PathPrefix("/api").Subrouter()
-	api.Use(mux.CORSMethodMiddleware(api))
 	api.Use(mux.CORSMethodMiddleware(api))
 
 	// User routes

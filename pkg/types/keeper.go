@@ -10,7 +10,8 @@ type NodeConfig struct {
 	KeeperAddress            string `yaml:"address"`
 	EcdsaPrivateKeyStorePath string `yaml:"ecdsa_keystore_path"`
 	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`
-
+	P2pPeerId                string `yaml:"p2p_peer_id"`
+	
 	// Network settings
 	EthRpcUrl string `yaml:"ethrpcurl"`
 	EthWsUrl  string `yaml:"ethwsurl"`
@@ -22,10 +23,8 @@ type NodeConfig struct {
 	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
 
 	// Metrics and API settings
-	EnableMetrics             bool   `yaml:"enable_metrics"`
-	EigenMetricsIpPortAddress string `yaml:"port_address"`
-	EnableNodeApi             bool   `yaml:"enable_node_api"`
-	NodeApiIpPortAddress      string `yaml:"node_api_ip_port_address"`
+	EnableMetrics        bool   `yaml:"enable_metrics"`
+	MetricsIpPortAddress string `yaml:"port_address"`
 }
 
 type KeeperStatus struct {

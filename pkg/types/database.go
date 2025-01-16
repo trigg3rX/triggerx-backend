@@ -31,6 +31,7 @@ type JobData struct {
 	JobCostPrediction int       `json:"job_cost_prediction"`
 	ScriptFunction    string    `json:"script_function"`
 	ScriptIpfsUrl     string    `json:"script_ipfs_url"`
+	TimeCheck         time.Time `json:"time_check"`
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	UserBalance       float64   `json:"user_balance"`

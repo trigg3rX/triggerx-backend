@@ -41,3 +41,9 @@ start-api: ## Start the API server
 
 generate-bindings: ## Generate bindings
 	./pkg/avsinterface/generate-bindings.sh
+
+############################ KEEPER NODE ####################################
+
+keeper-node: ## Build the keeper node
+	./scripts/build-keeper-node.sh
+

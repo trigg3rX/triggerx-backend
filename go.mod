@@ -2,8 +2,6 @@ module github.com/trigg3rX/triggerx-backend
 
 go 1.23.3
 
-toolchain go1.23.4
-
 // toolchain go1.22.2
 
 // replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98
