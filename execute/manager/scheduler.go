@@ -40,6 +40,7 @@ type JobScheduler struct {
 	networkClient   *network.Messaging
 	loadBalancer    *LoadBalancer
 	dbClient        *database.Connection
+	cacheManager *CacheManager
 }
 
 // NewJobScheduler creates an enhanced scheduler with resource limits
@@ -67,6 +68,20 @@ func NewJobScheduler(workersCount int, dbClient *database.Connection) *JobSchedu
 		loadBalancer:  NewLoadBalancer(),
 		dbClient:      dbClient,
 	}
+
+	cacheManager, err := NewCacheManager(scheduler, 30*time.Second)
+    if err != nil {
+        log.Fatalf("Failed to initialize cache manager: %v", err)
+    }
+    scheduler.cacheManager = cacheManager
+
+    // Try to restore state from cache
+    if err := cacheManager.LoadState(); err != nil {
+        log.Printf("Failed to load cached state: %v", err)
+    }
+
+    // Start cache manager
+    cacheManager.Start()
 
 	scheduler.startWorkers()
 	go scheduler.loadBalancer.MonitorResources()

@@ -131,6 +131,11 @@ func (js *JobScheduler) GetQueueStatus() map[string]interface{} {
 
 // Stop gracefully shuts down the scheduler
 func (js *JobScheduler) Stop() {
+    if js.cacheManager != nil {
+        if err := js.cacheManager.SaveState(); err != nil {
+            log.Printf("Failed to save final state during shutdown: %v", err)
+        }
+    }
     js.cancel()
     js.Cron.Stop()
 }
