@@ -39,7 +39,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
-	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	txtaskmanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXTaskManager"
 	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 
 	sdkelcontracts "github.com/Layr-Labs/eigensdk-go/chainio/clients/elcontracts"

@@ -1,6 +1,6 @@
 module github.com/trigg3rX/triggerx-backend
 
-go 1.22.7
+go 1.23.3
 
 toolchain go1.23.4
 
@@ -15,7 +15,6 @@ require (
 	github.com/gocql/gocql v1.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/ipfs/go-ipfs-api v0.7.0
-	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.38.1
 	github.com/multiformats/go-multiaddr v0.14.0
 	github.com/prometheus/client_golang v1.20.5
@@ -23,6 +22,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/shirou/gopsutil/v3 v3.24.5
+	github.com/trigg3rX/triggerx-contracts v0.0.0-20250110114624-0d78e677355e
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
 	go.uber.org/zap v1.27.0

@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	regcoord "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
+	regcoord "github.com/trigg3rX/triggerx-contracts/bindings/contracts/RegistryCoordinator"
 )
 
 const (
