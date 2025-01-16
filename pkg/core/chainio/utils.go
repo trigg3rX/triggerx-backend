@@ -2,9 +2,9 @@ package chainio
 
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	registrycoordinator "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
-	txservicemanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
-	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	registrycoordinator "github.com/trigg3rX/triggerx-contracts/bindings/contracts/RegistryCoordinator"
+	txservicemanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXServiceManager"
+	txtaskmanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXTaskManager"
 	"golang.org/x/crypto/sha3"
 )
 

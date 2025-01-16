@@ -8,9 +8,9 @@ import (
 
 	sdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 
-	txservicemanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
-	stakeregistry "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXStakeRegistry"
-	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
+	txservicemanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXServiceManager"
+	stakeregistry "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXStakeRegistry"
+	txtaskmanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXTaskManager"
 	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 	"github.com/trigg3rX/triggerx-backend/pkg/core/config"
 )

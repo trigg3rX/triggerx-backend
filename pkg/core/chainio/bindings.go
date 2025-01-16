@@ -7,11 +7,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 
-	regcoord "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/RegistryCoordinator"
-	erc20mock "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/ERC20Mock"
-	txservicemanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXServiceManager"
-	txtaskmanager "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXTaskManager"
-	stakeregistry "github.com/trigg3rX/triggerx-backend/pkg/avsinterface/bindings/TriggerXStakeRegistry"
+	regcoord "github.com/trigg3rX/triggerx-contracts/bindings/contracts/RegistryCoordinator"
+	erc20mock "github.com/trigg3rX/triggerx-contracts/bindings/contracts/ERC20"
+	txservicemanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXServiceManager"
+	txtaskmanager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXTaskManager"
+	stakeregistry "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXStakeRegistry"
 	sdkcommon "github.com/trigg3rX/triggerx-backend/pkg/common"
 )
 
