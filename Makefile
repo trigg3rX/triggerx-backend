@@ -47,3 +47,6 @@ generate-bindings: ## Generate bindings
 keeper-node: ## Build the keeper node
 	./scripts/build-keeper-node.sh
 
+publish-keeper-node: ## Publish the keeper node
+	./scripts/publish-keeper-node.sh
+
