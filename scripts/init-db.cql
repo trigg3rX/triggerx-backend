@@ -15,10 +15,17 @@ DROP TABLE IF EXISTS task_data;
 DROP TABLE IF EXISTS quorum_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS task_history;
+DROP TABLE IF EXISTS user_data;
+DROP TABLE IF EXISTS job_data;
+DROP TABLE IF EXISTS task_data;
+DROP TABLE IF EXISTS quorum_data;
+DROP TABLE IF EXISTS keeper_data;
+DROP TABLE IF EXISTS task_history;
 
 -- Create User_data table
 CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint PRIMARY KEY,
+    user_address text,
     user_address text,
     job_ids set<bigint>,
     stake_amount varint,
@@ -37,6 +44,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     time_frame bigint,
     time_interval int,
     contract_address text,
+    contract_address text,
     target_function text,
     arg_type int,
     arguments list<text>,
@@ -50,6 +58,7 @@ CREATE TABLE IF NOT EXISTS job_data (
 
 -- Create Task_data table
 CREATE TABLE IF NOT EXISTS task_data (
+    task_id bigint PRIMARY KEY,
     task_id bigint PRIMARY KEY,
     job_id bigint,
     task_no int,
@@ -72,9 +81,12 @@ CREATE TABLE IF NOT EXISTS quorum_data (
     quorum_no int,
     quorum_creation_block bigint,
     quorum_termination_block bigint,
+    quorum_termination_block bigint,
     quorum_tx_hash text,
     keepers list<text>,
     quorum_stake_total bigint,
+    task_ids set<bigint>,
+    quorum_status boolean
     task_ids set<bigint>,
     quorum_status boolean
 );
@@ -82,6 +94,7 @@ CREATE TABLE IF NOT EXISTS quorum_data (
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint PRIMARY KEY,
+    withdrawal_address text,
     withdrawal_address text,
     stakes list<decimal>,
     strategies list<text>,

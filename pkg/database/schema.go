@@ -44,6 +44,7 @@ func InitSchema(session *gocql.Session) error {
 			time_frame bigint,
 			time_interval int,
 			contract_address text,
+			contract_address text,
 			target_function text,
 			arg_type int,
 			arguments list<text>,
@@ -60,6 +61,7 @@ func InitSchema(session *gocql.Session) error {
 	// Create Task_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.task_data (
+			task_id bigint PRIMARY KEY,
 			task_id bigint PRIMARY KEY,
 			job_id bigint,
 			task_no int,

@@ -35,6 +35,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	created_at := time.Now().UTC()
 	last_updated_at := time.Now().UTC()
 
+	created_at := time.Now().UTC()
+	last_updated_at := time.Now().UTC()
+
 	// Create a temporary struct to handle string chain_id
 	type tempJobData struct {
 		JobID             int64    `json:"job_id"`
@@ -81,7 +84,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		JobID:             tempJob.JobID,
 		JobType:           int(tempJob.JobType),
 		UserAddress:       tempJob.UserAddress,
-		ChainID:           int(chainID),
+		ChainID:           int(tempJob.ChainID),
 		TimeFrame:         tempJob.TimeFrame,
 		TimeInterval:      int(tempJob.TimeInterval),
 		ContractAddress:   tempJob.ContractAddress,
