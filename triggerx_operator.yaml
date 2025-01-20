@@ -14,10 +14,10 @@ ethrpcurl: "https://eth-holesky.g.alchemy.com/v2/<YOUR_ALCHEMY_API>"
 ethwsurl: "wss://eth-holesky.g.alchemy.com/v2/<YOUR_ALCHEMY_API>"
 
 # Contract addresses
-avs_directory_address: "0x0000000000000000000000000000000000000000"
-strategy_manager_address: "0x0000000000000000000000000000000000000000"
-service_manager_address: "0xD13cb4e9092D0c489819647E59B4CED2746b9980"
-operator_state_retriever: "0x0bFAf958319205DDEE91881De142e3139A4E9730"
+avs_directory_address: "0x055733000064333CaDDbC92763c58BF0192fFeBf"
+strategy_manager_address: "0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6"
+service_manager_address: "0xc0aA79c13bC1eEA0168f1A2975b7aA9FF64135ed"
+operator_state_retriever: "0xc39536Cb2bd5b4537930E17B954428DfF9F66b39"
 
 # Metrics and API settings
 enable_metrics: true
