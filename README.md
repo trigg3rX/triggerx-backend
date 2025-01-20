@@ -1,73 +1,71 @@
-# TriggerX Go Backend
+# TriggerX Keeper Backend
 
-Backend Utilities and APIs for TriggerX
+The **TriggerX Keeper Backend** is a decentralized system designed to automate and manage task execution across blockchain networks. It consists of three core components: **Task Manager**, **Keepers**, and **Validator**, each playing a critical role in ensuring efficient, reliable, and scalable task orchestration.
 
-## Architecture Overview
+---
 
-### Directory Structure
+## Table of Contents
 
-```
-triggerx-backend/
-├── cmd/                    # Application entry points
-│   ├── keeper/            # Keeper service entry point
-│   ├── quorum/     # Quorum creation service
-│   ├── manager/       # Task management service
-│   └── validator/     # Task validation service
-│
-├── internal/              # Private application code
-│   ├── keeper/           # Keeper service implementation
-│   ├── quorum/    # Quorum creation logic
-│   ├── manager/      # Task management implementation
-│   └── validator/    # Task validation logic
-│
-├── pkg/                  # Public shared libraries
-│   ├── communication/    # Network communication utilities
-│   └── database/        # Database interactions
-│
-└── scripts/               # Utility scripts
-    └── start-*.sh      # Service startup scripts
-```
+- [Introduction](#introduction)
+- [Core Components](#core-components)
+  - [Task Manager](#task-manager)
+  - [Keepers](#keepers)
+  - [Validator](#validator)
+- [Features](#features)
 
-### Component Overview
+---
 
-#### Core Services
+## Introduction
 
-1. **Keeper Service** (`cmd/keeper/`)
-   - Manages distributed keeper nodes
-   - Handles leader and worker coordination
-   - Aggregates data from multiple sources
+The TriggerX Keeper Backend simplifies task management and automation in blockchain ecosystems. By leveraging decentralized technologies, it ensures fault-tolerant and secure task orchestration while enabling efficient cross-chain operations. Designed for scalability and reliability, the system provides a flexible and extensible platform for blockchain automation.
 
-2. **Quorum Creator** (`cmd/quorumcreator/`)
-   - Establishes and maintains quorum requirements
-   - Handles consensus mechanisms
-   - Manages node participation
+---
 
-3. **Manager** (`cmd/manager/`)
-   - Orchestrates job and task distribution
-   - Implements load balancing
-   - Manages thread pools and resources
+## Core Components
 
-4. **Validator** (`cmd/validator/`)
-   - Validates execution results
-   - Ensures data integrity
-   - Submits results on-chain
+### Task Manager
 
-#### Shared Packages
+The **Task Manager** serves as the backbone for decentralized job scheduling and execution. It:
+- Automates task scheduling and optimizes resource usage.
+- Uses a dynamic quorum system for fault tolerance.
+- Monitors progress and persists results.
+- Features:
+  - Load balancing.
+  - State persistence.
+  - Support for various execution triggers.
+  
+### Keepers
 
-1. **Communication** (`pkg/communication/`)
-   - P2P Network setup and configuration
-   - Peer discovery mechanisms
-   - Data transmission protocols
+The **Keepers** are responsible for executing tasks by:
+- Monitoring jobs and validating conditions.
+- Interacting with smart contracts securely.
+- Processing arguments (static, dynamic, or none).
+- Integrating with external data sources for real-time inputs.
 
-2. **Database** (`pkg/database/`)
-   - ScyllaDB interactions
-   - Query operations
+Operating in a decentralized architecture, Keepers ensure:
+- Fault tolerance.
+- Efficient resource usage.
+- Secure and reliable contract interactions.
 
-### Technology Stack
+### Validator
 
-- **Language:** Go
-- **Database:** ScyllaDB
+The **Validator** ensures the accuracy and integrity of task execution by:
+- Validating off-chain tasks.
+- Generating cryptographically secure responses.
+- Submitting verified results to the blockchain.
 
-### Getting Started
+Validators maintain system reliability by:
+- Ensuring tasks meet predefined criteria.
+- Synchronizing off-chain and on-chain states effectively.
 
-[Add installation and setup instructions here]
+---
+
+## Features
+
+- **Decentralized Task Management**: Automates and orchestrates task execution across blockchain networks.
+- **Cross-Chain Compatibility**: Enables seamless task coordination across multiple blockchains.
+- **Fault Tolerance**: Utilizes a dynamic quorum system to ensure reliability.
+- **Real-Time Integration**: Supports external data sources for real-time inputs.
+- **Secure Interactions**: Provides cryptographically secure validations and contract interactions.
+
+---
