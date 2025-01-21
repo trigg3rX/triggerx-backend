@@ -99,7 +99,7 @@ func AbiEncodeSignatureWithSaltAndExpiry(sig *registrycoordinator.ISignatureUtil
 }
 
 // ABI encoding for rewards types
-func AbiEncodeRewardsSubmission(submission *txservicemanager.IRewardsCoordinatorRewardsSubmission) ([]byte, error) {
+func AbiEncodeRewardsSubmission(submission *txservicemanager.IRewardsCoordinatorTypesRewardsSubmission) ([]byte, error) {
 	rewardsSubmissionType, err := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
 		{Name: "rewardToken", Type: "address"},
 		{Name: "amount", Type: "uint256"},
@@ -112,7 +112,7 @@ func AbiEncodeRewardsSubmission(submission *txservicemanager.IRewardsCoordinator
 	return arguments.Pack(submission)
 }
 
-func AbiEncodeOperatorDirectedRewardsSubmission(submission *txservicemanager.IRewardsCoordinatorOperatorDirectedRewardsSubmission) ([]byte, error) {
+func AbiEncodeOperatorDirectedRewardsSubmission(submission *txservicemanager.IRewardsCoordinatorTypesRewardsSubmission) ([]byte, error) {
 	operatorDirectedRewardsSubmissionType, err := abi.NewType("tuple", "", []abi.ArgumentMarshaling{
 		{Name: "rewardToken", Type: "address"},
 		{Name: "amount", Type: "uint256"},

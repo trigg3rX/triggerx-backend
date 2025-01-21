@@ -62,9 +62,7 @@ func (s *Server) routes() {
 
 	// User routes
 	// api.HandleFunc("/users", handler.CreateUserData).Methods("POST")
-	// api.HandleFunc("/users", handler.CreateUserData).Methods("POST")
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
-	// api.HandleFunc("/users/{id}", handler.UpdateUserData).Methods("PUT")
 	// api.HandleFunc("/users/{id}", handler.UpdateUserData).Methods("PUT")
 
 	// // Job routes
@@ -76,27 +74,23 @@ func (s *Server) routes() {
 	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
 
 	// // Task routes
-	// // Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
 
 	// // Quorum routes
-	api.HandleFunc("/quorums/free", handler.GetFreeQuorum).Methods("GET")
-	// // Quorum routes
-	api.HandleFunc("/quorums/free", handler.GetFreeQuorum).Methods("GET")
+	api.HandleFunc("/quorums/all", handler.GetAllQuorums).Methods("GET")
+	api.HandleFunc("/quorums/registration", handler.GetQuorumNoForRegistration).Methods("GET")
 	api.HandleFunc("/quorums", handler.CreateQuorumData).Methods("POST")
 	api.HandleFunc("/quorums/{id}", handler.GetQuorumData).Methods("GET")
 	api.HandleFunc("/quorums/{id}", handler.UpdateQuorumData).Methods("PUT")
 
 	// // Keeper routes
 	api.HandleFunc("/get_peer_info/{id}", handler.GetKeeperPeerInfo).Methods("GET")
-	// // Keeper routes
-	api.HandleFunc("/get_peer_info/{id}", handler.GetKeeperPeerInfo).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
+	api.HandleFunc("/keepers/{address}", handler.CheckKeeperRegistration).Methods("GET")
 
-	// // Task History routes
 	// // Task History routes
 	api.HandleFunc("/task_history", handler.CreateTaskHistory).Methods("POST")
 	api.HandleFunc("/task_history/{id}", handler.GetTaskHistory).Methods("GET")

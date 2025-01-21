@@ -32,7 +32,7 @@ curl -X POST http://localhost:8080/api/jobs \
     \"job_id\": $NEW_JOB_ID,
     \"jobType\": 1,
     \"user_address\": \"$SELECTED_USER_ADDRESS\",
-    \"chain_id\": 11155420,
+    \"chain_id\": \"11155420\",
     \"time_frame\": 86400,
     \"time_interval\": 10800,
     \"contract_address\": \"0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d\",

@@ -1,10 +1,18 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
+	"github.com/joho/godotenv"
+
+	"github.com/ethereum/go-ethereum/common"
+	sdktypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -38,11 +46,51 @@ func (h *Handler) GetKeeperPeerInfo(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (h *Handler) CheckKeeperRegistration(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	keeperAddress := vars["address"]
+	log.Printf("[CheckKeeperRegistration] Retrieving keeper by address: %s", keeperAddress)
+
+	var keeper types.KeeperData
+	if err := h.db.Session().Query(`
+		SELECT keeper_id, registered_tx, connection_address 
+		FROM triggerx.keeper_data 
+		WHERE withdrawal_address = ? ALLOW FILTERING`, keeperAddress).Scan(
+		&keeper.KeeperID, &keeper.RegisteredTx, &keeper.ConnectionAddress); err != nil {
+		log.Printf("[CheckKeeperRegistration] Error retrieving keeper by address %s: %v", keeperAddress, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if keeper.KeeperID == 0 {
+		log.Printf("[CheckKeeperRegistration] No keeper found for address: %s", keeperAddress)
+		http.Error(w, "Keeper not found", http.StatusNotFound)
+		return
+	}
+
+	response := types.RegisterKeeperResponse{
+		KeeperID:     keeper.KeeperID,
+		RegisteredTx: keeper.RegisteredTx,
+		PeerID:       keeper.ConnectionAddress,
+	}
+
+	log.Printf("[CheckKeeperRegistration] Successfully retrieved keeper by address: %s", keeperAddress)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.KeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
 		log.Printf("[CreateKeeperData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	validationStatus := checkRegistration(keeperData.RegisteredTx, keeperData.WithdrawalAddress)
+	if !validationStatus {
+		log.Printf("[CreateKeeperData] Registration validation failed for keeper ID: %d", keeperData.KeeperID)
+		http.Error(w, "Registration validation failed", http.StatusBadRequest)
 		return
 	}
 
@@ -254,3 +302,55 @@ func (h *Handler) GetTaskHistory(w http.ResponseWriter, r *http.Request) {
 // 	log.Printf("[DeleteTaskHistory] Successfully deleted task history for task ID: %s", taskID)
 // 	w.WriteHeader(http.StatusNoContent)
 // }
+
+func checkRegistration(registeredTx string, withdrawalAddress string) bool {
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Printf("[checkRegistration] Error loading .env file: %v", err)
+	}
+
+	// Get ETH RPC URL from environment
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Printf("[checkRegistration] ETH_RPC_URL environment variable not set")
+		return false
+	}
+
+	// Create Ethereum client
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Printf("[checkRegistration] Failed to connect to Ethereum client: %v", err)
+		return false
+	}
+	defer client.Close()
+
+	// Convert tx hash string to hash
+	txHash := common.HexToHash(registeredTx)
+
+	// Get transaction
+	tx, isPending, err := client.TransactionByHash(context.Background(), txHash)
+	if err != nil {
+		log.Printf("[checkRegistration] Failed to get transaction: %v", err)
+		return false
+	}
+
+	if isPending {
+		log.Printf("[checkRegistration] Transaction is still pending")
+		return false
+	}
+
+	// Get transaction sender
+	from, err := sdktypes.Sender(sdktypes.LatestSignerForChainID(tx.ChainId()), tx)
+	if err != nil {
+		log.Printf("[checkRegistration] Failed to get transaction sender: %v", err)
+		return false
+	}
+
+	// Compare addresses (case-insensitive)
+	if !strings.EqualFold(from.Hex(), withdrawalAddress) {
+		log.Printf("[checkRegistration] Address mismatch - From: %s, Expected: %s", from.Hex(), withdrawalAddress)
+		return false
+	}
+
+	return true
+}

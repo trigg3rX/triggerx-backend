@@ -66,6 +66,14 @@ type QuorumData struct {
 	QuorumStatus           bool     `json:"quorum_status"`
 }
 
+type QuorumDataResponse struct {
+	QuorumID          int64    `json:"quorum_id"`
+	QuorumNo          int      `json:"quorum_no"`
+	QuorumStatus      bool     `json:"quorum_status"`
+	QuorumStakeTotal  int64    `json:"quorum_stake_total"`
+	QuorumStrength     int      `json:"quorum_strength"`
+}
+
 type KeeperData struct {
 	KeeperID          int64     `json:"keeper_id"`
 	WithdrawalAddress string    `json:"withdrawal_address"`

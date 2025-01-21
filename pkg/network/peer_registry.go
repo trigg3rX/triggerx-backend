@@ -80,15 +80,17 @@ func (r *PeerRegistry) load() error {
 }
 
 func (r *PeerRegistry) save() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	data, err := json.MarshalIndent(r.Services, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal registry: %w", err)
 	}
 
-	return os.WriteFile(r.path, data, 0644)
+	if err := os.WriteFile(r.path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write registry file: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PeerRegistry) UpdateService(serviceType string, peerID peer.ID, addrs []string) error {
@@ -101,7 +103,12 @@ func (r *PeerRegistry) UpdateService(serviceType string, peerID peer.ID, addrs [
 		Addresses: addrs,
 	}
 
-	return r.save()
+	err := r.save()
+	if err != nil {
+		return fmt.Errorf("failed to save registry after update: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PeerRegistry) GetService(serviceType string) (ServiceInfo, bool) {

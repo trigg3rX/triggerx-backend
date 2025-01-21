@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
-
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/urfave/cli/v2"
@@ -29,8 +33,15 @@ import (
 	"crypto/rand"
 
 	eigensdkbls "github.com/Layr-Labs/eigensdk-go/crypto/bls"
-	contractAVSDirectory "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AvsDirectory"
-	regcoord "github.com/trigg3rX/triggerx-contracts/bindings/contracts/RegistryCoordinator"
+
+	contractAVSDirectory "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IAVSDirectory"
+	contractERC20 "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IERC20"
+	contractStrategy "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IStrategy"
+	contractStrategyManager "github.com/Layr-Labs/eigensdk-go/contracts/bindings/StrategyManager"
+
+	// contractServiceManager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXServiceManager"
+	// contractDelegationManager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/DelegationManager"
+	contractRegistryCoordinator "github.com/Layr-Labs/eigensdk-go/contracts/bindings/RegistryCoordinator"
 )
 
 var configPath = "config-files/triggerx_operator.yaml"
@@ -63,8 +74,23 @@ func RegisterCommand() *cli.Command {
 		Usage: "Register a new operator",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "passphrase",
+				Name:     "ecdsa-passphrase",
 				Usage:    "Passphrase for the ECDSA keystore file",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "bls-passphrase",
+				Usage:    "Passphrase for the BLS keystore file",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "strategy-address",
+				Usage:    "Address of the strategies provided here: https://github.com/trigg3rX/triggerx-contracts",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "amount",
+				Usage:    "Amount of token to stake in strategy in ETH",
 				Required: true,
 			},
 		},
@@ -111,7 +137,7 @@ func registerOperator(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("bls keystore file not found at path: %s", blsKeystorePath), 1)
 	}
 
-	blsKeyPair, err := eigensdkbls.ReadPrivateKeyFromFile(blsKeystorePath, c.String("passphrase"))
+	blsKeyPair, err := eigensdkbls.ReadPrivateKeyFromFile(blsKeystorePath, c.String("bls-passphrase"))
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to read BLS private key: %v", err), 1)
 	}
@@ -119,7 +145,7 @@ func registerOperator(c *cli.Context) error {
 	// logger.Infof("blsKeyPair: %+v", blsKeyPair)
 
 	// Read ECDSA private key
-	ecdsaPrivKey, err := ecdsa.ReadKey(keystorePath, c.String("passphrase"))
+	ecdsaPrivKey, err := ecdsa.ReadKey(keystorePath, c.String("ecdsa-passphrase"))
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to read ECDSA keystore file: %v", err), 1)
 	}
@@ -129,6 +155,20 @@ func registerOperator(c *cli.Context) error {
 	keeperAddress, err := ecdsa.GetAddressFromKeyStoreFile(keystorePath)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to get ECDSA public key: %v", err), 1)
+	}
+
+	apiEndpoint := fmt.Sprintf("%s/keepers/%s", "http://localhost:8080/api", keeperAddress.Hex())
+	logger.Infof("Checking keeper registration at: %s", apiEndpoint)
+	resp, err := http.Get(apiEndpoint)
+	if err != nil {
+		logger.Error("Failed to check keeper registration", "error", err, "endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to check keeper registration: %v", err), 1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		logger.Info("Keeper is already registered", "address", keeperAddress.Hex())
+		return cli.Exit(fmt.Sprintf("Keeper is already registered: %s", keeperAddress.Hex()), 0)
 	}
 
 	// Connect to Ethereum client
@@ -163,17 +203,109 @@ func registerOperator(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("error creating transaction object %v", err), 1)
 	}
 
+	strategyAddr := c.String("strategy-address")
+	stakeAmountFloat, err := strconv.ParseFloat(c.String("amount"), 64)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to parse stake amount: %v", err), 1)
+	}
+
+	// Convert to Wei (1 ETH = 10^18 Wei)
+	stakeAmountFloat = stakeAmountFloat * 1e18
+	stakeAmount := new(big.Int)
+	stakeAmount.SetString(fmt.Sprintf("%.0f", stakeAmountFloat), 10)
+
+	// Add logging to verify the amount
+	logger.Infof("Stake amount in Wei: %s", stakeAmount.String())
+
 	// Create AVSDirectory contract instance
 	avsDirectoryAddr := common.HexToAddress(nodeConfig.AvsDirectoryAddress)
-	avsDirectory, err := contractAVSDirectory.NewContractAvsDirectory(avsDirectoryAddr, client)
+	avsDirectory, err := contractAVSDirectory.NewContractIAVSDirectory(avsDirectoryAddr, client)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to create AVSDirectory contract instance: %v", err), 1)
 	}
 
-	registryCoordinatorContract, err := regcoord.NewContractRegistryCoordinator(common.HexToAddress(nodeConfig.RegistryCoordinatorAddress), client)
+	strategyManagerAddr := common.HexToAddress(nodeConfig.StrategyManagerAddress)
+	strategyManager, err := contractStrategyManager.NewContractStrategyManager(strategyManagerAddr, client)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to create StrategyManager contract instance: %v", err), 1)
+	}
+
+	registryCoordinatorContract, err := contractRegistryCoordinator.NewContractRegistryCoordinator(common.HexToAddress(nodeConfig.RegistryCoordinatorAddress), client)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to create RegistryCoordinator contract instance: %v", err), 1)
 	}
+
+	strategyContract, err := contractStrategy.NewContractIStrategy(common.HexToAddress(strategyAddr), client)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to create Strategy contract instance: %v", err), 1)
+	}
+
+	underlyingTokenAddr, err := strategyContract.UnderlyingToken(&bind.CallOpts{})
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to get underlying token address: %v", err), 1)
+	}
+
+	logger.Info("Underlying token address", "address", underlyingTokenAddr.Hex())
+
+	tokenContract, err := contractERC20.NewContractIERC20(underlyingTokenAddr, client)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to create ERC20 contract instance: %v", err), 1)
+	}
+
+	tokenBalance, err := tokenContract.BalanceOf(nil, keeperAddress)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to get token balance: %v", err), 1)
+	}
+
+	if tokenBalance.Cmp(stakeAmount) < 0 {
+		return cli.Exit(fmt.Sprintf("Insufficient token balance. Required: %s, Available: %s",
+			stakeAmount.String(), tokenBalance.String()), 1)
+	}
+
+	tx1, err := tokenContract.Approve(noSendTxOpts, common.HexToAddress(nodeConfig.StrategyManagerAddress), stakeAmount)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to approve token: %v", err), 1)
+	}
+
+	receipt1, err := txMgr.Send(context.Background(), tx1, true)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
+	}
+
+	logger.Info("Approved token", "txHash", receipt1.TxHash.Hex())
+
+	if receipt1.Status == 0 {
+		return cli.Exit(fmt.Sprintf("Approve transaction failed: %s", tx1.Hash().Hex()), 1)
+	}
+
+	logger.Info("Approval transaction successfully mined",
+		"txHash", receipt1.TxHash.Hex(),
+		"blockNumber", receipt1.BlockNumber,
+		"gasUsed", receipt1.GasUsed)
+
+	logger.Info("Depositing into strategy",
+		"stakeAmount", stakeAmount.String(),
+		"balance", tokenBalance.String())
+
+	tx2, err := strategyManager.DepositIntoStrategy(
+		noSendTxOpts,
+		common.HexToAddress(strategyAddr),
+		underlyingTokenAddr,
+		stakeAmount,
+	)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to deposit into strategy: %v", err), 1)
+	}
+
+	receipt2, err := txMgr.Send(context.Background(), tx2, true)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
+	}
+
+	logger.Infof("Transaction successfully sent and mined",
+		"txHash", receipt2.TxHash.Hex(),
+		"blockNumber", receipt2.BlockNumber,
+		"gasUsed", receipt2.GasUsed)
 
 	// Generate random salt
 	var saltBytes [32]byte
@@ -210,7 +342,7 @@ func registerOperator(c *cli.Context) error {
 	G1pubkeyBN254 := ConvertToBN254G1Point(blsKeyPair.GetPubKeyG1())
 	G2pubkeyBN254 := ConvertToBN254G2Point(blsKeyPair.GetPubKeyG2())
 
-	pubkeyRegParams := regcoord.IBLSApkRegistryPubkeyRegistrationParams{
+	pubkeyRegParams := contractRegistryCoordinator.IBLSApkRegistryPubkeyRegistrationParams{
 		PubkeyRegistrationSignature: signedMsg,
 		PubkeyG1:                    G1pubkeyBN254,
 		PubkeyG2:                    G2pubkeyBN254,
@@ -236,38 +368,134 @@ func registerOperator(c *cli.Context) error {
 
 	operatorSignature[64] += 27
 
-	operatorSignatureWithSaltAndExpiry := regcoord.ISignatureUtilsSignatureWithSaltAndExpiry{
+	operatorSignatureWithSaltAndExpiry := contractRegistryCoordinator.ISignatureUtilsSignatureWithSaltAndExpiry{
 		Signature: operatorSignature,
 		Salt:      saltBytes,
 		Expiry:    expiry,
 	}
 
+	// Get quorum number from API
+	// apiEndpoint := fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
+	apiEndpoint = fmt.Sprintf("%s/quorums/registration", "http://localhost:8080/api")
+	logger.Info("Fetching quorum number from API", "endpoint", apiEndpoint)
+	resp, err = http.Get(apiEndpoint)
+	if err != nil {
+		logger.Error("Failed to get quorum number from API",
+			"error", err,
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to get quorum number from API: %v", err), 1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		logger.Error("API returned non-200 status code",
+			"statusCode", resp.StatusCode,
+			"response", string(body),
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to get quorum number. Status: %d", resp.StatusCode), 1)
+	}
+
+	var quorumNumber uint8
+	if err := json.NewDecoder(resp.Body).Decode(&quorumNumber); err != nil {
+		logger.Error("Failed to decode quorum number from response",
+			"error", err,
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to decode quorum number: %v", err), 1)
+	}
+
+	// Convert quorum number to bytes
+	quorumBytes := []byte{quorumNumber}
+	logger.Info("Successfully retrieved quorum number",
+		"quorumNumber", quorumNumber,
+		"quorumBytes", fmt.Sprintf("%v", quorumBytes))
+
+	logger.Info("Creating registration transaction",
+		"quorumNumber", quorumNumber,
+		"operatorAddress", keeperAddress.Hex(),
+		"connectionAddress", nodeConfig.ConnectionAddress)
+
 	logger.Info("Creating unsigned transaction")
 	tx, err := registryCoordinatorContract.RegisterOperator(
 		noSendTxOpts,
-		[]byte{0},
-		"",
+		quorumBytes,
+		nodeConfig.ConnectionAddress,
 		pubkeyRegParams,
 		operatorSignatureWithSaltAndExpiry,
 	)
 	if err != nil {
-		logger.Errorf("Failed to create transaction: %v", err)
+		logger.Error("Failed to create registration transaction",
+			"error", err,
+			"quorumNumber", quorumNumber,
+			"operatorAddress", keeperAddress.Hex())
 		return cli.Exit(fmt.Sprintf("Failed to create transaction: %v", err), 1)
 	}
-	logger.Info("Successfully created unsigned transaction", "txHash", tx.Hash().Hex())
+	logger.Info("Successfully created unsigned transaction",
+		"txHash", tx.Hash().Hex(),
+		"quorumNumber", quorumNumber)
 
-	logger.Info("Sending transaction")
+	logger.Info("Sending transaction to network")
 	receipt, err := txMgr.Send(context.Background(), tx, true)
 	if err != nil {
-		logger.Errorf("Failed to send transaction: %v", err)
+		logger.Error("Failed to send transaction",
+			"error", err,
+			"txHash", tx.Hash().Hex())
 		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
 	}
 	logger.Info("Transaction successfully sent and mined",
 		"txHash", receipt.TxHash.Hex(),
 		"blockNumber", receipt.BlockNumber,
-		"gasUsed", receipt.GasUsed)
+		"gasUsed", receipt.GasUsed,
+		"quorumNumber", quorumNumber)
 
-	logger.Info("Successfully registered keeper to TriggerX AVS")
+	// Create keeper data in database
+	keeperData := types.KeeperData{
+		WithdrawalAddress: keeperAddress.Hex(),
+		RegisteredTx:      receipt.TxHash.Hex(),
+		Status:            true,
+		BlsSigningKeys:    []string{G1pubkeyBN254.X.String(), G1pubkeyBN254.Y.String()},
+		ConnectionAddress: nodeConfig.ConnectionAddress,
+		Verified:          true,
+		CurrentQuorumNo:   int(quorumNumber), // Set the assigned quorum number
+	}
+
+	logger.Info("Preparing to create keeper in database",
+		"withdrawalAddress", keeperData.WithdrawalAddress,
+		"registeredTx", keeperData.RegisteredTx,
+		"quorumNumber", keeperData.CurrentQuorumNo)
+
+	jsonData, err := json.Marshal(keeperData)
+	if err != nil {
+		logger.Error("Failed to marshal keeper data",
+			"error", err,
+			"keeperData", fmt.Sprintf("%+v", keeperData))
+		return cli.Exit(fmt.Sprintf("Failed to marshal keeper data: %v", err), 1)
+	}
+
+	// Make POST request to create keeper
+	apiEndpoint = fmt.Sprintf("%s/keepers", "http://localhost:8080/api")
+	resp, err = http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Error("Failed to create keeper in database",
+			"error", err,
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to create keeper in database: %v", err), 1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		logger.Error("Failed to create keeper in database",
+			"statusCode", resp.StatusCode,
+			"response", string(body),
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to create keeper in database. Status: %d", resp.StatusCode), 1)
+	}
+
+	logger.Info("Successfully completed registration process",
+		"operatorAddress", keeperAddress.Hex(),
+		"quorumNumber", quorumNumber,
+		"txHash", receipt.TxHash.Hex())
 	return nil
 }
 
@@ -284,20 +512,20 @@ func getConfig() (config types.NodeConfig, err error) {
 	return config, err
 }
 
-func ConvertBn254GethToGnark(input regcoord.BN254G1Point) *bn254.G1Affine {
+func ConvertBn254GethToGnark(input contractRegistryCoordinator.BN254G1Point) *bn254.G1Affine {
 	return eigensdkbls.NewG1Point(input.X, input.Y).G1Affine
 }
 
-func ConvertToBN254G1Point(input *eigensdkbls.G1Point) regcoord.BN254G1Point {
-	output := regcoord.BN254G1Point{
+func ConvertToBN254G1Point(input *eigensdkbls.G1Point) contractRegistryCoordinator.BN254G1Point {
+	output := contractRegistryCoordinator.BN254G1Point{
 		X: input.X.BigInt(big.NewInt(0)),
 		Y: input.Y.BigInt(big.NewInt(0)),
 	}
 	return output
 }
 
-func ConvertToBN254G2Point(input *eigensdkbls.G2Point) regcoord.BN254G2Point {
-	output := regcoord.BN254G2Point{
+func ConvertToBN254G2Point(input *eigensdkbls.G2Point) contractRegistryCoordinator.BN254G2Point {
+	output := contractRegistryCoordinator.BN254G2Point{
 		X: [2]*big.Int{input.X.A1.BigInt(big.NewInt(0)), input.X.A0.BigInt(big.NewInt(0))},
 		Y: [2]*big.Int{input.Y.A1.BigInt(big.NewInt(0)), input.Y.A0.BigInt(big.NewInt(0))},
 	}

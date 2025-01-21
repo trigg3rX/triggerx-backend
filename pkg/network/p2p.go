@@ -73,28 +73,19 @@ func SetupP2PWithRegistry(ctx context.Context, config P2PConfig, registry *PeerR
 		return nil, fmt.Errorf("failed to setup peer identity: %w", err)
 	}
 
-	// Get the peer ID from the private key for logging
-	id, _ := peer.IDFromPrivateKey(priv)
-	fmt.Printf("Loaded identity with peer ID: %s\n", id.String())
+	// id, _ := peer.IDFromPrivateKey(priv)
+	// fmt.Printf("Loaded identity with peer ID: %s\n", id.String())
 
-	// Check if this peer is already in registry
 	if service, exists := registry.GetService(config.Name); exists {
-		fmt.Printf("Found service in registry: %+v\n", service)
 
-		// Only verify if the service has a non-empty PeerID
 		if service.PeerID != "" {
-			// Verify the loaded identity matches the registered peer ID
 			if id, err := peer.IDFromPrivateKey(priv); err == nil {
-				fmt.Printf("Comparing IDs - Loaded: %s, Registry: %s\n", id.String(), service.PeerID)
 				if id.String() != service.PeerID {
-					// Mismatch between loaded identity and registry
 					return nil, fmt.Errorf("loaded identity (%s) doesn't match registry (%s)", id.String(), service.PeerID)
 				}
 			}
 		} else {
-			// Service exists but has no PeerID - update with current identity
 			if id, err := peer.IDFromPrivateKey(priv); err == nil {
-				fmt.Printf("Updating registry with new peer ID: %s\n", id.String())
 				if err := registry.UpdateService(config.Name, id, []string{config.Address}); err != nil {
 					return nil, fmt.Errorf("failed to update registry with identity: %w", err)
 				}
@@ -106,7 +97,6 @@ func SetupP2PWithRegistry(ctx context.Context, config P2PConfig, registry *PeerR
 	if err != nil {
 		return nil, fmt.Errorf("invalid address: %w", err)
 	}
-	fmt.Printf("Created multiaddr: %s\n", maddr.String())
 
 	connMgr, err := connmgr.NewConnManager(
 		100, 400,
@@ -115,7 +105,6 @@ func SetupP2PWithRegistry(ctx context.Context, config P2PConfig, registry *PeerR
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection manager: %w", err)
 	}
-	fmt.Printf("Created connection manager\n")
 
 	h, err := libp2p.New(
 		libp2p.Identity(priv),
@@ -128,13 +117,6 @@ func SetupP2PWithRegistry(ctx context.Context, config P2PConfig, registry *PeerR
 	if err != nil {
 		return nil, fmt.Errorf("failed to create host: %w", err)
 	}
-	fmt.Printf("Created libp2p host with ID: %s\n", h.ID().String())
-
-	// Update registry with current info
-	if err := registry.UpdateService(config.Name, h.ID(), []string{config.Address}); err != nil {
-		return nil, fmt.Errorf("failed to update peer registry: %w", err)
-	}
-	fmt.Printf("Updated registry with host info\n")
 
 	return h, nil
 }

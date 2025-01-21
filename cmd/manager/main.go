@@ -41,7 +41,7 @@ func handleJobEvent(event events.JobEvent) {
 		queueStatus := jobScheduler.GetQueueStatus()
 		systemMetrics := jobScheduler.GetSystemMetrics()
 
-		logger.Info("New job %s added. Current System Status:", jobID)
+		logger.Infof("New job %s added. Current System Status:", jobID)
 		logger.Infof("  Job Details: ID=%d, Type=%d, ChainID=%d",
 			event.JobID, event.JobType, event.ChainID)
 		logger.Infof("  Active Jobs: %d", queueStatus["active_jobs"])
@@ -104,7 +104,7 @@ func main() {
 	if err := logging.InitLogger(logging.Development, "manager"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetLogger()
+	logger = logging.GetLogger()
 	logger.Info("Starting manager node...")
 
 	ctx := context.Background()
@@ -140,34 +140,26 @@ func main() {
 		Name:    network.ServiceManager,
 		Address: "/ip4/0.0.0.0/tcp/9000",
 	}
-	logger.Info("--------------------444--------------------")
+	
 	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
 	if err != nil {
 		logger.Fatalf("Failed to setup P2P: %v", err)
 	}
-	logger.Info("--------------------555--------------------")
+	
 	// Initialize discovery service
-	discovery := network.NewDiscovery(ctx, host, config.Name)
+	// discovery := network.NewDiscovery(ctx, host, config.Name)
 
 	// Initialize messaging
 	messaging := network.NewMessaging(host, config.Name)
 	messaging.InitMessageHandling(func(msg network.Message) {
 		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
 	})
-	logger.Info("--------------------666--------------------")
-
-	// Try to connect to other services
-	for _, service := range []string{network.ServiceValidator, network.ServiceQuorum} {
-		if _, err := discovery.ConnectToPeer(service); err != nil {
-			logger.Warnf("Failed to connect to %s: %v", service, err)
-		}
-	}
-	logger.Info("--------------------777--------------------")
+	
 	// Subscribe to events
 	if err := subscribeToEvents(ctx); err != nil {
 		logger.Fatalf("Failed to subscribe to events: %v", err)
 	}
-	logger.Info("--------------------888--------------------")
+
 	logger.Infof("Manager node is running. Node ID: %s", host.ID().String())
 	select {} // Keep the service running
 }

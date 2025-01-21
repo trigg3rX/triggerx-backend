@@ -16,12 +16,12 @@ import (
 )
 
 type AvsManagersBindings struct {
-	TaskManager    *txtaskmanager.ContractTriggerXTaskManager
-	ServiceManager *txservicemanager.ContractTriggerXServiceManager
-	StakeRegistry  *stakeregistry.ContractTriggerXStakeRegistry
+	TaskManager         *txtaskmanager.ContractTriggerXTaskManager
+	ServiceManager      *txservicemanager.ContractTriggerXServiceManager
+	StakeRegistry       *stakeregistry.ContractTriggerXStakeRegistry
 	RegistryCoordinator *regcoord.ContractRegistryCoordinator
-	ethClient      eth.HttpBackend
-	logger         logging.Logger
+	ethClient           eth.HttpBackend
+	logger              logging.Logger
 }
 
 func NewAvsManagersBindings(registryCoordinatorAddr, operatorStateRetrieverAddr common.Address, ethclient sdkcommon.EthClientInterface, logger logging.Logger) (*AvsManagersBindings, error) {

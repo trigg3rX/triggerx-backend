@@ -11,6 +11,7 @@ type NodeConfig struct {
 	EcdsaPrivateKeyStorePath string `yaml:"ecdsa_keystore_path"`
 	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`
 	P2pPeerId                string `yaml:"p2p_peer_id"`
+	ConnectionAddress        string `yaml:"connection_address"`
 	
 	// Network settings
 	EthRpcUrl string `yaml:"ethrpcurl"`

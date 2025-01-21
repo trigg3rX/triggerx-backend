@@ -14,6 +14,13 @@ true: quorum is active
 false: quorum is inactive
 */
 
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 func (h *Handler) CreateQuorumData(w http.ResponseWriter, r *http.Request) {
 	var quorumData types.QuorumData
 	if err := json.NewDecoder(r.Body).Decode(&quorumData); err != nil {
@@ -60,31 +67,100 @@ func (h *Handler) GetQuorumData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(quorumData)
 }
 
-func (h *Handler) GetFreeQuorum(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[GetFreeQuorum] Retrieving quorums with status false")
+func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[GetQuorumNoForRegistration] Finding optimal quorum for registration")
 
-	var quorumIDs []int64
+	var quorums []types.QuorumDataResponse
 	iter := h.db.Session().Query(`
-		SELECT quorum_id 
+		SELECT quorum_id, quorum_no, quorum_status, quorum_stake_total, keepers
 		FROM triggerx.quorum_data 
-		WHERE quorum_status = ? 
-		ALLOW FILTERING`, false).Iter()
+		ALLOW FILTERING`).Iter()
 
-	var quorumID int64
-	for iter.Scan(&quorumID) {
-		quorumIDs = append(quorumIDs, quorumID)
+	var quorum types.QuorumDataResponse
+	var keepers []string
+	quorumMap := make(map[int]types.QuorumDataResponse)
+
+	// Collect active quorums
+	for iter.Scan(&quorum.QuorumID, &quorum.QuorumNo, &quorum.QuorumStatus, &quorum.QuorumStakeTotal, &keepers) {
+		quorum.QuorumStrength = len(keepers)
+		quorums = append(quorums, quorum)
+		quorumMap[quorum.QuorumNo] = quorum
 	}
 
 	if err := iter.Close(); err != nil {
-		log.Printf("[GetFreeQuorum] Error retrieving free quorums: %v", err)
+		log.Printf("[GetQuorumNoForRegistration] Error retrieving quorums: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetFreeQuorum] Successfully retrieved %d free quorums", len(quorumIDs))
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"free_quorum_ids": quorumIDs,
-	})
+	if len(quorums) == 0 {
+		// If no quorums exist, start with quorum 0
+		json.NewEncoder(w).Encode(0)
+		return
+	}
+
+	// First check if quorum strengths are balanced (within +-1)
+	balanced := true
+	baseStrength := quorums[0].QuorumStrength
+	for _, q := range quorums {
+		if abs(q.QuorumStrength-baseStrength) > 1 {
+			balanced = false
+			break
+		}
+	}
+
+	var selectedQuorumNo int
+	if !balanced {
+		// Find quorum with minimum strength
+		minStrength := quorums[0].QuorumStrength
+		selectedQuorumNo = quorums[0].QuorumNo
+		for _, q := range quorums {
+			if q.QuorumStrength < minStrength {
+				minStrength = q.QuorumStrength
+				selectedQuorumNo = q.QuorumNo
+			}
+		}
+	} else {
+		// Quorum strengths are balanced, so balance by stake
+		minStake := quorums[0].QuorumStakeTotal
+		selectedQuorumNo = quorums[0].QuorumNo
+		for _, q := range quorums {
+			if q.QuorumStakeTotal < minStake {
+				minStake = q.QuorumStakeTotal
+				selectedQuorumNo = q.QuorumNo
+			}
+		}
+	}
+
+	log.Printf("[GetQuorumNoForRegistration] Selected quorum number: %d", selectedQuorumNo)
+	json.NewEncoder(w).Encode(selectedQuorumNo)
+
+}
+
+func (h *Handler) GetAllQuorums(w http.ResponseWriter, r *http.Request) {
+	log.Printf("[GetAllQuorums] Retrieving all quorums")
+
+	var quorums []types.QuorumDataResponse
+	iter := h.db.Session().Query(`
+		SELECT quorum_id, quorum_no, quorum_status, quorum_stake_total, keepers
+		FROM triggerx.quorum_data 
+		ALLOW FILTERING`).Iter()
+
+	var quorum types.QuorumDataResponse
+	var keepers []string
+	for iter.Scan(&quorum.QuorumID, &quorum.QuorumNo, &quorum.QuorumStatus, &quorum.QuorumStakeTotal, &keepers) {
+		quorum.QuorumStrength = len(keepers)
+		quorums = append(quorums, quorum)
+	}
+
+	if err := iter.Close(); err != nil {
+		log.Printf("[GetAllQuorums] Error retrieving quorums: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[GetAllQuorums] Successfully retrieved %d quorums", len(quorums))
+	json.NewEncoder(w).Encode(quorums)
 }
 
 func (h *Handler) UpdateQuorumData(w http.ResponseWriter, r *http.Request) {
