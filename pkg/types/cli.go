@@ -1,11 +1,13 @@
 package types
 
+import (
+	regcoord "github.com/trigg3rX/triggerx-contracts/bindings/contracts/RegistryCoordinator"
+)
+
 type RegisterKeeperRequest struct {
 	KeeperAddress     string   `json:"keeper_address"`
-	Signature         string   `json:"signature"`
-	Salt              string   `json:"salt"`
-	Expiry            string   `json:"expiry"`
-	BlsPublicKey      string   `json:"bls_public_key"`
+	PubkeyRegistrationParams regcoord.IBLSApkRegistryPubkeyRegistrationParams `json:"pubkey_registration_params"`
+	SignatureWithSaltAndExpiry regcoord.ISignatureUtilsSignatureWithSaltAndExpiry `json:"signature_with_salt_and_expiry"`
 	// TokenStrategyAddr string   `json:"token_strategy_addr"`
 	// StakeAmount       string   `json:"stake_amount"`
 }
