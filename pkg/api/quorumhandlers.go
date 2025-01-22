@@ -93,12 +93,6 @@ func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if len(quorums) == 0 {
-		// If no quorums exist, start with quorum 0
-		json.NewEncoder(w).Encode(0)
-		return
-	}
-
 	// First check if quorum strengths are balanced (within +-1)
 	balanced := true
 	baseStrength := quorums[0].QuorumStrength
@@ -134,7 +128,6 @@ func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Requ
 
 	log.Printf("[GetQuorumNoForRegistration] Selected quorum number: %d", selectedQuorumNo)
 	json.NewEncoder(w).Encode(selectedQuorumNo)
-
 }
 
 func (h *Handler) GetAllQuorums(w http.ResponseWriter, r *http.Request) {

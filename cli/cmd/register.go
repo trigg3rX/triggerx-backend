@@ -157,7 +157,7 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("Failed to get ECDSA public key: %v", err), 1)
 	}
 
-	apiEndpoint := fmt.Sprintf("%s/keepers/%s", "https://data.triggerx.network/api", keeperAddress.Hex())
+	apiEndpoint := fmt.Sprintf("%s/keepers/address/%s", "https://data.triggerx.network/api", keeperAddress.Hex())
 	logger.Infof("Checking keeper registration at: %s", apiEndpoint)
 	resp, err := http.Get(apiEndpoint)
 	if err != nil {
@@ -419,7 +419,7 @@ func registerKeeper(c *cli.Context) error {
 	tx, err := registryCoordinatorContract.RegisterOperator(
 		noSendTxOpts,
 		quorumBytes,
-		nodeConfig.ConnectionAddress,
+		string(nodeConfig.ConnectionAddress),
 		pubkeyRegParams,
 		operatorSignatureWithSaltAndExpiry,
 	)

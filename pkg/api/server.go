@@ -89,7 +89,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
-	api.HandleFunc("/keepers/{address}", handler.CheckKeeperRegistration).Methods("GET")
+	api.HandleFunc("/keepers/address/{address}", handler.CheckKeeperRegistration).Methods("GET")
 
 	// // Task History routes
 	api.HandleFunc("/task_history", handler.CreateTaskHistory).Methods("POST")
