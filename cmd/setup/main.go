@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"net"
 	"os"
 	"strconv"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -43,9 +46,23 @@ func main() {
 	}
 
 	// Find free port starting from 3000
-	port, err := findFreePort(3000)
+	port, err := findFreePort(9003)
 	if err != nil {
 		fmt.Printf("Error finding free port: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Generate peer ID
+	privKey, err := network.LoadOrCreateIdentity("keeper")
+	if err != nil {
+		fmt.Printf("Error generating peer ID: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Convert private key to peer ID
+	peerID, err := peer.IDFromPrivateKey(privKey)
+	if err != nil {
+		fmt.Printf("Error converting private key to peer ID: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -63,9 +80,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Update connection_address field with IP and port
-	config.ConnectionAddress = ip + ":" + strconv.Itoa(port)
-
+	// Update connection_address and p2p_peer_id fields
+	config.ConnectionAddress = ip
+	config.P2pPeerId = peerID.String()
+	config.P2pPort = strconv.Itoa(port)
+	
 	// Write back to file
 	yamlData, err := yaml.Marshal(config)
 	if err != nil {
@@ -78,5 +97,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully updated connection_address to %s\n", config.ConnectionAddress)
+	fmt.Printf("Successfully updated connection_address to %s and peer ID to %s\n",
+		config.ConnectionAddress, config.P2pPeerId)
 }

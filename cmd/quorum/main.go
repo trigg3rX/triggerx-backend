@@ -63,7 +63,7 @@ func main() {
 	// Setup P2P with registry
 	config := network.P2PConfig{
 		Name:    network.ServiceQuorum,
-		Address: "/ip4/0.0.0.0/tcp/9002",
+		Address: "/ip4/0.0.0.0/tcp/9001",
 	}
 
 	host, err := network.SetupP2PWithRegistry(ctx, config, registry)

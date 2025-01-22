@@ -10,11 +10,10 @@ config-files/operator.yaml
 config-files/triggerx_operator.yaml
 
 data/logs/*/*.log
-data/peer_registry/*
+data/peer_registry/services_privKeys.json
+data/peer_registry/keeper_identity.json
 !data/logs/*/.gitkeep
-!data/peer_registry/.gitkeep
 
 data/logs/*/*.log
-data/peer_registry/*.json
 references/*
 cosign.key

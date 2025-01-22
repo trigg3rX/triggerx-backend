@@ -2,11 +2,13 @@
 production: false
 avs_name: "triggerx"
 sem_ver: "v0.0.1"
+server_ip_address: "157.173.218.229"
 
 # Keeper settings
 address: "0x0000000000000000000000000000000000000000"
 ecdsa_keystore_path: "path/to/your/ecdsa/keystore"
 bls_keystore_path: "path/to/your/bls/keystore"
+connection_address: ""
 p2p_peer_id: ""
 
 # Network settings

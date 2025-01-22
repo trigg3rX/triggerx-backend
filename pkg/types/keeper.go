@@ -5,6 +5,7 @@ type NodeConfig struct {
 	Production bool   `yaml:"production"`
 	AvsName    string `yaml:"avs_name"`
 	SemVer     string `yaml:"sem_ver"`
+	ServerIpAddress string `yaml:"server_ip_address"`
 
 	// Keeper settings
 	KeeperAddress            string `yaml:"address"`
@@ -12,6 +13,7 @@ type NodeConfig struct {
 	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`
 	P2pPeerId                string `yaml:"p2p_peer_id"`
 	ConnectionAddress        string `yaml:"connection_address"`
+	P2pPort                  string `yaml:"p2p_port"`
 	
 	// Network settings
 	EthRpcUrl string `yaml:"ethrpcurl"`

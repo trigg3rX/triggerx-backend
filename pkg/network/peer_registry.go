@@ -12,7 +12,6 @@ import (
 
 const (
 	ServiceManager   = "manager"
-	ServiceDatabase  = "database"
 	ServiceQuorum    = "quorum"
 	ServiceValidator = "validator"
 	ServiceKeeper    = "keeper"
@@ -53,7 +52,6 @@ func NewPeerRegistry() (*PeerRegistry, error) {
 		// Initialize with default services with empty peer IDs
 		registry.Services = map[string]ServiceInfo{
 			ServiceManager:   {Type: ServiceManager, PeerID: "", Addresses: nil},
-			ServiceDatabase:  {Type: ServiceDatabase, PeerID: "", Addresses: nil},
 			ServiceQuorum:    {Type: ServiceQuorum, PeerID: "", Addresses: nil},
 			ServiceValidator: {Type: ServiceValidator, PeerID: "", Addresses: nil},
 			ServiceKeeper:    {Type: ServiceKeeper, PeerID: "", Addresses: nil},
