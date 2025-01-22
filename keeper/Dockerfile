@@ -21,7 +21,7 @@ WORKDIR /keeper
 # Copy only the binary from builder
 COPY --from=builder /keeper/keeper .
 # Copy config file from the correct location
-COPY config-files/triggerx_operator.yaml /keeper/config-files/triggerx_operator.yaml
+COPY config-files/triggerx_keeper.yaml /keeper/config-files/triggerx_keeper.yaml
 
 # Run the keeper
 ENTRYPOINT ["./keeper"]

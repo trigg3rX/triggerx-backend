@@ -15,9 +15,9 @@ func VersionCommand() *cli.Command {
 }
 
 func displayVersion(c *cli.Context) error {
-	fmt.Println("TriggerX AVS CLI")
+	fmt.Println("TriggerX Keeper CLI")
 	fmt.Printf("Version:      %s\n", "v1.0.0")
-	fmt.Printf("Build Date:   %s\n", "2024-11-26")
-	fmt.Printf("Go Version:   %s\n", "1.23.1")
+	fmt.Printf("Build Date:   %s\n", "2025-01-22")
+	fmt.Printf("Go Version:   %s\n", "1.23.5")
 	return nil
 }

@@ -44,7 +44,7 @@ import (
 	contractRegistryCoordinator "github.com/Layr-Labs/eigensdk-go/contracts/bindings/RegistryCoordinator"
 )
 
-var configPath = "config-files/triggerx_operator.yaml"
+var configPath = "config-files/triggerx_keeper.yaml"
 
 type BLSKeystore struct {
 	PubKey string `json:"pubKey"`
@@ -71,7 +71,7 @@ func handleHomeDirPath(path string) string {
 func RegisterCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "register",
-		Usage: "Register a new operator",
+		Usage: "Register a new Keeper",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "ecdsa-passphrase",
@@ -94,19 +94,19 @@ func RegisterCommand() *cli.Command {
 				Required: true,
 			},
 		},
-		Action: registerOperator,
+		Action: registerKeeper,
 	}
 }
 
 func DeregisterCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "deregister",
-		Usage:  "Deregister an operator",
-		Action: deregisterOperator,
+		Usage:  "Deregister an keeper",
+		Action: deregisterKeeper,
 	}
 }
 
-func registerOperator(c *cli.Context) error {
+func registerKeeper(c *cli.Context) error {
 	// Initialize logger with error checking
 	logger, err := logging.NewZapLogger(logging.Development)
 	if err != nil {
@@ -499,7 +499,7 @@ func registerOperator(c *cli.Context) error {
 	return nil
 }
 
-func deregisterOperator(c *cli.Context) error {
+func deregisterKeeper(c *cli.Context) error {
 	return nil
 }
 

@@ -6,15 +6,10 @@ global:
         # !!!!!  THIS IS EXAMPLE CODE    !!!!!
 
 scrape_configs:
-  - job_name: 'mach-operator'
+  - job_name: 'triggerx-keeper'
     scrape_interval: 1m
     static_configs:
       - targets: ['localhost:9092']
-
-  - job_name: 'mach-verifier'
-    scrape_interval: 1m
-    static_configs:
-      - targets: ['localhost:9094']
 
   - job_name: 'node'
     static_configs:

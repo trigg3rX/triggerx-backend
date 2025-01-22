@@ -11,7 +11,7 @@ import (
 func main() {
 	app := &cli.App{
 		Name:  "triggerx",
-		Usage: "TriggerX AVS CLI - Tool for managing operators on AVS",
+		Usage: "TriggerX Keeper CLI - Tool for managing keepers on TriggerX",
 		Commands: []*cli.Command{
 			cmd.RegisterCommand(),
 			cmd.DeregisterCommand(),

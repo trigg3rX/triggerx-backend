@@ -285,14 +285,14 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 		TriggerxServiceManagerAddr: common.HexToAddress(c.ServiceManagerAddress),
 	}
 
-	// 	// OperatorId is set in contract during registration so we get it after registering operator.
+	// 	// OperatorId is set in contract during registration so we get it after registering keeper.
 	// 	operatorId, err := sdkClients.AvsRegistryChainReader.GetOperatorId(&bind.CallOpts{}, keeper.KeeperAddr)
 	// 	if err != nil {
-	// 		logger.Error("Cannot get operator id", "err", err)
+	// 		logger.Error("Cannot get keeper id", "err", err)
 	// 		return nil, err
 	// 	}
 	// 	keeper.KeeperId = operatorId
-	// 	logger.Info("Operator info",
+	// 	logger.Info("Keeper info",
 	// 		"operatorId", operatorId,
 	// 		"operatorAddr", c.KeeperAddress,
 	// 		"operatorG1Pubkey", keeper.BlsKeypair.GetPubKeyG1(),
@@ -304,14 +304,14 @@ func NewKeeperFromConfig(c types.NodeConfig) (*Keeper, error) {
 }
 
 // func (k *Keeper) Start(ctx context.Context) error {
-// 	// Check if operator is registered using AvsReader interface
+// 	// Check if keeper is registered using AvsReader interface
 // 	operatorIsRegistered, err := k.AvsReader.GetOperatorId(&bind.CallOpts{}, k.KeeperAddr)
 // 	if err != nil {
-// 		k.Logger.Error("Error checking if operator is registered", "err", err)
+// 		k.Logger.Error("Error checking if keeper is registered", "err", err)
 // 		return err
 // 	}
 // 	if operatorIsRegistered == [32]byte{} {
-// 		return fmt.Errorf("operator is not registered. Register operator using the operator-cli before starting operator")
+// 		return fmt.Errorf("keeper is not registered. Register keeper using the keeper-cli before starting keeper")
 // 	}
 
 // 	k.Logger.Info("Starting keeper node")
@@ -403,7 +403,7 @@ func ValidateConfig(c types.NodeConfig) error {
 	}
 
 	if !common.IsHexAddress(c.OperatorStateRetrieverAddress) {
-		return fmt.Errorf("invalid operator state retriever address: %s", c.OperatorStateRetrieverAddress)
+		return fmt.Errorf("invalid keeper state retriever address: %s", c.OperatorStateRetrieverAddress)
 	}
 
 	// Validate and expand keystore paths
@@ -441,7 +441,7 @@ func ValidateConfig(c types.NodeConfig) error {
 }
 
 // func (k *Keeper) PrintOperatorStatus() error {
-// 	fmt.Println("Printing operator status")
+// 	fmt.Println("Printing keeper status")
 // 	operatorId, err := k.AvsReader.GetOperatorId(&bind.CallOpts{}, k.KeeperAddr)
 // 	if err != nil {
 // 		return err

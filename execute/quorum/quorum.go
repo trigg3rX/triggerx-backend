@@ -44,7 +44,7 @@ func Create() error {
 		log.Fatalf("failed to create auth transactor: %v", err)
 	}
 
-	// Define operator set parameters
+	// Define keeper set parameters
 	operatorSetParams := regcoord.IRegistryCoordinatorOperatorSetParam{
 		MaxOperatorCount:        uint32(MAX_OPERATORS_PER_QUORUM),
 		KickBIPsOfOperatorStake: uint16(100), // 1% in basis points (100 = 1%)
@@ -98,8 +98,8 @@ func Create() error {
 	return nil
 }
 
-// RegisterOperator registers an operator for specific quorums
-func RegisterOperator(quorumNumbers []byte, socket string,
+// RegisterKeeper registers an keeper for specific quorums
+func RegisterKeeper(quorumNumbers []byte, socket string,
 	pubkeyParams regcoord.IBLSApkRegistryPubkeyRegistrationParams,
 	operatorSignature regcoord.ISignatureUtilsSignatureWithSaltAndExpiry) error {
 	client, err := ethclient.Dial(HOLESKY_RPC)
@@ -120,14 +120,14 @@ func RegisterOperator(quorumNumbers []byte, socket string,
 
 	tx, err := contract.RegisterOperator(auth, quorumNumbers, socket, pubkeyParams, operatorSignature)
 	if err != nil {
-		return fmt.Errorf("failed to register operator: %v", err)
+		return fmt.Errorf("failed to register keeper: %v", err)
 	}
 
-	log.Printf("Operator registration transaction submitted: %s", tx.Hash().Hex())
+	log.Printf("Keeper registration transaction submitted: %s", tx.Hash().Hex())
 	return nil
 }
 
-func DeregisterOperator(quorumNumbers []byte) error {
+func DeregisterKeeper(quorumNumbers []byte) error {
 	client, err := ethclient.Dial(HOLESKY_RPC)
 	if err != nil {
 		return fmt.Errorf("failed to connect to the Ethereum client: %v", err)
@@ -145,10 +145,10 @@ func DeregisterOperator(quorumNumbers []byte) error {
 
 	tx, err := contract.DeregisterOperator(auth, quorumNumbers)
 	if err != nil {
-		return fmt.Errorf("failed to deregister operator: %v", err)
+		return fmt.Errorf("failed to deregister keeper: %v", err)
 	}
 
-	log.Printf("Operator deregistration transaction submitted: %s", tx.Hash().Hex())
+	log.Printf("Keeper deregistration transaction submitted: %s", tx.Hash().Hex())
 	return nil
 }
 

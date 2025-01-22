@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Read existing YAML
-	yamlFile, err := os.ReadFile("config-files/triggerx_operator.yaml")
+	yamlFile, err := os.ReadFile("triggerx_keeper.yaml")
 	if err != nil {
 		fmt.Printf("Error reading YAML file: %v\n", err)
 		os.Exit(1)
@@ -92,7 +92,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := os.WriteFile("config-files/triggerx_operator.yaml", yamlData, 0644); err != nil {
+	if err := os.WriteFile("config-files/triggerx_keeper.yaml", yamlData, 0644); err != nil {
 		fmt.Printf("Error writing YAML file: %v\n", err)
 		os.Exit(1)
 	}

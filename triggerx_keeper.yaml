@@ -10,6 +10,7 @@ ecdsa_keystore_path: "path/to/your/ecdsa/keystore"
 bls_keystore_path: "path/to/your/bls/keystore"
 connection_address: ""
 p2p_peer_id: ""
+p2p_port: 9003
 
 # Network settings
 ethrpcurl: "https://eth-holesky.g.alchemy.com/v2/<YOUR_ALCHEMY_API>"

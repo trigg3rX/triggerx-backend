@@ -1,16 +1,20 @@
 package main
 
 import (
-	"fmt"
 	"context"
-	// "os"
+	"fmt"
+	"os"
+
 	// "os/signal"
 	// "syscall"
-	// "gopkg.in/yaml.v3"
+	"strings"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
-	// "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var (
@@ -23,6 +27,18 @@ func main() {
 	}
 	logger = logging.GetLogger()
 
+	yamlFile, err := os.ReadFile("config-files/triggerx_keeper.yaml")
+	if err != nil {
+		fmt.Printf("Error reading YAML file: %v\n", err)
+		os.Exit(1)
+	}
+
+	var config types.NodeConfig
+	if err := yaml.Unmarshal(yamlFile, &config); err != nil {
+		fmt.Printf("Error parsing YAML: %v\n", err)
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 
 	registry, err := network.NewPeerRegistry()
@@ -30,9 +46,24 @@ func main() {
 		logger.Fatalf("Failed to initialize peer registry: %v", err)
 	}
 
+	// Update the addresses in the registry with the actual server IP
+	for serviceType, info := range registry.GetAllServices() {
+		if serviceType != network.ServiceKeeper {
+			newAddrs := make([]string, len(info.Addresses))
+			for i, addr := range info.Addresses {
+				newAddrs[i] = strings.Replace(addr, "0.0.0.0", config.ServerIpAddress, 1)
+			}
+			info.Addresses = newAddrs
+			if err := registry.UpdateService(serviceType, peer.ID(info.PeerID), newAddrs); err != nil {
+				logger.Fatalf("Failed to update registry addresses: %v", err)
+			}
+		}
+	}
+
 	p2pconfig := network.P2PConfig{
-		Name:    network.ServiceKeeper,
-		Address: "/ip4/0.0.0.0/tcp/9001",
+		Name: network.ServiceKeeper,
+		// Use keeper's connection address and port
+		Address: fmt.Sprintf("/ip4/%s/tcp/%s", config.ConnectionAddress, config.P2pPort),
 	}
 
 	host, err := network.SetupP2PWithRegistry(ctx, p2pconfig, registry)
@@ -40,72 +71,31 @@ func main() {
 		logger.Fatalf("Failed to setup P2P: %v", err)
 	}
 
-	// discovery := network.NewDiscovery(ctx, host, config.Name)
-
+	// Initialize messaging
 	messaging := network.NewMessaging(host, p2pconfig.Name)
 	messaging.InitMessageHandling(func(msg network.Message) {
 		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
 	})
 
-	// config := types.NodeConfig{}
-	
-	// yamlFile, err := os.ReadFile("triggerx_operator.yaml")
-    // if err != nil {
-    //     logger.Fatalf("Error reading YAML config file: %v", err)
-    // }
+	// Initialize discovery and attempt connections in order
+	discovery := network.NewDiscovery(ctx, host, p2pconfig.Name)
 
-	// var yamlConfig struct {
-    //     Keeper struct {
-    //         Address          string `yaml:"address"`
-    //         EcdsaKeystore   string `yaml:"ecdsa_keystore_path"`
-    //         BlsKeystore     string `yaml:"bls_keystore_path"`
-    //     } `yaml:"keeper"`
-    //     Environment struct {
-    //         EthRpcUrl string `yaml:"ethrpcurl"`
-    //         EthWsUrl  string `yaml:"ethwsurl"`
-    //     } `yaml:"environment"`
-    //     Prometheus struct {
-    //         PortAddress string `yaml:"port_address"`
-    //     } `yaml:"prometheus"`
-    //     Addresses struct {
-    //         ServiceManagerAddress  string `yaml:"service_manager_address"`
-    //         OperatorStateRetriever string `yaml:"operator_state_retriever"`
-    //     } `yaml:"addresses"`
-    // }
-
-	// if err := yaml.Unmarshal(yamlFile, &yamlConfig); err != nil {
-    //     logger.Fatalf("Error parsing YAML config: %v", err)
-    // }
-
-    // // Set config values from YAML
-    // config.EthRpcUrl = yamlConfig.Environment.EthRpcUrl
-    // config.EthWsUrl = yamlConfig.Environment.EthWsUrl
-    // config.ServiceManagerAddress = yamlConfig.Addresses.ServiceManagerAddress
-    // config.OperatorStateRetrieverAddress = yamlConfig.Addresses.OperatorStateRetriever
-    // config.EigenMetricsIpPortAddress = yamlConfig.Prometheus.PortAddress
-    // // config.EcdsaKeystorePath = yamlConfig.Keeper.EcdsaKeystore
-    // // config.BlsKeystorePath = yamlConfig.Keeper.BlsKeystore
-
-    // keeperNode, err := keeper.NewKeeperFromConfig(config)
-    // if err != nil {
-    //     logger.Fatalf("Failed to create keeper node: %v", err)
-    // }
-
-    // sigChan := make(chan os.Signal, 1)
-    // signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-    // errChan := make(chan error, 1)
-    // go func() {
-    //     if err := keeperNode.Start(ctx); err != nil {
-    //         errChan <- err
-    //     }
-    // }()
-
+	// Try connecting to services in order: quorum -> manager -> validator
+	services := []string{network.ServiceQuorum, network.ServiceManager, network.ServiceValidator}
+	for _, service := range services {
+		peerID, err := discovery.ConnectToPeer(service)
+		if err != nil {
+			logger.Warnf("Failed to connect to %s: %v", service, err)
+			continue
+		}
+		logger.Infof("Successfully connected to %s (PeerID: %s)", service, peerID.String())
+	}
 
 	logger.Info("Starting keeper node...")
+	logger.Infof("Keeper node is running. Node ID: %s", host.ID().String())
+	logger.Infof("Listening on addresses: %v", host.Addrs())
 	select {}
 }
-
 
 // import (
 // 	"context"
