@@ -157,7 +157,7 @@ func registerOperator(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("Failed to get ECDSA public key: %v", err), 1)
 	}
 
-	apiEndpoint := fmt.Sprintf("%s/keepers/%s", "http://localhost:8080/api", keeperAddress.Hex())
+	apiEndpoint := fmt.Sprintf("%s/keepers/%s", "https://data.triggerx.network/api", keeperAddress.Hex())
 	logger.Infof("Checking keeper registration at: %s", apiEndpoint)
 	resp, err := http.Get(apiEndpoint)
 	if err != nil {
@@ -376,7 +376,7 @@ func registerOperator(c *cli.Context) error {
 
 	// Get quorum number from API
 	// apiEndpoint := fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
-	apiEndpoint = fmt.Sprintf("%s/quorums/registration", "http://localhost:8080/api")
+	apiEndpoint = fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
 	logger.Info("Fetching quorum number from API", "endpoint", apiEndpoint)
 	resp, err = http.Get(apiEndpoint)
 	if err != nil {
@@ -473,7 +473,7 @@ func registerOperator(c *cli.Context) error {
 	}
 
 	// Make POST request to create keeper
-	apiEndpoint = fmt.Sprintf("%s/keepers", "http://localhost:8080/api")
+	apiEndpoint = fmt.Sprintf("%s/keepers", "https://data.triggerx.network/api")
 	resp, err = http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		logger.Error("Failed to create keeper in database",

@@ -22,7 +22,7 @@ type QuorumData struct {
 
 func GetQuorum() (int64, error) {
 	// Make GET request to API endpoint
-	resp, err := http.Get("http://localhost:8080/api/quorums/free")
+	resp, err := http.Get("hhttps://data.triggerx.network/api/quorums/free")
 	if err != nil {
 		return 0, fmt.Errorf("failed to make request: %v", err)
 	}
@@ -51,7 +51,7 @@ func GetQuorum() (int64, error) {
 }
 
 func AssignQuorumHead(quorumID int64) (string, error) {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:8080/api/quorums/%d", quorumID))
+	resp, err := http.Get(fmt.Sprintf("https://data.triggerx.network/api/quorums/%d", quorumID))
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: %v", err)
 	}
