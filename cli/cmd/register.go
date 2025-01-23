@@ -629,7 +629,51 @@ func deregisterKeeper(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
 	}
 
-	logger.Infof("Transaction successfully sent and mined",
+	// Create keeper data in database
+	keeperData := types.KeeperData{
+		WithdrawalAddress: keeperAddress.Hex(),
+		RegisteredTx:      receipt.TxHash.Hex(),
+		Status:            false,
+		BlsSigningKeys:    []string{},
+		ConnectionAddress: nodeConfig.ConnectionAddress,
+		Verified:          false,
+		CurrentQuorumNo:   int(0),
+	}
+
+	logger.Info("Preparing to create keeper in database",
+		"withdrawalAddress", keeperData.WithdrawalAddress,
+		"registeredTx", keeperData.RegisteredTx,
+		"quorumNumber", keeperData.CurrentQuorumNo)
+
+	jsonData, err := json.Marshal(keeperData)
+	if err != nil {
+		logger.Error("Failed to marshal keeper data",
+			"error", err,
+			"keeperData", fmt.Sprintf("%+v", keeperData))
+		return cli.Exit(fmt.Sprintf("Failed to marshal keeper data: %v", err), 1)
+	}
+
+	// Make POST request to create keeper
+	apiEndpoint := fmt.Sprintf("%s/keepers", "https://data.triggerx.network/api")
+	resp, err := http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Error("Failed to create keeper in database",
+			"error", err,
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to create keeper in database: %v", err), 1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		logger.Error("Failed to create keeper in database",
+			"statusCode", resp.StatusCode,
+			"response", string(body),
+			"endpoint", apiEndpoint)
+		return cli.Exit(fmt.Sprintf("Failed to create keeper in database. Status: %d", resp.StatusCode), 1)
+	}
+
+	logger.Info("Transaction successfully sent and mined",
 		"txHash", receipt.TxHash.Hex(),
 		"blockNumber", receipt.BlockNumber,
 		"gasUsed", receipt.GasUsed)
