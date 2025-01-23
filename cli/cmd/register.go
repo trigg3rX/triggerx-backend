@@ -35,9 +35,9 @@ import (
 	eigensdkbls "github.com/Layr-Labs/eigensdk-go/crypto/bls"
 
 	contractAVSDirectory "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IAVSDirectory"
-	contractERC20 "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IERC20"
-	contractStrategy "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IStrategy"
-	contractStrategyManager "github.com/Layr-Labs/eigensdk-go/contracts/bindings/StrategyManager"
+	// contractERC20 "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IERC20"
+	// contractStrategy "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IStrategy"
+	// contractStrategyManager "github.com/Layr-Labs/eigensdk-go/contracts/bindings/StrategyManager"
 
 	// contractServiceManager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/TriggerXServiceManager"
 	// contractDelegationManager "github.com/trigg3rX/triggerx-contracts/bindings/contracts/DelegationManager"
@@ -203,7 +203,7 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("error creating transaction object %v", err), 1)
 	}
 
-	strategyAddr := c.String("strategy-address")
+	// strategyAddr := c.String("strategy-address")
 	stakeAmountFloat, err := strconv.ParseFloat(c.String("amount"), 64)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to parse stake amount: %v", err), 1)
@@ -224,88 +224,88 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("Failed to create AVSDirectory contract instance: %v", err), 1)
 	}
 
-	strategyManagerAddr := common.HexToAddress(nodeConfig.StrategyManagerAddress)
-	strategyManager, err := contractStrategyManager.NewContractStrategyManager(strategyManagerAddr, client)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to create StrategyManager contract instance: %v", err), 1)
-	}
+	// strategyManagerAddr := common.HexToAddress(nodeConfig.StrategyManagerAddress)
+	// strategyManager, err := contractStrategyManager.NewContractStrategyManager(strategyManagerAddr, client)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to create StrategyManager contract instance: %v", err), 1)
+	// }
 
 	registryCoordinatorContract, err := contractRegistryCoordinator.NewContractRegistryCoordinator(common.HexToAddress(nodeConfig.RegistryCoordinatorAddress), client)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Failed to create RegistryCoordinator contract instance: %v", err), 1)
 	}
 
-	strategyContract, err := contractStrategy.NewContractIStrategy(common.HexToAddress(strategyAddr), client)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to create Strategy contract instance: %v", err), 1)
-	}
+	// strategyContract, err := contractStrategy.NewContractIStrategy(common.HexToAddress(strategyAddr), client)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to create Strategy contract instance: %v", err), 1)
+	// }
 
-	underlyingTokenAddr, err := strategyContract.UnderlyingToken(&bind.CallOpts{})
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to get underlying token address: %v", err), 1)
-	}
+	// underlyingTokenAddr, err := strategyContract.UnderlyingToken(&bind.CallOpts{})
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to get underlying token address: %v", err), 1)
+	// }
 
-	logger.Info("Underlying token address", "address", underlyingTokenAddr.Hex())
+	// logger.Info("Underlying token address", "address", underlyingTokenAddr.Hex())
 
-	tokenContract, err := contractERC20.NewContractIERC20(underlyingTokenAddr, client)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to create ERC20 contract instance: %v", err), 1)
-	}
+	// tokenContract, err := contractERC20.NewContractIERC20(underlyingTokenAddr, client)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to create ERC20 contract instance: %v", err), 1)
+	// }
 
-	tokenBalance, err := tokenContract.BalanceOf(nil, keeperAddress)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to get token balance: %v", err), 1)
-	}
+	// tokenBalance, err := tokenContract.BalanceOf(nil, keeperAddress)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to get token balance: %v", err), 1)
+	// }
 
-	if tokenBalance.Cmp(stakeAmount) < 0 {
-		return cli.Exit(fmt.Sprintf("Insufficient token balance. Required: %s, Available: %s",
-			stakeAmount.String(), tokenBalance.String()), 1)
-	}
+	// if tokenBalance.Cmp(stakeAmount) < 0 {
+	// 	return cli.Exit(fmt.Sprintf("Insufficient token balance. Required: %s, Available: %s",
+	// 		stakeAmount.String(), tokenBalance.String()), 1)
+	// }
 
-	tx1, err := tokenContract.Approve(noSendTxOpts, common.HexToAddress(nodeConfig.StrategyManagerAddress), stakeAmount)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to approve token: %v", err), 1)
-	}
+	// tx1, err := tokenContract.Approve(noSendTxOpts, common.HexToAddress(nodeConfig.StrategyManagerAddress), stakeAmount)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to approve token: %v", err), 1)
+	// }
 
-	receipt1, err := txMgr.Send(context.Background(), tx1, true)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
-	}
+	// receipt1, err := txMgr.Send(context.Background(), tx1, true)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
+	// }
 
-	logger.Info("Approved token", "txHash", receipt1.TxHash.Hex())
+	// logger.Info("Approved token", "txHash", receipt1.TxHash.Hex())
 
-	if receipt1.Status == 0 {
-		return cli.Exit(fmt.Sprintf("Approve transaction failed: %s", tx1.Hash().Hex()), 1)
-	}
+	// if receipt1.Status == 0 {
+	// 	return cli.Exit(fmt.Sprintf("Approve transaction failed: %s", tx1.Hash().Hex()), 1)
+	// }
 
-	logger.Info("Approval transaction successfully mined",
-		"txHash", receipt1.TxHash.Hex(),
-		"blockNumber", receipt1.BlockNumber,
-		"gasUsed", receipt1.GasUsed)
+	// logger.Info("Approval transaction successfully mined",
+	// 	"txHash", receipt1.TxHash.Hex(),
+	// 	"blockNumber", receipt1.BlockNumber,
+	// 	"gasUsed", receipt1.GasUsed)
 
-	logger.Info("Depositing into strategy",
-		"stakeAmount", stakeAmount.String(),
-		"balance", tokenBalance.String())
+	// logger.Info("Depositing into strategy",
+	// 	"stakeAmount", stakeAmount.String(),
+	// 	"balance", tokenBalance.String())
 
-	tx2, err := strategyManager.DepositIntoStrategy(
-		noSendTxOpts,
-		common.HexToAddress(strategyAddr),
-		underlyingTokenAddr,
-		stakeAmount,
-	)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to deposit into strategy: %v", err), 1)
-	}
+	// tx2, err := strategyManager.DepositIntoStrategy(
+	// 	noSendTxOpts,
+	// 	common.HexToAddress(strategyAddr),
+	// 	underlyingTokenAddr,
+	// 	stakeAmount,
+	// )
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to deposit into strategy: %v", err), 1)
+	// }
 
-	receipt2, err := txMgr.Send(context.Background(), tx2, true)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
-	}
+	// receipt2, err := txMgr.Send(context.Background(), tx2, true)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
+	// }
 
-	logger.Infof("Transaction successfully sent and mined",
-		"txHash", receipt2.TxHash.Hex(),
-		"blockNumber", receipt2.BlockNumber,
-		"gasUsed", receipt2.GasUsed)
+	// logger.Infof("Transaction successfully sent and mined",
+	// 	"txHash", receipt2.TxHash.Hex(),
+	// 	"blockNumber", receipt2.BlockNumber,
+	// 	"gasUsed", receipt2.GasUsed)
 
 	// Generate random salt
 	var saltBytes [32]byte

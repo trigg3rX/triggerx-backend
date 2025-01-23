@@ -87,6 +87,8 @@ func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Requ
 		quorumMap[quorum.QuorumNo] = quorum
 	}
 
+	log.Printf("[GetQuorumNoForRegistration] Quorums: %v", quorums)
+
 	if err := iter.Close(); err != nil {
 		log.Printf("[GetQuorumNoForRegistration] Error retrieving quorums: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
