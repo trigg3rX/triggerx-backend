@@ -2,13 +2,17 @@ package api
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+)
+
+var (
+	logger logging.Logger
 )
 
 type Server struct {
@@ -20,9 +24,11 @@ type Server struct {
 func NewServer(db *database.Connection) *Server {
 	router := mux.NewRouter()
 
+	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
+
 	// Initialize event bus for the API service
 	if err := events.InitEventBus("localhost:6379"); err != nil {
-		log.Fatalf("Failed to initialize event bus: %v", err)
+		logger.Fatalf("Failed to initialize event bus: %v", err)
 	}
 
 	// Create a new CORS handler
@@ -97,7 +103,7 @@ func (s *Server) routes() {
 }
 
 func (s *Server) Start(port string) error {
-	log.Printf("Starting server on port %s", port)
+	logger.Info("Starting server on port %s", port)
 
 	// Wrap the router with the CORS handler
 	handler := s.cors.Handler(s.router)

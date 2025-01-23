@@ -13,7 +13,7 @@ func main() {
 	if err := logging.InitLogger(logging.Development, "validator"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetLogger()
+	logger := logging.GetLogger(logging.Development, logging.ValidatorProcess)
 
 	logger.Info("Starting validator node...")
 

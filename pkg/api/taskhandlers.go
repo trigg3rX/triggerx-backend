@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,7 +23,7 @@ import (
 func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	var taskData ttypes.TaskData
 	if err := json.NewDecoder(r.Body).Decode(&taskData); err != nil {
-		log.Printf("[CreateTaskData] Error decoding request body: %v", err)
+		logger.Error("[CreateTaskData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -34,7 +33,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT script_ipfs_url FROM triggerx.job_data WHERE job_id = ?`,
 		taskData.JobID).Scan(&jobData.ScriptIpfsUrl); err != nil {
-		log.Printf("[CreateTaskData] Error fetching job data: %v", err)
+		logger.Error("[CreateTaskData] Error fetching job data: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -42,7 +41,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		log.Printf("[CreateTaskData] Error creating Docker client: %v", err)
+		logger.Error("[CreateTaskData] Error creating Docker client: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -51,7 +50,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Download and process the script
 	codePath, err := resources.DownloadIPFSFile(jobData.ScriptIpfsUrl)
 	if err != nil {
-		log.Printf("[CreateTaskData] Error downloading IPFS file: %v", err)
+		logger.Error("[CreateTaskData] Error downloading IPFS file: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -60,7 +59,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Create and monitor container
 	containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
 	if err != nil {
-		log.Printf("[CreateTaskData] Error creating container: %v", err)
+		logger.Error("[CreateTaskData] Error creating container: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -69,7 +68,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Monitor resources and get stats
 	stats, err := resources.MonitorResources(context.Background(), cli, containerID)
 	if err != nil {
-		log.Printf("[CreateTaskData] Error monitoring resources: %v", err)
+		logger.Error("[CreateTaskData] Error monitoring resources: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -77,7 +76,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Set the task fee from the calculated value
 	taskData.TaskFee = stats.TotalFee
 
-	log.Printf("[CreateTaskData] Creating task with ID: %d", taskData.TaskID)
+	logger.Info("[CreateTaskData] Creating task with ID: %d", taskData.TaskID)
 
 	// Insert task data with the calculated fee
 	if err := h.db.Session().Query(`
@@ -93,12 +92,12 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 		taskData.TaskCreatedTxHash, taskData.TaskRespondedBlock, taskData.TaskRespondedTxHash,
 		taskData.TaskHash, taskData.TaskResponseHash, taskData.QuorumKeeperHash,
 		taskData.TaskFee).Exec(); err != nil {
-		log.Printf("[CreateTaskData] Error inserting task with ID %d: %v", taskData.TaskID, err)
+		logger.Error("[CreateTaskData] Error inserting task with ID %d: %v", taskData.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[CreateTaskData] Successfully created task with ID: %d", taskData.TaskID)
+	logger.Info("[CreateTaskData] Successfully created task with ID: %d", taskData.TaskID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(taskData)
 }
@@ -106,7 +105,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID := vars["id"]
-	log.Printf("[GetTaskData] Fetching task with ID: %s", taskID)
+	logger.Info("[GetTaskData] Fetching task with ID: %s", taskID)
 
 	var taskData ttypes.TaskData
 	if err := h.db.Session().Query(`
@@ -120,12 +119,12 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 		&taskData.QuorumNumber, &taskData.QuorumThreshold, &taskData.TaskCreatedBlock,
 		&taskData.TaskCreatedTxHash, &taskData.TaskRespondedBlock, &taskData.TaskRespondedTxHash,
 		&taskData.TaskHash, &taskData.TaskResponseHash, &taskData.QuorumKeeperHash); err != nil {
-		log.Printf("[GetTaskData] Error retrieving task with ID %s: %v", taskID, err)
+		logger.Error("[GetTaskData] Error retrieving task with ID %s: %v", taskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetTaskData] Successfully retrieved task with ID: %s", taskID)
+	logger.Info("[GetTaskData] Successfully retrieved task with ID: %s", taskID)
 	json.NewEncoder(w).Encode(taskData)
 }
 
@@ -197,7 +196,7 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 		client.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
-		log.Printf("[GetTaskFees] Error creating Docker client: %v", err)
+		logger.Error("[GetTaskFees] Error creating Docker client: %v", err)
 		http.Error(w, "Failed to create Docker client", http.StatusInternalServerError)
 		return
 	}
@@ -206,7 +205,7 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	// Download and process the IPFS file
 	codePath, err := resources.DownloadIPFSFile(ipfsURL)
 	if err != nil {
-		log.Printf("[GetTaskFees] Error downloading IPFS file: %v", err)
+		logger.Error("[GetTaskFees] Error downloading IPFS file: %v", err)
 		http.Error(w, "Failed to download IPFS file", http.StatusInternalServerError)
 		return
 	}
@@ -215,7 +214,7 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	// Create container
 	containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
 	if err != nil {
-		log.Printf("[GetTaskFees] Error creating container: %v", err)
+		logger.Error("[GetTaskFees] Error creating container: %v", err)
 		http.Error(w, "Failed to create container", http.StatusInternalServerError)
 		return
 	}
@@ -224,7 +223,7 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	// Monitor resources and get stats
 	stats, err := resources.MonitorResources(ctx, cli, containerID)
 	if err != nil {
-		log.Printf("[GetTaskFees] Error monitoring resources: %v", err)
+		logger.Error("[GetTaskFees] Error monitoring resources: %v", err)
 		http.Error(w, "Failed to monitor resources", http.StatusInternalServerError)
 		return
 	}

@@ -104,7 +104,7 @@ func main() {
 	if err := logging.InitLogger(logging.Development, "manager"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger = logging.GetLogger()
+	logger := logging.GetLogger(logging.Development, logging.ManagerProcess)
 	logger.Info("Starting manager node...")
 
 	ctx := context.Background()

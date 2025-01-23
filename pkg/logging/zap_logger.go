@@ -21,6 +21,17 @@ const (
 	Production  LogLevel = "production"  // prints info and above
 )
 
+// ProcessName type to ensure valid process names
+type ProcessName string
+
+const (
+	ManagerProcess   ProcessName = "manager"
+	QuorumProcess    ProcessName = "quorum"
+	ValidatorProcess ProcessName = "validator"
+	DatabaseProcess  ProcessName = "database"
+	KeeperProcess    ProcessName = "keeper"
+)
+
 type ZapLogger struct {
 	logger *zap.Logger
 }
@@ -28,7 +39,7 @@ type ZapLogger struct {
 var _ Logger = (*ZapLogger)(nil)
 
 var (
-	defaultLogger Logger
+	loggers map[ProcessName]Logger = make(map[ProcessName]Logger)
 )
 
 // NewZapLogger creates a new logger wrapped the zap.Logger
@@ -117,18 +128,23 @@ func (z *ZapLogger) With(tags ...any) Logger {
 	}
 }
 
-func InitLogger(env LogLevel, processName string) error {
-	logger, err := NewZapLogger(env, processName)
+// InitLogger initializes a logger for a specific process with production environment by default
+func InitLogger(env LogLevel, processName ProcessName) error {
+	logger, err := NewZapLogger(env, string(processName))
 	if err != nil {
 		return err
 	}
-	defaultLogger = logger
+	loggers[processName] = logger
 	return nil
 }
 
-func GetLogger() Logger {
-	if defaultLogger == nil {
-		defaultLogger, _ = NewZapLogger(Development, "default")
+// GetLogger returns the logger for a specific process
+func GetLogger(env LogLevel, processName ProcessName) Logger {
+	if logger, exists := loggers[processName]; exists {
+		return logger
 	}
-	return defaultLogger
+	// Initialize with production environment if not found
+	logger, _ := NewZapLogger(env, string(processName))
+	loggers[processName] = logger
+	return logger
 }

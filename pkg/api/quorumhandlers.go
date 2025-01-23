@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -24,24 +23,24 @@ func abs(x int) int {
 func (h *Handler) CreateQuorumData(w http.ResponseWriter, r *http.Request) {
 	var quorumData types.QuorumData
 	if err := json.NewDecoder(r.Body).Decode(&quorumData); err != nil {
-		log.Printf("[CreateQuorumData] Error decoding request body: %v", err)
+		logger.Error("[CreateQuorumData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[CreateQuorumData] Creating quorum with ID: %d", quorumData.QuorumID)
+	logger.Info("[CreateQuorumData] Creating quorum with ID: %d", quorumData.QuorumID)
 
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.quorum_data (quorum_id, quorum_no, quorum_creation_block, quorum_tx_hash, keepers, quorum_stake_total, task_ids, quorum_status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		quorumData.QuorumID, quorumData.QuorumNo, quorumData.QuorumCreationBlock, quorumData.QuorumTxHash,
 		quorumData.Keepers, quorumData.QuorumStakeTotal, quorumData.TaskIDs, quorumData.QuorumStatus).Exec(); err != nil {
-		log.Printf("[CreateQuorumData] Error creating quorum with ID %d: %v", quorumData.QuorumID, err)
+		logger.Error("[CreateQuorumData] Error creating quorum with ID %d: %v", quorumData.QuorumID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[CreateQuorumData] Successfully created quorum with ID: %d", quorumData.QuorumID)
+	logger.Info("[CreateQuorumData] Successfully created quorum with ID: %d", quorumData.QuorumID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(quorumData)
 }
@@ -49,7 +48,7 @@ func (h *Handler) CreateQuorumData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetQuorumData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	quorumID := vars["id"]
-	log.Printf("[GetQuorumData] Retrieving quorum with ID: %s", quorumID)
+	logger.Info("[GetQuorumData] Retrieving quorum with ID: %s", quorumID)
 
 	var quorumData types.QuorumData
 	if err := h.db.Session().Query(`
@@ -58,17 +57,17 @@ func (h *Handler) GetQuorumData(w http.ResponseWriter, r *http.Request) {
         WHERE quorum_id = ?`, quorumID).Scan(
 		&quorumData.QuorumID, &quorumData.QuorumNo, &quorumData.QuorumCreationBlock, &quorumData.QuorumTxHash,
 		&quorumData.Keepers, &quorumData.QuorumStakeTotal, &quorumData.TaskIDs, &quorumData.QuorumStatus); err != nil {
-		log.Printf("[GetQuorumData] Error retrieving quorum with ID %s: %v", quorumID, err)
+		logger.Error("[GetQuorumData] Error retrieving quorum with ID %s: %v", quorumID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetQuorumData] Successfully retrieved quorum with ID: %s", quorumID)
+	logger.Info("[GetQuorumData] Successfully retrieved quorum with ID: %s", quorumID)
 	json.NewEncoder(w).Encode(quorumData)
 }
 
 func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[GetQuorumNoForRegistration] Finding optimal quorum for registration")
+	logger.Info("[GetQuorumNoForRegistration] Finding optimal quorum for registration")
 
 	var quorums []types.QuorumDataResponse
 	iter := h.db.Session().Query(`
@@ -87,10 +86,10 @@ func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Requ
 		quorumMap[quorum.QuorumNo] = quorum
 	}
 
-	log.Printf("[GetQuorumNoForRegistration] Quorums: %v", quorums)
+	logger.Info("[GetQuorumNoForRegistration] Quorums: %v", quorums)
 
 	if err := iter.Close(); err != nil {
-		log.Printf("[GetQuorumNoForRegistration] Error retrieving quorums: %v", err)
+		logger.Error("[GetQuorumNoForRegistration] Error retrieving quorums: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -128,12 +127,12 @@ func (h *Handler) GetQuorumNoForRegistration(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	log.Printf("[GetQuorumNoForRegistration] Selected quorum number: %d", selectedQuorumNo)
+	logger.Info("[GetQuorumNoForRegistration] Selected quorum number: %d", selectedQuorumNo)
 	json.NewEncoder(w).Encode(selectedQuorumNo)
 }
 
 func (h *Handler) GetAllQuorums(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[GetAllQuorums] Retrieving all quorums")
+	logger.Info("[GetAllQuorums] Retrieving all quorums")
 
 	var quorums []types.QuorumDataResponse
 	iter := h.db.Session().Query(`
@@ -149,12 +148,12 @@ func (h *Handler) GetAllQuorums(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := iter.Close(); err != nil {
-		log.Printf("[GetAllQuorums] Error retrieving quorums: %v", err)
+		logger.Error("[GetAllQuorums] Error retrieving quorums: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetAllQuorums] Successfully retrieved %d quorums", len(quorums))
+	logger.Info("[GetAllQuorums] Successfully retrieved %d quorums", len(quorums))
 	json.NewEncoder(w).Encode(quorums)
 }
 
@@ -164,12 +163,12 @@ func (h *Handler) UpdateQuorumData(w http.ResponseWriter, r *http.Request) {
 
 	var quorumData types.QuorumData
 	if err := json.NewDecoder(r.Body).Decode(&quorumData); err != nil {
-		log.Printf("[UpdateQuorumData] Error decoding request body for quorum ID %s: %v", quorumID, err)
+		logger.Error("[UpdateQuorumData] Error decoding request body for quorum ID %s: %v", quorumID, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[UpdateQuorumData] Updating quorum with ID: %s", quorumID)
+	logger.Info("[UpdateQuorumData] Updating quorum with ID: %s", quorumID)
 
 	if err := h.db.Session().Query(`
         UPDATE triggerx.quorum_data 
@@ -177,12 +176,12 @@ func (h *Handler) UpdateQuorumData(w http.ResponseWriter, r *http.Request) {
         WHERE quorum_id = ?`,
 		quorumData.QuorumNo, quorumData.QuorumCreationBlock, quorumData.QuorumTxHash,
 		quorumData.Keepers, quorumData.QuorumStakeTotal, quorumData.TaskIDs, quorumData.QuorumStatus, quorumID).Exec(); err != nil {
-		log.Printf("[UpdateQuorumData] Error updating quorum with ID %s: %v", quorumID, err)
+		logger.Error("[UpdateQuorumData] Error updating quorum with ID %s: %v", quorumID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[UpdateQuorumData] Successfully updated quorum with ID: %s", quorumID)
+	logger.Info("[UpdateQuorumData] Successfully updated quorum with ID: %s", quorumID)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(quorumData)
 }

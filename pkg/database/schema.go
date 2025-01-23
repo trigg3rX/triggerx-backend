@@ -1,10 +1,11 @@
 package database
 
 import (
-	"log"
-
 	"github.com/gocql/gocql"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+var logger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
 
 func InitSchema(session *gocql.Session) error {
 	// Create keyspace
@@ -127,6 +128,6 @@ func InitSchema(session *gocql.Session) error {
 		return err
 	}
 
-	log.Println("Database schema initialized successfully")
+	logger.Info("Database schema initialized successfully")
 	return nil
 }

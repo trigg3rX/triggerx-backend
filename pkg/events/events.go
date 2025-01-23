@@ -48,7 +48,7 @@ func GetEventBus() *EventBus {
 }
 
 func (eb *EventBus) PublishJobEvent(ctx context.Context, event JobEvent) error {
-	logger := logging.GetLogger()
+	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
 
 	// Marshal event to JSON
 	eventJSON, err := json.Marshal(event)
@@ -72,7 +72,7 @@ func (eb *EventBus) PublishJobEvent(ctx context.Context, event JobEvent) error {
 }
 
 func (eb *EventBus) PublishKeeperEvent(ctx context.Context, event KeeperEvent) error {
-	logger := logging.GetLogger()
+	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
 
 	// Marshal event to JSON
 	eventJSON, err := json.Marshal(event)

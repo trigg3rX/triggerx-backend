@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"math/big"
 	"net/http"
 	"time"
@@ -60,7 +59,7 @@ import (
 func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID := vars["id"]
-	log.Printf("[GetUserData] Retrieving user with ID: %s", userID)
+	logger.Info("[GetUserData] Retrieving user with ID: %s", userID)
 
 	var (
 		userData struct {
@@ -80,12 +79,12 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
         WHERE user_id = ?`, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs,
 		&userData.StakeAmount, &userData.AccountBalance, &userData.CreatedAt, &userData.LastUpdatedAt); err != nil {
-		log.Printf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
+		logger.Error("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetUserData] Successfully retrieved user with ID: %s", userID)
+	logger.Info("[GetUserData] Successfully retrieved user with ID: %s", userID)
 
 	// Convert big.Int to float64 for JSON response
 	stakeAmountFloat := new(big.Float).SetInt(userData.StakeAmount)

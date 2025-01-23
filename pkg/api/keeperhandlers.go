@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -27,21 +26,21 @@ import (
 func (h *Handler) GetKeeperPeerInfo(w http.ResponseWriter, r *http.Request) {
 	var peerInfo types.PeerInfo
 	if err := json.NewDecoder(r.Body).Decode(&peerInfo); err != nil {
-		log.Printf("[GetKeeperPeerInfo] Error decoding request body: %v", err)
+		logger.Error("[GetKeeperPeerInfo] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[GetKeeperPeerInfo] Retrieving peer info for keeper ID: %s", peerInfo.ID)
+	logger.Info("[GetKeeperPeerInfo] Retrieving peer info for keeper ID: %s", peerInfo.ID)
 	if err := h.db.Session().Query(`
 		SELECT id, addresses FROM triggerx.keeper_data WHERE keeper_id = ?`, peerInfo.ID).Scan(
 		&peerInfo.ID, &peerInfo.Addresses); err != nil {
-		log.Printf("[GetKeeperPeerInfo] Error retrieving peer info for keeper ID %s: %v", peerInfo.ID, err)
+		logger.Error("[GetKeeperPeerInfo] Error retrieving peer info for keeper ID %s: %v", peerInfo.ID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetKeeperPeerInfo] Successfully retrieved peer info for keeper ID: %s", peerInfo.ID)
+	logger.Info("[GetKeeperPeerInfo] Successfully retrieved peer info for keeper ID: %s", peerInfo.ID)
 	json.NewEncoder(w).Encode(peerInfo)
 	w.WriteHeader(http.StatusOK)
 }
@@ -49,7 +48,7 @@ func (h *Handler) GetKeeperPeerInfo(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CheckKeeperRegistration(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperAddress := vars["address"]
-	log.Printf("[CheckKeeperRegistration] Retrieving keeper by address: %s", keeperAddress)
+	logger.Info("[CheckKeeperRegistration] Retrieving keeper by address: %s", keeperAddress)
 
 	var keeper types.KeeperData
 	if err := h.db.Session().Query(`
@@ -57,13 +56,13 @@ func (h *Handler) CheckKeeperRegistration(w http.ResponseWriter, r *http.Request
 		FROM triggerx.keeper_data 
 		WHERE withdrawal_address = ? ALLOW FILTERING`, keeperAddress).Scan(
 		&keeper.KeeperID, &keeper.RegisteredTx, &keeper.ConnectionAddress); err != nil {
-		log.Printf("[CheckKeeperRegistration] Error retrieving keeper by address %s: %v", keeperAddress, err)
+		logger.Error("[CheckKeeperRegistration] Error retrieving keeper by address %s: %v", keeperAddress, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if keeper.KeeperID == 0 {
-		log.Printf("[CheckKeeperRegistration] No keeper found for address: %s", keeperAddress)
+		logger.Error("[CheckKeeperRegistration] No keeper found for address: %s", keeperAddress)
 		http.Error(w, "Keeper not found", http.StatusNotFound)
 		return
 	}
@@ -74,7 +73,7 @@ func (h *Handler) CheckKeeperRegistration(w http.ResponseWriter, r *http.Request
 		PeerID:       keeper.ConnectionAddress,
 	}
 
-	log.Printf("[CheckKeeperRegistration] Successfully retrieved keeper by address: %s", keeperAddress)
+	logger.Info("[CheckKeeperRegistration] Successfully retrieved keeper by address: %s", keeperAddress)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
@@ -82,19 +81,19 @@ func (h *Handler) CheckKeeperRegistration(w http.ResponseWriter, r *http.Request
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.KeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-		log.Printf("[CreateKeeperData] Error decoding request body: %v", err)
+		logger.Error("[CreateKeeperData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	validationStatus := checkRegistration(keeperData.RegisteredTx, keeperData.WithdrawalAddress)
 	if !validationStatus {
-		log.Printf("[CreateKeeperData] Registration validation failed for keeper ID: %d", keeperData.KeeperID)
+		logger.Error("[CreateKeeperData] Registration validation failed for keeper ID: %d", keeperData.KeeperID)
 		http.Error(w, "Registration validation failed", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[CreateKeeperData] Creating keeper with ID: %d", keeperData.KeeperID)
+	logger.Info("[CreateKeeperData] Creating keeper with ID: %d", keeperData.KeeperID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (
             keeper_id, withdrawal_address, stakes, strategies, 
@@ -105,12 +104,12 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 		keeperData.Strategies, keeperData.Verified, keeperData.CurrentQuorumNo,
 		keeperData.RegisteredTx, keeperData.Status, keeperData.BlsSigningKeys,
 		keeperData.ConnectionAddress).Exec(); err != nil {
-		log.Printf("[CreateKeeperData] Error creating keeper with ID %d: %v", keeperData.KeeperID, err)
+		logger.Error("[CreateKeeperData] Error creating keeper with ID %d: %v", keeperData.KeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[CreateKeeperData] Successfully created keeper with ID: %d", keeperData.KeeperID)
+	logger.Info("[CreateKeeperData] Successfully created keeper with ID: %d", keeperData.KeeperID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(keeperData)
 }
@@ -118,7 +117,7 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperID := vars["id"]
-	log.Printf("[GetKeeperData] Retrieving keeper with ID: %s", keeperID)
+	logger.Info("[GetKeeperData] Retrieving keeper with ID: %s", keeperID)
 
 	var keeperData types.KeeperData
 	if err := h.db.Session().Query(`
@@ -131,17 +130,17 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 		&keeperData.Strategies, &keeperData.Verified, &keeperData.CurrentQuorumNo,
 		&keeperData.RegisteredTx, &keeperData.Status, &keeperData.BlsSigningKeys,
 		&keeperData.ConnectionAddress); err != nil {
-		log.Printf("[GetKeeperData] Error retrieving keeper with ID %s: %v", keeperID, err)
+		logger.Error("[GetKeeperData] Error retrieving keeper with ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetKeeperData] Successfully retrieved keeper with ID: %s", keeperID)
+	logger.Info("[GetKeeperData] Successfully retrieved keeper with ID: %s", keeperID)
 	json.NewEncoder(w).Encode(keeperData)
 }
 
 func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
-	log.Printf("[GetAllKeepers] Retrieving all keepers")
+	logger.Info("[GetAllKeepers] Retrieving all keepers")
 	var keepers []types.KeeperData
 	iter := h.db.Session().Query(`SELECT * FROM triggerx.keeper_data`).Iter()
 
@@ -155,12 +154,12 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := iter.Close(); err != nil {
-		log.Printf("[GetAllKeepers] Error retrieving keepers: %v", err)
+		logger.Error("[GetAllKeepers] Error retrieving keepers: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetAllKeepers] Successfully retrieved %d keepers", len(keepers))
+	logger.Info("[GetAllKeepers] Successfully retrieved %d keepers", len(keepers))
 	json.NewEncoder(w).Encode(keepers)
 }
 
@@ -170,12 +169,12 @@ func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {
 
 	var keeperData types.KeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-		log.Printf("[UpdateKeeperData] Error decoding request body for keeper ID %s: %v", keeperID, err)
+		logger.Error("[UpdateKeeperData] Error decoding request body for keeper ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[UpdateKeeperData] Updating keeper with ID: %s", keeperID)
+	logger.Info("[UpdateKeeperData] Updating keeper with ID: %s", keeperID)
 	if err := h.db.Session().Query(`
         UPDATE triggerx.keeper_data 
         SET withdrawal_address = ?, stakes = ?, strategies = ?, 
@@ -186,12 +185,12 @@ func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {
 		keeperData.Verified, keeperData.CurrentQuorumNo, keeperData.RegisteredTx,
 		keeperData.Status, keeperData.BlsSigningKeys, keeperData.ConnectionAddress,
 		keeperID).Exec(); err != nil {
-		log.Printf("[UpdateKeeperData] Error updating keeper with ID %s: %v", keeperID, err)
+		logger.Error("[UpdateKeeperData] Error updating keeper with ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[UpdateKeeperData] Successfully updated keeper with ID: %s", keeperID)
+	logger.Info("[UpdateKeeperData] Successfully updated keeper with ID: %s", keeperID)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(keeperData)
 }
@@ -216,23 +215,23 @@ func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateTaskHistory(w http.ResponseWriter, r *http.Request) {
 	var taskHistory types.TaskHistory
 	if err := json.NewDecoder(r.Body).Decode(&taskHistory); err != nil {
-		log.Printf("[CreateTaskHistory] Error decoding request body: %v", err)
+		logger.Error("[CreateTaskHistory] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("[CreateTaskHistory] Creating task history for task ID: %d", taskHistory.TaskID)
+	logger.Info("[CreateTaskHistory] Creating task history for task ID: %d", taskHistory.TaskID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.task_history (task_id, quorum_id, keepers, responses, consensus_method, validation_status, tx_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		taskHistory.TaskID, taskHistory.QuorumID, taskHistory.Keepers, taskHistory.Responses,
 		taskHistory.ConsensusMethod, taskHistory.ValidationStatus, taskHistory.TxHash).Exec(); err != nil {
-		log.Printf("[CreateTaskHistory] Error creating task history for task ID %d: %v", taskHistory.TaskID, err)
+		logger.Error("[CreateTaskHistory] Error creating task history for task ID %d: %v", taskHistory.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[CreateTaskHistory] Successfully created task history for task ID: %d", taskHistory.TaskID)
+	logger.Info("[CreateTaskHistory] Successfully created task history for task ID: %d", taskHistory.TaskID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(taskHistory)
 }
@@ -240,7 +239,7 @@ func (h *Handler) CreateTaskHistory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTaskHistory(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID := vars["id"]
-	log.Printf("[GetTaskHistory] Retrieving task history for task ID: %s", taskID)
+	logger.Info("[GetTaskHistory] Retrieving task history for task ID: %s", taskID)
 
 	var taskHistory types.TaskHistory
 	if err := h.db.Session().Query(`
@@ -249,12 +248,12 @@ func (h *Handler) GetTaskHistory(w http.ResponseWriter, r *http.Request) {
         WHERE task_id = ?`, taskID).Scan(
 		&taskHistory.TaskID, &taskHistory.QuorumID, &taskHistory.Keepers, &taskHistory.Responses,
 		&taskHistory.ConsensusMethod, &taskHistory.ValidationStatus, &taskHistory.TxHash); err != nil {
-		log.Printf("[GetTaskHistory] Error retrieving task history for task ID %s: %v", taskID, err)
+		logger.Error("[GetTaskHistory] Error retrieving task history for task ID %s: %v", taskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("[GetTaskHistory] Successfully retrieved task history for task ID: %s", taskID)
+	logger.Info("[GetTaskHistory] Successfully retrieved task history for task ID: %s", taskID)
 	json.NewEncoder(w).Encode(taskHistory)
 }
 
@@ -306,20 +305,20 @@ func (h *Handler) GetTaskHistory(w http.ResponseWriter, r *http.Request) {
 func checkRegistration(registeredTx string, withdrawalAddress string) bool {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
-		log.Printf("[checkRegistration] Error loading .env file: %v", err)
+		logger.Error("[checkRegistration] Error loading .env file: %v", err)
 	}
 
 	// Get ETH RPC URL from environment
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
-		log.Printf("[checkRegistration] ETH_RPC_URL environment variable not set")
+		logger.Error("[checkRegistration] ETH_RPC_URL environment variable not set")
 		return false
 	}
 
 	// Create Ethereum client
 	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
-		log.Printf("[checkRegistration] Failed to connect to Ethereum client: %v", err)
+		logger.Error("[checkRegistration] Failed to connect to Ethereum client: %v", err)
 		return false
 	}
 	defer client.Close()
@@ -330,25 +329,25 @@ func checkRegistration(registeredTx string, withdrawalAddress string) bool {
 	// Get transaction
 	tx, isPending, err := client.TransactionByHash(context.Background(), txHash)
 	if err != nil {
-		log.Printf("[checkRegistration] Failed to get transaction: %v", err)
+		logger.Error("[checkRegistration] Failed to get transaction: %v", err)
 		return false
 	}
 
 	if isPending {
-		log.Printf("[checkRegistration] Transaction is still pending")
+		logger.Error("[checkRegistration] Transaction is still pending")
 		return false
 	}
 
 	// Get transaction sender
 	from, err := sdktypes.Sender(sdktypes.LatestSignerForChainID(tx.ChainId()), tx)
 	if err != nil {
-		log.Printf("[checkRegistration] Failed to get transaction sender: %v", err)
+		logger.Error("[checkRegistration] Failed to get transaction sender: %v", err)
 		return false
 	}
 
 	// Compare addresses (case-insensitive)
 	if !strings.EqualFold(from.Hex(), withdrawalAddress) {
-		log.Printf("[checkRegistration] Address mismatch - From: %s, Expected: %s", from.Hex(), withdrawalAddress)
+		logger.Error("[checkRegistration] Address mismatch - From: %s, Expected: %s", from.Hex(), withdrawalAddress)
 		return false
 	}
 

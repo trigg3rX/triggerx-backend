@@ -2,8 +2,6 @@ package database
 
 import (
 	"github.com/gocql/gocql"
-	// "log"
-	// "time"
 )
 
 type Connection struct {

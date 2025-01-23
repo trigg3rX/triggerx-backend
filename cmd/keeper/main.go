@@ -55,7 +55,7 @@ func main() {
 	if err := logging.InitLogger(logging.Development, "keeper"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger = logging.GetLogger()
+	logger := logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 	yamlFile, err := os.ReadFile("config-files/triggerx_keeper.yaml")
 	if err != nil {

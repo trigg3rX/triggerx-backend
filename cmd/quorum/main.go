@@ -129,7 +129,7 @@ func main() {
 	if err := logging.InitLogger(logging.Development, "quorum"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger = logging.GetLogger()
+	logger := logging.GetLogger(logging.Development, logging.QuorumProcess)
 	logger.Info("Starting quorum node...")
 
 	// Initialize event bus
