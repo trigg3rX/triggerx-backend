@@ -1,5 +1,9 @@
 package cmd
 
+// TODO: 
+// - Use (eigensdk-go/chainio/elcontracts).IsOperatorRegistered() to check for EigenLayerRegistration
+// - Use (eigensdk-go/chainio/avsregistry).IsOperatorRegistered() to check AVS registration
+
 import (
 	"fmt"
 	"os"

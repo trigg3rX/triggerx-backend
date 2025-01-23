@@ -1,5 +1,13 @@
 package cmd
 
+// TODO: 
+// - Use (eigensdk-go/chainio/elcontracts).IsOperatorRegistered() to check for EigenLayerRegistration
+// - Use (eigensdk-go/chainio/elcontracts).GetStrategyAndUnderlyingERC20Token() to get strategy and underlying ERC20 token
+// - Use (eigensdk-go/chainio/elcontracts).DepositERC20IntoStrategy() to deposit into strategy
+
+// - Use (eigensdk-go/chainio/avsregistry).GetQuorumCount() to get quorum count
+// - Use (eigensdk-go/chainio/elcontracts).GetOperatorId() to get operator ID and save in yaml
+
 import (
 	"bytes"
 	"context"

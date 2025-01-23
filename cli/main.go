@@ -1,5 +1,11 @@
 package main
 
+// TODO: 
+// - Use (eigensdk-go/chainio/avsregistry).UpdateSocket() to update socket
+// - Add more cmds and use:
+// - (eigensdk-go/chainio/avsregistry).GetOperatorsStakeInQuorumsAtCurrentBlock()
+// - ().GetOperatorsStakeInQuorumsAtBlock()
+
 import (
 	"log"
 	"os"
