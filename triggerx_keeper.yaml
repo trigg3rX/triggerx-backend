@@ -5,6 +5,7 @@ sem_ver: "v0.0.1"
 server_ip_address: "157.173.218.229"
 
 # Keeper settings
+keeper_name: "name_used_in_metadata.json"
 address: "0x0000000000000000000000000000000000000000"
 ecdsa_keystore_path: "path/to/your/ecdsa/keystore"
 bls_keystore_path: "path/to/your/bls/keystore"

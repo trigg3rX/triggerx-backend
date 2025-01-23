@@ -11,9 +11,11 @@ start-manager: ## Start the task manager
 start-validator: ## Start the task validator
 	./scripts/start-validator.sh
 
-start-quorumcreator: ## Start the quorum creator
-	./scripts/start-quorumcreator.sh
+start-quorum: ## Start the quorum Manager
+	./scripts/start-quorum.sh
 
+start-keeper: ## Start the keeper node
+	./scripts/start-keeper.sh
 
 ############################# DATABASE #############################
 

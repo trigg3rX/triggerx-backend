@@ -8,6 +8,7 @@ type NodeConfig struct {
 	ServerIpAddress string `yaml:"server_ip_address"`
 
 	// Keeper settings
+	KeeperName 				 string `yaml:"keeper_name"`
 	KeeperAddress            string `yaml:"address"`
 	EcdsaPrivateKeyStorePath string `yaml:"ecdsa_keystore_path"`
 	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`

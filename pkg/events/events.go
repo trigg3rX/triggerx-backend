@@ -11,6 +11,7 @@ import (
 
 const (
 	JobEventChannel = "job_events"
+	KeeperEventChannel = "keeper_events"
 )
 
 type JobEvent struct {
@@ -18,6 +19,11 @@ type JobEvent struct {
 	JobID   int64  `json:"job_id"`
 	JobType int    `json:"job_type"`
 	ChainID int    `json:"chain_id"`
+}
+
+type KeeperEvent struct {
+	Type    string `json:"type"`
+	KeeperID int64    `json:"keeper_id"`
 }
 
 type EventBus struct {
@@ -54,6 +60,30 @@ func (eb *EventBus) PublishJobEvent(ctx context.Context, event JobEvent) error {
 
 	// Publish to Redis
 	result := eb.redis.Publish(ctx, JobEventChannel, eventJSON)
+	if err := result.Err(); err != nil {
+		return fmt.Errorf("failed to publish event: %w", err)
+	}
+
+	// Get number of clients that received the message
+	receivers := result.Val()
+	logger.Infof("Event published to %d subscribers", receivers)
+
+	return nil
+}
+
+func (eb *EventBus) PublishKeeperEvent(ctx context.Context, event KeeperEvent) error {
+	logger := logging.GetLogger()
+
+	// Marshal event to JSON
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	logger.Infof("Publishing event to channel %s: %s", KeeperEventChannel, string(eventJSON))
+
+	// Publish to Redis
+	result := eb.redis.Publish(ctx, KeeperEventChannel, eventJSON)
 	if err := result.Err(); err != nil {
 		return fmt.Errorf("failed to publish event: %w", err)
 	}

@@ -25,11 +25,6 @@ func NewServer(db *database.Connection) *Server {
 		log.Fatalf("Failed to initialize event bus: %v", err)
 	}
 
-	// Initialize event bus for the API service
-	if err := events.InitEventBus("localhost:6379"); err != nil {
-		log.Fatalf("Failed to initialize event bus: %v", err)
-	}
-
 	// Create a new CORS handler
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins: []string{

@@ -16,7 +16,7 @@ import (
 
 // Add this as a package-level variable
 var (
-	db *database.Connection
+	db     *database.Connection
 	logger logging.Logger
 )
 
@@ -138,14 +138,14 @@ func main() {
 	// Setup P2P with registry
 	config := network.P2PConfig{
 		Name:    network.ServiceManager,
-		Address: "/ip4/0.0.0.0/tcp/9000",
+		Address: "/ip4/127.0.0.1/tcp/9000",
 	}
-	
+
 	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
 	if err != nil {
 		logger.Fatalf("Failed to setup P2P: %v", err)
 	}
-	
+
 	// Initialize discovery service
 	// discovery := network.NewDiscovery(ctx, host, config.Name)
 
@@ -154,7 +154,7 @@ func main() {
 	messaging.InitMessageHandling(func(msg network.Message) {
 		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
 	})
-	
+
 	// Subscribe to events
 	if err := subscribeToEvents(ctx); err != nil {
 		logger.Fatalf("Failed to subscribe to events: %v", err)
