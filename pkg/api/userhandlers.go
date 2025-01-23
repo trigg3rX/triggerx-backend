@@ -34,18 +34,18 @@ import (
 // 	stakeAmountGwei := new(big.Int)
 // 	stakeAmountGwei = userData.StakeAmount
 
-	// if err := h.db.Session().Query(`
-    //     INSERT INTO triggerx.user_data (
-    //         user_id, user_address, job_ids, stake_amount, 
-    //         account_balance, created_at, last_updated_at
-    //     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-	// 	userData.UserID, userData.UserAddress, userData.JobIDs, stakeAmountGwei,
-	// 	userData.AccountBalance,
-	// 	time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
-	// 	log.Printf("[CreateUserData] Error creating user with ID %d: %v", userData.UserID, err)
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
+// if err := h.db.Session().Query(`
+//     INSERT INTO triggerx.user_data (
+//         user_id, user_address, job_ids, stake_amount,
+//         account_balance, created_at, last_updated_at
+//     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+// 	userData.UserID, userData.UserAddress, userData.JobIDs, stakeAmountGwei,
+// 	userData.AccountBalance,
+// 	time.Now().UTC(), time.Now().UTC()).Exec(); err != nil {
+// 	log.Printf("[CreateUserData] Error creating user with ID %d: %v", userData.UserID, err)
+// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+// 	return
+// }
 
 // 	log.Printf("[CreateUserData] Successfully created user with ID: %d", userData.UserID)
 // 	w.WriteHeader(http.StatusCreated)
@@ -59,7 +59,7 @@ import (
 func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID := vars["id"]
-	logger.Info("[GetUserData] Retrieving user with ID: %s", userID)
+	h.logger.Infof("[GetUserData] Retrieving user with ID: %s", userID)
 
 	var (
 		userData struct {
@@ -79,12 +79,12 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
         WHERE user_id = ?`, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs,
 		&userData.StakeAmount, &userData.AccountBalance, &userData.CreatedAt, &userData.LastUpdatedAt); err != nil {
-		logger.Error("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
+		h.logger.Error("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logger.Info("[GetUserData] Successfully retrieved user with ID: %s", userID)
+	h.logger.Info("[GetUserData] Successfully retrieved user with ID: %s", userID)
 
 	// Convert big.Int to float64 for JSON response
 	stakeAmountFloat := new(big.Float).SetInt(userData.StakeAmount)
@@ -131,7 +131,7 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 // 	}
 
 // 	if err := h.db.Session().Query(`
-//         UPDATE triggerx.user_data 
+//         UPDATE triggerx.user_data
 //         SET user_address = ?, job_ids = ?, stake_amount = ?, last_updated_at = ?
 //         WHERE user_id = ?`,
 // 		userData.UserAddress, userData.JobIDs, userData.StakeAmount,
@@ -141,7 +141,7 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 // 		return
 // 	}
 // 	if err := h.db.Session().Query(`
-//         UPDATE triggerx.user_data 
+//         UPDATE triggerx.user_data
 //         SET user_address = ?, job_ids = ?, stake_amount = ?, last_updated_at = ?
 //         WHERE user_id = ?`,
 // 		userData.UserAddress, userData.JobIDs, userData.StakeAmount,

@@ -6,8 +6,9 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"time"
 	"strconv"
+	"time"
+
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
@@ -15,18 +16,18 @@ import (
 )
 
 func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
-	logger.Info("[CreateJobData] Received request method: %s", r.Method)
+	h.logger.Info("[CreateJobData] Received request method: %s", r.Method)
 
 	// Handle preflight
 	if r.Method == http.MethodOptions {
-		logger.Info("[CreateJobData] Handling preflight request")
+		h.logger.Info("[CreateJobData] Handling preflight request")
 		return
 	}
 
 	// Read the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("[CreateJobData] Error reading request body: %v", err)
+		h.logger.Error("[CreateJobData] Error reading request body: %v", err)
 		http.Error(w, "Error reading request body", http.StatusBadRequest)
 		return
 	}
@@ -39,7 +40,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		JobID             int64    `json:"job_id"`
 		JobType           int64    `json:"jobType"`
 		UserAddress       string   `json:"user_address"`
-		ChainID           string    `json:"chain_id"`
+		ChainID           string   `json:"chain_id"`
 		TimeFrame         int64    `json:"time_frame"`
 		TimeInterval      int64    `json:"time_interval"`
 		ContractAddress   string   `json:"contract_address"`
@@ -56,7 +57,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	var tempJob tempJobData
 	if err := json.Unmarshal(body, &tempJob); err != nil {
-		logger.Error("[CreateJobData] Error decoding JSON for job_id %d: %v", tempJob.JobID, err)
+		h.logger.Error("[CreateJobData] Error decoding JSON for job_id %d: %v", tempJob.JobID, err)
 		http.Error(w, "Error decoding request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -70,7 +71,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	// Convert hex string to int64
 	chainID, err := strconv.ParseInt(tempJob.ChainID[2:], 16, 64) // Remove "0x" prefix and parse as hex
 	if err != nil {
-		logger.Error("[CreateJobData] Error parsing chain_id for job_id %d: %v", tempJob.JobID, err)
+		h.logger.Error("[CreateJobData] Error parsing chain_id for job_id %d: %v", tempJob.JobID, err)
 		http.Error(w, "Invalid chain_id format", http.StatusBadRequest)
 		return
 	}
@@ -93,7 +94,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		ScriptIpfsUrl:     tempJob.ScriptIpfsUrl,
 	}
 
-	logger.Info("[CreateJobData] Processing job creation for job_id %d", jobData.JobID)
+	h.logger.Info("[CreateJobData] Processing job creation for job_id %d", jobData.JobID)
 
 	// Check if user exists by user_address
 	var existingUserID int64
@@ -108,19 +109,19 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		jobData.UserAddress).Scan(&existingUserID, &existingJobIDs, &existingStakeAmount, &existingUserBalance)
 
 	if err != nil && err != gocql.ErrNotFound {
-		logger.Error("[CreateJobData] Error checking user existence for address %s: %v", jobData.UserAddress, err)
+		h.logger.Error("[CreateJobData] Error checking user existence for address %s: %v", jobData.UserAddress, err)
 		http.Error(w, "Error checking user existence: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Get new user ID if user doesn't exist
 	if err == gocql.ErrNotFound {
-		logger.Info("[CreateJobData] Creating new user for address %s", jobData.UserAddress)
+		h.logger.Info("[CreateJobData] Creating new user for address %s", jobData.UserAddress)
 		var maxUserID int64
 		if err := h.db.Session().Query(`
             SELECT MAX(user_id) FROM triggerx.user_data
         `).Scan(&maxUserID); err != nil && err != gocql.ErrNotFound {
-			logger.Error("[CreateJobData] Error getting max user ID: %v", err)
+			h.logger.Error("[CreateJobData] Error getting max user ID: %v", err)
 			http.Error(w, "Error getting max user ID: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -137,11 +138,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			existingUserID, jobData.UserAddress, []int64{jobData.JobID}, stakeAmountInt,
 			time.Now().UTC(), time.Now().UTC(), userBalanceInt).Exec(); err != nil {
-			logger.Error("[CreateJobData] Error creating user data for user_id %d: %v", existingUserID, err)
+			h.logger.Error("[CreateJobData] Error creating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		logger.Info("[CreateJobData] Created new user with user_id %d", existingUserID)
+		h.logger.Info("[CreateJobData] Created new user with user_id %d", existingUserID)
 	} else {
 		// Update existing user's job IDs and add to existing stake amount
 		updatedJobIDs := append(existingJobIDs, jobData.JobID)
@@ -157,11 +158,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             SET job_ids = ?, stake_amount = ?, account_balance = ?
             WHERE user_id = ?`,
 			updatedJobIDs, newStakeAmount, updateaccountBalance, existingUserID).Exec(); err != nil {
-			logger.Error("[CreateJobData] Error updating user data for user_id %d: %v", existingUserID, err)
+			h.logger.Error("[CreateJobData] Error updating user data for user_id %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		logger.Info("[CreateJobData] Updated user data for user_id %d", existingUserID)
+		h.logger.Info("[CreateJobData] Updated user data for user_id %d", existingUserID)
 	}
 
 	// Create the job
@@ -178,21 +179,21 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		jobData.ArgType, jobData.Arguments, jobData.Status, jobData.JobCostPrediction,
 		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.UserAddress,
 		created_at, last_updated_at).Exec(); err != nil {
-		logger.Error("[CreateJobData] Error inserting job data for job_id %d: %v", jobData.JobID, err)
+		h.logger.Error("[CreateJobData] Error inserting job data for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logger.Info("[CreateJobData] Successfully created job_id %d", jobData.JobID)
+	h.logger.Info("[CreateJobData] Successfully created job_id %d", jobData.JobID)
 
 	// After successfully creating the job
 	eventBus := events.GetEventBus()
 	if eventBus == nil {
-		logger.Info("[CreateJobData] Warning: EventBus is nil, event will not be published")
+		h.logger.Info("[CreateJobData] Warning: EventBus is nil, event will not be published")
 		return
 	}
 
-	logger.Info("[CreateJobData] Publishing job creation event for job_id %d", jobData.JobID)
+	h.logger.Info("[CreateJobData] Publishing job creation event for job_id %d", jobData.JobID)
 	event := events.JobEvent{
 		Type:    "job_created",
 		JobID:   jobData.JobID,
@@ -201,9 +202,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := eventBus.PublishJobEvent(r.Context(), event); err != nil {
-		logger.Info("[CreateJobData] Warning: Failed to publish job creation event: %v", err)
+		h.logger.Info("[CreateJobData] Warning: Failed to publish job creation event: %v", err)
 	} else {
-		logger.Info("[CreateJobData] Successfully published job creation event for job_id %d", jobData.JobID)
+		h.logger.Info("[CreateJobData] Successfully published job creation event for job_id %d", jobData.JobID)
 	}
 
 	// Set response headers
@@ -237,7 +238,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	// Return response
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		logger.Error("[CreateJobData] Error encoding response for job_id %d: %v", jobData.JobID, err)
+		h.logger.Error("[CreateJobData] Error encoding response for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -246,11 +247,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	jobID := vars["id"]
-	logger.Info("[UpdateJobData] Updating job_id %s", jobID)
+	h.logger.Info("[UpdateJobData] Updating job_id %s", jobID)
 
 	var jobData types.JobData
 	if err := json.NewDecoder(r.Body).Decode(&jobData); err != nil {
-		logger.Error("[UpdateJobData] Error decoding request for job_id %s: %v", jobID, err)
+		h.logger.Error("[UpdateJobData] Error decoding request for job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -266,7 +267,7 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
 		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
 		jobData.Status, jobData.JobCostPrediction, jobData.LastExecutedAt, jobID).Exec(); err != nil {
-		logger.Error("[UpdateJobData] Error updating job_id %s: %v", jobID, err)
+		h.logger.Error("[UpdateJobData] Error updating job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -280,14 +281,14 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 			ChainID: jobData.ChainID,
 		}
 		if err := eventBus.PublishJobEvent(r.Context(), event); err != nil {
-			logger.Info("[UpdateJobData] Warning: Failed to publish job update event: %v", err)
+			h.logger.Info("[UpdateJobData] Warning: Failed to publish job update event: %v", err)
 			// Continue execution - don't fail the request due to event publishing
 		} else {
-			logger.Info("[UpdateJobData] Successfully published job update event for job_id %d", jobData.JobID)
+			h.logger.Info("[UpdateJobData] Successfully published job update event for job_id %d", jobData.JobID)
 		}
 	}
 
-	logger.Info("[UpdateJobData] Successfully updated and published event for job_id %s", jobID)
+	h.logger.Info("[UpdateJobData] Successfully updated and published event for job_id %s", jobID)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(jobData)
 }
@@ -295,7 +296,7 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	jobID := vars["id"]
-	logger.Info("[GetJobData] Fetching data for job_id %s", jobID)
+	h.logger.Info("[GetJobData] Fetching data for job_id %s", jobID)
 
 	var jobData types.JobData
 	if err := h.db.Session().Query(`
@@ -308,17 +309,17 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 		&jobData.TimeFrame, &jobData.TimeInterval, &jobData.ContractAddress,
 		&jobData.TargetFunction, &jobData.ArgType, &jobData.Arguments,
 		&jobData.Status, &jobData.JobCostPrediction); err != nil {
-		logger.Error("[GetJobData] Error retrieving job_id %s: %v", jobID, err)
+		h.logger.Error("[GetJobData] Error retrieving job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logger.Info("[GetJobData] Successfully retrieved job_id %s", jobID)
+	h.logger.Info("[GetJobData] Successfully retrieved job_id %s", jobID)
 	json.NewEncoder(w).Encode(jobData)
 }
 
 func (h *Handler) GetAllJobs(w http.ResponseWriter, r *http.Request) {
-	logger.Info("[GetAllJobs] Fetching all jobs")
+	h.logger.Info("[GetAllJobs] Fetching all jobs")
 	var jobs []types.JobData
 	iter := h.db.Session().Query(`SELECT * FROM triggerx.job_data`).Iter()
 
@@ -332,17 +333,17 @@ func (h *Handler) GetAllJobs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := iter.Close(); err != nil {
-		logger.Error("[GetAllJobs] Error retrieving jobs: %v", err)
+		h.logger.Error("[GetAllJobs] Error retrieving jobs: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logger.Info("[GetAllJobs] Successfully retrieved %d jobs", len(jobs))
+	h.logger.Info("[GetAllJobs] Successfully retrieved %d jobs", len(jobs))
 	json.NewEncoder(w).Encode(jobs)
 }
 
 func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
-	logger.Info("[GetLatestJobID] Fetching latest job ID")
+	h.logger.Info("[GetLatestJobID] Fetching latest job ID")
 	var latestJobID int64
 
 	// Query to get the maximum job_id
@@ -350,24 +351,24 @@ func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
         SELECT MAX(job_id) FROM triggerx.job_data
     `).Scan(&latestJobID); err != nil {
 		if err == gocql.ErrNotFound {
-			logger.Info("[GetLatestJobID] No jobs found, starting with job_id 0")
+			h.logger.Info("[GetLatestJobID] No jobs found, starting with job_id 0")
 			latestJobID = 0
 			json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
 			return
 		}
-		logger.Error("[GetLatestJobID] Error fetching latest job ID: %v", err)
+		h.logger.Error("[GetLatestJobID] Error fetching latest job ID: %v", err)
 		http.Error(w, "Error fetching latest job ID: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logger.Info("[GetLatestJobID] Latest job_id is %d", latestJobID)
+	h.logger.Info("[GetLatestJobID] Latest job_id is %d", latestJobID)
 	json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
 }
 
 func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userAddress := vars["user_address"]
-	logger.Info("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
+	h.logger.Info("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
 		JobID   int64 `json:"job_id"`
@@ -389,17 +390,17 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := iter.Close(); err != nil {
-		logger.Error("[GetJobsByUserAddress] Error retrieving jobs for user_address %s: %v", userAddress, err)
+		h.logger.Error("[GetJobsByUserAddress] Error retrieving jobs for user_address %s: %v", userAddress, err)
 		http.Error(w, "Error retrieving jobs: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logger.Info("[GetJobsByUserAddress] Retrieved %d jobs for user_address %s", len(userJobs), userAddress)
+	h.logger.Info("[GetJobsByUserAddress] Retrieved %d jobs for user_address %s", len(userJobs), userAddress)
 
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(userJobs); err != nil {
-		logger.Error("[GetJobsByUserAddress] Error encoding response for user_address %s: %v", userAddress, err)
+		h.logger.Error("[GetJobsByUserAddress] Error encoding response for user_address %s: %v", userAddress, err)
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		return
 	}

@@ -11,20 +11,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var (
-	logger logging.Logger
-)
-
 type Server struct {
 	router *mux.Router
 	db     *database.Connection
 	cors   *cors.Cors
+	logger logging.Logger
 }
 
-func NewServer(db *database.Connection) *Server {
+func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
 	router := mux.NewRouter()
 
-	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
+	// Get the logger instance
+	logger := logging.GetLogger(logging.Development, processName)
 
 	// Initialize event bus for the API service
 	if err := events.InitEventBus("localhost:6379"); err != nil {
@@ -48,6 +46,7 @@ func NewServer(db *database.Connection) *Server {
 		router: router,
 		db:     db,
 		cors:   corsHandler,
+		logger: logger,
 	}
 
 	s.routes()
@@ -55,7 +54,7 @@ func NewServer(db *database.Connection) *Server {
 }
 
 func (s *Server) routes() {
-	handler := NewHandler(s.db)
+	handler := NewHandler(s.db, s.logger)
 
 	// Add the base /api prefix to all routes
 	api := s.router.PathPrefix("/api").Subrouter()
@@ -103,7 +102,7 @@ func (s *Server) routes() {
 }
 
 func (s *Server) Start(port string) error {
-	logger.Info("Starting server on port %s", port)
+	s.logger.Infof("Starting server on port %s", port)
 
 	// Wrap the router with the CORS handler
 	handler := s.cors.Handler(s.router)

@@ -14,7 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
-// Add this as a package-level variable
+// Add these as package-level variables
 var (
 	db     *database.Connection
 	logger logging.Logger
@@ -100,11 +100,12 @@ func subscribeToEvents(ctx context.Context) error {
 }
 
 func main() {
-	// Initialize logger
-	if err := logging.InitLogger(logging.Development, "manager"); err != nil {
+	// Initialize logger first
+	if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetLogger(logging.Development, logging.ManagerProcess)
+	// Get the logger instance and assign it to package-level variable
+	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	logger.Info("Starting manager node...")
 
 	ctx := context.Background()
