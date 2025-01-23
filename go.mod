@@ -22,7 +22,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/trigg3rX/triggerx-contracts v0.0.0-20250120042520-c56268e71ece
+	github.com/trigg3rX/triggerx-contracts v0.0.0-20250121061654-1fecbc3abe1d
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
 	go.uber.org/zap v1.27.0
