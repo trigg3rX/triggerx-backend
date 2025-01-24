@@ -26,7 +26,9 @@ type NodeConfig struct {
 	RegistryCoordinatorAddress  string `yaml:"registry_coordinator_address"`
 	ServiceManagerAddress       string `yaml:"service_manager_address"`
 	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
-
+	DelegationManagerAddress 	string `yaml:"delegation_manager"`
+	RewardsCoordinatorAddress	string `yaml:"rewards_coordinator_address"`
+	PermissionsControllerAddress	string `yaml:"permissions_controller_address"`
 	// Metrics and API settings
 	EnableMetrics        bool   `yaml:"enable_metrics"`
 	MetricsIpPortAddress string `yaml:"port_address"`

@@ -553,138 +553,138 @@ func depositIntoStrategy(c *cli.Context, logger logging.Logger, client *ethclien
 }
 
 func deregisterKeeper(c *cli.Context) error {
-	logger, err := logging.NewZapLogger(logging.Development)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to initialize logger: %v", err), 1)
-	}
+	// logger, err := logging.NewZapLogger(logging.Development)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to initialize logger: %v", err), 1)
+	// }
 
-	nodeConfig, err := getConfig()
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to get node config: %v", err), 1)
-	}
+	// nodeConfig, err := getConfig()
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to get node config: %v", err), 1)
+	// }
 
-	keystorePath := handleHomeDirPath(nodeConfig.EcdsaPrivateKeyStorePath)
-	if keystorePath == "" {
-		return cli.Exit("Fill in the ECDSA keystore path in the config file", 1)
-	}
+	// keystorePath := handleHomeDirPath(nodeConfig.EcdsaPrivateKeyStorePath)
+	// if keystorePath == "" {
+	// 	return cli.Exit("Fill in the ECDSA keystore path in the config file", 1)
+	// }
 
-	// Check if keystore file exists
-	if _, err := os.Stat(keystorePath); os.IsNotExist(err) {
-		return cli.Exit(fmt.Sprintf("keystore file not found at path: %s", keystorePath), 1)
-	}
+	// // Check if keystore file exists
+	// if _, err := os.Stat(keystorePath); os.IsNotExist(err) {
+	// 	return cli.Exit(fmt.Sprintf("keystore file not found at path: %s", keystorePath), 1)
+	// }
 
-	// Read ECDSA private key
-	ecdsaPrivKey, err := ecdsa.ReadKey(keystorePath, c.String("ecdsa-passphrase"))
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to read ECDSA keystore file: %v", err), 1)
-	}
+	// // Read ECDSA private key
+	// ecdsaPrivKey, err := ecdsa.ReadKey(keystorePath, c.String("ecdsa-passphrase"))
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to read ECDSA keystore file: %v", err), 1)
+	// }
 
-	// logger.Infof("ecdsaPrivKey: %+v", ecdsaPrivKey)
+	// // logger.Infof("ecdsaPrivKey: %+v", ecdsaPrivKey)
 
-	keeperAddress, err := ecdsa.GetAddressFromKeyStoreFile(keystorePath)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to get ECDSA public key: %v", err), 1)
-	}
+	// keeperAddress, err := ecdsa.GetAddressFromKeyStoreFile(keystorePath)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to get ECDSA public key: %v", err), 1)
+	// }
 
-	// Connect to Ethereum client
-	client, err := ethclient.Dial(nodeConfig.EthRpcUrl)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to connect to Ethereum client: %v", err), 1)
-	}
+	// // Connect to Ethereum client
+	// client, err := ethclient.Dial(nodeConfig.EthRpcUrl)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to connect to Ethereum client: %v", err), 1)
+	// }
 
-	// Get chain ID
-	chainID, err := client.ChainID(context.Background())
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to get chain ID: %v", err), 1)
-	}
-	logger.Infof("Connected to chain ID: %s", chainID.String())
+	// // Get chain ID
+	// chainID, err := client.ChainID(context.Background())
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to get chain ID: %v", err), 1)
+	// }
+	// logger.Infof("Connected to chain ID: %s", chainID.String())
 
-	logger.Infof("Using address: %s", keeperAddress.Hex())
+	// logger.Infof("Using address: %s", keeperAddress.Hex())
 
-	signerV2, signerAddr, err := signerv2.SignerFromConfig(signerv2.Config{PrivateKey: ecdsaPrivKey}, chainID)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to create signer: %v", err), 1)
-	}
+	// signerV2, signerAddr, err := signerv2.SignerFromConfig(signerv2.Config{PrivateKey: ecdsaPrivKey}, chainID)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to create signer: %v", err), 1)
+	// }
 
-	txSender, err := wallet.NewPrivateKeyWallet(client, signerV2, signerAddr, logger)
-	if err != nil {
-		logger.Fatalf("Failed to create transaction sender: %v", err)
-	}
+	// txSender, err := wallet.NewPrivateKeyWallet(client, signerV2, signerAddr, logger)
+	// if err != nil {
+	// 	logger.Fatalf("Failed to create transaction sender: %v", err)
+	// }
 
-	txMgr := txmgr.NewSimpleTxManager(txSender, client, logger, signerAddr)
+	// txMgr := txmgr.NewSimpleTxManager(txSender, client, logger, signerAddr)
 
-	noSendTxOpts, err := txMgr.GetNoSendTxOpts()
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("error creating transaction object %v", err), 1)
-	}
+	// noSendTxOpts, err := txMgr.GetNoSendTxOpts()
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("error creating transaction object %v", err), 1)
+	// }
 
-	registryCoordinatorContract, err := contractRegistryCoordinator.NewContractRegistryCoordinator(common.HexToAddress(nodeConfig.RegistryCoordinatorAddress), client)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to create RegistryCoordinator contract instance: %v", err), 1)
-	}
+	// registryCoordinatorContract, err := contractRegistryCoordinator.NewContractRegistryCoordinator(common.HexToAddress(nodeConfig.RegistryCoordinatorAddress), client)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to create RegistryCoordinator contract instance: %v", err), 1)
+	// }
 
-	// TODO: Get the Quorum No of Keeper Registration
+	// // TODO: Get the Quorum No of Keeper Registration
 
-	logger.Info("Deregistering keeper", "operatorAddress", keeperAddress.Hex())
+	// logger.Info("Deregistering keeper", "operatorAddress", keeperAddress.Hex())
 
-	tx, err := registryCoordinatorContract.DeregisterOperator(noSendTxOpts, []byte{0})
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to deregister operator: %v", err), 1)
-	}
+	// tx, err := registryCoordinatorContract.DeregisterOperator(noSendTxOpts, keeperAddress.Hex(), []byte{0})
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to deregister operator: %v", err), 1)
+	// }
 
-	receipt, err := txMgr.Send(context.Background(), tx, true)
-	if err != nil {
-		return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
-	}
+	// receipt, err := txMgr.Send(context.Background(), tx, true)
+	// if err != nil {
+	// 	return cli.Exit(fmt.Sprintf("Failed to send transaction: %v", err), 1)
+	// }
 
-	// Create keeper data in database
-	keeperData := types.KeeperData{
-		WithdrawalAddress: keeperAddress.Hex(),
-		RegisteredTx:      receipt.TxHash.Hex(),
-		Status:            false,
-		BlsSigningKeys:    []string{},
-		ConnectionAddress: nodeConfig.ConnectionAddress,
-		Verified:          false,
-		CurrentQuorumNo:   int(0),
-	}
+	// // Create keeper data in database
+	// keeperData := types.KeeperData{
+	// 	WithdrawalAddress: keeperAddress.Hex(),
+	// 	RegisteredTx:      receipt.TxHash.Hex(),
+	// 	Status:            false,
+	// 	BlsSigningKeys:    []string{},
+	// 	ConnectionAddress: nodeConfig.ConnectionAddress,
+	// 	Verified:          false,
+	// 	CurrentQuorumNo:   int(0),
+	// }
 
-	logger.Info("Preparing to create keeper in database",
-		"withdrawalAddress", keeperData.WithdrawalAddress,
-		"registeredTx", keeperData.RegisteredTx,
-		"quorumNumber", keeperData.CurrentQuorumNo)
+	// logger.Info("Preparing to create keeper in database",
+	// 	"withdrawalAddress", keeperData.WithdrawalAddress,
+	// 	"registeredTx", keeperData.RegisteredTx,
+	// 	"quorumNumber", keeperData.CurrentQuorumNo)
 
-	jsonData, err := json.Marshal(keeperData)
-	if err != nil {
-		logger.Error("Failed to marshal keeper data",
-			"error", err,
-			"keeperData", fmt.Sprintf("%+v", keeperData))
-		return cli.Exit(fmt.Sprintf("Failed to marshal keeper data: %v", err), 1)
-	}
+	// jsonData, err := json.Marshal(keeperData)
+	// if err != nil {
+	// 	logger.Error("Failed to marshal keeper data",
+	// 		"error", err,
+	// 		"keeperData", fmt.Sprintf("%+v", keeperData))
+	// 	return cli.Exit(fmt.Sprintf("Failed to marshal keeper data: %v", err), 1)
+	// }
 
-	// Make POST request to create keeper
-	apiEndpoint := fmt.Sprintf("%s/keepers", "https://data.triggerx.network/api")
-	resp, err := http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		logger.Error("Failed to create keeper in database",
-			"error", err,
-			"endpoint", apiEndpoint)
-		return cli.Exit(fmt.Sprintf("Failed to create keeper in database: %v", err), 1)
-	}
-	defer resp.Body.Close()
+	// // Make POST request to create keeper
+	// apiEndpoint := fmt.Sprintf("%s/keepers", "https://data.triggerx.network/api")
+	// resp, err := http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
+	// if err != nil {
+	// 	logger.Error("Failed to create keeper in database",
+	// 		"error", err,
+	// 		"endpoint", apiEndpoint)
+	// 	return cli.Exit(fmt.Sprintf("Failed to create keeper in database: %v", err), 1)
+	// }
+	// defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		logger.Error("Failed to create keeper in database",
-			"statusCode", resp.StatusCode,
-			"response", string(body),
-			"endpoint", apiEndpoint)
-		return cli.Exit(fmt.Sprintf("Failed to create keeper in database. Status: %d", resp.StatusCode), 1)
-	}
+	// if resp.StatusCode != http.StatusCreated {
+	// 	body, _ := io.ReadAll(resp.Body)
+	// 	logger.Error("Failed to create keeper in database",
+	// 		"statusCode", resp.StatusCode,
+	// 		"response", string(body),
+	// 		"endpoint", apiEndpoint)
+	// 	return cli.Exit(fmt.Sprintf("Failed to create keeper in database. Status: %d", resp.StatusCode), 1)
+	// }
 
-	logger.Info("Transaction successfully sent and mined",
-		"txHash", receipt.TxHash.Hex(),
-		"blockNumber", receipt.BlockNumber,
-		"gasUsed", receipt.GasUsed)
+	// logger.Info("Transaction successfully sent and mined",
+	// 	"txHash", receipt.TxHash.Hex(),
+	// 	"blockNumber", receipt.BlockNumber,
+	// 	"gasUsed", receipt.GasUsed)
 
 	return nil
 }
