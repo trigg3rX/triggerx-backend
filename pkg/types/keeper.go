@@ -11,7 +11,9 @@ type NodeConfig struct {
 	KeeperName 				 string `yaml:"keeper_name"`
 	KeeperAddress            string `yaml:"address"`
 	EcdsaPrivateKeyStorePath string `yaml:"ecdsa_keystore_path"`
+	EcdsaPassphrase          string `yaml:"ecdsa_passphrase"`
 	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`
+	BlsPassphrase            string `yaml:"bls_passphrase"`
 	P2pPeerId                string `yaml:"p2p_peer_id"`
 	ConnectionAddress        string `yaml:"connection_address"`
 	P2pPort                  string `yaml:"p2p_port"`
@@ -21,14 +23,13 @@ type NodeConfig struct {
 	EthWsUrl  string `yaml:"ethwsurl"`
 
 	// Contract addresses
-	AvsDirectoryAddress         string `yaml:"avs_directory_address"`
-	StrategyManagerAddress      string `yaml:"strategy_manager_address"`
-	RegistryCoordinatorAddress  string `yaml:"registry_coordinator_address"`
-	ServiceManagerAddress       string `yaml:"service_manager_address"`
+	AvsDirectoryAddress           string `yaml:"avs_directory_address"`
+	DelegationManagerAddress 	  string `yaml:"delegation_manager_address"`
+	StrategyManagerAddress        string `yaml:"strategy_manager_address"`
+	RegistryCoordinatorAddress    string `yaml:"registry_coordinator_address"`
+	ServiceManagerAddress         string `yaml:"service_manager_address"`
 	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
-	DelegationManagerAddress 	string `yaml:"delegation_manager"`
-	RewardsCoordinatorAddress	string `yaml:"rewards_coordinator_address"`
-	PermissionsControllerAddress	string `yaml:"permissions_controller_address"`
+	
 	// Metrics and API settings
 	EnableMetrics        bool   `yaml:"enable_metrics"`
 	MetricsIpPortAddress string `yaml:"port_address"`

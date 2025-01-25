@@ -8,9 +8,11 @@ server_ip_address: "157.173.218.229"
 keeper_name: "name_used_in_metadata.json"
 address: "0x0000000000000000000000000000000000000000"
 ecdsa_keystore_path: "path/to/your/ecdsa/keystore"
+ecdsa_passphrase: "passphrase"
 bls_keystore_path: "path/to/your/bls/keystore"
-connection_address: ""
+bls_passphrase: "passphrase"
 p2p_peer_id: ""
+connection_address: ""
 p2p_port: 9003
 
 # Network settings
@@ -19,6 +21,7 @@ ethwsurl: "wss://eth-holesky.g.alchemy.com/v2/<YOUR_ALCHEMY_API>"
 
 # Contract addresses
 avs_directory_address: "0x055733000064333CaDDbC92763c58BF0192fFeBf"
+delegation_manager_address: "0xA44151489861Fe9e3055d95adC98FbD462B948e7"
 strategy_manager_address: "0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6"
 registry_coordinator_address: "0xB438C6Fc1652148BB758b939831f9A2cD59CE02b"
 service_manager_address: "0xc0aA79c13bC1eEA0168f1A2975b7aA9FF64135ed"
