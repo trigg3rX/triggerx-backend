@@ -51,18 +51,6 @@ import (
 
 var ConfigPath = "config-files/triggerx_keeper.yaml"
 
-// BLSKeystore represents the structure of a BLS keystore file
-type BLSKeystore struct {
-	PubKey string `json:"pubKey"`
-	Crypto struct {
-		Cipher       string `json:"cipher"`
-		CipherText   string `json:"ciphertext"`
-		CipherParams struct {
-			IV string `json:"iv"`
-		} `json:"cipherparams"`
-	} `json:"crypto"`
-}
-
 // handleHomeDirPath expands the home directory path if it starts with "~/"
 func handleHomeDirPath(path string) string {
 	if len(path) >= 2 && path[:2] == "~/" {
@@ -84,12 +72,10 @@ func RegisterCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:     "ecdsa-passphrase",
 				Usage:    "Passphrase for the ECDSA keystore file",
-				Required: true,
 			},
 			&cli.StringFlag{
 				Name:     "bls-passphrase", 
 				Usage:    "Passphrase for the BLS keystore file",
-				Required: true,
 			},
 			&cli.StringFlag{
 				Name:  "strategy-address",
@@ -151,12 +137,30 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit(fmt.Sprintf("BLS keystore file not found at path: %s", blsKeystorePath), 1)
 	}
 
-	blsKeyPair, err := eigensdkbls.ReadPrivateKeyFromFile(blsKeystorePath, c.String("bls-passphrase"))
+	var ecdsaPassphrase string
+	if c.String("ecdsa-passphrase") != "" {
+		ecdsaPassphrase = c.String("ecdsa-passphrase")
+	} else if nodeConfig.EcdsaPassphrase != "" {
+		ecdsaPassphrase = nodeConfig.EcdsaPassphrase
+	} else {
+		return cli.Exit("ECDSA passphrase not provided in flag or config file", 1)
+	}
+
+	var blsPassphrase string
+	if c.String("bls-passphrase") != "" {
+		blsPassphrase = c.String("bls-passphrase")
+	} else if nodeConfig.BlsPassphrase != "" {
+		blsPassphrase = nodeConfig.BlsPassphrase
+	} else {
+		return cli.Exit("BLS passphrase not provided in flag or config file", 1)
+	}
+
+	blsKeyPair, err := eigensdkbls.ReadPrivateKeyFromFile(blsKeystorePath, blsPassphrase)
 	if err != nil {
 		return cli.Exit("Failed to read BLS private key", 1)
 	}
 
-	ecdsaPrivKey, err := ecdsa.ReadKey(keystorePath, c.String("ecdsa-passphrase"))
+	ecdsaPrivKey, err := ecdsa.ReadKey(keystorePath, ecdsaPassphrase)
 	if err != nil {
 		return cli.Exit("Failed to read ECDSA keystore file", 1)
 	}
