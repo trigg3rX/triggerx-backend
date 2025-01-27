@@ -22,6 +22,10 @@ WORKDIR /keeper
 COPY --from=builder /keeper/keeper .
 # Copy config file from the correct location
 COPY config-files/triggerx_keeper.yaml /keeper/config-files/triggerx_keeper.yaml
+COPY data/peer_registry/services.json /keeper/data/peer_registry/services.json
+
+# Expose port 9003
+EXPOSE 9003
 
 # Run the keeper
 ENTRYPOINT ["./keeper"]
