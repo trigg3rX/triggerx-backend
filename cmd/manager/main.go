@@ -139,7 +139,7 @@ func main() {
 	// Setup P2P with registry
 	config := network.P2PConfig{
 		Name:    network.ServiceManager,
-		Address: "/ip4/127.0.0.1/tcp/9000",
+		Address: "/ip4/0.0.0.0/tcp/9000",
 	}
 
 	host, err := network.SetupP2PWithRegistry(ctx, config, registry)

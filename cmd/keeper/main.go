@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -74,20 +73,6 @@ func main() {
 		logger.Fatalf("Failed to initialize peer registry: %v", err)
 	}
 
-	// Update the addresses in the registry with the actual server IP
-	for serviceType, info := range registry.GetAllServices() {
-		if serviceType != network.ServiceKeeper {
-			newAddrs := make([]string, len(info.Addresses))
-			for i, addr := range info.Addresses {
-				newAddrs[i] = strings.Replace(addr, "127.0.0.1", config.ServerIpAddress, 1)
-			}
-			info.Addresses = newAddrs
-			if err := registry.UpdateService(serviceType, peer.ID(info.PeerID), newAddrs); err != nil {
-				logger.Fatalf("Failed to update registry addresses: %v", err)
-			}
-		}
-	}
-
 	p2pconfig := network.P2PConfig{
 		Name:    network.ServiceKeeper,
 		Address: fmt.Sprintf("/ip4/%s/tcp/%s", config.ConnectionAddress, config.P2pPort),
@@ -106,24 +91,19 @@ func main() {
 
 	// Initialize discovery and attempt connections in order
 	discovery := network.NewDiscovery(ctx, host, p2pconfig.Name)
+	if err := discovery.SavePeerInfo(); err != nil {
+		logger.Fatalf("Failed to save peer info: %v", err)
+	}
 
-	// Connect to manager service first
-	managerPeerID, err := discovery.ConnectToPeer(network.ServiceManager)
+	// Connect to quorum service using public address
+	quorumPeerID, err := discovery.ConnectToPeer(network.ServiceQuorum)
 	if err != nil {
-		logger.Fatalf("Failed to connect to manager: %v", err)
+		logger.Fatalf("Failed to connect to quorum: %v", err)
 	}
-	logger.Infof("Successfully connected to manager node: %s", managerPeerID.String())
+	logger.Infof("Successfully connected to quorum node: %s", quorumPeerID.String())
 
-	// Send join message to manager
-	joinMsg := fmt.Sprintf("%s joined the network", config.KeeperName)
-	if err := messaging.SendMessage(network.ServiceManager, managerPeerID, joinMsg); err != nil {
-		logger.Errorf("Failed to send join message to manager: %v", err)
-	} else {
-		logger.Info("Sent join message to manager")
-	}
-
-	// Try connecting to other services: quorum -> validator
-	services := []string{network.ServiceQuorum, network.ServiceValidator}
+	// Try connecting to other services if needed
+	services := []string{network.ServiceManager, network.ServiceValidator}
 	for _, service := range services {
 		peerID, err := discovery.ConnectToPeer(service)
 		if err != nil {
@@ -149,7 +129,7 @@ func main() {
 		case <-sigChan:
 			logger.Info("Received shutdown signal")
 			wg.Add(1)
-			go shutdown(cancel, messaging, managerPeerID, &wg, config.KeeperName)
+			go shutdown(cancel, messaging, quorumPeerID, &wg, config.KeeperName)
 		case <-ctx.Done():
 			return
 		}

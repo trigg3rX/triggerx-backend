@@ -129,7 +129,7 @@ func main() {
 	if err := logging.InitLogger(logging.Development, "quorum"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetLogger(logging.Development, logging.QuorumProcess)
+	logger = logging.GetLogger(logging.Development, logging.QuorumProcess)
 	logger.Info("Starting quorum node...")
 
 	// Initialize event bus
@@ -160,7 +160,7 @@ func main() {
 	// Setup P2P with registry
 	config := network.P2PConfig{
 		Name:    network.ServiceQuorum,
-		Address: "/ip4/127.0.0.1/tcp/9001",
+		Address: "/ip4/0.0.0.0/tcp/9001",
 	}
 
 	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
