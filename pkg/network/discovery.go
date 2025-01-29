@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -21,7 +23,6 @@ type Discovery struct {
 	name    string
 	context context.Context
 	mutex   sync.RWMutex
-	peers   map[peer.ID]PeerInfo
 }
 
 func NewDiscovery(ctx context.Context, h host.Host, name string) *Discovery {
@@ -29,7 +30,6 @@ func NewDiscovery(ctx context.Context, h host.Host, name string) *Discovery {
 		host:    h,
 		name:    name,
 		context: ctx,
-		peers:   make(map[peer.ID]PeerInfo),
 	}
 }
 
@@ -66,38 +66,51 @@ func (d *Discovery) ConnectToPeer(serviceType string) (peer.ID, error) {
 		return "", fmt.Errorf("service %s not found in registry", serviceType)
 	}
 
-	peerID, err := peer.Decode(service.PeerID)
+	targetPeerID, err := peer.Decode(service.PeerID)
 	if err != nil {
 		return "", fmt.Errorf("invalid peer ID in registry: %w", err)
 	}
 
-	// Try each address until one succeeds
-	var lastErr error
-	for _, addr := range service.Addresses {
-		maddr, err := multiaddr.NewMultiaddr(addr)
+	// Convert addresses to multiaddr
+	var addrs []multiaddr.Multiaddr
+	for _, addrStr := range service.Addresses {
+		addr, err := multiaddr.NewMultiaddr(addrStr)
 		if err != nil {
-			lastErr = err
 			continue
 		}
-
-		peerInfo := peer.AddrInfo{
-			ID:    peerID,
-			Addrs: []multiaddr.Multiaddr{maddr},
-		}
-
-		if err = d.host.Connect(d.context, peerInfo); err != nil {
-			lastErr = err
-			continue
-		}
-
-		d.peers[peerID] = PeerInfo{
-			Name:    serviceType,
-			Address: strings.Join(service.Addresses, ","),
-		}
-		return peerID, nil
+		addrs = append(addrs, addr)
 	}
 
-	return "", fmt.Errorf("failed to connect to peer using any address: %w", lastErr)
+	// Add target's addresses to our peerstore with permanent TTL
+	d.host.Peerstore().AddAddrs(targetPeerID, addrs, peerstore.PermanentAddrTTL)
+
+	// Add our addresses to target's info in registry
+	myAddrs := make([]string, 0)
+	for _, addr := range d.host.Addrs() {
+		myAddrs = append(myAddrs, addr.String())
+	}
+	if err := registry.UpdateService(d.name, d.host.ID(), myAddrs); err != nil {
+		return "", fmt.Errorf("failed to update our service info: %w", err)
+	}
+
+	// Establish connection from our side
+	if err := d.host.Connect(d.context, peer.AddrInfo{
+		ID:    targetPeerID,
+		Addrs: addrs,
+	}); err != nil {
+		return "", fmt.Errorf("failed to connect to peer %s: %w", targetPeerID, err)
+	}
+
+	// Wait a short time for the connection to stabilize
+	time.Sleep(time.Millisecond * 100)
+
+	// Verify connection status
+	conns := d.host.Network().ConnsToPeer(targetPeerID)
+	if len(conns) == 0 {
+		return "", fmt.Errorf("failed to establish stable connection with peer %s", targetPeerID)
+	}
+
+	return targetPeerID, nil
 }
 
 // GetConnectedPeers returns all currently connected peers
@@ -105,10 +118,26 @@ func (d *Discovery) GetConnectedPeers() map[peer.ID]PeerInfo {
 	d.mutex.RLock()
 	defer d.mutex.RUnlock()
 
-	// Create a copy to avoid concurrent access issues
 	peers := make(map[peer.ID]PeerInfo)
-	for k, v := range d.peers {
-		peers[k] = v
+
+	// Get all peers from peerstore that have addresses
+	for _, peerID := range d.host.Peerstore().PeersWithAddrs() {
+		addrs := d.host.Peerstore().Addrs(peerID)
+		if len(addrs) > 0 {
+			addrStrings := make([]string, len(addrs))
+			for i, addr := range addrs {
+				addrStrings[i] = addr.String()
+			}
+
+			peers[peerID] = PeerInfo{
+				Address: strings.Join(addrStrings, ","),
+			}
+		}
 	}
+
 	return peers
+}
+
+func (d *Discovery) IsConnected(peerID peer.ID) bool {
+	return len(d.host.Network().ConnsToPeer(peerID)) > 0
 }

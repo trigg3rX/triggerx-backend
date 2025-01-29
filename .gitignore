@@ -11,7 +11,7 @@ config-files/triggerx_keeper.yaml
 
 data/logs/*/*.log
 data/peer_registry/services_privKeys.json
-data/peer_registry/keeper_identity.json
+data/peer_registry/*_identity.json
 !data/logs/*/.gitkeep
 
 data/logs/*/*.log

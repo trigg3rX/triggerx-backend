@@ -17,12 +17,13 @@ const (
 	ServiceKeeper    = "keeper"
 
 	// Define base data directory
-	BaseDataDir = "data"
-	RegistryDir = "peer_registry"
+	BaseDataDir     = "data"
+	RegistryDir     = "peer_registry"
+	ServiceRegistry = "services.json"
 )
 
 type ServiceInfo struct {
-	Type      string   `json:"type"`
+	Name      string   `json:"name"`
 	PeerID    string   `json:"peer_id"`
 	Addresses []string `json:"addresses"`
 }
@@ -41,7 +42,7 @@ func NewPeerRegistry() (*PeerRegistry, error) {
 
 	registry := &PeerRegistry{
 		Services: make(map[string]ServiceInfo),
-		path:     filepath.Join(registryDir, "services.json"),
+		path:     filepath.Join(registryDir, ServiceRegistry),
 	}
 
 	// Load existing registry if it exists
@@ -51,10 +52,9 @@ func NewPeerRegistry() (*PeerRegistry, error) {
 		}
 		// Initialize with default services with empty peer IDs
 		registry.Services = map[string]ServiceInfo{
-			ServiceManager:   {Type: ServiceManager, PeerID: "", Addresses: nil},
-			ServiceQuorum:    {Type: ServiceQuorum, PeerID: "", Addresses: nil},
-			ServiceValidator: {Type: ServiceValidator, PeerID: "", Addresses: nil},
-			ServiceKeeper:    {Type: ServiceKeeper, PeerID: "", Addresses: nil},
+			ServiceManager:   {Name: ServiceManager, PeerID: "", Addresses: nil},
+			ServiceQuorum:    {Name: ServiceQuorum, PeerID: "", Addresses: nil},
+			ServiceValidator: {Name: ServiceValidator, PeerID: "", Addresses: nil},
 		}
 		// Save initial registry
 		if err := registry.save(); err != nil {
@@ -78,7 +78,6 @@ func (r *PeerRegistry) load() error {
 }
 
 func (r *PeerRegistry) save() error {
-
 	data, err := json.MarshalIndent(r.Services, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal registry: %w", err)
@@ -91,12 +90,12 @@ func (r *PeerRegistry) save() error {
 	return nil
 }
 
-func (r *PeerRegistry) UpdateService(serviceType string, peerID peer.ID, addrs []string) error {
+func (r *PeerRegistry) UpdateService(serviceName string, peerID peer.ID, addrs []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.Services[serviceType] = ServiceInfo{
-		Type:      serviceType,
+	r.Services[serviceName] = ServiceInfo{
+		Name:      serviceName,
 		PeerID:    peerID.String(),
 		Addresses: addrs,
 	}
@@ -109,11 +108,11 @@ func (r *PeerRegistry) UpdateService(serviceType string, peerID peer.ID, addrs [
 	return nil
 }
 
-func (r *PeerRegistry) GetService(serviceType string) (ServiceInfo, bool) {
+func (r *PeerRegistry) GetService(serviceName string) (ServiceInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	service, exists := r.Services[serviceType]
+	service, exists := r.Services[serviceName]
 	return service, exists
 }
 
