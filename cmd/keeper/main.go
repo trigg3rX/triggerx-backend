@@ -16,7 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
-    "github.com/ethereum/go-ethereum/crypto"
+	"github.com/Layr-Labs/eigensdk-go/crypto/ecdsa"
 	eigensdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 )
 
@@ -27,7 +27,7 @@ var (
 	// validatorState bool
 )
 
-func shutdown(cancel context.CancelFunc, messaging *network.Messaging, managerPeerID peer.ID, wg *sync.WaitGroup, keeperName string) {
+func shutdown(cancel context.CancelFunc, messaging *network.Messaging, quorumPeerID peer.ID, wg *sync.WaitGroup, keeperName string) {
 	defer wg.Done()
 
 	logger.Info("Starting shutdown sequence...")
@@ -58,7 +58,6 @@ func main() {
 
 	var wg sync.WaitGroup
 
-		// Load configuration
 	yamlFile, err := os.ReadFile("config-files/triggerx_keeper.yaml")
 	if err != nil {
 		logger.Fatalf("Error reading YAML file: %v", err)
@@ -69,16 +68,16 @@ func main() {
 		logger.Fatalf("Error parsing YAML: %v", err)
 	}
 	
-		// Load private key from keystore
-	ecdsaPrivateKey, err := metrics.LoadPrivateKeyFromKeystore(config.EcdsaPrivateKeyStorePath, config.EcdsaPassphrase)
+	ecdsaPrivateKey, err :=  ecdsa.ReadKey(config.EcdsaPrivateKeyStorePath, config.EcdsaPassphrase)
 	if err != nil {
 		logger.Fatalf("Failed to load ECDSA private key: %v", err)
 	}
 	
-	operatorAddr := crypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
-	logger.Info("Operator address", "address", operatorAddr.Hex())
-	eigensdkLogger, err := eigensdklogging.NewZapLogger("development")
-	// Initialize metrics service if enabled
+	keeperAddr, _ := ecdsa.GetAddressFromKeyStoreFile(config.EcdsaPrivateKeyStorePath)
+	logger.Info("Keeper Address", "address", keeperAddr.Hex())
+
+	eigensdklogger, _ := eigensdklogging.NewZapLogger("development")
+
 	if config.EnableMetrics {
 		metricsConfig := &metrics.MetricsConfig{
 			AvsName:                    config.AvsName,
@@ -89,21 +88,20 @@ func main() {
 		}
 	
 		metricsService, err := metrics.NewMetricsService(
-			eigensdkLogger,
+			eigensdklogger,
 			ecdsaPrivateKey,
-			operatorAddr,
+			keeperAddr,
 			metricsConfig,
 		)
 		if err != nil {
 			logger.Fatalf("Failed to initialize metrics service: %v", err)
 		}
-	
-		// Start metrics service
+
 		if err := metricsService.Start(ctx); err != nil {
 			logger.Fatalf("Failed to start metrics service: %v", err)
 		}
-		logger.Info("Metrics service started successfully")
 	}
+
 	registry, err := network.NewPeerRegistry()
 	if err != nil {
 		logger.Fatalf("Failed to initialize peer registry: %v", err)

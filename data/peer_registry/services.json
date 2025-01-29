@@ -1,11 +1,4 @@
 {
-  "keeper": {
-    "type": "keeper",
-    "peer_id": "12D3KooWMm1v9U1X1pbCLEiw3TWQucbNvUyZAhzWrZQUTqJaYqmb",
-    "addresses": [
-      "/ip4/192.168.1.48/tcp/9003"
-    ]
-  },
   "manager": {
     "type": "manager",
     "peer_id": "12D3KooWSkJif43fNsm6TvnSJzVr3buMGJm5Hqci9JAcsTdNNfTi",

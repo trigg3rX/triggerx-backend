@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"os"
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients"
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
@@ -16,8 +15,15 @@ import (
 	"github.com/Layr-Labs/eigensdk-go/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 )
+
+type MetricsConfig struct {
+	AvsName                   string
+	EthRpcUrl                 string
+	EthWsUrl                  string
+	RegistryCoordinatorAddress   string
+	OperatorStateRetrieverAddress string
+}
 
 type MetricsService struct {
 	logger         logging.Logger
@@ -91,30 +97,6 @@ func NewMetricsService(
 func (m *MetricsService) Start(ctx context.Context) error {
 	reg := prometheus.NewRegistry()
 	m.eigenMetrics.Start(ctx, reg)
-	m.logger.Info("Metrics service started successfully", "address", m.metricsAddress)
 	return nil
 }
 
-type MetricsConfig struct {
-	AvsName                   string
-	EthRpcUrl                 string
-	EthWsUrl                  string
-	RegistryCoordinatorAddress   string
-	OperatorStateRetrieverAddress string
-}
-
-func LoadPrivateKeyFromKeystore(keystorePath, passphrase string) (*ecdsa.PrivateKey, error) {
-    // Read the keystore file
-    keystoreJSON, err := os.ReadFile(keystorePath)
-    if err != nil {
-        return nil, err
-    }
-
-    // Decrypt the key
-    key, err := keystore.DecryptKey(keystoreJSON, passphrase)
-    if err != nil {
-        return nil, err
-    }
-
-    return key.PrivateKey, nil
-}
