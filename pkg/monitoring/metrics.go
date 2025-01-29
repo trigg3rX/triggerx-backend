@@ -1,81 +1,120 @@
-package manager
+// metrics/metrics.go
+package metrics
 
-// import (
-// 	"net/http"
-// 	"time"
+import (
+	"context"
+	"crypto/ecdsa"
+	"fmt"
+	"os"
 
-// 	"github.com/prometheus/client_golang/prometheus"
-// 	"github.com/prometheus/client_golang/prometheus/promhttp"
-// )
+	"github.com/Layr-Labs/eigensdk-go/chainio/clients"
+	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
+	"github.com/Layr-Labs/eigensdk-go/logging"
+	eigenmetrics "github.com/Layr-Labs/eigensdk-go/metrics"
+	"github.com/Layr-Labs/eigensdk-go/metrics/collectors/economic"
+	rpccalls "github.com/Layr-Labs/eigensdk-go/metrics/collectors/rpc_calls"
+	"github.com/Layr-Labs/eigensdk-go/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/ethereum/go-ethereum/accounts/keystore"
+)
 
+type MetricsService struct {
+	logger         logging.Logger
+	eigenMetrics   *eigenmetrics.EigenMetrics
+	clientSet      *clients.Clients
+	ethClient      *eth.InstrumentedClient
+	operatorAddr   common.Address
+	metricsAddress string
+}
 
-// // This is temp file please add your metrics which you want
+func NewMetricsService(
+	logger logging.Logger,
+	ecdsaPrivateKey *ecdsa.PrivateKey,
+	operatorAddr common.Address,
+	config *MetricsConfig,
+) (*MetricsService, error) {
+	chainioConfig := clients.BuildAllConfig{
+		EthHttpUrl:                 config.EthRpcUrl,
+		EthWsUrl:                  config.EthWsUrl,
+		RegistryCoordinatorAddr:    config.RegistryCoordinatorAddress,
+		OperatorStateRetrieverAddr: config.OperatorStateRetrieverAddress,
+		AvsName:                    config.AvsName,
+		PromMetricsIpPortAddress:   ":9092", // Fixed metrics port
+	}
 
-// var (
-// 	uptime = prometheus.NewGaugeFunc(
-// 		prometheus.GaugeOpts{
-// 			Name: "uptime_seconds",
-// 			Help: "Time for which the node is active in seconds",
-// 		},
-// 		func() float64 {
-// 			return time.Since(startTime).Seconds()
-// 		},
-// 	)
+	clientSet, err := clients.BuildAll(chainioConfig, ecdsaPrivateKey, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build chainio clients: %w", err)
+	}
 
-// 	successfulExecutions = prometheus.NewCounter(
-// 		prometheus.CounterOpts{
-// 			Name: "successful_executions_total",
-// 			Help: "Total number of successfully executed tasks",
-// 		},
-// 	)
+	reg := prometheus.NewRegistry()
+	eigenMetrics := eigenmetrics.NewEigenMetrics(config.AvsName, ":9092", reg, logger)
 
-// 	totalTasks = prometheus.NewCounterVec(
-// 		prometheus.CounterOpts{
-// 			Name: "total_tasks_total",
-// 			Help: "Total number of tasks executed",
-// 		},
-// 		[]string{"status"},
-// 	)
+	// Setup quorum names
+	quorumNames := map[types.QuorumNum]string{
+		0: "quorum1",
+		1: "quorum2",
+		2: "quorum3",
+		3: "quorum4",
+		4: "quorum5",
+	}
 
-// 	successRate = prometheus.NewGaugeFunc(
-// 		prometheus.GaugeOpts{
-// 			Name: "success_rate",
-// 			Help: "Percentage of successful executions",
-// 		},
-// 		func() float64 {
-// 			total := totalTasks.WithLabelValues("total").Get()
-// 			if total == 0 {
-// 				return 0
-// 			}
-// 			return (successfulExecutions.Get() / total) * 100
-// 		},
-// 	)
-// )
+	// Initialize economic metrics collector
+	economicMetricsCollector := economic.NewCollector(
+		clientSet.ElChainReader,
+		clientSet.AvsRegistryChainReader,
+		config.AvsName,
+		logger,
+		operatorAddr,
+		quorumNames,
+	)
+	reg.MustRegister(economicMetricsCollector)
 
-// var startTime time.Time
-// var totalTaskCount float64
+	// Initialize RPC calls collector
+	rpcCallsCollector := rpccalls.NewCollector(config.AvsName, reg)
+	instrumentedEthClient, err := eth.NewInstrumentedClient(config.EthRpcUrl, rpcCallsCollector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create instrumented ETH client: %w", err)
+	}
 
-// func init() {
-// 	startTime = time.Now()
-// 	prometheus.MustRegister(uptime)
-// 	prometheus.MustRegister(successfulExecutions)
-// 	prometheus.MustRegister(totalTasks)
-// 	prometheus.MustRegister(successRate)
-// }
+	return &MetricsService{
+		logger:         logger,
+		eigenMetrics:   eigenMetrics,
+		clientSet:      clientSet,
+		ethClient:      instrumentedEthClient,
+		operatorAddr:   operatorAddr,
+		metricsAddress: ":9092",
+	}, nil
+}
 
-// // UpdateMetrics updates the metrics based on job execution results
-// func UpdateMetrics(success bool) {
-// 	status := "failed"
-// 	if success {
-// 		status = "success"
-// 		successfulExecutions.Inc()
-// 	}
-// 	totalTasks.WithLabelValues(status).Inc()
-// 	totalTaskCount++
-// }
+func (m *MetricsService) Start(ctx context.Context) error {
+	reg := prometheus.NewRegistry()
+	m.eigenMetrics.Start(ctx, reg)
+	m.logger.Info("Metrics service started successfully", "address", m.metricsAddress)
+	return nil
+}
 
-// // ExposeMetricsHandler handles the metrics endpoint
-// func ExposeMetricsHandler(w http.ResponseWriter, r *http.Request) {
-// 	// Serve the metrics for Prometheus
-// 	promhttp.Handler().ServeHTTP(w, r)
-// }
+type MetricsConfig struct {
+	AvsName                   string
+	EthRpcUrl                 string
+	EthWsUrl                  string
+	RegistryCoordinatorAddress   string
+	OperatorStateRetrieverAddress string
+}
+
+func LoadPrivateKeyFromKeystore(keystorePath, passphrase string) (*ecdsa.PrivateKey, error) {
+    // Read the keystore file
+    keystoreJSON, err := os.ReadFile(keystorePath)
+    if err != nil {
+        return nil, err
+    }
+
+    // Decrypt the key
+    key, err := keystore.DecryptKey(keystoreJSON, passphrase)
+    if err != nil {
+        return nil, err
+    }
+
+    return key.PrivateKey, nil
+}

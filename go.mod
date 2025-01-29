@@ -7,7 +7,7 @@ go 1.23.3
 // replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98
 
 require (
-	github.com/Layr-Labs/eigensdk-go v0.1.13
+	github.com/Layr-Labs/eigensdk-go v0.1.15-0.20241217234459-1dd4a5c5b30a
 	github.com/consensys/gnark-crypto v0.12.1
 	github.com/docker/docker v25.0.6+incompatible
 	github.com/ethereum/go-ethereum v1.14.12

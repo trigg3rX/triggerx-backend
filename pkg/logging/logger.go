@@ -23,3 +23,4 @@ type Logger interface {
 
 	With(tags ...any) Logger
 }
+

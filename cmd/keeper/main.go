@@ -15,11 +15,15 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
+    "github.com/ethereum/go-ethereum/crypto"
+	eigensdklogging "github.com/Layr-Labs/eigensdk-go/logging"
 )
 
 var (
 	logger logging.Logger
 )
+
 
 func shutdown(cancel context.CancelFunc, messaging *network.Messaging, managerPeerID peer.ID, wg *sync.WaitGroup, keeperName string) {
 	defer wg.Done()
@@ -41,33 +45,65 @@ func shutdown(cancel context.CancelFunc, messaging *network.Messaging, managerPe
 	cancel()
 
 	logger.Info("Shutdown complete")
-}
 
+}
 func main() {
-	// Create a context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// Create a WaitGroup to track goroutines
+	
 	var wg sync.WaitGroup
-
+	
 	if err := logging.InitLogger(logging.Development, "keeper"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger := logging.GetLogger(logging.Development, logging.KeeperProcess)
 
+		// Load configuration
 	yamlFile, err := os.ReadFile("config-files/triggerx_keeper.yaml")
 	if err != nil {
-		fmt.Printf("Error reading YAML file: %v\n", err)
-		os.Exit(1)
+		logger.Fatalf("Error reading YAML file: %v", err)
 	}
-
+	
 	var config types.NodeConfig
 	if err := yaml.Unmarshal(yamlFile, &config); err != nil {
-		fmt.Printf("Error parsing YAML: %v\n", err)
-		os.Exit(1)
+		logger.Fatalf("Error parsing YAML: %v", err)
 	}
-
+	
+		// Load private key from keystore
+	ecdsaPrivateKey, err := metrics.LoadPrivateKeyFromKeystore(config.EcdsaPrivateKeyStorePath, config.EcdsaPassphrase)
+	if err != nil {
+		logger.Fatalf("Failed to load ECDSA private key: %v", err)
+	}
+	
+	operatorAddr := crypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
+	logger.Info("Operator address", "address", operatorAddr.Hex())
+	eigensdkLogger, err := eigensdklogging.NewZapLogger("development")
+	// Initialize metrics service if enabled
+	if config.EnableMetrics {
+		metricsConfig := &metrics.MetricsConfig{
+			AvsName:                    config.AvsName,
+			EthRpcUrl:                 config.EthRpcUrl,
+			EthWsUrl:                  config.EthWsUrl,
+			RegistryCoordinatorAddress:    config.RegistryCoordinatorAddress,
+			OperatorStateRetrieverAddress: config.OperatorStateRetrieverAddress,
+		}
+	
+		metricsService, err := metrics.NewMetricsService(
+			eigensdkLogger,
+			ecdsaPrivateKey,
+			operatorAddr,
+			metricsConfig,
+		)
+		if err != nil {
+			logger.Fatalf("Failed to initialize metrics service: %v", err)
+		}
+	
+		// Start metrics service
+		if err := metricsService.Start(ctx); err != nil {
+			logger.Fatalf("Failed to start metrics service: %v", err)
+		}
+		logger.Info("Metrics service started successfully")
+	}
 	registry, err := network.NewPeerRegistry()
 	if err != nil {
 		logger.Fatalf("Failed to initialize peer registry: %v", err)
@@ -139,190 +175,3 @@ func main() {
 	wg.Wait()
 }
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"log"
-// 	"os"
-// 	"os/signal"
-// 	"strconv"
-// 	"syscall"
-
-// 	"github.com/joho/godotenv"
-// 	"github.com/libp2p/go-libp2p"
-// 	"github.com/libp2p/go-libp2p/core/peer"
-// 	"github.com/multiformats/go-multiaddr"
-
-// 	"github.com/trigg3rX/triggerx-backend/execute/keeper/handler"
-// 	"github.com/trigg3rX/triggerx-backend/execute/manager"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/network"
-
-// 	"github.com/ethereum/go-ethereum/ethclient"
-// )
-
-// func main() {
-// 	// Setup logging
-// 	log.SetOutput(os.Stdout)
-// 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-
-// 	// Create context
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-
-// 	// Create libp2p host
-// 	host, err := libp2p.New()
-// 	if err != nil {
-// 		log.Fatalf("Failed to create libp2p host: %v", err)
-// 	}
-// 	defer host.Close()
-
-// 	// Create network messaging
-// 	keeperName := "node1"
-// 	messaging := network.NewMessaging(host, keeperName)
-// 	err = godotenv.Load(".env")
-// 	if err != nil {
-// 		log.Fatalf("Error loading .env file: %s", err)
-// 	}
-// 	alchemyAPIKey := os.Getenv("ALCHEMY_API_KEY")
-// 	ethClient, err := ethclient.Dial(fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", alchemyAPIKey))
-// 	if err != nil {
-// 		log.Fatalf("Failed to create Ethereum client: %v", err)
-// 	}
-// 	defer ethClient.Close()
-
-// 	etherscanAPIKey := os.Getenv("ETHERSCAN_API_KEY")
-// 	if etherscanAPIKey == "" {
-// 		log.Fatalf("ETHERSCAN_API_KEY is required")
-// 	}
-// 	jobHandler := handler.NewJobHandler(ethClient, etherscanAPIKey)
-
-// 	// Setup message handling
-// 	messaging.InitMessageHandling(func(msg network.Message) {
-// 		// Check if it's a JOB_TRANSMISSION message
-// 		if nestedContent, ok := msg.Content.(map[string]interface{})["content"]; ok {
-// 			// Type assert the nested content
-// 			jobMap, ok := nestedContent.(map[string]interface{})
-// 			if !ok {
-// 				log.Printf("Invalid job content type")
-// 				return
-// 			}
-
-// 			// Convert map to Job struct
-// 			jobData, err := convertMapToJob(jobMap)
-// 			if err != nil {
-// 				log.Printf("Job conversion error: %v", err)
-// 				return
-// 			}
-
-// 			// Print the job in a formatted way
-// 			log.Printf("Received Job:")
-// 			log.Printf("Job ID: %s", jobData.JobID)
-// 			log.Printf("Chain ID: %s", jobData.ChainID)
-// 			log.Printf("Contract Address: %s", jobData.ContractAddress)
-// 			log.Printf("Target Function: %s", jobData.TargetFunction)
-// 			log.Printf("Status: %s", jobData.Status)
-// 			log.Printf("Arguments: %+v", jobData.Arguments)
-// 			log.Printf("Max Retries: %d", jobData.MaxRetries)
-// 			log.Printf("Current Retries: %d", jobData.CurrentRetries)
-// 			log.Printf("CodeURL: %s", jobData.CodeURL)
-
-// 			// Handle job
-// 			if err := jobHandler.HandleJob(jobData); err != nil {
-// 				log.Printf("Job handling error: %v", err)
-// 			}
-// 		} else {
-// 			log.Printf("Received non-job message: %+v", msg.Type)
-// 		}
-// 	})
-
-// 	// Save peer info for discovery
-// 	discovery := network.NewDiscovery(ctx, host, keeperName)
-// 	if err := discovery.SavePeerInfo(); err != nil {
-// 		log.Printf("Failed to save peer info: %v", err)
-// 	}
-
-// 	log.Println("Keeper addresses:", host.Addrs())
-
-// 	peerInfos, err := network.LoadPeerInfo()
-// 	if err != nil {
-// 		log.Printf("Error loading peer info: %v", err)
-// 	}
-
-// 	for name, info := range peerInfos {
-// 		if name != keeperName {
-// 			// Attempt to connect to other known peers
-// 			maddr, err := multiaddr.NewMultiaddr(info.Address)
-// 			if err == nil {
-// 				peerInfo, err := peer.AddrInfoFromP2pAddr(maddr)
-// 				if err == nil {
-// 					host.Connect(ctx, *peerInfo)
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	// Wait for interrupt
-// 	sigChan := make(chan os.Signal, 1)
-// 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-// 	log.Printf("🚀 Keeper node started. Listening on %s", host.Addrs())
-// 	<-sigChan
-// }
-
-// // Helper function to convert map to Job struct
-// func convertMapToJob(jobMap map[string]interface{}) (*manager.Job, error) {
-// 	job := &manager.Job{
-// 		JobID:           toString(jobMap["JobID"]),
-// 		ArgType:         toString(jobMap["ArgType"]),
-// 		ChainID:         toString(jobMap["ChainID"]),
-// 		ContractAddress: toString(jobMap["ContractAddress"]),
-// 		TargetFunction:  toString(jobMap["TargetFunction"]),
-// 		Status:          toString(jobMap["Status"]),
-// 		UserID:          toString(jobMap["UserID"]),
-// 		MaxRetries:      toInt(jobMap["MaxRetries"]),
-// 		CurrentRetries:  toInt(jobMap["CurrentRetries"]),
-// 		CodeURL:         toString(jobMap["CodeURL"]),
-// 	}
-
-// 	// Convert arguments
-// 	if args, ok := jobMap["Arguments"].(map[string]interface{}); ok {
-// 		job.Arguments = args
-// 	}
-
-// 	return job, nil
-// }
-
-// // Helper functions for type conversion
-// func toString(v interface{}) string {
-// 	if s, ok := v.(string); ok {
-// 		return s
-// 	}
-// 	return ""
-// }
-
-// func toInt(v interface{}) int {
-// 	switch val := v.(type) {
-// 	case int:
-// 		return val
-// 	case float64:
-// 		return int(val)
-// 	case string:
-// 		intVal, _ := strconv.Atoi(val)
-// 		return intVal
-// 	default:
-// 		return 0
-// 	}
-// }
-
-// func toUint(v interface{}) uint {
-// 	switch val := v.(type) {
-// 	case uint:
-// 		return val
-// 	case int:
-// 		return uint(val)
-// 	case float64:
-// 		return uint(val)
-// 	default:
-// 		return 0
-// 	}
-// }
