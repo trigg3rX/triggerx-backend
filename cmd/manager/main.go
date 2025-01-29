@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/execute/manager"
@@ -12,32 +16,32 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	libnetwork "github.com/libp2p/go-libp2p/core/network"
 )
 
-// Add these as package-level variables
 var (
-	db     *database.Connection
-	logger logging.Logger
+	db             *database.Connection
+	logger         logging.Logger
+	quorumState    bool
+	validatorState bool
 )
 
 func handleJobEvent(event events.JobEvent) {
 	logger.Infof("Received job event - Type: %s, JobID: %d, JobType: %d, ChainID: %d",
 		event.Type, event.JobID, event.JobType, event.ChainID)
 
-	// Initialize job scheduler with 5 workers
 	jobScheduler := manager.NewJobScheduler(5, db)
 
 	switch event.Type {
 	case "job_created":
 		logger.Infof("New job created: %d", event.JobID)
-		// Convert job ID to string and add to scheduler
 		jobID := strconv.FormatInt(event.JobID, 10)
 		if err := jobScheduler.AddJob(jobID); err != nil {
 			logger.Errorf("Failed to add job %s: %v", jobID, err)
 			return
 		}
 
-		// Print metrics when new job is added
 		queueStatus := jobScheduler.GetQueueStatus()
 		systemMetrics := jobScheduler.GetSystemMetrics()
 
@@ -64,18 +68,15 @@ func subscribeToEvents(ctx context.Context) error {
 		return fmt.Errorf("event bus not initialized")
 	}
 
-	// Subscribe to the job events channel
 	pubsub := eventBus.Redis().Subscribe(ctx, events.JobEventChannel)
 
 	logger.Info("Subscribed to job events channel")
 
-	// Listen for messages in a separate goroutine
 	go func() {
-		defer pubsub.Close() // Move defer inside the goroutine
+		defer pubsub.Close()
 
 		logger.Info("Starting event subscription...")
 
-		// Wait for confirmation of subscription
 		_, err := pubsub.Receive(ctx)
 		if err != nil {
 			logger.Errorf("Failed to receive subscription confirmation: %v", err)
@@ -99,23 +100,69 @@ func subscribeToEvents(ctx context.Context) error {
 	return nil
 }
 
+func shutdown(cancel context.CancelFunc, messaging *network.Messaging, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	logger.Info("Starting shutdown sequence...")
+
+	if err := messaging.BroadcastMessage("Manager Shutdown"); err != nil {
+		logger.Errorf("Failed to broadcast shutdown message: %v", err)
+	}
+
+	time.Sleep(time.Second)
+
+	cancel()
+
+	if db != nil {
+		db.Close()
+	}
+
+	logger.Info("Shutdown complete")
+}
+
+// Add connection state handler
+func handleConnectionStateChange(peerID peer.ID, connected bool) {
+	registry, err := network.NewPeerRegistry()
+	if err != nil {
+		logger.Errorf("Failed to load peer registry: %v", err)
+		return
+	}
+
+	// Check if the peer is quorum or validator
+	services := registry.GetAllServices()
+	for serviceName, info := range services {
+		if info.PeerID == peerID.String() {
+			switch serviceName {
+			case network.ServiceQuorum:
+				quorumState = connected
+				// logger.Infof("Quorum connection state changed to: %v", connected)
+			case network.ServiceValidator:
+				validatorState = connected
+				// logger.Infof("Validator connection state changed to: %v", connected)
+			}
+		}
+	}
+}
+
 func main() {
-	// Initialize logger first
+	quorumState = false
+	validatorState = false
+
 	if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	// Get the logger instance and assign it to package-level variable
 	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	logger.Info("Starting manager node...")
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Initialize event bus
+	var wg sync.WaitGroup
+
 	if err := events.InitEventBus("localhost:6379"); err != nil {
 		logger.Fatalf("Failed to initialize event bus: %v", err)
 	}
 
-	// Initialize database connection
 	dbConfig := &database.Config{
 		Hosts:       []string{"localhost"},
 		Timeout:     time.Second * 30,
@@ -123,7 +170,6 @@ func main() {
 		ConnectWait: time.Second * 20,
 	}
 
-	// Assign to the package-level variable
 	var err error
 	db, err = database.NewConnection(dbConfig)
 	if err != nil {
@@ -131,36 +177,52 @@ func main() {
 	}
 	defer db.Close()
 
-	// Initialize registry
 	registry, err := network.NewPeerRegistry()
 	if err != nil {
 		logger.Fatalf("Failed to initialize peer registry: %v", err)
 	}
-	// Setup P2P with registry
-	config := network.P2PConfig{
-		Name:    network.ServiceManager,
-		Address: "/ip4/0.0.0.0/tcp/9000",
-	}
 
-	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
+	host, err := network.SetupServiceWithRegistry(ctx, network.ServiceManager, registry)
 	if err != nil {
 		logger.Fatalf("Failed to setup P2P: %v", err)
 	}
 
-	// Initialize discovery service
-	// discovery := network.NewDiscovery(ctx, host, config.Name)
+	// discovery := network.NewDiscovery(ctx, host, network.ServiceManager)
 
-	// Initialize messaging
-	messaging := network.NewMessaging(host, config.Name)
-	messaging.InitMessageHandling(func(msg network.Message) {
-		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
+	// Set up connection monitoring using NotifyBundle
+	host.Network().Notify(&libnetwork.NotifyBundle{
+		ConnectedF: func(n libnetwork.Network, conn libnetwork.Conn) {
+			handleConnectionStateChange(conn.RemotePeer(), true)
+		},
+		DisconnectedF: func(n libnetwork.Network, conn libnetwork.Conn) {
+			handleConnectionStateChange(conn.RemotePeer(), false)
+		},
 	})
 
-	// Subscribe to events
+	messaging := network.NewMessaging(host, network.ServiceManager)
+	messaging.InitMessageHandling(func(msg network.Message) {})
+
 	if err := subscribeToEvents(ctx); err != nil {
 		logger.Fatalf("Failed to subscribe to events: %v", err)
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-sigChan:
+			logger.Info("Received shutdown signal")
+			wg.Add(1)
+			go shutdown(cancel, messaging, &wg)
+		case <-ctx.Done():
+			return
+		}
+	}()
+
 	logger.Infof("Manager node is running. Node ID: %s", host.ID().String())
-	select {} // Keep the service running
+
+	wg.Wait()
 }

@@ -296,12 +296,11 @@ func (js *JobScheduler) transmitJobToKeeper(keeperName string, job *Job) error {
 		From:      "task_manager",
 		To:        keeperName,
 		Content:   job,
-		Type:      "JOB_TRANSMISSION",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 
 	// Send the message
-	err = js.networkClient.SendMessage(keeperName, peerID, networkMessage)
+	err = js.networkClient.SendMessage(keeperName, peerID, networkMessage, false)
 	if err != nil {
 		return fmt.Errorf("failed to send job to keeper %s: %v", keeperName, err)
 	}

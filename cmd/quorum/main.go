@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/trigg3rX/triggerx-backend/execute/quorum"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
@@ -18,7 +17,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
-// Add this as a package-level variable
 var (
 	db     *database.Connection
 	logger logging.Logger
@@ -56,18 +54,15 @@ func subscribeToEvents(ctx context.Context) error {
 		return fmt.Errorf("event bus not initialized")
 	}
 
-	// Subscribe to the job events channel
 	pubsub := eventBus.Redis().Subscribe(ctx, events.KeeperEventChannel)
 
 	logger.Info("Subscribed to keeper events channel")
 
-	// Listen for messages in a separate goroutine
 	go func() {
-		defer pubsub.Close() // Move defer inside the goroutine
+		defer pubsub.Close()
 
 		logger.Info("Starting event subscription...")
 
-		// Wait for confirmation of subscription
 		_, err := pubsub.Receive(ctx)
 		if err != nil {
 			logger.Errorf("Failed to receive subscription confirmation: %v", err)
@@ -91,25 +86,19 @@ func subscribeToEvents(ctx context.Context) error {
 	return nil
 }
 
-func shutdown(cancel context.CancelFunc, messaging *network.Messaging, managerPeerID peer.ID, wg *sync.WaitGroup) {
+func shutdown(cancel context.CancelFunc, messaging *network.Messaging, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	logger.Info("Starting shutdown sequence...")
 
-	// Send shutdown message to manager
-	if err := messaging.SendMessage(network.ServiceManager, managerPeerID, "Quorum Shutdown"); err != nil {
-		logger.Errorf("Failed to send shutdown message to manager: %v", err)
-	} else {
-		logger.Info("Sent shutdown message to manager")
+	if err := messaging.BroadcastMessage("Quorum Shutdown"); err != nil {
+		logger.Errorf("Failed to broadcast shutdown message: %v", err)
 	}
 
-	// Give some time for the message to be sent
 	time.Sleep(time.Second)
 
-	// Cancel the context to signal all goroutines to stop
 	cancel()
 
-	// Close database connection
 	if db != nil {
 		db.Close()
 	}
@@ -118,26 +107,21 @@ func shutdown(cancel context.CancelFunc, messaging *network.Messaging, managerPe
 }
 
 func main() {
-	// Create a context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Create a WaitGroup to track goroutines
-	var wg sync.WaitGroup
-
-	// Initialize logger
 	if err := logging.InitLogger(logging.Development, "quorum"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger = logging.GetLogger(logging.Development, logging.QuorumProcess)
 	logger.Info("Starting quorum node...")
 
-	// Initialize event bus
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+
 	if err := events.InitEventBus("localhost:6379"); err != nil {
 		logger.Fatalf("Failed to initialize event bus: %v", err)
 	}
 
-	// Initialize database connection
 	dbConfig := &database.Config{
 		Hosts:       []string{"localhost"},
 		Timeout:     time.Second * 30,
@@ -151,58 +135,40 @@ func main() {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Initialize registry
 	registry, err := network.NewPeerRegistry()
 	if err != nil {
 		logger.Fatalf("Failed to initialize peer registry: %v", err)
 	}
 
-	// Setup P2P with registry
-	config := network.P2PConfig{
-		Name:    network.ServiceQuorum,
-		Address: "/ip4/0.0.0.0/tcp/9001",
-	}
-
-	host, err := network.SetupP2PWithRegistry(ctx, config, registry)
+	host, err := network.SetupServiceWithRegistry(ctx, network.ServiceQuorum, registry)
 	if err != nil {
 		logger.Fatalf("Failed to setup P2P: %v", err)
 	}
 
-	// Initialize discovery service
-	discovery := network.NewDiscovery(ctx, host, config.Name)
+	discovery := network.NewDiscovery(ctx, host, network.ServiceQuorum)
 
-	// Connect to manager service
-	managerPeerID, err := discovery.ConnectToPeer(network.ServiceManager)
+	_, err = discovery.ConnectToPeer(network.ServiceManager)
 	if err != nil {
 		logger.Fatalf("Failed to connect to manager: %v", err)
 	}
-	logger.Infof("Successfully connected to manager node: %s", managerPeerID.String())
+	logger.Infof("Successfully connected to Manager")
 
-	// Initialize messaging
-	messaging := network.NewMessaging(host, config.Name)
-	messaging.InitMessageHandling(func(msg network.Message) {
-		logger.Infof("Received message from %s: %+v", msg.From, msg.Content)
-	})
+	messaging := network.NewMessaging(host, network.ServiceQuorum)
+	messaging.InitMessageHandling(func(msg network.Message) {})
 
-	// Send "Quorum Set" message to manager
-	if err := messaging.SendMessage(network.ServiceManager, managerPeerID, "Quorum Set"); err != nil {
-		logger.Errorf("Failed to send initial message to manager: %v", err)
-	} else {
-		logger.Info("Sent 'Quorum Set' message to manager")
+	if err := messaging.BroadcastMessage("Quorum Set"); err != nil {
+		logger.Errorf("Failed to broadcast initial message: %v", err)
 	}
 
-	// Subscribe to events
 	if err := subscribeToEvents(ctx); err != nil {
 		logger.Fatalf("Failed to subscribe to events: %v", err)
 	}
 
 	logger.Infof("Quorum node is running. Node ID: %s", host.ID().String())
 
-	// Set up signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Wait for shutdown signal
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -210,12 +176,11 @@ func main() {
 		case <-sigChan:
 			logger.Info("Received shutdown signal")
 			wg.Add(1)
-			go shutdown(cancel, messaging, managerPeerID, &wg)
+			go shutdown(cancel, messaging, &wg)
 		case <-ctx.Done():
 			return
 		}
 	}()
 
-	// Wait for all goroutines to complete
 	wg.Wait()
 }

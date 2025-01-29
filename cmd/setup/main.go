@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -8,9 +10,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/network"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
 func getOutboundIP() (string, error) {
@@ -38,34 +41,6 @@ func findFreePort(startPort int) (int, error) {
 }
 
 func main() {
-	// Get local IP address
-	ip, err := getOutboundIP()
-	if err != nil {
-		fmt.Printf("Error getting IP address: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Find free port starting from 3000
-	port, err := findFreePort(9003)
-	if err != nil {
-		fmt.Printf("Error finding free port: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Generate peer ID
-	privKey, err := network.LoadOrCreateIdentity("keeper")
-	if err != nil {
-		fmt.Printf("Error generating peer ID: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Convert private key to peer ID
-	peerID, err := peer.IDFromPrivateKey(privKey)
-	if err != nil {
-		fmt.Printf("Error converting private key to peer ID: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Read existing YAML
 	yamlFile, err := os.ReadFile("triggerx_keeper.yaml")
 	if err != nil {
@@ -80,6 +55,47 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Get local IP address
+	ip, err := getOutboundIP()
+	if err != nil {
+		fmt.Printf("Error getting IP address: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Find free port starting from 3000
+	port, err := findFreePort(9003)
+	if err != nil {
+		fmt.Printf("Error finding free port: %v\n", err)
+		os.Exit(1)
+	}
+
+	privKey, _, err := crypto.GenerateKeyPairWithReader(crypto.Ed25519, -1, rand.Reader)
+	if err != nil {
+		fmt.Printf("failed to generate key pair: %w", err)
+	}
+
+	privBytes, err := crypto.MarshalPrivateKey(privKey)
+	if err != nil {
+		fmt.Printf("failed to marshal private key: %w", err)
+	}
+
+	identity := network.PeerIdentity{PrivKey: privBytes}
+	identityJson, err := json.Marshal(identity)
+	if err != nil {
+		fmt.Printf("failed to marshal identity: %w", err)
+	}
+
+	if err := os.WriteFile("data/peer_registry/keeper_identity.json", identityJson, 0600); err != nil {
+		fmt.Printf("failed to save identity: %w", err)
+	}
+
+	// Convert private key to peer ID
+	peerID, err := peer.IDFromPrivateKey(privKey)
+	if err != nil {
+		fmt.Printf("Error converting private key to peer ID: %v\n", err)
+		os.Exit(1)
+	}
+	
 	// Update connection_address and p2p_peer_id fields
 	config.ConnectionAddress = ip
 	config.P2pPeerId = peerID.String()
