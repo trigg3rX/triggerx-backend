@@ -1,6 +1,6 @@
 package cmd
 
-// TODO: 
+// TODO:
 // - Use (eigensdk-go/chainio/elcontracts).IsOperatorRegistered() to check for EigenLayerRegistration
 // - Use (eigensdk-go/chainio/elcontracts).GetStrategyAndUnderlyingERC20Token() to get strategy and underlying ERC20 token
 // - Use (eigensdk-go/chainio/elcontracts).DepositERC20IntoStrategy() to deposit into strategy
@@ -12,70 +12,58 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
+	"strings"
+	"crypto/rand"
 
-	"github.com/consensys/gnark-crypto/ecc/bn254"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v3"
+	"github.com/consensys/gnark-crypto/ecc/bn254"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/wallet"
 	"github.com/Layr-Labs/eigensdk-go/chainio/txmgr"
-
 	"github.com/Layr-Labs/eigensdk-go/crypto/ecdsa"
+	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
 	"github.com/Layr-Labs/eigensdk-go/logging"
 	"github.com/Layr-Labs/eigensdk-go/signerv2"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
-
-	"crypto/rand"
-
-	eigensdkbls "github.com/Layr-Labs/eigensdk-go/crypto/bls"
 
 	contractAVSDirectory "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IAVSDirectory"
 	contractERC20 "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IERC20"
 	contractStrategy "github.com/Layr-Labs/eigensdk-go/contracts/bindings/IStrategy"
 	contractRegistryCoordinator "github.com/Layr-Labs/eigensdk-go/contracts/bindings/RegistryCoordinator"
 	contractStrategyManager "github.com/Layr-Labs/eigensdk-go/contracts/bindings/StrategyManager"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/cli/utils"
 )
 
-var ConfigPath = "config-files/triggerx_keeper.yaml"
-
-// handleHomeDirPath expands the home directory path if it starts with "~/"
-func handleHomeDirPath(path string) string {
-	if len(path) >= 2 && path[:2] == "~/" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return filepath.Join(homeDir, path[2:])
-	}
-	return path
-}
-
-// RegisterCommand returns the CLI command for registering a new keeper
 func RegisterCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "register",
 		Usage: "Register a new Keeper",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "ecdsa-passphrase",
-				Usage:    "Passphrase for the ECDSA keystore file",
+				Name:     "config",
+				Usage:    "Path to the config file (triggerx_keeper.yaml)",
+				Required: true,
 			},
 			&cli.StringFlag{
-				Name:     "bls-passphrase", 
-				Usage:    "Passphrase for the BLS keystore file",
+				Name:  "ecdsa-passphrase",
+				Usage: "Passphrase for the ECDSA keystore file",
+			},
+			&cli.StringFlag{
+				Name:  "bls-passphrase",
+				Usage: "Passphrase for the BLS keystore file",
 			},
 			&cli.StringFlag{
 				Name:  "strategy-address",
@@ -90,41 +78,44 @@ func RegisterCommand() *cli.Command {
 	}
 }
 
-// DeregisterCommand returns the CLI command for deregistering a keeper
 func DeregisterCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "deregister",
 		Usage: "Deregister an keeper",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "ecdsa-passphrase",
-				Usage:    "Passphrase for the ECDSA keystore file", 
+				Name:     "config",
+				Usage:    "Path to the config file (triggerx_keeper.yaml)",
 				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "ecdsa-passphrase",
+				Usage: "Passphrase for the ECDSA keystore file",
 			},
 		},
 		Action: deregisterKeeper,
 	}
 }
 
-// registerKeeper handles the registration of a new keeper including BLS key setup,
-// contract interactions and database registration
 func registerKeeper(c *cli.Context) error {
 	logger, err := logging.NewZapLogger(logging.Development)
 	if err != nil {
 		return cli.Exit("Failed to initialize logger", 1)
 	}
 
-	nodeConfig, err := getConfig()
+	logger.Info("Starting registration process...")
+
+	nodeConfig, err := utils.GetConfig(c.String("config"))
 	if err != nil {
 		return cli.Exit("Failed to get node config", 1)
 	}
 
-	keystorePath := handleHomeDirPath(nodeConfig.EcdsaPrivateKeyStorePath)
+	keystorePath := utils.HandleHomeDirPath(nodeConfig.EcdsaPrivateKeyStorePath)
 	if keystorePath == "" {
 		return cli.Exit("Fill in the ECDSA keystore path in the config file", 1)
 	}
 
-	blsKeystorePath := handleHomeDirPath(nodeConfig.BlsPrivateKeyStorePath)
+	blsKeystorePath := utils.HandleHomeDirPath(nodeConfig.BlsPrivateKeyStorePath)
 	if blsKeystorePath == "" {
 		return cli.Exit("Fill in the BLS keystore path in the config file", 1)
 	}
@@ -155,7 +146,7 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit("BLS passphrase not provided in flag or config file", 1)
 	}
 
-	blsKeyPair, err := eigensdkbls.ReadPrivateKeyFromFile(blsKeystorePath, blsPassphrase)
+	blsKeyPair, err := bls.ReadPrivateKeyFromFile(blsKeystorePath, blsPassphrase)
 	if err != nil {
 		return cli.Exit("Failed to read BLS private key", 1)
 	}
@@ -170,8 +161,10 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit("Failed to get ECDSA public key", 1)
 	}
 
+	logger.Info("Keeper address", "address", keeperAddress.Hex())
+
 	apiEndpoint := fmt.Sprintf("%s/keepers/address/%s", "https://data.triggerx.network/api", keeperAddress.Hex())
-	logger.Info("Checking keeper registration", "endpoint", apiEndpoint)
+	logger.Info("Checking keeper registration ...")
 	resp, err := http.Get(apiEndpoint)
 	if err != nil {
 		logger.Error("Failed to check keeper registration", "error", err)
@@ -193,9 +186,6 @@ func registerKeeper(c *cli.Context) error {
 	if err != nil {
 		return cli.Exit("Failed to get chain ID", 1)
 	}
-	logger.Info("Connected to chain", "chainID", chainID.String())
-
-	logger.Info("Using keeper address", "address", keeperAddress.Hex())
 
 	signerV2, signerAddr, err := signerv2.SignerFromConfig(signerv2.Config{PrivateKey: ecdsaPrivKey}, chainID)
 	if err != nil {
@@ -225,11 +215,14 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit("Failed to create RegistryCoordinator contract instance", 1)
 	}
 
+	logger.Info("Wallet and Contracts created")
+
 	if c.String("strategy-address") != "" || c.String("amount") != "" {
 		if c.String("strategy-address") == "" || c.String("amount") == "" {
 			return cli.Exit("Both strategy-address and amount must be provided for staking", 1)
 		}
 
+		logger.Info("Depositing into strategy ...")
 		if err := depositIntoStrategy(c, logger, client, txMgr, keeperAddress, nodeConfig); err != nil {
 			return cli.Exit("Failed to deposit into strategy", 1)
 		}
@@ -281,7 +274,6 @@ func registerKeeper(c *cli.Context) error {
 	if err != nil {
 		return cli.Exit("Failed to sign digest", 1)
 	}
-
 	operatorSignature[64] += 27
 
 	operatorSignatureWithSaltAndExpiry := contractRegistryCoordinator.ISignatureUtilsSignatureWithSaltAndExpiry{
@@ -290,10 +282,36 @@ func registerKeeper(c *cli.Context) error {
 		Expiry:    expiry,
 	}
 
-	logger.Info("Creating registration transaction")
+	logger.Info("Parameters created.")
+	logger.Info("Getting Quorum No ...")
+
+	apiEndpoint = fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
+	resp, err = http.Get(apiEndpoint)
+	if err != nil {
+		logger.Error("Failed to get quorum no", "error", err)
+		return cli.Exit("Failed to get quorum no", 1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("Failed to read response body", "error", err)
+		return cli.Exit("Failed to read response body", 1)
+	}
+
+	quorumNo := "0" +strings.TrimSpace(string(body))
+	quorumNoInt, err := strconv.Atoi(quorumNo)
+	if err != nil {
+		logger.Error("Failed to parse quorum number", "error", err)
+		return cli.Exit("Failed to parse quorum number", 1)
+	}
+	quorumNoBytes, _ := hex.DecodeString(quorumNo)
+
+	logger.Info("Creating registration transaction ...")
 	tx, err := registryCoordinatorContract.RegisterOperator(
 		noSendTxOpts,
-		[]byte{0},
+		// []byte{0},
+		quorumNoBytes,
 		string(nodeConfig.ConnectionAddress),
 		pubkeyRegParams,
 		operatorSignatureWithSaltAndExpiry,
@@ -304,8 +322,8 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit("Failed to create transaction", 1)
 	}
 	logger.Info("Created unsigned transaction", "txHash", tx.Hash().Hex())
-
-	logger.Info("Sending transaction")
+	
+	logger.Info("Sending transaction...")
 	receipt, err := txMgr.Send(context.Background(), tx, true)
 	if err != nil {
 		logger.Error("Failed to send transaction", "error", err)
@@ -320,10 +338,10 @@ func registerKeeper(c *cli.Context) error {
 		BlsSigningKeys:    []string{G1pubkeyBN254.X.String(), G1pubkeyBN254.Y.String()},
 		ConnectionAddress: nodeConfig.ConnectionAddress,
 		Verified:          false,
-		CurrentQuorumNo:   int(0),
+		CurrentQuorumNo:   quorumNoInt,
 	}
 
-	logger.Info("Creating keeper in database", "address", keeperData.WithdrawalAddress)
+	logger.Info("Registering keeper in database", "address", keeperData.WithdrawalAddress)
 
 	jsonData, err := json.Marshal(keeperData)
 	if err != nil {
@@ -346,43 +364,15 @@ func registerKeeper(c *cli.Context) error {
 	}
 
 	logger.Info("Registration complete", "address", keeperAddress.Hex(), "txHash", receipt.TxHash.Hex())
+
+	err = utils.DisplayBannerMessage(nodeConfig.KeeperName, keeperAddress.Hex())
+	if err != nil {
+		fmt.Printf("Error displaying banner: %v\n", err)
+	}
+
 	return nil
 }
 
-// getConfig reads and parses the node configuration file
-func getConfig() (config types.NodeConfig, err error) {
-	yamlFile, err := os.ReadFile(ConfigPath)
-	if err != nil {
-		return config, err
-	}
-	err = yaml.Unmarshal(yamlFile, &config)
-	return config, err
-}
-
-// ConvertBn254GethToGnark converts a BN254G1Point to G1Affine format
-func ConvertBn254GethToGnark(input contractRegistryCoordinator.BN254G1Point) *bn254.G1Affine {
-	return eigensdkbls.NewG1Point(input.X, input.Y).G1Affine
-}
-
-// ConvertToBN254G1Point converts a G1Point to BN254G1Point format
-func ConvertToBN254G1Point(input *eigensdkbls.G1Point) contractRegistryCoordinator.BN254G1Point {
-	output := contractRegistryCoordinator.BN254G1Point{
-		X: input.X.BigInt(big.NewInt(0)),
-		Y: input.Y.BigInt(big.NewInt(0)),
-	}
-	return output
-}
-
-// ConvertToBN254G2Point converts a G2Point to BN254G2Point format
-func ConvertToBN254G2Point(input *eigensdkbls.G2Point) contractRegistryCoordinator.BN254G2Point {
-	output := contractRegistryCoordinator.BN254G2Point{
-		X: [2]*big.Int{input.X.A1.BigInt(big.NewInt(0)), input.X.A0.BigInt(big.NewInt(0))},
-		Y: [2]*big.Int{input.Y.A1.BigInt(big.NewInt(0)), input.Y.A0.BigInt(big.NewInt(0))},
-	}
-	return output
-}
-
-// depositIntoStrategy handles the token approval and deposit into the strategy contract
 func depositIntoStrategy(c *cli.Context, logger logging.Logger, client *ethclient.Client, txMgr *txmgr.SimpleTxManager, keeperAddress common.Address, nodeConfig types.NodeConfig) error {
 	strategyAddr := c.String("strategy-address")
 	if strategyAddr == "" {
@@ -477,19 +467,18 @@ func depositIntoStrategy(c *cli.Context, logger logging.Logger, client *ethclien
 	return nil
 }
 
-// deregisterKeeper handles the deregistration of a keeper from the contracts and database
 func deregisterKeeper(c *cli.Context) error {
 	logger, err := logging.NewZapLogger(logging.Development)
 	if err != nil {
 		return cli.Exit("Failed to initialize logger", 1)
 	}
 
-	nodeConfig, err := getConfig()
+	nodeConfig, err := utils.GetConfig(c.String("config"))
 	if err != nil {
 		return cli.Exit("Failed to get node config", 1)
 	}
 
-	keystorePath := handleHomeDirPath(nodeConfig.EcdsaPrivateKeyStorePath)
+	keystorePath := utils.HandleHomeDirPath(nodeConfig.EcdsaPrivateKeyStorePath)
 	if keystorePath == "" {
 		return cli.Exit("Fill in the ECDSA keystore path in the config file", 1)
 	}
@@ -590,4 +579,24 @@ func deregisterKeeper(c *cli.Context) error {
 	logger.Info("Deregistration complete", "txHash", receipt.TxHash.Hex(), "blockNumber", receipt.BlockNumber)
 
 	return nil
+}
+
+func ConvertBn254GethToGnark(input contractRegistryCoordinator.BN254G1Point) *bn254.G1Affine {
+	return bls.NewG1Point(input.X, input.Y).G1Affine
+}
+
+func ConvertToBN254G1Point(input *bls.G1Point) contractRegistryCoordinator.BN254G1Point {
+	output := contractRegistryCoordinator.BN254G1Point{
+		X: input.X.BigInt(big.NewInt(0)),
+		Y: input.Y.BigInt(big.NewInt(0)),
+	}
+	return output
+}
+
+func ConvertToBN254G2Point(input *bls.G2Point) contractRegistryCoordinator.BN254G2Point {
+	output := contractRegistryCoordinator.BN254G2Point{
+		X: [2]*big.Int{input.X.A1.BigInt(big.NewInt(0)), input.X.A0.BigInt(big.NewInt(0))},
+		Y: [2]*big.Int{input.Y.A1.BigInt(big.NewInt(0)), input.Y.A0.BigInt(big.NewInt(0))},
+	}
+	return output
 }

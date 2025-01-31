@@ -26,7 +26,7 @@ func checkKeeperStatus(c *cli.Context) error {
 
     logger.Info("keeper status check initiated")
 
-    yamlFile, err := os.ReadFile(ConfigPath)
+    yamlFile, err := os.ReadFile(c.String("config"))
     if err != nil {
         logger.Error("config file read failed", "error", err)
         return fmt.Errorf("failed to read config file: %w", err)
@@ -94,5 +94,12 @@ func StatusCommand() *cli.Command {
         Name:   "status",
         Usage:  "Check keeper registration status",
         Action: checkKeeperStatus,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "config",
+				Usage: "Path to the config file (triggerx_keeper.yaml)",
+				Required: true,
+			},
+		},
     }
 }

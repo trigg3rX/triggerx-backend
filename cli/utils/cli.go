@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-var TriggerXAsciiArt = `
-	████████╗██████╗ ██╗ ██████╗  ██████╗ ███████╗██████╗ ██╗  ██╗
-	╚══██╔══╝██╔══██╗██║██╔════╝ ██╔════╝ ██╔════╝██╔══██╗╚██╗██╔╝
-	   ██║   ██████╔╝██║██║  ███╗██║  ███╗█████╗  ██████╔╝ ╚███╔╝
-	   ██║   ██╔══██╗██║██║   ██║██║   ██║██║     ██╔══██╗ ██╔██╗
-	   ██║   ██║  ██║██║╚██████╔╝╚██████╔╝███████╗██║  ██║██╔╝ ██╗
-	   ╚═╝   ╚═╝  ╚═╝╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
-`
+// var TriggerXAsciiArt = `
+// 	████████╗██████╗ ██╗ ██████╗  ██████╗ ███████╗██████╗ ██╗  ██╗
+// 	╚══██╔══╝██╔══██╗██║██╔════╝ ██╔════╝ ██╔════╝██╔══██╗╚██╗██╔╝
+// 	   ██║   ██████╔╝██║██║  ███╗██║  ███╗█████╗  ██████╔╝ ╚███╔╝
+// 	   ██║   ██╔══██╗██║██║   ██║██║   ██║██║     ██╔══██╗ ██╔██╗
+// 	   ██║   ██║  ██║██║╚██████╔╝╚██████╔╝███████╗██║  ██║██╔╝ ██╗
+// 	   ╚═╝   ╚═╝  ╚═╝╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
+// `
 
 var TriggerXAsciiArtWithBorder = `
 +------------------------------------------------------------------------+
@@ -27,7 +27,7 @@ var TriggerXAsciiArtWithBorder = `
 +------------------------------------------------------------------------+
 `
 
-func DisplayWarningMessage(keyType, privateKey, ksPath string) error {
+func DisplayBannerMessage(keeperName, keeperAddress string) error {
 	cmd := exec.Command("less", "-R")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -42,16 +42,15 @@ func DisplayWarningMessage(keyType, privateKey, ksPath string) error {
 
 	msg := ""
 
+	msg += fmt.Sprintln(TriggerXAsciiArtWithBorder)
 	msg += fmt.Sprintln("")
-	msg += fmt.Sprintln(strings.ToUpper(keyType) + " Private Key Generated Successfully 🎉")
-	border := strings.Repeat("=", len(privateKey)+6)
+	msg += fmt.Sprintln(keeperName + " Keeper Registered Successfully 🎉")
+	border := strings.Repeat("=", len(keeperName)+6)
 	msg += fmt.Sprintln("\033[1m\x1b[31m" + border + "\033[0m")
-	msg += fmt.Sprintln("\x1b[36m|  " + privateKey + "  |\033[0m")
+	msg += fmt.Sprintln("\x1b[36m|  " + keeperAddress + "  |\033[0m")
 	msg += fmt.Sprintln("\033[1m\x1b[31m" + border + "\033[0m")
 	msg += fmt.Sprintln("")
-	msg += fmt.Sprintln("\033[1m\x1b[33m🔑  WARNING: Make sure to copy this private key securely and never share it with anyone!\033[0m")
-	msg += fmt.Sprintln("🔑  Keystore file will be saved at: " + ksPath)
-	msg += fmt.Sprintln("Please press 'q' to exit this screen completely after confirmation.")
+	msg += fmt.Sprintln("\033[1m\x1b[33m🔑  WARNING: Make sure to keep this wallet's private key securely and never share it with anyone!\033[0m")
 
 	if _, err = stdin.Write([]byte(msg)); err != nil {
 		return fmt.Errorf("failed to write to stdin: %w", err)

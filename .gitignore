@@ -6,8 +6,7 @@ go.mod
 !pkg/avsinterface/abis/.gitkeep
 pkg/avsinterface/abis/*
 
-config-files/operator.yaml
-config-files/triggerx_keeper.yaml
+config-files/*.yaml
 
 data/logs/*/*.log
 data/peer_registry/services_privKeys.json
