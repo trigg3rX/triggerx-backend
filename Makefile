@@ -9,6 +9,14 @@ help:
 build-binary: ## Build the binary
 	./scripts/binary/build.sh
 
+release-binary: ## Build the binary for release
+	@if [ -z "$(version)" ]; then \
+		echo "Error: version argument is required"; \
+		echo "Usage: make release-binary version=<version>"; \
+		exit 1; \
+	fi
+	./scripts/binary/release.sh $(version)
+
 ############################# RUN #############################
 
 start-manager: ## Start the task manager

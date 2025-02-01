@@ -21,6 +21,7 @@ func main() {
 		Commands: []*cli.Command{
 			cmd.RegisterCommand(),
 			cmd.DeregisterCommand(),
+			cmd.SetupCommand(),
 			cmd.StatusCommand(),
 			cmd.VersionCommand(),
 		},

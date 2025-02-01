@@ -7,6 +7,7 @@ go.mod
 pkg/avsinterface/abis/*
 
 config-files/*.yaml
+release/*
 
 data/logs/*/*.log
 data/peer_registry/services_privKeys.json

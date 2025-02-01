@@ -1,36 +1,38 @@
 package types
 
 type NodeConfig struct {
-	// Core settings
-	Production bool   `yaml:"production"`
-	AvsName    string `yaml:"avs_name"`
-	SemVer     string `yaml:"sem_ver"`
-	ServerIpAddress string `yaml:"server_ip_address"`
-
 	// Keeper settings
-	KeeperName 				 string `yaml:"keeper_name"`
-	KeeperAddress            string `yaml:"address"`
-	EcdsaPrivateKeyStorePath string `yaml:"ecdsa_keystore_path"`
-	EcdsaPassphrase          string `yaml:"ecdsa_passphrase"`
-	BlsPrivateKeyStorePath   string `yaml:"bls_keystore_path"`
-	BlsPassphrase            string `yaml:"bls_passphrase"`
-	P2pPeerId                string `yaml:"p2p_peer_id"`
-	ConnectionAddress        string `yaml:"connection_address"`
-	P2pPort                  string `yaml:"p2p_port"`
-	
+	KeeperName               string `yaml:"keeper_name"`
+	KeeperAddress           string `yaml:"keeper_address"`
+	EcdsaPrivateKeyStorePath string `yaml:"keeper_ecdsa_keystore_path"`
+	EcdsaPassphrase         string `yaml:"keeper_ecdsa_passphrase"`
+	BlsPrivateKeyStorePath  string `yaml:"keeper_bls_keystore_path"`
+	BlsPassphrase          string `yaml:"keeper_bls_passphrase"`
+
 	// Network settings
 	EthRpcUrl string `yaml:"ethrpcurl"`
 	EthWsUrl  string `yaml:"ethwsurl"`
 
+	// Port Settings
+	MetricsPort int `yaml:"metrics_port"`
+	P2pPort     int `yaml:"p2p_port"`
+
+	// Connection settings
+	P2pPeerId         string `yaml:"keeper_p2p_peer_id"`
+	ConnectionAddress string `yaml:"keeper_connection_address"`
+
+	// Core settings
+	AvsName string `yaml:"avs_name"`
+	Version string `yaml:"version"`
+
 	// Contract addresses
 	AvsDirectoryAddress           string `yaml:"avs_directory_address"`
-	DelegationManagerAddress 	  string `yaml:"delegation_manager_address"`
+	DelegationManagerAddress      string `yaml:"delegation_manager_address"`
 	StrategyManagerAddress        string `yaml:"strategy_manager_address"`
 	RegistryCoordinatorAddress    string `yaml:"registry_coordinator_address"`
 	ServiceManagerAddress         string `yaml:"service_manager_address"`
 	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
-	
-	// Metrics and API settings
-	EnableMetrics        bool   `yaml:"enable_metrics"`
-	MetricsIpPortAddress string `yaml:"port_address"`
+
+	// Metrics settings
+	EnableMetrics bool `yaml:"enable_metrics"`
 }

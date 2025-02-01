@@ -1,23 +1,34 @@
-# Core settings
-production: false
-avs_name: "triggerx"
-sem_ver: "v0.0.1"
-server_ip_address: "157.173.218.229"
+#################################################
+## KEEPER operators NEED TO FILL THESE FIELDS  ##
+#################################################
 
 # Keeper settings
 keeper_name: "name_used_in_metadata.json"
-address: "0x0000000000000000000000000000000000000000"
-ecdsa_keystore_path: "path/to/your/ecdsa/keystore"
-ecdsa_passphrase: "passphrase"
-bls_keystore_path: "path/to/your/bls/keystore"
-bls_passphrase: "passphrase"
-p2p_peer_id: ""
-connection_address: ""
-p2p_port: 9003
+keeper_address: "0x0000000000000000000000000000000000000000"
+keeper_ecdsa_keystore_path: "path/to/your/ecdsa/keystore"
+keeper_ecdsa_passphrase: "passphrase"
+keeper_bls_keystore_path: "path/to/your/bls/keystore"
+keeper_bls_passphrase: "passphrase"
 
 # Network settings
+# Dedicated RPC URLs are needed, public RPC URLs won't work and leave the Keeper Node inactive
 ethrpcurl: "https://eth-holesky.g.alchemy.com/v2/<YOUR_ALCHEMY_API>"
 ethwsurl: "wss://eth-holesky.g.alchemy.com/v2/<YOUR_ALCHEMY_API>"
+
+# Port Settings
+metrics_port: 6060
+p2p_port: 9003
+
+#####################################
+## DO NOT EDIT THESE FIELDS BELOW  ##
+#####################################
+
+keeper_p2p_peer_id: ""
+keeper_connection_address: ""
+
+# Core settings
+avs_name: "triggerx"
+version: "v0.0.1"
 
 # Contract addresses
 avs_directory_address: "0x055733000064333CaDDbC92763c58BF0192fFeBf"
@@ -28,5 +39,4 @@ service_manager_address: "0xD8EEC4a71EC95428A45c7a9019533567a7B04913"
 operator_state_retriever: "0x18860E25F8E37b1c6B1ec2E95be3858aC64B7E10"
 
 # Metrics and API settings
-enable_metrics: true
-port_address: "127.0.0.1:6060"
+enable_metrics: false

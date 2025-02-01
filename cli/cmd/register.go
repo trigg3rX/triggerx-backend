@@ -163,20 +163,6 @@ func registerKeeper(c *cli.Context) error {
 
 	logger.Info("Keeper address", "address", keeperAddress.Hex())
 
-	apiEndpoint := fmt.Sprintf("%s/keepers/address/%s", "https://data.triggerx.network/api", keeperAddress.Hex())
-	logger.Info("Checking keeper registration ...")
-	resp, err := http.Get(apiEndpoint)
-	if err != nil {
-		logger.Error("Failed to check keeper registration", "error", err)
-		return cli.Exit("Failed to check keeper registration", 1)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		logger.Info("Keeper already registered", "address", keeperAddress.Hex())
-		return cli.Exit("Keeper already registered", 0)
-	}
-
 	client, err := ethclient.Dial(nodeConfig.EthRpcUrl)
 	if err != nil {
 		return cli.Exit("Failed to connect to Ethereum client", 1)
@@ -285,8 +271,8 @@ func registerKeeper(c *cli.Context) error {
 	logger.Info("Parameters created.")
 	logger.Info("Getting Quorum No ...")
 
-	apiEndpoint = fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
-	resp, err = http.Get(apiEndpoint)
+	apiEndpoint := fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
+	resp, err := http.Get(apiEndpoint)
 	if err != nil {
 		logger.Error("Failed to get quorum no", "error", err)
 		return cli.Exit("Failed to get quorum no", 1)
@@ -335,8 +321,7 @@ func registerKeeper(c *cli.Context) error {
 		WithdrawalAddress: keeperAddress.Hex(),
 		RegisteredTx:      receipt.TxHash.Hex(),
 		Status:            true,
-		BlsSigningKeys:    []string{G1pubkeyBN254.X.String(), G1pubkeyBN254.Y.String()},
-		ConnectionAddress: nodeConfig.ConnectionAddress,
+		BlsSigningKeys:    []string{},
 		Verified:          false,
 		CurrentQuorumNo:   quorumNoInt,
 	}
@@ -549,9 +534,7 @@ func deregisterKeeper(c *cli.Context) error {
 		RegisteredTx:      receipt.TxHash.Hex(),
 		Status:            false,
 		BlsSigningKeys:    []string{},
-		ConnectionAddress: nodeConfig.ConnectionAddress,
-		Verified:          false,
-		CurrentQuorumNo:   int(0),
+		CurrentQuorumNo:   int(99),
 	}
 
 	logger.Info("Updating keeper in database", "address", keeperData.WithdrawalAddress)
