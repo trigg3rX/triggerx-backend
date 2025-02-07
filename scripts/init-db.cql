@@ -63,7 +63,22 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_hash text,
     task_response_hash text,
     quorum_keeper_hash text,
-    task_fee decimal
+    task_fee decimal,
+    job_type text,
+    blockExpiry varint,
+    baseRewardFeeForAttesters varint,
+    baseRewardFeeForPerformer varint,
+    baseRewardFeeForAggregator varint,
+    disputePeriodBlocks varint,
+    minimumVotingPower varint,
+    _restrictedOperatorIndexes list<varint>,
+    proofOfTask text,
+    data blob,
+    taskPerformer text,
+    _isApproved boolean,
+    _tpSignature blob,
+    _taSignature list<varint>,
+    _operatorIds list<varint>
 );
 
 -- Create Quorum_data table

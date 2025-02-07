@@ -38,20 +38,31 @@ type JobData struct {
 }
 
 type TaskData struct {
-	TaskID              int64   `json:"task_id"`
-	JobID               int64   `json:"job_id"`
-	TaskNo              int     `json:"task_no"`
-	QuorumID            int64   `json:"quorum_id"`
-	QuorumNumber        int     `json:"quorum_number"`
-	QuorumThreshold     float64 `json:"quorum_threshold"`
-	TaskCreatedBlock    int64   `json:"task_created_block"`
-	TaskCreatedTxHash   string  `json:"task_created_tx_hash"`
-	TaskRespondedBlock  int64   `json:"task_responded_block"`
-	TaskRespondedTxHash string  `json:"task_responded_tx_hash"`
-	TaskHash            string  `json:"task_hash"`
-	TaskResponseHash    string  `json:"task_response_hash"`
-	QuorumKeeperHash    string  `json:"quorum_keeper_hash"`
-	TaskFee             float64 `json:"task_fee"`
+	TaskID                     int64     `json:"task_id"`
+	JobID                      int64     `json:"job_id"`
+	TaskNo                     int       `json:"task_no"`
+	QuorumNumber               int       `json:"quorum_number"`
+	QuorumThreshold            float64   `json:"quorum_threshold"`
+	TaskCreatedTxHash          string    `json:"task_created_tx_hash"`
+	TaskRespondedTxHash        string    `json:"task_responded_tx_hash"`
+	TaskHash                   string    `json:"task_hash"`
+	TaskResponseHash           string    `json:"task_response_hash"`
+	TaskFee                    float64   `json:"task_fee"`
+	JobType                    string    `json:"job_type"`
+	BlockExpiry                uint64    `json:"block_expiry"`
+	BaseRewardFeeForAttesters  uint64    `json:"base_reward_fee_for_attesters"`
+	BaseRewardFeeForPerformer  uint64    `json:"base_reward_fee_for_performer"`
+	BaseRewardFeeForAggregator uint64    `json:"base_reward_fee_for_aggregator"`
+	DisputePeriodBlocks        uint64    `json:"dispute_period_blocks"`
+	MinimumVotingPower         uint64    `json:"minimum_voting_power"`
+	RestrictedOperatorIndexes  []uint64  `json:"restricted_operator_indexes"`
+	ProofOfTask                string    `json:"proof_of_task"`
+	Data                       []byte    `json:"data"`
+	TaskPerformer              string    `json:"task_performer"`
+	IsApproved                 bool      `json:"is_approved"`
+	TpSignature                []byte    `json:"tp_signature"`
+	TaSignature                [2]uint64 `json:"ta_signature"`
+	OperatorIds                []uint64  `json:"operator_ids"`
 }
 
 type QuorumData struct {
@@ -67,11 +78,11 @@ type QuorumData struct {
 }
 
 type QuorumDataResponse struct {
-	QuorumID          int64    `json:"quorum_id"`
-	QuorumNo          int      `json:"quorum_no"`
-	QuorumStatus      bool     `json:"quorum_status"`
-	QuorumStakeTotal  int64    `json:"quorum_stake_total"`
-	QuorumStrength     int      `json:"quorum_strength"`
+	QuorumID         int64 `json:"quorum_id"`
+	QuorumNo         int   `json:"quorum_no"`
+	QuorumStatus     bool  `json:"quorum_status"`
+	QuorumStakeTotal int64 `json:"quorum_stake_total"`
+	QuorumStrength   int   `json:"quorum_strength"`
 }
 
 type KeeperData struct {
@@ -80,7 +91,7 @@ type KeeperData struct {
 	Stakes            []float64 `json:"stakes"`
 	Strategies        []string  `json:"strategies"`
 	Verified          bool      `json:"verified"`
-	CurrentQuorumNo   int       `json:"current_quorum_no"`
+	KeeperType        int       `json:"keeper_type"`
 	RegisteredTx      string    `json:"registered_tx"`
 	Status            bool      `json:"status"`
 	BlsSigningKeys    []string  `json:"bls_signing_keys"`
@@ -98,6 +109,6 @@ type TaskHistory struct {
 }
 
 type PeerInfo struct {
-	ID        string `json:"id"`
+	ID        string   `json:"id"`
 	Addresses []string `json:"addresses"`
 }
