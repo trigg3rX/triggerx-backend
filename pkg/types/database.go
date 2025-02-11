@@ -16,25 +16,30 @@ type UserData struct {
 }
 
 type JobData struct {
-	JobID             int64     `json:"job_id"`
-	JobType           int       `json:"jobType"`
-	UserID            int64     `json:"user_id"`
-	UserAddress       string    `json:"user_address"`
-	ChainID           int       `json:"chain_id"`
-	TimeFrame         int64     `json:"time_frame"`
-	TimeInterval      int       `json:"time_interval"`
-	ContractAddress   string    `json:"contract_address"`
-	TargetFunction    string    `json:"target_function"`
-	ArgType           int       `json:"arg_type"`
-	Arguments         []string  `json:"arguments"`
-	Status            bool      `json:"status"`
-	JobCostPrediction int       `json:"job_cost_prediction"`
-	ScriptFunction    string    `json:"script_function"`
-	ScriptIpfsUrl     string    `json:"script_ipfs_url"`
-	TimeCheck         time.Time `json:"time_check"`
-	CreatedAt         time.Time `json:"created_at"`
-	LastExecutedAt    time.Time `json:"last_executed_at"`
-	UserBalance       float64   `json:"user_balance"`
+	JobID               int64     `json:"job_id"`
+	JobType             int       `json:"jobType"`
+	UserID              int64     `json:"user_id"`
+	UserAddress         string    `json:"user_address"`
+	ChainID             int       `json:"chain_id"`
+	TimeFrame           int64     `json:"time_frame"`
+	TimeInterval        int       `json:"time_interval"`
+	ContractAddress     string    `json:"contract_address"`
+	TargetFunction      string    `json:"target_function"`
+	TargetEvent         string    `json:"target_event"`
+	ArgType             int       `json:"arg_type"`
+	Arguments           []string  `json:"arguments"`
+	Status              bool      `json:"status"`
+	JobCostPrediction   int       `json:"job_cost_prediction"`
+	ScriptFunction      string    `json:"script_function"`
+	ScriptIpfsUrl       string    `json:"script_ipfs_url"`
+	TimeCheck           time.Time `json:"time_check"`
+	CreatedAt           time.Time `json:"created_at"`
+	LastExecutedAt      time.Time `json:"last_executed_at"`
+	UserBalance         float64   `json:"user_balance"`
+	DisputePeriodBlocks *big.Int  `json:"dispute_period_blocks"`
+	Priority            int       `json:"priority"`
+	Security            int       `json:"security"`
+	TaskIDs             []int64   `json:"task_ids"`
 }
 
 type TaskData struct {

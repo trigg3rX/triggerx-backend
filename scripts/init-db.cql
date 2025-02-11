@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     time_interval int,
     contract_address text,
     target_function text,
+    target_event text,
     arg_type int,
     arguments list<text>,
     status boolean,
@@ -45,7 +46,11 @@ CREATE TABLE IF NOT EXISTS job_data (
     script_function text,
     script_ipfs_url text,
     created_at timestamp,
-    last_executed_at timestamp
+    last_executed_at timestamp,
+    dispute_period_blocks varint,
+    priority int,
+    security int,
+    task_ids set<bigint>
 );
 
 -- Create Task_data table
