@@ -97,11 +97,11 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (
             keeper_id, withdrawal_address, stakes, strategies, 
-            verified, current_quorum_no, registered_tx, status, 
+            verified, keeper_type, registered_tx, status, 
             bls_signing_keys, connection_address
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		keeperData.KeeperID, keeperData.WithdrawalAddress, keeperData.Stakes,
-		keeperData.Strategies, keeperData.Verified, keeperData.CurrentQuorumNo,
+		keeperData.Strategies, keeperData.Verified, keeperData.KeeperType,
 		keeperData.RegisteredTx, keeperData.Status, keeperData.BlsSigningKeys,
 		keeperData.ConnectionAddress).Exec(); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", keeperData.KeeperID, err)
@@ -122,12 +122,12 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.KeeperData
 	if err := h.db.Session().Query(`
         SELECT keeper_id, withdrawal_address, stakes, strategies, 
-               verified, current_quorum_no, registered_tx, status, 
+               verified, keeper_type, registered_tx, status, 
                bls_signing_keys, connection_address
         FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Scan(
 		&keeperData.KeeperID, &keeperData.WithdrawalAddress, &keeperData.Stakes,
-		&keeperData.Strategies, &keeperData.Verified, &keeperData.CurrentQuorumNo,
+		&keeperData.Strategies, &keeperData.Verified, &keeperData.KeeperType,
 		&keeperData.RegisteredTx, &keeperData.Status, &keeperData.BlsSigningKeys,
 		&keeperData.ConnectionAddress); err != nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper with ID %s: %v", keeperID, err)
@@ -147,7 +147,7 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	var keeper types.KeeperData
 	for iter.Scan(
 		&keeper.KeeperID, &keeper.WithdrawalAddress, &keeper.Stakes,
-		&keeper.Strategies, &keeper.Verified, &keeper.CurrentQuorumNo,
+		&keeper.Strategies, &keeper.Verified, &keeper.KeeperType,
 		&keeper.RegisteredTx, &keeper.Status, &keeper.BlsSigningKeys,
 		&keeper.ConnectionAddress) {
 		keepers = append(keepers, keeper)
@@ -178,11 +178,11 @@ func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         UPDATE triggerx.keeper_data 
         SET withdrawal_address = ?, stakes = ?, strategies = ?, 
-            verified = ?, current_quorum_no = ?, registered_tx = ?, 
+            verified = ?, keeper_type = ?, registered_tx = ?, 
             status = ?, bls_signing_keys = ?, connection_address = ?
         WHERE keeper_id = ?`,
 		keeperData.WithdrawalAddress, keeperData.Stakes, keeperData.Strategies,
-		keeperData.Verified, keeperData.CurrentQuorumNo, keeperData.RegisteredTx,
+		keeperData.Verified, keeperData.KeeperType, keeperData.RegisteredTx,
 		keeperData.Status, keeperData.BlsSigningKeys, keeperData.ConnectionAddress,
 		keeperID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateKeeperData] Error updating keeper with ID %s: %v", keeperID, err)

@@ -63,20 +63,30 @@ func InitSchema(session *gocql.Session) error {
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.task_data (
 			task_id bigint PRIMARY KEY,
-			task_id bigint PRIMARY KEY,
 			job_id bigint,
 			task_no int,
-			quorum_id bigint,
 			quorum_number int,
 			quorum_threshold decimal,
-			task_created_block bigint,
 			task_created_tx_hash text,
-			task_responded_block bigint,
 			task_responded_tx_hash text,
 			task_hash text,
 			task_response_hash text,
-			quorum_keeper_hash text,
-			task_fee decimal
+			task_fee decimal,
+			job_type text,
+			blockExpiry varint,
+			baseRewardFeeForAttesters varint,
+			baseRewardFeeForPerformer varint,
+			baseRewardFeeForAggregator varint,
+			disputePeriodBlocks varint,
+			minimumVotingPower varint,
+			_restrictedOperatorIndexes list<varint>,
+			proofOfTask text,
+			data blob,
+			taskPerformer text,
+			_isApproved boolean,
+			_tpSignature blob,
+			_taSignature list<varint>,
+			_operatorIds list<varint>
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -105,7 +115,7 @@ func InitSchema(session *gocql.Session) error {
 			stakes list<decimal>,
 			strategies list<text>,
 			verified boolean,
-			current_quorum_no int,
+			keeper_type int,
 			registered_tx text,
 			status boolean,
 			bls_signing_keys list<text>,
