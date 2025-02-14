@@ -18,6 +18,11 @@ SELECTED_USER_ADDRESS=${USER_ADDRESSES[$RANDOM_INDEX]}
 
 GAS_PRICE=4
 
+# JOB_TYPE=(1 2 3 4)
+JOB_TYPE=(1)
+RANDOM_JOB_TYPE_INDEX=$((RANDOM % ${#JOB_TYPE[@]}))
+SELECTED_JOB_TYPE=${JOB_TYPE[$RANDOM_JOB_TYPE_INDEX]}
+
 # Array of job cost predictions
 JOB_COST_PREDICTIONS=(208 219 256 303)
 
@@ -30,11 +35,11 @@ curl -X POST http://localhost:8080/api/jobs \
   -H "Content-Type: application/json" \
   -d "{
     \"job_id\": $NEW_JOB_ID,
-    \"jobType\": 1,
+    \"jobType\": $SELECTED_JOB_TYPE,
     \"user_address\": \"$SELECTED_USER_ADDRESS\",
     \"chain_id\": \"11155420\",
     \"time_frame\": 86400,
-    \"time_interval\": 10800,
+    \"time_interval\": 10,
     \"contract_address\": \"0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d\",
     \"target_function\": \"addTaskId(uint256,uint256)\",
     \"arg_type\": 1,

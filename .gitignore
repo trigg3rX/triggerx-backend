@@ -9,6 +9,7 @@ pkg/avsinterface/abis/*
 config-files/*.yaml
 release/*
 
+data/cache/*
 data/logs/*/*.log
 data/peer_registry/services_privKeys.json
 data/peer_registry/*_identity.json
