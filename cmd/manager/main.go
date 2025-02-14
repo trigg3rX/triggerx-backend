@@ -6,56 +6,67 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/internal/manager"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	libnetwork "github.com/libp2p/go-libp2p/core/network"
 )
 
 var (
-	db             *database.Connection
-	logger         logging.Logger
-	quorumState    bool
-	validatorState bool
+	db     *database.Connection
+	logger logging.Logger
 )
 
 func handleJobEvent(event events.JobEvent) {
 	logger.Infof("Received job event - Type: %s, JobID: %d, JobType: %d, ChainID: %d",
 		event.Type, event.JobID, event.JobType, event.ChainID)
 
-	jobScheduler := manager.NewJobScheduler(5, db)
+	jobScheduler, err := manager.NewJobScheduler(db, logger, network.GetP2PHost())
+	if err != nil {
+		logger.Errorf("Failed to initialize job scheduler: %v", err)
+		return
+	}
 
 	switch event.Type {
 	case "job_created":
 		logger.Infof("New job created: %d", event.JobID)
-		jobID := strconv.FormatInt(event.JobID, 10)
-		if err := jobScheduler.AddJob(jobID); err != nil {
-			logger.Errorf("Failed to add job %s: %v", jobID, err)
-			return
+		jobID := event.JobID
+		switch event.JobType {
+		case 1:
+			logger.Infof("Processing Time-Based job: %d", event.JobID)
+			err := jobScheduler.StartTimeBasedJob(jobID)
+			if err != nil {
+				logger.Errorf("Failed to add job %s: %v", jobID, err)
+			}
+		case 2:
+			logger.Infof("Processing Event-Based job: %d", event.JobID)
+			err := jobScheduler.StartEventBasedJob(jobID)
+			if err != nil {
+				logger.Errorf("Failed to add job %s: %v", jobID, err)
+			}
+		case 3:
+			logger.Infof("Processing Condition-Based job: %d", event.JobID)
+			err := jobScheduler.StartConditionBasedJob(jobID)
+			if err != nil {
+				logger.Errorf("Failed to add job %s: %v", jobID, err)
+			}
+		case 4:
+			logger.Infof("Processing Custom Script job: %d", event.JobID)
+			err := jobScheduler.StartCustomScriptJob(jobID)
+			if err != nil {
+				logger.Errorf("Failed to add job %s: %v", jobID, err)
+			}
+		default:
+			logger.Warnf("Unknown job type: %d for job: %d", event.JobType, event.JobID)
 		}
-
-		queueStatus := jobScheduler.GetQueueStatus()
-		systemMetrics := jobScheduler.GetSystemMetrics()
-
-		logger.Infof("New job %s added. Current System Status:", jobID)
-		logger.Infof("  Job Details: ID=%d, Type=%d, ChainID=%d",
-			event.JobID, event.JobType, event.ChainID)
-		logger.Infof("  Active Jobs: %d", queueStatus["active_jobs"])
-		logger.Infof("  Waiting Jobs: %d", queueStatus["waiting_jobs"])
-		logger.Infof("  CPU Usage: %.2f%%", systemMetrics.CPUUsage)
-		logger.Infof("  Memory Usage: %.2f%%", systemMetrics.MemoryUsage)
 
 	case "job_updated":
 		logger.Infof("Job updated: %d", event.JobID)
-		jobScheduler.UpdateJob(event.JobID)
 
 	default:
 		logger.Warnf("Unknown event type: %s", event.Type)
@@ -69,8 +80,6 @@ func subscribeToEvents(ctx context.Context) error {
 	}
 
 	pubsub := eventBus.Redis().Subscribe(ctx, events.JobEventChannel)
-
-	logger.Info("Subscribed to job events channel")
 
 	go func() {
 		defer pubsub.Close()
@@ -100,16 +109,10 @@ func subscribeToEvents(ctx context.Context) error {
 	return nil
 }
 
-func shutdown(cancel context.CancelFunc, messaging *network.Messaging, wg *sync.WaitGroup) {
+func shutdown(cancel context.CancelFunc, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	logger.Info("Starting shutdown sequence...")
-
-	if err := messaging.BroadcastMessage("Manager Shutdown"); err != nil {
-		logger.Errorf("Failed to broadcast shutdown message: %v", err)
-	}
-
-	time.Sleep(time.Second)
 
 	cancel()
 
@@ -117,37 +120,14 @@ func shutdown(cancel context.CancelFunc, messaging *network.Messaging, wg *sync.
 		db.Close()
 	}
 
+	if err := network.CloseP2PHost(); err != nil {
+		logger.Errorf("Failed to close P2P host: %v", err)
+	}
+
 	logger.Info("Shutdown complete")
 }
 
-// Add connection state handler
-func handleConnectionStateChange(peerID peer.ID, connected bool) {
-	registry, err := network.NewPeerRegistry()
-	if err != nil {
-		logger.Errorf("Failed to load peer registry: %v", err)
-		return
-	}
-
-	// Check if the peer is quorum or validator
-	services := registry.GetAllServices()
-	for serviceName, info := range services {
-		if info.PeerID == peerID.String() {
-			switch serviceName {
-			case network.ServiceQuorum:
-				quorumState = connected
-				// logger.Infof("Quorum connection state changed to: %v", connected)
-			case network.ServiceValidator:
-				validatorState = connected
-				// logger.Infof("Validator connection state changed to: %v", connected)
-			}
-		}
-	}
-}
-
 func main() {
-	quorumState = false
-	validatorState = false
-
 	if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
@@ -177,31 +157,6 @@ func main() {
 	}
 	defer db.Close()
 
-	registry, err := network.NewPeerRegistry()
-	if err != nil {
-		logger.Fatalf("Failed to initialize peer registry: %v", err)
-	}
-
-	host, err := network.SetupServiceWithRegistry(ctx, network.ServiceManager, registry)
-	if err != nil {
-		logger.Fatalf("Failed to setup P2P: %v", err)
-	}
-
-	// discovery := network.NewDiscovery(ctx, host, network.ServiceManager)
-
-	// Set up connection monitoring using NotifyBundle
-	host.Network().Notify(&libnetwork.NotifyBundle{
-		ConnectedF: func(n libnetwork.Network, conn libnetwork.Conn) {
-			handleConnectionStateChange(conn.RemotePeer(), true)
-		},
-		DisconnectedF: func(n libnetwork.Network, conn libnetwork.Conn) {
-			handleConnectionStateChange(conn.RemotePeer(), false)
-		},
-	})
-
-	messaging := network.NewMessaging(host, network.ServiceManager)
-	messaging.InitMessageHandling(func(msg network.Message) {})
-
 	if err := subscribeToEvents(ctx); err != nil {
 		logger.Fatalf("Failed to subscribe to events: %v", err)
 	}
@@ -216,13 +171,20 @@ func main() {
 		case <-sigChan:
 			logger.Info("Received shutdown signal")
 			wg.Add(1)
-			go shutdown(cancel, messaging, &wg)
+			go shutdown(cancel, &wg)
 		case <-ctx.Done():
 			return
 		}
 	}()
 
-	logger.Infof("Manager node is running. Node ID: %s", host.ID().String())
+	logger.Info("Connecting to Aggregator...")
+
+	err = network.ConnectToAggregator()
+	if err != nil {
+		logger.Fatalf("Failed to connect to aggregator: %v", err)
+	}
+
+	logger.Infof("Manager node is READY.")
 
 	wg.Wait()
 }
