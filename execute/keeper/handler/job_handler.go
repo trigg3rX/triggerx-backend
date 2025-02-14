@@ -768,7 +768,7 @@ func (h *JobHandler) decodeContractOutput(contractABI *abi.ABI, method *abi.Meth
 			return nil, err
 		}
 
-		log.Printf("Decoded single output: %v", result.Interface())
+		log.Printf("Decoded single output: %v", result.Interface())   
 		return result.Interface(), nil
 	}
 

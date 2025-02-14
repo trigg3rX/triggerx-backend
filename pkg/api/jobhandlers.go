@@ -58,6 +58,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		Priority            int      `json:"priority"`
 		Security            int      `json:"security"`
 		TaskIDs             []int64  `json:"task_ids"`
+		LinkID              int64    `json:"link_id"`
 	}
 
 	var tempJob tempJobData
@@ -106,6 +107,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		Priority:            tempJob.Priority,
 		Security:            tempJob.Security,
 		TaskIDs:             tempJob.TaskIDs,
+		LinkID:              tempJob.LinkID,
 	}
 
 	h.logger.Infof("[CreateJobData] Processing job creation for job_id %d", jobData.JobID)
@@ -186,13 +188,15 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             time_frame, time_interval, contract_address, target_function, 
             target_event, arg_type, arguments, status, job_cost_prediction,
             script_function, script_ipfs_url, user_address,
-            created_at, last_executed_at, dispute_period_blocks, priority, security, task_ids
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            created_at, last_executed_at, dispute_period_blocks, priority, security, task_ids,
+            link_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
 		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress, jobData.TargetFunction,
 		jobData.TargetEvent, jobData.ArgType, jobData.Arguments, jobData.Status, jobData.JobCostPrediction,
 		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.UserAddress,
-		created_at, last_updated_at, jobData.DisputePeriodBlocks, jobData.Priority, jobData.Security, jobData.TaskIDs).Exec(); err != nil {
+		created_at, last_updated_at, jobData.DisputePeriodBlocks, jobData.Priority, jobData.Security, jobData.TaskIDs,
+		jobData.LinkID).Exec(); err != nil {
 		h.logger.Errorf("[CreateJobData] Error inserting job data for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -321,13 +325,15 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT job_id, jobType, user_id, chain_id, time_frame, 
                time_interval, contract_address, target_function, 
-               target_event, arg_type, arguments, status, job_cost_prediction
+               target_event, arg_type, arguments, status, job_cost_prediction,
+               link_id
         FROM triggerx.job_data 
         WHERE job_id = ?`, jobID).Scan(
 		&jobData.JobID, &jobData.JobType, &jobData.UserID, &jobData.ChainID,
 		&jobData.TimeFrame, &jobData.TimeInterval, &jobData.ContractAddress,
 		&jobData.TargetFunction, &jobData.TargetEvent, &jobData.ArgType,
-		&jobData.Arguments, &jobData.Status, &jobData.JobCostPrediction); err != nil {
+		&jobData.Arguments, &jobData.Status, &jobData.JobCostPrediction,
+		&jobData.LinkID); err != nil {
 		h.logger.Errorf("[GetJobData] Error retrieving job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -347,7 +353,7 @@ func (h *Handler) GetAllJobs(w http.ResponseWriter, r *http.Request) {
 		&job.JobID, &job.JobType, &job.UserID, &job.ChainID,
 		&job.TimeFrame, &job.TimeInterval, &job.ContractAddress,
 		&job.TargetFunction, &job.TargetEvent, &job.ArgType, &job.Arguments,
-		&job.Status, &job.JobCostPrediction) {
+		&job.Status, &job.JobCostPrediction, &job.LinkID) {
 		jobs = append(jobs, job)
 	}
 
@@ -380,7 +386,7 @@ func (h *Handler) GetLatestJobID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Infof("[GetLatestJobID] Latest job_id is %d", latestJobID)
+	h.logger.Infof("[GetLatestJobID] Latest job_id is %d", latestJobID) 
 	json.NewEncoder(w).Encode(map[string]int64{"latest_job_id": latestJobID})
 }
 
