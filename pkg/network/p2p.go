@@ -6,17 +6,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
-	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+)
+
+const (
+	ServiceManager   = "manager"
+	ServicePerformer = "performer"
+	ServiceValidator = "validator"
+
+	BaseDataDir = "data"
+	RegistryDir = "peer_registry"
 )
 
 type P2PConfig struct {
@@ -30,174 +34,107 @@ type PeerIdentity struct {
 
 type ServicePrivateKeys struct {
 	ManagerPrivKey   string `json:"manager_p2p_private_key"`
-	QuorumPrivKey    string `json:"quorum_p2p_private_key"`
+	PerformerPrivKey string `json:"performer_p2p_private_key"`
 	ValidatorPrivKey string `json:"validator_p2p_private_key"`
 }
 
+// Add this new type to store host globally
+type P2PHost struct {
+	Host host.Host
+}
+
+var globalHost *P2PHost
+
 func LoadIdentity(nodeType string) (crypto.PrivKey, error) {
-	if nodeType == ServiceManager || nodeType == ServiceQuorum || nodeType == ServiceValidator {
 
-
-		privKeysPath := filepath.Join(BaseDataDir, RegistryDir, "services_privKeys.json")
-		data, err := os.ReadFile(privKeysPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read services private keys: %w", err)
-		}
-
-		var keys ServicePrivateKeys
-		if err := json.Unmarshal(data, &keys); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal private keys: %w", err)
-		}
-
-		var privKeyStr string
-		switch nodeType {
-		case ServiceManager:
-			privKeyStr = keys.ManagerPrivKey
-		case ServiceQuorum:
-			privKeyStr = keys.QuorumPrivKey
-		case ServiceValidator:
-			privKeyStr = keys.ValidatorPrivKey
-		}
-
-		privKeyBytes, err := crypto.ConfigDecodeKey(privKeyStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode private key: %w", err)
-		}
-
-		return crypto.UnmarshalPrivateKey(privKeyBytes)
-	} else {
-		identityFile := filepath.Join(BaseDataDir, RegistryDir, "keeper_identity.json")
-
-		if data, err := os.ReadFile(identityFile); err == nil {
-			var identity PeerIdentity
-			if err := json.Unmarshal(data, &identity); err == nil {
-				if priv, err := crypto.UnmarshalPrivateKey(identity.PrivKey); err == nil {
-					return priv, nil
-				}
-			}
-		}
+	privKeysPath := filepath.Join(BaseDataDir, RegistryDir, "services_privKeys.json")
+	data, err := os.ReadFile(privKeysPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read services private keys: %w", err)
 	}
 
-	return nil, fmt.Errorf("invalid node type or missing private key")
+	var keys ServicePrivateKeys
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal private keys: %w", err)
+	}
+
+	var privKeyStr string
+	switch nodeType {
+	case ServiceManager:
+		privKeyStr = keys.ManagerPrivKey
+	case ServicePerformer:
+		privKeyStr = keys.PerformerPrivKey
+	case ServiceValidator:
+		privKeyStr = keys.ValidatorPrivKey
+	}
+
+	privKeyBytes, err := crypto.ConfigDecodeKey(privKeyStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode private key: %w", err)
+	}
+
+	return crypto.UnmarshalPrivateKey(privKeyBytes)
 }
 
-func SetupServiceWithRegistry(ctx context.Context, serviceName string, registry *PeerRegistry) (host.Host, error) {
-	priv, err := LoadIdentity(serviceName)
+func ConnectToAggregator() error {
+	// If we already have a host, return
+	if globalHost != nil {
+		return nil
+	}
+
+	// Initialize P2P host for manager
+	priv, err := LoadIdentity(ServiceManager)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup peer identity: %w", err)
+		return fmt.Errorf("failed to load manager identity: %w", err)
 	}
 
-	serviceInfo, exists := registry.GetService(serviceName)
-	if !exists {
-		return nil, fmt.Errorf("service %s not found in registry", serviceName)
-	}
-
-	listenAddr, err := multiaddr.NewMultiaddr(serviceInfo.Addresses[0])
-
-	if err != nil {
-		return nil, fmt.Errorf("invalid address: %w", err)
-	}
-
-	connMgr, err := connmgr.NewConnManager(
-		200, 400,
-		connmgr.WithGracePeriod(time.Minute),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection manager: %w", err)
-	}
-
-	promReg := prometheus.NewRegistry()
-	ps, err := pstoremem.NewPeerstore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create peerstore: %w", err)
-	}
-
-	// Configure bootstrap peers based on node type
-	var bootstrapPeers []peer.AddrInfo
-	if serviceName != ServiceManager {
-		managerInfo, exists := registry.GetService(ServiceManager)
-		if exists && managerInfo.PeerID != "" {
-			peerID, _ := peer.Decode(managerInfo.PeerID)
-			for _, addr := range managerInfo.Addresses {
-				maddr, _ := multiaddr.NewMultiaddr(addr)
-				bootstrapPeers = append(bootstrapPeers, peer.AddrInfo{
-					ID:    peerID,
-					Addrs: []multiaddr.Multiaddr{maddr},
-				})
-				ps.AddAddrs(peerID, []multiaddr.Multiaddr{maddr}, time.Hour*168)
-			}
-		}
-	}
-
+	// Create libp2p host
 	h, err := libp2p.New(
 		libp2p.Identity(priv),
-		libp2p.ListenAddrs(listenAddr),
-		libp2p.ConnectionManager(connMgr),
-		libp2p.Peerstore(ps),
-		libp2p.PrometheusRegisterer(promReg),
-		libp2p.EnableRelay(),
-		libp2p.EnableAutoRelayWithStaticRelays(bootstrapPeers),
-		libp2p.NATPortMap(),
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/9000"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create host: %w", err)
+		return fmt.Errorf("failed to create libp2p host: %w", err)
 	}
 
-	return h, nil
+	// Store host globally
+	globalHost = &P2PHost{Host: h}
+
+	// Parse aggregator multiaddr
+	targetAddr, err := multiaddr.NewMultiaddr("/ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB")
+	if err != nil {
+		return fmt.Errorf("failed to parse aggregator address: %w", err)
+	}
+
+	// Extract peer info
+	info, err := peer.AddrInfoFromP2pAddr(targetAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get peer info: %w", err)
+	}
+
+	// Connect to the aggregator
+	if err := h.Connect(context.Background(), *info); err != nil {
+		return fmt.Errorf("failed to connect to aggregator: %w", err)
+	}
+
+	return nil
 }
 
-func SetupKeeperWithRegistry(ctx context.Context, keeperConfig types.NodeConfig, registry *PeerRegistry) (host.Host, error) {
-	priv, err := LoadIdentity(ServiceKeeper)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup peer identity: %w", err)
+func GetP2PHost() *P2PHost {
+	return globalHost
+}
+
+// Add this new function to clean up the host
+func CloseP2PHost() error {
+	if globalHost != nil && globalHost.Host != nil {
+		if err := globalHost.Host.Close(); err != nil {
+			return fmt.Errorf("failed to close p2p host: %w", err)
+		}
+		globalHost = nil
 	}
+	return nil
+}
 
-	addr := fmt.Sprintf("/ip4/%s/tcp/%s", keeperConfig.ConnectionAddress, keeperConfig.P2pPort)
-	listenAddr, err := multiaddr.NewMultiaddr(addr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid address: %w", err)
-	}
-
-	connMgr, err := connmgr.NewConnManager(
-		200, 400,
-		connmgr.WithGracePeriod(time.Minute),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection manager: %w", err)
-	}
-
-	promReg := prometheus.NewRegistry()
-	ps, err := pstoremem.NewPeerstore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create peerstore: %w", err)
-	}
-
-	services := registry.GetAllServices()
-
-	var bootstrapPeers []peer.AddrInfo
-	for _, service := range services {
-		peerID, _ := peer.Decode(service.PeerID)
-		maddr, _ := multiaddr.NewMultiaddr(service.Addresses[0])
-		bootstrapPeers = append(bootstrapPeers, peer.AddrInfo{
-			ID:    peerID,
-			Addrs: []multiaddr.Multiaddr{maddr},
-		})
-		ps.AddAddrs(peerID, []multiaddr.Multiaddr{maddr}, time.Hour*168)
-	}
-
-	h, err := libp2p.New(
-		libp2p.Identity(priv),
-		libp2p.ListenAddrs(listenAddr),
-		libp2p.ConnectionManager(connMgr),
-		libp2p.Peerstore(ps),
-		libp2p.PrometheusRegisterer(promReg),
-		libp2p.EnableRelay(),
-		libp2p.EnableAutoRelayWithStaticRelays(bootstrapPeers),
-		libp2p.NATPortMap(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create host: %w", err)
-	}
-
-	return h, nil
+func SendTaskToPerformer(jobID int64) error {
+	return nil
 }
