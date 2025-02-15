@@ -164,7 +164,8 @@ func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
 			"last_executed": jobDetails.LastExecuted,
 			"status":        "running",
 			"type":          "event-based",
-			"chain_id":      11155420,
+			"chain_id":      jobDetails.ChainID,
+			"recurring":     jobDetails.Recurring,
 		}
 		s.cacheMutex.Unlock()
 
@@ -206,7 +207,7 @@ func (s *JobScheduler) StartConditionBasedJob(jobID int64) error {
 			"last_executed": jobDetails.LastExecuted,
 			"status":        "running",
 			"type":          "condition-based",
-			"script_url":    jobDetails.ScriptIpfsUrl,
+			"script_url":    jobDetails.ScriptIPFSUrl,
 			"condition":     jobDetails.TargetFunction,
 		}
 		s.cacheMutex.Unlock()

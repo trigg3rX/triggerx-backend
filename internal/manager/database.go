@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -13,37 +14,52 @@ func (s *JobScheduler) GetJobDetails(jobID int64) (*types.Job, error) {
 	jobIDStr := strconv.FormatInt(jobID, 10)
 
 	err := s.dbClient.Session().Query(`
-		SELECT job_id, jobType, user_address, chain_id, 
-			   time_frame, time_interval, contract_address, 
-			   target_function, arg_type, arguments, status, 
-			   job_cost_prediction, script_function, script_ipfs_url
+		SELECT jobID, jobType, userID, chainID, 
+			   timeFrame, timeInterval, triggerContractAddress, 
+			   triggerEvent, targetContractAddress, targetFunction, 
+			   argType, arguments, recurring, status, 
+			   jobCostPrediction, createdAt, lastExecutedAt, scriptFunction,
+			   scriptIPFSUrl, priority, security, taskIDs, linkJobID
 		FROM triggerx.job_data 
-		WHERE job_id = ?`, jobIDStr).Scan(
-		&jobData.JobID, &jobData.JobType, &jobData.UserAddress,
+		WHERE jobID = ?`, jobIDStr).Scan(
+		&jobData.JobID, &jobData.JobType, &jobData.UserID,
 		&jobData.ChainID, &jobData.TimeFrame, &jobData.TimeInterval,
-		&jobData.ContractAddress, &jobData.TargetFunction,
-		&jobData.ArgType, &jobData.Arguments, &jobData.Status,
-		&jobData.JobCostPrediction, &jobData.ScriptFunction,
-		&jobData.ScriptIpfsUrl)
+		&jobData.TriggerContractAddress, &jobData.TriggerEvent,
+		&jobData.TargetContractAddress, &jobData.TargetFunction,
+		&jobData.ArgType, &jobData.Arguments, &jobData.Recurring,
+		&jobData.Status, &jobData.JobCostPrediction,
+		&jobData.CreatedAt, &jobData.LastExecutedAt,
+		&jobData.ScriptFunction, &jobData.ScriptIPFSUrl,
+		&jobData.Priority, &jobData.Security, &jobData.TaskIDs,
+		&jobData.LinkJobID)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch job data: %v", err)
 	}
 
 	job := &types.Job{
-		JobID:             jobData.JobID,
-		JobType:           jobData.JobType,
-		ChainID:           strconv.Itoa(jobData.ChainID),
-		ContractAddress:   jobData.ContractAddress,
-		TimeFrame:         jobData.TimeFrame,
-		TimeInterval:      int64(jobData.TimeInterval),
-		TargetFunction:    jobData.TargetFunction,
-		ArgType:           strconv.Itoa(jobData.ArgType),
-		Arguments:         make(map[string]interface{}),
-		ScriptFunction:    jobData.ScriptFunction,
-		ScriptIpfsUrl:     jobData.ScriptIpfsUrl,
-		CreatedAt:         jobData.CreatedAt,
-		LastExecuted:      jobData.LastExecutedAt,
+		JobID:                  jobData.JobID,
+		JobType:                jobData.JobType,
+		UserID:                 jobData.UserID,
+		ChainID:                jobData.ChainID,
+		TimeFrame:              jobData.TimeFrame,
+		TimeInterval:           int64(jobData.TimeInterval),
+		TriggerContractAddress: jobData.TriggerContractAddress,
+		TriggerEvent:           jobData.TriggerEvent,
+		TargetContractAddress:  jobData.TargetContractAddress,
+		TargetFunction:         jobData.TargetFunction,
+		ArgType:                jobData.ArgType,
+		Recurring:              jobData.Recurring,
+		ScriptFunction:         jobData.ScriptFunction,
+		ScriptIPFSUrl:          jobData.ScriptIPFSUrl,
+		Status:                 jobData.Status,
+		CreatedAt:              jobData.CreatedAt,
+		LastExecuted:           jobData.LastExecutedAt,
+		Priority:               jobData.Priority,
+		Security:               jobData.Security,
+		TaskIDs:                jobData.TaskIDs,
+		LinkID:                 jobData.LinkJobID,
+		Arguments:              make(map[string]interface{}),
 	}
 
 	for i, arg := range jobData.Arguments {
@@ -59,7 +75,7 @@ func (s *JobScheduler) UpdateJobStatus(jobID int64, status string) error {
 	err := s.dbClient.Session().Query(`
 		UPDATE triggerx.job_data 
 		SET status = ? 
-		WHERE job_id = ?`, status, jobIDStr).Scan()
+		WHERE jobID = ?`, status, jobIDStr).Scan()
 
 	if err != nil {
 		return fmt.Errorf("failed to update job status: %v", err)
@@ -73,8 +89,8 @@ func (s *JobScheduler) UpdateJobLastExecuted(jobID int64, lastExecuted time.Time
 
 	err := s.dbClient.Session().Query(`
 		UPDATE triggerx.job_data 
-		SET last_executed_at = ? 
-		WHERE job_id = ?`, lastExecuted, jobIDStr).Scan()
+		SET lastExecutedAt = ? 
+		WHERE jobID = ?`, lastExecuted, jobIDStr).Scan()
 
 	if err != nil {
 		return fmt.Errorf("failed to update job last executed: %v", err)

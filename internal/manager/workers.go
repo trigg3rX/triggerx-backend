@@ -48,7 +48,7 @@ type TimeBasedWorker struct {
 type EventBasedWorker struct {
 	jobID           int64
 	scheduler       *JobScheduler
-	chainID         string
+	chainID         int
 	contractAddress string
 	eventSignature  string
 	client          *ethclient.Client
@@ -146,8 +146,8 @@ func NewEventBasedWorker(jobData *types.Job, scheduler *JobScheduler) *EventBase
 		jobID:           jobData.JobID,
 		scheduler:       scheduler,
 		chainID:         jobData.ChainID,
-		contractAddress: jobData.ContractAddress,
-		eventSignature:  jobData.TargetFunction,
+		contractAddress: jobData.TriggerContractAddress,
+		eventSignature:  jobData.TriggerEvent,
 		BaseWorker: BaseWorker{
 			status:     "pending",
 			maxRetries: 3,
@@ -225,39 +225,39 @@ func (w *EventBasedWorker) GetJobID() int64 {
 func (w *EventBasedWorker) getAlchemyWSURL() string {
 	apiKey := os.Getenv("ALCHEMY_API_KEY")
 
-	// var network string
-	// switch w.chainID {
-	// case "1":
+	var network string
+	switch w.chainID {
+	// case 1:
 	// 	network = "eth-mainnet"
-	// case "10":
+	// case 10:
 	// 	network = "opt-mainnet"
-	// case "8453":
+	// case 8453:
 	// 	network = "base-mainnet"
-	// case "42161":
+	// case 42161:
 	// 	network = "arb-mainnet"
-	// case "17000":
-	// 	network = "eth-holesky"
-	// case "11155111":
-	// 	network = "eth-sepolia"
-	// case "84532":
-	// 	network = "base-sepolia"
-	// case "421614":
-	// 	network = "arb-sepolia"
-	// case "11155420":
-	// 	network = "opt-sepolia"
-	// default:
-	// 	network = "eth-holesky"
-	// }
+	case 17000:
+		network = "eth-holesky"
+	case 11155111:
+		network = "eth-sepolia"
+	case 84532:
+		network = "base-sepolia"
+	case 421614:
+		network = "arb-sepolia"
+	case 11155420:
+		network = "opt-sepolia"
+	default:
+		network = "eth-holesky"
+	}
 
-	return fmt.Sprintf("wss://%s.g.alchemy.com/v2/%s", "opt-sepolia", apiKey)
+	return fmt.Sprintf("wss://%s.g.alchemy.com/v2/%s", network, apiKey)
 }
 
 func NewConditionBasedWorker(jobData *types.Job, scheduler *JobScheduler) *ConditionBasedWorker {
 	return &ConditionBasedWorker{
 		jobID:         jobData.JobID,
 		scheduler:     scheduler,
-		scriptIpfsUrl: jobData.ScriptIpfsUrl,
-		condition:     jobData.TargetFunction,
+		scriptIpfsUrl: jobData.ScriptIPFSUrl,
+		condition:     jobData.ScriptFunction,
 		done:          make(chan bool),
 		BaseWorker: BaseWorker{
 			status:     "pending",
