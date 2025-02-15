@@ -37,22 +37,27 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	// Create a temporary struct to handle string chain_id
 	type tempJobData struct {
-		JobID             int64    `json:"job_id"`
-		JobType           int64    `json:"jobType"`
-		UserAddress       string   `json:"user_address"`
-		ChainID           string   `json:"chain_id"`
-		TimeFrame         int64    `json:"time_frame"`
-		TimeInterval      int64    `json:"time_interval"`
-		ContractAddress   string   `json:"contract_address"`
-		TargetFunction    string   `json:"target_function"`
-		ArgType           int64    `json:"arg_type"`
-		Arguments         []string `json:"arguments"`
-		Status            bool     `json:"status"`
-		JobCostPrediction int64    `json:"job_cost_prediction"`
-		ScriptFunction    string   `json:"script_function"`
-		ScriptIpfsUrl     string   `json:"script_ipfs_url"`
-		StakeAmount       float64  `json:"stake_amount"`
-		UserBalance       float64  `json:"user_balance"`
+		JobID               int64    `json:"job_id"`
+		JobType             int64    `json:"jobType"`
+		UserAddress         string   `json:"user_address"`
+		ChainID             string   `json:"chain_id"`
+		TimeFrame           int64    `json:"time_frame"`
+		TimeInterval        int64    `json:"time_interval"`
+		ContractAddress     string   `json:"contract_address"`
+		TargetFunction      string   `json:"target_function"`
+		TargetEvent         string   `json:"target_event"`
+		ArgType             int64    `json:"arg_type"`
+		Arguments           []string `json:"arguments"`
+		Status              bool     `json:"status"`
+		JobCostPrediction   int64    `json:"job_cost_prediction"`
+		ScriptFunction      string   `json:"script_function"`
+		ScriptIpfsUrl       string   `json:"script_ipfs_url"`
+		StakeAmount         float64  `json:"stake_amount"`
+		UserBalance         float64  `json:"user_balance"`
+		DisputePeriodBlocks string   `json:"dispute_period_blocks"`
+		Priority            int      `json:"priority"`
+		Security            int      `json:"security"`
+		TaskIDs             []int64  `json:"task_ids"`
 	}
 
 	var tempJob tempJobData
@@ -76,22 +81,31 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert DisputePeriodBlocks from string to *big.Int
+	disputePeriodBlocksInt := new(big.Int)
+	disputePeriodBlocksInt.SetString(tempJob.DisputePeriodBlocks, 10)
+
 	// Create the actual JobData struct
 	jobData := types.JobData{
-		JobID:             tempJob.JobID,
-		JobType:           int(tempJob.JobType),
-		UserAddress:       tempJob.UserAddress,
-		ChainID:           int(chainID),
-		TimeFrame:         tempJob.TimeFrame,
-		TimeInterval:      int(tempJob.TimeInterval),
-		ContractAddress:   tempJob.ContractAddress,
-		TargetFunction:    tempJob.TargetFunction,
-		ArgType:           int(tempJob.ArgType),
-		Arguments:         tempJob.Arguments,
-		Status:            tempJob.Status,
-		JobCostPrediction: int(tempJob.JobCostPrediction),
-		ScriptFunction:    tempJob.ScriptFunction,
-		ScriptIpfsUrl:     tempJob.ScriptIpfsUrl,
+		JobID:               tempJob.JobID,
+		JobType:             int(tempJob.JobType),
+		UserAddress:         tempJob.UserAddress,
+		ChainID:             int(chainID),
+		TimeFrame:           tempJob.TimeFrame,
+		TimeInterval:        int(tempJob.TimeInterval),
+		ContractAddress:     tempJob.ContractAddress,
+		TargetFunction:      tempJob.TargetFunction,
+		TargetEvent:         tempJob.TargetEvent,
+		ArgType:             int(tempJob.ArgType),
+		Arguments:           tempJob.Arguments,
+		Status:              tempJob.Status,
+		JobCostPrediction:   int(tempJob.JobCostPrediction),
+		ScriptFunction:      tempJob.ScriptFunction,
+		ScriptIpfsUrl:       tempJob.ScriptIpfsUrl,
+		DisputePeriodBlocks: disputePeriodBlocksInt,
+		Priority:            tempJob.Priority,
+		Security:            tempJob.Security,
+		TaskIDs:             tempJob.TaskIDs,
 	}
 
 	h.logger.Infof("[CreateJobData] Processing job creation for job_id %d", jobData.JobID)
@@ -170,15 +184,15 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
         INSERT INTO triggerx.job_data (
             job_id, jobType, user_id, chain_id, 
             time_frame, time_interval, contract_address, target_function, 
-            arg_type, arguments, status, job_cost_prediction,
+            target_event, arg_type, arguments, status, job_cost_prediction,
             script_function, script_ipfs_url, user_address,
-            created_at, last_executed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            created_at, last_executed_at, dispute_period_blocks, priority, security, task_ids
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobData.JobID, jobData.JobType, existingUserID, jobData.ChainID,
 		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress, jobData.TargetFunction,
-		jobData.ArgType, jobData.Arguments, jobData.Status, jobData.JobCostPrediction,
+		jobData.TargetEvent, jobData.ArgType, jobData.Arguments, jobData.Status, jobData.JobCostPrediction,
 		jobData.ScriptFunction, jobData.ScriptIpfsUrl, jobData.UserAddress,
-		created_at, last_updated_at).Exec(); err != nil {
+		created_at, last_updated_at, jobData.DisputePeriodBlocks, jobData.Priority, jobData.Security, jobData.TaskIDs).Exec(); err != nil {
 		h.logger.Errorf("[CreateJobData] Error inserting job data for job_id %d: %v", jobData.JobID, err)
 		http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -215,24 +229,29 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"message": "Job created successfully",
 		"job": map[string]interface{}{
-			"job_id":              jobData.JobID,
-			"jobType":             jobData.JobType,
-			"user_id":             existingUserID,
-			"chain_id":            fmt.Sprintf("%d", jobData.ChainID), // Convert to string if needed
-			"time_frame":          jobData.TimeFrame,
-			"time_interval":       jobData.TimeInterval,
-			"contract_address":    jobData.ContractAddress,
-			"target_function":     jobData.TargetFunction,
-			"arg_type":            jobData.ArgType,
-			"arguments":           jobData.Arguments,
-			"status":              jobData.Status,
-			"job_cost_prediction": jobData.JobCostPrediction,
-			"script_function":     jobData.ScriptFunction,
-			"script_ipfs_url":     jobData.ScriptIpfsUrl,
-			"time_check":          jobData.TimeCheck,
-			"user_address":        jobData.UserAddress,
-			"created_at":          time.Now().UTC(),
-			"last_executed_at":    time.Now().UTC(),
+			"job_id":                jobData.JobID,
+			"jobType":               jobData.JobType,
+			"user_id":               existingUserID,
+			"chain_id":              fmt.Sprintf("%d", jobData.ChainID), // Convert to string if needed
+			"time_frame":            jobData.TimeFrame,
+			"time_interval":         jobData.TimeInterval,
+			"contract_address":      jobData.ContractAddress,
+			"target_function":       jobData.TargetFunction,
+			"target_event":          jobData.TargetEvent,
+			"arg_type":              jobData.ArgType,
+			"arguments":             jobData.Arguments,
+			"status":                jobData.Status,
+			"job_cost_prediction":   jobData.JobCostPrediction,
+			"script_function":       jobData.ScriptFunction,
+			"script_ipfs_url":       jobData.ScriptIpfsUrl,
+			"dispute_period_blocks": jobData.DisputePeriodBlocks,
+			"priority":              jobData.Priority,
+			"security":              jobData.Security,
+			"task_ids":              jobData.TaskIDs,
+			"time_check":            jobData.TimeCheck,
+			"user_address":          jobData.UserAddress,
+			"created_at":            time.Now().UTC(),
+			"last_executed_at":      time.Now().UTC(),
 		},
 	}
 
@@ -260,12 +279,12 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
         UPDATE triggerx.job_data 
         SET jobType = ?, user_id = ?, chain_id = ?, 
             time_frame = ?, time_interval = ?, contract_address = ?,
-            target_function = ?, arg_type = ?, arguments = ?,
+            target_function = ?, target_event = ?, arg_type = ?, arguments = ?,
             status = ?, job_cost_prediction = ?, last_executed_at = ?
         WHERE job_id = ?`,
 		jobData.JobType, jobData.UserID, jobData.ChainID,
 		jobData.TimeFrame, jobData.TimeInterval, jobData.ContractAddress,
-		jobData.TargetFunction, jobData.ArgType, jobData.Arguments,
+		jobData.TargetFunction, jobData.TargetEvent, jobData.ArgType, jobData.Arguments,
 		jobData.Status, jobData.JobCostPrediction, jobData.LastExecutedAt, jobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error updating job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -302,13 +321,13 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT job_id, jobType, user_id, chain_id, time_frame, 
                time_interval, contract_address, target_function, 
-               arg_type, arguments, status, job_cost_prediction
+               target_event, arg_type, arguments, status, job_cost_prediction
         FROM triggerx.job_data 
         WHERE job_id = ?`, jobID).Scan(
 		&jobData.JobID, &jobData.JobType, &jobData.UserID, &jobData.ChainID,
 		&jobData.TimeFrame, &jobData.TimeInterval, &jobData.ContractAddress,
-		&jobData.TargetFunction, &jobData.ArgType, &jobData.Arguments,
-		&jobData.Status, &jobData.JobCostPrediction); err != nil {
+		&jobData.TargetFunction, &jobData.TargetEvent, &jobData.ArgType,
+		&jobData.Arguments, &jobData.Status, &jobData.JobCostPrediction); err != nil {
 		h.logger.Errorf("[GetJobData] Error retrieving job_id %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -327,7 +346,7 @@ func (h *Handler) GetAllJobs(w http.ResponseWriter, r *http.Request) {
 	for iter.Scan(
 		&job.JobID, &job.JobType, &job.UserID, &job.ChainID,
 		&job.TimeFrame, &job.TimeInterval, &job.ContractAddress,
-		&job.TargetFunction, &job.ArgType, &job.Arguments,
+		&job.TargetFunction, &job.TargetEvent, &job.ArgType, &job.Arguments,
 		&job.Status, &job.JobCostPrediction) {
 		jobs = append(jobs, job)
 	}

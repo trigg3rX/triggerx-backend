@@ -81,17 +81,27 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Insert task data with the calculated fee
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.task_data (
-            task_id, job_id, task_no, quorum_id,
-            quorum_number, quorum_threshold, task_created_block,
-            task_created_tx_hash, task_responded_block,
+            task_id, job_id, task_no,
+            quorum_number, quorum_threshold, task_created_tx_hash,
             task_responded_tx_hash, task_hash,
-            task_response_hash, quorum_keeper_hash, task_fee
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskData.TaskID, taskData.JobID, taskData.TaskNo, taskData.QuorumID,
-		taskData.QuorumNumber, taskData.QuorumThreshold, taskData.TaskCreatedBlock,
-		taskData.TaskCreatedTxHash, taskData.TaskRespondedBlock, taskData.TaskRespondedTxHash,
-		taskData.TaskHash, taskData.TaskResponseHash, taskData.QuorumKeeperHash,
-		taskData.TaskFee).Exec(); err != nil {
+            task_response_hash, task_fee,
+            job_type, block_expiry, base_reward_fee_for_attesters,
+            base_reward_fee_for_performer, base_reward_fee_for_aggregator,
+            dispute_period_blocks, minimum_voting_power, restricted_operator_indexes,
+            proof_of_task, data, task_performer,
+            is_approved, tp_signature, ta_signature,
+            operator_ids
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskData.TaskID, taskData.JobID, taskData.TaskNo,
+		taskData.QuorumNumber, taskData.QuorumThreshold, taskData.TaskCreatedTxHash,
+		taskData.TaskRespondedTxHash, taskData.TaskHash,
+		taskData.TaskResponseHash, taskData.TaskFee,
+		taskData.JobType, taskData.BlockExpiry, taskData.BaseRewardFeeForAttesters,
+		taskData.BaseRewardFeeForPerformer, taskData.BaseRewardFeeForAggregator,
+		taskData.DisputePeriodBlocks, taskData.MinimumVotingPower, taskData.RestrictedOperatorIndexes,
+		taskData.ProofOfTask, taskData.Data, taskData.TaskPerformer,
+		taskData.IsApproved, taskData.TpSignature, taskData.TaSignature,
+		taskData.OperatorIds).Exec(); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error inserting task with ID %d: %v", taskData.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -109,16 +119,27 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 
 	var taskData ttypes.TaskData
 	if err := h.db.Session().Query(`
-        SELECT task_id, job_id, task_no, quorum_id, quorum_number, 
-               quorum_threshold, task_created_block, task_created_tx_hash,
-               task_responded_block, task_responded_tx_hash, task_hash, 
-               task_response_hash, quorum_keeper_hash
+        SELECT task_id, job_id, task_no, quorum_number, quorum_threshold, 
+               task_created_tx_hash, task_responded_tx_hash, task_hash, 
+               task_response_hash, task_fee,
+               job_type, block_expiry, base_reward_fee_for_attesters,
+               base_reward_fee_for_performer, base_reward_fee_for_aggregator,
+               dispute_period_blocks, minimum_voting_power, restricted_operator_indexes,
+               proof_of_task, data, task_performer,
+               is_approved, tp_signature, ta_signature,
+               operator_ids
         FROM triggerx.task_data 
         WHERE task_id = ?`, taskID).Scan(
-		&taskData.TaskID, &taskData.JobID, &taskData.TaskNo, &taskData.QuorumID,
-		&taskData.QuorumNumber, &taskData.QuorumThreshold, &taskData.TaskCreatedBlock,
-		&taskData.TaskCreatedTxHash, &taskData.TaskRespondedBlock, &taskData.TaskRespondedTxHash,
-		&taskData.TaskHash, &taskData.TaskResponseHash, &taskData.QuorumKeeperHash); err != nil {
+		&taskData.TaskID, &taskData.JobID, &taskData.TaskNo,
+		&taskData.QuorumNumber, &taskData.QuorumThreshold,
+		&taskData.TaskCreatedTxHash, &taskData.TaskRespondedTxHash, &taskData.TaskHash,
+		&taskData.TaskResponseHash, &taskData.TaskFee,
+		&taskData.JobType, &taskData.BlockExpiry, &taskData.BaseRewardFeeForAttesters,
+		&taskData.BaseRewardFeeForPerformer, &taskData.BaseRewardFeeForAggregator,
+		&taskData.DisputePeriodBlocks, &taskData.MinimumVotingPower, &taskData.RestrictedOperatorIndexes,
+		&taskData.ProofOfTask, &taskData.Data, &taskData.TaskPerformer,
+		&taskData.IsApproved, &taskData.TpSignature, &taskData.TaSignature,
+		&taskData.OperatorIds); err != nil {
 		h.logger.Errorf("[GetTaskData] Error retrieving task with ID %s: %v", taskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
