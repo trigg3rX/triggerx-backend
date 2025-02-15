@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS job_data (
     dispute_period_blocks varint,
     priority int,
     security int,
-    task_ids set<bigint>
+    task_ids set<bigint>,
+    link_id bigint
 );
 
 -- Create Task_data table
@@ -76,14 +77,14 @@ CREATE TABLE IF NOT EXISTS task_data (
     baseRewardFeeForAggregator varint,
     disputePeriodBlocks varint,
     minimumVotingPower varint,
-    _restrictedOperatorIndexes list<varint>,
+    restrictedOperatorIndexes list<varint>,
     proofOfTask text,
     data blob,
     taskPerformer text,
-    _isApproved boolean,
-    _tpSignature blob,
-    _taSignature list<varint>,
-    _operatorIds list<varint>
+    isApproved boolean,
+    tpSignature blob,
+    taSignature list<varint>,
+    operatorIds list<varint>
 );
 
 -- Create Quorum_data table

@@ -40,6 +40,7 @@ type JobData struct {
 	Priority            int       `json:"priority"`
 	Security            int       `json:"security"`
 	TaskIDs             []int64   `json:"task_ids"`
+	LinkID              int64     `json:"link_id"`
 }
 
 type TaskData struct {

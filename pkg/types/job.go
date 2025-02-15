@@ -26,6 +26,7 @@ type Job struct {
 	Priority            int
 	Security            int
 	TaskIDs             []int64
+	LinkID              int64
 }
 
 type JobMessage struct {
