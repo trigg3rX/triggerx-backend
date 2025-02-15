@@ -3,7 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
-	// "strconv"
+
 	"sync"
 
 	"github.com/robfig/cron/v3"
@@ -11,7 +11,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
-	// "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type JobScheduler struct {
@@ -22,12 +21,10 @@ type JobScheduler struct {
 	logger     logging.Logger
 	p2pNetwork *network.P2PHost
 
-	// Job handling components
 	cronScheduler *cron.Cron
 	eventWatchers map[int64]context.CancelFunc
 	conditions    map[int64]*ConditionMonitor
 
-	// Cache management
 	stateCache map[int64]interface{}
 	cacheMutex sync.RWMutex
 
@@ -57,7 +54,6 @@ func (c *ConditionMonitor) Start(callback func()) {
 	// TODO: Implement condition monitoring logic
 }
 
-// NewJobScheduler creates and initializes a new job scheduler
 func NewJobScheduler(db *database.Connection, logger logging.Logger, p2p *network.P2PHost) (*JobScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -77,23 +73,19 @@ func NewJobScheduler(db *database.Connection, logger logging.Logger, p2p *networ
 		workerCancel:  cancel,
 	}
 
-	// Initialize cache manager
 	cacheManager, err := NewCacheManager(scheduler)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize cache manager: %v", err)
 	}
 	scheduler.cacheManager = cacheManager
 
-	// Start the resource monitor
 	go scheduler.balancer.MonitorResources()
 
-	// Start the cron scheduler
 	scheduler.cronScheduler.Start()
 
 	return scheduler, nil
 }
 
-// canAcceptNewJob checks if the system can handle a new job
 func (s *JobScheduler) canAcceptNewJob() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -108,52 +100,161 @@ func (s *JobScheduler) StartTimeBasedJob(jobID int64) error {
 		return nil
 	}
 
-	// Fetch job details from database
-	jobDetails, err := s.GetJobDetails(jobID)
-	if err != nil {
-		s.logger.Errorf("Failed to fetch job details: %v", err)
-		return err
-	}
+	go func() {
+		jobDetails, err := s.GetJobDetails(jobID)
+		if err != nil {
+			s.logger.Errorf("Failed to fetch job details: %v", err)
+			return
+		}
 
-	// Convert time interval to cron expression
-	interval := jobDetails.TimeInterval
-	cronExpr := fmt.Sprintf("@every %ds", interval)
+		cronExpr := fmt.Sprintf("@every %ds", jobDetails.TimeInterval)
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+		s.mu.Lock()
+		worker := NewTimeBasedWorker(jobDetails, cronExpr, s)
+		s.workers[jobID] = worker
+		s.mu.Unlock()
 
-	worker := NewTimeBasedWorker(jobID, cronExpr, s)
-	s.workers[jobID] = worker
+		s.cacheMutex.Lock()
+		s.stateCache[jobID] = map[string]interface{}{
+			"created":       jobDetails.CreatedAt,
+			"last_executed": jobDetails.LastExecuted,
+			"status":        "running",
+			"type":          "time-based",
+			"timeframe":     jobDetails.TimeFrame,
+			"interval":      jobDetails.TimeInterval,
+		}
+		s.cacheMutex.Unlock()
 
-	go worker.Start(s.workerCtx)
+		go worker.Start(s.workerCtx)
 
-	s.cacheMutex.Lock()
-	s.stateCache[jobID] = map[string]interface{}{
-		"created":       jobDetails.CreatedAt,
-		"last_executed": jobDetails.LastExecuted,
-		"status":        "running",
-		"type":          "time-based",
-		"time_interval": interval,
-	}
-	s.cacheMutex.Unlock()
+		if err := s.cacheManager.SaveState(); err != nil {
+			s.logger.Errorf("Failed to save state: %v", err)
+			return
+		}
 
-	if err := s.cacheManager.SaveState(); err != nil {
-		s.logger.Errorf("Failed to save state: %v", err)
-		return err
-	}
+		s.logger.Infof("Started time-based job %d", jobID)
+	}()
 
 	return nil
 }
 
 func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
+	if !s.canAcceptNewJob() {
+		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
+		s.balancer.AddJobToQueue(jobID, 1)
+		return nil
+	}
+
+	go func() {
+		jobDetails, err := s.GetJobDetails(jobID)
+		if err != nil {
+			s.logger.Errorf("Failed to fetch job details: %v", err)
+			return
+		}
+
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		worker := NewEventBasedWorker(jobDetails, s)
+		s.workers[jobID] = worker
+
+		s.cacheMutex.Lock()
+		s.stateCache[jobID] = map[string]interface{}{
+			"created":       jobDetails.CreatedAt,
+			"last_executed": jobDetails.LastExecuted,
+			"status":        "running",
+			"type":          "event-based",
+			"chain_id":      11155420,
+		}
+		s.cacheMutex.Unlock()
+
+		go worker.Start(s.workerCtx)
+
+		if err := s.cacheManager.SaveState(); err != nil {
+			s.logger.Errorf("Failed to save state: %v", err)
+			return
+		}
+
+		s.logger.Infof("Started event-based job %d", jobID)
+	}()
+
 	return nil
 }
 
 func (s *JobScheduler) StartConditionBasedJob(jobID int64) error {
+	if !s.canAcceptNewJob() {
+		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
+		s.balancer.AddJobToQueue(jobID, 1)
+		return nil
+	}
+
+	go func() {
+		jobDetails, err := s.GetJobDetails(jobID)
+		if err != nil {
+			s.logger.Errorf("Failed to fetch job details: %v", err)
+			return
+		}
+
+		s.mu.Lock()
+		worker := NewConditionBasedWorker(jobDetails, s)
+		s.workers[jobID] = worker
+		s.mu.Unlock()
+
+		s.cacheMutex.Lock()
+		s.stateCache[jobID] = map[string]interface{}{
+			"created":       jobDetails.CreatedAt,
+			"last_executed": jobDetails.LastExecuted,
+			"status":        "running",
+			"type":          "condition-based",
+			"script_url":    jobDetails.ScriptIpfsUrl,
+			"condition":     jobDetails.TargetFunction,
+		}
+		s.cacheMutex.Unlock()
+
+		go worker.Start(s.workerCtx)
+
+		if err := s.cacheManager.SaveState(); err != nil {
+			s.logger.Errorf("Failed to save state: %v", err)
+			return
+		}
+
+		s.logger.Infof("Started condition-based job %d", jobID)
+	}()
 
 	return nil
 }
 
-func (s *JobScheduler) StartCustomScriptJob(jobID int64) error {
+func (s *JobScheduler) getJobStatus(jobID int64) map[string]interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if worker, exists := s.workers[jobID]; exists {
+		return map[string]interface{}{
+			"status":        worker.GetStatus(),
+			"error":         worker.GetError(),
+			"current_retry": worker.GetRetries(),
+			"max_retries":   3,
+		}
+	}
 	return nil
+}
+
+func (s *JobScheduler) updateJobCache(jobID int64) {
+	status := s.getJobStatus(jobID)
+	if status == nil {
+		return
+	}
+
+	s.cacheMutex.Lock()
+	if jobData, exists := s.stateCache[jobID]; exists {
+		data := jobData.(map[string]interface{})
+		for k, v := range status {
+			data[k] = v
+		}
+	}
+	s.cacheMutex.Unlock()
+
+	if err := s.cacheManager.SaveState(); err != nil {
+		s.logger.Errorf("Failed to save state for job %d: %v", jobID, err)
+	}
 }

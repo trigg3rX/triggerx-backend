@@ -18,8 +18,10 @@ SELECTED_USER_ADDRESS=${USER_ADDRESSES[$RANDOM_INDEX]}
 
 GAS_PRICE=4
 
+CHAIN_ID=11155420
+
 # JOB_TYPE=(1 2 3 4)
-JOB_TYPE=(1)
+JOB_TYPE=(3)
 RANDOM_JOB_TYPE_INDEX=$((RANDOM % ${#JOB_TYPE[@]}))
 SELECTED_JOB_TYPE=${JOB_TYPE[$RANDOM_JOB_TYPE_INDEX]}
 
@@ -37,16 +39,16 @@ curl -X POST http://localhost:8080/api/jobs \
     \"job_id\": $NEW_JOB_ID,
     \"jobType\": $SELECTED_JOB_TYPE,
     \"user_address\": \"$SELECTED_USER_ADDRESS\",
-    \"chain_id\": \"11155420\",
-    \"time_frame\": 86400,
+    \"chain_id\": \"$CHAIN_ID\",
+    \"time_frame\": 10000,
     \"time_interval\": 10,
-    \"contract_address\": \"0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d\",
-    \"target_function\": \"addTaskId(uint256,uint256)\",
+    \"contract_address\": \"0xF1d505d1f6df11795c77A8A1b7476609E7b6361a\",
+    \"target_function\": \"Staked(address indexed user, uint256 amount)\",
     \"arg_type\": 1,
     \"arguments\": [\"1000\", \"2000\"],
     \"status\": true,
     \"job_cost_prediction\": $SELECTED_JOB_COST,
     \"script_function\": \"checker\",
-    \"script_ipfs_url\": \"https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a\",
+    \"script_ipfs_url\": \"https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT\",
     \"stake_amount\": $((GAS_PRICE * SELECTED_JOB_COST))
 }"

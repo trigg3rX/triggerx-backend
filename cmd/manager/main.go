@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
@@ -34,30 +36,23 @@ func handleJobEvent(event events.JobEvent) {
 
 	switch event.Type {
 	case "job_created":
-		logger.Infof("New job created: %d", event.JobID)
 		jobID := event.JobID
 		switch event.JobType {
 		case 1:
-			logger.Infof("Processing Time-Based job: %d", event.JobID)
+			// logger.Infof("Processing Time-Based job: %d", event.JobID)
 			err := jobScheduler.StartTimeBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
 		case 2:
-			logger.Infof("Processing Event-Based job: %d", event.JobID)
+			// logger.Infof("Processing Event-Based job: %d", event.JobID)
 			err := jobScheduler.StartEventBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
 		case 3:
-			logger.Infof("Processing Condition-Based job: %d", event.JobID)
+			// logger.Infof("Processing Condition-Based job: %d", event.JobID)
 			err := jobScheduler.StartConditionBasedJob(jobID)
-			if err != nil {
-				logger.Errorf("Failed to add job %s: %v", jobID, err)
-			}
-		case 4:
-			logger.Infof("Processing Custom Script job: %d", event.JobID)
-			err := jobScheduler.StartCustomScriptJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
@@ -128,6 +123,11 @@ func shutdown(cancel context.CancelFunc, wg *sync.WaitGroup) {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		fmt.Printf("Error loading .env file: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}

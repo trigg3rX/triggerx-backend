@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// CacheData represents the current state to be persisted
 type CacheData struct {
 	ActiveJobs      map[string]interface{} `json:"active_jobs"`
 	EventWatchers   []int64                `json:"event_watchers"`
@@ -47,7 +46,6 @@ func (cm *CacheManager) SaveState() error {
 	cm.scheduler.mu.RLock()
 	defer cm.scheduler.mu.RUnlock()
 
-	// First load existing cache data
 	var cacheData CacheData
 	if file, err := os.Open(cm.cacheFile); err == nil {
 		if err := json.NewDecoder(file).Decode(&cacheData); err == nil {
@@ -55,24 +53,20 @@ func (cm *CacheManager) SaveState() error {
 		}
 	}
 
-	// If active_jobs is nil, initialize it
 	if cacheData.ActiveJobs == nil {
 		cacheData.ActiveJobs = make(map[string]interface{})
 	}
 
-	// Merge new jobs with existing ones
 	for jobID, jobData := range cm.scheduler.stateCache {
 		cacheData.ActiveJobs[fmt.Sprintf("%d", jobID)] = jobData
 	}
 
-	// Update the rest of the cache data
 	cacheData.EventWatchers = make([]int64, 0, len(cm.scheduler.eventWatchers))
 	cacheData.ConditionJobs = make([]int64, 0, len(cm.scheduler.conditions))
 	cacheData.JobQueue = cm.scheduler.balancer.jobQueue
 	cacheData.SystemResources = cm.scheduler.balancer.resources
 	cacheData.LastUpdated = time.Now()
 
-	// Save to file
 	file, err := os.Create(cm.cacheFile)
 	if err != nil {
 		return fmt.Errorf("failed to create cache file: %v", err)
@@ -103,7 +97,6 @@ func (cm *CacheManager) LoadState() error {
 		return fmt.Errorf("failed to decode cache data: %v", err)
 	}
 
-	// Verify cache isn't too old
 	if time.Since(cacheData.LastUpdated) > 1*time.Hour {
 		cm.scheduler.logger.Info("Cache data is too old, starting with fresh state")
 		return nil
@@ -112,7 +105,6 @@ func (cm *CacheManager) LoadState() error {
 	cm.scheduler.mu.Lock()
 	defer cm.scheduler.mu.Unlock()
 
-	// Restore state
 	convertedCache := make(map[int64]interface{})
 	for strID, data := range cacheData.ActiveJobs {
 		id, _ := strconv.ParseInt(strID, 10, 64)
@@ -122,14 +114,12 @@ func (cm *CacheManager) LoadState() error {
 	cm.scheduler.balancer.jobQueue = cacheData.JobQueue
 	cm.scheduler.balancer.resources = cacheData.SystemResources
 
-	// Restore event watchers
 	for _, jobID := range cacheData.EventWatchers {
 		if err := cm.scheduler.StartEventBasedJob(jobID); err != nil {
 			cm.scheduler.logger.Errorf("Failed to restore event job %d: %v", jobID, err)
 		}
 	}
 
-	// Restore condition jobs
 	for _, jobID := range cacheData.ConditionJobs {
 		if err := cm.scheduler.StartConditionBasedJob(jobID); err != nil {
 			cm.scheduler.logger.Errorf("Failed to restore condition job %d: %v", jobID, err)
@@ -142,15 +132,31 @@ func (cm *CacheManager) LoadState() error {
 
 func (s *JobScheduler) RemoveJob(jobID int64) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	delete(s.workers, jobID)
+	s.mu.Unlock()
 
 	s.cacheMutex.Lock()
 	delete(s.stateCache, jobID)
 	s.cacheMutex.Unlock()
 
-	if err := s.cacheManager.SaveState(); err != nil {
-		s.logger.Errorf("Failed to save state after removing job %d: %v", jobID, err)
+	s.cacheManager.cacheMutex.Lock()
+	defer s.cacheManager.cacheMutex.Unlock()
+
+	var cacheData CacheData
+	if file, err := os.Open(s.cacheManager.cacheFile); err == nil {
+		if err := json.NewDecoder(file).Decode(&cacheData); err == nil {
+			file.Close()
+			delete(cacheData.ActiveJobs, fmt.Sprintf("%d", jobID))
+
+			file, err = os.Create(s.cacheManager.cacheFile)
+			if err == nil {
+				defer file.Close()
+				encoder := json.NewEncoder(file)
+				encoder.SetIndent("", "    ")
+				if err := encoder.Encode(cacheData); err != nil {
+					s.logger.Errorf("Failed to encode cache data: %v", err)
+				}
+			}
+		}
 	}
 }
