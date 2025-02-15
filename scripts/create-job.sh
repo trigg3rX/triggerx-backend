@@ -1,15 +1,16 @@
 #!/bin/bash
 
 # Get the latest job ID and increment it
-LATEST_ID=$(curl -s -X GET http://localhost:8080/api/jobs/latest-id | jq -r '.latest_job_id')
+LATEST_ID=$(curl -s -X GET http://localhost:8080/api/jobs/latest-id | jq -r '.latest_jobID')
 NEW_JOB_ID=$((LATEST_ID + 1))
-
+echo "Latest job ID: $LATEST_ID"
+echo "New job ID: $NEW_JOB_ID"
 # Array of user addresses
 USER_ADDRESSES=(
-    "0x7Db951c0E6D8906687B459427eA3F3F2b456473B"
-    "0xc073A5E091DC60021058346b10cD5A9b3F0619fE" 
-    "0xD5E9061656252a0b44D98C6944B99046FDDf49cA"
-    "0xC9dC9c361c248fFA0890d7E1a263247670914980"
+    "0x8A3bEcE42E6C56A96C6D69537e784D88401C8b9F"
+    "0x2F5e2E9C62F2A0b9C95D56C43e8A3B075f5A4e1D"
+    "0xB1c4D2f8E69A1c5d4a52C8bB962b9E4b2F8D5e3A"
+    "0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E"
 )
 
 # Get random user address
@@ -20,8 +21,7 @@ GAS_PRICE=4
 
 CHAIN_ID=11155420
 
-# JOB_TYPE=(1 2 3 4)
-JOB_TYPE=(3)
+JOB_TYPE=(1 2 3)
 RANDOM_JOB_TYPE_INDEX=$((RANDOM % ${#JOB_TYPE[@]}))
 SELECTED_JOB_TYPE=${JOB_TYPE[$RANDOM_JOB_TYPE_INDEX]}
 
@@ -36,19 +36,24 @@ SELECTED_JOB_COST=${JOB_COST_PREDICTIONS[$RANDOM_COST_INDEX]}
 curl -X POST http://localhost:8080/api/jobs \
   -H "Content-Type: application/json" \
   -d "{
-    \"job_id\": $NEW_JOB_ID,
+    \"userAddress\": \"$SELECTED_USER_ADDRESS\",
+    \"stakeAmount\": $((GAS_PRICE * SELECTED_JOB_COST)),
+    \"jobID\": $NEW_JOB_ID,
     \"jobType\": $SELECTED_JOB_TYPE,
-    \"user_address\": \"$SELECTED_USER_ADDRESS\",
-    \"chain_id\": \"$CHAIN_ID\",
-    \"time_frame\": 10000,
-    \"time_interval\": 10,
-    \"contract_address\": \"0xF1d505d1f6df11795c77A8A1b7476609E7b6361a\",
-    \"target_function\": \"Staked(address indexed user, uint256 amount)\",
-    \"arg_type\": 1,
-    \"arguments\": [\"1000\", \"2000\"],
-    \"status\": true,
-    \"job_cost_prediction\": $SELECTED_JOB_COST,
-    \"script_function\": \"checker\",
-    \"script_ipfs_url\": \"https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT\",
-    \"stake_amount\": $((GAS_PRICE * SELECTED_JOB_COST))
+    \"chainID\": $CHAIN_ID,
+    \"timeFrame\": 10000,
+    \"timeInterval\": 10,
+    \"triggerContractAddress\": \"0xF1d505d1f6df11795c77A8A1b7476609E7b6361a\",
+    \"triggerEvent\": \"Staked(address indexed user, uint256 amount)\",
+    \"targetContractAddress\": \"0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d\",
+    \"targetFunction\": \"addTaskId(uint32 jobId, uint32 taskId)\",
+    \"argType\": 1,
+    \"arguments\": [\"19\", \"91\"],
+    \"recurring\": true,
+    \"jobCostPrediction\": $SELECTED_JOB_COST,
+    \"scriptFunction\": \"checker\",
+    \"scriptIPFSUrl\": \"https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT\",
+    \"priority\": 1,
+    \"security\": 1,
+    \"linkJobID\": 0
 }"

@@ -19,17 +19,35 @@ func InitSchema(session *gocql.Session) error {
 	}
 
 	// Drop existing tables if any
+	if err := session.Query(`DROP TABLE IF EXISTS triggerx.user_data`).Exec(); err != nil {
+		return err
+	}
+	if err := session.Query(`DROP TABLE IF EXISTS triggerx.job_data`).Exec(); err != nil {
+		return err
+	}
+	if err := session.Query(`DROP TABLE IF EXISTS triggerx.task_data`).Exec(); err != nil {
+		return err
+	}
+	if err := session.Query(`DROP TABLE IF EXISTS triggerx.quorum_data`).Exec(); err != nil {
+		return err
+	}
+	if err := session.Query(`DROP TABLE IF EXISTS triggerx.keeper_data`).Exec(); err != nil {
+		return err
+	}
+	if err := session.Query(`DROP TABLE IF EXISTS triggerx.task_history`).Exec(); err != nil {
+		return err
+	}
 
 	// Create User_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.user_data (
-			user_id bigint PRIMARY KEY,
-			user_address text,
-			job_ids set<bigint>,
-			stake_amount varint,
-			account_balance varint,
-			created_at timestamp,
-			last_updated_at timestamp
+			userID bigint PRIMARY KEY,
+			userAddress text,
+			jobIDs set<bigint>,
+			stakeAmount varint,
+			accountBalance varint,
+			createdAt timestamp,
+			lastUpdatedAt timestamp
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -37,24 +55,29 @@ func InitSchema(session *gocql.Session) error {
 	// Create Job_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.job_data (
-			job_id bigint PRIMARY KEY,
+			jobID bigint PRIMARY KEY,
 			jobType int,
-			user_id bigint,
-			user_address text,
-			chain_id int,
-			time_frame bigint,
-			time_interval int,
-			contract_address text,
-			contract_address text,
-			target_function text,
-			arg_type int,
+			userID bigint,
+			chainID int,
+			timeFrame bigint,
+			timeInterval int,
+			triggerxContractAddress text,
+			triggerEvent text,
+			targetContractAddress text,
+			targetFunction text,
+			argType int,
 			arguments list<text>,
+			recurring boolean,
+			scriptFunction text,
+			scriptIPFSUrl text,
 			status boolean,
-			job_cost_prediction int,
-			script_function text,
-			script_ipfs_url text,
-			created_at timestamp,
-			last_executed_at timestamp
+			jobCostPrediction int,
+			createdAt timestamp,
+			lastExecutedAt timestamp,
+			priority int,
+			security int,
+			taskIDs set<bigint>,
+			linkJobID bigint
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -62,31 +85,29 @@ func InitSchema(session *gocql.Session) error {
 	// Create Task_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.task_data (
-			task_id bigint PRIMARY KEY,
-			job_id bigint,
-			task_no int,
-			quorum_number int,
-			quorum_threshold decimal,
-			task_created_tx_hash text,
-			task_responded_tx_hash text,
-			task_hash text,
-			task_response_hash text,
-			task_fee decimal,
-			job_type text,
+			taskID bigint PRIMARY KEY,
+			jobID bigint,
+			taskDefinitionID bigint,
+			taskCreatedTxHash text,
+			taskRespondedTxHash text,
+			taskHash text,
+			taskResponseHash text,
+			taskFee decimal,
+			jobType text,
 			blockExpiry varint,
 			baseRewardFeeForAttesters varint,
 			baseRewardFeeForPerformer varint,
 			baseRewardFeeForAggregator varint,
 			disputePeriodBlocks varint,
 			minimumVotingPower varint,
-			_restrictedOperatorIndexes list<varint>,
+			restrictedOperatorIndexes list<varint>,
 			proofOfTask text,
 			data blob,
 			taskPerformer text,
-			_isApproved boolean,
-			_tpSignature blob,
-			_taSignature list<varint>,
-			_operatorIds list<varint>
+			isApproved boolean,
+			tpSignature blob,
+			taSignature list<varint>,
+			operatorIds list<varint>
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -110,16 +131,16 @@ func InitSchema(session *gocql.Session) error {
 	// Create Keeper_data table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.keeper_data (
-			keeper_id bigint PRIMARY KEY,
-			withdrawal_address text,
+			keeperID bigint PRIMARY KEY,
+			keeperAddress text,
+			rewardsAddress text,
 			stakes list<decimal>,
 			strategies list<text>,
 			verified boolean,
-			keeper_type int,
-			registered_tx text,
+			registeredTx text,
 			status boolean,
-			bls_signing_keys list<text>,
-			connection_address text
+			blsSigningKeys list<text>,
+			connectionAddress text
 		)`).Exec(); err != nil {
 		return err
 	}
@@ -127,13 +148,12 @@ func InitSchema(session *gocql.Session) error {
 	// Create Task_history table
 	if err := session.Query(`
 		CREATE TABLE IF NOT EXISTS triggerx.task_history (
-			task_id bigint PRIMARY KEY,
-			quorum_id bigint,
-			keepers list<text>,
-			responses list<text>,
-			consensus_method text,
-			validation_status boolean,
-			tx_hash text
+			taskID bigint PRIMARY KEY,
+			performer text,
+			attesters list<text>,
+			proofOfTask text,
+			isSuccessful boolean,
+			txHash text
 		)`).Exec(); err != nil {
 		return err
 	}
