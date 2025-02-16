@@ -3,16 +3,14 @@ package performer
 import (
 	// "crypto/tls"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	// Import your trigger project packages (adjust the module paths as needed)
-	"github.com/trigg3rX/triggerx-backend/execute/keeper/executor"
-	"github.com/trigg3rX/triggerx-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/executor"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // keeperResponseWrapper implements the KeeperResponse interface from the proof module.
@@ -62,13 +60,13 @@ func ExecuteTask(c *gin.Context) {
 	}
 
 	// Create a job object from the job data.
-	job := &manager.Job{
-		JobID:          "",
+	job := &types.Job{
+		JobID:          0,
 		TargetFunction: "",
 		Arguments:      map[string]interface{}{},
-		ChainID:        "",
+		ChainID:        0,
 	}
-	if id, ok := jobData["job_id"].(string); ok {
+	if id, ok := jobData["job_id"].(int64); ok {
 		job.JobID = id
 	}
 	if tf, ok := jobData["targetFunction"].(string); ok {
@@ -77,11 +75,11 @@ func ExecuteTask(c *gin.Context) {
 	if args, ok := jobData["arguments"].(map[string]interface{}); ok {
 		job.Arguments = args
 	}
-	if chain, ok := jobData["chainID"].(string); ok {
+	if chain, ok := jobData["chainID"].(int); ok {
 		job.ChainID = chain
 	}
 	if ca, ok := jobData["contractAddress"].(string); ok {
-		job.ContractAddress = ca
+		job.TargetContractAddress = ca
 	}
 
 	// Execute the job using your custom JobExecutor.
@@ -106,8 +104,8 @@ func ExecuteTask(c *gin.Context) {
 	proofTemplate := proof.ProofTemplate{
 		JobID:            job.JobID,
 		JobType:          job.TargetFunction,
-		TaskID:           fmt.Sprintf("task-%s", job.JobID),
-		TaskDefinitionID: fmt.Sprintf("%d", taskDefinitionId),
+		TaskID:           job.JobID,
+		TaskDefinitionID: int64(taskDefinitionId),
 		Trigger: proof.TriggerInfo{
 			Timestamp:         time.Now().UTC().Format(time.RFC3339),
 			Value:             "triggered",
