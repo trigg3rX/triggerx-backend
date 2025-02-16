@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // CustomLogicFunc defines the signature for custom processing logic
-type CustomLogicFunc func(*manager.Job, interface{}) (interface{}, error)
+type CustomLogicFunc func(*types.Job, interface{}) (interface{}, error)
 
 // IntervalChecker manages job execution timing and validation
 type IntervalChecker struct{}
@@ -24,8 +24,8 @@ func main() {
 	checker := NewIntervalChecker()
 
 	// Create a dummy job for testing
-	job := &manager.Job{
-		JobID:        "test_job",
+	job := &types.Job{
+		JobID:        999,
 		TimeInterval: 60,
 		LastExecuted: time.Now().Add(-time.Minute),
 		CreatedAt:    time.Now().Add(-time.Hour),
@@ -60,7 +60,7 @@ func main() {
 }
 
 // Checker is a comprehensive method that validates job execution and processes dynamic arguments
-func (ic *IntervalChecker) Checker(job *manager.Job, customLogic CustomLogicFunc) (bool, map[string]interface{}) {
+func (ic *IntervalChecker) Checker(job *types.Job, customLogic CustomLogicFunc) (bool, map[string]interface{}) {
 	payload := make(map[string]interface{})
 
 	// Validate interval
@@ -79,7 +79,7 @@ func (ic *IntervalChecker) Checker(job *manager.Job, customLogic CustomLogicFunc
 }
 
 // ValidateJobInterval checks if enough time has passed since last execution
-func (ic *IntervalChecker) ValidateJobInterval(job *manager.Job) bool {
+func (ic *IntervalChecker) ValidateJobInterval(job *types.Job) bool {
 	if job.LastExecuted.IsZero() {
 		return true
 	}
@@ -89,7 +89,7 @@ func (ic *IntervalChecker) ValidateJobInterval(job *manager.Job) bool {
 }
 
 // ValidateJobTimeFrame checks if the job is still within its allowed time frame
-func (ic *IntervalChecker) ValidateJobTimeFrame(job *manager.Job) (bool, string) {
+func (ic *IntervalChecker) ValidateJobTimeFrame(job *types.Job) (bool, string) {
 	if job.TimeFrame <= 0 {
 		return true, ""
 	}
