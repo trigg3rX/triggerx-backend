@@ -5,43 +5,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ProofResponse represents the structure of the proof data received from the API
 type ProofResponse struct {
 	ProofHash string `json:"proofHash"`
 	CID       string `json:"cid"`
-}
-
-// IPFSResponse represents the structure of the JSON stored in IPFS
-type IPFSResponse struct {
-	JobID            string `json:"job_id"`
-	JobType          string `json:"job_type"`
-	TaskID           string `json:"task_id"`
-	TaskDefinitionID string `json:"task_definition_id"`
-	Trigger          struct {
-		Timestamp               string `json:"timestamp"`
-		Value                   string `json:"value"`
-		TxHash                  string `json:"txHash"`
-		EventName               string `json:"eventName"`
-		ConditionEndpoint       string `json:"conditionEndpoint"`
-		ConditionValue          string `json:"conditionValue"`
-		CustomTriggerDefinition struct {
-			Type   string                 `json:"type"`
-			Params map[string]interface{} `json:"params"`
-		} `json:"customTriggerDefinition"`
-	} `json:"trigger"`
-	Action struct {
-		Timestamp string `json:"timestamp"`
-		TxHash    string `json:"txHash"`
-		GasUsed   string `json:"gasUsed"`
-		Status    string `json:"status"`
-	} `json:"action"`
-	Proof struct {
-		CertificateHash string `json:"certificateHash"`
-		ResponseHash    string `json:"responseHash"`
-		Timestamp       string `json:"timestamp"`
-	} `json:"proof"`
 }
 
 // ValidationResult represents the response we'll send back
@@ -86,7 +57,7 @@ func ValidateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse IPFS JSON content
-	var ipfsResp IPFSResponse
+	var ipfsResp types.IPFSResponse
 	if err := json.Unmarshal([]byte(ipfsData), &ipfsResp); err != nil {
 		sendResponse(w, ValidationResult{
 			IsValid: false,

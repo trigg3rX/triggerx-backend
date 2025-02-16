@@ -4,8 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/execute/attester"
-	
+	"github.com/trigg3rX/triggerx-backend/internal/attester"
 )
 
 func main() {
