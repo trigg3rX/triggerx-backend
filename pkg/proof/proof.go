@@ -14,10 +14,10 @@ import (
 )
 
 type ProofTemplate struct {
-	JobID            string      `json:"job_id"`
+	JobID            int64       `json:"job_id"`
 	JobType          string      `json:"job_type"`
-	TaskID           string      `json:"task_id"`
-	TaskDefinitionID string      `json:"task_definition_id"`
+	TaskID           int64       `json:"task_id"`
+	TaskDefinitionID int64       `json:"task_definition_id"`
 	Trigger          TriggerInfo `json:"trigger"`
 	Action           ActionInfo  `json:"action"`
 	Proof            *TLSProof   `json:"proof"`
@@ -133,7 +133,7 @@ func GenerateAndStoreProof(
 	}
 
 	// Create unique name for the file
-	fileName := fmt.Sprintf("proof_%s_%s_%s.json",
+	fileName := fmt.Sprintf("proof_%d_%d_%s.json",
 		templateData.JobID,
 		templateData.TaskID,
 		time.Now().UTC().Format("20060102150405"))
