@@ -1,4 +1,4 @@
-package attester
+package validation
 
 import (
 	"encoding/json"

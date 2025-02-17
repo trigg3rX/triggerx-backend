@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/trigg3rX/triggerx-backend/internal/performer/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 )
 
 func Init() {

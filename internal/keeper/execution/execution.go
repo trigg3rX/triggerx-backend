@@ -13,7 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
-	"github.com/trigg3rX/triggerx-backend/internal/performer/services"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 )
 
 // keeperResponseWrapper implements the KeeperResponse interface from the proof module.

@@ -26,8 +26,6 @@ type ProcessName string
 
 const (
 	ManagerProcess   ProcessName = "manager"
-	QuorumProcess    ProcessName = "quorum"
-	ValidatorProcess ProcessName = "validator"
 	DatabaseProcess  ProcessName = "database"
 	KeeperProcess    ProcessName = "keeper"
 )
