@@ -1,7 +1,11 @@
 package manager
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -97,4 +101,67 @@ func (s *JobScheduler) UpdateJobLastExecuted(jobID int64, lastExecuted time.Time
 	}
 
 	return nil
+}
+
+func CreateTaskData(taskData *types.TaskData) (status bool, err error) {
+	client := &http.Client{}
+
+	jsonData, err := json.Marshal(taskData)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal task data: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", "http://localhost:8080/api/tasks", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("failed to create task, status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return true, nil
+
+}
+
+func GetPerformer() (types.Performer, error) {
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", "http://localhost:8080/api/keepers/performers", nil)
+	if err != nil {
+		return types.Performer{}, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return types.Performer{}, fmt.Errorf("failed to make request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return types.Performer{}, fmt.Errorf("failed to get performers, status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var performers []types.Performer
+	if err := json.NewDecoder(resp.Body).Decode(&performers); err != nil {
+		return types.Performer{}, fmt.Errorf("failed to decode performers: %v", err)
+	}
+
+	if len(performers) == 0 {
+		return types.Performer{}, fmt.Errorf("no performers available")
+	}
+
+	return performers[0], nil
 }

@@ -45,19 +45,9 @@ type TaskData struct {
 	TaskID                     int64     `json:"task_id"`
 	JobID                      int64     `json:"job_id"`
 	TaskDefinitionID           int64     `json:"task_definition_id"`
-	TaskCreatedTxHash         string    `json:"task_created_tx_hash"`
 	TaskRespondedTxHash       string    `json:"task_responded_tx_hash"`
-	TaskHash                  string    `json:"task_hash"`
 	TaskResponseHash          string    `json:"task_response_hash"`
-	TaskFee                   float64   `json:"task_fee"`
-	JobType                   string    `json:"job_type"`
-	BlockExpiry               *big.Int  `json:"block_expiry"`
-	BaseRewardFeeForAttesters *big.Int  `json:"base_reward_fee_for_attesters"`
-	BaseRewardFeeForPerformer *big.Int  `json:"base_reward_fee_for_performer"`
-	BaseRewardFeeForAggregator *big.Int  `json:"base_reward_fee_for_aggregator"`
-	DisputePeriodBlocks       *big.Int  `json:"dispute_period_blocks"`
-	MinimumVotingPower        *big.Int  `json:"minimum_voting_power"`
-	RestrictedOperatorIndexes []big.Int `json:"restricted_operator_indexes"`
+	TaskFee                   string    `json:"task_fee"`
 	ProofOfTask               string    `json:"proof_of_task"`
 	Data                      []byte    `json:"data"`
 	TaskPerformer             string    `json:"task_performer"`
@@ -65,6 +55,7 @@ type TaskData struct {
 	TpSignature               []byte    `json:"tp_signature"`
 	TaSignature               []big.Int `json:"ta_signature"`
 	OperatorIds               []big.Int `json:"operator_ids"`
+	ExecutedAt                time.Time `json:"executed_at"`
 }
 
 type QuorumData struct {

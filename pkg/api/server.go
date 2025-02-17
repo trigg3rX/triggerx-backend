@@ -77,10 +77,12 @@ func (s *Server) routes() {
 	// api.HandleFunc("/quorums/{id}", handler.UpdateQuorumData).Methods("PUT")
 
 	// // Keeper routes
+	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
 	api.HandleFunc("/keepers/address/{address}", handler.CheckKeeperRegistration).Methods("GET")
+	
 
 	// // Task History routes
 	// api.HandleFunc("/task_history", handler.CreateTaskHistory).Methods("POST")
