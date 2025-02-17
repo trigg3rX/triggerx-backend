@@ -21,7 +21,7 @@ GAS_PRICE=4
 
 CHAIN_ID=11155420
 
-JOB_TYPE=(1)
+JOB_TYPE=(1 2 3)
 RANDOM_JOB_TYPE_INDEX=$((RANDOM % ${#JOB_TYPE[@]}))
 SELECTED_JOB_TYPE=${JOB_TYPE[$RANDOM_JOB_TYPE_INDEX]}
 
@@ -46,14 +46,15 @@ curl -X POST http://localhost:8080/api/jobs \
     \"triggerContractAddress\": \"0xF1d505d1f6df11795c77A8A1b7476609E7b6361a\",
     \"triggerEvent\": \"Staked(address indexed user, uint256 amount)\",
     \"targetContractAddress\": \"0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d\",
-    \"targetFunction\": \"addTaskId(uint32 jobId, uint32 taskId)\",
+    \"targetFunction\": \"execute\",
     \"argType\": 1,
     \"arguments\": [\"19\", \"91\"],
     \"recurring\": true,
     \"jobCostPrediction\": $SELECTED_JOB_COST,
     \"scriptFunction\": \"checker\",
-    \"scriptIPFSUrl\": \"https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT\",
+    \"scriptIPFSUrl\": \"https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a\",
     \"priority\": 1,
     \"security\": 1,
     \"linkJobID\": 0
 }"
+
