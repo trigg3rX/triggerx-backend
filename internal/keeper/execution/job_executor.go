@@ -1,22 +1,23 @@
-package executor
+package execution
 
 import (
-	"log"
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type JobExecutor struct {
-	// Add any executor-specific configuration or dependencies
-}
+// JobExecutor handles execution of blockchain transactions and contract calls
+// Can be extended with additional configuration and dependencies as needed
+type JobExecutor struct {}
 
 func NewJobExecutor() *JobExecutor {
 	return &JobExecutor{}
 }
 
+// Execute routes jobs to appropriate handlers based on the target function
+// Currently supports 'transfer' for token transfers and 'execute' for generic contract calls
 func (e *JobExecutor) Execute(job *types.Job) (interface{}, error) {
-	log.Printf("Executing job: %d (Function: %s)", job.JobID, job.TargetFunction)
+	logger.Info("[Execution] Executing job: %d (Function: %s)", job.JobID, job.TargetFunction)
 
 	switch job.TargetFunction {
 	case "transfer":
@@ -28,11 +29,11 @@ func (e *JobExecutor) Execute(job *types.Job) (interface{}, error) {
 	}
 }
 
+// executeTransfer handles token transfer transactions
+// Expects 'from', 'to' addresses and 'amount' in job arguments
 func (e *JobExecutor) executeTransfer(job *types.Job) (interface{}, error) {
-	// Simulate transfer logic
-	log.Printf("Performing transfer for job %d", job.JobID)
+	logger.Info("[Execution] Performing transfer for job %d", job.JobID)
 
-	// Extract transfer details from arguments
 	from, ok1 := job.Arguments["from"].(string)
 	to, ok2 := job.Arguments["to"].(string)
 	amount, ok3 := job.Arguments["amount"].(float64)
@@ -41,9 +42,8 @@ func (e *JobExecutor) executeTransfer(job *types.Job) (interface{}, error) {
 		return nil, fmt.Errorf("invalid transfer arguments")
 	}
 
-	// Simulated transfer logic
 	return map[string]interface{}{
-		"status":  "success",
+		"status":  "success", 
 		"from":    from,
 		"to":      to,
 		"amount":  amount,
@@ -51,9 +51,10 @@ func (e *JobExecutor) executeTransfer(job *types.Job) (interface{}, error) {
 	}, nil
 }
 
+// executeGenericContract handles arbitrary contract function calls
+// Uses contract address and arguments specified in the job
 func (e *JobExecutor) executeGenericContract(job *types.Job) (interface{}, error) {
-	// Generic contract execution logic
-	log.Printf("Executing contract call for job %d", job.JobID)
+	logger.Info("[Execution] Executing contract call for job %d", job.JobID)
 
 	return map[string]interface{}{
 		"status":    "success",

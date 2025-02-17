@@ -10,10 +10,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// SendTaskToPerformer sends a job execution request to the performer service running on port 4003.
+// It takes job and task metadata, formats them into the expected payload structure, and makes a POST request.
+// Returns true if the task was successfully sent and accepted by the performer, false with error otherwise.
 func SendTaskToPerformer(jobData *types.Job, taskData *types.TaskData) (bool, error) {
 	client := &http.Client{}
 
-	// Prepare the request payload matching the performer's expected structure
+	// Construct payload with task definition ID and job details required for execution
 	payload := map[string]interface{}{
 		"taskDefinitionId": taskData.TaskDefinitionID,
 		"job": map[string]interface{}{
@@ -30,7 +33,6 @@ func SendTaskToPerformer(jobData *types.Job, taskData *types.TaskData) (bool, er
 		return false, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Create the request
 	req, err := http.NewRequest("POST", "http://localhost:4003/task/execute", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)
@@ -38,14 +40,12 @@ func SendTaskToPerformer(jobData *types.Job, taskData *types.TaskData) (bool, er
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Check response status
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return false, fmt.Errorf("performer returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
@@ -53,5 +53,3 @@ func SendTaskToPerformer(jobData *types.Job, taskData *types.TaskData) (bool, er
 
 	return true, nil
 }
-
-

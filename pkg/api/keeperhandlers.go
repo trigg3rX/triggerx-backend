@@ -23,39 +23,6 @@ import (
 		- Add GetTasksByKeeperId
 */
 
-func (h *Handler) CheckKeeperRegistration(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	keeperAddress := vars["address"]
-	h.logger.Infof("[CheckKeeperRegistration] Retrieving keeper by address: %s", keeperAddress)
-
-	var keeper types.KeeperData
-	if err := h.db.Session().Query(`
-		SELECT keeperID, registeredTx, connectionAddress 
-		FROM triggerx.keeper_data 
-		WHERE keeperAddress = ? ALLOW FILTERING`, keeperAddress).Scan(
-		&keeper.KeeperID, &keeper.RegisteredTx, &keeper.ConnectionAddress); err != nil {
-		h.logger.Errorf("[CheckKeeperRegistration] Error retrieving keeper by address %s: %v", keeperAddress, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if keeper.KeeperID == 0 {
-		h.logger.Errorf("[CheckKeeperRegistration] No keeper found for address: %s", keeperAddress)
-		http.Error(w, "Keeper not found", http.StatusNotFound)
-		return
-	}
-
-	response := types.RegisterKeeperResponse{
-		KeeperID:     keeper.KeeperID,
-		RegisteredTx: keeper.RegisteredTx,
-		PeerID:       keeper.ConnectionAddress,
-	}
-
-	h.logger.Infof("[CheckKeeperRegistration] Successfully retrieved keeper by address: %s", keeperAddress)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
-}
-
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.KeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
@@ -118,7 +85,7 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetAllKeepers] Retrieving all keepers")
 	var keepers []types.KeeperData
-	iter := h.db.Session().Query(`SELECT * FROM triggerx.keeper_data WHERE keeperType = 2`).Iter()
+	iter := h.db.Session().Query(`SELECT keeperID, keeperAddress, rewardsAddress, stakes, strategies, verified, registeredTx, status, blsSigningKeys, connectionAddress FROM triggerx.keeper_data`).Iter()
 
 	var keeper types.KeeperData
 	for iter.Scan(
@@ -137,27 +104,6 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[GetAllKeepers] Successfully retrieved %d keepers", len(keepers))
 	json.NewEncoder(w).Encode(keepers)
-}
-
-func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
-	h.logger.Infof("[GetPerformers] Retrieving all performers")
-	var performers []types.Performer
-	iter := h.db.Session().Query(`SELECT keeperID, keeperAddress, connectionAddress FROM triggerx.keeper_data WHERE keeperType = 1 ALLOW FILTERING`).Iter()
-	
-	var performer types.Performer
-	for iter.Scan(
-		&performer.KeeperID, &performer.KeeperAddress, &performer.ConnectionAddress) {
-		performers = append(performers, performer)
-	}
-
-	if err := iter.Close(); err != nil {
-		h.logger.Errorf("[GetPerformers] Error retrieving performers: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.logger.Infof("[GetPerformers] Successfully retrieved %d performers", len(performers))
-	json.NewEncoder(w).Encode(performers)
 }
 
 func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {

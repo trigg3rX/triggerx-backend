@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	// "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 type ProofResponse struct {
 	ProofHash string `json:"proofHash"`
@@ -54,11 +56,11 @@ func ValidateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Received Task Validation Request:")
-	log.Printf("Proof of Task: %s", taskRequest.ProofOfTask)
-	log.Printf("Data: %s", taskRequest.Data)
-	log.Printf("Task Definition ID: %d", taskRequest.TaskDefinitionID)
-	log.Printf("Performer Address: %s", taskRequest.Performer)
+	logger.Info("[Validation] Received Task Validation Request:")
+	logger.Info("[Validation] Proof of Task: %s", taskRequest.ProofOfTask)
+	logger.Info("[Validation] Data: %s", taskRequest.Data)
+	logger.Info("[Validation] Task Definition ID: %d", taskRequest.TaskDefinitionID)
+	logger.Info("[Validation] Performer Address: %s", taskRequest.Performer)
 
 	ipfsData, err := fetchIPFSContent(taskRequest.ProofOfTask)
 	if err != nil {
@@ -70,8 +72,8 @@ func ValidateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("IPFS Data Fetched")
-	log.Printf("IPFS Data: %s", ipfsData)
+	logger.Info("[Validation] IPFS Data Fetched")
+	logger.Info("[Validation] IPFS Data: %s", ipfsData)
 
 	// var ipfsResp types.IPFSResponse
 	// if err := json.Unmarshal([]byte(ipfsData), &ipfsResp); err != nil {

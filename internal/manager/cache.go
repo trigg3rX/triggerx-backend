@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+// CacheData represents the complete state of the job scheduler that needs to be persisted
+// including active jobs, watchers, queues and system resources
 type CacheData struct {
 	ActiveJobs      map[string]interface{} `json:"active_jobs"`
 	EventWatchers   []int64                `json:"event_watchers"`
@@ -19,6 +21,8 @@ type CacheData struct {
 	LastUpdated     time.Time              `json:"last_updated"`
 }
 
+// CacheManager handles persisting and restoring scheduler state to disk
+// Uses file-based JSON storage with mutex-protected access
 type CacheManager struct {
 	cacheDir   string
 	cacheFile  string
@@ -39,6 +43,8 @@ func NewCacheManager(scheduler *JobScheduler) (*CacheManager, error) {
 	}, nil
 }
 
+// SaveState persists the current scheduler state to disk
+// Merges existing cache with current state to avoid data loss
 func (cm *CacheManager) SaveState() error {
 	cm.cacheMutex.Lock()
 	defer cm.cacheMutex.Unlock()
@@ -78,6 +84,8 @@ func (cm *CacheManager) SaveState() error {
 	return encoder.Encode(cacheData)
 }
 
+// LoadState restores scheduler state from disk cache
+// Skips restoration if cache is too old (>1h) and initializes jobs from cached state
 func (cm *CacheManager) LoadState() error {
 	cm.cacheMutex.RLock()
 	defer cm.cacheMutex.RUnlock()
@@ -130,6 +138,8 @@ func (cm *CacheManager) LoadState() error {
 	return nil
 }
 
+// RemoveJob deletes a job from both memory and persistent cache
+// Updates cache file to reflect the removal while maintaining other jobs' state
 func (s *JobScheduler) RemoveJob(jobID int64) {
 	s.mu.Lock()
 	delete(s.workers, jobID)

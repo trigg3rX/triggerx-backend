@@ -3,7 +3,6 @@ package services
 import (
 	"crypto/ecdsa"
 	"encoding/hex"
-	"log"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -14,10 +13,14 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 func Init() {
 	config.Init()
+	logger.Info("[Services] Config Initialized")
 }
 
 type Params struct {
@@ -29,13 +32,13 @@ type Params struct {
 }
 
 func SendTask(proofOfTask string, data string, taskDefinitionId int) {
-	privateKey, err := crypto.HexToECDSA(config.PrivateKey)
+	privateKey, err := crypto.HexToECDSA(config.PrivateKeyPerformer)
 	if err != nil {
-		log.Println(err)
+		logger.Error("[Services] Error converting private key", "error", err)
 	}
 	publicKey, ok := privateKey.Public().(*ecdsa.PublicKey)
 	if !ok {
-		log.Println("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+		logger.Error("[Services] cannot assert type: publicKey is not of type *ecdsa.PublicKey")
 	}
 	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
 
@@ -53,23 +56,21 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 		big.NewInt(int64(taskDefinitionId)),
 	)
 	if err != nil {
-		log.Println("error occured while encoding")
-		log.Println(err)
+		logger.Error("[Services] Error encoding data", "error", err)
 	}
 	messageHash := crypto.Keccak256Hash(dataPacked)
 
 	sig, err := crypto.Sign(messageHash.Bytes(), privateKey)
 	if err != nil {
-		log.Println("error occured while signing")
-		log.Println(err)
+		logger.Error("[Services] Error signing message", "error", err)
 	}
 	sig[64] += 27
 	serializedSignature := hexutil.Encode(sig)
-	log.Println(serializedSignature)
+	logger.Info("[Services] Serialized signature", "signature", serializedSignature)
 
 	client, err := rpc.Dial(config.OTHENTIC_CLIENT_RPC_ADDRESS)
 	if err != nil {
-		log.Println(err)
+		logger.Error("[Services] Error dialing RPC", "error", err)
 	}
 
 	params := Params{
@@ -81,7 +82,7 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	}
 
 	response := makeRPCRequest(client, params)
-	log.Println("API response:", response)
+	logger.Info("[Services] API response:", "response", response)
 }
 
 func makeRPCRequest(client *rpc.Client, params Params) interface{} {
@@ -89,7 +90,7 @@ func makeRPCRequest(client *rpc.Client, params Params) interface{} {
 
 	err := client.Call(&result, "sendTask", params.proofOfTask, params.data, params.taskDefinitionId, params.performerAddress, params.signature)
 	if err != nil {
-		log.Println(err)
+		logger.Error("[Services] Error making RPC request", "error", err)
 	}
 	return result
 }

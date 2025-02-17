@@ -69,20 +69,11 @@ func (s *Server) routes() {
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
 
-	// // Quorum routes
-	// api.HandleFunc("/quorums/all", handler.GetAllQuorums).Methods("GET")
-	// api.HandleFunc("/quorums/registration", handler.GetQuorumNoForRegistration).Methods("GET")
-	// api.HandleFunc("/quorums", handler.CreateQuorumData).Methods("POST")
-	// api.HandleFunc("/quorums/{id}", handler.GetQuorumData).Methods("GET")
-	// api.HandleFunc("/quorums/{id}", handler.UpdateQuorumData).Methods("PUT")
-
 	// // Keeper routes
-	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
+	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
-	api.HandleFunc("/keepers/address/{address}", handler.CheckKeeperRegistration).Methods("GET")
-	
 
 	// // Task History routes
 	// api.HandleFunc("/task_history", handler.CreateTaskHistory).Methods("POST")

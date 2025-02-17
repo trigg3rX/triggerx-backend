@@ -18,6 +18,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// Worker interface defines the core functionality required for all job workers.
+// Each worker type (time, event, condition) must implement these methods.
 type Worker interface {
 	Start(ctx context.Context)
 	Stop()
@@ -27,6 +29,8 @@ type Worker interface {
 	GetRetries() int
 }
 
+// BaseWorker provides common functionality shared across all worker types
+// including status tracking, error handling, and retry logic.
 type BaseWorker struct {
 	status       string
 	error        string
@@ -34,6 +38,8 @@ type BaseWorker struct {
 	maxRetries   int
 }
 
+// TimeBasedWorker handles jobs that need to be executed at specific intervals
+// or timestamps using cron scheduling.
 type TimeBasedWorker struct {
 	jobID     int64
 	scheduler *JobScheduler
@@ -44,6 +50,8 @@ type TimeBasedWorker struct {
 	BaseWorker
 }
 
+// EventBasedWorker listens for specific blockchain events and triggers job execution
+// when the target event is detected.
 type EventBasedWorker struct {
 	jobID           int64
 	scheduler       *JobScheduler
@@ -54,6 +62,8 @@ type EventBasedWorker struct {
 	BaseWorker
 }
 
+// ConditionBasedWorker periodically checks external conditions (e.g., API endpoints)
+// and executes jobs when conditions are met.
 type ConditionBasedWorker struct {
 	jobID         int64
 	scheduler     *JobScheduler
@@ -78,6 +88,8 @@ func NewTimeBasedWorker(jobData *types.Job, schedule string, scheduler *JobSched
 	}
 }
 
+// Start initiates the time-based job execution. It handles both one-time delayed execution
+// and recurring cron-based schedules. Monitors job duration and handles graceful shutdown.
 func (w *TimeBasedWorker) Start(ctx context.Context) {
 	if w.status == "completed" || w.status == "failed" {
 		return
@@ -133,6 +145,8 @@ func (w *TimeBasedWorker) GetJobID() int64 {
 	return w.jobID
 }
 
+// executeTask handles the core job execution logic for time-based jobs.
+// Creates task data, assigns it to a performer, and initiates task execution.
 func (w *TimeBasedWorker) executeTask(jobData *types.Job) error {
 	w.scheduler.logger.Infof("Executing time-based job: %d", w.jobID)
 
@@ -187,6 +201,8 @@ func NewEventBasedWorker(jobData *types.Job, scheduler *JobScheduler) *EventBase
 	}
 }
 
+// Start establishes a WebSocket connection to the blockchain node and sets up event filtering.
+// Monitors for specific contract events and triggers job execution when events are detected.
 func (w *EventBasedWorker) Start(ctx context.Context) {
 	wsURL := w.getAlchemyWSURL()
 
@@ -255,6 +271,8 @@ func (w *EventBasedWorker) GetJobID() int64 {
 	return w.jobID
 }
 
+// getAlchemyWSURL determines the appropriate Alchemy WebSocket endpoint based on the chain ID.
+// Currently supports various testnets with mainnet endpoints commented out.
 func (w *EventBasedWorker) getAlchemyWSURL() string {
 	apiKey := os.Getenv("ALCHEMY_API_KEY")
 
@@ -335,6 +353,8 @@ func NewConditionBasedWorker(jobData *types.Job, scheduler *JobScheduler) *Condi
 	}
 }
 
+// Start initiates periodic checking of external conditions via API endpoints.
+// Executes the job when conditions are met or handles failures after max retries.
 func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	w.status = "running"
 	w.ticker = time.NewTicker(1 * time.Second)

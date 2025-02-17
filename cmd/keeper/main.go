@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/attester"
-	"github.com/trigg3rX/triggerx-backend/internal/performer"
-	"github.com/trigg3rX/triggerx-backend/internal/performer/services"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -22,11 +22,11 @@ func main() {
 
 	// Set up performer server using Gin for better performance and middleware support
 	router := gin.Default()
-	router.POST("/task/execute", performer.ExecuteTask)
+	router.POST("/task/execute", execution.ExecuteTask)
 
 	// Set up attester server using standard net/http
 	mux := http.NewServeMux()
-	mux.HandleFunc("/task/validate", attester.ValidateTask)
+	mux.HandleFunc("/task/validate", validation.ValidateTask)
 
 	performerSrv := &http.Server{
 		Addr:    ":4003",

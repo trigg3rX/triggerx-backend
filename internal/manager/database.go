@@ -12,6 +12,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// GetJobDetails retrieves job configuration and metadata from the database.
+// Maps the raw database fields into a structured Job type, including argument parsing.
 func (s *JobScheduler) GetJobDetails(jobID int64) (*types.Job, error) {
 	var jobData types.JobData
 
@@ -73,6 +75,8 @@ func (s *JobScheduler) GetJobDetails(jobID int64) (*types.Job, error) {
 	return job, nil
 }
 
+// UpdateJobStatus updates the status field for a job in the database.
+// Used to track job lifecycle states (pending, running, completed, failed etc).
 func (s *JobScheduler) UpdateJobStatus(jobID int64, status string) error {
 	jobIDStr := strconv.FormatInt(jobID, 10)
 
@@ -88,6 +92,8 @@ func (s *JobScheduler) UpdateJobStatus(jobID int64, status string) error {
 	return nil
 }
 
+// UpdateJobLastExecuted updates the last execution timestamp for a job.
+// Critical for tracking execution history and scheduling recurring jobs.
 func (s *JobScheduler) UpdateJobLastExecuted(jobID int64, lastExecuted time.Time) error {
 	jobIDStr := strconv.FormatInt(jobID, 10)
 
@@ -103,6 +109,8 @@ func (s *JobScheduler) UpdateJobLastExecuted(jobID int64, lastExecuted time.Time
 	return nil
 }
 
+// CreateTaskData sends a POST request to create a new task in the task management service.
+// Returns success status and any errors encountered during task creation.
 func CreateTaskData(taskData *types.TaskData) (status bool, err error) {
 	client := &http.Client{}
 
@@ -133,6 +141,8 @@ func CreateTaskData(taskData *types.TaskData) (status bool, err error) {
 
 }
 
+// GetPerformer retrieves an available performer node from the keeper network.
+// Returns the first available performer or error if none are available.
 func GetPerformer() (types.Performer, error) {
 	client := &http.Client{}
 

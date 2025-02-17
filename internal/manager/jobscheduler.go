@@ -13,6 +13,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
+// JobScheduler orchestrates different types of jobs (time-based, event-based, condition-based)
+// and manages their lifecycle, state persistence, and resource allocation
 type JobScheduler struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -36,6 +38,8 @@ type JobScheduler struct {
 	workerCancel context.CancelFunc
 }
 
+// ConditionMonitor tracks external conditions for condition-based jobs
+// and triggers job execution when conditions are met
 type ConditionMonitor struct {
 	ctx      context.Context
 	jobID    string
@@ -54,6 +58,8 @@ func (c *ConditionMonitor) Start(callback func()) {
 	// TODO: Implement condition monitoring logic
 }
 
+// NewJobScheduler initializes a new scheduler with resource monitoring,
+// state persistence, and job management capabilities
 func NewJobScheduler(db *database.Connection, logger logging.Logger, p2p *network.P2PHost) (*JobScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -86,6 +92,7 @@ func NewJobScheduler(db *database.Connection, logger logging.Logger, p2p *networ
 	return scheduler, nil
 }
 
+// canAcceptNewJob checks if system has enough resources to handle a new job
 func (s *JobScheduler) canAcceptNewJob() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -93,6 +100,8 @@ func (s *JobScheduler) canAcceptNewJob() bool {
 	return s.balancer.CheckResourceAvailability()
 }
 
+// StartTimeBasedJob initializes and runs a job that executes on a time interval.
+// Jobs that can't be started due to resource constraints are queued.
 func (s *JobScheduler) StartTimeBasedJob(jobID int64) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
@@ -138,6 +147,8 @@ func (s *JobScheduler) StartTimeBasedJob(jobID int64) error {
 	return nil
 }
 
+// StartEventBasedJob initializes and runs a job that executes in response to blockchain events.
+// Includes state persistence and resource management.
 func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
@@ -182,6 +193,8 @@ func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
 	return nil
 }
 
+// StartConditionBasedJob initializes and runs a job that executes when specific conditions are met.
+// Conditions are monitored via external scripts or APIs.
 func (s *JobScheduler) StartConditionBasedJob(jobID int64) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)

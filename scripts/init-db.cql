@@ -12,7 +12,6 @@ USE triggerx;
 DROP TABLE IF EXISTS user_data;
 DROP TABLE IF EXISTS job_data;
 DROP TABLE IF EXISTS task_data;
-DROP TABLE IF EXISTS quorum_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS task_history;
 
@@ -70,19 +69,6 @@ CREATE TABLE IF NOT EXISTS task_data (
     taSignature list<varint>,
     operatorIds list<varint>,
     executedAt timestamp
-);
-
--- Create Quorum_data table
-CREATE TABLE IF NOT EXISTS quorum_data (
-    quorum_id bigint PRIMARY KEY,
-    quorum_no int,
-    quorum_creation_block bigint,
-    quorum_termination_block bigint,
-    quorum_tx_hash text,
-    keepers list<text>,
-    quorum_stake_total bigint,
-    task_ids set<bigint>,
-    quorum_status boolean
 );
 
 -- Create Keeper_data table

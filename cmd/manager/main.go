@@ -1,5 +1,12 @@
 package main
 
+/*
+	TODO:
+	1. Add P2P message receiver to know what's going with Aggregator
+	2. Interlinking Jobs execution Logic
+
+*/
+
 import (
 	"context"
 	"encoding/json"
@@ -24,6 +31,8 @@ var (
 	logger logging.Logger
 )
 
+// handleJobEvent processes incoming job events and delegates to appropriate job scheduler
+// based on the job type (time-based, event-based, or condition-based)
 func handleJobEvent(event events.JobEvent) {
 	logger.Infof("Received job event - Type: %s, JobID: %d, JobType: %d, ChainID: %d",
 		event.Type, event.JobID, event.JobType, event.ChainID)
@@ -39,19 +48,16 @@ func handleJobEvent(event events.JobEvent) {
 		jobID := event.JobID
 		switch event.JobType {
 		case 1:
-			// logger.Infof("Processing Time-Based job: %d", event.JobID)
 			err := jobScheduler.StartTimeBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
 		case 2:
-			// logger.Infof("Processing Event-Based job: %d", event.JobID)
 			err := jobScheduler.StartEventBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
 		case 3:
-			// logger.Infof("Processing Condition-Based job: %d", event.JobID)
 			err := jobScheduler.StartConditionBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
@@ -68,6 +74,8 @@ func handleJobEvent(event events.JobEvent) {
 	}
 }
 
+// subscribeToEvents sets up Redis pub/sub subscription for job events
+// and handles incoming messages in a separate goroutine
 func subscribeToEvents(ctx context.Context) error {
 	eventBus := events.GetEventBus()
 	if eventBus == nil {
@@ -104,6 +112,8 @@ func subscribeToEvents(ctx context.Context) error {
 	return nil
 }
 
+// shutdown performs graceful shutdown of all components:
+// cancels context, closes DB connection and P2P host
 func shutdown(cancel context.CancelFunc, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -122,6 +132,8 @@ func shutdown(cancel context.CancelFunc, wg *sync.WaitGroup) {
 	logger.Info("Shutdown complete")
 }
 
+// main initializes the manager node, sets up event handling,
+// database connections, and handles graceful shutdown
 func main() {
 	if err := godotenv.Load(); err != nil {
 		fmt.Printf("Error loading .env file: %v\n", err)

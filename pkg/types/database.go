@@ -58,18 +58,6 @@ type TaskData struct {
 	ExecutedAt                time.Time `json:"executed_at"`
 }
 
-type QuorumData struct {
-	QuorumID                int64    `json:"quorum_id"`
-	QuorumNo                int      `json:"quorum_no"`
-	QuorumCreationBlock     int64    `json:"quorum_creation_block"`
-	QuorumTerminationBlock  int64    `json:"quorum_termination_block"`
-	QuorumTxHash            string   `json:"quorum_tx_hash"`
-	Keepers                 []string `json:"keepers"`
-	QuorumStakeTotal        int64    `json:"quorum_stake_total"`
-	TaskIDs                 []int64  `json:"task_ids"`
-	QuorumStatus            bool     `json:"quorum_status"`
-}
-
 type KeeperData struct {
 	KeeperID          int64     `json:"keeper_id"`
 	KeeperAddress     string    `json:"keeper_address"`
