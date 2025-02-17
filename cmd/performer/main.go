@@ -5,9 +5,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/performer"
+	"github.com/trigg3rX/triggerx-backend/internal/performer/services"
 )
 
 func main() {
+	services.Init()
 	router := gin.Default()
 	router.POST("/task/execute", performer.ExecuteTask)
 	log.Println("Server starting on :4003")

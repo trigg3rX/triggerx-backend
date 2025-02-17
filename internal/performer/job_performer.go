@@ -1,7 +1,8 @@
 package performer
 
 import (
-	// "crypto/tls"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/executor"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+
+	"github.com/trigg3rX/triggerx-backend/internal/performer/services"
 )
 
 // keeperResponseWrapper implements the KeeperResponse interface from the proof module.
@@ -126,8 +129,12 @@ func ExecuteTask(c *gin.Context) {
 		},
 	}
 
-	// Get the TLS connection state from the request.
-	connState := c.Request.TLS
+	// Create mock TLS connection state
+    certBytes := []byte("mock certificate data")
+    mockCert := &x509.Certificate{Raw: certBytes}
+    connState := &tls.ConnectionState{
+        PeerCertificates: []*x509.Certificate{mockCert},
+    }
 
 	// Generate and store the proof.
 	// This will return a CID (e.g. from Pinata) which is our stored proof identifier.
@@ -145,6 +152,10 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Proof generation failed"})
 		return
 	}
+
+	services.SendTask(cid, cid, taskDefinitionId)
+
+	log.Println("CID: ", cid)
 
 	// Prepare the final response including the execution result, proof details, and CID.
 	responseData := map[string]interface{}{
