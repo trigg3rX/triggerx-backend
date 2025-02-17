@@ -224,38 +224,3 @@ func (s *JobScheduler) StartConditionBasedJob(jobID int64) error {
 
 	return nil
 }
-
-func (s *JobScheduler) getJobStatus(jobID int64) map[string]interface{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if worker, exists := s.workers[jobID]; exists {
-		return map[string]interface{}{
-			"status":        worker.GetStatus(),
-			"error":         worker.GetError(),
-			"current_retry": worker.GetRetries(),
-			"max_retries":   3,
-		}
-	}
-	return nil
-}
-
-func (s *JobScheduler) updateJobCache(jobID int64) {
-	status := s.getJobStatus(jobID)
-	if status == nil {
-		return
-	}
-
-	s.cacheMutex.Lock()
-	if jobData, exists := s.stateCache[jobID]; exists {
-		data := jobData.(map[string]interface{})
-		for k, v := range status {
-			data[k] = v
-		}
-	}
-	s.cacheMutex.Unlock()
-
-	if err := s.cacheManager.SaveState(); err != nil {
-		s.logger.Errorf("Failed to save state for job %d: %v", jobID, err)
-	}
-}

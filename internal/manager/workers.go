@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	// "encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,7 +39,7 @@ type TimeBasedWorker struct {
 	scheduler *JobScheduler
 	cron      *cron.Cron
 	schedule  string
-	timeframe int64
+	jobData   *types.Job
 	startTime time.Time
 	BaseWorker
 }
@@ -49,8 +48,7 @@ type EventBasedWorker struct {
 	jobID           int64
 	scheduler       *JobScheduler
 	chainID         int
-	contractAddress string
-	eventSignature  string
+	jobData         *types.Job
 	client          *ethclient.Client
 	subscription    ethereum.Subscription
 	BaseWorker
@@ -59,8 +57,7 @@ type EventBasedWorker struct {
 type ConditionBasedWorker struct {
 	jobID         int64
 	scheduler     *JobScheduler
-	scriptIpfsUrl string
-	condition     string
+	jobData       *types.Job
 	ticker        *time.Ticker
 	done          chan bool
 	BaseWorker
@@ -72,7 +69,7 @@ func NewTimeBasedWorker(jobData *types.Job, schedule string, scheduler *JobSched
 		scheduler: scheduler,
 		cron:      cron.New(cron.WithSeconds()),
 		schedule:  schedule,
-		timeframe: jobData.TimeFrame,
+		jobData:   jobData,
 		startTime: time.Now(),
 		BaseWorker: BaseWorker{
 			status:     "pending",
@@ -89,13 +86,13 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 	w.status = "running"
 
 	time.AfterFunc(2*time.Second, func() {
-		if err := w.executeTask(); err != nil {
+		if err := w.executeTask(w.jobData); err != nil {
 			w.handleError(err)
 		}
 	})
 
 	w.cron.AddFunc(w.schedule, func() {
-		if w.timeframe > 0 && time.Since(w.startTime) > time.Duration(w.timeframe)*time.Second {
+		if w.jobData.TimeFrame > 0 && time.Since(w.startTime) > time.Duration(w.jobData.TimeFrame)*time.Second {
 			w.status = "completed"
 			w.Stop()
 			return
@@ -105,7 +102,7 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 			return
 		}
 
-		if err := w.executeTask(); err != nil {
+		if err := w.executeTask(w.jobData); err != nil {
 			w.handleError(err)
 		}
 	})
@@ -136,8 +133,44 @@ func (w *TimeBasedWorker) GetJobID() int64 {
 	return w.jobID
 }
 
-func (w *TimeBasedWorker) executeTask() error {
+func (w *TimeBasedWorker) executeTask(jobData *types.Job) error {
 	w.scheduler.logger.Infof("Executing time-based job: %d", w.jobID)
+
+	performer, err := GetPerformer()
+	if err != nil {
+		w.scheduler.logger.Errorf("Failed to get performer for job %d: %v", w.jobID, err)
+		return err
+	}
+
+	taskData := &types.TaskData{
+		JobID:           w.jobID,
+		TaskDefinitionID: 1,
+		TaskPerformer:   performer.KeeperAddress,
+		IsApproved:      true,
+	}
+
+	w.scheduler.logger.Infof("Task data: %d | %d | %s", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformer)
+
+	status, err := CreateTaskData(taskData)
+	if err != nil {
+		w.scheduler.logger.Errorf("Failed to create task data for job %d: %v", w.jobID, err)
+		return err
+	}
+
+	if !status {
+		return fmt.Errorf("failed to create task data for job %d", w.jobID)
+	}
+
+	w.scheduler.logger.Infof("Task data created for job %v", w.jobID)
+
+	_, err = SendTaskToPerformer(jobData, taskData)
+	if err != nil {
+		w.scheduler.logger.Errorf("Error sending task to performer: %v", err)
+		return err
+	}
+
+	w.scheduler.logger.Infof("Task sent for job %d to performer %s", w.jobID, performer.KeeperAddress)
+
 	return nil
 }
 
@@ -146,8 +179,7 @@ func NewEventBasedWorker(jobData *types.Job, scheduler *JobScheduler) *EventBase
 		jobID:           jobData.JobID,
 		scheduler:       scheduler,
 		chainID:         jobData.ChainID,
-		contractAddress: jobData.TriggerContractAddress,
-		eventSignature:  jobData.TriggerEvent,
+		jobData:         jobData,
 		BaseWorker: BaseWorker{
 			status:     "pending",
 			maxRetries: 3,
@@ -158,7 +190,7 @@ func NewEventBasedWorker(jobData *types.Job, scheduler *JobScheduler) *EventBase
 func (w *EventBasedWorker) Start(ctx context.Context) {
 	wsURL := w.getAlchemyWSURL()
 
-	// w.scheduler.logger.Infof("Connecting to Alchemy at %s", wsURL)
+	w.scheduler.logger.Infof("Connecting to Alchemy at %s", wsURL)
 
 	client, err := ethclient.Dial(wsURL)
 	if err != nil {
@@ -169,11 +201,12 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	}
 	w.client = client
 
-	eventSigHash := crypto.Keccak256Hash([]byte(w.eventSignature))
-	w.eventSignature = eventSigHash.Hex()
+	eventSigHash := crypto.Keccak256Hash([]byte(w.jobData.TriggerEvent))
+	eventSignature := eventSigHash.Hex()
 
 	query := ethereum.FilterQuery{
-		Addresses: []common.Address{common.HexToAddress(w.contractAddress)},
+		Addresses: []common.Address{common.HexToAddress(w.jobData.TriggerContractAddress)},
+		Topics:    [][]common.Hash{{common.HexToHash(eventSignature)}},
 	}
 
 	logs := make(chan gethtypes.Log)
@@ -201,7 +234,7 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 			case log := <-logs:
 				w.scheduler.logger.Infof("Event detected for job %d: %v", w.jobID, log.TxHash.Hex())
 
-				w.scheduler.logger.Infof("Executing event-based job: %d", w.jobID)
+				w.executeTask(w.jobData)
 				return
 			}
 		}
@@ -252,12 +285,48 @@ func (w *EventBasedWorker) getAlchemyWSURL() string {
 	return fmt.Sprintf("wss://%s.g.alchemy.com/v2/%s", network, apiKey)
 }
 
+func (w *EventBasedWorker) executeTask(jobData *types.Job) error {
+	w.scheduler.logger.Infof("Executing event-based job: %d", w.jobID)
+
+	performer, err := GetPerformer()
+	if err != nil {
+		w.scheduler.logger.Errorf("Failed to get performer for job %d: %v", w.jobID, err)
+		return err
+	}
+
+	taskData := &types.TaskData{
+		JobID:           w.jobID,
+		TaskDefinitionID: 2,
+		TaskPerformer:   performer.KeeperAddress,
+		IsApproved:      true,
+	}
+
+	status, err := CreateTaskData(taskData)
+	if err != nil {
+		w.scheduler.logger.Errorf("Failed to create task data for job %d: %v", w.jobID, err)
+		return err
+	}
+
+	if !status {
+		return fmt.Errorf("failed to create task data for job %d", w.jobID)
+	}
+
+	_, err = SendTaskToPerformer(jobData, taskData)
+	if err != nil {
+		w.scheduler.logger.Errorf("Error sending task to performer: %v", err)
+		return err
+	}
+
+	w.scheduler.logger.Infof("Task sent for job %d to performer %s", w.jobID, performer)
+
+	return nil
+}
+
 func NewConditionBasedWorker(jobData *types.Job, scheduler *JobScheduler) *ConditionBasedWorker {
 	return &ConditionBasedWorker{
 		jobID:         jobData.JobID,
 		scheduler:     scheduler,
-		scriptIpfsUrl: jobData.ScriptIPFSUrl,
-		condition:     jobData.ScriptFunction,
+		jobData:       jobData,
 		done:          make(chan bool),
 		BaseWorker: BaseWorker{
 			status:     "pending",
@@ -271,7 +340,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	w.ticker = time.NewTicker(1 * time.Second)
 
 	w.scheduler.logger.Infof("Starting condition-based job %d", w.jobID)
-	w.scheduler.logger.Infof("Listening to %s", w.scriptIpfsUrl)
+	w.scheduler.logger.Infof("Listening to %s", w.jobData.ScriptIPFSUrl)
 
 	go func() {
 		defer w.Stop()
@@ -301,7 +370,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 				if satisfied {
 					w.scheduler.logger.Infof("Condition satisfied for job %d", w.jobID)
 					w.status = "completed"
-					w.executeTask()
+					w.executeTask(w.jobData)
 					return
 				}
 			}
@@ -322,7 +391,7 @@ func (w *ConditionBasedWorker) GetJobID() int64 {
 }
 
 func (w *ConditionBasedWorker) checkCondition() (bool, error) {
-	resp, err := http.Get(w.scriptIpfsUrl)
+	resp, err := http.Get(w.jobData.ScriptIPFSUrl)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch API data: %v", err)
 	}
@@ -335,25 +404,43 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 
 	w.scheduler.logger.Infof("API response: %s", string(body))
 
-	// var data map[string]interface{}
-	// if err := json.Unmarshal(body, &data); err != nil {
-	// 	return false, fmt.Errorf("failed to parse API response: %v", err)
-	// }
-
-	// result, err := w.evaluateCondition(data)
-	// if err != nil {
-	// 	return false, fmt.Errorf("failed to evaluate condition: %v", err)
-	// }
-
 	return true, nil
 }
 
-func (w *ConditionBasedWorker) evaluateCondition(data map[string]interface{}) (bool, error) {
-	return data["price"].(float64) > 100, nil
-}
-
-func (w *ConditionBasedWorker) executeTask() error {
+func (w *ConditionBasedWorker) executeTask(jobData *types.Job) error {
 	w.scheduler.logger.Infof("Executing condition-based job: %d", w.jobID)
+	
+	performer, err := GetPerformer()
+	if err != nil {
+		w.scheduler.logger.Errorf("Failed to get performer for job %d: %v", w.jobID, err)
+		return err
+	}
+
+	taskData := &types.TaskData{
+		JobID:           w.jobID,
+		TaskDefinitionID: 3,
+		TaskPerformer:   performer.KeeperAddress,
+		IsApproved:      true,
+	}
+
+	status, err := CreateTaskData(taskData)
+	if err != nil {
+		w.scheduler.logger.Errorf("Failed to create task data for job %d: %v", w.jobID, err)
+		return err
+	}
+
+	if !status {
+		return fmt.Errorf("failed to create task data for job %d", w.jobID)
+	}
+
+	_, err = SendTaskToPerformer(jobData, taskData)
+	if err != nil {
+		w.scheduler.logger.Errorf("Error sending task to performer: %v", err)
+		return err
+	}
+
+	w.scheduler.logger.Infof("Task sent for job %d to performer %s", w.jobID, performer)
+
 	return nil
 }
 

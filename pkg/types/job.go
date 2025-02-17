@@ -28,6 +28,7 @@ type Job struct {
 	LinkID              int64
 	ScriptFunction      string
 	ScriptIPFSUrl       string
+    Payload       map[string]interface{}
 }
 
 type JobMessage struct {
