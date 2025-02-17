@@ -12,14 +12,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"crypto/rand"
 
 	"github.com/urfave/cli/v2"
@@ -271,33 +269,10 @@ func registerKeeper(c *cli.Context) error {
 	logger.Info("Parameters created.")
 	logger.Info("Getting Quorum No ...")
 
-	apiEndpoint := fmt.Sprintf("%s/quorums/registration", "https://data.triggerx.network/api")
-	resp, err := http.Get(apiEndpoint)
-	if err != nil {
-		logger.Error("Failed to get quorum no", "error", err)
-		return cli.Exit("Failed to get quorum no", 1)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("Failed to read response body", "error", err)
-		return cli.Exit("Failed to read response body", 1)
-	}
-
-	quorumNo := "0" +strings.TrimSpace(string(body))
-	quorumNoInt, err := strconv.Atoi(quorumNo)
-	if err != nil {
-		logger.Error("Failed to parse quorum number", "error", err)
-		return cli.Exit("Failed to parse quorum number", 1)
-	}
-	quorumNoBytes, _ := hex.DecodeString(quorumNo)
-
 	logger.Info("Creating registration transaction ...")
 	tx, err := registryCoordinatorContract.RegisterOperator(
 		noSendTxOpts,
-		// []byte{0},
-		quorumNoBytes,
+		[]byte{0},
 		string(nodeConfig.ConnectionAddress),
 		pubkeyRegParams,
 		operatorSignatureWithSaltAndExpiry,
@@ -318,15 +293,14 @@ func registerKeeper(c *cli.Context) error {
 	logger.Info("Transaction mined", "txHash", receipt.TxHash.Hex(), "blockNumber", receipt.BlockNumber)
 
 	keeperData := types.KeeperData{
-		WithdrawalAddress: keeperAddress.Hex(),
+		KeeperAddress: keeperAddress.Hex(),
 		RegisteredTx:      receipt.TxHash.Hex(),
 		Status:            true,
 		BlsSigningKeys:    []string{},
 		Verified:          false,
-		CurrentQuorumNo:   quorumNoInt,
 	}
 
-	logger.Info("Registering keeper in database", "address", keeperData.WithdrawalAddress)
+	logger.Info("Registering keeper in database", "address", keeperData.KeeperAddress)
 
 	jsonData, err := json.Marshal(keeperData)
 	if err != nil {
@@ -334,8 +308,8 @@ func registerKeeper(c *cli.Context) error {
 		return cli.Exit("Failed to marshal keeper data", 1)
 	}
 
-	apiEndpoint = fmt.Sprintf("%s/keepers", "https://data.triggerx.network/api")
-	resp, err = http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
+	apiEndpoint := fmt.Sprintf("%s/keepers", "https://data.triggerx.network/api")
+	resp, err := http.Post(apiEndpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		logger.Error("Failed to create keeper in database", "error", err)
 		return cli.Exit("Failed to create keeper in database", 1)
@@ -530,14 +504,13 @@ func deregisterKeeper(c *cli.Context) error {
 	}
 
 	keeperData := types.KeeperData{
-		WithdrawalAddress: keeperAddress.Hex(),
+		KeeperAddress: keeperAddress.Hex(),
 		RegisteredTx:      receipt.TxHash.Hex(),
 		Status:            false,
 		BlsSigningKeys:    []string{},
-		CurrentQuorumNo:   int(99),
 	}
 
-	logger.Info("Updating keeper in database", "address", keeperData.WithdrawalAddress)
+	logger.Info("Updating keeper in database", "address", keeperData.KeeperAddress)
 
 	jsonData, err := json.Marshal(keeperData)
 	if err != nil {
