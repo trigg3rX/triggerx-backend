@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Get the latest job ID and increment it
-LATEST_ID=$(curl -s -X GET http://localhost:8080/api/jobs/latest-id | jq -r '.latest_jobID')
+LATEST_ID=$(curl -s -X GET http://data.triggerx.network:8080/api/jobs/latest-id | jq -r '.latest_jobID')
 NEW_JOB_ID=$((LATEST_ID + 1))
 echo "Latest job ID: $LATEST_ID"
 echo "New job ID: $NEW_JOB_ID"
@@ -33,7 +33,7 @@ RANDOM_COST_INDEX=$((RANDOM % ${#JOB_COST_PREDICTIONS[@]}))
 SELECTED_JOB_COST=${JOB_COST_PREDICTIONS[$RANDOM_COST_INDEX]}
 
 # Create a new job with the incremented ID
-curl -X POST http://localhost:8080/api/jobs \
+curl -X POST http://data.triggerx.network:8080/api/jobs \
   -H "Content-Type: application/json" \
   -d "{
     \"userAddress\": \"$SELECTED_USER_ADDRESS\",

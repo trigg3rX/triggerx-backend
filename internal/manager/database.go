@@ -119,7 +119,7 @@ func CreateTaskData(taskData *types.TaskData) (status bool, err error) {
 		return false, fmt.Errorf("failed to marshal task data: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:8080/api/tasks", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "http://data.triggerx.network:8080/api/tasks", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %v", err)
 	}
@@ -146,7 +146,7 @@ func CreateTaskData(taskData *types.TaskData) (status bool, err error) {
 func GetPerformer() (types.Performer, error) {
 	client := &http.Client{}
 
-	req, err := http.NewRequest("GET", "http://localhost:8080/api/keepers/performers", nil)
+	req, err := http.NewRequest("GET", "http://data.triggerx.network:8080/api/keepers/performers", nil)
 	if err != nil {
 		return types.Performer{}, fmt.Errorf("failed to create request: %v", err)
 	}
