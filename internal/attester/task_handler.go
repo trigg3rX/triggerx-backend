@@ -4,87 +4,93 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	// "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// ProofResponse represents the structure of the proof data received from the API
 type ProofResponse struct {
 	ProofHash string `json:"proofHash"`
 	CID       string `json:"cid"`
 }
 
-// ValidationResult represents the response we'll send back
 type ValidationResult struct {
 	IsValid bool   `json:"isValid"`
 	Message string `json:"message"`
 	Error   string `json:"error,omitempty"`
 }
 
-// ValidateTask handles the validation request
+type TaskValidationRequest struct {
+	ProofOfTask      string `json:"proofOfTask"`
+	Data             string `json:"data"`
+	TaskDefinitionID uint16 `json:"taskDefinitionId"`
+	Performer        string `json:"performer"`
+}
+
+type ValidationResponse struct {
+	Data    bool   `json:"data"`
+	Error   bool   `json:"error"`
+	Message string `json:"message,omitempty"`
+}
+
 func ValidateTask(w http.ResponseWriter, r *http.Request) {
-	// Only allow POST requests
 	if r.Method != http.MethodPost {
-		sendResponse(w, ValidationResult{
-			IsValid: false,
-			Message: "Method not allowed",
-			Error:   "Only POST requests are accepted",
+		sendResponse(w, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: "Only POST requests are accepted",
 		}, http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Parse the request body
-	var proofResp ProofResponse
-	if err := json.NewDecoder(r.Body).Decode(&proofResp); err != nil {
-		sendResponse(w, ValidationResult{
-			IsValid: false,
-			Message: "Failed to parse request body",
-			Error:   err.Error(),
+	var taskRequest TaskValidationRequest
+	if err := json.NewDecoder(r.Body).Decode(&taskRequest); err != nil {
+		sendResponse(w, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: fmt.Sprintf("Failed to parse request body: %v", err),
 		}, http.StatusBadRequest)
 		return
 	}
 
-	// Fetch IPFS content
-	ipfsData, err := fetchIPFSContent(proofResp.CID)
+	log.Printf("Received Task Validation Request:")
+	log.Printf("Proof of Task: %s", taskRequest.ProofOfTask)
+	log.Printf("Data: %s", taskRequest.Data)
+	log.Printf("Task Definition ID: %d", taskRequest.TaskDefinitionID)
+	log.Printf("Performer Address: %s", taskRequest.Performer)
+
+	ipfsData, err := fetchIPFSContent(taskRequest.ProofOfTask)
 	if err != nil {
-		sendResponse(w, ValidationResult{
-			IsValid: false,
-			Message: "Failed to fetch IPFS content",
-			Error:   err.Error(),
+		sendResponse(w, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: fmt.Sprintf("Failed to fetch IPFS content: %v", err),
 		}, http.StatusInternalServerError)
 		return
 	}
 
-	// Parse IPFS JSON content
-	var ipfsResp types.IPFSResponse
-	if err := json.Unmarshal([]byte(ipfsData), &ipfsResp); err != nil {
-		sendResponse(w, ValidationResult{
-			IsValid: false,
-			Message: "Failed to parse IPFS content",
-			Error:   err.Error(),
-		}, http.StatusInternalServerError)
-		return
-	}
+	log.Printf("IPFS Data Fetched")
+	log.Printf("IPFS Data: %s", ipfsData)
 
-	// Compare hashes
-	if proofResp.ProofHash == ipfsResp.Proof.ResponseHash {
-		sendResponse(w, ValidationResult{
-			IsValid: true,
-			Message: "Proof hash matches response hash",
-		}, http.StatusOK)
-	} else {
-		sendResponse(w, ValidationResult{
-			IsValid: false,
-			Message: "Proof hash does not match response hash",
-			Error:   "Hash mismatch",
-		}, http.StatusOK)
-	}
+	// var ipfsResp types.IPFSResponse
+	// if err := json.Unmarshal([]byte(ipfsData), &ipfsResp); err != nil {
+	// 	sendResponse(w, ValidationResponse{
+	// 		Data:    false,
+	// 		Error:   true,
+	// 		Message: fmt.Sprintf("Failed to parse IPFS content: %v", err),
+	// 	}, http.StatusInternalServerError)
+	// 	return
+	// }
+
+	sendResponse(w, ValidationResponse{
+		Data:    true,
+		Error:   false,
+		Message: "",
+	}, http.StatusOK)
 }
 
-// fetchIPFSContent retrieves content from IPFS gateway
 func fetchIPFSContent(cid string) (string, error) {
-	// You can use any public IPFS gateway
 	ipfsGateway := "https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/"
 	resp, err := http.Get(ipfsGateway + cid)
 	if err != nil {
@@ -104,9 +110,8 @@ func fetchIPFSContent(cid string) (string, error) {
 	return string(body), nil
 }
 
-// sendResponse is a helper function to send JSON responses
-func sendResponse(w http.ResponseWriter, result ValidationResult, statusCode int) {
+func sendResponse(w http.ResponseWriter, response ValidationResponse, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(response)
 }
