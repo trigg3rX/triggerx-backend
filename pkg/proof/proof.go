@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type ProofTemplate struct {
@@ -64,6 +66,11 @@ type KeeperResponse interface {
 }
 
 func LoadPinataConfig() (*PinataConfig, error) {
+	err := godotenv.Load()
+	if err != nil {
+		return nil, fmt.Errorf("error loading .env file: %v", err)
+	}
+
 	apiKey := os.Getenv("PINATA_API_KEY")
 	secretKey := os.Getenv("PINATA_SECRET_API_KEY")
 	host := os.Getenv("IPFS_HOST")

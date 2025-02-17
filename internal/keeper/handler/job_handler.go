@@ -22,8 +22,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/execute/keeper/executor"
-	"github.com/trigg3rX/triggerx-backend/execute/manager"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/executor"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ArgumentConverter struct{}
@@ -140,12 +140,12 @@ func NewJobHandler(ethClient *ethclient.Client, etherscanAPIKey string) *JobHand
 	}
 }
 
-func (h *JobHandler) HandleJob(job *manager.Job) error {
+func (h *JobHandler) HandleJob(job *types.Job) error {
 	if h.ethClient == nil {
 		return fmt.Errorf("ethereum client not initialized")
 	}
 
-	log.Printf("🔧 Received job %s for execution", job.JobID)
+	log.Printf("🔧 Received job %d for execution", job.JobID)
 
 	// Validate job
 	if err := h.validateJob(job); err != nil {
@@ -154,7 +154,7 @@ func (h *JobHandler) HandleJob(job *manager.Job) error {
 	}
 
 	// Fetch checker_template.go from IPFS if CodeURL is provided
-	checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+	checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.ScriptIPFSUrl)
 	if err != nil {
 		log.Printf("Error fetching checker template: %v", err)
 		return err
@@ -169,14 +169,14 @@ func (h *JobHandler) HandleJob(job *manager.Job) error {
 
 	// Execute job based on argument type
 	switch job.ArgType {
-	case "None":
+	case 0:
 		return h.executeNoArgContract(job)
-	case "Static":
+	case 1:
 		return h.executeStaticArgContract(job)
-	case "Dynamic":
+	case 2:
 		return h.executeDynamicArgContract(job)
 	default:
-		return fmt.Errorf("unsupported argument type: %s", job.ArgType)
+		return fmt.Errorf("unsupported argument type: %d", job.ArgType)
 	}
 }
 
@@ -219,13 +219,13 @@ func (h *JobHandler) fetchCheckerTemplateFromIPFS(codeURL string) (string, error
 	return checkerPath, nil
 }
 
-func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
-	log.Printf("Executing contract call for job %s with no arguments", job.JobID)
+func (h *JobHandler) executeNoArgContract(job *types.Job) error {
+	log.Printf("Executing contract call for job %d with no arguments", job.JobID)
 
 	// Check IPFS code validation if CodeURL is provided
-	if job.CodeURL != "" {
+	if job.ScriptIPFSUrl != "" {
 		// Fetch checker template from IPFS
-		checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+		checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.ScriptIPFSUrl)
 		if err != nil {
 			return fmt.Errorf("failed to fetch checker template: %v", err)
 		}
@@ -262,10 +262,10 @@ func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
 		// Note: We don't modify arguments here since it's a no-arg contract
 	}
 
-	contractAddress := common.HexToAddress(job.ContractAddress)
+	contractAddress := common.HexToAddress(job.TargetContractAddress)
 
 	// Prepare method call data
-	contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.ContractAddress)
+	contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
 	if err != nil {
 		return err
 	}
@@ -295,10 +295,10 @@ func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
 		return err
 	}
 
-	log.Printf("✅ Job %s executed successfully. Result: %+v", job.JobID, map[string]interface{}{
+	log.Printf("✅ Job %d executed successfully. Result: %+v", job.JobID, map[string]interface{}{
 		"arguments": job.Arguments,
 		"chainID":   job.ChainID,
-		"contract":  job.ContractAddress,
+		"contract":  job.TargetContractAddress,
 		"result":    decodedResults,
 		"status":    "success",
 	})
@@ -306,13 +306,13 @@ func (h *JobHandler) executeNoArgContract(job *manager.Job) error {
 	return nil
 }
 
-func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
-	log.Printf("Executing contract call for job %s with static arguments", job.JobID)
+func (h *JobHandler) executeStaticArgContract(job *types.Job) error {
+	log.Printf("Executing contract call for job %d with static arguments", job.JobID)
 
 	// Check IPFS code validation if CodeURL is provided
-	if job.CodeURL != "" {
+	if job.ScriptIPFSUrl != "" {
 		// Fetch checker template from IPFS
-		checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+		checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.ScriptIPFSUrl)
 		if err != nil {
 			return fmt.Errorf("failed to fetch checker template: %v", err)
 		}
@@ -349,10 +349,10 @@ func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
 		// Note: We don't modify arguments here since they are static
 	}
 
-	contractAddress := common.HexToAddress(job.ContractAddress)
+	contractAddress := common.HexToAddress(job.TargetContractAddress)
 
 	// Prepare method call data
-	contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.ContractAddress)
+	contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
 	if err != nil {
 		return err
 	}
@@ -404,10 +404,10 @@ func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
 		return err
 	}
 
-	log.Printf("✅ Job %s executed successfully. Result: %+v", job.JobID, map[string]interface{}{
+	log.Printf("✅ Job %d executed successfully. Result: %+v", job.JobID, map[string]interface{}{
 		"arguments": job.Arguments,
 		"chainID":   job.ChainID,
-		"contract":  job.ContractAddress,
+		"contract":  job.TargetContractAddress,
 		"result":    decodedResults,
 		"status":    "success",
 	})
@@ -416,14 +416,14 @@ func (h *JobHandler) executeStaticArgContract(job *manager.Job) error {
 
 // Only showing the modified parts of job_handler.go for brevity
 
-func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
-	log.Printf("Executing contract call for job %s with dynamic arguments", job.JobID)
+func (h *JobHandler) executeDynamicArgContract(job *types.Job) error {
+	log.Printf("Executing contract call for job %d with dynamic arguments", job.JobID)
 
 	// Fetch and compile the checker template if CodeURL is provided
 	var checkerResult map[string]interface{}
-	if job.CodeURL != "" {
+	if job.ScriptIPFSUrl != "" {
 		// Fetch checker template from IPFS
-		checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.CodeURL)
+		checkerPath, err := h.fetchCheckerTemplateFromIPFS(job.ScriptIPFSUrl)
 		if err != nil {
 			return fmt.Errorf("failed to fetch checker template: %v", err)
 		}
@@ -466,8 +466,8 @@ func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
 	}
 
 	// Continue with contract execution
-	contractAddress := common.HexToAddress(job.ContractAddress)
-	contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.ContractAddress)
+	contractAddress := common.HexToAddress(job.TargetContractAddress)
+	contractABI, method, err := h.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
 	if err != nil {
 		return err
 	}
@@ -513,10 +513,10 @@ func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
 		return fmt.Errorf("error decoding contract output: %v", err)
 	}
 
-	log.Printf("✅ Job %s executed successfully. Result: %+v", job.JobID, map[string]interface{}{
+	log.Printf("✅ Job %d executed successfully. Result: %+v", job.JobID, map[string]interface{}{
 		"arguments": job.Arguments,
 		"chainID":   job.ChainID,
-		"contract":  job.ContractAddress,
+		"contract":  job.TargetContractAddress,
 		"result":    decodedResults,
 		"status":    "success",
 	})
@@ -614,141 +614,141 @@ func (h *JobHandler) executeDynamicArgContract(job *manager.Job) error {
 //     }
 // }
 
-func (h *JobHandler) sendToQuorumHead(originalValue interface{}) (interface{}, error) {
-	log.Printf("Sending value to Quorum Head: %v", originalValue)
+// func (h *JobHandler) sendToQuorumHead(originalValue interface{}) (interface{}, error) {
+// 	log.Printf("Sending value to Quorum Head: %v", originalValue)
 
-	// Placeholder for Quorum Head processing
-	// In future, this will involve complex quorum head logic
-	receivedValue, err := h.receiveValueFromWorkers(originalValue)
-	if err != nil {
-		log.Printf("Error in Quorum Head processing: %v", err)
-		return nil, err
-	}
+// 	// Placeholder for Quorum Head processing
+// 	// In future, this will involve complex quorum head logic
+// 	receivedValue, err := h.receiveValueFromWorkers(originalValue)
+// 	if err != nil {
+// 		log.Printf("Error in Quorum Head processing: %v", err)
+// 		return nil, err
+// 	}
 
-	return receivedValue, nil
-}
+// 	return receivedValue, nil
+// }
 
-func (h *JobHandler) receiveValueFromWorkers(originalValue interface{}) (interface{}, error) {
-	log.Printf("Receiving value from workers: %v", originalValue)
+// func (h *JobHandler) receiveValueFromWorkers(originalValue interface{}) (interface{}, error) {
+// 	log.Printf("Receiving value from workers: %v", originalValue)
 
-	// Placeholder for worker value processing
-	consensusValue, err := h.runConsensus(originalValue)
-	if err != nil {
-		log.Printf("Error in worker value processing: %v", err)
-		return nil, err
-	}
+// 	// Placeholder for worker value processing
+// 	consensusValue, err := h.runConsensus(originalValue)
+// 	if err != nil {
+// 		log.Printf("Error in worker value processing: %v", err)
+// 		return nil, err
+// 	}
 
-	return consensusValue, nil
-}
+// 	return consensusValue, nil
+// }
 
-func (h *JobHandler) runConsensus(originalValue interface{}) (interface{}, error) {
-	log.Printf("Running consensus on value: %v", originalValue)
+// func (h *JobHandler) runConsensus(originalValue interface{}) (interface{}, error) {
+// 	log.Printf("Running consensus on value: %v", originalValue)
 
-	// Placeholder for consensus logic
-	// Currently just returns the original value
-	// In future, this will involve complex consensus mechanism
-	return originalValue, nil
-}
+// 	// Placeholder for consensus logic
+// 	// Currently just returns the original value
+// 	// In future, this will involve complex consensus mechanism
+// 	return originalValue, nil
+// }
 
-// New method to fetch dynamic argument from API
-func (h *JobHandler) fetchDynamicArgument(arguments map[string]interface{}) (interface{}, error) {
-	// Check if URL is provided in arguments
-	urlInterface, exists := arguments["url"]
-	if !exists {
-		log.Printf("No URL provided for dynamic argument, returning default value 0")
-		return "0", nil
-	}
+// // New method to fetch dynamic argument from API
+// func (h *JobHandler) fetchDynamicArgument(arguments map[string]interface{}) (interface{}, error) {
+// 	// Check if URL is provided in arguments
+// 	urlInterface, exists := arguments["url"]
+// 	if !exists {
+// 		log.Printf("No URL provided for dynamic argument, returning default value 0")
+// 		return "0", nil
+// 	}
 
-	// Convert URL to string
-	url, ok := urlInterface.(string)
-	if !ok {
-		log.Printf("Invalid URL format, returning default value 0")
-		return "0", nil
-	}
+// 	// Convert URL to string
+// 	url, ok := urlInterface.(string)
+// 	if !ok {
+// 		log.Printf("Invalid URL format, returning default value 0")
+// 		return "0", nil
+// 	}
 
-	log.Printf("Fetching dynamic argument from URL: %s", url)
+// 	log.Printf("Fetching dynamic argument from URL: %s", url)
 
-	// Attempt to fetch value from API
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Printf("Error fetching dynamic argument: %v, returning default value 0", err)
-		return "0", nil
-	}
-	defer resp.Body.Close()
+// 	// Attempt to fetch value from API
+// 	resp, err := http.Get(url)
+// 	if err != nil {
+// 		log.Printf("Error fetching dynamic argument: %v, returning default value 0", err)
+// 		return "0", nil
+// 	}
+// 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v, returning default value 0", err)
-		return "0", nil
-	}
+// 	// Read response body
+// 	body, err := ioutil.ReadAll(resp.Body)
+// 	if err != nil {
+// 		log.Printf("Error reading response body: %v, returning default value 0", err)
+// 		return "0", nil
+// 	}
 
-	log.Printf("Received API response body: %s", string(body))
+// 	log.Printf("Received API response body: %s", string(body))
 
-	// Flexible response parsing
-	var apiResponse map[string]interface{}
-	err = json.Unmarshal(body, &apiResponse)
-	if err != nil {
-		log.Printf("Error parsing API response: %v, returning default value 0", err)
-		return "0", nil
-	}
+// 	// Flexible response parsing
+// 	var apiResponse map[string]interface{}
+// 	err = json.Unmarshal(body, &apiResponse)
+// 	if err != nil {
+// 		log.Printf("Error parsing API response: %v, returning default value 0", err)
+// 		return "0", nil
+// 	}
 
-	// Try to extract value from different possible nested structures
-	var value interface{}
+// 	// Try to extract value from different possible nested structures
+// 	var value interface{}
 
-	// Check for "data.value" structure
-	if data, ok := apiResponse["data"].(map[string]interface{}); ok {
-		value = data["value"]
-	}
+// 	// Check for "data.value" structure
+// 	if data, ok := apiResponse["data"].(map[string]interface{}); ok {
+// 		value = data["value"]
+// 	}
 
-	// If not found, check for direct "value" at root
-	if value == nil {
-		value = apiResponse["value"]
+// 	// If not found, check for direct "value" at root
+// 	if value == nil {
+// 		value = apiResponse["value"]
 
-		// If still nil, try checking for "price"
-		if value == nil {
-			value = apiResponse["price"]
-		}
-	}
+// 		// If still nil, try checking for "price"
+// 		if value == nil {
+// 			value = apiResponse["price"]
+// 		}
+// 	}
 
-	// Convert value to string
-	var stringValue string
-	switch v := value.(type) {
-	case string:
-		stringValue = v
-	case float64:
-		stringValue = fmt.Sprintf("%d", int(v))
-	case int:
-		stringValue = strconv.Itoa(v)
-	case int64:
-		stringValue = strconv.FormatInt(v, 10)
-	default:
-		log.Printf("Unexpected value type: %T, returning default value 0", value)
-		return "0", nil
-	}
+// 	// Convert value to string
+// 	var stringValue string
+// 	switch v := value.(type) {
+// 	case string:
+// 		stringValue = v
+// 	case float64:
+// 		stringValue = fmt.Sprintf("%d", int(v))
+// 	case int:
+// 		stringValue = strconv.Itoa(v)
+// 	case int64:
+// 		stringValue = strconv.FormatInt(v, 10)
+// 	default:
+// 		log.Printf("Unexpected value type: %T, returning default value 0", value)
+// 		return "0", nil
+// 	}
 
-	// If no value is found or conversion fails, return "0"
-	if stringValue == "" {
-		log.Printf("No value found in API response, returning default value 0")
-		return "0", nil
-	}
+// 	// If no value is found or conversion fails, return "0"
+// 	if stringValue == "" {
+// 		log.Printf("No value found in API response, returning default value 0")
+// 		return "0", nil
+// 	}
 
-	// New workflow: Send fetched value through Quorum Head processing
-	processedValue, err := h.sendToQuorumHead(stringValue)
-	if err != nil {
-		log.Printf("Error in Quorum Head processing: %v, using original value", err)
-		processedValue = stringValue
-	}
+// 	// New workflow: Send fetched value through Quorum Head processing
+// 	processedValue, err := h.sendToQuorumHead(stringValue)
+// 	if err != nil {
+// 		log.Printf("Error in Quorum Head processing: %v, using original value", err)
+// 		processedValue = stringValue
+// 	}
 
-	// Update newPrice in arguments if it exists
-	if _, exists := arguments["data"]; exists {
-		arguments["data"] = processedValue
-		log.Printf("Updated data to: %v", processedValue)
-	}
+// 	// Update newPrice in arguments if it exists
+// 	if _, exists := arguments["data"]; exists {
+// 		arguments["data"] = processedValue
+// 		log.Printf("Updated data to: %v", processedValue)
+// 	}
 
-	log.Printf("Fetched and processed dynamic argument value: %v", processedValue)
-	return processedValue, nil
-}
+// 	log.Printf("Fetched and processed dynamic argument value: %v", processedValue)
+// 	return processedValue, nil
+// }
 
 func (h *JobHandler) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
 	// Handle different output scenarios
@@ -784,11 +784,11 @@ func (h *JobHandler) decodeContractOutput(contractABI *abi.ABI, method *abi.Meth
 	return results, nil
 }
 
-func (h *JobHandler) validateJob(job *manager.Job) error {
+func (h *JobHandler) validateJob(job *types.Job) error {
 	if job == nil {
 		return fmt.Errorf("received nil job")
 	}
-	if job.JobID == "" {
+	if job.JobID == 0 {
 		return fmt.Errorf("invalid job: empty job ID")
 	}
 	return nil
