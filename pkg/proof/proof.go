@@ -13,39 +13,8 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-type ProofTemplate struct {
-	JobID            int64       `json:"job_id"`
-	JobType          string      `json:"job_type"`
-	TaskID           int64       `json:"task_id"`
-	TaskDefinitionID int64       `json:"task_definition_id"`
-	Trigger          TriggerInfo `json:"trigger"`
-	Action           ActionInfo  `json:"action"`
-	Proof            *TLSProof   `json:"proof"`
-}
-
-type TriggerInfo struct {
-	Timestamp               string            `json:"timestamp"`
-	Value                   string            `json:"value"`
-	TxHash                  string            `json:"txHash"`
-	EventName               string            `json:"eventName"`
-	ConditionEndpoint       string            `json:"conditionEndpoint"`
-	ConditionValue          string            `json:"conditionValue"`
-	CustomTriggerDefinition CustomTriggerInfo `json:"customTriggerDefinition"`
-}
-
-type CustomTriggerInfo struct {
-	Type   string                 `json:"type"`
-	Params map[string]interface{} `json:"params"`
-}
-
-type ActionInfo struct {
-	Timestamp string `json:"timestamp"`
-	TxHash    string `json:"txHash"`
-	GasUsed   string `json:"gasUsed"`
-	Status    string `json:"status"`
-}
 
 // TLSProof struct holds proof details including the BLS signature
 type TLSProof struct {
@@ -111,46 +80,48 @@ func GenerateProof(response KeeperResponse, connState *tls.ConnectionState) (*TL
 func GenerateAndStoreProof(
 	response KeeperResponse,
 	connState *tls.ConnectionState,
-	templateData ProofTemplate,
-) (string, error) {
+	tempData types.IPFSData,
+) (types.IPFSData, error) {
 	// Generate the proof
 	proof, err := GenerateProof(response, connState)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate proof: %v", err)
+		return types.IPFSData{}, fmt.Errorf("failed to generate proof: %v", err)
 	}
 
-	// Add proof to template
-	templateData.Proof = proof
-
-	// Set current timestamp if not provided
-	if templateData.Action.Timestamp == "" {
-		templateData.Action.Timestamp = time.Now().Format(time.RFC3339)
-	}
+	tempData.ProofData.TaskID = tempData.ActionData.TaskID
+	tempData.ProofData.Timestamp = time.Now()
+	tempData.ProofData.CertificateHash = proof.CertificateHash
+	tempData.ProofData.ResponseHash = proof.ResponseHash
 
 	// Convert template to JSON
-	jsonData, err := json.MarshalIndent(templateData, "", "  ")
+	jsonData, err := json.MarshalIndent(tempData, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal template: %v", err)
+		return types.IPFSData{}, fmt.Errorf("failed to marshal template: %v", err)
 	}
 
 	// Load Pinata config
 	pinataConfig, err := LoadPinataConfig()
 	if err != nil {
-		return "", fmt.Errorf("failed to load Pinata config: %v", err)
+		return types.IPFSData{}, fmt.Errorf("failed to load Pinata config: %v", err)
 	}
 
 	// Create unique name for the file
 	fileName := fmt.Sprintf("proof_%d_%d_%s.json",
-		templateData.JobID,
-		templateData.TaskID,
-		time.Now().UTC().Format("20060102150405"))
+		tempData.JobData.JobID,
+		tempData.ActionData.TaskID,
+		time.Now().UTC().Format(time.RFC3339))
 
 	// Store in IPFS using Pinata with metadata
-	return uploadToPinata(jsonData, fileName, pinataConfig)
+	ipfsData, err := uploadToPinata(tempData, jsonData, fileName, pinataConfig)
+	if err != nil {
+		return types.IPFSData{}, fmt.Errorf("failed to upload to Pinata: %v", err)
+	}
+
+	return ipfsData, nil
 }
 
 // uploadToPinata uploads the data to IPFS using Pinata API
-func uploadToPinata(data []byte, fileName string, config *PinataConfig) (string, error) {
+func uploadToPinata(tempData types.IPFSData, data []byte, fileName string, config *PinataConfig) (types.IPFSData, error) {
 	url := "https://api.pinata.cloud/pinning/pinJSONToIPFS"
 
 	// Create metadata for the file
@@ -164,12 +135,12 @@ func uploadToPinata(data []byte, fileName string, config *PinataConfig) (string,
 	// Convert metadata to JSON
 	jsonData, err := json.Marshal(metadata)
 	if err != nil {
-		return "", err
+		return types.IPFSData{}, fmt.Errorf("failed to marshal metadata: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", err
+		return types.IPFSData{}, fmt.Errorf("failed to create request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -179,12 +150,12 @@ func uploadToPinata(data []byte, fileName string, config *PinataConfig) (string,
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return types.IPFSData{}, fmt.Errorf("failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to upload to Pinata: status %d", resp.StatusCode)
+		return types.IPFSData{}, fmt.Errorf("failed to upload to Pinata: status %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -192,8 +163,11 @@ func uploadToPinata(data []byte, fileName string, config *PinataConfig) (string,
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return types.IPFSData{}, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	return result.IpfsHash, nil
+	var ipfsData types.IPFSData = tempData
+	ipfsData.ProofData.ActionDataCID = result.IpfsHash
+
+	return ipfsData, nil
 }
