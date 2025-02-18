@@ -1,5 +1,8 @@
 #!/bin/bash
 
+docker compose up -d ./docker/scylla_database.yaml
+sleep 10
+
 # Execute the CQL script
 echo "Initializing database schema..."
 docker exec -i triggerx-scylla cqlsh < scripts/init-db.cql

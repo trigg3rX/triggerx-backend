@@ -17,8 +17,8 @@ const (
 type JobEvent struct {
 	Type    string `json:"type"`
 	JobID   int64  `json:"job_id"`
-	JobType int    `json:"job_type"`
-	ChainID int    `json:"chain_id"`
+	TaskDefinitionID int    `json:"task_definition_id"`
+	TimeFrame int64    `json:"time_frame"`
 }
 
 type KeeperEvent struct {

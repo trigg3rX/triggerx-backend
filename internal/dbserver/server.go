@@ -1,4 +1,4 @@
-package api
+package dbserver
 
 import (
 	"fmt"
@@ -6,19 +6,20 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type Server struct {
 	router *mux.Router
-	db     *database.Connection
+	db     *config.Connection
 	cors   *cors.Cors
 	logger logging.Logger
 }
 
-func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
+func NewServer(db *config.Connection, processName logging.ProcessName) *Server {
 	router := mux.NewRouter()
 
 	logger := logging.GetLogger(logging.Development, processName)
@@ -50,7 +51,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 }
 
 func (s *Server) routes() {
-	handler := NewHandler(s.db, s.logger)
+	handler := handlers.NewHandler(s.db, s.logger)
 
 	api := s.router.PathPrefix("/api").Subrouter()
 	api.Use(mux.CORSMethodMiddleware(api))
@@ -59,7 +60,6 @@ func (s *Server) routes() {
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
 
 	// // Job routes
-	api.HandleFunc("/jobs/latest-id", handler.GetLatestJobID).Methods("GET")
 	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
@@ -75,14 +75,8 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
 
-	// // Task History routes
-	// api.HandleFunc("/task_history", handler.CreateTaskHistory).Methods("POST")
-	// api.HandleFunc("/task_history/{id}", handler.GetTaskHistory).Methods("GET")
-	// api.HandleFunc("/task_history/{id}", handler.UpdateTaskHistory).Methods("PUT")
-	// api.HandleFunc("/task_history/{id}", handler.DeleteTaskHistory).Methods("DELETE")
-
 	// Fees routes
-	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
+	// api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
 }
 
 func (s *Server) Start(port string) error {

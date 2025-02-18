@@ -33,27 +33,14 @@ start-keeper: ## Start the keeper node
 
 ############################# DATABASE #############################
 
-db-start: ## Start ScyllaDB container
-	docker compose up -d
-	sleep 10
+db-setup: ## Setup ScyllaDB container
+	./scripts/database/setup-db.sh
 
-db-init: ## Initialize database schema
-	./scripts/init-db.sh
+start-db-server: ## Start the Database Server
+	./scripts/database/start-dbserver.sh
 
 db-shell: ## Open CQL shell
 	docker exec -it triggerx-scylla cqlsh
-
-############################# FULL SETUP #############################
-
-setup: db-start db-init ## Setup everything
-
-start-api: ## Start the API server
-	./scripts/start-api.sh
-
-############################# GENERATE BINDINGS #############################
-
-generate-bindings: ## Generate bindings
-	./pkg/avsinterface/generate-bindings.sh
 
 ############################ KEEPER NODE ####################################
 
