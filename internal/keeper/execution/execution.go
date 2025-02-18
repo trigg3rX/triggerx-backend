@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
@@ -32,7 +31,7 @@ func (krw *keeperResponseWrapper) GetData() []byte {
 // 3. Stores proof on IPFS via Pinata
 // 4. Returns execution results with proof details to the attester
 func ExecuteTask(c *gin.Context) {
-	logger.Info("[Execution] Executing Task")
+	logger.Info("Executing Task")
 
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -49,83 +48,31 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	taskDefinitionId := 0
-	if val, ok := requestBody["taskDefinitionId"].(float64); ok {
-		taskDefinitionId = int(val)
-	}
-	logger.Info("[Execution] taskDefinitionId: %v\n", taskDefinitionId)
+	jobData := requestBody["job"].(types.Job)
+	triggerData := requestBody["trigger"].(types.TriggerData)
 
-	jobData, ok := requestBody["job"].(map[string]interface{})
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing job data"})
-		return
-	}
-
-	// Construct job object from request data with safe defaults
-	job := &types.Job{
-		JobID:          0,
-		TargetFunction: "",
-		Arguments:      map[string]interface{}{},
-		ChainID:        0,
-	}
-	if id, ok := jobData["job_id"].(int64); ok {
-		job.JobID = id
-	}
-	if tf, ok := jobData["targetFunction"].(string); ok {
-		job.TargetFunction = tf
-	}
-	if args, ok := jobData["arguments"].(map[string]interface{}); ok {
-		job.Arguments = args
-	}
-	if chain, ok := jobData["chainID"].(int); ok {
-		job.ChainID = chain
-	}
-	if ca, ok := jobData["contractAddress"].(string); ok {
-		job.TargetContractAddress = ca
-	}
+	logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
 
 	// Execute job and handle any execution errors
 	jobExecutor := NewJobExecutor()
-	execResult, err := jobExecutor.Execute(job)
+	actionData, err := jobExecutor.Execute(&jobData)
 	if err != nil {
-		logger.Error("[Execution] Error executing job:", "error", err)
+		logger.Errorf("Error executing job:", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Job execution failed"})
 		return
 	}
 
-	execResultBytes, err := json.Marshal(execResult)
+	actionData.TaskID = triggerData.TaskID
+
+	logger.Infof("actionData: %v\n", actionData)
+
+	actionDataBytes, err := json.Marshal(actionData)
 	if err != nil {
-		logger.Error("[Execution] Error marshaling execution result:", "error", err)
+		logger.Errorf("Error marshaling execution result:", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal execution result"})
 		return
 	}
-	krw := &keeperResponseWrapper{Data: execResultBytes}
-
-	// Build proof template with execution metadata and placeholders
-	proofTemplate := proof.ProofTemplate{
-		JobID:            job.JobID,
-		JobType:          job.TargetFunction,
-		TaskID:           job.JobID,
-		TaskDefinitionID: int64(taskDefinitionId),
-		Trigger: proof.TriggerInfo{
-			Timestamp:         time.Now().UTC().Format(time.RFC3339),
-			Value:             "triggered",
-			TxHash:            "0x",
-			EventName:         "Event",
-			ConditionEndpoint: "http://example.com/condition",
-			ConditionValue:    "value",
-			CustomTriggerDefinition: proof.CustomTriggerInfo{
-				Type:   "custom",
-				Params: map[string]interface{}{"example": "param"},
-			},
-		},
-		Action: proof.ActionInfo{
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			TxHash:    "0x",
-			GasUsed:   "0",
-			Status:    "success",
-		},
-	}
+	krw := &keeperResponseWrapper{Data: actionDataBytes}
 
 	// Mock TLS state for proof generation
     certBytes := []byte("mock certificate data")
@@ -134,10 +81,16 @@ func ExecuteTask(c *gin.Context) {
         PeerCertificates: []*x509.Certificate{mockCert},
     }
 
+	tempData := types.IPFSData{
+		JobData: jobData,
+		TriggerData: triggerData,
+		ActionData: actionData,
+	}
+
 	// Generate and store proof on IPFS, returning content identifier (CID)
-	cid, err := proof.GenerateAndStoreProof(krw, connState, proofTemplate)
+	ipfsData, err := proof.GenerateAndStoreProof(krw, connState, tempData)
 	if err != nil {
-		logger.Error("[Execution] Error generating/storing proof:", "error", err)
+		logger.Errorf("Error generating/storing proof:", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Proof generation failed"})
 		return
 	}
@@ -145,29 +98,21 @@ func ExecuteTask(c *gin.Context) {
 	// Generate TLS proof for response verification
 	tlsProof, err := proof.GenerateProof(krw, connState)
 	if err != nil {
-		logger.Error("[Execution] Error generating TLS proof:", "error", err)
+		logger.Errorf("Error generating TLS proof:", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Proof generation failed"})
 		return
 	}
 
-	services.SendTask(cid, cid, taskDefinitionId)
+	services.SendTask(tlsProof.ResponseHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
 
-	logger.Info("[Execution] CID: ", cid)
+	logger.Infof("CID: %s", ipfsData.ProofData.ActionDataCID)
 
-	// Combine all response data for attester
-	responseData := map[string]interface{}{
-		"executionResult":  execResult,
-		"proof":            tlsProof,
-		"cid":              cid,
-		"taskDefinitionId": taskDefinitionId,
-	}
-
-	responseBytes, err := json.Marshal(responseData)
+	ipfsDataBytes, err := json.Marshal(ipfsData)
 	if err != nil {
-		logger.Error("[Execution] Error marshaling response:", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal response"})
+		logger.Errorf("Error marshaling IPFS data:", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal IPFS data"})
 		return
 	}
 
-	c.Data(http.StatusOK, "application/octet-stream", responseBytes)
+	c.Data(http.StatusOK, "application/octet-stream", ipfsDataBytes)
 }

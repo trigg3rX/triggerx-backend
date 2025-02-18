@@ -20,7 +20,7 @@ var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 func Init() {
 	config.Init()
-	logger.Info("[Services] Config Initialized")
+	logger.Info("Config Initialized")
 }
 
 type Params struct {
@@ -34,11 +34,11 @@ type Params struct {
 func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	privateKey, err := crypto.HexToECDSA(config.PrivateKeyPerformer)
 	if err != nil {
-		logger.Error("[Services] Error converting private key", "error", err)
+		logger.Errorf("Error converting private key", "error", err)
 	}
 	publicKey, ok := privateKey.Public().(*ecdsa.PublicKey)
 	if !ok {
-		logger.Error("[Services] cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+		logger.Error("Cannot assert type: publicKey is not of type *ecdsa.PublicKey")
 	}
 	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
 
@@ -56,21 +56,21 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 		big.NewInt(int64(taskDefinitionId)),
 	)
 	if err != nil {
-		logger.Error("[Services] Error encoding data", "error", err)
+		logger.Errorf("Error encoding data", "error", err)
 	}
 	messageHash := crypto.Keccak256Hash(dataPacked)
 
 	sig, err := crypto.Sign(messageHash.Bytes(), privateKey)
 	if err != nil {
-		logger.Error("[Services] Error signing message", "error", err)
+		logger.Errorf("Error signing message", "error", err)
 	}
 	sig[64] += 27
 	serializedSignature := hexutil.Encode(sig)
-	logger.Info("[Services] Serialized signature", "signature", serializedSignature)
+	logger.Infof("Serialized signature", "signature", serializedSignature)
 
 	client, err := rpc.Dial(config.OTHENTIC_CLIENT_RPC_ADDRESS)
 	if err != nil {
-		logger.Error("[Services] Error dialing RPC", "error", err)
+		logger.Errorf("Error dialing RPC", "error", err)
 	}
 
 	params := Params{
@@ -82,7 +82,7 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	}
 
 	response := makeRPCRequest(client, params)
-	logger.Info("[Services] API response:", "response", response)
+	logger.Infof("API response:", "response", response)
 }
 
 func makeRPCRequest(client *rpc.Client, params Params) interface{} {
@@ -90,7 +90,7 @@ func makeRPCRequest(client *rpc.Client, params Params) interface{} {
 
 	err := client.Call(&result, "sendTask", params.proofOfTask, params.data, params.taskDefinitionId, params.performerAddress, params.signature)
 	if err != nil {
-		logger.Error("[Services] Error making RPC request", "error", err)
+		logger.Errorf("Error making RPC request", "error", err)
 	}
 	return result
 }
