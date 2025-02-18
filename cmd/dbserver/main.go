@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -16,8 +16,8 @@ func main() {
 	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
 
 	// Establish database connection with default configuration
-	cfg := config.NewConfig()
-	conn, err := config.NewConnection(cfg)
+	cfg := database.NewConfig()
+	conn, err := database.NewConnection(cfg)
 	if err != nil {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}

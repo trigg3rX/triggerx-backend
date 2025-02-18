@@ -34,8 +34,8 @@ var (
 // handleJobEvent processes incoming job events and delegates to appropriate job scheduler
 // based on the job type (time-based, event-based, or condition-based)
 func handleJobEvent(event events.JobEvent) {
-	logger.Infof("Received job event - Type: %s, JobID: %d, JobType: %d, ChainID: %d",
-		event.Type, event.JobID, event.JobType, event.ChainID)
+	logger.Infof("Received job event - Type: %s, JobID: %d",
+		event.Type, event.JobID)
 
 	jobScheduler, err := manager.NewJobScheduler(db, logger, network.GetP2PHost())
 	if err != nil {
@@ -46,24 +46,24 @@ func handleJobEvent(event events.JobEvent) {
 	switch event.Type {
 	case "job_created":
 		jobID := event.JobID
-		switch event.JobType {
-		case 1:
+		switch event.TaskDefinitionID {
+		case 1, 2:
 			err := jobScheduler.StartTimeBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
-		case 2:
+		case 3, 4:
 			err := jobScheduler.StartEventBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
-		case 3:
+		case 5,6:
 			err := jobScheduler.StartConditionBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
 		default:
-			logger.Warnf("Unknown job type: %d for job: %d", event.JobType, event.JobID)
+			logger.Warnf("Unknown job type: %d for job: %d", event.TaskDefinitionID, event.JobID)
 		}
 
 	case "job_updated":

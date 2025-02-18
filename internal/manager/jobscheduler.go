@@ -43,14 +43,14 @@ type JobScheduler struct {
 type ConditionMonitor struct {
 	ctx      context.Context
 	jobID    string
-	dbClient *database.Connection
+	scriptIPFSUrl string
 }
 
-func NewConditionMonitor(ctx context.Context, jobID string, db *database.Connection) *ConditionMonitor {
+func NewConditionMonitor(ctx context.Context, jobID string, scriptIPFSUrl string) *ConditionMonitor {
 	return &ConditionMonitor{
-		ctx:      ctx,
-		jobID:    jobID,
-		dbClient: db,
+		ctx:           ctx,
+		jobID:         jobID,
+		scriptIPFSUrl: scriptIPFSUrl,
 	}
 }
 
@@ -175,7 +175,7 @@ func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
 			"last_executed": jobDetails.LastExecuted,
 			"status":        "running",
 			"type":          "event-based",
-			"chain_id":      jobDetails.ChainID,
+			"chain_id":      jobDetails.TriggerChainID,
 			"recurring":     jobDetails.Recurring,
 		}
 		s.cacheMutex.Unlock()

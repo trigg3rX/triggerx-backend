@@ -13,19 +13,13 @@ import (
 // SendTaskToPerformer sends a job execution request to the performer service running on port 4003.
 // It takes job and task metadata, formats them into the expected payload structure, and makes a POST request.
 // Returns true if the task was successfully sent and accepted by the performer, false with error otherwise.
-func SendTaskToPerformer(jobData *types.Job, taskData *types.TaskData) (bool, error) {
+func SendTaskToPerformer(jobData *types.Job, triggerData *types.TriggerData) (bool, error) {
 	client := &http.Client{}
 
 	// Construct payload with task definition ID and job details required for execution
 	payload := map[string]interface{}{
-		"taskDefinitionId": taskData.TaskDefinitionID,
-		"job": map[string]interface{}{
-			"job_id":          jobData.JobID,
-			"targetFunction":  jobData.TargetFunction,
-			"arguments":       jobData.Arguments,
-			"chainID":         jobData.ChainID,
-			"contractAddress": jobData.TargetContractAddress,
-		},
+		"job": jobData,
+		"trigger": triggerData,
 	}
 
 	jsonData, err := json.Marshal(payload)

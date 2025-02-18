@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -14,12 +14,12 @@ import (
 
 type Server struct {
 	router *mux.Router
-	db     *config.Connection
+	db     *database.Connection
 	cors   *cors.Cors
 	logger logging.Logger
 }
 
-func NewServer(db *config.Connection, processName logging.ProcessName) *Server {
+func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
 	router := mux.NewRouter()
 
 	logger := logging.GetLogger(logging.Development, processName)

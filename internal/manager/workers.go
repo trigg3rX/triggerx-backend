@@ -95,17 +95,24 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 		return
 	}
 
+	var triggerData types.TriggerData
+	triggerData.TimeInterval = w.jobData.TimeInterval
+	triggerData.TriggerTxHash = ""
+	triggerData.ConditionParams = make(map[string]interface{})
+
 	w.status = "running"
 
-	time.AfterFunc(2*time.Second, func() {
-		if err := w.executeTask(w.jobData); err != nil {
+	time.AfterFunc(1*time.Second, func() {
+		triggerData.Timestamp = time.Now()
+		triggerData.LastExecuted = time.Now()
+
+		if err := w.executeTask(w.jobData, &triggerData); err != nil {
 			w.handleError(err)
 		}
 	})
 
 	w.cron.AddFunc(w.schedule, func() {
 		if w.jobData.TimeFrame > 0 && time.Since(w.startTime) > time.Duration(w.jobData.TimeFrame)*time.Second {
-			w.status = "completed"
 			w.Stop()
 			return
 		}
@@ -114,9 +121,13 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 			return
 		}
 
-		if err := w.executeTask(w.jobData); err != nil {
+		triggerData.Timestamp = time.Now()
+
+		if err := w.executeTask(w.jobData, &triggerData); err != nil {
 			w.handleError(err)
 		}
+
+		triggerData.LastExecuted = time.Now()
 	})
 	w.cron.Start()
 
@@ -147,29 +158,24 @@ func (w *TimeBasedWorker) GetJobID() int64 {
 
 // executeTask handles the core job execution logic for time-based jobs.
 // Creates task data, assigns it to a performer, and initiates task execution.
-func (w *TimeBasedWorker) executeTask(jobData *types.Job) error {
+func (w *TimeBasedWorker) executeTask(jobData *types.Job, triggerData *types.TriggerData) error {
 	w.scheduler.logger.Infof("Executing time-based job: %d", w.jobID)
 
-	performer, err := GetPerformer()
-	if err != nil {
-		w.scheduler.logger.Errorf("Failed to get performer for job %d: %v", w.jobID, err)
-		return err
+	taskData := &types.CreateTaskData{
+		JobID:            w.jobID,
+		TaskDefinitionID:  jobData.TaskDefinitionID,
+		TaskPerformerID: 0,
 	}
 
-	taskData := &types.TaskData{
-		JobID:           w.jobID,
-		TaskDefinitionID: 1,
-		TaskPerformer:   performer.KeeperAddress,
-		IsApproved:      true,
-	}
+	w.scheduler.logger.Infof("Task data: %d | %d | %s", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformerID)
 
-	w.scheduler.logger.Infof("Task data: %d | %d | %s", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformer)
-
-	status, err := CreateTaskData(taskData)
+	taskID, status, err := CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.logger.Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
 	}
+
+	triggerData.TaskID = taskID
 
 	if !status {
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
@@ -177,13 +183,13 @@ func (w *TimeBasedWorker) executeTask(jobData *types.Job) error {
 
 	w.scheduler.logger.Infof("Task data created for job %v", w.jobID)
 
-	_, err = SendTaskToPerformer(jobData, taskData)
+	_, err = SendTaskToPerformer(jobData, triggerData)
 	if err != nil {
 		w.scheduler.logger.Errorf("Error sending task to performer: %v", err)
 		return err
 	}
 
-	w.scheduler.logger.Infof("Task sent for job %d to performer %s", w.jobID, performer.KeeperAddress)
+	w.scheduler.logger.Infof("Task sent for job %d to performer", w.jobID)
 
 	return nil
 }
@@ -192,7 +198,7 @@ func NewEventBasedWorker(jobData *types.Job, scheduler *JobScheduler) *EventBase
 	return &EventBasedWorker{
 		jobID:           jobData.JobID,
 		scheduler:       scheduler,
-		chainID:         jobData.ChainID,
+		chainID:         jobData.TriggerChainID,
 		jobData:         jobData,
 		BaseWorker: BaseWorker{
 			status:     "pending",
@@ -236,6 +242,11 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	}
 	w.subscription = sub
 
+	var triggerData types.TriggerData
+	triggerData.TimeInterval = w.jobData.TimeInterval
+	triggerData.LastExecuted = time.Now()
+	triggerData.ConditionParams = make(map[string]interface{})
+
 	go func() {
 		for {
 			select {
@@ -250,11 +261,26 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 			case log := <-logs:
 				w.scheduler.logger.Infof("Event detected for job %d: %v", w.jobID, log.TxHash.Hex())
 
-				w.executeTask(w.jobData)
+				triggerData.Timestamp = time.Now()
+				triggerData.TriggerTxHash = log.TxHash.Hex()
+
+				if err := w.executeTask(w.jobData, &triggerData); err != nil {
+					w.handleError(err)
+				}
 				return
 			}
 		}
 	}()
+}
+
+func (w *EventBasedWorker) handleError(err error) {
+	w.error = err.Error()
+	w.currentRetry++
+
+	if w.currentRetry >= w.maxRetries {
+		w.status = "failed"
+		w.Stop()
+	}
 }
 
 func (w *EventBasedWorker) Stop() {
@@ -303,39 +329,34 @@ func (w *EventBasedWorker) getAlchemyWSURL() string {
 	return fmt.Sprintf("wss://%s.g.alchemy.com/v2/%s", network, apiKey)
 }
 
-func (w *EventBasedWorker) executeTask(jobData *types.Job) error {
+func (w *EventBasedWorker) executeTask(jobData *types.Job, triggerData *types.TriggerData) error {
 	w.scheduler.logger.Infof("Executing event-based job: %d", w.jobID)
 
-	performer, err := GetPerformer()
-	if err != nil {
-		w.scheduler.logger.Errorf("Failed to get performer for job %d: %v", w.jobID, err)
-		return err
+	taskData := &types.CreateTaskData{
+		JobID:            w.jobID,
+		TaskDefinitionID:  jobData.TaskDefinitionID,
+		TaskPerformerID: 0,
 	}
 
-	taskData := &types.TaskData{
-		JobID:           w.jobID,
-		TaskDefinitionID: 2,
-		TaskPerformer:   performer.KeeperAddress,
-		IsApproved:      true,
-	}
-
-	status, err := CreateTaskData(taskData)
+	taskID, status, err := CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.logger.Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
 	}
 
+	triggerData.TaskID = taskID
+
 	if !status {
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
 	}
 
-	_, err = SendTaskToPerformer(jobData, taskData)
+	_, err = SendTaskToPerformer(jobData, triggerData)
 	if err != nil {
 		w.scheduler.logger.Errorf("Error sending task to performer: %v", err)
 		return err
 	}
 
-	w.scheduler.logger.Infof("Task sent for job %d to performer %s", w.jobID, performer)
+	w.scheduler.logger.Infof("Task sent for job %d to performer", w.jobID)
 
 	return nil
 }
@@ -361,6 +382,11 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 	w.scheduler.logger.Infof("Starting condition-based job %d", w.jobID)
 	w.scheduler.logger.Infof("Listening to %s", w.jobData.ScriptIPFSUrl)
+
+	var triggerData types.TriggerData
+	triggerData.TimeInterval = w.jobData.TimeInterval
+	triggerData.LastExecuted = time.Now()
+	triggerData.TriggerTxHash = ""
 
 	go func() {
 		defer w.Stop()
@@ -389,13 +415,28 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 				if satisfied {
 					w.scheduler.logger.Infof("Condition satisfied for job %d", w.jobID)
-					w.status = "completed"
-					w.executeTask(w.jobData)
+					
+					triggerData.Timestamp = time.Now()
+					triggerData.ConditionParams = make(map[string]interface{})
+
+					if err := w.executeTask(w.jobData, &triggerData); err != nil {
+						w.handleError(err)
+					}
 					return
 				}
 			}
 		}
 	}()
+}
+
+func (w *ConditionBasedWorker) handleError(err error) {
+	w.error = err.Error()
+	w.currentRetry++
+
+	if w.currentRetry >= w.maxRetries {
+		w.status = "failed"
+		w.Stop()
+	}
 }
 
 func (w *ConditionBasedWorker) Stop() {
@@ -427,39 +468,34 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 	return true, nil
 }
 
-func (w *ConditionBasedWorker) executeTask(jobData *types.Job) error {
+func (w *ConditionBasedWorker) executeTask(jobData *types.Job, triggerData *types.TriggerData) error {
 	w.scheduler.logger.Infof("Executing condition-based job: %d", w.jobID)
-	
-	performer, err := GetPerformer()
-	if err != nil {
-		w.scheduler.logger.Errorf("Failed to get performer for job %d: %v", w.jobID, err)
-		return err
+
+	taskData := &types.CreateTaskData{
+		JobID:            w.jobID,
+		TaskDefinitionID:  jobData.TaskDefinitionID,
+		TaskPerformerID: 0,
 	}
 
-	taskData := &types.TaskData{
-		JobID:           w.jobID,
-		TaskDefinitionID: 3,
-		TaskPerformer:   performer.KeeperAddress,
-		IsApproved:      true,
-	}
-
-	status, err := CreateTaskData(taskData)
+	taskID, status, err := CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.logger.Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
 	}
 
+	triggerData.TaskID = taskID
+
 	if !status {
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
 	}
 
-	_, err = SendTaskToPerformer(jobData, taskData)
+	_, err = SendTaskToPerformer(jobData, triggerData)
 	if err != nil {
 		w.scheduler.logger.Errorf("Error sending task to performer: %v", err)
 		return err
 	}
 
-	w.scheduler.logger.Infof("Task sent for job %d to performer %s", w.jobID, performer)
+	w.scheduler.logger.Infof("Task sent for job %d to performer", w.jobID)
 
 	return nil
 }
