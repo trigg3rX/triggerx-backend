@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Get the latest job ID and increment it
-LATEST_ID=$(curl -s -X GET http://data.triggerx.network:8080/api/jobs/latest-id | jq -r '.latest_jobID')
-NEW_JOB_ID=$((LATEST_ID + 1))
-echo "Latest job ID: $LATEST_ID"
-echo "New job ID: $NEW_JOB_ID"
 # Array of user addresses
 USER_ADDRESSES=(
     "0x8A3bEcE42E6C56A96C6D69537e784D88401C8b9F"
@@ -38,23 +33,30 @@ curl -X POST http://localhost:8080/api/jobs \
   -d "{
     \"userAddress\": \"$SELECTED_USER_ADDRESS\",
     \"stakeAmount\": $((GAS_PRICE * SELECTED_JOB_COST)),
-    \"jobID\": $NEW_JOB_ID,
-    \"jobType\": $SELECTED_JOB_TYPE,
-    \"triggerChainID\": $CHAIN_ID,
+    \"tokenAmount\": $((GAS_PRICE * SELECTED_JOB_COST)),
+
+    \"taskDefinitionID\": 1,
+    \"priority\": 1,
+    \"security\": 1,
+    \"linkJobID\": -1,
+
     \"timeFrame\": 5,
+    \"recurring\": true,
+
     \"timeInterval\": 10,
+    \"triggerChainID\": 1,
     \"triggerContractAddress\": \"0xF1d505d1f6df11795c77A8A1b7476609E7b6361a\",
     \"triggerEvent\": \"Staked(address indexed user, uint256 amount)\",
+    \"scriptIPFSUrl\": \"https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a\",
+    \"scriptTriggerFunction\": \"checker\",
+
+    \"targetChainID\": 1,
     \"targetContractAddress\": \"0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d\",
     \"targetFunction\": \"execute\",
     \"argType\": 1,
     \"arguments\": [\"19\", \"91\"],
-    \"recurring\": true,
-    \"jobCostPrediction\": $SELECTED_JOB_COST,
     \"scriptTargetFunction\": \"checker\",
-    \"scriptIPFSUrl\": \"https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a\",
-    \"priority\": 1,
-    \"security\": 1,
-    \"linkJobID\": 0
+
+    \"jobCostPrediction\": $SELECTED_JOB_COST
 }"
 

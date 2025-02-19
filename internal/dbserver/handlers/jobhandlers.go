@@ -51,7 +51,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		h.logger.Infof("[CreateJobData] Creating new user for address %s", tempData.UserAddress)
 		var maxUserID int64
 		if err := h.db.Session().Query(`
-            SELECT MAX(userID) FROM triggerx.user_data
+            SELECT MAX(user_id) FROM triggerx.user_data
         `).Scan(&maxUserID); err != nil && err != gocql.ErrNotFound {
 			h.logger.Errorf("[CreateJobData] Error getting max user ID: %v", err)
 			http.Error(w, "Error getting max userID: "+err.Error(), http.StatusInternalServerError)
@@ -98,7 +98,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
             trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
             target_contract_address, target_function, arg_type, arguments, script_target_function, 
             status, job_cost_prediction, created_at, last_executed_at, task_ids
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		jobID, tempData.TaskDefinitionID, existingUserID, tempData.Priority, tempData.Security, tempData.LinkJobID, 
 		tempData.TimeFrame, tempData.Recurring, tempData.TimeInterval, tempData.TriggerChainID, tempData.TriggerContractAddress, 
 		tempData.TriggerEvent, tempData.ScriptIPFSUrl, tempData.ScriptTriggerFunction, tempData.TargetChainID, 
