@@ -20,20 +20,22 @@ release-binary: ## Build the binary for release
 ############################# RUN #############################
 
 start-manager: ## Start the task manager
-	./scripts/start-manager.sh
+	./scripts/services/start-manager.sh
 
-start-validator: ## Start the task validator
-	./scripts/start-validator.sh
+start-aggregator: ## Start the Aggregator
+	./scripts/services/start-aggregator.sh
 
-start-quorum: ## Start the quorum Manager
-	./scripts/start-quorum.sh
+start-attester: ## Start the Attester
+	./scripts/services/start-attester.sh
 
 start-keeper: ## Start the keeper node
-	./scripts/start-keeper.sh
+	./scripts/services/start-performer.sh
 
 ############################# DATABASE #############################
 
 db-setup: ## Setup ScyllaDB container
+	docker compose up -d
+	sleep 10
 	./scripts/database/setup-db.sh
 
 start-db-server: ## Start the Database Server

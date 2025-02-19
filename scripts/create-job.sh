@@ -33,14 +33,14 @@ RANDOM_COST_INDEX=$((RANDOM % ${#JOB_COST_PREDICTIONS[@]}))
 SELECTED_JOB_COST=${JOB_COST_PREDICTIONS[$RANDOM_COST_INDEX]}
 
 # Create a new job with the incremented ID
-curl -X POST http://data.triggerx.network:8080/api/jobs \
+curl -X POST http://localhost:8080/api/jobs \
   -H "Content-Type: application/json" \
   -d "{
     \"userAddress\": \"$SELECTED_USER_ADDRESS\",
     \"stakeAmount\": $((GAS_PRICE * SELECTED_JOB_COST)),
     \"jobID\": $NEW_JOB_ID,
     \"jobType\": $SELECTED_JOB_TYPE,
-    \"chainID\": $CHAIN_ID,
+    \"triggerChainID\": $CHAIN_ID,
     \"timeFrame\": 5,
     \"timeInterval\": 10,
     \"triggerContractAddress\": \"0xF1d505d1f6df11795c77A8A1b7476609E7b6361a\",
@@ -51,7 +51,7 @@ curl -X POST http://data.triggerx.network:8080/api/jobs \
     \"arguments\": [\"19\", \"91\"],
     \"recurring\": true,
     \"jobCostPrediction\": $SELECTED_JOB_COST,
-    \"scriptFunction\": \"checker\",
+    \"scriptTargetFunction\": \"checker\",
     \"scriptIPFSUrl\": \"https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a\",
     \"priority\": 1,
     \"security\": 1,
