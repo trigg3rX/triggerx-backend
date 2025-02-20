@@ -139,7 +139,7 @@ func handleKeeperConnection(c *gin.Context) {
 	}
 
 	// Update keeper's connection address in the database
-	query := `UPDATE keeper_data SET connection_address = ? WHERE keeper_id = ?`
+	query := `UPDATE triggerx.keeper_data SET connection_address = ? WHERE keeper_id = ?`
 	if err := db.Session().Query(query, keeper.KeeperIP, keeperID).Exec(); err != nil {
 		logger.Error("Failed to update keeper connection address",
 			"keeper_id", keeperID,

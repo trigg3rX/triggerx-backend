@@ -96,9 +96,7 @@ func main() {
 
 	// Generate or load keeper ID
 	keeperID := os.Getenv("KEEPER_ID")
-	if keeperID == "" {
-		keeperID = fmt.Sprintf("keeper_%d", time.Now().UnixNano())
-	}
+	
 
 	// Get the local IP address using getOutboundIP
 	ip, err := getOutboundIP()
