@@ -5,64 +5,62 @@ import (
 )
 
 type CreateJobData struct {
-	UserAddress            string   `json:"userAddress"`
-	StakeAmount            *big.Int `json:"stakeAmount"`
-	TokenAmount            *big.Int `json:"tokenAmount"`
+	UserAddress            string   `json:"user_address"`
+	StakeAmount            *big.Int `json:"stake_amount"`
+	TokenAmount            *big.Int `json:"token_amount"`
 
-	TaskDefinitionID       int      `json:"taskDefinitionID"`
+	TaskDefinitionID       int      `json:"task_definition_id"`
 	Priority               int      `json:"priority"`
 	Security               int      `json:"security"`
-	LinkJobID              int64    `json:"linkJobID"`
 
-	TimeFrame              int64    `json:"timeFrame"`
+	TimeFrame              int64    `json:"time_frame"`
 	Recurring              bool     `json:"recurring"`
 
-	TimeInterval           int      `json:"timeInterval"`
-	TriggerChainID         int      `json:"triggerChainID"`
-	TriggerContractAddress string   `json:"triggerContractAddress"`
-	TriggerEvent           string   `json:"triggerEvent"`
-	ScriptIPFSUrl          string   `json:"scriptIPFSUrl"`
-	ScriptTriggerFunction  string   `json:"scriptTriggerFunction"`
+	TimeInterval           int      `json:"time_interval"`
+	TriggerChainID         int      `json:"trigger_chain_id"`
+	TriggerContractAddress string   `json:"trigger_contract_address"`
+	TriggerEvent           string   `json:"trigger_event"`
+	ScriptIPFSUrl          string   `json:"script_ipfs_url"`
+	ScriptTriggerFunction  string   `json:"script_trigger_function"`
 	
-	TargetChainID          int      `json:"targetChainID"`
-	TargetContractAddress  string   `json:"targetContractAddress"`
-	TargetFunction         string   `json:"targetFunction"`
-	ArgType                int      `json:"argType"`
+	TargetChainID          int      `json:"target_chain_id"`
+	TargetContractAddress  string   `json:"target_contract_address"`
+	TargetFunction         string   `json:"target_function"`
+	ArgType                int      `json:"arg_type"`
 	Arguments              []string `json:"arguments"`
-	ScriptTargetFunction   string   `json:"scriptTargetFunction"`
+	ScriptTargetFunction   string   `json:"script_target_function"`
 	
-	JobCostPrediction      int      `json:"jobCostPrediction"`
+	JobCostPrediction      int      `json:"job_cost_prediction"`
 }
 
 type CreateJobResponse struct {
-	UserID 				int64 `json:"userID"`
-	AccountBalance 		*big.Int `json:"accountBalance"`
-	TokenBalance 		*big.Int `json:"tokenBalance"`
+	UserID 				int64 		`json:"user_id"`
+	AccountBalance 		*big.Int 	`json:"account_balance"`
+	TokenBalance 		*big.Int 	`json:"token_balance"`
 
-	JobID 				int64 `json:"jobID"`
-	TaskDefinitionID 	int `json:"taskDefinitionID"`
-	
-	TimeFrame 			int64 `json:"timeFrame"`
+	JobIDs 				[]int64 	`json:"job_ids"`
+	TaskDefinitionIDs 	[]int 		`json:"task_definition_ids"`
+	TimeFrames 			[]int64 	`json:"time_frames"`
 }
 
 type UpdateJobData struct {
-	JobID 				int64 `json:"jobID"`
+	JobID 				int64 `json:"job_id"`
 	Recurring 			bool `json:"recurring"`
-	TimeFrame 			int64 `json:"timeFrame"`
+	TimeFrame 			int64 `json:"time_frame"`
 }
 
 type CreateTaskData struct {
-	JobID            int64  `json:"jobID"`
-	TaskDefinitionID int    `json:"taskDefinitionID"`
-	TaskPerformerID  int64  `json:"taskPerformerID"`
+	JobID            int64  `json:"job_id"`
+	TaskDefinitionID int    `json:"task_definition_id"`
+	TaskPerformerID  int64  `json:"task_performer_id"`
 }
 
 type CreateTaskResponse struct {
-	TaskID 				int64 `json:"taskID"`
-	JobID 				int64 `json:"jobID"`
-	TaskDefinitionID 	int `json:"taskDefinitionID"`
-	TaskPerformerID 	int64 `json:"taskPerformerID"`
-	IsApproved 			bool `json:"isApproved"`
+	TaskID 				int64 `json:"task_id"`
+	JobID 				int64 `json:"job_id"`
+	TaskDefinitionID 	int `json:"task_definition_id"`
+	TaskPerformerID 	int64 `json:"task_performer_id"`
+	IsApproved 			bool `json:"is_approved"`
 }
 
 type GetPerformerData struct {

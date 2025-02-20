@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     priority int,
     security int,
     link_job_id bigint,
+    chain_status int,
      
     time_frame bigint,
     recurring boolean,

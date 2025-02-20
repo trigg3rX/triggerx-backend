@@ -34,8 +34,9 @@ start-keeper: ## Start the keeper node
 ############################# DATABASE #############################
 
 db-setup: ## Setup ScyllaDB container
+	docker compose down
 	docker compose up -d
-	sleep 10
+	sleep 6
 	./scripts/database/setup-db.sh
 
 start-db-server: ## Start the Database Server

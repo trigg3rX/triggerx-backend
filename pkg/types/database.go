@@ -26,6 +26,7 @@ type JobData struct {
 	Priority              int       `json:"priority"` // Defines BaseFee for Keepers
 	Security              int       `json:"security"` // Defines VotingPower for Aggregator
 	LinkJobID             int64     `json:"link_job_id"`
+	ChainStatus           int       `json:"chain_status"` // 0 = Chain Head, 1 = Chain Block 
 
 	// Can be Updated By User
 	TimeFrame             int64     `json:"time_frame"`
