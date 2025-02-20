@@ -43,36 +43,39 @@ type KeeperConnection struct {
 // handleJobEvent processes incoming job events and delegates to appropriate job scheduler
 // based on the job type (time-based, event-based, or condition-based)
 func handleJobEvent(event events.JobEvent) {
-	logger.Infof("Received job event - Type: %s, JobID: %d",
-		event.Type, event.JobID)
+	logger.Infof("Received job event - %s | %d | %d | %d",
+		event.Type, event.JobID, event.TaskDefinitionID, event.ChainStatus)
 
 	jobScheduler, err := manager.NewJobScheduler(db, logger, network.GetP2PHost())
 	if err != nil {
-		logger.Errorf("Failed to initialize job scheduler: %v", err)
+		logger.Errorf("Failed to initialize job scheduler: %v", err)	
 		return
 	}
 
 	switch event.Type {
 	case "job_created":
 		jobID := event.JobID
-		switch event.TaskDefinitionID {
-		case 1, 2:
-			err := jobScheduler.StartTimeBasedJob(jobID)
-			if err != nil {
-				logger.Errorf("Failed to add job %s: %v", jobID, err)
+
+		if event.ChainStatus == 0 {
+			switch event.TaskDefinitionID {
+			case 1, 2:
+				err := jobScheduler.StartTimeBasedJob(jobID)
+				if err != nil {
+					logger.Errorf("Failed to add job %d: %v", jobID, err)
+				}
+			case 3, 4:
+				err := jobScheduler.StartEventBasedJob(jobID)
+				if err != nil {
+					logger.Errorf("Failed to add job %d: %v", jobID, err)
+				}
+			case 5,6:
+				err := jobScheduler.StartConditionBasedJob(jobID)
+				if err != nil {
+					logger.Errorf("Failed to add job %d: %v", jobID, err)
+				}
+			default:
+				logger.Warnf("Unknown job type: %d for job: %d", event.TaskDefinitionID, event.JobID)
 			}
-		case 3, 4:
-			err := jobScheduler.StartEventBasedJob(jobID)
-			if err != nil {
-				logger.Errorf("Failed to add job %s: %v", jobID, err)
-			}
-		case 5, 6:
-			err := jobScheduler.StartConditionBasedJob(jobID)
-			if err != nil {
-				logger.Errorf("Failed to add job %s: %v", jobID, err)
-			}
-		default:
-			logger.Warnf("Unknown job type: %d for job: %d", event.TaskDefinitionID, event.JobID)
 		}
 
 	case "job_updated":
@@ -294,7 +297,7 @@ func main() {
 
 	err = network.ConnectToAggregator()
 	if err != nil {
-		logger.Errorf("Failed to connect to aggregator: %v", err)
+		logger.Errorf("Failed to connect to aggregator: %v", err.Error())
 	}
 
 	logger.Infof("Manager node is READY.")

@@ -19,6 +19,7 @@ type CacheData struct {
 	JobQueue        JobQueue               `json:"job_queue"`
 	SystemResources SystemResources        `json:"system_resources"`
 	LastUpdated     time.Time              `json:"last_updated"`
+	JobChains       map[int64]int64        `json:"job_chains"` // maps job ID to linked job ID
 }
 
 // CacheManager handles persisting and restoring scheduler state to disk
@@ -72,6 +73,18 @@ func (cm *CacheManager) SaveState() error {
 	cacheData.JobQueue = cm.scheduler.balancer.jobQueue
 	cacheData.SystemResources = cm.scheduler.balancer.resources
 	cacheData.LastUpdated = time.Now()
+
+	// Add job chains to cache
+	cacheData.JobChains = make(map[int64]int64)
+	for jobID := range cm.scheduler.workers {
+		jobData, err := cm.scheduler.GetJobDetails(jobID)
+		if err != nil {
+			continue
+		}
+		if jobData.LinkJobID > 0 {
+			cacheData.JobChains[jobID] = jobData.LinkJobID
+		}
+	}
 
 	file, err := os.Create(cm.cacheFile)
 	if err != nil {

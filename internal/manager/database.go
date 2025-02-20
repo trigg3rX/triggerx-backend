@@ -16,30 +16,32 @@ import (
 // Maps the raw database fields into a structured Job type, including argument parsing.
 func (s *JobScheduler) GetJobDetails(jobID int64) (*types.Job, error) {
 	var jobData types.Job
+	var argList []string
 
 	jobIDStr := strconv.FormatInt(jobID, 10)
 
-	var arguments map[int]interface{}
-
 	err := s.dbClient.Session().Query(`
-		SELECT job_id, task_definition_id, priority, security, time_frame, recurring, link_job_id,
-			   time_interval, trigger_chain_id, trigger_contract_address, trigger_event, script_ipfs_url,
-			   script_trigger_function, target_chain_id, target_contract_address, target_function, arg_type, arguments,
-			   script_target_function, created_at, last_executed
+		SELECT job_id, task_definition_id, priority, security, link_job_id, time_frame, recurring, 
+			   time_interval, trigger_chain_id, trigger_contract_address, trigger_event, 
+			   script_ipfs_url, script_trigger_function, target_chain_id, target_contract_address, 
+			   target_function, arg_type, arguments, script_target_function, 
+			   created_at, last_executed_at
 		FROM triggerx.job_data 
-		WHERE jobID = ?`, jobIDStr).Scan(
-		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.Priority, &jobData.Security, &jobData.TimeFrame,
-		&jobData.TriggerChainID, &jobData.TargetChainID, &jobData.TimeFrame,
-		&jobData.TimeInterval, &jobData.TriggerContractAddress,
-		&jobData.TriggerEvent, &jobData.TargetContractAddress,
-		&jobData.TargetFunction, &jobData.ArgType, arguments,
+		WHERE job_id = ?`, jobIDStr).Scan(
+		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID,
+		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID,
+		&jobData.TriggerContractAddress, &jobData.TriggerEvent, &jobData.ScriptIPFSUrl,
+		&jobData.ScriptTriggerFunction, &jobData.TargetChainID, &jobData.TargetContractAddress,
+		&jobData.TargetFunction, &jobData.ArgType, &argList,
 		&jobData.ScriptTargetFunction, &jobData.CreatedAt, &jobData.LastExecuted)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch job data: %v", err)
 	}
 
-	for i, arg := range arguments {
+	jobData.Arguments = make(map[string]interface{})
+
+	for i, arg := range argList {
 		jobData.Arguments[fmt.Sprintf("arg%d", i)] = arg
 	}
 
@@ -54,7 +56,7 @@ func (s *JobScheduler) UpdateJobStatus(jobID int64, status string) error {
 	err := s.dbClient.Session().Query(`
 		UPDATE triggerx.job_data 
 		SET status = ? 
-		WHERE jobID = ?`, status, jobIDStr).Scan()
+		WHERE job_id = ?`, status, jobIDStr).Scan()
 
 	if err != nil {
 		return fmt.Errorf("failed to update job status: %v", err)
@@ -70,8 +72,8 @@ func (s *JobScheduler) UpdateJobLastExecuted(jobID int64, lastExecuted time.Time
 
 	err := s.dbClient.Session().Query(`
 		UPDATE triggerx.job_data 
-		SET lastExecutedAt = ? 
-		WHERE jobID = ?`, lastExecuted, jobIDStr).Scan()
+		SET last_executed_at = ? 
+		WHERE job_id = ?`, lastExecuted, jobIDStr).Scan()
 
 	if err != nil {
 		return fmt.Errorf("failed to update job last executed: %v", err)

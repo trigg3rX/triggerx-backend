@@ -36,13 +36,16 @@ type JobScheduler struct {
 	workers      map[int64]Worker
 	workerCtx    context.Context
 	workerCancel context.CancelFunc
+
+	jobChainStatus map[int64]string // tracks status of job chains
+	chainMutex     sync.RWMutex
 }
 
 // ConditionMonitor tracks external conditions for condition-based jobs
 // and triggers job execution when conditions are met
 type ConditionMonitor struct {
-	ctx      context.Context
-	jobID    string
+	ctx           context.Context
+	jobID         string
 	scriptIPFSUrl string
 }
 
@@ -100,9 +103,39 @@ func (s *JobScheduler) canAcceptNewJob() bool {
 	return s.balancer.CheckResourceAvailability()
 }
 
+// validateJobLink checks for circular dependencies in job chains
+func (s *JobScheduler) validateJobLink(jobID int64) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check for circular dependencies
+	visited := make(map[int64]bool)
+	current := jobID
+
+	for current > 0 {
+		if visited[current] {
+			return fmt.Errorf("circular dependency detected in job chain starting from job %d", jobID)
+		}
+		visited[current] = true
+
+		jobData, err := s.GetJobDetails(current)
+		if err != nil {
+			return fmt.Errorf("failed to fetch job %d details: %v", current, err)
+		}
+
+		current = jobData.LinkJobID
+	}
+
+	return nil
+}
+
 // StartTimeBasedJob initializes and runs a job that executes on a time interval.
 // Jobs that can't be started due to resource constraints are queued.
 func (s *JobScheduler) StartTimeBasedJob(jobID int64) error {
+	if err := s.validateJobLink(jobID); err != nil {
+		return fmt.Errorf("job link validation failed: %v", err)
+	}
+
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
 		s.balancer.AddJobToQueue(jobID, 1)
@@ -150,6 +183,10 @@ func (s *JobScheduler) StartTimeBasedJob(jobID int64) error {
 // StartEventBasedJob initializes and runs a job that executes in response to blockchain events.
 // Includes state persistence and resource management.
 func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
+	if err := s.validateJobLink(jobID); err != nil {
+		return fmt.Errorf("job link validation failed: %v", err)
+	}
+
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
 		s.balancer.AddJobToQueue(jobID, 1)
@@ -196,6 +233,10 @@ func (s *JobScheduler) StartEventBasedJob(jobID int64) error {
 // StartConditionBasedJob initializes and runs a job that executes when specific conditions are met.
 // Conditions are monitored via external scripts or APIs.
 func (s *JobScheduler) StartConditionBasedJob(jobID int64) error {
+	if err := s.validateJobLink(jobID); err != nil {
+		return fmt.Errorf("job link validation failed: %v", err)
+	}
+
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobID)
 		s.balancer.AddJobToQueue(jobID, 1)
@@ -236,4 +277,18 @@ func (s *JobScheduler) StartConditionBasedJob(jobID int64) error {
 	}()
 
 	return nil
+}
+
+// Add method to update chain status
+func (s *JobScheduler) updateJobChainStatus(jobID int64, status string) {
+	s.chainMutex.Lock()
+	defer s.chainMutex.Unlock()
+	s.jobChainStatus[jobID] = status
+}
+
+// Add method to get chain status
+func (s *JobScheduler) GetJobChainStatus(jobID int64) string {
+	s.chainMutex.RLock()
+	defer s.chainMutex.RUnlock()
+	return s.jobChainStatus[jobID]
 }

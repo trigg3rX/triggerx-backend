@@ -27,7 +27,7 @@ func SendTaskToPerformer(jobData *types.Job, triggerData *types.TriggerData) (bo
 		return false, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:4003/task/execute", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", "http://localhost:9002/task/execute", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)
 	}

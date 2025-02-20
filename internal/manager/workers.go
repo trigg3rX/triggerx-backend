@@ -53,23 +53,23 @@ type TimeBasedWorker struct {
 // EventBasedWorker listens for specific blockchain events and triggers job execution
 // when the target event is detected.
 type EventBasedWorker struct {
-	jobID           int64
-	scheduler       *JobScheduler
-	chainID         int
-	jobData         *types.Job
-	client          *ethclient.Client
-	subscription    ethereum.Subscription
+	jobID        int64
+	scheduler    *JobScheduler
+	chainID      int
+	jobData      *types.Job
+	client       *ethclient.Client
+	subscription ethereum.Subscription
 	BaseWorker
 }
 
 // ConditionBasedWorker periodically checks external conditions (e.g., API endpoints)
 // and executes jobs when conditions are met.
 type ConditionBasedWorker struct {
-	jobID         int64
-	scheduler     *JobScheduler
-	jobData       *types.Job
-	ticker        *time.Ticker
-	done          chan bool
+	jobID     int64
+	scheduler *JobScheduler
+	jobData   *types.Job
+	ticker    *time.Ticker
+	done      chan bool
 	BaseWorker
 }
 
@@ -163,11 +163,11 @@ func (w *TimeBasedWorker) executeTask(jobData *types.Job, triggerData *types.Tri
 
 	taskData := &types.CreateTaskData{
 		JobID:            w.jobID,
-		TaskDefinitionID:  jobData.TaskDefinitionID,
-		TaskPerformerID: 0,
+		TaskDefinitionID: jobData.TaskDefinitionID,
+		TaskPerformerID:  0,
 	}
 
-	w.scheduler.logger.Infof("Task data: %d | %d | %s", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformerID)
+	w.scheduler.logger.Infof("Task data: %d | %d | %d", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformerID)
 
 	taskID, status, err := CreateTaskData(taskData)
 	if err != nil {
@@ -191,15 +191,21 @@ func (w *TimeBasedWorker) executeTask(jobData *types.Job, triggerData *types.Tri
 
 	w.scheduler.logger.Infof("Task sent for job %d to performer", w.jobID)
 
+	// After successful execution, handle linked job
+	if err := w.handleLinkedJob(w.scheduler, jobData); err != nil {
+		w.scheduler.logger.Errorf("Failed to execute linked job for job %d: %v", w.jobID, err)
+		// Don't return error here as the main job was successful
+	}
+
 	return nil
 }
 
 func NewEventBasedWorker(jobData *types.Job, scheduler *JobScheduler) *EventBasedWorker {
 	return &EventBasedWorker{
-		jobID:           jobData.JobID,
-		scheduler:       scheduler,
-		chainID:         jobData.TriggerChainID,
-		jobData:         jobData,
+		jobID:     jobData.JobID,
+		scheduler: scheduler,
+		chainID:   jobData.TriggerChainID,
+		jobData:   jobData,
 		BaseWorker: BaseWorker{
 			status:     "pending",
 			maxRetries: 3,
@@ -334,8 +340,8 @@ func (w *EventBasedWorker) executeTask(jobData *types.Job, triggerData *types.Tr
 
 	taskData := &types.CreateTaskData{
 		JobID:            w.jobID,
-		TaskDefinitionID:  jobData.TaskDefinitionID,
-		TaskPerformerID: 0,
+		TaskDefinitionID: jobData.TaskDefinitionID,
+		TaskPerformerID:  0,
 	}
 
 	taskID, status, err := CreateTaskData(taskData)
@@ -358,15 +364,21 @@ func (w *EventBasedWorker) executeTask(jobData *types.Job, triggerData *types.Tr
 
 	w.scheduler.logger.Infof("Task sent for job %d to performer", w.jobID)
 
+	// After successful execution, handle linked job
+	if err := w.handleLinkedJob(w.scheduler, jobData); err != nil {
+		w.scheduler.logger.Errorf("Failed to execute linked job for job %d: %v", w.jobID, err)
+		// Don't return error here as the main job was successful
+	}
+
 	return nil
 }
 
 func NewConditionBasedWorker(jobData *types.Job, scheduler *JobScheduler) *ConditionBasedWorker {
 	return &ConditionBasedWorker{
-		jobID:         jobData.JobID,
-		scheduler:     scheduler,
-		jobData:       jobData,
-		done:          make(chan bool),
+		jobID:     jobData.JobID,
+		scheduler: scheduler,
+		jobData:   jobData,
+		done:      make(chan bool),
 		BaseWorker: BaseWorker{
 			status:     "pending",
 			maxRetries: 3,
@@ -415,7 +427,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 				if satisfied {
 					w.scheduler.logger.Infof("Condition satisfied for job %d", w.jobID)
-					
+
 					triggerData.Timestamp = time.Now()
 					triggerData.ConditionParams = make(map[string]interface{})
 
@@ -473,8 +485,8 @@ func (w *ConditionBasedWorker) executeTask(jobData *types.Job, triggerData *type
 
 	taskData := &types.CreateTaskData{
 		JobID:            w.jobID,
-		TaskDefinitionID:  jobData.TaskDefinitionID,
-		TaskPerformerID: 0,
+		TaskDefinitionID: jobData.TaskDefinitionID,
+		TaskPerformerID:  0,
 	}
 
 	taskID, status, err := CreateTaskData(taskData)
@@ -496,6 +508,12 @@ func (w *ConditionBasedWorker) executeTask(jobData *types.Job, triggerData *type
 	}
 
 	w.scheduler.logger.Infof("Task sent for job %d to performer", w.jobID)
+
+	// After successful execution, handle linked job
+	if err := w.handleLinkedJob(w.scheduler, jobData); err != nil {
+		w.scheduler.logger.Errorf("Failed to execute linked job for job %d: %v", w.jobID, err)
+		// Don't return error here as the main job was successful
+	}
 
 	return nil
 }
@@ -534,4 +552,31 @@ func (w *TimeBasedWorker) GetError() string {
 
 func (w *TimeBasedWorker) GetRetries() int {
 	return w.currentRetry
+}
+
+// Add this helper function to the BaseWorker struct
+func (w *BaseWorker) handleLinkedJob(scheduler *JobScheduler, jobData *types.Job) error {
+	if jobData.LinkJobID <= 0 {
+		return nil // No linked job to execute
+	}
+
+	scheduler.updateJobChainStatus(jobData.JobID, "completed")
+	scheduler.logger.Infof("Found linked job %d for job %d", jobData.LinkJobID, jobData.JobID)
+
+	linkedJob, err := scheduler.GetJobDetails(jobData.LinkJobID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch linked job %d details: %v", jobData.LinkJobID, err)
+	}
+
+	// Start the linked job based on its type
+	switch {
+	case linkedJob.TaskDefinitionID == 1 || linkedJob.TaskDefinitionID == 2:
+		return scheduler.StartTimeBasedJob(linkedJob.JobID)
+	case linkedJob.TaskDefinitionID == 3 || linkedJob.TaskDefinitionID == 4:
+		return scheduler.StartEventBasedJob(linkedJob.JobID)
+	case linkedJob.TaskDefinitionID == 5 || linkedJob.TaskDefinitionID == 6:
+		return scheduler.StartConditionBasedJob(linkedJob.JobID)
+	default:
+		return fmt.Errorf("invalid job type for linked job %d", linkedJob.JobID)
+	}
 }
