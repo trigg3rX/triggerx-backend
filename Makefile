@@ -50,6 +50,6 @@ db-shell: ## Open CQL shell
 run-keeper: ## Build the keeper node
 	./scripts/build-keeper-node.sh
 
-publish-keeper-node: ## Publish the keeper node
+publish-keeper-node: ## Publish the keeper node 
 	./scripts/publish-keeper-node.sh
 

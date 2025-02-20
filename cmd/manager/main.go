@@ -11,12 +11,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
@@ -30,6 +33,12 @@ var (
 	db     *database.Connection
 	logger logging.Logger
 )
+
+// KeeperConnection represents the connection payload from keepers
+type KeeperConnection struct {
+	KeeperID string `json:"keeper_id"`
+	KeeperIP string `json:"keeper_ip"`
+}
 
 // handleJobEvent processes incoming job events and delegates to appropriate job scheduler
 // based on the job type (time-based, event-based, or condition-based)
@@ -57,7 +66,7 @@ func handleJobEvent(event events.JobEvent) {
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
 			}
-		case 5,6:
+		case 5, 6:
 			err := jobScheduler.StartConditionBasedJob(jobID)
 			if err != nil {
 				logger.Errorf("Failed to add job %s: %v", jobID, err)
@@ -112,6 +121,94 @@ func subscribeToEvents(ctx context.Context) error {
 	return nil
 }
 
+// handleKeeperConnection handles incoming keeper connection requests
+func handleKeeperConnection(c *gin.Context) {
+	var keeper KeeperConnection
+	if err := c.BindJSON(&keeper); err != nil {
+		logger.Error("Failed to parse keeper connection request", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	// Convert keeper_id from string to int64
+	keeperID, err := strconv.ParseInt(keeper.KeeperID, 10, 64)
+	if err != nil {
+		logger.Error("Invalid keeper ID format", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper ID format"})
+		return
+	}
+
+	// Update keeper's connection address in the database
+	query := `UPDATE keeper_data SET connection_address = ? WHERE keeper_id = ?`
+	if err := db.Session().Query(query, keeper.KeeperIP, keeperID).Exec(); err != nil {
+		logger.Error("Failed to update keeper connection address",
+			"keeper_id", keeperID,
+			"keeper_ip", keeper.KeeperIP,
+			"error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper data"})
+		return
+	}
+
+	logger.Info("Keeper connected successfully",
+		"keeper_id", keeperID,
+		"keeper_ip", keeper.KeeperIP)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "connected",
+		"keeper_id": keeper.KeeperID,
+	})
+}
+
+// setupKeeperListener initializes the HTTP server for keeper connections
+func setupKeeperListener(ctx context.Context, wg *sync.WaitGroup) error {
+	// Get the RPC address from environment
+	rpcAddress := os.Getenv("TASK_MANAGER_RPC_ADDRESS")
+	if rpcAddress == "" {
+		return fmt.Errorf("TASK_MANAGER_RPC_ADDRESS not set in .env file")
+	}
+
+	// Setup Gin router
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
+
+	// Add keeper connection endpoint
+	router.POST("/connect", handleKeeperConnection)
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:    rpcAddress,
+		Handler: router,
+	}
+
+	// Start server in a goroutine
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("Starting keeper connection listener", "address", rpcAddress)
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("Keeper connection listener failed", "error", err)
+		}
+	}()
+
+	// Graceful shutdown handler
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error("Failed to shutdown keeper connection listener gracefully", "error", err)
+		}
+	}()
+
+	return nil
+}
+
 // shutdown performs graceful shutdown of all components:
 // cancels context, closes DB connection and P2P host
 func shutdown(cancel context.CancelFunc, wg *sync.WaitGroup) {
@@ -152,7 +249,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	if err := events.InitEventBus("localhost:6379"); err != nil {
-		logger.Fatalf("Failed to initialize event bus: %v", err)
+		logger.Errorf("Failed to initialize event bus: %v", err)
 	}
 
 	dbConfig := &database.Config{
@@ -165,12 +262,16 @@ func main() {
 	var err error
 	db, err = database.NewConnection(dbConfig)
 	if err != nil {
-		logger.Fatalf("Failed to connect to database: %v", err)
+		logger.Errorf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
 	if err := subscribeToEvents(ctx); err != nil {
-		logger.Fatalf("Failed to subscribe to events: %v", err)
+		logger.Errorf("Failed to subscribe to events: %v", err)
+	}
+
+	if err := setupKeeperListener(ctx, &wg); err != nil {
+		logger.Errorf("Failed to setup keeper listener: %v", err)
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -193,7 +294,7 @@ func main() {
 
 	err = network.ConnectToAggregator()
 	if err != nil {
-		logger.Fatalf("Failed to connect to aggregator: %v", err)
+		logger.Errorf("Failed to connect to aggregator: %v", err)
 	}
 
 	logger.Infof("Manager node is READY.")
