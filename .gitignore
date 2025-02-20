@@ -6,6 +6,7 @@ config-files/*.yaml
 release/*
 
 .keystore/*
+.cursor
 
 data/cache/*
 data/logs/*/*.log
