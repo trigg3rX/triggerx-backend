@@ -162,7 +162,7 @@ func handleKeeperConnection(c *gin.Context) {
 // setupKeeperListener initializes the HTTP server for keeper connections
 func setupKeeperListener(ctx context.Context, wg *sync.WaitGroup) error {
 	// Get the RPC address from environment
-	rpcAddress := os.Getenv("TASK_MANAGER_RPC_ADDRESS")
+	rpcAddress := ":9001"
 	if rpcAddress == "" {
 		return fmt.Errorf("TASK_MANAGER_RPC_ADDRESS not set in .env file")
 	}
