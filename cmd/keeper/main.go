@@ -8,86 +8,15 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"net"
-	"encoding/json"
-	"bytes"
-
-	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
-
-func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-}
-
-// ConnectToTaskManager sends the keeper's ID and IP to the task manager to establish a connection.
-func ConnectToTaskManager(keeperID string, keeperIP string) error {
-	// Load the TASK_MANAGER_RPC_ADDRESS from the .env file
-	taskManagerRPCAddress := os.Getenv("TASK_MANAGER_RPC_ADDRESS")
-	if taskManagerRPCAddress == "" {
-		return fmt.Errorf("TASK_MANAGER_RPC_ADDRESS not set in .env file")
-	}
-
-	// Construct the payload to send to the task manager
-	payload := map[string]string{
-		"keeper_id": keeperID,
-		"keeper_ip": keeperIP,
-	}
-
-	// Marshal the payload into JSON
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	// Create a new HTTP client
-	client := &http.Client{}
-
-	// Create a new request to the task manager
-	req, err := http.NewRequest("POST", taskManagerRPCAddress, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set the content type to JSON
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check if the response was successful
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("task manager returned non-200 status code: %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-// getOutboundIP returns the preferred outbound IP of this machine
-func getOutboundIP() (string, error) {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close()
-
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String(), nil
-}
 
 func main() {
 	if err := logging.InitLogger(logging.Development, logging.KeeperProcess); err != nil {
@@ -98,16 +27,20 @@ func main() {
 
 	services.Init()
 
-	keeperAddress := os.Getenv("OPERATOR_ADDRESS")
-	
-	ip, err := services.GetOutboundIP()
+	// Setup a tunnel for the keeper service
+	var connectionAddress string
+	tunnelURL, err := services.SetupTunnel(config.KeeperRPCPort, config.KeeperAddress)
 	if err != nil {
-		logger.Error("Failed to get outbound IP", "error", err)
-		ip = "localhost"
+		logger.Error("Failed to setup tunnel", "error", err)
+		connectionAddress = fmt.Sprintf("%s:%s", config.KeeperIP, config.KeeperRPCPort)
+		logger.Info("Using local connection address", "address", connectionAddress)
+	} else {
+		connectionAddress = tunnelURL
+		logger.Info("Using tunnel for connection", "url", tunnelURL)
 	}
-	keeperIP := fmt.Sprintf("%s:%s", ip, os.Getenv("OPERATOR_RPC_PORT"))
 
-	connected, err := services.ConnectToTaskManager(keeperAddress, keeperIP)
+	// Connect to task manager with the tunnel URL or local address as fallback
+	connected, err := services.ConnectToTaskManager(config.KeeperAddress, connectionAddress)
 	if err != nil {
 		logger.Error("Failed to connect to task manager", "error", err)
 	}
@@ -123,6 +56,15 @@ func main() {
 	router.Use(gin.Logger())
 	router.POST("/task/execute", execution.ExecuteTask)
 	router.POST("/task/validate", validation.ValidateTask)
+
+	// Add health endpoint for keeper verification
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":         "healthy",
+			"keeper_address": config.KeeperAddress,
+			"timestamp":      time.Now().Unix(),
+		})
+	})
 
 	// Custom middleware for error handling
 	errorHandler := func(c *gin.Context) {

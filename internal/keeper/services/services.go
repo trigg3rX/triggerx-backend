@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
-	"net"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/localtunnel/go-localtunnel"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -102,7 +105,7 @@ func makeRPCRequest(client *rpc.Client, params Params) interface{} {
 	return result
 }
 
-func ConnectToTaskManager(keeperAddress string, keeperIP string) (bool, error) {
+func ConnectToTaskManager(keeperAddress string, connectionAddress string) (bool, error) {
 	taskManagerIPAddress := os.Getenv("TASK_MANAGER_IP_ADDRESS")
 	taskManagerPort := os.Getenv("TASK_MANAGER_RPC_PORT")
 	if taskManagerIPAddress == "" || taskManagerPort == "" {
@@ -113,7 +116,17 @@ func ConnectToTaskManager(keeperAddress string, keeperIP string) (bool, error) {
 
 	var payload types.UpdateKeeperConnectionData
 	payload.KeeperAddress = keeperAddress
-	payload.ConnectionAddress = keeperIP
+	payload.ConnectionAddress = connectionAddress
+
+	// Ensure the connection address has the proper format for health checks
+	if !strings.HasPrefix(payload.ConnectionAddress, "http://") && !strings.HasPrefix(payload.ConnectionAddress, "https://") {
+		payload.ConnectionAddress = "https://" + payload.ConnectionAddress
+	}
+
+	logger.Info("Connecting to task manager",
+		"keeper_address", keeperAddress,
+		"connection_address", payload.ConnectionAddress,
+		"task_manager", taskManagerRPCAddress)
 
 	var response types.UpdateKeeperConnectionDataResponse
 
@@ -159,32 +172,79 @@ func ConnectToTaskManager(keeperAddress string, keeperIP string) (bool, error) {
 	return true, nil
 }
 
-// getOutboundIP returns the preferred outbound IP of this machine
-func GetOutboundIP() (string, error) {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close()
+func SetupTunnel(port string, keeperAddress string) (string, error) {
+	logger.Info("Setting up localtunnel for port", "port", port)
 
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String(), nil
+	// Convert port string to int
+	portInt := 0
+	_, err := fmt.Sscanf(port, "%d", &portInt)
+	if err != nil {
+		return "", fmt.Errorf("invalid port format: %w", err)
+	}
+
+	// Create a localtunnel client
+	tunnel, err := localtunnel.New(portInt, "localhost", localtunnel.Options{
+		Subdomain:      keeperAddress,
+		MaxConnections: 10,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to create localtunnel: %w", err)
+	}
+
+	// Get the tunnel URL
+	tunnelURL := tunnel.URL()
+
+	// Ensure the URL has the http:// prefix
+	if !strings.HasPrefix(tunnelURL, "http://") && !strings.HasPrefix(tunnelURL, "https://") {
+		tunnelURL = "https://" + tunnelURL
+	}
+
+	logger.Info("Localtunnel established", "url", tunnelURL)
+
+	// The tunnel starts automatically when created with New()
+	// We'll keep a reference to close it later if needed
+	// This could be stored in a package variable or context
+
+	return tunnelURL, nil
 }
 
-// Add this function to setup a tunnel (this is a pseudo-implementation)
-func SetupTunnel(port string) (string, error) {
-	// You would implement this using a tunneling service like ngrok
-	// This is just an example structure
+func GetPublicIP() (string, error) {
+	ipServices := []string{
+		"https://api.ipify.org",
+		"https://ifconfig.me/ip",
+		"https://api.ipify.org?format=text",
+		"https://checkip.amazonaws.com",
+	}
 
-	// Option 1: Using ngrok's Go SDK
-	// tunnel, err := ngrok.Listen(context.Background(),
-	//     config.HTTPEndpoint(),
-	//     ngrok.WithAuthtokenFromEnv(),
-	// )
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 
-	// Option 2: Using localtunnel
-	// cmd := exec.Command("lt", "--port", port)
-	// output, err := cmd.Output()
+	var lastErr error
+	for _, service := range ipServices {
+		resp, err := client.Get(service)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
 
-	return "", fmt.Errorf("tunnel implementation needed")
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("service %s returned status: %d", service, resp.StatusCode)
+			continue
+		}
+
+		ipBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		ip := strings.TrimSpace(string(ipBytes))
+		if ip != "" {
+			return ip, nil
+		}
+	}
+
+	return "", fmt.Errorf("failed to get public IP: %v", lastErr)
 }

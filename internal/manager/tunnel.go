@@ -49,11 +49,7 @@ func HandleKeeperConnection(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("Unexpected status code", "status", resp.StatusCode)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unexpected status code"})
-		return
-	}
+	logger.Info("Status code", "status", resp.StatusCode)
 
 	json.NewDecoder(resp.Body).Decode(&response)
 
@@ -76,10 +72,17 @@ func HandleKeeperConnection(c *gin.Context) {
 
 // verifyKeeperEndpoint attempts to verify that the keeper's endpoint is accessible
 func verifyKeeperEndpoint(keeperURL string) error {
+	// Ensure the URL has http:// or https:// prefix
+	if !strings.HasPrefix(keeperURL, "http://") && !strings.HasPrefix(keeperURL, "https://") {
+		keeperURL = "https://" + keeperURL
+	}
+
 	// Add health check endpoint if it doesn't exist in URL
 	if !strings.HasSuffix(keeperURL, "/health") {
 		keeperURL = strings.TrimSuffix(keeperURL, "/") + "/health"
 	}
+
+	logger.Info("Verifying keeper endpoint", "url", keeperURL)
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,
@@ -93,6 +96,17 @@ func verifyKeeperEndpoint(keeperURL string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("keeper endpoint returned non-200 status: %d", resp.StatusCode)
+	}
+
+	// Read and log the response body for debugging
+	var healthResponse map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&healthResponse); err != nil {
+		logger.Warn("Failed to decode health response", "error", err)
+	} else {
+		logger.Info("Keeper health check successful",
+			"status", healthResponse["status"],
+			"keeper_address", healthResponse["keeper_address"],
+			"timestamp", healthResponse["timestamp"])
 	}
 
 	return nil
