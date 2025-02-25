@@ -24,12 +24,6 @@ func HandleKeeperConnection(c *gin.Context) {
 		return
 	}
 
-	// if !strings.HasPrefix(keeper.ConnectionAddress, "http://") && !strings.HasPrefix(keeper.ConnectionAddress, "https://") {
-	// 	logger.Error("Invalid keeper URL format", "url", keeper.ConnectionAddress)
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper URL format"})
-	// 	return
-	// }
-
 	jsonData, err := json.Marshal(keeper)
 	if err != nil {
 		logger.Error("Error marshaling data", "error", err)
@@ -88,7 +82,18 @@ func verifyKeeperEndpoint(keeperURL string) error {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(keeperURL)
+	// Create a custom request with headers to bypass localtunnel password page
+	req, err := http.NewRequest("GET", keeperURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set custom headers to bypass localtunnel password page
+	req.Header.Set("User-Agent", "TriggerX-Manager-Service")
+	req.Header.Set("bypass-tunnel-reminder", "true")
+
+	// Make the request
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to keeper endpoint: %w", err)
 	}

@@ -32,9 +32,21 @@ func main() {
 	tunnelURL, err := services.SetupTunnel(config.KeeperRPCPort, config.KeeperAddress)
 	if err != nil {
 		logger.Error("Failed to setup tunnel", "error", err)
-		connectionAddress = fmt.Sprintf("%s:%s", config.KeeperIP, config.KeeperRPCPort)
-		logger.Info("Using local connection address", "address", connectionAddress)
+		// Continue with local connection if tunnel fails
+
+		// Try to get public IP for better connectivity
+		publicIP, ipErr := services.GetPublicIP()
+		if ipErr != nil {
+			logger.Error("Failed to get public IP", "error", ipErr)
+			// Fall back to the configured IP if public IP retrieval fails
+			connectionAddress = fmt.Sprintf("http://%s:%s", config.KeeperIP, config.KeeperRPCPort)
+		} else {
+			connectionAddress = fmt.Sprintf("http://%s:%s", publicIP, config.KeeperRPCPort)
+		}
+
+		logger.Info("Using direct connection address", "address", connectionAddress)
 	} else {
+		// Use the tunnel URL for connection
 		connectionAddress = tunnelURL
 		logger.Info("Using tunnel for connection", "url", tunnelURL)
 	}
@@ -58,6 +70,7 @@ func main() {
 	router.POST("/task/validate", validation.ValidateTask)
 
 	// Add health endpoint for keeper verification
+	// Note: This is now also handled by the tunnel server for tunnel connections
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":         "healthy",
@@ -113,6 +126,9 @@ func main() {
 
 	case sig := <-shutdown:
 		logger.Info("starting shutdown", "signal", sig)
+
+		// Close the tunnel if it's active
+		services.CloseTunnel()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
