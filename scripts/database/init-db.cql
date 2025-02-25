@@ -96,5 +96,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     verified boolean,
     status boolean,
     consensus_keys list<text>,
-    connection_address text
+    connection_address text,
+    no_exctask int,
+    keeper_points bigint
 );

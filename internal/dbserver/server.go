@@ -6,8 +6,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -74,9 +74,13 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
+	api.HandleFunc("/keepers/{id}/increment-tasks", handler.IncrementKeeperTaskCount).Methods("POST")
+	api.HandleFunc("/keepers/{id}/task-count", handler.GetKeeperTaskCount).Methods("GET")
+	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
+	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
 
 	// Fees routes
-	// api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
+	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
 }
 
 func (s *Server) Start(port string) error {

@@ -7,90 +7,90 @@ import (
 
 type UserData struct {
 	// Fixed Values
-	UserID         int64     `json:"user_id"`
-	UserAddress    string    `json:"user_address"`
-	CreatedAt      time.Time `json:"created_at"`
+	UserID      int64     `json:"user_id"`
+	UserAddress string    `json:"user_address"`
+	CreatedAt   time.Time `json:"created_at"`
 
 	// Active Values
 	JobIDs         []int64   `json:"job_ids"`
 	AccountBalance *big.Int  `json:"account_balance"` // Balance in Wei (ETH)
-	TokenBalance   *big.Int  `json:"token_balance"` // Balance in Wei (ETH)
+	TokenBalance   *big.Int  `json:"token_balance"`   // Balance in Wei (ETH)
 	LastUpdatedAt  time.Time `json:"last_updated_at"`
 }
 
 type JobData struct {
 	// Fixed Values
-	JobID                 int64     `json:"job_id"`
-	TaskDefinitionID      int       `json:"task_definition_id"`
-	UserID                int64     `json:"user_id"`
-	Priority              int       `json:"priority"` // Defines BaseFee for Keepers
-	Security              int       `json:"security"` // Defines VotingPower for Aggregator
-	LinkJobID             int64     `json:"link_job_id"`
-	ChainStatus           int       `json:"chain_status"` // 0 = Chain Head, 1 = Chain Block 
+	JobID            int64 `json:"job_id"`
+	TaskDefinitionID int   `json:"task_definition_id"`
+	UserID           int64 `json:"user_id"`
+	Priority         int   `json:"priority"` // Defines BaseFee for Keepers
+	Security         int   `json:"security"` // Defines VotingPower for Aggregator
+	LinkJobID        int64 `json:"link_job_id"`
+	ChainStatus      int   `json:"chain_status"` // 0 = Chain Head, 1 = Chain Block
 
 	// Can be Updated By User
-	TimeFrame             int64     `json:"time_frame"`
-	Recurring             bool      `json:"recurring"` // Only True -> False is allowed
-	
+	TimeFrame int64 `json:"time_frame"`
+	Recurring bool  `json:"recurring"` // Only True -> False is allowed
+
 	// Trigger Values
-	TimeInterval          int64     `json:"time_interval"`
-	TriggerChainID        string    `json:"trigger_chain_id"`
-	TriggerContractAddress string   `json:"trigger_contract_address"`
-	TriggerEvent          string    `json:"trigger_event"`
-	ScriptIPFSUrl         string    `json:"script_ipfs_url"`
-	ScriptTriggerFunction string    `json:"script_trigger_function"`
-	
+	TimeInterval           int64  `json:"time_interval"`
+	TriggerChainID         string `json:"trigger_chain_id"`
+	TriggerContractAddress string `json:"trigger_contract_address"`
+	TriggerEvent           string `json:"trigger_event"`
+	ScriptIPFSUrl          string `json:"script_ipfs_url"`
+	ScriptTriggerFunction  string `json:"script_trigger_function"`
+
 	// Action Values
-	TargetChainID         string    `json:"target_chain_id"`
-	TargetContractAddress string    `json:"target_contract_address"`
-	TargetFunction        string    `json:"target_function"`
-	ArgType               int       `json:"arg_type"`
-	Arguments             []string  `json:"arguments"`
-	ScriptTargetFunction  string    `json:"script_target_function"`
-	
+	TargetChainID         string   `json:"target_chain_id"`
+	TargetContractAddress string   `json:"target_contract_address"`
+	TargetFunction        string   `json:"target_function"`
+	ArgType               int      `json:"arg_type"`
+	Arguments             []string `json:"arguments"`
+	ScriptTargetFunction  string   `json:"script_target_function"`
+
 	// Status Values
-	Status                bool      `json:"status"`
-	JobCostPrediction     int       `json:"job_cost_prediction"`
-	CreatedAt             time.Time `json:"created_at"`
-	LastExecutedAt        time.Time `json:"last_executed_at"`
-	TaskIDs               []int64   `json:"task_ids"`
+	Status            bool      `json:"status"`
+	JobCostPrediction int       `json:"job_cost_prediction"`
+	CreatedAt         time.Time `json:"created_at"`
+	LastExecutedAt    time.Time `json:"last_executed_at"`
+	TaskIDs           []int64   `json:"task_ids"`
 }
 
 type TaskData struct {
 	// Fixed Values
-	TaskID                     int64     `json:"task_id"`
-	JobID                      int64     `json:"job_id"`
-	TaskDefinitionID           int       `json:"task_definition_id"`
-	CreatedAt                  time.Time `json:"created_at"`
-	TaskFee                    int64      `json:"task_fee"`
+	TaskID           int64     `json:"task_id"`
+	JobID            int64     `json:"job_id"`
+	TaskDefinitionID int       `json:"task_definition_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	TaskFee          int64     `json:"task_fee"`
 
 	// Action Values
-	ExecutionTimestamp        time.Time `json:"execution_timestamp"`
-	ExecutionTxHash           string    `json:"execution_tx_hash"`
-	TaskPerformerID           int64     `json:"task_performer_id"`
-	
+	ExecutionTimestamp time.Time `json:"execution_timestamp"`
+	ExecutionTxHash    string    `json:"execution_tx_hash"`
+	TaskPerformerID    int64     `json:"task_performer_id"`
+
 	// ProofOfTask Values
-	ProofOfTask               string    `json:"proof_of_task"`
-	ActionDataCID             string    `json:"action_data_cid"`
-	TaskAttesterIDs           []int64   `json:"task_attester_ids"`
-	
+	ProofOfTask     string  `json:"proof_of_task"`
+	ActionDataCID   string  `json:"action_data_cid"`
+	TaskAttesterIDs []int64 `json:"task_attester_ids"`
+
 	// Contract Values
-	IsApproved                bool      `json:"is_approved"`
-	TpSignature               []byte    `json:"tp_signature"`
-	TaSignature               []byte    `json:"ta_signature"`
-	TaskSubmissionTxHash      string    `json:"task_submission_tx_hash"`
+	IsApproved           bool   `json:"is_approved"`
+	TpSignature          []byte `json:"tp_signature"`
+	TaSignature          []byte `json:"ta_signature"`
+	TaskSubmissionTxHash string `json:"task_submission_tx_hash"`
 
 	// Status Values
-	IsSuccessful              bool      `json:"is_successful"`
+	IsSuccessful bool `json:"is_successful"`
 }
 
 type KeeperData struct {
 	// Fixed Values
-	KeeperID          int64     `json:"keeper_id"`
-	KeeperAddress     string    `json:"keeper_address"`
-	KeeperType        int       `json:"keeper_type"` // Keeper = 1, Attester = 2
-	RegisteredTx      string    `json:"registered_tx"`
-	
+	KeeperID      int64  `json:"keeper_id"`
+	KeeperAddress string `json:"keeper_address"`
+	KeeperType    int    `json:"keeper_type"` // Keeper = 1, Attester = 2
+	RegisteredTx  string `json:"registered_tx"`
+
 	// Active Values
 	RewardsAddress    string    `json:"rewards_address"`
 	Stakes            []float64 `json:"stakes"`
@@ -99,4 +99,6 @@ type KeeperData struct {
 	Status            bool      `json:"status"`
 	ConsensusKeys     []string  `json:"consensus_keys"`
 	ConnectionAddress string    `json:"connection_address"`
+	NoExcTask         int       `json:"no_exctask"`    // Number of executed tasks
+	KeeperPoints      int64     `json:"keeper_points"` // Sum of task fees earned
 }
