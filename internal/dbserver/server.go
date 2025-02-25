@@ -9,13 +9,15 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
 )
 
 type Server struct {
-	router *mux.Router
-	db     *database.Connection
-	cors   *cors.Cors
-	logger logging.Logger
+	router        *mux.Router
+	db            *database.Connection
+	cors          *cors.Cors
+	logger        logging.Logger
+	metricsServer *metrics.MetricsServer
 }
 
 func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
@@ -34,11 +36,15 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		Debug:            true,
 	})
 
+	// Initialize metrics server
+	metricsServer := metrics.NewMetricsServer(db, logger)
+
 	s := &Server{
-		router: router,
-		db:     db,
-		cors:   corsHandler,
-		logger: logger,
+		router:        router,
+		db:            db,
+		cors:          corsHandler,
+		logger:        logger,
+		metricsServer: metricsServer,
 	}
 
 	s.routes()
@@ -81,7 +87,9 @@ func (s *Server) routes() {
 func (s *Server) Start(port string) error {
 	s.logger.Infof("Starting server on port %s", port)
 
-	handler := s.cors.Handler(s.router)
+	// Start the metrics server
+	s.metricsServer.Start()
 
+	handler := s.cors.Handler(s.router)
 	return http.ListenAndServe(fmt.Sprintf(":%s", port), handler)
 }

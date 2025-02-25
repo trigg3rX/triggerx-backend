@@ -9,5 +9,9 @@ scrape_configs:
   - job_name: 'othentic-cli'
     static_configs:
       - targets: ['172.17.0.1:6060']  # This is usually Docker's default bridge IP
-
+      
+  - job_name: 'triggerx-keepers'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['172.17.0.1:8081']  # Using a different port for keeper metrics
       
