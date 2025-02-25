@@ -98,6 +98,6 @@ type KeeperData struct {
 	Status            bool      `json:"status"`
 	ConsensusKeys     []string  `json:"consensus_keys"`
 	ConnectionAddress string    `json:"connection_address"`
-	NoExcTask         int       `json:"no_exctask"`    // Number of executed tasks
-	KeeperPoints      int64     `json:"keeper_points"` // Sum of task fees earned
+	NoExcTask         int       `json:"no_exctask"`
+	KeeperPoints      int64     `json:"keeper_points"`
 }

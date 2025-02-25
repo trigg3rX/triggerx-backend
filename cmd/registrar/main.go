@@ -12,11 +12,12 @@ import (
 	"os"
 
     "github.com/ethereum/go-ethereum"
-    // "github.com/ethereum/go-ethereum/accounts/abi"
     "github.com/ethereum/go-ethereum/common"
-    "github.com/ethereum/go-ethereum/core/types"
+    gethtypes "github.com/ethereum/go-ethereum/core/types"
     "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/joho/godotenv"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Event signature for OperatorRegistered
@@ -25,20 +26,6 @@ const OperatorRegisteredSig = "OperatorRegistered(address,uint256[4])"
 type OperatorRegisteredEvent struct {
     Operator    common.Address
     BlsKey      [4]*big.Int
-}
-
-type KeeperData struct {
-    KeeperID          int64     `json:"keeper_id"`
-    KeeperAddress     string    `json:"keeper_address"`
-    KeeperType        int       `json:"keeper_type"`
-    RegisteredTx      string    `json:"registered_tx"`
-    RewardsAddress    string    `json:"rewards_address"`
-    Stakes            []float64 `json:"stakes"`
-    Strategies        []string  `json:"strategies"`
-    Verified          bool      `json:"verified"`
-    Status            bool      `json:"status"`
-    ConsensusKeys     []string  `json:"consensus_keys"`
-    ConnectionAddress string    `json:"connection_address"`
 }
 
 func main() {
@@ -67,7 +54,7 @@ func main() {
     }
 
     // Create a channel to receive the logs
-    logs := make(chan types.Log)
+    logs := make(chan gethtypes.Log)
 
     // Subscribe to the events
     sub, err := client.SubscribeFilterLogs(context.Background(), query, logs)
@@ -97,9 +84,8 @@ func main() {
             }
 
             // Create keeper data
-            keeperData := KeeperData{
+            keeperData := types.KeeperData{
                 KeeperAddress: event.Operator.Hex(),
-                KeeperType:   1, // Assuming 1 for Keeper
                 RegisteredTx: vLog.TxHash.Hex(),
                 ConsensusKeys: consensusKeys,
                 Status:       true,
@@ -121,7 +107,7 @@ func generateEventSignatureHash(sig string) string {
     return strings.TrimPrefix(common.HexToHash(sig).Hex(), "0x")
 }
 
-func parseOperatorRegisteredEvent(vLog types.Log) (*OperatorRegisteredEvent, error) {
+func parseOperatorRegisteredEvent(vLog gethtypes.Log) (*OperatorRegisteredEvent, error) {
     event := new(OperatorRegisteredEvent)
     
     // Parse operator address from first topic
@@ -141,7 +127,7 @@ func parseOperatorRegisteredEvent(vLog types.Log) (*OperatorRegisteredEvent, err
     return event, nil
 }
 
-func sendToAPI(data KeeperData) error {
+func sendToAPI(data types.KeeperData) error {
     jsonData, err := json.Marshal(data)
     if err != nil {
         return fmt.Errorf("error marshaling data: %v", err)
