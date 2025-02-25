@@ -26,7 +26,6 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	}
 	currentKeeperID := maxKeeperID + 1
 
-
 	h.logger.Infof("[CreateKeeperData] Creating keeper with ID: %d", currentKeeperID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (

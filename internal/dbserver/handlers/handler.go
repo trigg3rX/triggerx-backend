@@ -16,7 +16,7 @@ import (
 
 // Handler struct update
 type Handler struct {
-	db *database.Connection
+	db     *database.Connection
 	logger logging.Logger
 }
 
@@ -39,23 +39,23 @@ func (h *Handler) SendDataToManager(route string, data interface{}) error {
 
 	managerURL := fmt.Sprintf("http://%s:%s%s", managerIPAddress, managerPort, route)
 
-    jsonData, err := json.Marshal(data)
-    if err != nil {
-        return fmt.Errorf("error marshaling data: %v", err)
-    }
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("error marshaling data: %v", err)
+	}
 
-    resp, err := http.Post(managerURL, "application/json", bytes.NewBuffer(jsonData))
-    if err != nil {
-        return fmt.Errorf("error sending data to manager: %v", err)
-    }
-    defer resp.Body.Close()
+	resp, err := http.Post(managerURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error sending data to manager: %v", err)
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("manager service error (status=%d): %s", resp.StatusCode, string(body))
-    }
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("manager service error (status=%d): %s", resp.StatusCode, string(body))
+	}
 
-    return nil
+	return nil
 }
 
 // package manager
@@ -81,12 +81,12 @@ func (h *Handler) SendDataToManager(route string, data interface{}) error {
 // 	jobIDStr := strconv.FormatInt(jobID, 10)
 
 // 	err := s.dbClient.Session().Query(`
-// 		SELECT job_id, task_definition_id, priority, security, link_job_id, time_frame, recurring, 
-// 			   time_interval, trigger_chain_id, trigger_contract_address, trigger_event, 
-// 			   script_ipfs_url, script_trigger_function, target_chain_id, target_contract_address, 
-// 			   target_function, arg_type, arguments, script_target_function, 
+// 		SELECT job_id, task_definition_id, priority, security, link_job_id, time_frame, recurring,
+// 			   time_interval, trigger_chain_id, trigger_contract_address, trigger_event,
+// 			   script_ipfs_url, script_trigger_function, target_chain_id, target_contract_address,
+// 			   target_function, arg_type, arguments, script_target_function,
 // 			   created_at, last_executed_at
-// 		FROM triggerx.job_data 
+// 		FROM triggerx.job_data
 // 		WHERE job_id = ?`, jobIDStr).Scan(
 // 		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID,
 // 		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID,
@@ -114,8 +114,8 @@ func (h *Handler) SendDataToManager(route string, data interface{}) error {
 // 	jobIDStr := strconv.FormatInt(jobID, 10)
 
 // 	err := s.dbClient.Session().Query(`
-// 		UPDATE triggerx.job_data 
-// 		SET status = ? 
+// 		UPDATE triggerx.job_data
+// 		SET status = ?
 // 		WHERE job_id = ?`, status, jobIDStr).Scan()
 
 // 	if err != nil {
@@ -131,8 +131,8 @@ func (h *Handler) SendDataToManager(route string, data interface{}) error {
 // 	jobIDStr := strconv.FormatInt(jobID, 10)
 
 // 	err := s.dbClient.Session().Query(`
-// 		UPDATE triggerx.job_data 
-// 		SET last_executed_at = ? 
+// 		UPDATE triggerx.job_data
+// 		SET last_executed_at = ?
 // 		WHERE job_id = ?`, lastExecuted, jobIDStr).Scan()
 
 // 	if err != nil {

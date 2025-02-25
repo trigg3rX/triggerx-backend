@@ -99,9 +99,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		UserID:            existingUserID,
 		AccountBalance:    existingAccountBalance,
 		TokenBalance:      existingTokenBalance,
-		JobIDs:           make([]int64, len(tempJobs)),
+		JobIDs:            make([]int64, len(tempJobs)),
 		TaskDefinitionIDs: make([]int, len(tempJobs)),
-		TimeFrames:       make([]int64, len(tempJobs)),
+		TimeFrames:        make([]int64, len(tempJobs)),
 	}
 
 	for i := len(tempJobs) - 1; i >= 0; i-- {
@@ -141,29 +141,29 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
 		jobData := types.HandleCreateJobData{
-			JobID:                 currentJobID,
-			TaskDefinitionID:      tempJobs[i].TaskDefinitionID,
-			UserID:                existingUserID,
-			Priority:              tempJobs[i].Priority,
-			Security:              tempJobs[i].Security,
-			LinkJobID:             linkJobID,
-			ChainStatus:           chainStatus,
-			TimeFrame:             tempJobs[i].TimeFrame,
-			Recurring:             tempJobs[i].Recurring,
-			TimeInterval:          tempJobs[i].TimeInterval,
-			TriggerChainID:        tempJobs[i].TriggerChainID,
+			JobID:                  currentJobID,
+			TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
+			UserID:                 existingUserID,
+			Priority:               tempJobs[i].Priority,
+			Security:               tempJobs[i].Security,
+			LinkJobID:              linkJobID,
+			ChainStatus:            chainStatus,
+			TimeFrame:              tempJobs[i].TimeFrame,
+			Recurring:              tempJobs[i].Recurring,
+			TimeInterval:           tempJobs[i].TimeInterval,
+			TriggerChainID:         tempJobs[i].TriggerChainID,
 			TriggerContractAddress: tempJobs[i].TriggerContractAddress,
-			TriggerEvent:          tempJobs[i].TriggerEvent,
-			ScriptIPFSUrl:         tempJobs[i].ScriptIPFSUrl,
-			ScriptTriggerFunction: tempJobs[i].ScriptTriggerFunction,
-			TargetChainID:         tempJobs[i].TargetChainID,
-			TargetContractAddress: tempJobs[i].TargetContractAddress,
-			TargetFunction:        tempJobs[i].TargetFunction,
-			ArgType:               tempJobs[i].ArgType,
-			Arguments:             tempJobs[i].Arguments,
-			ScriptTargetFunction:  tempJobs[i].ScriptTargetFunction,
-			CreatedAt:             time.Now(),
-			LastExecutedAt:        time.Time{},
+			TriggerEvent:           tempJobs[i].TriggerEvent,
+			ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
+			ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
+			TargetChainID:          tempJobs[i].TargetChainID,
+			TargetContractAddress:  tempJobs[i].TargetContractAddress,
+			TargetFunction:         tempJobs[i].TargetFunction,
+			ArgType:                tempJobs[i].ArgType,
+			Arguments:              tempJobs[i].Arguments,
+			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
+			CreatedAt:              time.Now(),
+			LastExecutedAt:         time.Time{},
 		}
 
 		err := h.SendDataToManager("/job/create", jobData)
@@ -174,7 +174,6 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.logger.Infof("[CreateJobData] Successfully sent job data to manager for jobID %d", currentJobID)
-
 
 		createdJobs.JobIDs[i] = currentJobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
@@ -199,7 +198,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"message": "Database Updated Successfully",
-		"Data": createdJobs,
+		"Data":    createdJobs,
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -274,7 +273,7 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	var userJobs []JobSummary
 
 	iter := h.db.Session().Query(`
-        SELECT jobID, jobType, status 
+        SELECT job_id, task_definition_id, status 
         FROM triggerx.job_data 
         WHERE user_address = ? ALLOW FILTERING
     `, userAddress).Iter()

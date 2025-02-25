@@ -1,15 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 	"os"
-	"context"
 	"path/filepath"
+	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/docker/docker/client"
+	"github.com/gorilla/mux"
 
 	"github.com/docker/docker/api/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
@@ -79,7 +79,7 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 			   is_successful
         FROM triggerx.task_data
         WHERE task_id = ?`, taskID).Scan(
-		&taskData.TaskID, &taskData.JobID, &taskData.TaskDefinitionID, &taskData.CreatedAt, 
+		&taskData.TaskID, &taskData.JobID, &taskData.TaskDefinitionID, &taskData.CreatedAt,
 		&taskData.TaskFee, &taskData.ExecutionTimestamp, &taskData.ExecutionTxHash, &taskData.TaskPerformerID,
 		&taskData.ProofOfTask, &taskData.ActionDataCID, &taskData.TaskAttesterIDs,
 		&taskData.IsApproved, &taskData.TpSignature, &taskData.TaSignature,
@@ -92,7 +92,6 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetTaskData] Successfully retrieved task with ID: %s", taskID)
 	json.NewEncoder(w).Encode(taskData)
 }
-
 
 func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	// Get IPFS URL from query parameter
