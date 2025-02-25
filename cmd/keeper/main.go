@@ -46,17 +46,11 @@ func main() {
 		logger.Error("Failed to connect to task manager", "error", err)
 	}
 
-	// Set up performer server using Gin
-	performerRouter := gin.New()
-	performerRouter.Use(gin.Recovery())
-	// performerRouter.Use(gin.Logger())
-	performerRouter.POST("/task/execute", execution.ExecuteTask)
-
-	// Set up attester server using Gin
-	attesterRouter := gin.New()
-	attesterRouter.Use(gin.Recovery())
-	// attesterRouter.Use(gin.Logger())
-	attesterRouter.POST("/task/validate", validation.ValidateTask)
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
+	router.POST("/task/execute", execution.ExecuteTask)
+	router.POST("/task/validate", validation.ValidateTask)
 
 	// Custom middleware for error handling
 	errorHandler := func(c *gin.Context) {
@@ -71,42 +65,23 @@ func main() {
 		}
 	}
 
-	performerRouter.Use(errorHandler)
-	attesterRouter.Use(errorHandler)
+	router.Use(errorHandler)
 
-	performerSrv := &http.Server{
+	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", os.Getenv("OPERATOR_RPC_PORT")),
-		Handler: performerRouter,
-	}
-
-	attesterSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", os.Getenv("OPERATOR_P2P_PORT")),
-		Handler: attesterRouter,
+		Handler: router,
 	}
 
 	// Channel to collect server errors from both goroutines
-	serverErrors := make(chan error, 2)
+	serverErrors := make(chan error, 1)
 
 	// Start both servers with automatic recovery
 	go func() {
 		for {
-			logger.Info("Execution Service starting", "address", performerSrv.Addr)
-			if err := performerSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Info("Execution Service starting", "address", srv.Addr)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				serverErrors <- err
-				logger.Error("performer server failed, restarting...", "error", err)
-				time.Sleep(time.Second)
-				continue
-			}
-			break
-		}
-	}()
-
-	go func() {
-		for {
-			logger.Info("Validation Server starting", "address", attesterSrv.Addr)
-			if err := attesterSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				serverErrors <- err
-				logger.Error("attester server failed, restarting...", "error", err)
+				logger.Error("keeper server failed, restarting...", "error", err)
 				time.Sleep(time.Second)
 				continue
 			}
@@ -128,23 +103,13 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		if err := performerSrv.Shutdown(ctx); err != nil {
-			logger.Error("graceful shutdown performer server failed",
+		if err := srv.Shutdown(ctx); err != nil {
+			logger.Error("graceful shutdown keeper server failed",
 				"timeout", 2*time.Second,
 				"error", err)
 
-			if err := performerSrv.Close(); err != nil {
-				logger.Fatal("could not stop performer server gracefully", "error", err)
-			}
-		}
-
-		if err := attesterSrv.Shutdown(ctx); err != nil {
-			logger.Error("graceful shutdown attester server failed",
-				"timeout", 2*time.Second,
-				"error", err)
-
-			if err := attesterSrv.Close(); err != nil {
-				logger.Fatal("could not stop attester server gracefully", "error", err)
+			if err := srv.Close(); err != nil {
+				logger.Fatal("could not stop keeper server gracefully", "error", err)
 			}
 		}
 	}
