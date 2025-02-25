@@ -1,17 +1,8 @@
 package main
 
-/*
-	DEV NOTES:
-	1. The attestation code is not being used, as we yet have to figure out how to allow keepers to make contract calls. How to fund them, etc.
-	2. So, for the time being, we run the keepers, and attesters validate their actions.
-*/
-
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,68 +13,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 
-	// "github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
-
-// ConnectToTaskManager sends the keeper's ID and IP to the task manager to establish a connection.
-func ConnectToTaskManager(keeperID string, keeperIP string) error {
-	// Load the TASK_MANAGER_RPC_ADDRESS from the .env file
-	taskManagerRPCAddress := os.Getenv("TASK_MANAGER_RPC_ADDRESS")
-	if taskManagerRPCAddress == "" {
-		return fmt.Errorf("TASK_MANAGER_RPC_ADDRESS not set in .env file")
-	}
-
-	// Construct the payload to send to the task manager
-	payload := map[string]string{
-		"keeper_id": keeperID,
-		"keeper_ip": keeperIP,
-	}
-
-	// Marshal the payload into JSON
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	// Create a new HTTP client
-	client := &http.Client{}
-
-	// Create a new request to the task manager
-	req, err := http.NewRequest("POST", taskManagerRPCAddress, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set the content type to JSON
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check if the response was successful
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("task manager returned non-200 status code: %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-// getOutboundIP returns the preferred outbound IP of this machine
-func getOutboundIP() (string, error) {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close()
-
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String(), nil
-}
 
 func main() {
 	if err := logging.InitLogger(logging.Development, logging.KeeperProcess); err != nil {
@@ -94,35 +26,37 @@ func main() {
 
 	services.Init()
 
-	// Generate or load keeper ID
-	keeperID := os.Getenv("KEEPER_ID")
+	keeperAddress := os.Getenv("OPERATOR_ADDRESS")
 	
-
-	// Get the local IP address using getOutboundIP
-	ip, err := getOutboundIP()
+	ip, err := services.GetOutboundIP()
 	if err != nil {
 		logger.Error("Failed to get outbound IP", "error", err)
-		ip = "localhost" // fallback to localhost if IP detection fails
+		ip = "localhost"
 	}
-	keeperIP := fmt.Sprintf("%s:4003", ip)
+	keeperIP := fmt.Sprintf("%s:%s", ip, os.Getenv("OPERATOR_RPC_PORT"))
 
-	// Connect to task manager
-	if err := ConnectToTaskManager(keeperID, keeperIP); err != nil {
+	connected, err := services.ConnectToTaskManager(keeperAddress, keeperIP)
+	if err != nil {
 		logger.Error("Failed to connect to task manager", "error", err)
-		// Continue execution as the keeper might want to retry connection later
+	}
+
+	if connected {
+		logger.Info("Connected to task manager")
+	} else {
+		logger.Error("Failed to connect to task manager", "error", err)
 	}
 
 	// Set up performer server using Gin
 	performerRouter := gin.New()
 	performerRouter.Use(gin.Recovery())
-	performerRouter.Use(gin.Logger())
+	// performerRouter.Use(gin.Logger())
 	performerRouter.POST("/task/execute", execution.ExecuteTask)
 
-	// // Set up attester server using Gin
-	// attesterRouter := gin.New()
-	// attesterRouter.Use(gin.Recovery())
+	// Set up attester server using Gin
+	attesterRouter := gin.New()
+	attesterRouter.Use(gin.Recovery())
 	// attesterRouter.Use(gin.Logger())
-	// attesterRouter.POST("/task/validate", validation.ValidateTask)
+	attesterRouter.POST("/task/validate", validation.ValidateTask)
 
 	// Custom middleware for error handling
 	errorHandler := func(c *gin.Context) {
@@ -138,17 +72,17 @@ func main() {
 	}
 
 	performerRouter.Use(errorHandler)
-	// attesterRouter.Use(errorHandler)
+	attesterRouter.Use(errorHandler)
 
 	performerSrv := &http.Server{
-		Addr:    ":4003",
+		Addr:    fmt.Sprintf(":%s", os.Getenv("OPERATOR_RPC_PORT")),
 		Handler: performerRouter,
 	}
 
-	// attesterSrv := &http.Server{
-	// 	Addr:    ":4002",
-	// 	Handler: attesterRouter,
-	// }
+	attesterSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", os.Getenv("OPERATOR_P2P_PORT")),
+		Handler: attesterRouter,
+	}
 
 	// Channel to collect server errors from both goroutines
 	serverErrors := make(chan error, 2)
@@ -167,18 +101,18 @@ func main() {
 		}
 	}()
 
-	// go func() {
-	// 	for {
-	// 		logger.Info("Validation Server starting", "address", attesterSrv.Addr)
-	// 		if err := attesterSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-	// 			serverErrors <- err
-	// 			logger.Error("attester server failed, restarting...", "error", err)
-	// 			time.Sleep(time.Second)
-	// 			continue
-	// 		}
-	// 		break
-	// 	}
-	// }()
+	go func() {
+		for {
+			logger.Info("Validation Server starting", "address", attesterSrv.Addr)
+			if err := attesterSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				serverErrors <- err
+				logger.Error("attester server failed, restarting...", "error", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			break
+		}
+	}()
 
 	// Handle graceful shutdown on interrupt/termination signals
 	shutdown := make(chan os.Signal, 1)
@@ -204,15 +138,15 @@ func main() {
 			}
 		}
 
-		// if err := attesterSrv.Shutdown(ctx); err != nil {
-		// 	logger.Error("graceful shutdown attester server failed",
-		// 		"timeout", 2*time.Second,
-		// 		"error", err)
+		if err := attesterSrv.Shutdown(ctx); err != nil {
+			logger.Error("graceful shutdown attester server failed",
+				"timeout", 2*time.Second,
+				"error", err)
 
-		// 	if err := attesterSrv.Close(); err != nil {
-		// 		logger.Fatal("could not stop attester server gracefully", "error", err)
-		// 	}
-		// }
+			if err := attesterSrv.Close(); err != nil {
+				logger.Fatal("could not stop attester server gracefully", "error", err)
+			}
+		}
 	}
 	logger.Info("shutdown complete")
 }

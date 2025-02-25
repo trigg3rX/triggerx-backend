@@ -2,36 +2,6 @@ package types
 
 import "time"
 
-type Job struct {
-	JobID                 int64                 `json:"job_id"`
-	TaskDefinitionID      int                   `json:"task_definition_id"`
-	Priority              int                   `json:"priority"`
-	Security              int                   `json:"security"`
-	TimeFrame             int64                 `json:"time_frame"`
-	Recurring             bool                  `json:"recurring"`
-	LinkJobID             int64                 `json:"link_job_id"`
-
-	TimeInterval          int64                 `json:"time_interval"`
-	TriggerChainID        int                   `json:"trigger_chain_id"`
-	TriggerContractAddress string               `json:"trigger_contract_address"`
-	TriggerEvent          string                `json:"trigger_event"`
-	ScriptIPFSUrl         string                `json:"script_ipfs_url"`
-	ScriptTriggerFunction string                `json:"script_trigger_function"`
-
-	TargetChainID         int                   `json:"target_chain_id"`
-	TargetContractAddress string                `json:"target_contract_address"`
-	TargetFunction        string                `json:"target_function"`
-	ArgType               int                   `json:"arg_type"`
-	Arguments             map[string]interface{} `json:"arguments"`
-	ScriptTargetFunction  string                `json:"script_target_function"`
-
-	CreatedAt             time.Time             `json:"created_at"`
-	LastExecuted          time.Time             `json:"last_executed"`
-
-	Error                 string                `json:"error"`
-	Payload              map[string]interface{} `json:"payload"`
-}
-
 type TriggerData struct {
 	TaskID               int64                  `json:"task_id"`
 	Timestamp            time.Time              `json:"timestamp"`
@@ -65,4 +35,14 @@ type ProofData struct {
 
 	CertificateHash     string                  `json:"certificateHash"`
 	ResponseHash        string                  `json:"responseHash"`
+}
+
+type IPFSData struct {
+	JobData 	HandleCreateJobData 		`json:"job_data"`
+	
+	TriggerData TriggerData `json:"trigger_data"`
+	
+	ActionData 	ActionData 	`json:"action_data"`
+
+	ProofData 	ProofData 	`json:"proof_data"`
 }

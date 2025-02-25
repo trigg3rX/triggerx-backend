@@ -48,7 +48,7 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	jobData := requestBody["job"].(types.Job)
+	jobData := requestBody["job"].(types.HandleCreateJobData)
 	triggerData := requestBody["trigger"].(types.TriggerData)
 
 	logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)

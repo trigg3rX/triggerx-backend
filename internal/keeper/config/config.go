@@ -31,7 +31,7 @@ func Init() {
 	PinataSecretApiKey = os.Getenv("PINATA_SECRET_API_KEY")
 	IpfsHost = os.Getenv("IPFS_HOST")
 	OTHENTIC_CLIENT_RPC_ADDRESS = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
-	PrivateKeyPerformer = os.Getenv("PRIVATE_KEY_PERFORMER")
+	PrivateKeyPerformer = os.Getenv("OPERATOR_PRIVATE_KEY")
 	PrivateKeyAttester = os.Getenv("PRIVATE_KEY")
 	OperatorAddress = os.Getenv("OPERATOR_ADDRESS")
 

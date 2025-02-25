@@ -1,9 +1,15 @@
 package services
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/big"
+	"net"
+	"net/http"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -14,6 +20,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
@@ -93,4 +100,91 @@ func makeRPCRequest(client *rpc.Client, params Params) interface{} {
 		logger.Errorf("Error making RPC request", "error", err)
 	}
 	return result
+}
+
+func ConnectToTaskManager(keeperAddress string, keeperIP string) (bool, error) {
+	taskManagerIPAddress := os.Getenv("TASK_MANAGER_IP_ADDRESS")
+	taskManagerPort := os.Getenv("TASK_MANAGER_RPC_PORT")
+	if taskManagerIPAddress == "" || taskManagerPort == "" {
+		return false, fmt.Errorf("values missing in .env file")
+	}
+
+	taskManagerRPCAddress := fmt.Sprintf("http://%s:%s/connect", taskManagerIPAddress, taskManagerPort)
+
+	var payload types.UpdateKeeperConnectionData
+	payload.KeeperAddress = keeperAddress
+	payload.ConnectionAddress = keeperIP
+
+	var response types.UpdateKeeperConnectionDataResponse
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	client := &http.Client{}
+
+	req, err := http.NewRequest("POST", taskManagerRPCAddress, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	json.NewDecoder(resp.Body).Decode(&response)
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("task manager returned non-200 status code: %d", resp.StatusCode)
+	}
+
+	envFile := ".env"
+	keeperIDLine := fmt.Sprintf("\nKEEPER_ID=%d", response.KeeperID)
+
+	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return false, fmt.Errorf("failed to open .env file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(keeperIDLine); err != nil {
+		return false, fmt.Errorf("failed to write keeper ID to .env: %w", err)
+	}
+
+	return true, nil
+}
+
+// getOutboundIP returns the preferred outbound IP of this machine
+func GetOutboundIP() (string, error) {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String(), nil
+}
+
+// Add this function to setup a tunnel (this is a pseudo-implementation)
+func SetupTunnel(port string) (string, error) {
+	// You would implement this using a tunneling service like ngrok
+	// This is just an example structure
+
+	// Option 1: Using ngrok's Go SDK
+	// tunnel, err := ngrok.Listen(context.Background(),
+	//     config.HTTPEndpoint(),
+	//     ngrok.WithAuthtokenFromEnv(),
+	// )
+
+	// Option 2: Using localtunnel
+	// cmd := exec.Command("lt", "--port", port)
+	// output, err := cmd.Output()
+
+	return "", fmt.Errorf("tunnel implementation needed")
 }
