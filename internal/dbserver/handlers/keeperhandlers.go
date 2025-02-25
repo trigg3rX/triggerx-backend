@@ -106,30 +106,34 @@ func (h *Handler) UpdateKeeperConnectionData(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	h.logger.Infof("[UpdateKeeperData] Updating keeper with ID: %s", keeperData.KeeperAddress)
+	h.logger.Infof("[UpdateKeeperData] Processing update for keeper with address: %s", keeperData.KeeperAddress)
+
+	var keeperID int64
+	if err := h.db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperData.KeeperAddress).Scan(&keeperID); err != nil {
+		h.logger.Errorf("[UpdateKeeperData] Error retrieving keeper ID for address %s: %v", keeperData.KeeperAddress, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[UpdateKeeperData] Found keeper with ID: %d, updating connection data", keeperID)
+
 	if err := h.db.Session().Query(`
         UPDATE triggerx.keeper_data 
         SET connection_address = ?, verified = ?
-        WHERE keeper_address = ?`,
-		keeperData.ConnectionAddress, true,
-		keeperData.KeeperAddress).Exec(); err != nil {
-		h.logger.Errorf("[UpdateKeeperData] Error updating keeper with ID %s: %v", keeperData.KeeperAddress, err)
+        WHERE keeper_id = ?`,
+		keeperData.ConnectionAddress, true, keeperID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateKeeperData] Error updating keeper with ID %d: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ?`,
-		keeperData.KeeperAddress).Scan(&response.KeeperID); err != nil {
-		h.logger.Errorf("[UpdateKeeperData] Error retrieving keeper ID: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+	response.KeeperID = keeperID
 	response.KeeperAddress = keeperData.KeeperAddress
 	response.Verified = true
 
-	h.logger.Infof("[UpdateKeeperData] Successfully updated keeper with ID: %s", response.KeeperID)
+	h.logger.Infof("[UpdateKeeperData] Successfully updated keeper with ID: %d", keeperID)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

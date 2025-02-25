@@ -1,13 +1,13 @@
 package manager
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
-	"bytes"
-	"encoding/json"
-	"io"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -24,37 +24,38 @@ func HandleKeeperConnection(c *gin.Context) {
 		return
 	}
 
-	if !strings.HasPrefix(keeper.ConnectionAddress, "http://") && !strings.HasPrefix(keeper.ConnectionAddress, "https://") {
-		logger.Error("Invalid keeper URL format", "url", keeper.ConnectionAddress)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper URL format"})
+	// if !strings.HasPrefix(keeper.ConnectionAddress, "http://") && !strings.HasPrefix(keeper.ConnectionAddress, "https://") {
+	// 	logger.Error("Invalid keeper URL format", "url", keeper.ConnectionAddress)
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper URL format"})
+	// 	return
+	// }
+
+	jsonData, err := json.Marshal(keeper)
+	if err != nil {
+		logger.Error("Error marshaling data", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error marshaling data"})
 		return
 	}
 
-	jsonData, err := json.Marshal(keeper)
-    if err != nil {
-        logger.Error("Error marshaling data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error marshaling data"})
-		return
-    }
-
-	url := "http://data.triggerx.network/api/keepers/" + keeper.KeeperAddress
-    resp, err := http.Post(url, 
-        "application/json", 
-        bytes.NewBuffer(jsonData))
-    if err != nil {
-        logger.Error("Error sending request", "error", err)
+	url := "http://data.triggerx.network/api/keepers/connection"
+	// url := "http://localhost:8080/api/keepers/connection"
+	resp, err := http.Post(url,
+		"application/json",
+		bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Error("Error sending request", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error sending request"})
 		return
-    }
-    defer resp.Body.Close()
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusCreated {
-        logger.Error("Unexpected status code", "status", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("Unexpected status code", "status", resp.StatusCode)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unexpected status code"})
 		return
-    }
+	}
 
-	json.NewDecoder(resp.Body).Decode(&response)	
+	json.NewDecoder(resp.Body).Decode(&response)
 
 	logger.Info("Keeper connected successfully",
 		"keeperID", response.KeeperID,
@@ -105,7 +106,7 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 
 	// Construct payload with task definition ID and job details required for execution
 	payload := map[string]interface{}{
-		"job": jobData,
+		"job":     jobData,
 		"trigger": triggerData,
 	}
 
