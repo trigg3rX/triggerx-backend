@@ -1,13 +1,13 @@
 package execution
 
 import (
-	"bytes"
+	// "bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
+	// "fmt"
 	"net/http"
-	"os"
+	// "os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
@@ -65,20 +65,20 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	// Update keeper metrics after successful job execution
-	keeperID := os.Getenv("KEEPER_ID")
-	if keeperID == "" {
-		logger.Warn("KEEPER_ID environment variable not set, using default value")
-	}
-	taskID := triggerData.TaskID
+	// // Update keeper metrics after successful job execution
+	// keeperID := os.Getenv("KEEPER_ID")
+	// if keeperID == "" {
+	// 	logger.Warn("KEEPER_ID environment variable not set, using default value")
+	// }
+	// taskID := triggerData.TaskID
 
-	// Call the metrics server to store keeper execution metrics
-	if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
-		logger.Warnf("Failed to store keeper metrics: %v", err)
-		// Continue execution even if metrics storage fails
-	} else {
-		logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
-	}
+	// // Call the metrics server to store keeper execution metrics
+	// if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
+	// 	logger.Warnf("Failed to store keeper metrics: %v", err)
+	// 	// Continue execution even if metrics storage fails
+	// } else {
+	// 	logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
+	// }
 
 	actionData.TaskID = triggerData.TaskID
 
@@ -136,43 +136,43 @@ func ExecuteTask(c *gin.Context) {
 }
 
 // StoreKeeperMetrics makes API calls to update keeper metrics in the database
-func StoreKeeperMetrics(keeperID string, taskID string) error {
-	// Call the increment-tasks endpoint
-	incrementTasksURL := fmt.Sprintf("http://localhost:8080/api/keepers/%s/increment-tasks", keeperID)
-	incrementResp, err := http.Post(incrementTasksURL, "application/json", nil)
-	if err != nil {
-		return fmt.Errorf("failed to increment keeper task count: %w", err)
-	}
-	defer incrementResp.Body.Close()
+// func StoreKeeperMetrics(keeperID string, taskID string) error {
+// 	// Call the increment-tasks endpoint
+// 	incrementTasksURL := fmt.Sprintf("http://localhost:8080/api/keepers/%s/increment-tasks", keeperID)
+// 	incrementResp, err := http.Post(incrementTasksURL, "application/json", nil)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to increment keeper task count: %w", err)
+// 	}
+// 	defer incrementResp.Body.Close()
 
-	if incrementResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("increment task count API returned non-OK status: %d", incrementResp.StatusCode)
-	}
+// 	if incrementResp.StatusCode != http.StatusOK {
+// 		return fmt.Errorf("increment task count API returned non-OK status: %d", incrementResp.StatusCode)
+// 	}
 
-	// Call the add-points endpoint with the task ID
-	addPointsURL := fmt.Sprintf("http://localhost:8080/api/keepers/%s/add-points", keeperID)
+// 	// Call the add-points endpoint with the task ID
+// 	addPointsURL := fmt.Sprintf("http://localhost:8080/api/keepers/%s/add-points", keeperID)
 
-	// Create the request payload with the task ID
-	payload := struct {
-		TaskID string `json:"task_id"`
-	}{
-		TaskID: taskID,
-	}
+// 	// Create the request payload with the task ID
+// 	payload := struct {
+// 		TaskID string `json:"task_id"`
+// 	}{
+// 		TaskID: taskID,
+// 	}
 
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal task ID payload: %w", err)
-	}
+// 	payloadBytes, err := json.Marshal(payload)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to marshal task ID payload: %w", err)
+// 	}
 
-	addPointsResp, err := http.Post(addPointsURL, "application/json", bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		return fmt.Errorf("failed to add points to keeper: %w", err)
-	}
-	defer addPointsResp.Body.Close()
+// 	addPointsResp, err := http.Post(addPointsURL, "application/json", bytes.NewBuffer(payloadBytes))
+// 	if err != nil {
+// 		return fmt.Errorf("failed to add points to keeper: %w", err)
+// 	}
+// 	defer addPointsResp.Body.Close()
 
-	if addPointsResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("add points API returned non-OK status: %d", addPointsResp.StatusCode)
-	}
+// 	if addPointsResp.StatusCode != http.StatusOK {
+// 		return fmt.Errorf("add points API returned non-OK status: %d", addPointsResp.StatusCode)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
