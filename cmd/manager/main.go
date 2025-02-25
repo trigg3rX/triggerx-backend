@@ -51,7 +51,7 @@ func main() {
 	// Setup Gin router
 	router := gin.New()
 	router.Use(gin.Recovery())
-	// router.Use(gin.Logger())
+	router.Use(gin.Logger())
 	router.POST("/connect", manager.HandleKeeperConnection)
 	router.POST("/job/create", manager.HandleCreateJobEvent)
 	router.POST("/job/update", manager.HandleUpdateJobEvent)

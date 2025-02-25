@@ -11,6 +11,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// Create a new Job, and send it to the Manager
+// If User doesn't exist, create a new user, or update the existing user
 func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var tempJobs []types.CreateJobData
 	if err := json.NewDecoder(r.Body).Decode(&tempJobs); err != nil {
@@ -166,10 +168,16 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			LastExecutedAt:         time.Time{},
 		}
 
-		err := h.SendDataToManager("/job/create", jobData)
+		success, err := h.SendDataToManager("/job/create", jobData)
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
 			http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
+			return
+		}
+
+		if !success {
+			h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
+			http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
 			return
 		}
 
@@ -208,6 +216,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Update a Job, and send it to the Manager
 func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 	var tempData types.UpdateJobData
 	if err := json.NewDecoder(r.Body).Decode(&tempData); err != nil {
@@ -226,9 +235,40 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	success, err := h.SendDataToManager("/job/update", tempData)
+	if err != nil {
+		h.logger.Errorf("[UpdateJobData] Error sending job data to manager for jobID %d: %v", tempData.JobID, err)
+		http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
+		return
+	}
+
+	if !success {
+		h.logger.Errorf("[UpdateJobData] Failed to send job data to manager for jobID %d", tempData.JobID)
+		http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
+		return
+	}
+
 	h.logger.Infof("[UpdateJobData] Successfully updated and published event for jobID %s", tempData.JobID)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(tempData)
+}
+
+func (h *Handler) UpdateJobLastExecutedAt(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	jobID := vars["id"]
+	h.logger.Infof("[UpdateJobLastExecutedAt] Updating last executed at for jobID %s", jobID)
+
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.job_data 
+		SET last_executed_at = ?
+		WHERE job_id = ?`,
+		time.Now(), jobID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating last executed at for jobID %s: %v", jobID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[UpdateJobLastExecutedAt] Successfully updated last executed at for jobID %s", jobID)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {

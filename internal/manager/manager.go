@@ -20,7 +20,6 @@ var (
 	AlchemyApiKey   string
 
 	DeployerPrivateKey   string
-	AggregatorPrivateKey string
 
 	TaskManagerP2PPort string
 	TaskManagerRPCPort string
@@ -43,15 +42,14 @@ func Init() {
 	EtherscanApiKey = os.Getenv("ETHERSCAN_API_KEY")
 	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
 	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
-	AggregatorPrivateKey = os.Getenv("PRIVATE_KEY_AGGREGATOR")
 	TaskManagerP2PPort = os.Getenv("TASK_MANAGER_P2P_PORT")
 	TaskManagerRPCPort = os.Getenv("TASK_MANAGER_RPC_PORT")
 
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || AggregatorPrivateKey == "" || TaskManagerP2PPort == "" || TaskManagerRPCPort == "" {
+	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || TaskManagerP2PPort == "" || TaskManagerRPCPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 }
 
 func HandleCreateJobEvent(c *gin.Context) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -14,6 +15,8 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
+
+	config.Init()
 
 	// Establish database connection with default configuration
 	cfg := database.NewConfig()
