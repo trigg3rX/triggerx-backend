@@ -2,6 +2,8 @@ package types
 
 import "time"
 
+
+// Passed By Manager, Received By Keeper, before Executing Action
 type TriggerData struct {
 	TaskID               int64                  `json:"task_id"`
 	Timestamp            time.Time              `json:"timestamp"`
@@ -14,17 +16,25 @@ type TriggerData struct {
 	ConditionParams      map[string]interface{} `json:"condition_params"`
 }
 
+// Created By Keeper, details about the Action
 type ActionData struct {
 	TaskID              int64                   `json:"task_id"`
 	Timestamp           time.Time               `json:"timestamp"`
-
-	Performer           string                  `json:"performer"`
-	PerfomerSignature   string                  `json:"perfomer_signature"`
-
 	ActionTxHash        string                  `json:"action_tx_hash"`
 	GasUsed             string                  `json:"gas_used"`
 	Status              bool                  `json:"status"`
+	IPFSDataCID         string                  `json:"ipfs_data_cid"`
 }
+
+// Created By Keeper, details passed to Aggregator, submitted on chain upon successful consensus
+type PerformerData struct {
+	ProofOfTask       	string                  `json:"proof_of_task"`
+	TaskDefinitionID  	string                   `json:"task_definition_id"`
+	PerformerAddress  	string                  `json:"performer_address"`
+	PerformerSignature 	string                  `json:"performer_signature"`
+	Data              	string                  `json:"data"`
+}
+
 
 type ProofData struct {
 	TaskID              int64                   `json:"task_id"`

@@ -1,50 +1,59 @@
 package config
 
 import (
-	"log"
 	"os"
-
+	"strings"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 var (
+	logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
+
 	// User Entered Information
-	PrivateKeyPerformer         string
-	PrivateKeyAttester          string
+	AlchemyAPIKey               string
+	PrivateKeyConsensus          string
+	PrivateKeyController          string
 	KeeperAddress             	string
-	KeeperIP                    string
 	KeeperRPCPort               string
 
 	// Provided Information
 	PinataApiKey                string
 	PinataSecretApiKey          string
 	IpfsHost                    string
-	OTHENTIC_CLIENT_RPC_ADDRESS string
+	AggregatorRPCAddress        string
+	ManagerRPCAddress           string
+	DatabaseRPCAddress          string
 )
 
 func Init() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("Error loading .env file")
+		logger.Error("Error loading .env file", "error", err)
 	}
 
 	PinataApiKey = os.Getenv("PINATA_API_KEY")
 	PinataSecretApiKey = os.Getenv("PINATA_SECRET_API_KEY")
 	IpfsHost = os.Getenv("IPFS_HOST")
-	OTHENTIC_CLIENT_RPC_ADDRESS = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
-	PrivateKeyPerformer = os.Getenv("OPERATOR_PRIVATE_KEY")
-	PrivateKeyAttester = os.Getenv("PRIVATE_KEY")
-	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
-	KeeperIP = os.Getenv("KEEPER_IP")
-	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
+	AggregatorRPCAddress = os.Getenv("AGGREGATOR_RPC_ADDRESS")
+	ManagerRPCAddress = os.Getenv("MANAGER_RPC_ADDRESS")
+	DatabaseRPCAddress = os.Getenv("DATABASE_RPC_ADDRESS")
 
-	if PinataApiKey == "" || PinataSecretApiKey == "" || OTHENTIC_CLIENT_RPC_ADDRESS == "" || IpfsHost == "" {
-		log.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
+	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorRPCAddress == "" || ManagerRPCAddress == "" || DatabaseRPCAddress == "" {
+		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
+
+	EthRPCUrl := os.Getenv("ALCHEMY_API_KEY")
+	AlchemyAPIKey = strings.TrimPrefix(EthRPCUrl, "https://eth-holesky.g.alchemy.com/v2/")
+	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY_CONSENSUS")
+	PrivateKeyController = os.Getenv("PRIVATE_KEY_CONTROLLER")
+	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
+	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
 		
-	if PrivateKeyPerformer == "" || PrivateKeyAttester == "" || KeeperAddress == "" {
-		log.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
+	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" {
+		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
 	gin.SetMode(gin.ReleaseMode)

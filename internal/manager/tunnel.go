@@ -79,7 +79,7 @@ func verifyKeeperEndpoint(keeperURL string) error {
 	logger.Info("Verifying keeper endpoint", "url", keeperURL)
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 15 * time.Second,
 	}
 
 	// Create a custom request with headers to bypass localtunnel password page

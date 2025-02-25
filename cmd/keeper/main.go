@@ -28,27 +28,9 @@ func main() {
 	services.Init()
 
 	// Setup a tunnel for the keeper service
-	var connectionAddress string
-	tunnelURL, err := services.SetupTunnel(config.KeeperRPCPort, config.KeeperAddress)
+	connectionAddress, err := services.SetupTunnel(config.KeeperRPCPort, config.KeeperAddress)
 	if err != nil {
-		logger.Error("Failed to setup tunnel", "error", err)
-		// Continue with local connection if tunnel fails
-
-		// Try to get public IP for better connectivity
-		publicIP, ipErr := services.GetPublicIP()
-		if ipErr != nil {
-			logger.Error("Failed to get public IP", "error", ipErr)
-			// Fall back to the configured IP if public IP retrieval fails
-			connectionAddress = fmt.Sprintf("http://%s:%s", config.KeeperIP, config.KeeperRPCPort)
-		} else {
-			connectionAddress = fmt.Sprintf("http://%s:%s", publicIP, config.KeeperRPCPort)
-		}
-
-		logger.Info("Using direct connection address", "address", connectionAddress)
-	} else {
-		// Use the tunnel URL for connection
-		connectionAddress = tunnelURL
-		logger.Info("Using tunnel for connection", "url", tunnelURL)
+		logger.Fatal("Failed to setup tunnel", "error", err)
 	}
 
 	// Connect to task manager with the tunnel URL or local address as fallback
@@ -58,9 +40,10 @@ func main() {
 	}
 
 	if connected {
-		logger.Info("Connected to task manager")
+		logger.Info("Connected to Task Manager")
+		logger.Info("Tunnel URL", "url", connectionAddress)
 	} else {
-		logger.Error("Failed to connect to task manager", "error", err)
+		logger.Error("Failed to connect to Task Manager", "error", err)
 	}
 
 	router := gin.New()
@@ -95,7 +78,7 @@ func main() {
 	router.Use(errorHandler)
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", os.Getenv("OPERATOR_RPC_PORT")),
+		Addr:    fmt.Sprintf(":%s", config.KeeperRPCPort),
 		Handler: router,
 	}
 
@@ -122,10 +105,10 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		logger.Error("server error received", "error", err)
+		logger.Error("Server Error Received", "error", err)
 
 	case sig := <-shutdown:
-		logger.Info("starting shutdown", "signal", sig)
+		logger.Info("Starting Shutdown", "signal", sig)
 
 		// Close the tunnel if it's active
 		services.CloseTunnel()
@@ -134,14 +117,14 @@ func main() {
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			logger.Error("graceful shutdown keeper server failed",
+			logger.Error("Graceful Shutdown Keeper Server Failed",
 				"timeout", 2*time.Second,
 				"error", err)
 
 			if err := srv.Close(); err != nil {
-				logger.Fatal("could not stop keeper server gracefully", "error", err)
+				logger.Fatal("Could Not Stop Keeper Server Gracefully", "error", err)
 			}
 		}
 	}
-	logger.Info("shutdown complete")
+	logger.Info("Shutdown Complete")
 }
