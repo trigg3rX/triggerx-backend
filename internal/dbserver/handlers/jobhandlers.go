@@ -8,7 +8,6 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
-	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -140,26 +139,42 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		h.logger.Infof("[CreateJobData] Successfully created jobID %d", currentJobID)
 
-		eventBus := events.GetEventBus()
-		if eventBus == nil {
-			h.logger.Infof("[CreateJobData] Warning: EventBus is nil, event will not be published")
+		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
+		jobData := types.HandleCreateJobData{
+			JobID:                 currentJobID,
+			TaskDefinitionID:      tempJobs[i].TaskDefinitionID,
+			UserID:                existingUserID,
+			Priority:              tempJobs[i].Priority,
+			Security:              tempJobs[i].Security,
+			LinkJobID:             linkJobID,
+			ChainStatus:           chainStatus,
+			TimeFrame:             tempJobs[i].TimeFrame,
+			Recurring:             tempJobs[i].Recurring,
+			TimeInterval:          tempJobs[i].TimeInterval,
+			TriggerChainID:        tempJobs[i].TriggerChainID,
+			TriggerContractAddress: tempJobs[i].TriggerContractAddress,
+			TriggerEvent:          tempJobs[i].TriggerEvent,
+			ScriptIPFSUrl:         tempJobs[i].ScriptIPFSUrl,
+			ScriptTriggerFunction: tempJobs[i].ScriptTriggerFunction,
+			TargetChainID:         tempJobs[i].TargetChainID,
+			TargetContractAddress: tempJobs[i].TargetContractAddress,
+			TargetFunction:        tempJobs[i].TargetFunction,
+			ArgType:               tempJobs[i].ArgType,
+			Arguments:             tempJobs[i].Arguments,
+			ScriptTargetFunction:  tempJobs[i].ScriptTargetFunction,
+			CreatedAt:             time.Now(),
+			LastExecutedAt:        time.Time{},
+		}
+
+		err := h.SendDataToManager("/job/create", jobData)
+		if err != nil {
+			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
+			http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Publishing job creation event for jobID %d", currentJobID)
-		event := events.JobEvent{
-			Type:             "job_created",
-			JobID:            currentJobID,
-			TaskDefinitionID: tempJobs[i].TaskDefinitionID,
-			TimeFrame:        tempJobs[i].TimeFrame,
-			ChainStatus:      chainStatus,
-		}
+		h.logger.Infof("[CreateJobData] Successfully sent job data to manager for jobID %d", currentJobID)
 
-		if err := eventBus.PublishJobEvent(r.Context(), event); err != nil {
-			h.logger.Infof("[CreateJobData] Warning: Failed to publish job creation event: %v", err)
-		} else {
-			h.logger.Infof("[CreateJobData] Successfully published job creation event for jobID %d", currentJobID)
-		}
 
 		createdJobs.JobIDs[i] = currentJobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
@@ -210,19 +225,6 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 		h.logger.Errorf("[UpdateJobData] Error updating jobID %s: %v", tempData.JobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	if eventBus := events.GetEventBus(); eventBus != nil {
-		event := events.JobEvent{
-			Type:      "job_updated",
-			JobID:     tempData.JobID,
-			TimeFrame: tempData.TimeFrame,
-		}
-		if err := eventBus.PublishJobEvent(r.Context(), event); err != nil {
-			h.logger.Infof("[UpdateJobData] Warning: Failed to publish job update event: %v", err)
-		} else {
-			h.logger.Infof("[UpdateJobData] Successfully published job update event for jobID %d", tempData.JobID)
-		}
 	}
 
 	h.logger.Infof("[UpdateJobData] Successfully updated and published event for jobID %s", tempData.JobID)

@@ -39,13 +39,13 @@ CREATE TABLE IF NOT EXISTS job_data (
     recurring boolean,
 
     time_interval bigint,
-    trigger_chain_id int,
+    trigger_chain_id text,
     trigger_contract_address text,
     trigger_event text,
     script_ipfs_url text,
     script_trigger_function text,
     
-    target_chain_id int,
+    target_chain_id text,
     target_contract_address text,
     target_function text,
     arg_type int,
@@ -87,7 +87,6 @@ CREATE TABLE IF NOT EXISTS task_data (
 CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint PRIMARY KEY,
     keeper_address text,
-    keeper_type int,
     registered_tx text,
     
     rewards_address text,

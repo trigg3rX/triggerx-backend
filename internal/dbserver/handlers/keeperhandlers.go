@@ -9,7 +9,7 @@ import (
 )
 
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
-	var keeperData types.KeeperData
+	var keeperData types.CreateKeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -30,7 +30,7 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	keeperData.NoExcTask = 0
 	keeperData.KeeperPoints = 0
 
-	h.logger.Infof("[CreateKeeperData] Creating keeper with ID: %d", keeperData.KeeperID)
+	h.logger.Infof("[CreateKeeperData] Creating keeper with ID: %d", currentKeeperID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (
             keeper_id, keeper_address, keeper_type, registered_tx, 
@@ -47,7 +47,7 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", keeperData.KeeperID)
+	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(keeperData)
 }
@@ -63,8 +63,8 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
                verified, registered_tx, status, consensus_keys, connection_address, 
                no_exctask, keeper_points
         FROM triggerx.keeper_data 
-        WHERE keeper_id = ? AND keeper_type = 2`, keeperID).Scan(
-		&keeperData.KeeperID, &keeperData.KeeperAddress, &keeperData.KeeperType,
+        WHERE keeper_id = ?`, keeperID).Scan(
+		&keeperData.KeeperID, &keeperData.KeeperAddress,
 		&keeperData.RewardsAddress, &keeperData.Stakes, &keeperData.Strategies,
 		&keeperData.Verified, &keeperData.RegisteredTx, &keeperData.Status,
 		&keeperData.ConsensusKeys, &keeperData.ConnectionAddress,
@@ -85,7 +85,7 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 
 	var keeper types.KeeperData
 	for iter.Scan(
-		&keeper.KeeperID, &keeper.KeeperAddress, &keeper.KeeperType,
+		&keeper.KeeperID, &keeper.KeeperAddress,
 		&keeper.RewardsAddress, &keeper.Stakes, &keeper.Strategies,
 		&keeper.Verified, &keeper.RegisteredTx, &keeper.Status,
 		&keeper.ConsensusKeys, &keeper.ConnectionAddress,
@@ -103,18 +103,15 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(keepers)
 }
 
-func (h *Handler) UpdateKeeperData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	keeperID := vars["id"]
-
-	var keeperData types.KeeperData
+func (h *Handler) UpdateKeeperConnectionData(w http.ResponseWriter, r *http.Request) {
+	var keeperData types.UpdateKeeperConnectionData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-		h.logger.Errorf("[UpdateKeeperData] Error decoding request body for keeper ID %s: %v", keeperID, err)
+		h.logger.Errorf("[UpdateKeeperData] Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	h.logger.Infof("[UpdateKeeperData] Updating keeper with ID: %s", keeperID)
+	h.logger.Infof("[UpdateKeeperData] Updating keeper with ID: %s", keeperData.KeeperAddress)
 	if err := h.db.Session().Query(`
         UPDATE triggerx.keeper_data 
         SET rewards_address = ?, stakes = ?, strategies = ?, 

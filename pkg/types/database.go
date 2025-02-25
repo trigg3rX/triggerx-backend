@@ -86,11 +86,10 @@ type TaskData struct {
 
 type KeeperData struct {
 	// Fixed Values
-	KeeperID      int64  `json:"keeper_id"`
-	KeeperAddress string `json:"keeper_address"`
-	KeeperType    int    `json:"keeper_type"` // Keeper = 1, Attester = 2
-	RegisteredTx  string `json:"registered_tx"`
-
+	KeeperID          int64     `json:"keeper_id"`
+	KeeperAddress     string    `json:"keeper_address"`
+	RegisteredTx      string    `json:"registered_tx"`
+	
 	// Active Values
 	RewardsAddress    string    `json:"rewards_address"`
 	Stakes            []float64 `json:"stakes"`

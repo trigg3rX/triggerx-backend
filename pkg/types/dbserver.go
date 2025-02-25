@@ -16,14 +16,14 @@ type CreateJobData struct {
 	TimeFrame              int64    `json:"time_frame"`
 	Recurring              bool     `json:"recurring"`
 
-	TimeInterval           int      `json:"time_interval"`
-	TriggerChainID         int      `json:"trigger_chain_id"`
+	TimeInterval           int64      `json:"time_interval"`
+	TriggerChainID         string      `json:"trigger_chain_id"`
 	TriggerContractAddress string   `json:"trigger_contract_address"`
 	TriggerEvent           string   `json:"trigger_event"`
 	ScriptIPFSUrl          string   `json:"script_ipfs_url"`
 	ScriptTriggerFunction  string   `json:"script_trigger_function"`
 	
-	TargetChainID          int      `json:"target_chain_id"`
+	TargetChainID          string      `json:"target_chain_id"`
 	TargetContractAddress  string   `json:"target_contract_address"`
 	TargetFunction         string   `json:"target_function"`
 	ArgType                int      `json:"arg_type"`
@@ -67,4 +67,29 @@ type GetPerformerData struct {
 	KeeperID          int64  `json:"keeper_id"`
 	KeeperAddress     string `json:"keeper_address"`
 	ConnectionAddress string `json:"connection_address"`
+}
+
+type CreateKeeperData struct {
+	KeeperAddress     string    `json:"keeper_address"`
+	RegisteredTx      string    `json:"registered_tx"`
+	RewardsAddress    string    `json:"rewards_address"`
+	ConsensusKeys     []string  `json:"consensus_keys"`
+}
+
+type UpdateKeeperConnectionData struct {
+	KeeperAddress     string `json:"keeper_address"`
+	ConnectionAddress string `json:"connection_address"`
+}
+
+type UpdateKeeperConnectionDataResponse struct {
+	KeeperID          int64  `json:"keeper_id"`
+	KeeperAddress     string `json:"keeper_address"`
+	Verified          bool   `json:"verified"`
+}
+
+type UpdateKeeperStakeData struct {
+	KeeperID           int64  `json:"keeper_id"`
+	KeeperAddress     string `json:"keeper_address"`
+	Stakes            []float64 `json:"stakes"`
+	Strategies        []string  `json:"strategies"`
 }

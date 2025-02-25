@@ -7,8 +7,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -23,10 +21,6 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	router := mux.NewRouter()
 
 	logger := logging.GetLogger(logging.Development, processName)
-
-	if err := events.InitEventBus("localhost:6379"); err != nil {
-		logger.Fatalf("Failed to initialize event bus: %v", err)
-	}
 
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins: []string{
@@ -73,7 +67,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
-	api.HandleFunc("/keepers/{id}", handler.UpdateKeeperData).Methods("PUT")
+	api.HandleFunc("/keepers/{address}", handler.UpdateKeeperConnectionData).Methods("PUT")
 	api.HandleFunc("/keepers/{id}/increment-tasks", handler.IncrementKeeperTaskCount).Methods("POST")
 	api.HandleFunc("/keepers/{id}/task-count", handler.GetKeeperTaskCount).Methods("GET")
 	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
