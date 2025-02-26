@@ -60,7 +60,7 @@ func main() {
 	
 	// Create HTTP server
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", manager.TaskManagerRPCPort),
+		Addr:    fmt.Sprintf(":%s", manager.ManagerRPCPort),
 		Handler: router,
 	}
 
