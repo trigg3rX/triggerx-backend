@@ -27,7 +27,7 @@ func NewHandler(db *database.Connection, logger logging.Logger) *Handler {
 }
 
 func (h *Handler) SendDataToManager(route string, data interface{}) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.ManagerRPCAddress, route)
+	apiURL := fmt.Sprintf("%s%s", config.ManagerIPAddress, route)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {

@@ -26,7 +26,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	logger := logging.GetLogger(logging.Development, processName)
 
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{
+		AllowedOrigins: []string{"*",
 			"https://www.triggerx.network",
 			"http://localhost:3000",
 		},
@@ -73,6 +73,7 @@ func (s *Server) routes() {
 	// // Keeper routes
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers/connection", handler.UpdateKeeperConnectionData).Methods("POST")
+	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}/increment-tasks", handler.IncrementKeeperTaskCount).Methods("POST")

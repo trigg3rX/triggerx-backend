@@ -72,6 +72,42 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(keeperData)
 }
 
+func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
+	var performers []types.GetPerformerData
+	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address, connection_address FROM triggerx.keeper_data`).Iter()
+
+	var performer types.GetPerformerData
+	for iter.Scan(
+		&performer.KeeperID, &performer.KeeperAddress,
+		&performer.ConnectionAddress) {
+		performers = append(performers, performer)
+	}
+
+	if err := iter.Close(); err != nil {
+		h.logger.Errorf("[GetPerformers] Error retrieving performers: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if performers == nil {
+		performers = []types.GetPerformerData{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	h.logger.Infof("[GetPerformers] Successfully retrieved %d performers", len(performers))
+
+	jsonData, err := json.Marshal(performers)
+	if err != nil {
+		h.logger.Errorf("[GetPerformers] Error marshaling performers: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
 func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetAllKeepers] Retrieving all keepers")
 	var keepers []types.KeeperData

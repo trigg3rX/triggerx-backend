@@ -28,8 +28,8 @@ func main() {
 
 	// Initialize and start HTTP server with database connection
 	server := dbserver.NewServer(conn, logging.DatabaseProcess)
-	logger.Info("Database Server initialized, starting on port 8080...")
-	if err := server.Start("8080"); err != nil {
+	logger.Info("Database Server initialized, starting on port 9004...")
+	if err := server.Start(config.DatabasePort); err != nil {
 		logger.Fatalf("Failed to start server: %v", err)
 	}
 }

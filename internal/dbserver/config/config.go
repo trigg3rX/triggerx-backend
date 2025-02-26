@@ -11,8 +11,9 @@ import (
 var (
 	logger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
 
-	ManagerRPCAddress           string
-	DatabaseRPCAddress          string
+	ManagerIPAddress           string
+	DatabaseIPAddress          string
+	DatabasePort             string
 )
 
 func Init() {
@@ -21,10 +22,11 @@ func Init() {
 		logger.Error("Error loading .env file", "error", err)
 	}
 
-	ManagerRPCAddress = os.Getenv("MANAGER_RPC_ADDRESS")
-	DatabaseRPCAddress = os.Getenv("DATABASE_RPC_ADDRESS")
-
-	if ManagerRPCAddress == "" || DatabaseRPCAddress == "" {
+	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
+	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
+	DatabasePort = os.Getenv("DATABASE_RPC_PORT")
+	
+	if ManagerIPAddress == "" || DatabaseIPAddress == "" || DatabasePort == "" {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
 
