@@ -23,9 +23,9 @@ var (
 	PinataApiKey                string
 	PinataSecretApiKey          string
 	IpfsHost                    string
-	AggregatorRPCAddress        string
-	ManagerRPCAddress           string
-	DatabaseRPCAddress          string
+	AggregatorIPAddress        string
+	ManagerIPAddress           string
+	DatabaseIPAddress          string
 )
 
 func Init() {
@@ -37,18 +37,18 @@ func Init() {
 	PinataApiKey = os.Getenv("PINATA_API_KEY")
 	PinataSecretApiKey = os.Getenv("PINATA_SECRET_API_KEY")
 	IpfsHost = os.Getenv("IPFS_HOST")
-	AggregatorRPCAddress = os.Getenv("AGGREGATOR_RPC_ADDRESS")
-	ManagerRPCAddress = os.Getenv("MANAGER_RPC_ADDRESS")
-	DatabaseRPCAddress = os.Getenv("DATABASE_RPC_ADDRESS")
+	AggregatorIPAddress = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
+	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
+	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 
-	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorRPCAddress == "" || ManagerRPCAddress == "" || DatabaseRPCAddress == "" {
+	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorIPAddress == "" || ManagerIPAddress == "" || DatabaseIPAddress == "" {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
 
 	EthRPCUrl := os.Getenv("ALCHEMY_API_KEY")
 	AlchemyAPIKey = strings.TrimPrefix(EthRPCUrl, "https://eth-holesky.g.alchemy.com/v2/")
-	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY_CONSENSUS")
-	PrivateKeyController = os.Getenv("PRIVATE_KEY_CONTROLLER")
+	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY")
+	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
 	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
 		

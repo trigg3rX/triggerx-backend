@@ -1,15 +1,10 @@
 package services
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/http"
-	"os"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -59,7 +54,7 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	serializedSignature := hexutil.Encode(sig)
 	logger.Infof("Serialized signature", "signature", serializedSignature)
 
-	client, err := rpc.Dial(config.AggregatorRPCAddress)
+	client, err := rpc.Dial(config.AggregatorIPAddress)
 	if err != nil {
 		logger.Errorf("Error dialing RPC", "error", err)
 	}
@@ -84,65 +79,4 @@ func makeRPCRequest(client *rpc.Client, params types.PerformerData) interface{} 
 		logger.Errorf("Error making RPC request", "error", err)
 	}
 	return result
-}
-
-func ConnectToTaskManager(keeperAddress string, connectionAddress string) (bool, error) {
-	taskManagerRPCAddress := fmt.Sprintf("%s/connect", config.ManagerRPCAddress)
-
-	var payload types.UpdateKeeperConnectionData
-	payload.KeeperAddress = keeperAddress
-	payload.ConnectionAddress = connectionAddress
-
-	// Ensure the connection address has the proper format for health checks
-	if !strings.HasPrefix(payload.ConnectionAddress, "http://") && !strings.HasPrefix(payload.ConnectionAddress, "https://") {
-		payload.ConnectionAddress = "https://" + payload.ConnectionAddress
-	}
-
-	logger.Info("Connecting to task manager",
-		"keeper_address", keeperAddress,
-		"connection_address", payload.ConnectionAddress,
-		"task_manager", taskManagerRPCAddress)
-
-	var response types.UpdateKeeperConnectionDataResponse
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	client := &http.Client{}
-
-	req, err := http.NewRequest("POST", taskManagerRPCAddress, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return false, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	json.NewDecoder(resp.Body).Decode(&response)
-
-	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("task manager returned non-200 status code: %d", resp.StatusCode)
-	}
-
-	envFile := ".env"
-	keeperIDLine := fmt.Sprintf("\nKEEPER_ID=%d", response.KeeperID)
-
-	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return false, fmt.Errorf("failed to open .env file: %w", err)
-	}
-	defer f.Close()
-
-	if _, err := f.WriteString(keeperIDLine); err != nil {
-		return false, fmt.Errorf("failed to write keeper ID to .env: %w", err)
-	}
-
-	return true, nil
 }

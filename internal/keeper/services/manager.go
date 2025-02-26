@@ -1,16 +1,19 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/localtunnel/go-localtunnel"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
@@ -140,4 +143,66 @@ func CloseTunnel() {
 		}
 		activeTunnel = nil
 	}
+}
+
+
+func ConnectToTaskManager(keeperAddress string, connectionAddress string) (bool, error) {
+	taskManagerRPCAddress := fmt.Sprintf("%s/connect", config.ManagerIPAddress)
+
+	var payload types.UpdateKeeperConnectionData
+	payload.KeeperAddress = keeperAddress
+	payload.ConnectionAddress = connectionAddress
+
+	// Ensure the connection address has the proper format for health checks
+	if !strings.HasPrefix(payload.ConnectionAddress, "http://") && !strings.HasPrefix(payload.ConnectionAddress, "https://") {
+		payload.ConnectionAddress = "https://" + payload.ConnectionAddress
+	}
+
+	logger.Info("Connecting to task manager",
+		"keeper_address", keeperAddress,
+		"connection_address", payload.ConnectionAddress,
+		"task_manager", taskManagerRPCAddress)
+
+	var response types.UpdateKeeperConnectionDataResponse
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	resp, err := http.Post(taskManagerRPCAddress,
+		"application/json",
+		bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return false, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return false, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	logger.Info("Connected to task manager successfully",
+		"keeperID", response.KeeperID,
+		"keeperAddress", response.KeeperAddress,
+		"keeperURL", payload.ConnectionAddress)
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("task manager returned non-200 status code: %d", resp.StatusCode)
+	}
+
+	envFile := ".env"
+	keeperIDLine := fmt.Sprintf("\nKEEPER_ID=%d", response.KeeperID)
+
+	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return false, fmt.Errorf("failed to open .env file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(keeperIDLine); err != nil {
+		return false, fmt.Errorf("failed to write keeper ID to .env: %w", err)
+	}
+
+	return true, nil
 }
