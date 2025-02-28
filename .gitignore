@@ -17,3 +17,5 @@ data/peer_registry/*_identity.json
 data/logs/*/*.log
 cosign.key
 cosign.pub
+
+references

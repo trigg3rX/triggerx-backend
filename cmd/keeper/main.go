@@ -27,25 +27,6 @@ func main() {
 
 	services.Init()
 
-	// Setup a tunnel for the keeper service
-	connectionAddress, err := services.SetupTunnel(config.KeeperRPCPort, config.KeeperAddress)
-	if err != nil {
-		logger.Fatal("Failed to setup tunnel", "error", err)
-	}
-
-	// Connect to task manager with the tunnel URL or local address as fallback
-	connected, err := services.ConnectToTaskManager(config.KeeperAddress, connectionAddress)
-	if err != nil {
-		logger.Error("Failed to connect to task manager", "error", err)
-	}
-
-	if connected {
-		logger.Info("Connected to Task Manager")
-		logger.Info("Tunnel URL", "url", connectionAddress)
-	} else {
-		logger.Error("Failed to connect to Task Manager", "error", err)
-	}
-
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
@@ -53,7 +34,6 @@ func main() {
 	router.POST("/task/validate", validation.ValidateTask)
 
 	// Add health endpoint for keeper verification
-	// Note: This is now also handled by the tunnel server for tunnel connections
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":         "healthy",
@@ -109,9 +89,6 @@ func main() {
 
 	case sig := <-shutdown:
 		logger.Info("Starting Shutdown", "signal", sig)
-
-		// Close the tunnel if it's active
-		services.CloseTunnel()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
