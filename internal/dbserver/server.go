@@ -65,7 +65,8 @@ func (s *Server) routes() {
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
-
+	api.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
+	
 	// // Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")

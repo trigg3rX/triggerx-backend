@@ -141,45 +141,45 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		h.logger.Infof("[CreateJobData] Successfully created jobID %d", currentJobID)
 
-		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
-		jobData := types.HandleCreateJobData{
-			JobID:                  currentJobID,
-			TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
-			UserID:                 existingUserID,
-			Priority:               tempJobs[i].Priority,
-			Security:               tempJobs[i].Security,
-			LinkJobID:              linkJobID,
-			ChainStatus:            chainStatus,
-			TimeFrame:              tempJobs[i].TimeFrame,
-			Recurring:              tempJobs[i].Recurring,
-			TimeInterval:           tempJobs[i].TimeInterval,
-			TriggerChainID:         tempJobs[i].TriggerChainID,
-			TriggerContractAddress: tempJobs[i].TriggerContractAddress,
-			TriggerEvent:           tempJobs[i].TriggerEvent,
-			ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
-			ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
-			TargetChainID:          tempJobs[i].TargetChainID,
-			TargetContractAddress:  tempJobs[i].TargetContractAddress,
-			TargetFunction:         tempJobs[i].TargetFunction,
-			ArgType:                tempJobs[i].ArgType,
-			Arguments:              tempJobs[i].Arguments,
-			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
-			CreatedAt:              time.Now(),
-			LastExecutedAt:         time.Time{},
-		}
+		// h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
+		// jobData := types.HandleCreateJobData{
+		// 	JobID:                  currentJobID,
+		// 	TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
+		// 	UserID:                 existingUserID,
+		// 	Priority:               tempJobs[i].Priority,
+		// 	Security:               tempJobs[i].Security,
+		// 	LinkJobID:              linkJobID,
+		// 	ChainStatus:            chainStatus,
+		// 	TimeFrame:              tempJobs[i].TimeFrame,
+		// 	Recurring:              tempJobs[i].Recurring,
+		// 	TimeInterval:           tempJobs[i].TimeInterval,
+		// 	TriggerChainID:         tempJobs[i].TriggerChainID,
+		// 	TriggerContractAddress: tempJobs[i].TriggerContractAddress,
+		// 	TriggerEvent:           tempJobs[i].TriggerEvent,
+		// 	ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
+		// 	ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
+		// 	TargetChainID:          tempJobs[i].TargetChainID,
+		// 	TargetContractAddress:  tempJobs[i].TargetContractAddress,
+		// 	TargetFunction:         tempJobs[i].TargetFunction,
+		// 	ArgType:                tempJobs[i].ArgType,
+		// 	Arguments:              tempJobs[i].Arguments,
+		// 	ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
+		// 	CreatedAt:              time.Now(),
+		// 	LastExecutedAt:         time.Time{},
+		// }
 
-		success, err := h.SendDataToManager("/job/create", jobData)
-		if err != nil {
-			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
-			http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
-			return
-		}
+		// success, err := h.SendDataToManager("/job/create", jobData)
+		// if err != nil {
+		// 	h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
+		// 	http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
+		// 	return
+		// }
 
-		if !success {
-			h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
-			http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
-			return
-		}
+		// if !success {
+		// 	h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
+		// 	http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
+		// 	return
+		// }
 
 		h.logger.Infof("[CreateJobData] Successfully sent job data to manager for jobID %d", currentJobID)
 
@@ -305,21 +305,38 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
-		JobID   int64 `json:"jobID"`
-		JobType int   `json:"jobType"`
+		JobID   int64 `json:"job_id"`
+		JobType int   `json:"job_type"`
 		Status  bool  `json:"status"`
+		ChainStatus int `json:"chain_status"`
+		LinkJobID int64 `json:"link_job_id"`
 	}
 
 	var userJobs []JobSummary
 
+	// First, get the user_id from the user_address
+	var userID int64
+	if err := h.db.Session().Query(`
+		SELECT user_id 
+		FROM triggerx.user_data 
+		WHERE user_address = ? ALLOW FILTERING
+	`, userAddress).Scan(&userID); err != nil {
+		h.logger.Errorf("[GetJobsByUserAddress] Error retrieving user_id for user_address %s: %v", userAddress, err)
+		http.Error(w, "User not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+
+	h.logger.Infof("[GetJobsByUserAddress] Found user_id %d for user_address %s", userID, userAddress)
+
+
 	iter := h.db.Session().Query(`
-        SELECT job_id, task_definition_id, status 
+        SELECT job_id, task_definition_id, status, chain_status, link_job_id
         FROM triggerx.job_data 
-        WHERE user_address = ? ALLOW FILTERING
-    `, userAddress).Iter()
+        WHERE user_id = ? ALLOW FILTERING
+    `, userID).Iter()
 
 	var job JobSummary
-	for iter.Scan(&job.JobID, &job.JobType, &job.Status) {
+	for iter.Scan(&job.JobID, &job.JobType, &job.Status, &job.ChainStatus, &job.LinkJobID) {
 		userJobs = append(userJobs, job)
 	}
 
@@ -339,3 +356,23 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	jobID := vars["id"]
+	h.logger.Infof("[DeleteJobData] Deleting jobID %s", jobID)
+
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.job_data 
+        SET status = ?
+        WHERE job_id = ?`,
+		false, jobID).Exec(); err != nil {
+		h.logger.Errorf("[DeleteJobData] Error deleting jobID %s: %v", jobID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[DeleteJobData] Successfully deleted jobID %s", jobID)
+	w.WriteHeader(http.StatusOK)
+}
+
