@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -94,12 +95,18 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
-	// Get IPFS URL from query parameter
-	ipfsURL := r.URL.Query().Get("ipfs_url")
-	if ipfsURL == "" {
+	// Get the IPFS URLs from the query parameter
+	ipfsURLs := r.URL.Query().Get("ipfs_url") // Get the single string of URLs
+	if ipfsURLs == "" {
 		http.Error(w, "Missing ipfs_url query parameter", http.StatusBadRequest)
 		return
 	}
+
+	h.logger.Infof("[GetTaskFees] IPFS URLs: %s", ipfsURLs)
+
+	// Split the IPFS URLs by comma
+	urlList := strings.Split(ipfsURLs, ",")
+	totalFee := 0.0
 
 	ctx := context.Background()
 
@@ -115,39 +122,48 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cli.Close()
 
-	// Download and process the IPFS file
-	codePath, err := resources.DownloadIPFSFile(ipfsURL)
-	if err != nil {
-		h.logger.Errorf("[GetTaskFees] Error downloading IPFS file: %v", err)
-		http.Error(w, "Failed to download IPFS file", http.StatusInternalServerError)
-		return
-	}
-	defer os.RemoveAll(filepath.Dir(codePath))
+	// Process each IPFS URL
+	for _, ipfsURL := range urlList {
+		ipfsURL = strings.TrimSpace(ipfsURL) // Trim any whitespace
 
-	// Create container
-	containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
-	if err != nil {
-		h.logger.Errorf("[GetTaskFees] Error creating container: %v", err)
-		http.Error(w, "Failed to create container", http.StatusInternalServerError)
-		return
-	}
-	defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+		// Download and process the IPFS file
+		codePath, err := resources.DownloadIPFSFile(ipfsURL)
+		if err != nil {
+			h.logger.Errorf("[GetTaskFees] Error downloading IPFS file for URL %s: %v", ipfsURL, err)
+			http.Error(w, "Failed to download IPFS file", http.StatusInternalServerError)
+			return
+		}
+		defer os.RemoveAll(filepath.Dir(codePath))
 
-	// Monitor resources and get stats
-	stats, err := resources.MonitorResources(ctx, cli, containerID)
-	if err != nil {
-		h.logger.Errorf("[GetTaskFees] Error monitoring resources: %v", err)
-		http.Error(w, "Failed to monitor resources", http.StatusInternalServerError)
-		return
+		// Create container
+		containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
+		if err != nil {
+			h.logger.Errorf("[GetTaskFees] Error creating container for URL %s: %v", ipfsURL, err)
+			http.Error(w, "Failed to create container", http.StatusInternalServerError)
+			return
+		}
+		defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+
+		// Monitor resources and get stats
+		stats, err := resources.MonitorResources(ctx, cli, containerID)
+		if err != nil {
+			h.logger.Errorf("[GetTaskFees] Error monitoring resources for URL %s: %v", ipfsURL, err)
+			http.Error(w, "Failed to monitor resources", http.StatusInternalServerError)
+			return
+		}
+
+		// Add the fee for this URL to the total fee
+		totalFee += stats.TotalFee
 	}
 
-	// Return the fee calculation
+	// Return the total fee calculation
 	response := struct {
 		TotalFee float64 `json:"total_fee"`
 	}{
-		TotalFee: stats.TotalFee,
+		TotalFee: totalFee,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
+

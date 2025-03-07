@@ -305,11 +305,11 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
-		JobID   int64 `json:"job_id"`
-		JobType int   `json:"job_type"`
-		Status  bool  `json:"status"`
-		ChainStatus int `json:"chain_status"`
-		LinkJobID int64 `json:"link_job_id"`
+		JobID       int64 `json:"job_id"`
+		JobType     int   `json:"job_type"`
+		Status      bool  `json:"status"`
+		ChainStatus int   `json:"chain_status"`
+		LinkJobID   int64 `json:"link_job_id"`
 	}
 
 	var userJobs []JobSummary
@@ -327,7 +327,6 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Infof("[GetJobsByUserAddress] Found user_id %d for user_address %s", userID, userAddress)
-
 
 	iter := h.db.Session().Query(`
         SELECT job_id, task_definition_id, status, chain_status, link_job_id
@@ -366,7 +365,7 @@ func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
 		UPDATE triggerx.job_data 
         SET status = ?
         WHERE job_id = ?`,
-		false, jobID).Exec(); err != nil {
+		true, jobID).Exec(); err != nil {
 		h.logger.Errorf("[DeleteJobData] Error deleting jobID %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -375,4 +374,3 @@ func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[DeleteJobData] Successfully deleted jobID %s", jobID)
 	w.WriteHeader(http.StatusOK)
 }
-
