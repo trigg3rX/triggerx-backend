@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/client"
@@ -107,6 +108,8 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	// Split the IPFS URLs by comma
 	urlList := strings.Split(ipfsURLs, ",")
 	totalFee := 0.0
+	var mu sync.Mutex // Mutex to protect totalFee
+	var wg sync.WaitGroup // WaitGroup to wait for all goroutines to finish
 
 	ctx := context.Background()
 
@@ -122,39 +125,48 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cli.Close()
 
-	// Process each IPFS URL
+	// Process each IPFS URL concurrently
 	for _, ipfsURL := range urlList {
 		ipfsURL = strings.TrimSpace(ipfsURL) // Trim any whitespace
+		wg.Add(1) // Increment the WaitGroup counter
 
-		// Download and process the IPFS file
-		codePath, err := resources.DownloadIPFSFile(ipfsURL)
-		if err != nil {
-			h.logger.Errorf("[GetTaskFees] Error downloading IPFS file for URL %s: %v", ipfsURL, err)
-			http.Error(w, "Failed to download IPFS file", http.StatusInternalServerError)
-			return
-		}
-		defer os.RemoveAll(filepath.Dir(codePath))
+		go func(url string) {
+			defer wg.Done() // Decrement the counter when the goroutine completes
+			h.logger.Infof("[GetTaskFees] Starting processing for URL: %s", url) // Log when goroutine starts
 
-		// Create container
-		containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
-		if err != nil {
-			h.logger.Errorf("[GetTaskFees] Error creating container for URL %s: %v", ipfsURL, err)
-			http.Error(w, "Failed to create container", http.StatusInternalServerError)
-			return
-		}
-		defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+			// Download and process the IPFS file
+			codePath, err := resources.DownloadIPFSFile(url)
+			if err != nil {
+				h.logger.Errorf("[GetTaskFees] Error downloading IPFS file for URL %s: %v", url, err)
+				return // Exit the goroutine on error
+			}
+			defer os.RemoveAll(filepath.Dir(codePath))
 
-		// Monitor resources and get stats
-		stats, err := resources.MonitorResources(ctx, cli, containerID)
-		if err != nil {
-			h.logger.Errorf("[GetTaskFees] Error monitoring resources for URL %s: %v", ipfsURL, err)
-			http.Error(w, "Failed to monitor resources", http.StatusInternalServerError)
-			return
-		}
+			// Create container
+			containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
+			if err != nil {
+				h.logger.Errorf("[GetTaskFees] Error creating container for URL %s: %v", url, err)
+				return // Exit the goroutine on error
+			}
+			defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
 
-		// Add the fee for this URL to the total fee
-		totalFee += stats.TotalFee
+			// Monitor resources and get stats
+			stats, err := resources.MonitorResources(ctx, cli, containerID)
+			if err != nil {
+				h.logger.Errorf("[GetTaskFees] Error monitoring resources for URL %s: %v", url, err)
+				return // Exit the goroutine on error
+			}
+
+			// Add the fee for this URL to the total fee
+			mu.Lock() // Lock the mutex before updating totalFee
+			totalFee += stats.TotalFee
+			mu.Unlock() // Unlock the mutex
+
+			h.logger.Infof("[GetTaskFees] Finished processing for URL: %s, Fee: %f", url, stats.TotalFee) // Log when goroutine finishes
+		}(ipfsURL) // Pass the current URL to the goroutine
 	}
+
+	wg.Wait() // Wait for all goroutines to finish
 
 	// Return the total fee calculation
 	response := struct {
@@ -166,4 +178,3 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
-
