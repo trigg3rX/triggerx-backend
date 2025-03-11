@@ -32,7 +32,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		Debug:            true,
 	})
 
@@ -55,8 +55,7 @@ func (s *Server) routes() {
 	handler := handlers.NewHandler(s.db, s.logger)
 
 	api := s.router.PathPrefix("/api").Subrouter()
-	api.Use(mux.CORSMethodMiddleware(api))
-
+	
 	// User routes
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
 
