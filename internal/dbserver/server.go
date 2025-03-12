@@ -26,9 +26,11 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	logger := logging.GetLogger(logging.Development, processName)
 
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{"*",
+		AllowedOrigins: []string{
+			"https://app.triggerx.network",
 			"https://www.triggerx.network",
 			"http://localhost:3000",
+			
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token"},

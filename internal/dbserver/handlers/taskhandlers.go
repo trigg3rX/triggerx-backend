@@ -175,6 +175,9 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 		TotalFee: totalFee,
 	}
 
+	h.logger.Infof("[GetTaskFees] TotalFeeeeee: %v", response)
+	h.logger.Infof("[GetTaskFees] Response Type: %T", response)
+
 	// w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://www.triggerx.network")
     w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
