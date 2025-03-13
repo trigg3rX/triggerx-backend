@@ -13,7 +13,7 @@ The **TriggerX Keeper Backend** is a decentralized system designed to automate a
     - [Task Manager](#task-manager)
     - [Keepers](#keepers)
     - [Aggregator](#aggregator)
-  - [Steps to run the Keeper Backend](#steps-to-run-the-keeper-backend)
+  - [Steps to Run the Keeper Backend](#steps-to-run-the-keeper-backend)
 
 ---
 
@@ -53,25 +53,55 @@ Operating in a decentralized architecture, Keepers ensure:
 The **Aggregator** ensures the consensus of tasks by:
 - Aggregating tasks from multiple Keepers.
 - Submitting the tasks to the blockchain.
-- Acts as bootstrap for the p2p network.
+- Acting as a bootstrap for the p2p network.
 
 ---
 
-## Steps to run the Keeper Backend
+## Steps to Run the Keeper Backend
 
 1. Clone the repository.
-     - `git clone https://github.com/trigg3rX/triggerx-backend.git`
+     - ```sh
+       git clone https://github.com/trigg3rX/triggerx-backend.git
+       ```
 2. Install the dependencies.
-     - `go mod tidy`
-     - `npm i -g @othentic/othentic-cli`  (Node v22.6.0 is required)
+     - ```sh
+       go mod tidy
+       ```
+     - ```sh
+       npm i -g @othentic/othentic-cli  # (Node v22.6.0 is required)
+       ```
 3. Copy the `.env.example` file to `.env` and set the environment variables.
 
-4. Run the Keeper node.
-  - `go run cmd/keeper/main.go`
-5. Run the Attester node.
-```
-othentic-cli node attester /ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB --metrics --avs-webapi http://127.0.0.1 --avs-webapi-port 4002
-```
+4. Set up the database.
+   - ```sh
+     make db-setup
+     ```
 
+5. Start the database server.
+   - ```sh
+     make start-db-server
+     ```
 
+6. Start the Task Manager.
+   - ```sh
+     make start-manager
+     ```
 
+7. Start the Keepers.
+   - Pull the Docker image for executing tasks:
+     - ```sh
+       docker pull trigg3rx/keeper-execution:latest
+       ```
+   - Run the Docker image:
+     - ```sh
+       docker run --env .env --name triggerx_keeper -d trigg3rx/keeper-execution
+       ```
+
+8. Run the Keeper node.
+   - ```sh
+     go run cmd/keeper/main.go
+     ```
+
+9. Run the Attester node.
+   ```sh
+   othentic-cli node attester /ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB --metrics --avs-webapi http://127.0.0.1 --avs-webapi-port 4002
