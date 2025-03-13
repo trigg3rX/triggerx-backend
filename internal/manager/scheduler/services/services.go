@@ -53,7 +53,7 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 
 func GetPerformerData() (types.GetPerformerData, error) {
 	// url := "https://data.triggerx.network/keepers/performers"
-	url := "http://localhost:9004/api/keepers/performers"
+	url := "http://localhost:8080/api/keepers/performers"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -87,7 +87,7 @@ func GetPerformerData() (types.GetPerformerData, error) {
 }
 
 func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
-	url := fmt.Sprintf("https://data.triggerx.network/keepers/jobs/%d", jobID)
+	url := fmt.Sprintf("http://localhost:8080/api/keepers/jobs/%d", jobID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -146,7 +146,7 @@ func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
 
 func CreateTaskData(taskData *types.CreateTaskData) (int64, bool, error) {
 	// url := "https://data.triggerx.network/keepers/tasks"
-	url := "http://localhost:9004/api/tasks"
+	url := "http://localhost:8080/api/tasks"
 
 	jsonData, err := json.Marshal(taskData)
 	if err != nil {

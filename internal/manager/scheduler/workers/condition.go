@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ConditionBasedWorker struct {
@@ -38,12 +38,18 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	w.ticker = time.NewTicker(1 * time.Second)
 
 	w.scheduler.Logger().Infof("Starting condition-based job %d", w.jobID)
-	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptIPFSUrl)
+	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptTriggerFunction)
 
 	var triggerData types.TriggerData
 	triggerData.TimeInterval = w.jobData.TimeInterval
 	triggerData.LastExecuted = time.Now()
 	triggerData.TriggerTxHash = ""
+
+	// Calculate end time if timeframe is specified
+	var endTime time.Time
+	if w.jobData.TimeFrame > 0 {
+		endTime = time.Now().Add(time.Duration(w.jobData.TimeFrame) * time.Second)
+	}
 
 	go func() {
 		defer w.Stop()
@@ -57,6 +63,12 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 				return
 
 			case <-w.ticker.C:
+				// Check if we've exceeded the timeframe
+				if w.jobData.TimeFrame > 0 && time.Now().After(endTime) {
+					w.scheduler.Logger().Infof("Timeframe reached for job %d, stopping worker", w.jobID)
+					return
+				}
+
 				satisfied, err := w.checkCondition()
 				if err != nil {
 					w.error = err.Error()
@@ -78,8 +90,24 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 					if err := w.executeTask(w.jobData, &triggerData); err != nil {
 						w.handleError(err)
+						// If we're in recurring mode and hit an error, we continue checking
+						if !w.jobData.Recurring || w.status == "failed" {
+							return
+						}
+						continue
 					}
-					return
+
+					// If it's not recurring, exit after first execution
+					if !w.jobData.Recurring {
+						return
+					}
+
+					// Update last execution time
+					triggerData.LastExecuted = time.Now()
+					w.scheduler.Logger().Infof("Job %d executed. Continuing to monitor condition due to recurring flag", w.jobID)
+
+					// Optional: add a small pause after execution before checking again
+					time.Sleep(5 * time.Second)
 				}
 			}
 		}
