@@ -5,14 +5,19 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+
 	// "fmt"
+
 	"net/http"
+
 	// "os"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -51,16 +56,59 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	jobData := requestBody["job"].(types.HandleCreateJobData)
-	triggerData := requestBody["trigger"].(types.TriggerData)
+	// Fix type assertions by properly converting the data
+	jobDataRaw, ok := requestBody["job"]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing job data"})
+		return
+	}
+
+	triggerDataRaw, ok := requestBody["trigger"]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing trigger data"})
+		return
+	}
+
+	// Convert to proper types
+	var jobData types.HandleCreateJobData
+	jobDataBytes, err := json.Marshal(jobDataRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job data format"})
+		return
+	}
+	if err := json.Unmarshal(jobDataBytes, &jobData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse job data"})
+		return
+	}
+	logger.Infof("jobData: %v\n", jobData)
+	var triggerData types.TriggerData
+	triggerDataBytes, err := json.Marshal(triggerDataRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})
+		return
+	}
+	if err := json.Unmarshal(triggerDataBytes, &triggerData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
+		return
+	}
 
 	logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
 
-	// Execute job and handle any execution errors
-	jobExecutor := NewJobExecutor()
+	// Create ethClient using config
+	ethClient, err := ethclient.Dial(config.EthRPCUrl) // Use the full URL directly
+	if err != nil {
+		logger.Errorf("Failed to connect to Ethereum client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Ethereum network"})
+		return
+	}
+	defer ethClient.Close()
+
+	// Create job executor with ethClient and etherscan API key
+	jobExecutor := NewJobExecutor(ethClient, config.AlchemyAPIKey)
+
 	actionData, err := jobExecutor.Execute(&jobData)
 	if err != nil {
-		logger.Errorf("Error executing job:", "error", err)
+		logger.Errorf("Error executing job: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Job execution failed"})
 		return
 	}
@@ -154,25 +202,4 @@ func ExecuteTask(c *gin.Context) {
 
 // 	// Create the request payload with the task ID
 // 	payload := struct {
-// 		TaskID string `json:"task_id"`
-// 	}{
-// 		TaskID: taskID,
-// 	}
-
-// 	payloadBytes, err := json.Marshal(payload)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to marshal task ID payload: %w", err)
-// 	}
-
-// 	addPointsResp, err := http.Post(addPointsURL, "application/json", bytes.NewBuffer(payloadBytes))
-// 	if err != nil {
-// 		return fmt.Errorf("failed to add points to keeper: %w", err)
-// 	}
-// 	defer addPointsResp.Body.Close()
-
-// 	if addPointsResp.StatusCode != http.StatusOK {
-// 		return fmt.Errorf("add points API returned non-OK status: %d", addPointsResp.StatusCode)
-// 	}
-
-// 	return nil
-// }
+// 		TaskID string `
