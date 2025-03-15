@@ -46,6 +46,44 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(keeperData)
 }
 
+func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Request) {
+	var keeperData types.GoogleFormCreateKeeperData
+	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
+		h.logger.Errorf("[GoogleFormCreateKeeperData] Error decoding request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Get the maximum keeper ID from the database
+	var maxKeeperID int64
+	if err := h.db.Session().Query(`
+		SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
+		h.logger.Errorf("[GoogleFormCreateKeeperData] Error getting max keeper ID : %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	currentKeeperID := maxKeeperID + 1
+
+	h.logger.Infof("[GoogleFormCreateKeeperData] Creating keeper with ID: %d", currentKeeperID)
+	if err := h.db.Session().Query(`
+        INSERT INTO triggerx.keeper_data (
+            keeper_id, keeper_address, 
+            rewards_address, 
+            no_exctask, keeper_points
+        ) VALUES (?, ?, ?, ?, ? )`,
+		currentKeeperID, keeperData.KeeperAddress,
+		keeperData.RewardsAddress,
+		keeperData.ConsensusKeys, 0, 0).Exec(); err != nil {
+		h.logger.Errorf("[GoogleFormCreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[GoogleFormCreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(keeperData)
+}
+
 func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperID := vars["id"]

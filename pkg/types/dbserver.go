@@ -76,6 +76,11 @@ type CreateKeeperData struct {
 	ConsensusKeys     []string  `json:"consensus_keys"`
 }
 
+type GoogleFormCreateKeeperData struct {
+	KeeperAddress     string    `json:"keeper_address"`
+	RewardsAddress    string    `json:"rewards_address"`
+}
+
 type UpdateKeeperConnectionData struct {
 	KeeperAddress     string `json:"keeper_address"`
 	ConnectionAddress string `json:"connection_address"`
