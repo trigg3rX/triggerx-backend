@@ -321,8 +321,19 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 		FROM triggerx.user_data 
 		WHERE user_address = ? ALLOW FILTERING
 	`, userAddress).Scan(&userID); err != nil {
-		h.logger.Errorf("[GetJobsByUserAddress] Error retrieving user_id for user_address %s: %v", userAddress, err)
-		http.Error(w, "User not found: "+err.Error(), http.StatusNotFound)
+		// Instead of returning a 404, return a 200 with a message
+		h.logger.Infof("[GetJobsByUserAddress] User address %s not found", userAddress)
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]interface{}{
+			"message": "User address not registered",
+			"jobs":    userJobs, // Return an empty list of jobs
+		}
+		w.WriteHeader(http.StatusOK) // Set status to 200
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			h.logger.Errorf("[GetJobsByUserAddress] Error encoding response for user_address %s: %v", userAddress, err)
+			http.Error(w, "Error encoding response", http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
