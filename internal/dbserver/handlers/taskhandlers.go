@@ -96,7 +96,7 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
-	// Get the IPFS URLs from the query parameter
+	
 	ipfsURLs := r.URL.Query().Get("ipfs_url") // Get the single string of URLs
 	if ipfsURLs == "" {
 		http.Error(w, "Missing ipfs_url query parameter", http.StatusBadRequest)
@@ -104,8 +104,7 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger.Infof("[GetTaskFees] IPFS URLs: %s", ipfsURLs)
-
-	// Split the IPFS URLs by comma
+	// // Split the IPFS URLs by comma
 	urlList := strings.Split(ipfsURLs, ",")
 	totalFee := 0.0
 	var mu sync.Mutex // Mutex to protect totalFee
@@ -175,14 +174,13 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 		TotalFee: totalFee,
 	}
 
-	h.logger.Infof("[GetTaskFees] TotalFeeeeee: %v", response)
-	h.logger.Infof("[GetTaskFees] Response Type: %T", response)
+	h.logger.Infof("[GetTaskFees] Total fee calculated: %v", response)
 
-	// w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "https://www.triggerx.network")
-    w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Content-Type", "application/json")
-
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Errorf("[GetTaskFees] Error encoding response: %v", err)
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
+

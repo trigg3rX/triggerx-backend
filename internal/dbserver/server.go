@@ -30,7 +30,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 			"https://app.triggerx.network",
 			"https://www.triggerx.network",
 			"http://localhost:3000",
-			
+			"https://data.triggerx.network",
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token"},
