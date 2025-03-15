@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"strings"
+	"net"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
@@ -13,11 +15,13 @@ var (
 	logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 	// User Entered Information
+	EthRPCUrl                   string
 	AlchemyAPIKey               string
 	PrivateKeyConsensus          string
 	PrivateKeyController          string
 	KeeperAddress             	string
 	KeeperRPCPort               string
+	ConnectionAddress           string
 
 	// Provided Information
 	PinataApiKey                string
@@ -45,7 +49,7 @@ func Init() {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
 
-	EthRPCUrl := os.Getenv("ALCHEMY_API_KEY")
+	EthRPCUrl := os.Getenv("L1_RPC")
 	AlchemyAPIKey = strings.TrimPrefix(EthRPCUrl, "https://eth-holesky.g.alchemy.com/v2/")
 	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY")
 	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
@@ -55,6 +59,20 @@ func Init() {
 	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
+
+	// Get the connection address (IP address of the machine running this code)
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		logger.Error("Failed to determine local IP address", "error", err)
+		// Fallback to localhost if we can't determine the IP
+		ConnectionAddress = "127.0.0.1"
+	} else {
+		defer conn.Close()
+		localAddr := conn.LocalAddr().(*net.UDPAddr)
+		ConnectionAddress = fmt.Sprintf("http://%s:%s", localAddr.IP.String(), KeeperRPCPort)
+	}
+	
+	// logger.Info("Keeper connection address set", "address", ConnectionAddress)
 
 	gin.SetMode(gin.ReleaseMode)
 }
