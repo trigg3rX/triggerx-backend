@@ -30,7 +30,7 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 		return false, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	executionURL := fmt.Sprintf("%s/keeper/execute", connectionAddress)
+	executionURL := fmt.Sprintf("%s/task/execute", connectionAddress)
 
 	req, err := http.NewRequest("POST", executionURL, bytes.NewBuffer(jsonData))
 	if err != nil {
