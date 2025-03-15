@@ -1,6 +1,8 @@
 package manager
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"os"
 
@@ -128,4 +130,50 @@ func HandleResumeJobEvent(c *gin.Context) {
 	// TODO: Implement job resume logic using scheduler
 	logger.Infof("Job resume requested for ID: %d", resumeJobData.JobID)
 	c.JSON(http.StatusOK, gin.H{"message": "Job resume request received"})
+}
+
+func HandleKeeperConnectEvent(c *gin.Context) {
+	var keeperData types.UpdateKeeperConnectionData
+	if err := c.BindJSON(&keeperData); err != nil {
+		logger.Error("Failed to parse keeper data", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	url := "http://localhost:8080/api/keepers/connection"
+
+	jsonData, err := json.Marshal(keeperData)
+	if err != nil {
+		logger.Error("Failed to marshal keeper data", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to marshal keeper data"})
+		return
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Error("Failed to create HTTP request", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create HTTP request"})
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("Failed to send request", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to send request"})
+		return
+	}
+	defer resp.Body.Close()
+
+	var response types.UpdateKeeperConnectionDataResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		logger.Error("Failed to decode response", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})	
+		return
+	}
+
+	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
+	c.JSON(http.StatusOK, response)
 }

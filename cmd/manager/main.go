@@ -56,6 +56,7 @@ func main() {
 	router.POST("/job/update", manager.HandleUpdateJobEvent)
 	router.POST("/job/pause", manager.HandlePauseJobEvent)
 	router.POST("/job/resume", manager.HandleResumeJobEvent)
+	router.POST("/keeper/connect", manager.HandleKeeperConnectEvent)
 	
 	// Create HTTP server
 	srv := &http.Server{
