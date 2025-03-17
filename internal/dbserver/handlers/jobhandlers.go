@@ -141,45 +141,45 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		h.logger.Infof("[CreateJobData] Successfully created jobID %d", currentJobID)
 
-		// h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
-		// jobData := types.HandleCreateJobData{
-		// 	JobID:                  currentJobID,
-		// 	TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
-		// 	UserID:                 existingUserID,
-		// 	Priority:               tempJobs[i].Priority,
-		// 	Security:               tempJobs[i].Security,
-		// 	LinkJobID:              linkJobID,
-		// 	ChainStatus:            chainStatus,
-		// 	TimeFrame:              tempJobs[i].TimeFrame,
-		// 	Recurring:              tempJobs[i].Recurring,
-		// 	TimeInterval:           tempJobs[i].TimeInterval,
-		// 	TriggerChainID:         tempJobs[i].TriggerChainID,
-		// 	TriggerContractAddress: tempJobs[i].TriggerContractAddress,
-		// 	TriggerEvent:           tempJobs[i].TriggerEvent,
-		// 	ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
-		// 	ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
-		// 	TargetChainID:          tempJobs[i].TargetChainID,
-		// 	TargetContractAddress:  tempJobs[i].TargetContractAddress,
-		// 	TargetFunction:         tempJobs[i].TargetFunction,
-		// 	ArgType:                tempJobs[i].ArgType,
-		// 	Arguments:              tempJobs[i].Arguments,
-		// 	ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
-		// 	CreatedAt:              time.Now(),
-		// 	LastExecutedAt:         time.Time{},
-		// }
+		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
+		jobData := types.HandleCreateJobData{
+			JobID:                  currentJobID,
+			TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
+			UserID:                 existingUserID,
+			Priority:               tempJobs[i].Priority,
+			Security:               tempJobs[i].Security,
+			LinkJobID:              linkJobID,
+			ChainStatus:            chainStatus,
+			TimeFrame:              tempJobs[i].TimeFrame,
+			Recurring:              tempJobs[i].Recurring,
+			TimeInterval:           tempJobs[i].TimeInterval,
+			TriggerChainID:         tempJobs[i].TriggerChainID,
+			TriggerContractAddress: tempJobs[i].TriggerContractAddress,
+			TriggerEvent:           tempJobs[i].TriggerEvent,
+			ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
+			ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
+			TargetChainID:          tempJobs[i].TargetChainID,
+			TargetContractAddress:  tempJobs[i].TargetContractAddress,
+			TargetFunction:         tempJobs[i].TargetFunction,
+			ArgType:                tempJobs[i].ArgType,
+			Arguments:              tempJobs[i].Arguments,
+			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
+			CreatedAt:              time.Now(),
+			LastExecutedAt:         time.Time{},
+		}
 
-		// success, err := h.SendDataToManager("/job/create", jobData)
-		// if err != nil {
-		// 	h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
-		// 	http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
-		// 	return
-		// }
+		success, err := h.SendDataToManager("/job/create", jobData)
+		if err != nil {
+			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
+			http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
+			return
+		}
 
-		// if !success {
-		// 	h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
-		// 	http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
-		// 	return
-		// }
+		if !success {
+			h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
+			http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
+			return
+		}
 
 		h.logger.Infof("[CreateJobData] Successfully sent job data to manager for jobID %d", currentJobID)
 

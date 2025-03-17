@@ -84,7 +84,14 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	}
 
 	go func() {
-		defer w.Stop()
+		// Use a flag to prevent multiple Stop() calls
+		var stopped bool
+		defer func() {
+			if !stopped {
+				stopped = true
+				w.Stop()
+			}
+		}()
 
 		for {
 			select {
@@ -101,6 +108,9 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 				// Try to reconnect if we're in recurring mode and haven't failed
 				if w.jobData.Recurring {
 					w.reconnectSubscription(ctx, query, logs)
+					if w.status == "failed" {
+						return
+					}
 				} else {
 					return
 				}
@@ -145,11 +155,13 @@ func (w *EventBasedWorker) reconnectSubscription(ctx context.Context, query ethe
 	// Unsubscribe from existing subscription
 	if w.subscription != nil {
 		w.subscription.Unsubscribe()
+		w.subscription = nil
 	}
 
 	// Close existing client
 	if w.client != nil {
 		w.client.Close()
+		w.client = nil
 	}
 
 	// Create new client
@@ -177,10 +189,14 @@ func (w *EventBasedWorker) reconnectSubscription(ctx context.Context, query ethe
 func (w *EventBasedWorker) Stop() {
 	if w.subscription != nil {
 		w.subscription.Unsubscribe()
+		w.subscription = nil
 	}
+
 	if w.client != nil {
 		w.client.Close()
+		w.client = nil
 	}
+
 	w.scheduler.RemoveJob(w.jobID)
 }
 
@@ -276,6 +292,5 @@ func (w *EventBasedWorker) handleError(err error) {
 
 	if w.currentRetry >= w.maxRetries {
 		w.status = "failed"
-		w.Stop()
 	}
 }

@@ -24,12 +24,12 @@ var (
 	ConnectionAddress           string
 
 	// Provided Information
-	PinataApiKey                string
-	PinataSecretApiKey          string
-	IpfsHost                    string
-	AggregatorIPAddress        string
-	ManagerIPAddress           string
-	DatabaseIPAddress          string
+	PinataApiKey        string
+	PinataSecretApiKey  string
+	IpfsHost            string
+	AggregatorIPAddress string
+	ManagerIPAddress    string
+	DatabaseIPAddress   string
 )
 
 func Init() {
@@ -55,7 +55,7 @@ func Init() {
 	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
 	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
-		
+
 	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}

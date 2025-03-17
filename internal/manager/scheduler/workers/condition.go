@@ -36,9 +36,10 @@ func NewConditionBasedWorker(jobData types.HandleCreateJobData, scheduler JobSch
 func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	w.status = "running"
 	w.ticker = time.NewTicker(1 * time.Second)
+	w.done = make(chan bool) // Ensure we have a fresh channel
 
 	w.scheduler.Logger().Infof("Starting condition-based job %d", w.jobID)
-	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptTriggerFunction)
+	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptIPFSUrl)
 
 	var triggerData types.TriggerData
 	triggerData.TimeInterval = w.jobData.TimeInterval
@@ -52,7 +53,14 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	}
 
 	go func() {
-		defer w.Stop()
+		// Use a flag to prevent multiple Stop() calls
+		var stopped bool
+		defer func() {
+			if !stopped {
+				stopped = true
+				w.Stop()
+			}
+		}()
 
 		for {
 			select {
@@ -76,7 +84,6 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 					if w.currentRetry >= w.maxRetries {
 						w.status = "failed"
-						w.Stop()
 						return
 					}
 					continue
@@ -117,8 +124,26 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 func (w *ConditionBasedWorker) Stop() {
 	if w.ticker != nil {
 		w.ticker.Stop()
+		w.ticker = nil
 	}
-	close(w.done)
+
+	// Only close the done channel if it's not nil and not already closed
+	if w.done != nil {
+		// Use a recover to catch panic if channel is already closed
+		defer func() {
+			if r := recover(); r != nil {
+				w.scheduler.Logger().Warnf("Attempted to close already closed channel for job %d: %v", w.jobID, r)
+			}
+		}()
+
+		select {
+		case <-w.done:
+			// Channel is already closed, do nothing
+		default:
+			close(w.done)
+		}
+	}
+
 	w.scheduler.RemoveJob(w.jobID)
 }
 
@@ -128,7 +153,6 @@ func (w *ConditionBasedWorker) handleError(err error) {
 
 	if w.currentRetry >= w.maxRetries {
 		w.status = "failed"
-		w.Stop()
 	}
 }
 

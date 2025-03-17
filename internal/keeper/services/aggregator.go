@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strconv"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func SendTask(proofOfTask string, data string, taskDefinitionId int) {
@@ -43,38 +44,45 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	)
 	if err != nil {
 		logger.Errorf("Error encoding data", "error", err)
+		return
 	}
 	messageHash := crypto.Keccak256Hash(dataPacked)
 
 	sig, err := crypto.Sign(messageHash.Bytes(), privateKey)
 	if err != nil {
 		logger.Errorf("Error signing message", "error", err)
+		return
 	}
 	sig[64] += 27
 	serializedSignature := hexutil.Encode(sig)
 	logger.Infof("Serialized signature", "signature", serializedSignature)
 
-	client, err := rpc.Dial(config.AggregatorIPAddress)
+	aggregatorURL := config.AggregatorIPAddress
+	if !strings.HasPrefix(aggregatorURL, "http://") && !strings.HasPrefix(aggregatorURL, "https://") {
+		aggregatorURL = "http://" + aggregatorURL
+	}
+
+	client, err := rpc.Dial(aggregatorURL)
 	if err != nil {
 		logger.Errorf("Error dialing RPC", "error", err)
+		return
 	}
 
-	params := types.PerformerData{
-		ProofOfTask:      proofOfTask,
-		Data:             "0x" + hex.EncodeToString([]byte(data)),
-		TaskDefinitionID: fmt.Sprintf("%d", taskDefinitionId),
-		PerformerAddress: performerAddress,
-		PerformerSignature: serializedSignature,
+	// Convert taskDefinitionId to integer for RPC call
+	taskDefID, err := strconv.Atoi(fmt.Sprintf("%d", taskDefinitionId))
+	if err != nil {
+		logger.Errorf("Error converting taskDefinitionId", "error", err)
+		return
 	}
 
-	response := makeRPCRequest(client, params)
+	response := makeRPCRequest(client, proofOfTask, "0x"+hex.EncodeToString([]byte(data)), taskDefID, performerAddress, serializedSignature)
 	logger.Infof("API response:", "response", response)
 }
 
-func makeRPCRequest(client *rpc.Client, params types.PerformerData) interface{} {
+func makeRPCRequest(client *rpc.Client, proofOfTask string, data string, taskDefinitionID int, performerAddress string, performerSignature string) interface{} {
 	var result interface{}
 
-	err := client.Call(&result, "sendTask", params.ProofOfTask, params.Data, params.TaskDefinitionID, params.PerformerAddress, params.PerformerSignature)
+	err := client.Call(&result, "sendTask", proofOfTask, data, taskDefinitionID, performerAddress, performerSignature)
 	if err != nil {
 		logger.Errorf("Error making RPC request", "error", err)
 	}
