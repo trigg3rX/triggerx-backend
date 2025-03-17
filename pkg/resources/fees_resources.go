@@ -192,7 +192,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	)
 
 	var NoOfAttesters int
-	var OtherFactors int
+	// var OtherFactors int
 	// Convert content size to KB for static complexity
 	contentSizeKB := float64(len(content)) / (1024)
 
@@ -204,7 +204,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	memoryUsedMB := float64(stats.MemoryUsage) / (1024 * 1024) // Convert to MB
 
 	ComputationCost := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)
-	NetworkScalingFactor := (1 + NoOfAttesters + OtherFactors)
+	NetworkScalingFactor := (1 + NoOfAttesters )
 
 	// Calculate TotalTG using the new formula
 	TotalTG := (ComputationCost * float64(NetworkScalingFactor))  + Fixedcost + TransactionSimulation
