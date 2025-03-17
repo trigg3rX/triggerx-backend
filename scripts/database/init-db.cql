@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     script_target_function text,
     
     status boolean,
-    job_cost_prediction int,
+    job_cost_prediction double,
     created_at timestamp,
     last_executed_at timestamp,
     task_ids set<bigint>

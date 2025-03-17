@@ -30,6 +30,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 			"https://app.triggerx.network",
 			"https://www.triggerx.network",
 			"http://localhost:3000",
+			"http://localhost:3001",
 			"https://data.triggerx.network",
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
@@ -57,7 +58,7 @@ func (s *Server) routes() {
 	handler := handlers.NewHandler(s.db, s.logger)
 
 	api := s.router.PathPrefix("/api").Subrouter()
-	
+
 	// User routes
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
 
@@ -67,7 +68,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
 	api.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
-	
+
 	// // Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")

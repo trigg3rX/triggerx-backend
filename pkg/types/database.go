@@ -50,7 +50,7 @@ type JobData struct {
 
 	// Status Values
 	Status            bool      `json:"status"`
-	JobCostPrediction float64       `json:"job_cost_prediction"`
+	JobCostPrediction float64   `json:"job_cost_prediction"`
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	TaskIDs           []int64   `json:"task_ids"`
