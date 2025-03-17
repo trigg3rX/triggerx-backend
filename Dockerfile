@@ -4,7 +4,6 @@ FROM golang:1.23-alpine AS builder
 # Set the working directory inside the container
 WORKDIR /app
 
-
 # Copy go.mod and go.sum files
 COPY go.mod go.sum ./
 
@@ -22,10 +21,13 @@ RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o keeper-execution ./cmd/keeper
 
 # Use a minimal alpine image for the final stage
-FROM alpine:3.18
+FROM golang:1.23-alpine
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates for HTTPS requests and npm for othentic-cli
+RUN apk --no-cache add ca-certificates nodejs npm
+
+# Install othentic-cli globally
+RUN npm i -g @othentic/othentic-cli
 
 # Set working directory
 WORKDIR /root/
@@ -35,6 +37,7 @@ COPY --from=builder /app/keeper-execution .
 
 COPY .env .env
 
+COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
 # Expose the port the service runs on
 EXPOSE 9005
 
@@ -42,5 +45,12 @@ EXPOSE 9005
 ENV GIN_MODE=release
 ENV LOG_LEVEL=info
 
-# Run the binary
-CMD ["./keeper-execution"]
+# Disable SSL verification for HTTP client
+ENV GODEBUG=http2client=0
+ENV HTTPS_PROXY=""
+ENV HTTP_PROXY=""
+
+# Run the startup script
+
+CMD ["sh", "./start-keeper.sh"]
+# CMD ["sleep", "7200"]

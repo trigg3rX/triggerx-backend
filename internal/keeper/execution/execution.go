@@ -102,7 +102,7 @@ func ExecuteTask(c *gin.Context) {
 	logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
 
 	// Create ethClient using config
-	ethClient, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
+	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
 	if err != nil {
 		logger.Errorf("Failed to connect to Ethereum client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Ethereum network"})
