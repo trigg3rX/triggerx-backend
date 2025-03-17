@@ -33,6 +33,13 @@ func (krw *keeperResponseWrapper) GetData() []byte {
 	return krw.Data
 }
 
+func TestAPI(c *gin.Context) {
+	logger.Info("Hello Mic testing 1 2 3 ................")
+
+	var resp = "Hello"
+	c.Data(http.StatusOK, "application/octet-stream", []byte(resp))
+}
+
 // ExecuteTask is the main handler for executing keeper tasks. It:
 // 1. Validates and processes the incoming job request
 // 2. Executes the job and generates execution proof
@@ -95,7 +102,7 @@ func ExecuteTask(c *gin.Context) {
 	logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
 
 	// Create ethClient using config
-	ethClient, err := ethclient.Dial(config.EthRPCUrl)
+	ethClient, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
 	if err != nil {
 		logger.Errorf("Failed to connect to Ethereum client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Ethereum network"})

@@ -36,7 +36,7 @@ COPY --from=builder /app/keeper-execution .
 COPY .env .env
 
 # Expose the port the service runs on
-EXPOSE 8080
+EXPOSE 9005
 
 # Set environment variables (customize as needed)
 ENV GIN_MODE=release

@@ -32,6 +32,7 @@ func main() {
 	router.Use(gin.Logger())
 	router.POST("/task/execute", execution.ExecuteTask)
 	router.POST("/task/validate", validation.ValidateTask)
+	router.POST("/test", execution.TestAPI)
 
 	// Add health endpoint for keeper verification
 	router.GET("/health", func(c *gin.Context) {
