@@ -31,11 +31,11 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
         INSERT INTO triggerx.keeper_data (
             keeper_id, keeper_address, registered_tx, 
             rewards_address, 
-            consensus_keys, no_exctask, keeper_points
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            consensus_keys, no_exctask, keeper_points, status, verified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		currentKeeperID, keeperData.KeeperAddress, keeperData.RegisteredTx,
 		keeperData.RewardsAddress,
-		keeperData.ConsensusKeys, 0, 0).Exec(); err != nil {
+		keeperData.ConsensusKeys, 0, 0, true, true).Exec(); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
