@@ -2,13 +2,16 @@ package registrar
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
@@ -287,9 +290,29 @@ func ManageSubscriptions(
 				logger.Info("Data: <empty>")
 			}
 
+			///====================================================================
+
 			// Log transaction details
 			logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
 			logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
+			tx, isPending, err := ethWsClient.TransactionByHash(context.Background(), event.Raw.TxHash)
+			if err != nil {
+				logger.Error(fmt.Sprintf("Failed to fetch transaction: %v", err))
+				return
+			}
+			if isPending {
+				logger.Info("Transaction is pending.")
+			}
+
+			// Decode the input data to extract performer address and operator IDs
+			performerAddress, operatorIDs, err := decodeTaskInputData(tx.Data())
+			if err != nil {
+				logger.Error(fmt.Sprintf("Failed to decode input data: %v", err))
+				return
+			}
+
+			logger.Info(fmt.Sprintf("Performer Address: %s", performerAddress.Hex()))
+			logger.Info(fmt.Sprintf("Operator IDs: %v", operatorIDs))
 
 		// Handle TaskRejected events
 		case event := <-taskRejectedCh:
@@ -543,4 +566,31 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 
 	logger.Info(fmt.Sprintf("Successfully added keeper %s to database", operatorAddress))
 	return nil
+}
+
+// Function to decode the input data of the task submission
+func decodeTaskInputData(data []byte) (common.Address, []string, error) {
+	// Define the ABI of the contract containing the submitTask function
+	const submitTaskABI = `[{"inputs":[{"internalType":"address","name":"performer","type":"address"},{"internalType":"string[]","name":"operatorIds","type":"string[]"}],"name":"submitTask","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
+
+	// Parse the ABI
+	parsedABI, err := abi.JSON(strings.NewReader(submitTaskABI))
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to parse ABI: %v", err)
+	}
+
+	// Variables to hold the decoded values
+	var performerAddress common.Address
+	var operatorIDs []string
+
+	// Decode the input data
+	err = parsedABI.UnpackIntoInterface(&struct {
+		Performer   *common.Address
+		OperatorIds *[]string
+	}{&performerAddress, &operatorIDs}, "submitTask", data)
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("failed to unpack input data: %v", err)
+	}
+
+	return performerAddress, operatorIDs, nil
 }
