@@ -1,8 +1,7 @@
 #!/bin/bash
 
-
 # Delay in ms for the aggregator to wait before submitting the task to the EigenLayer
-DELAY=1000
+DELAY=10000
 
 # Sync interval in ms for the aggregator to run internal tasks
 SYNC_INTERVAL=7200000
@@ -13,11 +12,10 @@ METRICS_PORT=6060
 # Metrics export url
 METRICS_EXPORT_URL=
 
-# Persistent Storage Path
-DATA_DIR_PATH=/home/sky/trigg3rX/triggerx-othentic/data/p2p
-
 othentic-cli node aggregator \
     --json-rpc \
+    --json-rpc.port $AGGREGATOR_RPC_PORT \
+    --p2p.port $AGGREGATOR_P2P_PORT \
     --internal-tasks \
     --metrics \
     --delay $DELAY \

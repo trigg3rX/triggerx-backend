@@ -1,6 +1,7 @@
 package database
 
 import (
+    "os"
     "time"
 )
 
@@ -14,7 +15,7 @@ type Config struct {
 
 func NewConfig() *Config {
     return &Config{
-        Hosts:       []string{"localhost:9042"},
+        Hosts:       []string{"localhost:" + os.Getenv("DATABASE_DOCKER_PORT")},
         Keyspace:    "triggerx",
         Timeout:     time.Second * 30,
         Retries:     5,

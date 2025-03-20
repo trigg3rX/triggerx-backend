@@ -75,7 +75,7 @@ func main() {
 
 	// Signal server is ready
 	close(ready)
-	logger.Info("Manager node is READY")
+	logger.Infof("Manager node is READY on port %s...", manager.ManagerRPCPort)
 
 	// Handle shutdown signals
 	shutdown := make(chan os.Signal, 1)

@@ -254,9 +254,8 @@ func (s *JobScheduler) SendDataToDatabase(route string, callType int, data inter
 	}
 
 	databaseIPAddress := os.Getenv("DATABASE_IP_ADDRESS")
-	databasePort := os.Getenv("DATABASE_PORT")
 
-	databaseURL := fmt.Sprintf("http://%s:%s/%s", databaseIPAddress, databasePort, route)
+	databaseURL := fmt.Sprintf("http://%s/%s", databaseIPAddress, route)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {

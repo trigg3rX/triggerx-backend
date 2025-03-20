@@ -1,9 +1,9 @@
 services:
   scylla:
     image: scylladb/scylla
-    container_name: triggerx-scylla
+    container_name: triggerx-scylla-dev
     ports:
-      - "9042:9042"
+      - "${DATABASE_DOCKER_PORT}:9042"
     volumes:
       - scylla_data:/var/lib/scylla
     command: --smp 1 --memory 1024M --overprovisioned 1

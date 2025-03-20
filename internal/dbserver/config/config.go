@@ -12,7 +12,6 @@ var (
 	logger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
 
 	ManagerIPAddress           string
-	DatabaseIPAddress          string
 	DatabasePort             string
 )
 
@@ -23,10 +22,9 @@ func Init() {
 	}
 
 	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
-	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 	DatabasePort = os.Getenv("DATABASE_RPC_PORT")
 	
-	if ManagerIPAddress == "" || DatabaseIPAddress == "" || DatabasePort == "" {
+	if ManagerIPAddress == "" || DatabasePort == "" {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
 

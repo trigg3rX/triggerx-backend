@@ -24,7 +24,6 @@ var (
 	DeployerPrivateKey string
 
 	ManagerRPCPort    string
-	ManagerIPAddress  string
 	DatabaseIPAddress string
 )
 
@@ -46,10 +45,9 @@ func Init() {
 	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
 	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
 	ManagerRPCPort = os.Getenv("MANAGER_RPC_PORT")
-	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
 	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerIPAddress == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" {
+	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
