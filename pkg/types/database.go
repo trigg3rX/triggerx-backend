@@ -6,98 +6,98 @@ import (
 )
 
 type UserData struct {
-	UserID         int64     `json:"user_id"`
-	UserAddress    string    `json:"user_address"`
+	// Fixed Values
+	UserID      int64     `json:"user_id"`
+	UserAddress string    `json:"user_address"`
+	CreatedAt   time.Time `json:"created_at"`
+
+	// Active Values
 	JobIDs         []int64   `json:"job_ids"`
-	StakeAmount    *big.Int  `json:"stake_amount"`
-	AccountBalance float64   `json:"account_balance"`
-	CreatedAt      time.Time `json:"created_at"`
+	AccountBalance *big.Int  `json:"account_balance"` // Balance in Wei (ETH)
+	TokenBalance   *big.Int  `json:"token_balance"`   // Balance in Wei (ETH)
 	LastUpdatedAt  time.Time `json:"last_updated_at"`
 }
 
 type JobData struct {
-	JobID             int64     `json:"job_id"`
-	JobType           int       `json:"jobType"`
-	UserID            int64     `json:"user_id"`
-	UserAddress       string    `json:"user_address"`
-	ChainID           int       `json:"chain_id"`
-	TimeFrame         int64     `json:"time_frame"`
-	TimeInterval      int       `json:"time_interval"`
-	ContractAddress   string    `json:"contract_address"`
-	TargetFunction    string    `json:"target_function"`
-	ArgType           int       `json:"arg_type"`
-	Arguments         []string  `json:"arguments"`
+	// Fixed Values
+	JobID            int64 `json:"job_id"`
+	TaskDefinitionID int   `json:"task_definition_id"`
+	UserID           int64 `json:"user_id"`
+	Priority         int   `json:"priority"` // Defines BaseFee for Keepers
+	Security         int   `json:"security"` // Defines VotingPower for Aggregator
+	LinkJobID        int64 `json:"link_job_id"`
+	ChainStatus      int   `json:"chain_status"` // 0 = Chain Head, 1 = Chain Block
+
+	// Can be Updated By User
+	TimeFrame int64 `json:"time_frame"`
+	Recurring bool  `json:"recurring"` // Only True -> False is allowed
+
+	// Trigger Values
+	TimeInterval           int64  `json:"time_interval"`
+	TriggerChainID         string `json:"trigger_chain_id"`
+	TriggerContractAddress string `json:"trigger_contract_address"`
+	TriggerEvent           string `json:"trigger_event"`
+	ScriptIPFSUrl          string `json:"script_ipfs_url"`
+	ScriptTriggerFunction  string `json:"script_trigger_function"`
+
+	// Action Values
+	TargetChainID         string   `json:"target_chain_id"`
+	TargetContractAddress string   `json:"target_contract_address"`
+	TargetFunction        string   `json:"target_function"`
+	ArgType               int      `json:"arg_type"`
+	Arguments             []string `json:"arguments"`
+	ScriptTargetFunction  string   `json:"script_target_function"`
+
+	// Status Values
 	Status            bool      `json:"status"`
-	JobCostPrediction int       `json:"job_cost_prediction"`
-	ScriptFunction    string    `json:"script_function"`
-	ScriptIpfsUrl     string    `json:"script_ipfs_url"`
-	TimeCheck         time.Time `json:"time_check"`
+	JobCostPrediction float64   `json:"job_cost_prediction"`
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
-	UserBalance       float64   `json:"user_balance"`
+	TaskIDs           []int64   `json:"task_ids"`
 }
 
 type TaskData struct {
-	TaskID              int64   `json:"task_id"`
-	JobID               int64   `json:"job_id"`
-	TaskNo              int     `json:"task_no"`
-	QuorumID            int64   `json:"quorum_id"`
-	QuorumNumber        int     `json:"quorum_number"`
-	QuorumThreshold     float64 `json:"quorum_threshold"`
-	TaskCreatedBlock    int64   `json:"task_created_block"`
-	TaskCreatedTxHash   string  `json:"task_created_tx_hash"`
-	TaskRespondedBlock  int64   `json:"task_responded_block"`
-	TaskRespondedTxHash string  `json:"task_responded_tx_hash"`
-	TaskHash            string  `json:"task_hash"`
-	TaskResponseHash    string  `json:"task_response_hash"`
-	QuorumKeeperHash    string  `json:"quorum_keeper_hash"`
-	TaskFee             float64 `json:"task_fee"`
-}
+	// Fixed Values
+	TaskID           int64     `json:"task_id"`
+	JobID            int64     `json:"job_id"`
+	TaskDefinitionID int       `json:"task_definition_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	TaskFee          int64     `json:"task_fee"`
 
-type QuorumData struct {
-	QuorumID               int64    `json:"quorum_id"`
-	QuorumNo               int      `json:"quorum_no"`
-	QuorumCreationBlock    int64    `json:"quorum_creation_block"`
-	QuorumTerminationBlock int64    `json:"quorum_termination_block"`
-	QuorumTxHash           string   `json:"quorum_tx_hash"`
-	Keepers                []string `json:"keepers"`
-	QuorumStakeTotal       int64    `json:"quorum_stake_total"`
-	TaskIDs                []int64  `json:"task_ids"`
-	QuorumStatus           bool     `json:"quorum_status"`
-}
+	// Action Values
+	ExecutionTimestamp time.Time `json:"execution_timestamp"`
+	ExecutionTxHash    string    `json:"execution_tx_hash"`
+	TaskPerformerID    int64     `json:"task_performer_id"`
 
-type QuorumDataResponse struct {
-	QuorumID          int64    `json:"quorum_id"`
-	QuorumNo          int      `json:"quorum_no"`
-	QuorumStatus      bool     `json:"quorum_status"`
-	QuorumStakeTotal  int64    `json:"quorum_stake_total"`
-	QuorumStrength     int      `json:"quorum_strength"`
+	// ProofOfTask Values
+	ProofOfTask     string  `json:"proof_of_task"`
+	ActionDataCID   string  `json:"action_data_cid"`
+	TaskAttesterIDs []int64 `json:"task_attester_ids"`
+
+	// Contract Values
+	IsApproved           bool   `json:"is_approved"`
+	TpSignature          []byte `json:"tp_signature"`
+	TaSignature          []byte `json:"ta_signature"`
+	TaskSubmissionTxHash string `json:"task_submission_tx_hash"`
+
+	// Status Values
+	IsSuccessful bool `json:"is_successful"`
 }
 
 type KeeperData struct {
+	// Fixed Values
 	KeeperID          int64     `json:"keeper_id"`
-	WithdrawalAddress string    `json:"withdrawal_address"`
+	KeeperAddress     string    `json:"keeper_address"`
+	RegisteredTx      string    `json:"registered_tx"`
+	
+	// Active Values
+	RewardsAddress    string    `json:"rewards_address"`
 	Stakes            []float64 `json:"stakes"`
 	Strategies        []string  `json:"strategies"`
 	Verified          bool      `json:"verified"`
-	CurrentQuorumNo   int       `json:"current_quorum_no"`
-	RegisteredTx      string    `json:"registered_tx"`
 	Status            bool      `json:"status"`
-	BlsSigningKeys    []string  `json:"bls_signing_keys"`
+	ConsensusKeys     []string  `json:"consensus_keys"`
 	ConnectionAddress string    `json:"connection_address"`
-}
-
-type TaskHistory struct {
-	TaskID           int64    `json:"task_id"`
-	QuorumID         int64    `json:"quorum_id"`
-	Keepers          []string `json:"keepers"`
-	Responses        []string `json:"responses"`
-	ConsensusMethod  string   `json:"consensus_method"`
-	ValidationStatus bool     `json:"validation_status"`
-	TxHash           string   `json:"tx_hash"`
-}
-
-type PeerInfo struct {
-	ID        string `json:"id"`
-	Addresses []string `json:"addresses"`
+	NoExcTask         int       `json:"no_exctask"`
+	KeeperPoints      int64     `json:"keeper_points"`
 }

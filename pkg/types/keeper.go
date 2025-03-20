@@ -1,38 +1,58 @@
 package types
 
-type NodeConfig struct {
-	// Keeper settings
-	KeeperName               string `yaml:"keeper_name"`
-	KeeperAddress           string `yaml:"keeper_address"`
-	EcdsaPrivateKeyStorePath string `yaml:"keeper_ecdsa_keystore_path"`
-	EcdsaPassphrase         string `yaml:"keeper_ecdsa_passphrase"`
-	BlsPrivateKeyStorePath  string `yaml:"keeper_bls_keystore_path"`
-	BlsPassphrase          string `yaml:"keeper_bls_passphrase"`
+import "time"
 
-	// Network settings
-	EthRpcUrl string `yaml:"ethrpcurl"`
-	EthWsUrl  string `yaml:"ethwsurl"`
 
-	// Port Settings
-	MetricsPort int `yaml:"metrics_port"`
-	P2pPort     int `yaml:"p2p_port"`
+// Passed By Manager, Received By Keeper, before Executing Action
+type TriggerData struct {
+	TaskID               int64                  `json:"task_id"`
+	Timestamp            time.Time              `json:"timestamp"`
+	
+	LastExecuted         time.Time              `json:"last_executed"`
+	TimeInterval         int64                  `json:"time_interval"`
+	
+	TriggerTxHash        string                 `json:"trigger_tx_hash"`
+	
+	ConditionParams      map[string]interface{} `json:"condition_params"`
+}
 
-	// Connection settings
-	P2pPeerId         string `yaml:"keeper_p2p_peer_id"`
-	ConnectionAddress string `yaml:"keeper_connection_address"`
+// Created By Keeper, details about the Action
+type ActionData struct {
+	TaskID              int64                   `json:"task_id"`
+	Timestamp           time.Time               `json:"timestamp"`
+	ActionTxHash        string                  `json:"action_tx_hash"`
+	GasUsed             string                  `json:"gas_used"`
+	Status              bool                  `json:"status"`
+	IPFSDataCID         string                  `json:"ipfs_data_cid"`
+}
 
-	// Core settings
-	AvsName string `yaml:"avs_name"`
-	Version string `yaml:"version"`
+// Created By Keeper, details passed to Aggregator, submitted on chain upon successful consensus
+type PerformerData struct {
+	ProofOfTask       	string                  `json:"proof_of_task"`
+	TaskDefinitionID  	string                   `json:"task_definition_id"`
+	PerformerAddress  	string                  `json:"performer_address"`
+	PerformerSignature 	string                  `json:"performer_signature"`
+	Data              	string                  `json:"data"`
+}
 
-	// Contract addresses
-	AvsDirectoryAddress           string `yaml:"avs_directory_address"`
-	DelegationManagerAddress      string `yaml:"delegation_manager_address"`
-	StrategyManagerAddress        string `yaml:"strategy_manager_address"`
-	RegistryCoordinatorAddress    string `yaml:"registry_coordinator_address"`
-	ServiceManagerAddress         string `yaml:"service_manager_address"`
-	OperatorStateRetrieverAddress string `yaml:"operator_state_retriever"`
 
-	// Metrics settings
-	EnableMetrics bool `yaml:"enable_metrics"`
+type ProofData struct {
+	TaskID              int64                   `json:"task_id"`
+	Timestamp           time.Time               `json:"timestamp"`
+
+	ProofOfTask         string                  `json:"proof_of_task"`
+	ActionDataCID       string                  `json:"action_data_cid"`
+
+	CertificateHash     string                  `json:"certificateHash"`
+	ResponseHash        string                  `json:"responseHash"`
+}
+
+type IPFSData struct {
+	JobData 	HandleCreateJobData 		`json:"job_data"`
+	
+	TriggerData TriggerData `json:"trigger_data"`
+	
+	ActionData 	ActionData 	`json:"action_data"`
+
+	ProofData 	ProofData 	`json:"proof_data"`
 }

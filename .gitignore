@@ -1,19 +1,21 @@
 .env
 
 go.sum
-go.mod
-
-!pkg/avsinterface/abis/.gitkeep
-pkg/avsinterface/abis/*
 
 config-files/*.yaml
 release/*
 
+.keystore/*
+.cursor
+
+data/cache/*
 data/logs/*/*.log
 data/peer_registry/services_privKeys.json
 data/peer_registry/*_identity.json
 !data/logs/*/.gitkeep
 
 data/logs/*/*.log
-references/*
 cosign.key
+cosign.pub
+
+references

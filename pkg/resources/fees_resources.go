@@ -189,9 +189,10 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 		PriceperTG            = 0.0001 // Price per TG unit
 		Fixedcost             = 1      // Fixed cost in TG
 		TransactionSimulation = 1      // Weight for TransactionSimulation in TG
-		quroum_no             = 4
 	)
 
+	var NoOfAttesters int
+	// var OtherFactors int
 	// Convert content size to KB for static complexity
 	contentSizeKB := float64(len(content)) / (1024)
 
@@ -202,8 +203,11 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	execTimeInSeconds := executionTime.Seconds()
 	memoryUsedMB := float64(stats.MemoryUsage) / (1024 * 1024) // Convert to MB
 
+	ComputationCost := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)
+	NetworkScalingFactor := (1 + NoOfAttesters )
+
 	// Calculate TotalTG using the new formula
-	TotalTG := ((execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)*quroum_no) + Fixedcost + TransactionSimulation
+	TotalTG := (ComputationCost * float64(NetworkScalingFactor))  + Fixedcost + TransactionSimulation
 
 	// Calculate total fee based on TG units
 	totalFee := TotalTG * PriceperTG
@@ -437,7 +441,7 @@ func run() error {
 		return fmt.Errorf("error reading file: %w", err)
 	}
 	fmt.Printf("File content length: %d bytes\n", len(content))
-	
+
 	// Move the defer after the error check to ensure cleanup
 	defer func() {
 		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {

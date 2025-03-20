@@ -26,10 +26,9 @@ type ProcessName string
 
 const (
 	ManagerProcess   ProcessName = "manager"
-	QuorumProcess    ProcessName = "quorum"
-	ValidatorProcess ProcessName = "validator"
 	DatabaseProcess  ProcessName = "database"
 	KeeperProcess    ProcessName = "keeper"
+	RegistrarProcess ProcessName = "registrar"
 )
 
 type ZapLogger struct {
