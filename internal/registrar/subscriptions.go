@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	
 )
 
 // Setup subscription for OperatorRegistered events
@@ -339,6 +340,64 @@ func ManageSubscriptions(
 			logger.Info(fmt.Sprintf("TP Signature: %x", tpSignature))
 			logger.Info(fmt.Sprintf("TA Signature: %x", taSignature))
 			logger.Info(fmt.Sprintf("Attesters IDs: %v", attestersIds))
+
+
+			// Get task fee from task_data table
+			var taskFee int64
+			if err := db.Session().Query(`
+				SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+				taskID).Scan(&taskFee); err != nil {
+				logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
+				return
+			}
+
+			// Add points for the performer
+			var performerPoints int64
+			if err := db.Session().Query(`
+				SELECT keeper_points FROM triggerx.keeper_data 
+				WHERE keeper_address = ? ALLOW FILTERING`, 
+				performerAddress.Hex()).Scan(&performerPoints); err != nil {
+				logger.Error(fmt.Sprintf("Failed to get performer points: %v", err))
+				return
+			}
+
+			newPerformerPoints := performerPoints + taskFee
+
+			if err := db.Session().Query(`
+				UPDATE triggerx.keeper_data 
+				SET keeper_points = ? 
+				WHERE keeper_address = ?`,
+				newPerformerPoints, performerAddress.Hex()).Exec(); err != nil {
+				logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
+				return
+			}
+
+			logger.Info(fmt.Sprintf("Added %d points to performer %s", taskFee, performerAddress.Hex()))
+
+			// Add points for each attester
+			for _, attesterId := range attestersIds {
+				var attesterPoints int64
+				if err := db.Session().Query(`
+					SELECT keeper_points FROM triggerx.keeper_data 
+					WHERE keeper_id = ?`, 
+					attesterId).Scan(&attesterPoints); err != nil {
+					logger.Error(fmt.Sprintf("Failed to get attester points for ID %d: %v", attesterId, err))
+					continue
+				}
+
+				newAttesterPoints := attesterPoints + taskFee
+
+				if err := db.Session().Query(`
+					UPDATE triggerx.keeper_data 
+					SET keeper_points = ? 
+					WHERE keeper_id = ?`,
+					newAttesterPoints, attesterId).Exec(); err != nil {
+					logger.Error(fmt.Sprintf("Failed to update attester points for ID %d: %v", attesterId, err))
+					continue
+				}
+
+				logger.Info(fmt.Sprintf("Added %d points to attester ID %d", taskFee, attesterId))
+			}
 
 		// Handle TaskRejected events
 		case event := <-taskRejectedCh:
