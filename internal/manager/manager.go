@@ -3,6 +3,7 @@ package manager
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -138,7 +139,7 @@ func HandleKeeperConnectEvent(c *gin.Context) {
 		return
 	}
 
-	url := "http://localhost:8080/api/keepers/connection"
+	url := fmt.Sprintf("%s/api/keepers/connection", DatabaseIPAddress)
 
 	jsonData, err := json.Marshal(keeperData)
 	if err != nil {
@@ -173,5 +174,6 @@ func HandleKeeperConnectEvent(c *gin.Context) {
 	}
 
 	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
+	logger.Infof("Connection Address: %s", keeperData.ConnectionAddress)
 	c.JSON(http.StatusOK, response)
 }

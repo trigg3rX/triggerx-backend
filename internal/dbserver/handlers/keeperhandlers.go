@@ -112,7 +112,7 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
-	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address, connection_address FROM triggerx.keeper_data`).Iter()
+	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address, connection_address FROM triggerx.keeper_data WHERE connection_address IS NOT NULL`).Iter()
 
 	var performer types.GetPerformerData
 	for iter.Scan(
