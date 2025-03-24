@@ -138,7 +138,7 @@ func HandleKeeperConnectEvent(c *gin.Context) {
 		return
 	}
 
-	url := "http://localhost:8080/api/keepers/connection"
+	url := "https://data.triggerx.network/api/keepers/connection"
 
 	jsonData, err := json.Marshal(keeperData)
 	if err != nil {

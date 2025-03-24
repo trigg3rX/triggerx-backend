@@ -155,7 +155,7 @@ SELECTED_JOB_COST=${JOB_COST_PREDICTIONS[$RANDOM_COST_INDEX]}
 #   ]"
 
 # Create 1 new job
-curl -X POST http://localhost:8080/api/jobs \
+curl -X POST https://data.triggerx.network/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {

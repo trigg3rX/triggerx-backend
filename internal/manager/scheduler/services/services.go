@@ -84,7 +84,7 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 }
 
 func GetPerformerData() (types.GetPerformerData, error) {
-	url := "https://data.triggerx.network/keepers/performers"
+	url := "https://data.triggerx.network/api/keepers/performers"
 	// url := "http://localhost:8080/api/keepers/performers"
 
 	logger.Debugf("Fetching performer data from %s", url)
@@ -149,7 +149,7 @@ func GetPerformerData() (types.GetPerformerData, error) {
 }
 
 func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
-	url := fmt.Sprintf("http://localhost:8080/api/keepers/jobs/%d", jobID)
+	url := fmt.Sprintf("https://data.triggerx.network/api/keepers/jobs/%d", jobID)
 
 	logger.Debugf("Fetching job details for job %d from %s", jobID, url)
 
@@ -217,8 +217,8 @@ func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
 }
 
 func CreateTaskData(taskData *types.CreateTaskData) (int64, bool, error) {
-	// url := "https://data.triggerx.network/keepers/tasks"
-	url := "http://localhost:8080/api/tasks"
+	url := "https://data.triggerx.network/api/tasks"
+	// url := "http://localhost:8080/api/tasks"
 
 	logger.Debugf("Creating task for job %d with performer %d", taskData.JobID, taskData.TaskPerformerID)
 
