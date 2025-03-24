@@ -36,7 +36,7 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 	}
 
 	// Add the task execution endpoint to the connection address
-	connectionAddress = connectionAddress + "/task/execute"
+	// connectionAddress = connectionAddress
 	logger.Debugf("Final endpoint URL: %s", connectionAddress)
 
 	client := &http.Client{
