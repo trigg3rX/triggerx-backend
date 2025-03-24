@@ -45,6 +45,9 @@ start-db-server: ## Start the Database Server
 db-shell: ## Open CQL shell
 	docker exec -it triggerx-scylla cqlsh
 
+db-backup:  ##backup data
+	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_prod_backup triggerx -cf keeper_data
+
 ############################ KEEPER NODE ####################################
 
 run-keeper: ## Build the keeper node

@@ -16,9 +16,32 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
 	shell "github.com/ipfs/go-ipfs-api"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
-	
 )
+
+// Add these variables at the package level
+var (
+	db *database.Connection
+)
+
+// Add this init function
+func init() {
+	// Create database config
+	dbConfig := database.NewConfig()
+
+	// Create new database connection
+	var err error
+	db, err = database.NewConnection(dbConfig)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Failed to connect to database: %v", err))
+	}
+}
+
+// Add this function to set the database connection
+func SetDatabaseConnection(conn *database.Connection) {
+	db = conn
+}
 
 // Setup subscription for OperatorRegistered events
 func SetupRegisteredSubscription(
@@ -341,62 +364,10 @@ func ManageSubscriptions(
 			logger.Info(fmt.Sprintf("TA Signature: %x", taSignature))
 			logger.Info(fmt.Sprintf("Attesters IDs: %v", attestersIds))
 
-
-			// Get task fee from task_data table
-			var taskFee int64
-			if err := db.Session().Query(`
-				SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
-				taskID).Scan(&taskFee); err != nil {
-				logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
+			// Replace the database update section with this single call
+			if err := updatePointsInDatabase(taskID, performerAddress, attestersIds); err != nil {
+				logger.Error(fmt.Sprintf("Failed to update points in database: %v", err))
 				return
-			}
-
-			// Add points for the performer
-			var performerPoints int64
-			if err := db.Session().Query(`
-				SELECT keeper_points FROM triggerx.keeper_data 
-				WHERE keeper_address = ? ALLOW FILTERING`, 
-				performerAddress.Hex()).Scan(&performerPoints); err != nil {
-				logger.Error(fmt.Sprintf("Failed to get performer points: %v", err))
-				return
-			}
-
-			newPerformerPoints := performerPoints + taskFee
-
-			if err := db.Session().Query(`
-				UPDATE triggerx.keeper_data 
-				SET keeper_points = ? 
-				WHERE keeper_address = ?`,
-				newPerformerPoints, performerAddress.Hex()).Exec(); err != nil {
-				logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
-				return
-			}
-
-			logger.Info(fmt.Sprintf("Added %d points to performer %s", taskFee, performerAddress.Hex()))
-
-			// Add points for each attester
-			for _, attesterId := range attestersIds {
-				var attesterPoints int64
-				if err := db.Session().Query(`
-					SELECT keeper_points FROM triggerx.keeper_data 
-					WHERE keeper_id = ?`, 
-					attesterId).Scan(&attesterPoints); err != nil {
-					logger.Error(fmt.Sprintf("Failed to get attester points for ID %d: %v", attesterId, err))
-					continue
-				}
-
-				newAttesterPoints := attesterPoints + taskFee
-
-				if err := db.Session().Query(`
-					UPDATE triggerx.keeper_data 
-					SET keeper_points = ? 
-					WHERE keeper_id = ?`,
-					newAttesterPoints, attesterId).Exec(); err != nil {
-					logger.Error(fmt.Sprintf("Failed to update attester points for ID %d: %v", attesterId, err))
-					continue
-				}
-
-				logger.Info(fmt.Sprintf("Added %d points to attester ID %d", taskFee, attesterId))
 			}
 
 		// Handle TaskRejected events
@@ -719,4 +690,83 @@ func fetchDataFromCID(cid string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// New function to handle database updates
+func updatePointsInDatabase(taskID int64, performerAddress common.Address, attestersIds []string) error {
+	// Get task fee from task_data table
+	var taskFee int64
+	if err := db.Session().Query(`
+		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+		taskID).Scan(&taskFee); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
+		return err
+	}
+
+	// Update performer points
+	if err := updatePerformerPoints(performerAddress.Hex(), taskFee); err != nil {
+		return err
+	}
+
+	// Update attester points
+	for _, attesterId := range attestersIds {
+		if err := updateAttesterPoints(attesterId, taskFee); err != nil {
+			logger.Error(fmt.Sprintf("Failed to update points for attester %s: %v", attesterId, err))
+			continue
+		}
+	}
+
+	return nil
+}
+
+// Helper function to update performer points
+func updatePerformerPoints(performerAddress string, taskFee int64) error {
+	var performerPoints int64
+	if err := db.Session().Query(`
+		SELECT keeper_points FROM triggerx.keeper_data 
+		WHERE keeper_address = ? ALLOW FILTERING`,
+		performerAddress).Scan(&performerPoints); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get performer points: %v", err))
+		return err
+	}
+
+	newPerformerPoints := performerPoints + taskFee
+
+	if err := db.Session().Query(`
+		UPDATE triggerx.keeper_data 
+		SET keeper_points = ? 
+		WHERE keeper_address = ?`,
+		newPerformerPoints, performerAddress).Exec(); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
+		return err
+	}
+
+	logger.Info(fmt.Sprintf("Added %d points to performer %s", taskFee, performerAddress))
+	return nil
+}
+
+// Helper function to update attester points
+func updateAttesterPoints(attesterId string, taskFee int64) error {
+	var attesterPoints int64
+	if err := db.Session().Query(`
+		SELECT keeper_points FROM triggerx.keeper_data 
+		WHERE keeper_id = ?`,
+		attesterId).Scan(&attesterPoints); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get attester points for ID %s: %v", attesterId, err))
+		return err
+	}
+
+	newAttesterPoints := attesterPoints + taskFee
+
+	if err := db.Session().Query(`
+		UPDATE triggerx.keeper_data 
+		SET keeper_points = ? 
+		WHERE keeper_id = ?`,
+		newAttesterPoints, attesterId).Exec(); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update attester points for ID %s: %v", attesterId, err))
+		return err
+	}
+
+	logger.Info(fmt.Sprintf("Added %d points to attester ID %s", taskFee, attesterId))
+	return nil
 }

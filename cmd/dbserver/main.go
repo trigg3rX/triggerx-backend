@@ -5,6 +5,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -25,6 +26,9 @@ func main() {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer conn.Close()
+
+	// Set the database connection for the registrar package
+	registrar.SetDatabaseConnection(conn)
 
 	// Initialize and start HTTP server with database connection
 	server := dbserver.NewServer(conn, logging.DatabaseProcess)
