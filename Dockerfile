@@ -35,7 +35,7 @@ WORKDIR /root/
 # Copy the built binary from the builder stage
 COPY --from=builder /app/keeper-execution .
 
-COPY .env .env
+RUN touch .env
 
 COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
 # Expose the port the service runs on

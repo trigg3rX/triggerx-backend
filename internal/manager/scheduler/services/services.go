@@ -84,8 +84,8 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 }
 
 func GetPerformerData() (types.GetPerformerData, error) {
-	// url := "https://data.triggerx.network/keepers/performers"
-	url := "http://localhost:8080/api/keepers/performers"
+	url := "https://data.triggerx.network/keepers/performers"
+	// url := "http://localhost:8080/api/keepers/performers"
 
 	logger.Debugf("Fetching performer data from %s", url)
 
