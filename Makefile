@@ -25,12 +25,6 @@ start-manager: ## Start the task manager
 start-aggregator: ## Start the Aggregator
 	./scripts/services/start-aggregator.sh
 
-start-attester: ## Start the Attester
-	./scripts/services/start-attester.sh
-
-start-keeper: ## Start the keeper node
-	./scripts/services/start-performer.sh
-
 ############################# DATABASE #############################
 
 db-setup: ## Setup ScyllaDB container
@@ -43,7 +37,7 @@ start-db-server: ## Start the Database Server
 	./scripts/database/start-dbserver.sh
 
 db-shell: ## Open CQL shell
-	docker exec -it triggerx-scylla cqlsh
+	docker exec -it triggerx-scylla-dev cqlsh
 
 db-backup:  ##backup data
 	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_prod_backup triggerx -cf keeper_data

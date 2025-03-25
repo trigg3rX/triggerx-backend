@@ -3,55 +3,28 @@ package manager
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 
+	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var (
-	logger       logging.Logger
+	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	jobScheduler *scheduler.JobScheduler
-
-	EtherscanApiKey string
-	AlchemyApiKey   string
-
-	DeployerPrivateKey string
-
-	ManagerRPCPort    string
-	DatabaseIPAddress string
 )
 
-func Init() {
-	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
-
-	// var err error
-	err := godotenv.Load()
-	if err != nil {
-		logger.Fatal("Error loading .env file")
-	}
-
+func JobSchedulerInit() {
+	var err error
 	jobScheduler, err = scheduler.NewJobScheduler(logger)
 	if err != nil {
 		logger.Fatalf("Failed to initialize job scheduler: %v", err)
 	}
-
-	EtherscanApiKey = os.Getenv("ETHERSCAN_API_KEY")
-	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
-	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
-	ManagerRPCPort = os.Getenv("MANAGER_RPC_PORT")
-	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
-
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" {
-		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
-	}
-
-	gin.SetMode(gin.ReleaseMode)
 }
 
 func HandleCreateJobEvent(c *gin.Context) {
@@ -138,7 +111,7 @@ func HandleKeeperConnectEvent(c *gin.Context) {
 		return
 	}
 
-	url := "https://data.triggerx.network/api/keepers/connection"
+	url := fmt.Sprintf("%s/api/keepers/connection", config.DatabaseIPAddress)
 
 	jsonData, err := json.Marshal(keeperData)
 	if err != nil {
@@ -168,7 +141,7 @@ func HandleKeeperConnectEvent(c *gin.Context) {
 	var response types.UpdateKeeperConnectionDataResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		logger.Error("Failed to decode response", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})	
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})
 		return
 	}
 
