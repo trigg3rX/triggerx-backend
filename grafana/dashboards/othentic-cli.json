@@ -1138,7 +1138,8 @@
               "type": "prometheus",
               "uid": "prometheus"
             },
-            "expr": "triggerx_total_keepers",
+            "expr": "triggerx_total_keepers{instance=~\"$instance\"}",
+            "interval": "$interval",
             "refId": "A"
           }
         ],
@@ -1228,7 +1229,8 @@
               "type": "prometheus",
               "uid": "prometheus"
             },
-            "expr": "triggerx_keeper_points{keeper_id=\"$keeper_id\"}",
+            "expr": "triggerx_keeper_points{keeper_id=\"$keeper_id\", instance=~\"$instance\"}",
+            "interval": "$interval",
             "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
             "refId": "A"
           }
@@ -1319,7 +1321,8 @@
               "type": "prometheus",
               "uid": "prometheus"
             },
-            "expr": "triggerx_keeper_task_count{keeper_id=\"$keeper_id\"}",
+            "expr": "triggerx_keeper_task_count{keeper_id=\"$keeper_id\", instance=~\"$instance\"}",
+            "interval": "$interval",
             "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
             "refId": "A"
           }
@@ -1379,7 +1382,8 @@
               "type": "prometheus",
               "uid": "prometheus"
             },
-            "expr": "triggerx_keeper_points{keeper_id=\"$keeper_id\"}",
+            "expr": "triggerx_keeper_points{keeper_id=\"$keeper_id\", instance=~\"$instance\"}",
+            "interval": "$interval",
             "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
             "refId": "A"
           }
@@ -1439,7 +1443,8 @@
               "type": "prometheus",
               "uid": "prometheus"
             },
-            "expr": "triggerx_keeper_task_count{keeper_id=\"$keeper_id\"}",
+            "expr": "triggerx_keeper_task_count{keeper_id=\"$keeper_id\", instance=~\"$instance\"}",
+            "interval": "$interval",
             "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
             "refId": "A"
           }

@@ -43,7 +43,7 @@ start-db-server: ## Start the Database Server
 	./scripts/database/start-dbserver.sh
 
 db-shell: ## Open CQL shell
-	docker exec -it triggerx-scylla cqlsh
+	docker exec -it triggerx-scylla-dev cqlsh
 
 db-backup:  ##backup data
 	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_prod_backup triggerx -cf keeper_data
