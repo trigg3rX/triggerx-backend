@@ -79,6 +79,7 @@ type CreateKeeperData struct {
 type GoogleFormCreateKeeperData struct {
 	KeeperAddress  string `json:"keeper_address"`
 	RewardsAddress string `json:"rewards_address"`
+	KeeperName     string `json:"keeper_name"`
 }
 
 type UpdateKeeperConnectionData struct {

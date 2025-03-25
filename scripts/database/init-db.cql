@@ -97,5 +97,6 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     consensus_keys list<text>,
     connection_address text,
     no_exctask int,
-    keeper_points bigint
+    keeper_points bigint,
+    keeper_name text
 );
