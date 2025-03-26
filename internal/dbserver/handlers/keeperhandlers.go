@@ -149,15 +149,35 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetAllKeepers] Retrieving all keepers")
 	var keepers []types.KeeperData
-	iter := h.db.Session().Query(`SELECT * FROM triggerx.keeper_data`).Iter()
+
+	// Explicitly name columns instead of using SELECT *
+	iter := h.db.Session().Query(`
+		SELECT keeper_id, keeper_address, registered_tx, 
+		       rewards_address, stakes, strategies,
+		       verified, status, consensus_keys,
+		       connection_address, no_exctask, keeper_points 
+		FROM triggerx.keeper_data`).Iter()
 
 	var keeper types.KeeperData
+	var tmpConsensusKeys, tmpStrategies []string
+	var tmpStakes []float64
+
 	for iter.Scan(
-		&keeper.KeeperID, &keeper.KeeperAddress,
-		&keeper.RewardsAddress, &keeper.Stakes, &keeper.Strategies,
-		&keeper.Verified, &keeper.RegisteredTx, &keeper.Status,
-		&keeper.ConsensusKeys, &keeper.ConnectionAddress,
-		&keeper.NoExcTask, &keeper.KeeperPoints) {
+		&keeper.KeeperID, &keeper.KeeperAddress, &keeper.RegisteredTx,
+		&keeper.RewardsAddress, &tmpStakes, &tmpStrategies,
+		&keeper.Verified, &keeper.Status, &tmpConsensusKeys,
+		&keeper.ConnectionAddress, &keeper.NoExcTask, &keeper.KeeperPoints) {
+
+		// Make deep copies of the slices to avoid reference issues
+		keeper.Stakes = make([]float64, len(tmpStakes))
+		copy(keeper.Stakes, tmpStakes)
+
+		keeper.Strategies = make([]string, len(tmpStrategies))
+		copy(keeper.Strategies, tmpStrategies)
+
+		keeper.ConsensusKeys = make([]string, len(tmpConsensusKeys))
+		copy(keeper.ConsensusKeys, tmpConsensusKeys)
+
 		keepers = append(keepers, keeper)
 	}
 
@@ -167,8 +187,21 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if keepers == nil {
+		keepers = []types.KeeperData{}
+	}
+
+	jsonData, err := json.Marshal(keepers)
+	if err != nil {
+		h.logger.Errorf("[GetAllKeepers] Error marshaling keepers: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	h.logger.Infof("[GetAllKeepers] Successfully retrieved %d keepers", len(keepers))
-	json.NewEncoder(w).Encode(keepers)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }
 
 func (h *Handler) UpdateKeeperConnectionData(w http.ResponseWriter, r *http.Request) {
