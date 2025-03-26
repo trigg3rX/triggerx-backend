@@ -48,7 +48,7 @@ func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
-	// Updated query to include tasks completed count
+	// Updated query to include tasks completed count   (user points was not there for now so took static 0 points)
 	query := `SELECT 
                 u.user_id, 
                 u.user_address,
@@ -58,7 +58,7 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
                  JOIN triggerx.job_data j ON t.job_id = j.job_id 
                  WHERE j.user_address = u.user_address 
                  AND t.execution_timestamp IS NOT NULL) as tasks_completed,
-                COALESCE(u.user_points, 0) as user_points
+                COALESCE(u.user_points, 0) as user_points 
               FROM triggerx.user_data u
               WHERE u.status = true
               ORDER BY u.user_points DESC`
