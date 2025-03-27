@@ -85,9 +85,9 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
 	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
 
-	api.HandleFunc("leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
-	api.HandleFunc("leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
-	
+	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
+	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
+
 	// Fees routes
 	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
 }
@@ -95,7 +95,7 @@ func (s *Server) routes() {
 func (s *Server) Start(port string) error {
 	s.logger.Infof("Starting server on port %s", port)
 
-	// Start the metrics server 
+	// Start the metrics server
 	s.metricsServer.Start()
 
 	handler := s.cors.Handler(s.router)

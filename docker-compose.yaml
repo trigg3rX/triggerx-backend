@@ -6,7 +6,7 @@ services:
       - "${DATABASE_DOCKER_PORT}:9042"
     volumes:
       - scylla_data:/var/lib/scylla
-    command: --smp 1 --memory 1024M --overprovisioned 1
+    command: --smp 1 --memory 256M --overprovisioned 1
     logging:
       driver: "json-file"
 

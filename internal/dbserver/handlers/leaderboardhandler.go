@@ -12,9 +12,8 @@ func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("[GetKeeperLeaderboard] Fetching keeper leaderboard data")
 
 	query := `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
-             FROM triggerx.keeper_data 
-             WHERE status = true 
-             ORDER BY keeper_points DESC`
+              FROM triggerx.keeper_data 
+              WHERE status = true ALLOW FILTERING`
 
 	iter := h.db.Session().Query(query).Iter()
 
@@ -48,20 +47,10 @@ func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
-	// Updated query to include tasks completed count   (user points was not there for now so took static 0 points)
-	query := `SELECT 
-                u.user_id, 
-                u.user_address,
-                (SELECT COUNT(*) FROM triggerx.job_data WHERE user_address = u.user_address) as total_jobs,
-                (SELECT COUNT(*) 
-                 FROM triggerx.task_data t 
-                 JOIN triggerx.job_data j ON t.job_id = j.job_id 
-                 WHERE j.user_address = u.user_address 
-                 AND t.execution_timestamp IS NOT NULL) as tasks_completed,
-                COALESCE(u.user_points, 0) as user_points 
-              FROM triggerx.user_data u
-              WHERE u.status = true
-              ORDER BY u.user_points DESC`
+	// CQL query to get user leaderboard data
+	query := `SELECT user_id, user_address, user_points 
+              FROM triggerx.user_data 
+              WHERE status = true ALLOW FILTERING`
 
 	iter := h.db.Session().Query(query).Iter()
 
@@ -72,10 +61,29 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	for iter.Scan(
 		&userEntry.UserID,
 		&userEntry.UserAddress,
-		&userEntry.TotalJobs,
-		&userEntry.TasksCompleted,
 		&userEntry.UserPoints,
 	) {
+		// Count total jobs for the user
+		jobCountQuery := `SELECT COUNT(*) FROM triggerx.job_data WHERE user_address = ? ALLOW FILTERING`
+		var totalJobs int
+		if err := h.db.Session().Query(jobCountQuery, userEntry.UserAddress).Scan(&totalJobs); err != nil {
+			h.logger.Errorf("[GetUserLeaderboard] Error counting jobs for user %s: %v", userEntry.UserAddress, err)
+			totalJobs = 0 // Default to 0 if there's an error
+		}
+		userEntry.TotalJobs = int64(totalJobs)
+
+		// Count tasks completed for the user
+		// Refactor this part to avoid joins
+		// You may need to fetch tasks separately or redesign your data model
+		var tasksCompleted int
+		// Example of a separate query to count tasks
+		tasksCountQuery := `SELECT COUNT(*) FROM triggerx.task_data WHERE user_address = ? AND execution_timestamp IS NOT NULL ALLOW FILTERING`
+		if err := h.db.Session().Query(tasksCountQuery, userEntry.UserAddress).Scan(&tasksCompleted); err != nil {
+			h.logger.Errorf("[GetUserLeaderboard] Error counting tasks for user %s: %v", userEntry.UserAddress, err)
+			tasksCompleted = 0 // Default to 0 if there's an error
+		}
+		userEntry.TasksCompleted = int64(tasksCompleted)
+
 		userLeaderboard = append(userLeaderboard, userEntry)
 	}
 
