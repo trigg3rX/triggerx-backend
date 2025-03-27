@@ -228,3 +228,15 @@ func SetUseColors(processName ProcessName, useColors bool) {
 		}
 	}
 }
+
+// Set default color behavior for all loggers
+func init() {
+	// Pre-populate the loggers map with default settings
+	for _, process := range []ProcessName{ManagerProcess, DatabaseProcess, KeeperProcess, RegistrarProcess} {
+		logger, _ := NewZapLogger(Development, string(process))
+		if zapLogger, ok := logger.(*ZapLogger); ok {
+			zapLogger.useColors = true
+		}
+		loggers[process] = logger
+	}
+}
