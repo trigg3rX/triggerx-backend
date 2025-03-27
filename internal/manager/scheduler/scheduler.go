@@ -113,6 +113,9 @@ func NewJobScheduler(logger logging.Logger) (*JobScheduler, error) {
 		workerCtx:      ctx,
 		workerCancel:   cancel,
 		jobChainStatus: make(map[int64]string),
+		mu:             sync.RWMutex{},
+		cacheMutex:     sync.RWMutex{},
+		chainMutex:     sync.RWMutex{},
 	}
 
 	cacheManager, err := NewCacheManager(scheduler)

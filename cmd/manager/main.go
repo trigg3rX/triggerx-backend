@@ -49,6 +49,10 @@ func main() {
 		logger.Info("Connected to aggregator successfully.")
 	}
 
+	// Initialize the job scheduler
+	manager.JobSchedulerInit()
+	logger.Info("Job scheduler initialized successfully.")
+
 	// Setup Gin router
 	router := gin.New()
 	router.Use(gin.Recovery())
