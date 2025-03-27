@@ -101,7 +101,7 @@ func ConnectToAggregator() error {
 	globalHost = &P2PHost{Host: h}
 
 	// Parse aggregator multiaddr
-	targetAddr, err := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB")
+	targetAddr, err := multiaddr.NewMultiaddr("/ip4/51.21.200.252:9002/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB")
 	if err != nil {
 		return fmt.Errorf("failed to parse aggregator address: %w", err)
 	}

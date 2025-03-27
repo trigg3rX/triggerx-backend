@@ -168,7 +168,7 @@ func HandleKeeperConnectEvent(c *gin.Context) {
 	var response types.UpdateKeeperConnectionDataResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		logger.Error("Failed to decode response", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})	
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})
 		return
 	}
 
