@@ -39,7 +39,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"status":         "healthy",
 			"keeper_address": config.KeeperAddress,
-			"timestamp":      time.Now().Unix(),
+			"timestamp":      time.Now().UTC().Format(time.RFC3339),
 		})
 	})
 

@@ -27,7 +27,7 @@ FROM golang:1.23-alpine
 RUN apk --no-cache add ca-certificates nodejs npm
 
 # Install othentic-cli globally
-RUN npm i -g @othentic/othentic-cli
+RUN npm i -g @othentic/othentic-cli@1.8.1
 
 # Set working directory
 WORKDIR /root/
@@ -51,6 +51,5 @@ ENV HTTPS_PROXY=""
 ENV HTTP_PROXY=""
 
 # Run the startup script
-
 CMD ["sh", "./start-keeper.sh"]
 # CMD ["sleep", "7200"]
