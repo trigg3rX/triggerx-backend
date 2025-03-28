@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -321,31 +322,98 @@ func ValidateTask(c *gin.Context) {
 	logger.Infof("Task Definition ID: %d", taskRequest.TaskDefinitionID)
 	logger.Infof("Performer Address: %s", taskRequest.Performer)
 
-	ipfsData, err := fetchIPFSContent(taskRequest.ProofOfTask)
+	// Decode the data if it's hex-encoded (with 0x prefix)
+	var decodedData string
+	if strings.HasPrefix(taskRequest.Data, "0x") {
+		dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
+		if err != nil {
+			logger.Errorf("Failed to hex-decode data: %v", err)
+			c.JSON(http.StatusBadRequest, ValidationResponse{
+				Data:    false,
+				Error:   true,
+				Message: fmt.Sprintf("Failed to decode hex data: %v", err),
+			})
+			return
+		}
+		decodedData = string(dataBytes)
+		logger.Infof("Decoded Data: %s", decodedData)
+	} else {
+		decodedData = taskRequest.Data
+	}
+
+	// Fetch the ActionData from IPFS using CID from the proof of task
+	ipfsContent, err := fetchIPFSContent(decodedData)
 	if err != nil {
+		logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
 			Data:    false,
 			Error:   true,
-			Message: fmt.Sprintf("Failed to fetch IPFS content: %v", err),
+			Message: fmt.Sprintf("Failed to fetch IPFS content from ProofOfTask: %v", err),
 		})
 		return
 	}
 
-	logger.Info("IPFS Data Fetched")
-	logger.Infof("IPFS Data: %s", ipfsData)
+	// Log the decoded data CID for debugging
+	logger.Infof("Data CID: %s", decodedData)
 
-	// var ipfsResp types.IPFSResponse
-	// if err := json.Unmarshal([]byte(ipfsData), &ipfsResp); err != nil {
-	//     c.JSON(http.StatusInternalServerError, ValidationResponse{
-	//         Data:    false,
-	//         Error:   true,
-	//         Message: fmt.Sprintf("Failed to parse IPFS content: %v", err),
-	//     })
-	//     return
-	// }
+	// No need to fetch the data content separately since we're already getting
+	// the complete IPFSData from the ProofOfTask content
+
+	// Parse IPFS data into IPFSData struct
+	var ipfsData jobtypes.IPFSData
+	if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
+		logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
+		c.JSON(http.StatusInternalServerError, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: fmt.Sprintf("Failed to parse IPFS content: %v", err),
+		})
+		return
+	}
+
+	// Create a job validator
+	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
+	if err != nil {
+		logger.Errorf("Failed to connect to Ethereum client: %v", err)
+		c.JSON(http.StatusInternalServerError, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: fmt.Sprintf("Failed to connect to Ethereum client: %v", err),
+		})
+		return
+	}
+	defer ethClient.Close()
+
+	jobValidator := NewJobValidator(logger, ethClient)
+
+	// Validate job based on task definition ID
+	isValid := false
+	var validationErr error
+
+	switch taskRequest.TaskDefinitionID {
+	case 1, 2: // Time-based jobs
+		isValid, validationErr = jobValidator.ValidateTimeBasedJob(&ipfsData.JobData)
+	case 3, 4: // Event-based jobs
+		isValid, validationErr = jobValidator.ValidateEventBasedJob(&ipfsData.JobData, &ipfsData)
+	case 5, 6: // Condition-based jobs
+		// For future implementation
+		isValid = true
+	default:
+		validationErr = fmt.Errorf("unsupported task definition ID: %d", taskRequest.TaskDefinitionID)
+	}
+
+	if validationErr != nil {
+		logger.Errorf("Validation error: %v", validationErr)
+		c.JSON(http.StatusOK, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: validationErr.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, ValidationResponse{
-		Data:    true,
+		Data:    isValid,
 		Error:   false,
 		Message: "",
 	})
