@@ -8,8 +8,8 @@ docker tag keeper-execution trigg3rx/keeper-execution:latest
 
 sleep 1
 
-docker login
+# docker login
 
-sleep 2
+# sleep 2
 
-docker push trigg3rx/keeper-execution:latest
+# docker push trigg3rx/keeper-execution:latest
