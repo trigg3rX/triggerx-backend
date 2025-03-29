@@ -69,11 +69,11 @@ func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Requ
         INSERT INTO triggerx.keeper_data (
             keeper_id, keeper_address, 
             rewards_address, 
-            no_exctask, keeper_points
-        ) VALUES (?, ?, ?, ?, ? )`,
+            no_exctask, keeper_points, keeper_name
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
 		currentKeeperID, keeperData.KeeperAddress,
 		keeperData.RewardsAddress,
-		0, 0).Exec(); err != nil {
+		0, 0, keeperData.KeeperName).Exec(); err != nil {
 		h.logger.Errorf("[GoogleFormCreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -93,14 +93,14 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT keeper_id, keeper_address, rewards_address, stakes, strategies, 
                verified, registered_tx, status, consensus_keys, connection_address, 
-               no_exctask, keeper_points
+               no_exctask, keeper_points, keeper_name
         FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Scan(
 		&keeperData.KeeperID, &keeperData.KeeperAddress,
 		&keeperData.RewardsAddress, &keeperData.Stakes, &keeperData.Strategies,
 		&keeperData.Verified, &keeperData.RegisteredTx, &keeperData.Status,
 		&keeperData.ConsensusKeys, &keeperData.ConnectionAddress,
-		&keeperData.NoExcTask, &keeperData.KeeperPoints); err != nil {
+		&keeperData.NoExcTask, &keeperData.KeeperPoints, &keeperData.KeeperName); err != nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper with ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

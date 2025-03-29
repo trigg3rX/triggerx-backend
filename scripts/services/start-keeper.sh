@@ -23,4 +23,4 @@ wait -n
 # If one process exits, kill the other and exit with the same code
 EXIT_CODE=$?
 kill $KEEPER_PID $OTHENTIC_PID 2>/dev/null
-exit $EXIT_CODE
+exit $EXIT_CODE 

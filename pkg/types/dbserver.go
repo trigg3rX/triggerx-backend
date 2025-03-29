@@ -79,6 +79,7 @@ type CreateKeeperData struct {
 type GoogleFormCreateKeeperData struct {
 	KeeperAddress  string `json:"keeper_address"`
 	RewardsAddress string `json:"rewards_address"`
+	KeeperName     string `json:"keeper_name"`
 }
 
 type UpdateKeeperConnectionData struct {
@@ -97,4 +98,22 @@ type UpdateKeeperStakeData struct {
 	KeeperAddress string    `json:"keeper_address"`
 	Stakes        []float64 `json:"stakes"`
 	Strategies    []string  `json:"strategies"`
+}
+
+// KeeperLeaderboardEntry represents a single entry in the keeper leaderboard
+type KeeperLeaderboardEntry struct {
+	KeeperID      int64  `json:"keeper_id"`
+	KeeperAddress string `json:"keeper_address"`
+	KeeperName    string `json:"keeper_name"`
+	TasksExecuted int64  `json:"tasks_executed"`
+	KeeperPoints  int64  `json:"keeper_points"`
+}
+
+// UserLeaderboardEntry represents a single entry in the user leaderboard
+type UserLeaderboardEntry struct {
+	UserID         int64  `json:"user_id"`
+	UserAddress    string `json:"user_address"`
+	TotalJobs      int64  `json:"total_jobs"`
+	TasksCompleted int64  `json:"tasks_completed"`
+	UserPoints     int64  `json:"user_points"`
 }

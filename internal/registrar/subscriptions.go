@@ -15,32 +15,64 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/gocql/gocql"
 	shell "github.com/ipfs/go-ipfs-api"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Add these variables at the package level
+
 var (
-	db *database.Connection
+	dbMain *gocql.Session
+	db     *gocql.Session
+	loggerdb = logging.GetLogger(logging.Development, logging.DatabaseProcess)
 )
 
 // Add this init function
 func init() {
-	// Create database config
-	dbConfig := database.NewConfig()
-
-	// Create new database connection
-	var err error
-	db, err = database.NewConnection(dbConfig)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to database: %v", err))
-	}
+	// Remove any database operations from here
+	// Only initialize other necessary components
+	// ... other non-database initializations ...
 }
 
-// Add this function to set the database connection
-func SetDatabaseConnection(conn *database.Connection) {
-	db = conn
+// SetDatabaseConnection sets both database connections for the registrar package
+func SetDatabaseConnection(mainSession *gocql.Session, registrarSession *gocql.Session) {
+	if mainSession == nil || registrarSession == nil {
+		loggerdb.Fatal("Database sessions cannot be nil")
+		return
+	}
+
+	// Close existing connections before reassigning
+	if dbMain != nil {
+		dbMain.Close()
+	}
+	dbMain = mainSession
+
+	if db != nil {
+		db.Close()
+	}
+	db = registrarSession
+
+	loggerdb.Info("Database connections set for registrar package")
+}
+
+// GetDatabaseConnection returns the current database session
+func GetDatabaseConnection() *gocql.Session {
+	return db
+}
+
+// Helper function to check database connection
+func isDatabaseConnected() bool {
+	return db != nil && !db.Closed()
+}
+
+// For any function that needs database access, add a check:
+func someFunction() error {
+	if !isDatabaseConnected() {
+		return fmt.Errorf("database connection not initialized")
+	}
+	// Use db safely here
+	return nil
 }
 
 // Setup subscription for OperatorRegistered events
@@ -696,7 +728,7 @@ func fetchDataFromCID(cid string) ([]byte, error) {
 func updatePointsInDatabase(taskID int64, performerAddress common.Address, attestersIds []string) error {
 	// Get task fee from task_data table
 	var taskFee int64
-	if err := db.Session().Query(`
+	if err := db.Query(`
 		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
 		taskID).Scan(&taskFee); err != nil {
 		logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
@@ -722,7 +754,7 @@ func updatePointsInDatabase(taskID int64, performerAddress common.Address, attes
 // Helper function to update performer points
 func updatePerformerPoints(performerAddress string, taskFee int64) error {
 	var performerPoints int64
-	if err := db.Session().Query(`
+	if err := db.Query(`
 		SELECT keeper_points FROM triggerx.keeper_data 
 		WHERE keeper_address = ? ALLOW FILTERING`,
 		performerAddress).Scan(&performerPoints); err != nil {
@@ -732,7 +764,7 @@ func updatePerformerPoints(performerAddress string, taskFee int64) error {
 
 	newPerformerPoints := performerPoints + taskFee
 
-	if err := db.Session().Query(`
+	if err := db.Query(`
 		UPDATE triggerx.keeper_data 
 		SET keeper_points = ? 
 		WHERE keeper_address = ?`,
@@ -748,7 +780,7 @@ func updatePerformerPoints(performerAddress string, taskFee int64) error {
 // Helper function to update attester points
 func updateAttesterPoints(attesterId string, taskFee int64) error {
 	var attesterPoints int64
-	if err := db.Session().Query(`
+	if err := db.Query(`
 		SELECT keeper_points FROM triggerx.keeper_data 
 		WHERE keeper_id = ?`,
 		attesterId).Scan(&attesterPoints); err != nil {
@@ -758,7 +790,7 @@ func updateAttesterPoints(attesterId string, taskFee int64) error {
 
 	newAttesterPoints := attesterPoints + taskFee
 
-	if err := db.Session().Query(`
+	if err := db.Query(`
 		UPDATE triggerx.keeper_data 
 		SET keeper_points = ? 
 		WHERE keeper_id = ?`,

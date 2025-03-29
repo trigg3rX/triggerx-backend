@@ -23,8 +23,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o keeper-execution 
 # Use a minimal alpine image for the final stage
 FROM golang:1.23-alpine
 
-# Install ca-certificates for HTTPS requests and npm for othentic-cli
-RUN apk --no-cache add ca-certificates nodejs npm
+# Install ca-certificates, curl, Docker, and Docker Compose
+RUN apk --no-cache add ca-certificates curl \
+    && apk --no-cache add docker \
+    && apk --no-cache add docker-compose
+
+# Install npm for othentic-cli
+RUN apk --no-cache add nodejs npm
 
 # Install othentic-cli globally
 RUN npm i -g @othentic/othentic-cli@1.8.1
@@ -34,6 +39,12 @@ WORKDIR /root/
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/keeper-execution .
+
+# Copy the docker-compose.yaml file from the builder stage
+COPY --from=builder /app/cmd/keeper/docker-compose.yaml ./
+COPY --from=builder /app/cmd/keeper/prometheus.yaml ./
+COPY --from=builder /app/cmd/keeper/grafana ./grafana
+
 
 RUN touch .env
 

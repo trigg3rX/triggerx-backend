@@ -85,6 +85,9 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
 	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
 
+	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
+	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
+
 	// Fees routes
 	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
 }

@@ -1,24 +1,13 @@
 services:
-  scylla:
-    image: scylladb/scylla
-    container_name: triggerx-scylla-dev
-    ports:
-      - "9042:9042"
-    volumes:
-      - scylla_data:/var/lib/scylla
-    command: --smp 1 --memory 512M --overprovisioned 1
-    logging:
-      driver: "json-file"
-
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml  # Bind mount the config file
     ports:
-      - "9090:9090"
+      - "9090:9090"  # Expose Prometheus on port 9090
     command:
-      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--config.file=/etc/prometheus/prometheus.yaml'  # Specify the config file location
     restart: unless-stopped
     networks:
       - monitoring
@@ -32,15 +21,16 @@ services:
     networks:
       - monitoring
 
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:3000"  # Expose Grafana on port 3000
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin  # Set the admin user password
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
@@ -50,8 +40,6 @@ services:
 
 volumes:
   grafana-storage: {}
-
-  scylla_data: 
 
 networks:
   monitoring:
