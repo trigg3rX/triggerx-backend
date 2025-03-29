@@ -137,7 +137,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 		TaskPerformerID:  0,
 	}
 
-	performerData, err := services.GetPerformerData()
+	performerData, err := services.GetPerformer()
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
@@ -161,7 +161,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 
 	w.scheduler.Logger().Infof("Task ID %d created for job %v", taskID, w.jobID)
 
-	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData.ConnectionAddress)
+	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
 		return err

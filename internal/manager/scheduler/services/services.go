@@ -8,83 +8,112 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	// "strings"
 	"time"
-
+	"crypto/ecdsa"
+	"encoding/hex"
+	"math/big"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 var logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
+var lastPerformerID int64
 
-// SendTaskToPerformer sends a job execution request to the performer service running on port 4003.
-// It takes job and task metadata, formats them into the expected payload structure, and makes a POST request.
-// Returns true if the task was successfully sent and accepted by the performer, false with error otherwise.
-func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.TriggerData, connectionAddress string) (bool, error) {
-	// Validate connection address
-	if connectionAddress == "" {
-		logger.Errorf("Cannot send task for job %d: connection address is empty", jobData.JobID)
-		return false, fmt.Errorf("connection address is empty for job %d", jobData.JobID)
-	}
+type Params struct {
+	proofOfTask      string
+	data             string
+	taskDefinitionId int
+	performerAddress string
+	signature        string
+}
 
-	logger.Infof("Sending task for job %d to performer at address: %s", jobData.JobID, connectionAddress)
+func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.TriggerData, performerData types.GetPerformerData) (bool, error) {
+	logger.Debugf("Performer %d", performerData.KeeperID)
 
-	// Ensure connection address has a protocol
-	if !strings.HasPrefix(connectionAddress, "http://") && !strings.HasPrefix(connectionAddress, "https://") {
-		connectionAddress = "http://" + connectionAddress
-		logger.Debugf("Added HTTP protocol to connection address: %s", connectionAddress)
-	}
-
-	// Add the task execution endpoint to the connection address
-	// connectionAddress = connectionAddress
-	logger.Debugf("Final endpoint URL: %s", connectionAddress)
-
-	client := &http.Client{
-		Timeout: 10 * time.Second, // Add a timeout to prevent hanging requests
-	}
-
-	payload := map[string]interface{}{
-		"job":     jobData,
-		"trigger": triggerData,
-	}
-
-	jsonData, err := json.Marshal(payload)
+	privateKey, err := crypto.HexToECDSA(config.DeployerPrivateKey)
 	if err != nil {
-		logger.Errorf("Failed to marshal payload for job %d: %v", jobData.JobID, err)
-		return false, fmt.Errorf("failed to marshal payload: %w", err)
+		logger.Errorf("Error converting private key", "error", err)
+	}
+	publicKey, ok := privateKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		logger.Errorf("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+	}
+	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
+
+	arguments := abi.Arguments{
+		{Type: abi.Type{T: abi.StringTy}},
+		{Type: abi.Type{T: abi.BytesTy}},
+		{Type: abi.Type{T: abi.AddressTy}},
+		{Type: abi.Type{T: abi.UintTy}},
 	}
 
-	executionURL := fmt.Sprintf("%s/task/execute", connectionAddress)
+	data := map[string]interface{}{
+		"jobData": jobData,
+		"triggerData": triggerData,
+		"performerData": performerData,
+	}
 
-	req, err := http.NewRequest("POST", executionURL, bytes.NewBuffer(jsonData))
+	jsonData, err := json.Marshal(data)
 	if err != nil {
-		logger.Errorf("Failed to create request for job %d to %s: %v", jobData.JobID, connectionAddress, err)
-		return false, fmt.Errorf("failed to create request: %w", err)
+		logger.Errorf("Error marshalling data", "error", err)
+		return false, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	logger.Debugf("Sending HTTP request to %s for job %d", connectionAddress, jobData.JobID)
-	resp, err := client.Do(req)
+	dataPacked, err := arguments.Pack(
+		"proofOfTask",
+		[]byte(jsonData),
+		common.HexToAddress(performerAddress),
+		big.NewInt(int64(0)),
+	)
 	if err != nil {
-		logger.Errorf("Failed to send request for job %d to %s: %v", jobData.JobID, connectionAddress, err)
-		return false, fmt.Errorf("failed to send request: %w", err)
+		logger.Errorf("Error encoding data", "error", err)
+		return false, err
 	}
-	defer resp.Body.Close()
+	messageHash := crypto.Keccak256Hash(dataPacked)
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		logger.Errorf("Performer returned non-200 status code for job %d: %d, body: %s",
-			jobData.JobID, resp.StatusCode, string(body))
-		return false, fmt.Errorf("performer returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
+	sig, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		logger.Errorf("Error signing message", "error", err)
+		return false, err
+	}
+	sig[64] += 27
+	serializedSignature := hexutil.Encode(sig)
+	logger.Infof("Serialized signature: %s", serializedSignature)
+
+	client, err := rpc.Dial(config.AggregatorRPCAddress)
+	if err != nil {
+		logger.Errorf("Error dialing RPC", "error", err)
+		return false, err
 	}
 
-	logger.Infof("Successfully sent task for job %d to performer at %s", jobData.JobID, connectionAddress)
+	params := Params{
+		proofOfTask:      "proofOfTask",
+		data:             "0x" + hex.EncodeToString(jsonData),
+		taskDefinitionId: 0,
+		performerAddress: performerAddress,
+		signature:        serializedSignature,
+	}
+
+	var result interface{}
+
+	err = client.Call(&result, "sendCustomMessage", params.data, params.taskDefinitionId)
+	if err != nil {
+		logger.Errorf("Error making RPC request: %v", err)
+	}
+
+	logger.Infof("API response: %v", result)
 	return true, nil
 }
 
-func GetPerformerData() (types.GetPerformerData, error) {
+func GetPerformer() (types.GetPerformerData, error) {
 	url := fmt.Sprintf("%s/api/keepers/performers", config.DatabaseIPAddress)
 
 	logger.Debugf("Fetching performer data from %s", url)
@@ -98,7 +127,7 @@ func GetPerformerData() (types.GetPerformerData, error) {
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{
-		Timeout: 10 * time.Second, // Add a timeout to prevent hanging requests
+		Timeout: 10 * time.Second,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -120,30 +149,32 @@ func GetPerformerData() (types.GetPerformerData, error) {
 		return types.GetPerformerData{}, fmt.Errorf("failed to decode performers: %w", err)
 	}
 
-	logger.Debugf("Retrieved %d performers from API", len(performers))
+	logger.Infof("Found %d valid performers", len(performers))
+	if len(performers) == 0 {
+		return types.GetPerformerData{}, fmt.Errorf("no performers available")
+	}
 
-	// Filter out performers with empty connection addresses
-	var validPerformers []types.GetPerformerData
-	for _, p := range performers {
-		if p.ConnectionAddress != "" {
-			validPerformers = append(validPerformers, p)
-		} else {
-			logger.Warnf("Performer ID %d has empty connection address, skipping", p.KeeperID)
+	var selectedPerformer types.GetPerformerData
+	
+	for _, performer := range performers {
+		if performer.KeeperID > lastPerformerID {
+			selectedPerformer = performer
+			config.FoundNextPerformer = true
+			logger.Debugf("Found next performer with ID %d after last used ID %d", 
+				performer.KeeperID, lastPerformerID)
+			break
 		}
 	}
-
-	if len(validPerformers) == 0 {
-		logger.Errorf("No performers available with valid connection addresses")
-		return types.GetPerformerData{}, fmt.Errorf("no performers available with valid connection addresses")
+	
+	if !config.FoundNextPerformer {
+		selectedPerformer = performers[0]
+		logger.Debugf("Wrapping around to first performer with ID %d", selectedPerformer.KeeperID)
 	}
+	
+	lastPerformerID = selectedPerformer.KeeperID
 
-	logger.Infof("Found %d performers with valid connection addresses", len(validPerformers))
-
-	randomIndex := time.Now().UnixNano() % int64(len(validPerformers))
-	selectedPerformer := validPerformers[randomIndex]
-
-	logger.Infof("Selected performer ID: %v with connection address: %s",
-		selectedPerformer.KeeperID, selectedPerformer.ConnectionAddress)
+	logger.Infof("Selected performer ID: %v with address: %s",
+		selectedPerformer.KeeperID, selectedPerformer.KeeperAddress)
 
 	return selectedPerformer, nil
 }
