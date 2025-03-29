@@ -6,7 +6,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	// "github.com/trigg3rX/triggerx-backend/internal/registrar"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )

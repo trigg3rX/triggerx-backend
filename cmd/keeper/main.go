@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
+	// "os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -27,9 +27,9 @@ func main() {
 	logger.Info("Starting keeper node...")
 
 	// Start Docker containers
-	if err := startDockerContainers(); err != nil {
-		logger.Fatal("Failed to start Docker containers", "error", err)
-	}
+	// if err := startDockerContainers(); err != nil {
+	// 	logger.Fatal("Failed to start Docker containers", "error", err)
+	// }
 
 	services.Init()
 
@@ -105,9 +105,9 @@ func main() {
 		defer cancel()
 
 		// Run docker-compose down command
-		if err := stopDockerContainers(); err != nil {
-			logger.Error("Failed to stop Docker containers", "error", err)
-		}
+		// if err := stopDockerContainers(); err != nil {
+		// 	logger.Error("Failed to stop Docker containers", "error", err)
+		// }
 
 		if err := srv.Shutdown(ctx); err != nil {
 			logger.Error("Graceful Shutdown Keeper Server Failed",
@@ -123,23 +123,23 @@ func main() {
 }
 
 // Function to start Docker containers
-func startDockerContainers() error {
-	cmd := exec.Command("docker", "compose", "up", "-d")
-	cmd.Dir = "./"                      // Set the directory where your docker-compose.yaml is located
-	output, err := cmd.CombinedOutput() // Capture combined output (stdout and stderr)
-	if err != nil {
-		return fmt.Errorf("failed to start Docker containers: %v, output: %s", err, output)
-	}
-	return nil
-}
+// func startDockerContainers() error {
+// 	cmd := exec.Command("docker", "compose", "up", "-d")
+// 	cmd.Dir = "./"                      // Set the directory where your docker-compose.yaml is located
+// 	output, err := cmd.CombinedOutput() // Capture combined output (stdout and stderr)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to start Docker containers: %v, output: %s", err, output)
+// 	}
+// 	return nil
+// }
 
 // Function to stop Docker containers
-func stopDockerContainers() error {
-	cmd := exec.Command("docker", "compose", "down")
-	cmd.Dir = "./"                      // Set the directory where your docker-compose.yaml is located
-	output, err := cmd.CombinedOutput() // Capture combined output (stdout and stderr)
-	if err != nil {
-		return fmt.Errorf("failed to stop Docker containers: %v, output: %s", err, output)
-	}
-	return nil
-}
+// func stopDockerContainers() error {
+// 	cmd := exec.Command("docker", "compose", "down")
+// 	cmd.Dir = "./"                      // Set the directory where your docker-compose.yaml is located
+// 	output, err := cmd.CombinedOutput() // Capture combined output (stdout and stderr)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to stop Docker containers: %v, output: %s", err, output)
+// 	}
+// 	return nil
+// }
