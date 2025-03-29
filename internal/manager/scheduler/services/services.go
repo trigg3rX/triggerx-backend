@@ -25,7 +25,7 @@ import (
 )
 
 var logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
-var lastPerformerID int64
+var lastIndex int
 
 type Params struct {
 	proofOfTask      string
@@ -155,23 +155,25 @@ func GetPerformer() (types.GetPerformerData, error) {
 	}
 
 	var selectedPerformer types.GetPerformerData
+
 	
-	for _, performer := range performers {
-		if performer.KeeperID > lastPerformerID {
-			selectedPerformer = performer
-			config.FoundNextPerformer = true
-			logger.Debugf("Found next performer with ID %d after last used ID %d", 
-				performer.KeeperID, lastPerformerID)
-			break
-		}
+	// Simple round-robin based on array index
+	// If this is the first time, start with index 0
+	// Otherwise, use the next index in the array
+	nextIndex := 0
+	if config.FoundNextPerformer {
+		// Get the next index, wrapping around if needed
+		nextIndex = (lastIndex + 1) % len(performers)
 	}
 	
-	if !config.FoundNextPerformer {
-		selectedPerformer = performers[0]
-		logger.Debugf("Wrapping around to first performer with ID %d", selectedPerformer.KeeperID)
-	}
+	selectedPerformer = performers[nextIndex]
 	
-	lastPerformerID = selectedPerformer.KeeperID
+	logger.Debugf("Selected performer at index %d with ID %d", 
+		nextIndex, selectedPerformer.KeeperID)
+	
+	// Store the current index for the next round
+	lastIndex = nextIndex
+	config.FoundNextPerformer = true
 
 	logger.Infof("Selected performer ID: %v with address: %s",
 		selectedPerformer.KeeperID, selectedPerformer.KeeperAddress)
