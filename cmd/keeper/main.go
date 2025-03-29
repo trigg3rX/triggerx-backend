@@ -11,7 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
@@ -25,17 +24,14 @@ func main() {
 	logger := logging.GetLogger(logging.Development, logging.KeeperProcess)
 	logger.Info("Starting keeper node...")
 
-	services.Init()
+	config.Init()
 
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
-	router.POST("/task/execute", execution.ExecuteTask)
-	router.POST("/task/validate", validation.ValidateTask)
-	router.POST("/test", execution.TestAPI)
-
-	// Add health endpoint for keeper verification
-	router.GET("/health", func(c *gin.Context) {
+	routerValidation := gin.New()
+	routerValidation.Use(gin.Recovery())
+	routerValidation.Use(gin.Logger())
+	routerValidation.POST("/p2p/message", execution.TestAPI)
+	routerValidation.POST("/task/validate", validation.ValidateTask)
+	routerValidation.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":         "healthy",
 			"keeper_address": config.KeeperAddress,
@@ -56,11 +52,11 @@ func main() {
 		}
 	}
 
-	router.Use(errorHandler)
+	routerValidation.Use(errorHandler)
 
-	srv := &http.Server{
+	srvValidation := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.KeeperRPCPort),
-		Handler: router,
+		Handler: routerValidation,
 	}
 
 	// Channel to collect server errors from both goroutines
@@ -69,8 +65,8 @@ func main() {
 	// Start both servers with automatic recovery
 	go func() {
 		for {
-			logger.Info("Execution Service starting", "address", srv.Addr)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Info("Validation Service starting", "address", srvValidation.Addr)
+			if err := srvValidation.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				serverErrors <- err
 				logger.Error("keeper server failed, restarting...", "error", err)
 				time.Sleep(time.Second)
@@ -78,10 +74,6 @@ func main() {
 			}
 			break
 		}
-	}()
-
-	go func() {
-		services.ConnectToManager()
 	}()
 
 	// Handle graceful shutdown on interrupt/termination signals
@@ -98,12 +90,12 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := srvValidation.Shutdown(ctx); err != nil {
 			logger.Error("Graceful Shutdown Keeper Server Failed",
 				"timeout", 2*time.Second,
 				"error", err)
 
-			if err := srv.Close(); err != nil {
+			if err := srvValidation.Close(); err != nil {
 				logger.Fatal("Could Not Stop Keeper Server Gracefully", "error", err)
 			}
 		}

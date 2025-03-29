@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/hex"
 
 	// "fmt"
 
@@ -18,7 +19,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
+	"github.com/trigg3rX/triggerx-backend/pkg/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -35,6 +36,43 @@ func (krw *keeperResponseWrapper) GetData() []byte {
 
 func TestAPI(c *gin.Context) {
 	logger.Info("Hello Mic testing 1 2 3 ................")
+
+	if c.Request.Method != http.MethodPost {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{
+			"error": "Invalid method",
+		})
+		return
+	}
+
+	var requestBody struct {
+		Data string `json:"data"`
+	}
+	if err := c.BindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid JSON body",
+		})
+		return
+	}
+	
+	// Handle hex-encoded data (remove "0x" prefix if present)
+	hexData := requestBody.Data
+	if len(hexData) > 2 && hexData[:2] == "0x" {
+		hexData = hexData[2:]
+	}
+	
+	// Decode the hex string to bytes
+	decodedData, err := hex.DecodeString(hexData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid hex data",
+		})
+		return
+	}
+	
+	// Convert bytes to string or unmarshal to appropriate structure if needed
+	dataString := string(decodedData)
+
+	logger.Infof("requestBody: %v\n", dataString)
 
 	var resp = "Hello"
 	c.Data(http.StatusOK, "application/octet-stream", []byte(resp))
@@ -176,7 +214,7 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	services.SendTask(tlsProof.ResponseHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
+	aggregator.SendTask(tlsProof.ResponseHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
 
 	logger.Infof("CID: %s", ipfsData.ProofData.ActionDataCID)
 
