@@ -38,8 +38,6 @@ COPY --from=builder /app/keeper-execution .
 RUN touch .env
 
 COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
-# Expose the port the service runs on
-EXPOSE 9005
 
 # Set environment variables (customize as needed)
 ENV GIN_MODE=release
