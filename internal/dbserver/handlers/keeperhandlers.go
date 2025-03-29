@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -132,6 +133,11 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	if performers == nil {
 		performers = []types.GetPerformerData{}
 	}
+
+	// Sort the results in memory after fetching them
+	sort.Slice(performers, func(i, j int) bool {
+		return performers[i].KeeperID < performers[j].KeeperID
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 
