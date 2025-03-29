@@ -3,7 +3,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./cmd/keeper/prometheus.yaml:/etc/prometheus/prometheus.yaml  # Bind mount the config file
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml  # Bind mount the config file
     ports:
       - "9090:9090"  # Expose Prometheus on port 9090
     command:
