@@ -103,7 +103,7 @@ func main() {
 		// 	logger.Error("Failed to stop Docker containers", "error", err)
 		// }
 
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := srvValidation.Shutdown(ctx); err != nil {
 			logger.Error("Graceful Shutdown Keeper Server Failed",
 				"timeout", 2*time.Second,
 				"error", err)
