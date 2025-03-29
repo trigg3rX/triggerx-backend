@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -112,12 +113,14 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
-	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address, connection_address FROM triggerx.keeper_data`).Iter()
+	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
+			FROM triggerx.keeper_data 
+			WHERE verified = true AND status = true
+			ALLOW FILTERING`).Iter()
 
 	var performer types.GetPerformerData
 	for iter.Scan(
-		&performer.KeeperID, &performer.KeeperAddress,
-		&performer.ConnectionAddress) {
+		&performer.KeeperID, &performer.KeeperAddress) {
 		performers = append(performers, performer)
 	}
 
@@ -130,6 +133,11 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	if performers == nil {
 		performers = []types.GetPerformerData{}
 	}
+
+	// Sort the results in memory after fetching them
+	sort.Slice(performers, func(i, j int) bool {
+		return performers[i].KeeperID < performers[j].KeeperID
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 

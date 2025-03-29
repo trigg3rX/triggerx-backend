@@ -10,6 +10,7 @@ import (
 
 var (
 	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
+	FoundNextPerformer bool
 
 	EtherscanApiKey string
 	AlchemyApiKey   string
@@ -17,6 +18,7 @@ var (
 	DeployerPrivateKey string
 
 	ManagerRPCPort    string
+	AggregatorRPCAddress string
 	DatabaseIPAddress string
 )
 
@@ -26,13 +28,15 @@ func Init() {
 		logger.Fatal("Error loading .env file")
 	}
 
+	FoundNextPerformer = false
 	EtherscanApiKey = os.Getenv("ETHERSCAN_API_KEY")
 	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
 	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
 	ManagerRPCPort = os.Getenv("MANAGER_RPC_PORT")
+	AggregatorRPCAddress = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
 	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" {
+	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" || AggregatorRPCAddress == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 

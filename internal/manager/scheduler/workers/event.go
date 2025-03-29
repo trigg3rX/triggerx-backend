@@ -231,7 +231,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 		TaskPerformerID:  0,
 	}
 
-	performerData, err := services.GetPerformerData()
+	performerData, err := services.GetPerformer()
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
@@ -251,7 +251,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
 	}
 
-	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData.ConnectionAddress)
+	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
 		return err

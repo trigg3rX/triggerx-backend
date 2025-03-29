@@ -22,6 +22,7 @@ var (
 	PrivateKeyController          string
 	KeeperAddress             	string
 	KeeperRPCPort               string
+	KeeperP2PPort       		string
 	ConnectionAddress           string
 
 	// Provided Information
@@ -56,8 +57,9 @@ func Init() {
 	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
 	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
+	KeeperP2PPort = os.Getenv("OPERATOR_P2P_PORT")
 
-	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" {
+	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" || KeeperP2PPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 

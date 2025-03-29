@@ -66,7 +66,6 @@ type CreateTaskResponse struct {
 type GetPerformerData struct {
 	KeeperID          int64  `json:"keeper_id"`
 	KeeperAddress     string `json:"keeper_address"`
-	ConnectionAddress string `json:"connection_address"`
 }
 
 type CreateKeeperData struct {
