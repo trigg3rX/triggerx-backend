@@ -112,12 +112,14 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
-	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address, connection_address FROM triggerx.keeper_data`).Iter()
+	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
+			FROM triggerx.keeper_data 
+			WHERE verified = true AND status = true
+			ALLOW FILTERING`).Iter()
 
 	var performer types.GetPerformerData
 	for iter.Scan(
-		&performer.KeeperID, &performer.KeeperAddress,
-		&performer.ConnectionAddress) {
+		&performer.KeeperID, &performer.KeeperAddress) {
 		performers = append(performers, performer)
 	}
 
