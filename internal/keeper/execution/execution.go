@@ -19,7 +19,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/aggregator"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -32,50 +32,6 @@ type keeperResponseWrapper struct {
 
 func (krw *keeperResponseWrapper) GetData() []byte {
 	return krw.Data
-}
-
-func TestAPI(c *gin.Context) {
-	logger.Info("Hello Mic testing 1 2 3 ................")
-
-	if c.Request.Method != http.MethodPost {
-		c.JSON(http.StatusMethodNotAllowed, gin.H{
-			"error": "Invalid method",
-		})
-		return
-	}
-
-	var requestBody struct {
-		Data string `json:"data"`
-	}
-	if err := c.BindJSON(&requestBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid JSON body",
-		})
-		return
-	}
-	
-	// Handle hex-encoded data (remove "0x" prefix if present)
-	hexData := requestBody.Data
-	if len(hexData) > 2 && hexData[:2] == "0x" {
-		hexData = hexData[2:]
-	}
-	
-	// Decode the hex string to bytes
-	decodedData, err := hex.DecodeString(hexData)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid hex data",
-		})
-		return
-	}
-	
-	// Convert bytes to string or unmarshal to appropriate structure if needed
-	dataString := string(decodedData)
-
-	logger.Infof("requestBody: %v\n", dataString)
-
-	var resp = "Hello"
-	c.Data(http.StatusOK, "application/octet-stream", []byte(resp))
 }
 
 // ExecuteTask is the main handler for executing keeper tasks. It:
@@ -93,7 +49,9 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	var requestBody map[string]interface{}
+	var requestBody struct {
+		Data string `json:"data"`
+	}
 	if err := c.BindJSON(&requestBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid JSON body",
@@ -101,18 +59,38 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	// Fix type assertions by properly converting the data
-	jobDataRaw, ok := requestBody["job"]
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing job data"})
+	// Handle hex-encoded data (remove "0x" prefix if present)
+	hexData := requestBody.Data
+	if len(hexData) > 2 && hexData[:2] == "0x" {
+		hexData = hexData[2:]
+	}
+	
+	// Decode the hex string to bytes
+	decodedData, err := hex.DecodeString(hexData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid hex data",
+		})
 		return
 	}
 
-	triggerDataRaw, ok := requestBody["trigger"]
-	if !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing trigger data"})
+	decodedDataString := string(decodedData)
+
+	var requestData map[string]interface{}
+	if err := json.Unmarshal([]byte(decodedDataString), &requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to parse JSON data",
+		})
 		return
 	}
+
+	jobDataRaw := requestData["jobData"]
+	triggerDataRaw := requestData["triggerData"]
+	performerDataRaw := requestData["performerData"]
+
+	// logger.Infof("jobDataRaw: %v\n", jobDataRaw)
+	// logger.Infof("triggerDataRaw: %v\n", triggerDataRaw)
+	// logger.Infof("performerDataRaw: %v\n", performerDataRaw)
 
 	// Convert to proper types
 	var jobData types.HandleCreateJobData
@@ -125,7 +103,8 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse job data"})
 		return
 	}
-	logger.Infof("jobData: %v\n", jobData)
+	// logger.Infof("jobData: %v\n", jobData)
+
 	var triggerData types.TriggerData
 	triggerDataBytes, err := json.Marshal(triggerDataRaw)
 	if err != nil {
@@ -136,8 +115,28 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
 		return
 	}
+	// logger.Infof("triggerData: %v\n", triggerData)
 
-	logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
+	var performerData types.GetPerformerData
+	performerDataBytes, err := json.Marshal(performerDataRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid performer data format"})
+		return
+	}
+	if err := json.Unmarshal(performerDataBytes, &performerData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse performer data"})
+		return
+	}
+	// logger.Infof("performerData: %v\n", performerData)
+
+	// logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
+	logger.Infof("performerAddress: %v\n", performerData.KeeperAddress)
+
+	if performerData.KeeperAddress != config.KeeperAddress {
+		logger.Infof("I am not the performer for this task, skipping ...")
+		c.JSON(http.StatusOK, gin.H{"error": "I am not the performer for this task, skipping ..."})
+		return
+	}
 
 	// Create ethClient using config
 	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
@@ -214,7 +213,7 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	aggregator.SendTask(tlsProof.ResponseHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
+	services.SendTask(tlsProof.ResponseHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
 
 	logger.Infof("CID: %s", ipfsData.ProofData.ActionDataCID)
 

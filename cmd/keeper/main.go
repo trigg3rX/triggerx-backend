@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
-
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -24,13 +24,15 @@ func main() {
 	logger := logging.GetLogger(logging.Development, logging.KeeperProcess)
 	logger.Info("Starting keeper node...")
 
-	config.Init()
+	services.Init()
 
 	routerValidation := gin.New()
 	routerValidation.Use(gin.Recovery())
 	routerValidation.Use(gin.Logger())
-	routerValidation.POST("/p2p/message", execution.TestAPI)
+	
+	routerValidation.POST("/p2p/message", execution.ExecuteTask)
 	routerValidation.POST("/task/validate", validation.ValidateTask)
+	
 	routerValidation.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":         "healthy",

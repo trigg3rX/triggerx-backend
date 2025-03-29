@@ -1,23 +1,23 @@
 package services
 
-// import (
-// 	"bytes"
-// 	"encoding/json"
-// 	"fmt"
-// 	"net/http"
-// 	"time"
+import (
+	// "bytes"
+	// "encoding/json"
+	// "fmt"
+	// "net/http"
+	// "time"
 
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
-// 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-// )
+	// "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+)
 
-// var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
+var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
-// func Init() {
-// 	config.Init()
-// 	logger.Info("Config Initialized")
-// }
+func Init() {
+	config.Init()
+	logger.Info("Config Initialized")
+}
 
 // func ConnectToManager() (bool, error) {
 // 	// Prepare the keeper data to send to the manager
