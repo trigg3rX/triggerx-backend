@@ -18,32 +18,28 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the maximum keeper ID from the database
-	var maxKeeperID int64
+	var currentKeeperID int64
 	if err := h.db.Session().Query(`
-		SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperData.KeeperAddress).Scan(&currentKeeperID); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error getting max keeper ID: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	currentKeeperID := maxKeeperID + 1
 
-	h.logger.Infof("[CreateKeeperData] Creating keeper with ID: %d", currentKeeperID)
+	h.logger.Infof("[CreateKeeperData] Updating keeper with ID: %d", currentKeeperID)
 	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.keeper_data (
-            keeper_id, keeper_address, registered_tx, 
-            rewards_address, 
-            consensus_keys, no_exctask, keeper_points, status, verified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		currentKeeperID, keeperData.KeeperAddress, keeperData.RegisteredTx,
-		keeperData.RewardsAddress,
-		keeperData.ConsensusKeys, 0, 0, true, true).Exec(); err != nil {
+        UPDATE triggerx.keeper_data SET 
+            registered_tx = ?, consensus_keys = ?, status = ?
+        WHERE keeper_id = ?`,
+		keeperData.RegisteredTx, keeperData.ConsensusKeys, true, currentKeeperID).Exec(); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
-	w.WriteHeader(http.StatusCreated)
+	h.logger.Infof("[CreateKeeperData] Successfully updated keeper with ID: %d", currentKeeperID)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(keeperData)
 }
 
@@ -68,13 +64,11 @@ func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Requ
 	h.logger.Infof("[GoogleFormCreateKeeperData] Creating keeper with ID: %d", currentKeeperID)
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (
-            keeper_id, keeper_address, 
-            rewards_address, 
-            no_exctask, keeper_points, keeper_name
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-		currentKeeperID, keeperData.KeeperAddress,
-		keeperData.RewardsAddress,
-		0, 0, keeperData.KeeperName).Exec(); err != nil {
+            keeper_id, keeper_name, keeper_address, 
+            rewards_address, no_exctask, keeper_points, verified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress,
+		keeperData.RewardsAddress, 0, 0, true).Exec(); err != nil {
 		h.logger.Errorf("[GoogleFormCreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
