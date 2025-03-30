@@ -68,7 +68,7 @@ The **Aggregator** ensures the consensus of tasks by:
        go mod tidy
        ```
      - ```sh
-       npm i -g @othentic/othentic-cli  # (Node v22.6.0 is required)
+       npm i -g @othentic/othentic-cli@1.8.1  # (Node v22.6.0 is required)
        ```
 3. Copy the `.env.example` file to `.env` and set the environment variables.
 
@@ -82,7 +82,12 @@ The **Aggregator** ensures the consensus of tasks by:
      make start-db-server
      ```
 
-6. Start the Task Manager.
+6. Start the Aggregator.
+   - ```sh
+     make start-aggregator
+     ```
+
+7. Start the Task Manager.
    - ```sh
      make start-manager
      ```
@@ -90,18 +95,14 @@ The **Aggregator** ensures the consensus of tasks by:
 7. Start the Keepers.
    - Pull the Docker image for executing tasks:
      - ```sh
-       docker pull trigg3rx/keeper-execution:latest
+       docker pull trigg3rx/triggerx-keeper:latest
        ```
    - Run the Docker image:
      - ```sh
-       docker run --env .env --name triggerx_keeper -d trigg3rx/keeper-execution
+       docker run --env .env --name triggerx_keeper -d trigg3rx/ triggerx-keeper:latest
        ```
 
-8. Run the Keeper node.
+8. Run the Keeper node without docker.
    - ```sh
-     go run cmd/keeper/main.go
+     make start-keeper
      ```
-
-9. Run the Attester node.
-   ```sh
-   othentic-cli node attester /ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB --metrics --avs-webapi http://127.0.0.1 --avs-webapi-port 4002

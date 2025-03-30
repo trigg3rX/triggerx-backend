@@ -44,11 +44,9 @@ COPY --from=builder /app/keeper-execution .
 COPY --from=builder /app/cmd/keeper/docker-compose.yaml ./
 COPY --from=builder /app/cmd/keeper/prometheus.yaml ./
 COPY --from=builder /app/cmd/keeper/grafana ./grafana
-
+COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
 
 RUN touch .env
-
-COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
 
 # Set environment variables (customize as needed)
 ENV GIN_MODE=release
@@ -61,4 +59,3 @@ ENV HTTP_PROXY=""
 
 # Run the startup script
 CMD ["sh", "./start-keeper.sh"]
-# CMD ["sleep", "7200"]
