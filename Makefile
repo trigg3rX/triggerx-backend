@@ -3,20 +3,6 @@
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-
-############################# BINARY #############################
-
-build-binary: ## Build the binary
-	./scripts/binary/build.sh
-
-release-binary: ## Build the binary for release
-	@if [ -z "$(version)" ]; then \
-		echo "Error: version argument is required"; \
-		echo "Usage: make release-binary version=<version>"; \
-		exit 1; \
-	fi
-	./scripts/binary/release.sh $(version)
-
 ############################# RUN #############################
 
 start-manager: ## Start the task manager
@@ -24,6 +10,9 @@ start-manager: ## Start the task manager
 
 start-aggregator: ## Start the Aggregator
 	./scripts/services/start-aggregator.sh
+
+start-registrar: ## Start the Registrar
+	./scripts/services/start-registrar.sh
 
 ############################# DATABASE #############################
 
@@ -37,16 +26,15 @@ start-db-server: ## Start the Database Server
 	./scripts/database/start-dbserver.sh
 
 db-shell: ## Open CQL shell
-	docker exec -it triggerx-scylla-dev cqlsh
+	docker exec -it triggerx-scylla cqlsh
 
 db-backup:  ##backup data
-	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_prod_backup triggerx -cf keeper_data
+	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_backup triggerx -cf keeper_data
 
 ############################ KEEPER NODE ####################################
 
-run-keeper: ## Build the keeper node
-	./scripts/build-keeper-node.sh
+build-keeper: ## Build the Keeper
+	./scripts/binary/build.sh
 
-publish-keeper-node: ## Publish the keeper node 
-	./scripts/publish-keeper-node.sh
-
+start-keeper: ## Start the Keeper
+	./scripts/services/start-keeper.sh
