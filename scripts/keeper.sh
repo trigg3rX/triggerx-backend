@@ -36,18 +36,18 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-# Build Docker image with specified version
-docker build -t keeper-execution:${VERSION} .
+# Build Docker image once
+docker build -t triggerx-keeper:${VERSION} .
 
-# Tag images
-docker tag keeper-execution:${VERSION} trigg3rx/keeper-execution:${VERSION}
-
+# Tag images with version and latest
+docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:${VERSION}
+docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:latest
 
 # Login to Docker Hub
 docker login
 
-# Push version tags
-docker push trigg3rx/keeper-execution:${VERSION}
+# Push both version and latest tags
+docker push trigg3rx/triggerx-keeper:${VERSION}
+docker push trigg3rx/triggerx-keeper:latest
 
-
-echo "Successfully built and pushed version: $VERSION"
+echo "Successfully built and pushed version: $VERSION and latest tag"
