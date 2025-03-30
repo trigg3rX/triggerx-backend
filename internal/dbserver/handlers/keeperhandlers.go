@@ -54,9 +54,9 @@ func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Requ
 	// Check if the keeper_address already exists
 	var existingKeeperID int64
 	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ?`,
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperData.KeeperAddress).Scan(&existingKeeperID); err == nil {
-		h.logger.Errorf("[GoogleFormCreateKeeperData] Keeper with address %s already exists with ID: %d", keeperData.KeeperAddress, existingKeeperID)
+		h.logger.Warnf("[GoogleFormCreateKeeperData] Keeper with address %s already exists with ID: %d", keeperData.KeeperAddress, existingKeeperID)
 		http.Error(w, "Keeper with this address already exists", http.StatusConflict)
 		return
 	}
