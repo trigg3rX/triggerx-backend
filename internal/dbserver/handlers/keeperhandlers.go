@@ -51,6 +51,16 @@ func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// Check if the keeper_address already exists
+	var existingKeeperID int64
+	if err := h.db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ?`,
+		keeperData.KeeperAddress).Scan(&existingKeeperID); err == nil {
+		h.logger.Errorf("[GoogleFormCreateKeeperData] Keeper with address %s already exists with ID: %d", keeperData.KeeperAddress, existingKeeperID)
+		http.Error(w, "Keeper with this address already exists", http.StatusConflict)
+		return
+	}
+
 	// Get the maximum keeper ID from the database
 	var maxKeeperID int64
 	if err := h.db.Session().Query(`
