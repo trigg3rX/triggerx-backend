@@ -1,58 +1,30 @@
 package manager
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
+	// "bytes"
+	// "encoding/json"
+	// "fmt"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 
+	// "github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var (
-	logger       logging.Logger
+	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	jobScheduler *scheduler.JobScheduler
-
-	EtherscanApiKey string
-	AlchemyApiKey   string
-
-	DeployerPrivateKey string
-
-	ManagerRPCPort    string
-	DatabaseIPAddress string
 )
 
-func Init() {
-	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
-
-	// var err error
-	err := godotenv.Load()
-	if err != nil {
-		logger.Fatal("Error loading .env file")
-	}
-
+func JobSchedulerInit() {
+	var err error
 	jobScheduler, err = scheduler.NewJobScheduler(logger)
 	if err != nil {
 		logger.Fatalf("Failed to initialize job scheduler: %v", err)
 	}
-
-	EtherscanApiKey = os.Getenv("ETHERSCAN_API_KEY")
-	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
-	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
-	ManagerRPCPort = os.Getenv("MANAGER_RPC_PORT")
-	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
-
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" {
-		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
-	}
-
-	gin.SetMode(gin.ReleaseMode)
 }
 
 func HandleCreateJobEvent(c *gin.Context) {
@@ -131,49 +103,48 @@ func HandleResumeJobEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Job resume request received"})
 }
 
-func HandleKeeperConnectEvent(c *gin.Context) {
-	var keeperData types.UpdateKeeperConnectionData
-	if err := c.BindJSON(&keeperData); err != nil {
-		logger.Error("Failed to parse keeper data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
-	}
+// func HandleKeeperConnectEvent(c *gin.Context) {
+// 	var keeperData types.UpdateKeeperConnectionData
+// 	if err := c.BindJSON(&keeperData); err != nil {
+// 		logger.Error("Failed to parse keeper data", "error", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+// 		return
+// 	}
 
-	url := fmt.Sprintf("%s/api/keepers/connection", DatabaseIPAddress)
+// 	url := fmt.Sprintf("%s/api/keepers/connection", config.DatabaseIPAddress)
 
-	jsonData, err := json.Marshal(keeperData)
-	if err != nil {
-		logger.Error("Failed to marshal keeper data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to marshal keeper data"})
-		return
-	}
+// 	jsonData, err := json.Marshal(keeperData)
+// 	if err != nil {
+// 		logger.Error("Failed to marshal keeper data", "error", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to marshal keeper data"})
+// 		return
+// 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		logger.Error("Failed to create HTTP request", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create HTTP request"})
-		return
-	}
+// 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+// 	if err != nil {
+// 		logger.Error("Failed to create HTTP request", "error", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create HTTP request"})
+// 		return
+// 	}
 
-	req.Header.Set("Content-Type", "application/json")
+// 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Error("Failed to send request", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to send request"})
-		return
-	}
-	defer resp.Body.Close()
+// 	client := &http.Client{}
+// 	resp, err := client.Do(req)
+// 	if err != nil {
+// 		logger.Error("Failed to send request", "error", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to send request"})
+// 		return
+// 	}
+// 	defer resp.Body.Close()
 
-	var response types.UpdateKeeperConnectionDataResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		logger.Error("Failed to decode response", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})	
-		return
-	}
+// 	var response types.UpdateKeeperConnectionDataResponse
+// 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+// 		logger.Error("Failed to decode response", "error", err)
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})
+// 		return
+// 	}
 
-	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
-	logger.Infof("Connection Address: %s", keeperData.ConnectionAddress)
-	c.JSON(http.StatusOK, response)
-}
+// 	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
+// 	c.JSON(http.StatusOK, response)
+// }

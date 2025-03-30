@@ -37,17 +37,15 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 # Build Docker image with specified version
-docker build -t keeper-execution:${VERSION} .
+docker build -t dev-keeper-execution:${VERSION} .
 
 # Tag images
-docker tag keeper-execution:${VERSION} trigg3rx/keeper-execution:${VERSION}
-
+docker tag dev-keeper-execution:${VERSION} trigg3rx/dev-keeper-execution:${VERSION}
 
 # Login to Docker Hub
 docker login
 
 # Push version tags
-docker push trigg3rx/keeper-execution:${VERSION}
-
+docker push trigg3rx/dev-keeper-execution:${VERSION}
 
 echo "Successfully built and pushed version: $VERSION"

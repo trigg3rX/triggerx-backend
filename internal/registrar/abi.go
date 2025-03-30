@@ -54,7 +54,7 @@ type TaskRejected struct {
 // Initialize ABI parsers
 func InitABI() error {
 	// Load AvsGovernance ABI
-	avsGovernanceABIJSON, err := os.ReadFile("pkg/bindings/abi/AvsGovernance.abi")
+	avsGovernanceABIJSON, err := os.ReadFile("pkg/bindings/abi/AvsGovernance.json")
 	if err != nil {
 		return fmt.Errorf("failed to read AvsGovernance ABI: %v", err)
 	}
@@ -70,7 +70,7 @@ func InitABI() error {
 	logger.Info("Note: OperatorUnregistered event has empty data with operator address as second topic")
 
 	// Load AttestationCenter ABI
-	attestationCenterABIJSON, err := os.ReadFile("pkg/bindings/abi/AttestationCenter.abi")
+	attestationCenterABIJSON, err := os.ReadFile("pkg/bindings/abi/AttestationCenter.json")
 	if err != nil {
 		return fmt.Errorf("failed to read AttestationCenter ABI: %v", err)
 	}

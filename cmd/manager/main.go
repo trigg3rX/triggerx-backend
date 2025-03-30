@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
@@ -31,7 +32,7 @@ func main() {
 	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	logger.Info("Starting manager node...")
 
-	manager.Init()
+	config.Init()
 
 	var wg sync.WaitGroup
 
@@ -48,6 +49,10 @@ func main() {
 		logger.Info("Connected to aggregator successfully.")
 	}
 
+	// Initialize the job scheduler
+	manager.JobSchedulerInit()
+	logger.Info("Job scheduler initialized successfully.")
+
 	// Setup Gin router
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -56,11 +61,11 @@ func main() {
 	router.POST("/job/update", manager.HandleUpdateJobEvent)
 	router.POST("/job/pause", manager.HandlePauseJobEvent)
 	router.POST("/job/resume", manager.HandleResumeJobEvent)
-	router.POST("/keeper/connect", manager.HandleKeeperConnectEvent)
+	// router.POST("/keeper/connect", manager.HandleKeeperConnectEvent)
 	
 	// Create HTTP server
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", manager.ManagerRPCPort),
+		Addr:    fmt.Sprintf(":%s", config.ManagerRPCPort),
 		Handler: router,
 	}
 
@@ -75,7 +80,7 @@ func main() {
 
 	// Signal server is ready
 	close(ready)
-	logger.Infof("Manager node is READY on port %s...", manager.ManagerRPCPort)
+	logger.Infof("Manager node is READY on port %s...", config.ManagerRPCPort)
 
 	// Handle shutdown signals
 	shutdown := make(chan os.Signal, 1)

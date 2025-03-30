@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sync"
 
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
+
+	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/workers"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -112,6 +113,9 @@ func NewJobScheduler(logger logging.Logger) (*JobScheduler, error) {
 		workerCtx:      ctx,
 		workerCancel:   cancel,
 		jobChainStatus: make(map[int64]string),
+		mu:             sync.RWMutex{},
+		cacheMutex:     sync.RWMutex{},
+		chainMutex:     sync.RWMutex{},
 	}
 
 	cacheManager, err := NewCacheManager(scheduler)
@@ -253,9 +257,7 @@ func (s *JobScheduler) SendDataToDatabase(route string, callType int, data inter
 		return false, fmt.Errorf("error loading .env file: %v", err)
 	}
 
-	databaseIPAddress := os.Getenv("DATABASE_IP_ADDRESS")
-
-	databaseURL := fmt.Sprintf("http://%s/%s", databaseIPAddress, route)
+	databaseURL := fmt.Sprintf("%s/%s", config.DatabaseIPAddress, route)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {

@@ -15,8 +15,65 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/gocql/gocql"
+	shell "github.com/ipfs/go-ipfs-api"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
+
+
+var (
+	dbMain *gocql.Session
+	db     *gocql.Session
+	loggerdb = logging.GetLogger(logging.Development, logging.DatabaseProcess)
+)
+
+// Add this init function
+func init() {
+	// Remove any database operations from here
+	// Only initialize other necessary components
+	// ... other non-database initializations ...
+}
+
+// SetDatabaseConnection sets both database connections for the registrar package
+func SetDatabaseConnection(mainSession *gocql.Session, registrarSession *gocql.Session) {
+	if mainSession == nil || registrarSession == nil {
+		loggerdb.Fatal("Database sessions cannot be nil")
+		return
+	}
+
+	// Close existing connections before reassigning
+	if dbMain != nil {
+		dbMain.Close()
+	}
+	dbMain = mainSession
+
+	if db != nil {
+		db.Close()
+	}
+	db = registrarSession
+
+	loggerdb.Info("Database connections set for registrar package")
+}
+
+// GetDatabaseConnection returns the current database session
+func GetDatabaseConnection() *gocql.Session {
+	return db
+}
+
+// Helper function to check database connection
+func isDatabaseConnected() bool {
+	return db != nil && !db.Closed()
+}
+
+// For any function that needs database access, add a check:
+func someFunction() error {
+	if !isDatabaseConnected() {
+		return fmt.Errorf("database connection not initialized")
+	}
+	// Use db safely here
+	return nil
+}
 
 // Setup subscription for OperatorRegistered events
 func SetupRegisteredSubscription(
@@ -305,14 +362,45 @@ func ManageSubscriptions(
 			}
 
 			// Decode the input data to extract performer address and operator IDs
-			performerAddress, operatorIDs, err := decodeTaskInputData(tx.Data())
+			performerAddress, proofOfTask, data, taskDefinitionId, isApproved, tpSignature, taSignature, attestersIds, err := decodeTaskInputData(tx.Data())
 			if err != nil {
 				logger.Error(fmt.Sprintf("Failed to decode input data: %v", err))
 				return
 			}
 
+			// Fetch the task information from IPFS using the CID
+			cid := string(data) // Assuming data is the CID
+			IPFSData, err := fetchDataFromCID(cid)
+			if err != nil {
+				logger.Error(fmt.Sprintf("Failed to fetch task data from CID: %v", err))
+				return
+			}
+
+			// Unmarshal the IPFS data into the IPFSData struct
+			var ipfsData types.IPFSData
+			err = json.Unmarshal([]byte(IPFSData), &ipfsData)
+			if err != nil {
+				logger.Error(fmt.Sprintf("Failed to unmarshal IPFS data: %v", err))
+				return
+			}
+
+			// Now you can access the TaskID from the TriggerData
+			taskID := ipfsData.TriggerData.TaskID
+			logger.Info(fmt.Sprintf("Task ID: %d", taskID))
 			logger.Info(fmt.Sprintf("Performer Address: %s", performerAddress.Hex()))
-			logger.Info(fmt.Sprintf("Operator IDs: %v", operatorIDs))
+			logger.Info(fmt.Sprintf("Proof of Task: %s", proofOfTask))
+			logger.Info(fmt.Sprintf("Data: %x", data))
+			logger.Info(fmt.Sprintf("Task Definition ID: %d", taskDefinitionId))
+			logger.Info(fmt.Sprintf("Is Approved: %v", isApproved))
+			logger.Info(fmt.Sprintf("TP Signature: %x", tpSignature))
+			logger.Info(fmt.Sprintf("TA Signature: %x", taSignature))
+			logger.Info(fmt.Sprintf("Attesters IDs: %v", attestersIds))
+
+			// Replace the database update section with this single call
+			if err := updatePointsInDatabase(taskID, performerAddress, attestersIds); err != nil {
+				logger.Error(fmt.Sprintf("Failed to update points in database: %v", err))
+				return
+			}
 
 		// Handle TaskRejected events
 		case event := <-taskRejectedCh:
@@ -569,28 +657,148 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 }
 
 // Function to decode the input data of the task submission
-func decodeTaskInputData(data []byte) (common.Address, []string, error) {
+func decodeTaskInputData(data []byte) (common.Address, string, []byte, uint16, bool, [2]*big.Int, [2]*big.Int, []string, error) {
 	// Define the ABI of the contract containing the submitTask function
-	const submitTaskABI = `[{"inputs":[{"internalType":"address","name":"performer","type":"address"},{"internalType":"string[]","name":"operatorIds","type":"string[]"}],"name":"submitTask","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
+	const submitTaskABI = `[{"inputs":[{"components":[{"internalType":"string","name":"proofOfTask","type":"string"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"address","name":"taskPerformer","type":"address"},{"internalType":"uint16","name":"taskDefinitionId","type":"uint16"}],"internalType":"tuple","name":"_taskInfo","type":"tuple"},{"components":[{"internalType":"bool","name":"isApproved","type":"bool"},{"internalType":"uint256[2]","name":"tpSignature","type":"uint256[2]"},{"internalType":"uint256[2]","name":"taSignature","type":"uint256[2]"},{"internalType":"string[]","name":"attestersIds","type":"string[]"}],"internalType":"tuple","name":"_blsTaskSubmissionDetails","type":"tuple"}],"name":"submitTask","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
 
 	// Parse the ABI
 	parsedABI, err := abi.JSON(strings.NewReader(submitTaskABI))
 	if err != nil {
-		return common.Address{}, nil, fmt.Errorf("failed to parse ABI: %v", err)
+		return common.Address{}, "", nil, 0, false, [2]*big.Int{}, [2]*big.Int{}, nil, fmt.Errorf("failed to parse ABI: %v", err)
 	}
 
 	// Variables to hold the decoded values
-	var performerAddress common.Address
-	var operatorIDs []string
+	var taskInfo struct {
+		ProofOfTask      string
+		Data             []byte
+		TaskPerformer    common.Address
+		TaskDefinitionId uint16
+	}
+	var blsTaskSubmissionDetails struct {
+		IsApproved   bool
+		TpSignature  [2]*big.Int
+		TaSignature  [2]*big.Int
+		AttestersIds []string
+	}
 
 	// Decode the input data
 	err = parsedABI.UnpackIntoInterface(&struct {
-		Performer   *common.Address
-		OperatorIds *[]string
-	}{&performerAddress, &operatorIDs}, "submitTask", data)
+		TaskInfo *struct {
+			ProofOfTask      string
+			Data             []byte
+			TaskPerformer    common.Address
+			TaskDefinitionId uint16
+		}
+		BlsTaskSubmissionDetails *struct {
+			IsApproved   bool
+			TpSignature  [2]*big.Int
+			TaSignature  [2]*big.Int
+			AttestersIds []string
+		}
+	}{&taskInfo, &blsTaskSubmissionDetails}, "submitTask", data)
 	if err != nil {
-		return common.Address{}, nil, fmt.Errorf("failed to unpack input data: %v", err)
+		return common.Address{}, "", nil, 0, false, [2]*big.Int{}, [2]*big.Int{}, nil, fmt.Errorf("failed to unpack input data: %v", err)
 	}
 
-	return performerAddress, operatorIDs, nil
+	return taskInfo.TaskPerformer, taskInfo.ProofOfTask, taskInfo.Data, taskInfo.TaskDefinitionId, blsTaskSubmissionDetails.IsApproved, blsTaskSubmissionDetails.TpSignature, blsTaskSubmissionDetails.TaSignature, blsTaskSubmissionDetails.AttestersIds, nil
+}
+
+// Function to fetch data from IPFS using CID
+func fetchDataFromCID(cid string) ([]byte, error) {
+	// Create a new IPFS shell instance
+	sh := shell.NewShell("https://api.pinata.cloud/pinning/pinJSONToIPFS") // Adjust the address if your IPFS node is running elsewhere
+
+	// Fetch the data from IPFS
+	data, err := sh.Cat(cid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch data from IPFS: %v", err)
+	}
+	defer data.Close()
+
+	// Read the data into a byte slice
+	body, err := io.ReadAll(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read data from IPFS: %v", err)
+	}
+
+	return body, nil
+}
+
+// New function to handle database updates
+func updatePointsInDatabase(taskID int64, performerAddress common.Address, attestersIds []string) error {
+	// Get task fee from task_data table
+	var taskFee int64
+	if err := db.Query(`
+		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+		taskID).Scan(&taskFee); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
+		return err
+	}
+
+	// Update performer points
+	if err := updatePerformerPoints(performerAddress.Hex(), taskFee); err != nil {
+		return err
+	}
+
+	// Update attester points
+	for _, attesterId := range attestersIds {
+		if err := updateAttesterPoints(attesterId, taskFee); err != nil {
+			logger.Error(fmt.Sprintf("Failed to update points for attester %s: %v", attesterId, err))
+			continue
+		}
+	}
+
+	return nil
+}
+
+// Helper function to update performer points
+func updatePerformerPoints(performerAddress string, taskFee int64) error {
+	var performerPoints int64
+	if err := db.Query(`
+		SELECT keeper_points FROM triggerx.keeper_data 
+		WHERE keeper_address = ? ALLOW FILTERING`,
+		performerAddress).Scan(&performerPoints); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get performer points: %v", err))
+		return err
+	}
+
+	newPerformerPoints := performerPoints + taskFee
+
+	if err := db.Query(`
+		UPDATE triggerx.keeper_data 
+		SET keeper_points = ? 
+		WHERE keeper_address = ?`,
+		newPerformerPoints, performerAddress).Exec(); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
+		return err
+	}
+
+	logger.Info(fmt.Sprintf("Added %d points to performer %s", taskFee, performerAddress))
+	return nil
+}
+
+// Helper function to update attester points
+func updateAttesterPoints(attesterId string, taskFee int64) error {
+	var attesterPoints int64
+	if err := db.Query(`
+		SELECT keeper_points FROM triggerx.keeper_data 
+		WHERE keeper_id = ?`,
+		attesterId).Scan(&attesterPoints); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get attester points for ID %s: %v", attesterId, err))
+		return err
+	}
+
+	newAttesterPoints := attesterPoints + taskFee
+
+	if err := db.Query(`
+		UPDATE triggerx.keeper_data 
+		SET keeper_points = ? 
+		WHERE keeper_id = ?`,
+		newAttesterPoints, attesterId).Exec(); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update attester points for ID %s: %v", attesterId, err))
+		return err
+	}
+
+	logger.Info(fmt.Sprintf("Added %d points to attester ID %s", taskFee, attesterId))
+	return nil
 }

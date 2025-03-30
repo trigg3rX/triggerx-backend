@@ -7,11 +7,24 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
 	BaseDataDir = "data"
 	LogsDir     = "logs"
+)
+
+// ANSI color codes
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorPurple = "\033[35m"
+	colorCyan   = "\033[36m"
+	colorWhite  = "\033[37m"
 )
 
 type LogLevel string
@@ -32,7 +45,8 @@ const (
 )
 
 type ZapLogger struct {
-	logger *zap.Logger
+	logger    *zap.Logger
+	useColors bool
 }
 
 var _ Logger = (*ZapLogger)(nil)
@@ -65,6 +79,30 @@ func NewZapLogger(env LogLevel, processName string) (Logger, error) {
 		config.OutputPaths = []string{"stdout", logPath}
 	}
 
+	// Create a custom encoder config for colored output
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:       "ts",
+		LevelKey:      "", // Set to empty to hide the level
+		NameKey:       "logger",
+		CallerKey:     "caller",
+		FunctionKey:   zapcore.OmitKey,
+		MessageKey:    "msg",
+		StacktraceKey: "stacktrace",
+		LineEnding:    zapcore.DefaultLineEnding,
+		EncodeLevel:   zapcore.LowercaseLevelEncoder,
+		EncodeTime: func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
+			encoder.AppendString(t.Format("2006-01-02 15:04:05"))
+		},
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller: func(caller zapcore.EntryCaller, encoder zapcore.PrimitiveArrayEncoder) {
+			// Get just the file name without the path
+			_, file := filepath.Split(caller.File)
+			encoder.AppendString(fmt.Sprintf("%s:%d", file, caller.Line))
+		},
+	}
+
+	config.EncoderConfig = encoderConfig
+
 	return NewZapLoggerByConfig(config, zap.AddCallerSkip(1))
 }
 
@@ -77,53 +115,87 @@ func NewZapLoggerByConfig(config zap.Config, options ...zap.Option) (Logger, err
 	}
 
 	return &ZapLogger{
-		logger: logger,
+		logger:    logger,
+		useColors: true,
 	}, nil
 }
 
+// colorize adds ANSI color codes to the message based on log level
+func (z *ZapLogger) colorize(level, msg string) string {
+	if !z.useColors {
+		return msg
+	}
+
+	switch level {
+	case "debug":
+		return fmt.Sprintf("[%sdebug%s] %s", colorBlue, colorReset, msg)
+	case "info":
+		return fmt.Sprintf("[%sinfo%s] %s", colorGreen, colorReset, msg)
+	case "warn":
+		return fmt.Sprintf("[%swarn%s] %s", colorYellow, colorReset, msg)
+	case "error":
+		return fmt.Sprintf("[%serror%s] %s", colorRed, colorReset, msg)
+	case "fatal":
+		return fmt.Sprintf("[%sfatal%s] %s", colorPurple, colorReset, msg)
+	default:
+		return msg
+	}
+}
+
 func (z *ZapLogger) Debug(msg string, tags ...any) {
-	z.logger.Sugar().Debugw(msg, tags...)
+	coloredMsg := z.colorize("debug", msg)
+	z.logger.Sugar().Debugw(coloredMsg, tags...)
 }
 
 func (z *ZapLogger) Info(msg string, tags ...any) {
-	z.logger.Sugar().Infow(msg, tags...)
+	coloredMsg := z.colorize("info", msg)
+	z.logger.Sugar().Infow(coloredMsg, tags...)
 }
 
 func (z *ZapLogger) Warn(msg string, tags ...any) {
-	z.logger.Sugar().Warnw(msg, tags...)
+	coloredMsg := z.colorize("warn", msg)
+	z.logger.Sugar().Warnw(coloredMsg, tags...)
 }
 
 func (z *ZapLogger) Error(msg string, tags ...any) {
-	z.logger.Sugar().Errorw(msg, tags...)
+	coloredMsg := z.colorize("error", msg)
+	z.logger.Sugar().Errorw(coloredMsg, tags...)
 }
 
 func (z *ZapLogger) Fatal(msg string, tags ...any) {
-	z.logger.Sugar().Fatalw(msg, tags...)
+	coloredMsg := z.colorize("fatal", msg)
+	z.logger.Sugar().Fatalw(coloredMsg, tags...)
 }
 
 func (z *ZapLogger) Debugf(template string, args ...interface{}) {
-	z.logger.Sugar().Debugf(template, args...)
+	coloredTemplate := z.colorize("debug", template)
+	z.logger.Sugar().Debugf(coloredTemplate, args...)
 }
 
 func (z *ZapLogger) Infof(template string, args ...interface{}) {
-	z.logger.Sugar().Infof(template, args...)
+	coloredTemplate := z.colorize("info", template)
+	z.logger.Sugar().Infof(coloredTemplate, args...)
 }
 
 func (z *ZapLogger) Warnf(template string, args ...interface{}) {
-	z.logger.Sugar().Warnf(template, args...)
+	coloredTemplate := z.colorize("warn", template)
+	z.logger.Sugar().Warnf(coloredTemplate, args...)
 }
 
 func (z *ZapLogger) Errorf(template string, args ...interface{}) {
-	z.logger.Sugar().Errorf(template, args...)
+	coloredTemplate := z.colorize("error", template)
+	z.logger.Sugar().Errorf(coloredTemplate, args...)
 }
 
 func (z *ZapLogger) Fatalf(template string, args ...interface{}) {
-	z.logger.Sugar().Fatalf(template, args...)
+	coloredTemplate := z.colorize("fatal", template)
+	z.logger.Sugar().Fatalf(coloredTemplate, args...)
 }
 
 func (z *ZapLogger) With(tags ...any) Logger {
 	return &ZapLogger{
-		logger: z.logger.Sugar().With(tags...).Desugar(),
+		logger:    z.logger.Sugar().With(tags...).Desugar(),
+		useColors: z.useColors,
 	}
 }
 
@@ -146,4 +218,25 @@ func GetLogger(env LogLevel, processName ProcessName) Logger {
 	logger, _ := NewZapLogger(env, string(processName))
 	loggers[processName] = logger
 	return logger
+}
+
+// SetUseColors enables or disables color output
+func SetUseColors(processName ProcessName, useColors bool) {
+	if logger, exists := loggers[processName]; exists {
+		if zapLogger, ok := logger.(*ZapLogger); ok {
+			zapLogger.useColors = useColors
+		}
+	}
+}
+
+// Set default color behavior for all loggers
+func init() {
+	// Pre-populate the loggers map with default settings
+	for _, process := range []ProcessName{ManagerProcess, DatabaseProcess, KeeperProcess, RegistrarProcess} {
+		logger, _ := NewZapLogger(Development, string(process))
+		if zapLogger, ok := logger.(*ZapLogger); ok {
+			zapLogger.useColors = true
+		}
+		loggers[process] = logger
+	}
 }

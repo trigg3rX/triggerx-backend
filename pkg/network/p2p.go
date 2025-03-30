@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/joho/godotenv"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -82,6 +83,12 @@ func ConnectToAggregator() error {
 		return nil
 	}
 
+	// Load environment variables
+	err := godotenv.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load environment variables: %w", err)
+	}
+
 	// Initialize P2P host for manager
 	priv, err := LoadIdentity(ServiceManager)
 	if err != nil {
@@ -100,8 +107,11 @@ func ConnectToAggregator() error {
 	// Store host globally
 	globalHost = &P2PHost{Host: h}
 
+	targetIP := os.Getenv("AGGREGATOR_IP_ADDRESS")
+	targetPort := os.Getenv("AGGREGATOR_P2P_PORT")
+
 	// Parse aggregator multiaddr
-	targetAddr, err := multiaddr.NewMultiaddr("/ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB")
+	targetAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%s/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB", targetIP, targetPort))
 	if err != nil {
 		return fmt.Errorf("failed to parse aggregator address: %w", err)
 	}

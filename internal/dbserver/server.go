@@ -26,7 +26,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	logger := logging.GetLogger(logging.Development, processName)
 
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{
+		AllowedOrigins: []string{"*",
 			"https://app.triggerx.network",
 			"https://www.triggerx.network",
 			"http://localhost:3000",
@@ -61,6 +61,7 @@ func (s *Server) routes() {
 
 	// User routes
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
+	api.HandleFunc("/wallet/{wallet_address}/points", handler.GetWalletPoints).Methods("GET")
 
 	// // Job routes
 	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
@@ -75,7 +76,7 @@ func (s *Server) routes() {
 
 	// // Keeper routes
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
-	api.HandleFunc("/keepers/connection", handler.UpdateKeeperConnectionData).Methods("POST")
+	// api.HandleFunc("/keepers/connection", handler.UpdateKeeperConnectionData).Methods("POST")
 	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/form", handler.GoogleFormCreateKeeperData).Methods("POST")
@@ -84,6 +85,9 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}/task-count", handler.GetKeeperTaskCount).Methods("GET")
 	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
 	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
+
+	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
+	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
 
 	// Fees routes
 	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
