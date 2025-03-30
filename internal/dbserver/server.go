@@ -61,6 +61,7 @@ func (s *Server) routes() {
 
 	// User routes
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
+	api.HandleFunc("/wallet/{wallet_address}/points", handler.GetWalletPoints).Methods("GET")
 
 	// // Job routes
 	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
