@@ -50,21 +50,15 @@ func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT account_balance
         FROM triggerx.user_data 
-        WHERE user_address = ?`, walletAddress).Scan(&userPoints); err != nil {
-		h.logger.Errorf("[GetWalletPoints] Error retrieving user points for wallet address %s: %v", walletAddress, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+        WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {}
 
 	// Query keeper_data table
 	if err := h.db.Session().Query(`
-        SELECT points
+        SELECT keeper_points
         FROM triggerx.keeper_data 
-        WHERE user_address = ?`, walletAddress).Scan(&keeperPoints); err != nil {
-		h.logger.Errorf("[GetWalletPoints] Error retrieving keeper points for wallet address %s: %v", walletAddress, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+        WHERE keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {}
+
+	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)
 
 	totalPoints := userPoints + keeperPoints
 

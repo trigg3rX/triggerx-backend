@@ -56,11 +56,11 @@ func NewMetricsServer(db *database.Connection, logger logging.Logger) *MetricsSe
 
 // Start begins the metrics collection and HTTP server
 func (m *MetricsServer) Start() {
-	// Start metrics collection in a goroutine
-	go m.collectMetrics()
-
-	// Register the metrics handler
+	// Register the default metrics handler
 	http.Handle("/metrics", promhttp.Handler())
+
+	// Register a filtered metrics handler
+	http.HandleFunc("/metrics/keeper", m.filteredMetricsHandler)
 
 	// Start the HTTP server on port 8081
 	go func() {
@@ -131,4 +131,55 @@ func (m *MetricsServer) updateKeeperMetrics() {
 	if err := iter.Close(); err != nil {
 		m.logger.Errorf("Error fetching keeper metrics: %v", err)
 	}
+}
+
+// filteredMetricsHandler provides metrics filtered by keeper_address
+func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	keeperAddress := r.URL.Query().Get("address")
+	if keeperAddress == "" {
+		http.Error(w, "keeper address parameter 'address' is required", http.StatusBadRequest)
+		return
+	}
+
+	// Create a registry for this specific keeper
+	registry := prometheus.NewRegistry()
+
+	// Query just this keeper's data
+	var keeperID int64
+	var taskCount int
+	var points int64
+
+	err := m.db.Session().Query(`
+		SELECT keeper_id, no_exctask, keeper_points 
+		FROM triggerx.keeper_data
+		WHERE keeper_address = ?
+	`, keeperAddress).Scan(&keeperID, &taskCount, &points)
+
+	if err != nil {
+		m.logger.Errorf("Error fetching keeper metrics for %s: %v", keeperAddress, err)
+		http.Error(w, "Error fetching keeper data", http.StatusInternalServerError)
+		return
+	}
+
+	// Create keeper-specific metrics
+	keeperPointsMetric := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "triggerx_keeper_points",
+		Help: "The total points accumulated by this keeper",
+	})
+	keeperTaskCountMetric := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "triggerx_keeper_task_count",
+		Help: "The number of tasks executed by this keeper",
+	})
+
+	// Register metrics with this registry
+	registry.MustRegister(keeperPointsMetric)
+	registry.MustRegister(keeperTaskCountMetric)
+
+	// Set values
+	keeperPointsMetric.Set(float64(points))
+	keeperTaskCountMetric.Set(float64(taskCount))
+
+	// Generate response
+	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	h.ServeHTTP(w, r)
 }
