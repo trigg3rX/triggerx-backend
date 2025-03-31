@@ -37,7 +37,7 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 # Build Docker image once
-docker build -t triggerx-keeper:${VERSION} .
+docker build --no-cache -t triggerx-keeper:${VERSION} .
 
 # Tag images with version and latest
 docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:${VERSION}

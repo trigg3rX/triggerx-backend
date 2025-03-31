@@ -37,7 +37,7 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 # Build Docker image with specified version
-docker build -t dev-keeper:${VERSION} .
+docker build --no-cache -t dev-keeper:${VERSION} .
 
 # Tag images
 docker tag dev-keeper:${VERSION} trigg3rx/dev-keeper:${VERSION}
