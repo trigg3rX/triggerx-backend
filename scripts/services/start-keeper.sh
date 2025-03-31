@@ -2,7 +2,7 @@
 echo "Starting keeper node..."
 
 # Start keeper-execution in the background
-~/bin/triggerx-keeper &
+./keeper-execution &
 KEEPER_PID=$!
 
 # Start othentic-cli in the background
