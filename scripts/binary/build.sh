@@ -6,4 +6,4 @@ if ! [[ "$0" =~ scripts/binary/build.sh ]]; then
   exit 1
 fi
 
-go build -v -o ~/bin/triggerx-keeper cmd/keeper/main.go
+go build -v -o triggerx-keeper cmd/keeper/main.go

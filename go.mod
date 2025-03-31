@@ -1,6 +1,7 @@
 module github.com/trigg3rX/triggerx-backend
 
 go 1.23.3
+
 toolchain go1.24.1
 
 require (
