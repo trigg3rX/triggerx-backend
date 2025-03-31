@@ -14,6 +14,9 @@ start-aggregator: ## Start the Aggregator
 start-registrar: ## Start the Registrar
 	./scripts/services/start-registrar.sh
 
+start-health: ## Start the Health Check
+	./scripts/services/start-health.sh
+
 ############################# DATABASE #############################
 
 db-setup: ## Setup ScyllaDB container
