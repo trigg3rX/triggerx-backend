@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -38,6 +38,14 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "#EAB839",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
               }
             ]
           }
@@ -46,16 +54,17 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 0,
+        "w": 3,
+        "x": 5,
         "y": 0
       },
-      "id": 1,
+      "id": 10,
+      "maxDataPoints": 100,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
+        "colorMode": "background",
+        "graphMode": "none",
         "justifyMode": "auto",
-        "orientation": "auto",
+        "orientation": "horizontal",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
@@ -65,29 +74,26 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "auto",
+        "textMode": "value",
         "wideLayout": true
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
           "editorMode": "code",
-          "expr": "triggerx_total_keepers",
-          "interval": "$interval",
+          "expr": "sum(changes(process_start_time_seconds{instance=~\"$instance\"}[$restarts_interval]))",
+          "legendFormat": "",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Keepers",
+      "title": "Restarts in $restarts_interval",
       "type": "stat"
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -131,7 +137,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "disableTextWrap": false,
@@ -150,7 +156,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -194,7 +201,7 @@
         "textMode": "value_and_name",
         "wideLayout": false
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "disableTextWrap": false,
@@ -232,7 +239,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -276,7 +284,7 @@
         "textMode": "value_and_name",
         "wideLayout": false
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "disableTextWrap": false,
@@ -303,80 +311,12 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 5,
-        "y": 4
-      },
-      "id": 10,
-      "maxDataPoints": 100,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "value",
-        "wideLayout": true
-      },
-      "pluginVersion": "11.5.2",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "sum(changes(process_start_time_seconds{instance=~\"$instance\"}[$restarts_interval]))",
-          "legendFormat": "",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Restarts in $restarts_interval",
-      "type": "stat"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 4
       },
       "id": 7,
       "panels": [],
@@ -386,202 +326,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 9
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "11.5.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "triggerx_keeper_points",
-          "interval": "$interval",
-          "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Keeper Points",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 9
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "11.5.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "triggerx_keeper_task_count",
-          "interval": "$interval",
-          "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Keeper Task Count",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus"
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -643,7 +388,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 17
+        "y": 5
       },
       "id": 6,
       "options": {
@@ -659,16 +404,16 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "irate(process_cpu_user_seconds_total{instance=~\"$instance\"}[2m]) * 100",
           "format": "time_series",
@@ -678,7 +423,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "irate(process_cpu_system_seconds_total{instance=~\"$instance\"}[2m]) * 100",
           "format": "time_series",
@@ -692,7 +438,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -754,7 +501,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 17
+        "y": 5
       },
       "id": 36,
       "options": {
@@ -768,16 +515,16 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_heap_space_size_used_bytes{instance=~\"$instance\"}",
           "legendFormat": "{{space}}",
@@ -789,7 +536,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -851,7 +599,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 12
       },
       "id": 50,
       "options": {
@@ -867,16 +615,16 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "process_resident_memory_bytes{instance=~\"$instance\"}",
           "format": "time_series",
@@ -886,7 +634,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_heap_size_total_bytes{instance=~\"$instance\"}",
           "format": "time_series",
@@ -896,7 +645,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_heap_size_used_bytes{instance=~\"$instance\"}",
           "format": "time_series",
@@ -906,7 +656,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_external_memory_bytes{instance=~\"$instance\"}",
           "format": "time_series",
@@ -921,150 +672,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 31
-      },
-      "id": 4,
-      "options": {
-        "displayMode": "gradient",
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "maxVizHeight": 300,
-        "minVizHeight": 10,
-        "minVizWidth": 0,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      },
-      "pluginVersion": "11.5.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "triggerx_keeper_points",
-          "interval": "$interval",
-          "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Keeper Points Distribution",
-      "type": "bargauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 31
-      },
-      "id": 51,
-      "options": {
-        "displayMode": "gradient",
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "maxVizHeight": 300,
-        "minVizHeight": 10,
-        "minVizWidth": 0,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      },
-      "pluginVersion": "11.5.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "triggerx_keeper_task_count",
-          "interval": "$interval",
-          "legendFormat": "Keeper {{keeper_id}} ({{keeper_address}})",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Keeper Task Count Distribution",
-      "type": "bargauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus"
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -1126,7 +734,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 39
+        "y": 19
       },
       "id": 21,
       "options": {
@@ -1140,16 +748,16 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_eventloop_lag_seconds{instance=~\"$instance\"}",
           "hide": false,
@@ -1159,7 +767,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_eventloop_lag_p99_seconds{instance=~\"$instance\"}",
           "legendFormat": "p99",
@@ -1167,7 +776,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_eventloop_lag_p50_seconds{instance=~\"$instance\"}",
           "legendFormat": "p50",
@@ -1179,7 +789,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -1243,7 +854,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 39
+        "y": 19
       },
       "id": 5,
       "options": {
@@ -1257,12 +868,11 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "disableTextWrap": false,
@@ -1281,7 +891,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -1344,7 +955,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 44
+        "y": 24
       },
       "id": 46,
       "options": {
@@ -1358,16 +969,16 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "nodejs_gc_duration_seconds_sum{instance=~\"$instance\"}",
           "legendFormat": "{{kind}}",
@@ -1379,7 +990,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": null
       },
       "fieldConfig": {
         "defaults": {
@@ -1441,7 +1053,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 44
+        "y": 24
       },
       "id": 43,
       "options": {
@@ -1456,16 +1068,16 @@
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "11.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": null
           },
           "expr": "rate(nodejs_gc_duration_seconds_sum{instance=~\"$instance\"}[$interval])",
           "legendFormat": "{{kind}}",
@@ -1480,9 +1092,7 @@
   "schemaVersion": 40,
   "tags": [
     "othentic-cli",
-    "node.js",
-    "triggerx",
-    "keepers"
+    "node.js"
   ],
   "templating": {
     "list": [
@@ -1687,15 +1297,6 @@
         ],
         "query": "0.1,0.2,0.3,0.4,0.5",
         "type": "custom"
-      },
-      {
-        "includeAll": false,
-        "label": "Keeper",
-        "name": "keeper_id",
-        "query": "label_values(triggerx_keeper_points, keeper_id)",
-        "refresh": 1,
-        "sort": 1,
-        "type": "query"
       }
     ]
   },
@@ -1707,6 +1308,6 @@
   "timezone": "browser",
   "title": "othentic-cli Dashboard",
   "uid": "be57l7novo8hsf",
-  "version": 2,
+  "version": 57,
   "weekStart": ""
 }
