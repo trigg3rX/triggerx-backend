@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -8,6 +9,9 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,6 +45,127 @@ func NewJobValidator(logger Logger, ethClient *ethclient.Client) *JobValidator {
 		logger:    logger,
 		ethClient: ethClient,
 	}
+}
+
+func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
+	// Ensure this is a condition-based job
+	if job.TaskDefinitionID != 5 && job.TaskDefinitionID != 6 {
+		return false, fmt.Errorf("not a condition-based job: task definition ID %d", job.TaskDefinitionID)
+	}
+
+	v.logger.Infof("Validating condition-based job %d (taskDefID: %d)", job.JobID, job.TaskDefinitionID)
+
+	// For non-recurring jobs, check if job has already been executed and shouldn't run again
+	if !job.Recurring && !job.LastExecutedAt.IsZero() {
+		v.logger.Infof("Job %d is non-recurring and has already been executed on %s",
+			job.JobID, job.LastExecutedAt.Format(time.RFC3339))
+		return false, nil
+	}
+
+	// Check if ScriptTriggerFunction is provided
+	if job.ScriptTriggerFunction == "" {
+		return false, fmt.Errorf("missing ScriptTriggerFunction for condition-based job")
+	}
+
+	// Fetch and evaluate condition script from IPFS
+	satisfied, err := v.evaluateConditionScript(job.ScriptTriggerFunction)
+	if err != nil {
+		return false, fmt.Errorf("failed to evaluate condition script: %v", err)
+	}
+
+	// If condition is not satisfied, return false
+	if !satisfied {
+		v.logger.Infof("Condition not satisfied for job %d", job.JobID)
+		return false, nil
+	}
+
+	v.logger.Infof("Condition satisfied for job %d", job.JobID)
+
+	// Check if job is within its timeframe
+	now := time.Now()
+	if job.TimeFrame > 0 {
+		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second)
+		if now.After(endTime) {
+			v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds)",
+				job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame)
+			return false, nil
+		}
+	}
+
+	v.logger.Infof("Condition-based job %d is validated successfully", job.JobID)
+	return true, nil
+}
+
+// evaluateConditionScript fetches and executes a condition script from IPFS
+func (v *JobValidator) evaluateConditionScript(scriptUrl string) (bool, error) {
+	// Fetch the script content from IPFS
+	scriptContent, err := fetchIPFSContent(scriptUrl)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch condition script from IPFS: %v", err)
+	}
+
+	// Create a temporary file for the script
+	tempFile, err := os.CreateTemp("", "condition-*.go")
+	if err != nil {
+		return false, fmt.Errorf("failed to create temporary file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+
+	// Write the script content to the temporary file
+	if _, err := tempFile.Write([]byte(scriptContent)); err != nil {
+		return false, fmt.Errorf("failed to write script to temporary file: %v", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return false, fmt.Errorf("failed to close temporary file: %v", err)
+	}
+
+	// Create a temporary directory for the build output
+	tempDir, err := os.MkdirTemp("", "condition-build")
+	if err != nil {
+		return false, fmt.Errorf("failed to create temporary build directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Compile the script
+	outputBinary := filepath.Join(tempDir, "condition")
+	cmd := exec.Command("go", "build", "-o", outputBinary, tempFile.Name())
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return false, fmt.Errorf("failed to compile condition script: %v, stderr: %s", err, stderr.String())
+	}
+
+	// Run the compiled script
+	result := exec.Command(outputBinary)
+	stdout, err := result.Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to run condition script: %v", err)
+	}
+
+	// Parse the output to determine if condition is satisfied
+	output := string(stdout)
+	v.logger.Infof("Condition script output: %s", output)
+
+	// Look for "Condition satisfied: true" or "Condition satisfied: false"
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "Condition satisfied: true") {
+			return true, nil
+		} else if strings.Contains(line, "Condition satisfied: false") {
+			return false, nil
+		}
+	}
+
+	// If no explicit condition statement found, try to parse as JSON
+	var conditionResult struct {
+		Satisfied bool `json:"satisfied"`
+	}
+	if err := json.Unmarshal([]byte(output), &conditionResult); err == nil {
+		return conditionResult.Satisfied, nil
+	}
+
+	// If we can't determine the result, return an error
+	return false, fmt.Errorf("could not determine condition result from output: %s", output)
 }
 
 // ValidateTimeBasedJob checks if a time-based job (task definitions 1 and 2) should be executed
@@ -269,11 +394,11 @@ func (v *JobValidator) ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData, 
 	case 1, 2: // Time-based jobs
 		return v.ValidateTimeBasedJob(job)
 	case 3, 4: // Event-based jobs
-		// Placeholder for event-based validation logic
+		// Event-based validation logic
 		return v.ValidateEventBasedJob(job, &jobtypes.IPFSData{})
 	case 5, 6: // Condition-based jobs
-		// Placeholder for condition-based validation logic
-		return true, nil
+		// Condition-based validation logic
+		return v.ValidateConditionBasedJob(job)
 	default:
 		return false, fmt.Errorf("unsupported task definition ID: %d", job.TaskDefinitionID)
 	}
@@ -396,8 +521,7 @@ func ValidateTask(c *gin.Context) {
 	case 3, 4: // Event-based jobs
 		isValid, validationErr = jobValidator.ValidateEventBasedJob(&ipfsData.JobData, &ipfsData)
 	case 5, 6: // Condition-based jobs
-		// For future implementation
-		isValid = true
+		isValid, validationErr = jobValidator.ValidateConditionBasedJob(&ipfsData.JobData)
 	default:
 		validationErr = fmt.Errorf("unsupported task definition ID: %d", taskRequest.TaskDefinitionID)
 	}
