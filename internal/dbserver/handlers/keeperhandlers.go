@@ -392,3 +392,42 @@ func (h *Handler) GetKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]int64{"keeper_points": points})
 }
+
+func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
+	var keeperHealth types.UpdateKeeperHealth
+	if err := json.NewDecoder(r.Body).Decode(&keeperHealth); err != nil {
+		h.logger.Errorf("[KeeperHealthCheckIn] Error decoding request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var keeperID string
+	if err := h.db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperHealth.KeeperAddress).Scan(&keeperID); err != nil {
+		h.logger.Errorf("[KeeperHealthCheckIn] Error retrieving keeper_id for address %s: %v", 
+			keeperHealth.KeeperAddress, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if keeperID == "" {
+		h.logger.Errorf("[KeeperHealthCheckIn] No keeper found with address: %s", keeperHealth.KeeperAddress)
+		http.Error(w, "Keeper not found", http.StatusNotFound)
+		return
+	}
+
+	h.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %s | Online: %t", keeperID, keeperHealth.Active)
+
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.keeper_data SET online = ?, version = ? WHERE keeper_id = ?`,
+		keeperHealth.Active, keeperHealth.Version, keeperID).Exec(); err != nil {
+		h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	h.logger.Infof("[KeeperHealthCheckIn] Updated Keeper status for ID: %s", keeperID)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(keeperHealth)
+}
