@@ -6,7 +6,7 @@ toolchain go1.24.1
 
 require (
 	github.com/docker/docker v25.0.6+incompatible
-	github.com/ethereum/go-ethereum v1.15.5
+	github.com/ethereum/go-ethereum v1.15.7
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gocql/gocql v1.7.0
 	github.com/gorilla/mux v1.8.1
