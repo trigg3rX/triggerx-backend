@@ -419,12 +419,22 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %s | Online: %t", keeperID, keeperHealth.Active)
 
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET online = ?, version = ? WHERE keeper_id = ?`,
-		keeperHealth.Active, keeperHealth.Version, keeperID).Exec(); err != nil {
-		h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if keeperHealth.Version == "" {
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.keeper_data SET online = ?, WHERE keeper_id = ?`,
+			keeperHealth.Active, keeperID).Exec(); err != nil {
+			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.keeper_data SET online = ?, version = ? WHERE keeper_id = ?`,
+			keeperHealth.Active, keeperHealth.Version, keeperID).Exec(); err != nil {
+			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	
 	h.logger.Infof("[KeeperHealthCheckIn] Updated Keeper status for ID: %s", keeperID)
