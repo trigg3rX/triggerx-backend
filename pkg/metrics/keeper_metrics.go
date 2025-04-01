@@ -152,7 +152,7 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	err := m.db.Session().Query(`
 		SELECT keeper_id, no_exctask, keeper_points 
 		FROM triggerx.keeper_data
-		WHERE keeper_address = ?
+		WHERE keeper_address = ? ALLOW FILTERING
 	`, keeperAddress).Scan(&keeperID, &taskCount, &points)
 
 	if err != nil {

@@ -56,3 +56,18 @@ type IPFSData struct {
 
 	ProofData 	ProofData 	`json:"proof_data"`
 }
+
+// KeeperHealth represents the health status of a keeper
+type KeeperHealth struct {
+	KeeperAddress string    `json:"keeper_address"`
+	Version           string    `json:"version"`
+	Timestamp         time.Time `json:"timestamp"`
+	Signature         string    `json:"signature"`
+}
+
+type UpdateKeeperHealth struct {
+	KeeperAddress string    `json:"keeper_address"`
+	Active        bool      `json:"active"`
+	Timestamp     time.Time `json:"timestamp"`
+	Version       string    `json:"version"`
+}

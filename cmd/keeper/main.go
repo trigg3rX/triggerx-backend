@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	// "os/exec"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/checkin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
@@ -25,12 +25,27 @@ func main() {
 	logger := logging.GetLogger(logging.Development, logging.KeeperProcess)
 	logger.Info("Starting keeper node...")
 
-	// Start Docker containers
-	// if err := startDockerContainers(); err != nil {
-	// 	logger.Fatal("Failed to start Docker containers", "error", err)
-	// }
-
 	services.Init()
+
+	// Start a goroutine for periodic health check-ins
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+
+		// Do an initial checkin at startup
+		if err := checkin.CheckInWithHealthService(); err != nil {
+			logger.Error("Initial health check-in failed", "error", err)
+		}
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := checkin.CheckInWithHealthService(); err != nil {
+					logger.Error("Health check-in failed", "error", err)
+				}
+			}
+		}
+	}()
 
 	routerValidation := gin.New()
 	routerValidation.Use(gin.Recovery())
@@ -98,11 +113,6 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		// Run docker-compose down command
-		// if err := stopDockerContainers(); err != nil {
-		// 	logger.Error("Failed to stop Docker containers", "error", err)
-		// }
-
 		if err := srvValidation.Shutdown(ctx); err != nil {
 			logger.Error("Graceful Shutdown Keeper Server Failed",
 				"timeout", 2*time.Second,
@@ -115,25 +125,3 @@ func main() {
 	}
 	logger.Info("Shutdown Complete")
 }
-
-// Function to start Docker containers
-// func startDockerContainers() error {
-// 	cmd := exec.Command("docker", "compose", "up", "-d")
-// 	cmd.Dir = "./"                      // Set the directory where your docker-compose.yaml is located
-// 	output, err := cmd.CombinedOutput() // Capture combined output (stdout and stderr)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to start Docker containers: %v, output: %s", err, output)
-// 	}
-// 	return nil
-// }
-
-// Function to stop Docker containers
-// func stopDockerContainers() error {
-// 	cmd := exec.Command("docker", "compose", "down")
-// 	cmd.Dir = "./"                      // Set the directory where your docker-compose.yaml is located
-// 	output, err := cmd.CombinedOutput() // Capture combined output (stdout and stderr)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to stop Docker containers: %v, output: %s", err, output)
-// 	}
-// 	return nil
-// }
