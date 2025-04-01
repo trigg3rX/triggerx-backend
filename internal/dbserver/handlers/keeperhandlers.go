@@ -119,7 +119,7 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
 	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
 			FROM triggerx.keeper_data 
-			WHERE verified = true AND status = true
+			WHERE verified = true AND status = true AND online = true
 			ALLOW FILTERING`).Iter()
 
 	var performer types.GetPerformerData
