@@ -16,18 +16,19 @@ DROP TABLE IF EXISTS keeper_data;
 
 -- Create User_data table
 CREATE TABLE IF NOT EXISTS user_data (
-    user_id bigint PRIMARY KEY,
+    user_id bigint,
     user_address text,
     created_at timestamp,
     job_ids set<bigint>,
     account_balance varint,
     token_balance varint,
-    last_updated_at timestamp
+    last_updated_at timestamp,
+    PRIMARY KEY (user_id)
 );
 
 -- Create Job_data table    
 CREATE TABLE IF NOT EXISTS job_data (
-    job_id bigint PRIMARY KEY,
+    job_id bigint,
     task_definition_id int,
     user_id bigint,
     priority int,
@@ -56,12 +57,13 @@ CREATE TABLE IF NOT EXISTS job_data (
     job_cost_prediction double,
     created_at timestamp,
     last_executed_at timestamp,
-    task_ids set<bigint>
+    task_ids set<bigint>,
+    PRIMARY KEY (job_id)
 );
 
 -- Create Task_data table
 CREATE TABLE IF NOT EXISTS task_data (
-    task_id bigint PRIMARY KEY,
+    task_id bigint,
     job_id bigint,
     task_definition_id int,
     created_at timestamp,
@@ -80,12 +82,14 @@ CREATE TABLE IF NOT EXISTS task_data (
     ta_signature blob,
     task_submission_tx_hash text,
     
-    is_successful boolean
+    is_successful boolean,
+    PRIMARY KEY (task_id)
 );
 
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
-    keeper_id bigint PRIMARY KEY,
+    keeper_id bigint,
+    keeper_name text,
     keeper_address text,
     registered_tx text,
     
@@ -94,9 +98,10 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     strategies list<text>,
     verified boolean,
     status boolean,
+    online boolean,
+    version text,
     consensus_keys list<text>,
-    connection_address text,
     no_exctask int,
     keeper_points bigint,
-    keeper_name text
+    PRIMARY KEY (keeper_id)
 );
