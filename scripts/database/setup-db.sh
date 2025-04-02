@@ -2,7 +2,7 @@
 
 # Execute the CQL script
 echo "Initializing database schema..."
-docker exec -i triggerx-scylla-dev cqlsh < scripts/database/init-db.cql
+docker exec -i triggerx-scylla cqlsh < scripts/database/init-db.cql
 
 # Check if the keyspace was created
 if [ $? -eq 0 ]; then

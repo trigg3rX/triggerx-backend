@@ -42,6 +42,7 @@ const (
 	DatabaseProcess  ProcessName = "database"
 	KeeperProcess    ProcessName = "keeper"
 	RegistrarProcess ProcessName = "registrar"
+	HealthProcess    ProcessName = "health"
 )
 
 type ZapLogger struct {

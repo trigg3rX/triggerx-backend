@@ -13,6 +13,8 @@ data/logs/*/*.log
 data/peer_registry/services_privKeys.json
 data/peer_registry/*_identity.json
 !data/logs/*/.gitkeep
+data/peerstore
+peerstore
 
 data/logs/*/*.log
 cosign.key

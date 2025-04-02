@@ -1,8 +1,6 @@
 package config
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"strings"
 	
@@ -23,7 +21,6 @@ var (
 	KeeperAddress             	string
 	KeeperRPCPort               string
 	KeeperP2PPort       		string
-	ConnectionAddress           string
 
 	// Provided Information
 	PinataApiKey        string
@@ -32,6 +29,7 @@ var (
 	AggregatorIPAddress string
 	ManagerIPAddress    string
 	DatabaseIPAddress   string
+	HealthIPAddress     string
 )
 
 func Init() {
@@ -46,8 +44,9 @@ func Init() {
 	AggregatorIPAddress = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
 	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
 	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
+	HealthIPAddress = os.Getenv("HEALTH_IP_ADDRESS")
 
-	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorIPAddress == "" || ManagerIPAddress == "" || DatabaseIPAddress == "" {
+	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorIPAddress == "" || ManagerIPAddress == "" || DatabaseIPAddress == "" || HealthIPAddress == "" {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
 
@@ -62,20 +61,6 @@ func Init() {
 	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" || KeeperP2PPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
-
-	// Get the connection address (IP address of the machine running this code)
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		logger.Error("Failed to determine local IP address", "error", err)
-		// Fallback to localhost if we can't determine the IP
-		ConnectionAddress = "127.0.0.1"
-	} else {
-		defer conn.Close()
-		localAddr := conn.LocalAddr().(*net.UDPAddr)
-		ConnectionAddress = fmt.Sprintf("http://%s:%s", localAddr.IP.String(), KeeperRPCPort)
-	}
-	
-	// logger.Info("Keeper connection address set", "address", ConnectionAddress)
 
 	gin.SetMode(gin.ReleaseMode)
 }

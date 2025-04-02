@@ -88,6 +88,7 @@ type KeeperData struct {
 	// Fixed Values
 	KeeperID      int64  `json:"keeper_id"`
 	KeeperAddress string `json:"keeper_address"`
+	KeeperName        string    `json:"keeper_name"`
 	RegisteredTx  string `json:"registered_tx"`
 
 	// Active Values
@@ -96,9 +97,10 @@ type KeeperData struct {
 	Strategies        []string  `json:"strategies"`
 	Verified          bool      `json:"verified"`
 	Status            bool      `json:"status"`
+	Online            bool      `json:"online"`
+	Version           string    `json:"version"`
 	ConsensusKeys     []string  `json:"consensus_keys"`
 	ConnectionAddress string    `json:"connection_address"`
 	NoExcTask         int       `json:"no_exctask"`
 	KeeperPoints      int64     `json:"keeper_points"`
-	KeeperName        string    `json:"keeper_name"`
 }

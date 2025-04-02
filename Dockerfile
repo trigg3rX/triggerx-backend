@@ -41,11 +41,8 @@ WORKDIR /root/
 COPY --from=builder /app/keeper-execution .
 
 # Copy the docker-compose.yaml file from the builder stage
-COPY --from=builder /app/cmd/keeper/docker-compose.yaml ./
-COPY --from=builder /app/cmd/keeper/prometheus.yaml ./
-COPY --from=builder /app/cmd/keeper/grafana ./grafana
 COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
-
+RUN mkdir -p /root/peerstore
 RUN touch .env
 
 # Set environment variables (customize as needed)
