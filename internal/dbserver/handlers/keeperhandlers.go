@@ -9,9 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-
-
-func (h *Handler)HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request) {
 	// Extract keeper address from URL parameters
 	vars := mux.Vars(r)
 	keeperAddress := vars["address"]
@@ -30,16 +28,35 @@ func (h *Handler)HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// First check if the keeper exists
+	var exists bool
+	err = h.db.Session().Query(`
+        SELECT COUNT(*) > 0 FROM triggerx.keeper_data 
+        WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperAddress).Scan(&exists)
+
+	if err != nil {
+		h.logger.Error("Failed to check if keeper exists: " + err.Error())
+		http.Error(w, "Database error while checking keeper existence", http.StatusInternalServerError)
+		return
+	}
+
+	if !exists {
+		h.logger.Error("Keeper not found: " + keeperAddress)
+		http.Error(w, "Keeper not found", http.StatusNotFound)
+		return
+	}
+
 	// Update keeper status in database
 	err = h.db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET status = ? 
-		WHERE keeper_address = ? `,
+        UPDATE triggerx.keeper_data 
+        SET status = ? 
+        WHERE keeper_address = ? ALLOW FILTERING`,
 		statusUpdate.Status, keeperAddress).Exec()
-	
+
 	if err != nil {
 		h.logger.Error("Failed to update keeper status: " + err.Error())
-		http.Error(w, "Failed to update keeper status", http.StatusInternalServerError)
+		http.Error(w, "Failed to update keeper status: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -448,7 +465,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperHealth.KeeperAddress).Scan(&keeperID); err != nil {
-		h.logger.Errorf("[KeeperHealthCheckIn] Error retrieving keeper_id for address %s: %v", 
+		h.logger.Errorf("[KeeperHealthCheckIn] Error retrieving keeper_id for address %s: %v",
 			keeperHealth.KeeperAddress, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -479,7 +496,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	
+
 	h.logger.Infof("[KeeperHealthCheckIn] Updated Keeper status for ID: %s", keeperID)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(keeperHealth)

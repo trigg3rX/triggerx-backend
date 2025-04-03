@@ -17,3 +17,6 @@ cosign.key
 cosign.pub
 
 references
+
+data/peer_registry/
+peerstore/

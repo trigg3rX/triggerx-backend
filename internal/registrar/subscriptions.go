@@ -367,9 +367,10 @@ func processOperatorUnregisteredEvents(
 func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 	logger.Info(fmt.Sprintf("Updating operator %s status to unregistered in database", operatorAddress))
 
-	// Create the request payload
+	// Create the request payload with more details for debugging
 	updateData := map[string]interface{}{
-		"status": false,
+		"status":  false,
+		"address": operatorAddress,
 	}
 
 	// Convert to JSON
@@ -379,8 +380,11 @@ func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 		return err
 	}
 
-	// Create the HTTP request
+	// Log the request details for debugging
 	dbServerURL := fmt.Sprintf("%s/api/keepers/%s/status", DatabaseIPAddress, operatorAddress)
+	logger.Info(fmt.Sprintf("Making API request to: %s with payload: %s", dbServerURL, string(jsonData)))
+
+	// Create the HTTP request
 	req, err := http.NewRequest("PUT", dbServerURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to create HTTP request: %v", err))
