@@ -14,7 +14,6 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/p2p"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -37,13 +36,6 @@ func main() {
 
 	wg.Add(1)
 
-	err := p2p.ConnectToAggregator()
-	if err != nil {
-		logger.Fatalf("Failed to connect to aggregator: %v", err)
-	} else {
-		logger.Info("Connected to aggregator successfully.")
-	}
-
 	// Initialize the job scheduler
 	manager.JobSchedulerInit()
 	logger.Info("Job scheduler initialized successfully.")
@@ -56,7 +48,6 @@ func main() {
 	router.POST("/job/update", manager.HandleUpdateJobEvent)
 	router.POST("/job/pause", manager.HandlePauseJobEvent)
 	router.POST("/job/resume", manager.HandleResumeJobEvent)
-	// router.POST("/keeper/connect", manager.HandleKeeperConnectEvent)
 	
 	// Create HTTP server
 	srv := &http.Server{
