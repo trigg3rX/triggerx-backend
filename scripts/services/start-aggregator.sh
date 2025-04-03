@@ -18,6 +18,6 @@ othentic-cli node aggregator \
     --internal-tasks \
     --sync-interval $SYNC_INTERVAL \
     --metrics \
-    --metrics.port 9009 &
+    --metrics.port 9009 \
     --delay $DELAY \
     --keystore .keystore/aggregator.json 
