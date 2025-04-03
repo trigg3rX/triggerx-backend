@@ -1,11 +1,9 @@
-package network
+package p2p
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/joho/godotenv"
 	"github.com/libp2p/go-libp2p"
@@ -13,6 +11,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+
+	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 )
 
 const (
@@ -29,16 +29,6 @@ type P2PConfig struct {
 	Address peer.AddrInfo
 }
 
-type PeerIdentity struct {
-	PrivKey []byte `json:"priv_key"`
-}
-
-type ServicePrivateKeys struct {
-	ManagerPrivKey   string `json:"manager_p2p_private_key"`
-	PerformerPrivKey string `json:"performer_p2p_private_key"`
-	ValidatorPrivKey string `json:"validator_p2p_private_key"`
-}
-
 // Add this new type to store host globally
 type P2PHost struct {
 	Host host.Host
@@ -46,28 +36,8 @@ type P2PHost struct {
 
 var globalHost *P2PHost
 
-func LoadIdentity(nodeType string) (crypto.PrivKey, error) {
-
-	privKeysPath := filepath.Join(BaseDataDir, RegistryDir, "services_privKeys.json")
-	data, err := os.ReadFile(privKeysPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read services private keys: %w", err)
-	}
-
-	var keys ServicePrivateKeys
-	if err := json.Unmarshal(data, &keys); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal private keys: %w", err)
-	}
-
-	var privKeyStr string
-	switch nodeType {
-	case ServiceManager:
-		privKeyStr = keys.ManagerPrivKey
-	case ServicePerformer:
-		privKeyStr = keys.PerformerPrivKey
-	case ServiceValidator:
-		privKeyStr = keys.ValidatorPrivKey
-	}
+func LoadIdentity() (crypto.PrivKey, error) {
+	privKeyStr := config.P2PPrivateKey
 
 	privKeyBytes, err := crypto.ConfigDecodeKey(privKeyStr)
 	if err != nil {
@@ -90,7 +60,7 @@ func ConnectToAggregator() error {
 	}
 
 	// Initialize P2P host for manager
-	priv, err := LoadIdentity(ServiceManager)
+	priv, err := LoadIdentity()
 	if err != nil {
 		return fmt.Errorf("failed to load manager identity: %w", err)
 	}

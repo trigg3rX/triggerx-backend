@@ -16,6 +16,7 @@ var (
 	AlchemyApiKey   string
 
 	DeployerPrivateKey string
+	P2PPrivateKey string
 
 	ManagerRPCPort    string
 	AggregatorRPCAddress string
@@ -32,11 +33,12 @@ func Init() {
 	EtherscanApiKey = os.Getenv("ETHERSCAN_API_KEY")
 	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
 	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
+	P2PPrivateKey = os.Getenv("PRIVATE_KEY_MANAGER_P2P")
 	ManagerRPCPort = os.Getenv("MANAGER_RPC_PORT")
 	AggregatorRPCAddress = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
 	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" || AggregatorRPCAddress == "" {
+	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" || AggregatorRPCAddress == "" || P2PPrivateKey == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 

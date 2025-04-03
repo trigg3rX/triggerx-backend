@@ -1,10 +1,5 @@
 package main
 
-/*
-	TODO:
-	1. Add P2P message receiver to know what's going with Aggregator
-*/
-
 import (
 	"context"
 	"fmt"
@@ -19,8 +14,8 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/p2p"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
 var logger logging.Logger
@@ -42,7 +37,7 @@ func main() {
 
 	wg.Add(1)
 
-	err := network.ConnectToAggregator()
+	err := p2p.ConnectToAggregator()
 	if err != nil {
 		logger.Fatalf("Failed to connect to aggregator: %v", err)
 	} else {
