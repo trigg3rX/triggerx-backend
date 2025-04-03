@@ -42,7 +42,7 @@ COPY --from=builder /app/keeper-execution .
 
 # Copy the docker-compose.yaml file from the builder stage
 COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
-RUN mkdir -p /root/peerstore
+RUN mkdir -p /root/data/peerstore/attester
 RUN touch .env
 
 # Set environment variables (customize as needed)

@@ -9,29 +9,32 @@ KEEPER_PID=$!
 # echo "Starting othentic-cli..."
 # othentic-cli node attester \
 #     /ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB \
-#     --metrics \
-#     --metrics.port 9009 \
-#     --p2p.port 33333 \
-#     --p2p.datadir peerstore \
 #     --avs-webapi http://127.0.0.1 \
 #     --avs-webapi-port 9005 \
 #     --json-rpc \
 #     --json-rpc.port 9006 \
-#     --json-rpc.custom-message-enabled &
+#     --json-rpc.custom-message-enabled \
+#     --p2p.port 33333 \
+#     --p2p.datadir data/peerstore/attester \
+#     --p2p.discovery-interval 10000 \
+#     --metrics \
+#     --metrics.port 9009
 # OTHENTIC_PID=$!
 
 # Start othentic-cli in the background
 echo "Starting othentic-cli..."
 othentic-cli node attester \
-    /ip4/157.173.218.229/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB \
-    --metrics \
-    --p2p.port 33333 \
-    --p2p.datadir peerstore \
+    /ip4/192.168.1.57/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB \
     --avs-webapi http://127.0.0.1 \
     --avs-webapi-port 9005 \
     --json-rpc \
     --json-rpc.port 9006 \
-    --json-rpc.custom-message-enabled &
+    --json-rpc.custom-message-enabled \
+    --p2p.port 33333 \
+    --p2p.datadir data/peerstore/attester \
+    --p2p.discovery-interval 10000 \
+    --metrics \
+    --metrics.port 9009 &
 OTHENTIC_PID=$!
 
 # Handle shutdown signals to properly terminate both processes

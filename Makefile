@@ -11,6 +11,9 @@ start-manager: ## Start the task manager
 start-aggregator: ## Start the Aggregator
 	./scripts/services/start-aggregator.sh
 
+start-attester: ## Start the Attester
+	./scripts/services/start-attester.sh
+
 start-registrar: ## Start the Registrar
 	./scripts/services/start-registrar.sh
 
