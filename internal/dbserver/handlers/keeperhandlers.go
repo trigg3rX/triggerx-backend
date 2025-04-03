@@ -9,6 +9,49 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+
+
+func (h *Handler)HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request) {
+	// Extract keeper address from URL parameters
+	vars := mux.Vars(r)
+	keeperAddress := vars["address"]
+
+	if keeperAddress == "" {
+		http.Error(w, "Keeper address is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body
+	var statusUpdate types.KeeperStatusUpdate
+	err := json.NewDecoder(r.Body).Decode(&statusUpdate)
+	if err != nil {
+		h.logger.Error("Failed to decode request body: " + err.Error())
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Update keeper status in database
+	err = h.db.Session().Query(`
+		UPDATE triggerx.keeper_data 
+		SET status = ? 
+		WHERE keeper_address = ? `,
+		statusUpdate.Status, keeperAddress).Exec()
+	
+	if err != nil {
+		h.logger.Error("Failed to update keeper status: " + err.Error())
+		http.Error(w, "Failed to update keeper status", http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Keeper status updated successfully",
+	})
+}
+
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.CreateKeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {

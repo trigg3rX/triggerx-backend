@@ -9,24 +9,67 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/event"
+
+	// "github.com/ethereum/go-ethereum/event"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gocql/gocql"
 	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-
 var (
-	dbMain *gocql.Session
-	db     *gocql.Session
+	dbMain   *gocql.Session
+	db       *gocql.Session
 	loggerdb = logging.GetLogger(logging.Development, logging.DatabaseProcess)
+	logger   = logging.GetLogger(logging.Development, logging.RegistrarProcess)
+
+	// Variables to track the last processed block for each contract
+	lastProcessedBlockAVS  uint64
+	lastProcessedBlockBase uint64
+	blockProcessingMutex   sync.Mutex
+	// Configuration variables
+	EthRpcUrl         = "https://eth-sepolia.g.alchemy.com/v2/your-api-key"  // Regular RPC URL (not WebSocket)
+	BaseRpcUrl        = "https://base-sepolia.g.alchemy.com/v2/your-api-key" // Regular RPC URL (not WebSocket)
+	DatabaseIPAddress = "http://localhost:8080"                              // Your database API URL
 )
+
+type OperatorRegisteredEvent struct {
+	Operator common.Address
+	BlsKey   [4]*big.Int
+	Raw      ethtypes.Log // This contains metadata about the event
+}
+
+type OperatorUnregisteredEvent struct {
+	Operator common.Address
+	Raw      ethtypes.Log
+}
+
+type TaskSubmittedEvent struct {
+	Operator         common.Address
+	TaskNumber       *big.Int
+	ProofOfTask      string
+	Data             []byte
+	TaskDefinitionId uint16
+	Raw              ethtypes.Log
+}
+
+type TaskRejectedEvent struct {
+	Operator         common.Address
+	TaskNumber       *big.Int
+	ProofOfTask      string
+	Data             []byte
+	TaskDefinitionId uint16
+	Raw              ethtypes.Log
+}
 
 // Add this init function
 func init() {
@@ -75,523 +118,689 @@ func someFunction() error {
 	return nil
 }
 
-// Setup subscription for OperatorRegistered events
-func SetupRegisteredSubscription(
-	ethClient *ethclient.Client,
-	contractAddress common.Address,
-	operatorRegisteredCh chan<- *OperatorRegistered,
-) (event.Subscription, error) {
-	sub, err := SubscribeOperatorRegistered(ethClient, contractAddress, operatorRegisteredCh)
+func InitEventProcessing(ethClient *ethclient.Client, baseClient *ethclient.Client) error {
+	var err error
+
+	// Get current block numbers
+	blockProcessingMutex.Lock()
+	defer blockProcessingMutex.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get latest block numbers from each network
+	ethLatestBlock, err := ethClient.BlockNumber(ctx)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to watch for OperatorRegistered events: %v", err))
-		return nil, err
+		return fmt.Errorf("failed to get ETH latest block: %v", err)
 	}
-	logger.Info("Started watching for OperatorRegistered events")
-	return sub, nil
+
+	baseLatestBlock, err := baseClient.BlockNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get BASE latest block: %v", err)
+	}
+
+	// Initialize with current block numbers (could also load from database if you want to restore from a previous state)
+	lastProcessedBlockAVS = ethLatestBlock
+	lastProcessedBlockBase = baseLatestBlock
+
+	logger.Info(fmt.Sprintf("Initialized event processing from ETH block %d and BASE block %d", lastProcessedBlockAVS, lastProcessedBlockBase))
+	return nil
 }
 
-// Setup subscription for OperatorUnregistered events
-func SetupUnregisteredSubscription(
-	ethClient *ethclient.Client,
-	contractAddress common.Address,
-	operatorUnregisteredCh chan<- *OperatorUnregistered,
-) (event.Subscription, error) {
-	sub, err := SubscribeOperatorUnregistered(ethClient, contractAddress, operatorUnregisteredCh)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to watch for OperatorUnregistered events: %v", err))
-		return nil, err
-	}
-	logger.Info("Started watching for OperatorUnregistered events")
-	return sub, nil
-}
-
-// Setup subscription for TaskSubmitted events
-func SetupTaskSubmittedSubscription(
-	ethClient *ethclient.Client,
-	contractAddress common.Address,
-	taskSubmittedCh chan<- *TaskSubmitted,
-) (event.Subscription, error) {
-	sub, err := SubscribeTaskSubmitted(ethClient, contractAddress, taskSubmittedCh)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to watch for TaskSubmitted events: %v", err))
-		return nil, err
-	}
-	logger.Info("Started watching for TaskSubmitted events")
-	return sub, nil
-}
-
-// Setup subscription for TaskRejected events
-func SetupTaskRejectedSubscription(
-	ethClient *ethclient.Client,
-	contractAddress common.Address,
-	taskRejectedCh chan<- *TaskRejected,
-) (event.Subscription, error) {
-	sub, err := SubscribeTaskRejected(ethClient, contractAddress, taskRejectedCh)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to watch for TaskRejected events: %v", err))
-		return nil, err
-	}
-	logger.Info("Started watching for TaskRejected events")
-	return sub, nil
-}
-
-// Manage all subscriptions and handle reconnection logic
-func ManageSubscriptions(
-	ethWsClient *ethclient.Client,
+// StartEventPolling begins the event polling process
+func StartEventPolling(
 	avsGovernanceAddress common.Address,
-	baseWsClient *ethclient.Client,
 	attestationCenterAddress common.Address,
-	operatorRegisteredCh chan *OperatorRegistered,
-	operatorUnregisteredCh chan *OperatorUnregistered,
-	taskSubmittedCh chan *TaskSubmitted,
-	taskRejectedCh chan *TaskRejected,
-	regSub event.Subscription,
-	unregSub event.Subscription,
-	taskSubSub event.Subscription,
-	taskRejSub event.Subscription,
 ) {
-	// Create channels for subscription errors
-	regSubErrCh := make(chan error)
-	unregSubErrCh := make(chan error)
-	taskSubErrCh := make(chan error)
-	taskRejErrCh := make(chan error)
+	logger.Info("Starting event polling service...")
 
-	// Forward subscription errors to the error channels
-	if regSub != nil {
-		go forwardSubscriptionErrors(regSub, regSubErrCh)
-	}
-	if unregSub != nil {
-		go forwardSubscriptionErrors(unregSub, unregSubErrCh)
-	}
-	if taskSubSub != nil {
-		go forwardSubscriptionErrors(taskSubSub, taskSubErrCh)
-	}
-	if taskRejSub != nil {
-		go forwardSubscriptionErrors(taskRejSub, taskRejErrCh)
-	}
+	// Create ticker for 20-minute interval
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
 
-	// Keep track of which subscriptions are being reconnected
-	regSubReconnecting := false
-	unregSubReconnecting := false
-	taskSubSubReconnecting := false
-	taskRejSubReconnecting := false
+	// Initial poll immediately on startup
+	pollEvents(avsGovernanceAddress, attestationCenterAddress)
 
-	// Background task to restore subscriptions if they're nil
-	go func() {
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			<-ticker.C
-			// Check and reconnect each subscription individually
-			if regSub == nil && !regSubReconnecting {
-				logger.Info("Attempting to restore OperatorRegistered subscription...")
-				go reconnectRegisteredSubscription(
-					ethWsClient,
-					avsGovernanceAddress,
-					operatorRegisteredCh,
-					&regSub,
-					&regSubReconnecting,
-				)
-			}
-
-			if unregSub == nil && !unregSubReconnecting {
-				logger.Info("Attempting to restore OperatorUnregistered subscription...")
-				go reconnectUnregisteredSubscription(
-					ethWsClient,
-					avsGovernanceAddress,
-					operatorUnregisteredCh,
-					&unregSub,
-					&unregSubReconnecting,
-				)
-			}
-
-			if taskSubSub == nil && !taskSubSubReconnecting {
-				logger.Info("Attempting to restore TaskSubmitted subscription...")
-				go reconnectTaskSubmittedSubscription(
-					baseWsClient,
-					attestationCenterAddress,
-					taskSubmittedCh,
-					&taskSubSub,
-					&taskSubSubReconnecting,
-				)
-			}
-
-			if taskRejSub == nil && !taskRejSubReconnecting {
-				logger.Info("Attempting to restore TaskRejected subscription...")
-				go reconnectTaskRejectedSubscription(
-					baseWsClient,
-					attestationCenterAddress,
-					taskRejectedCh,
-					&taskRejSub,
-					&taskRejSubReconnecting,
-				)
-			}
-		}
-	}()
-
-	for {
-		select {
-		// Handle OperatorRegistered subscription errors
-		case err := <-regSubErrCh:
-			logger.Error(fmt.Sprintf("Error in OperatorRegistered subscription: %v", err))
-			regSub = nil
-			if !regSubReconnecting {
-				go reconnectRegisteredSubscription(
-					ethWsClient,
-					avsGovernanceAddress,
-					operatorRegisteredCh,
-					&regSub,
-					&regSubReconnecting,
-				)
-			}
-
-		// Handle OperatorUnregistered subscription errors
-		case err := <-unregSubErrCh:
-			logger.Error(fmt.Sprintf("Error in OperatorUnregistered subscription: %v", err))
-			unregSub = nil
-			if !unregSubReconnecting {
-				go reconnectUnregisteredSubscription(
-					ethWsClient,
-					avsGovernanceAddress,
-					operatorUnregisteredCh,
-					&unregSub,
-					&unregSubReconnecting,
-				)
-			}
-
-		// Handle TaskSubmitted subscription errors
-		case err := <-taskSubErrCh:
-			logger.Error(fmt.Sprintf("Error in TaskSubmitted subscription: %v", err))
-			taskSubSub = nil
-			if !taskSubSubReconnecting {
-				go reconnectTaskSubmittedSubscription(
-					baseWsClient,
-					attestationCenterAddress,
-					taskSubmittedCh,
-					&taskSubSub,
-					&taskSubSubReconnecting,
-				)
-			}
-
-		// Handle TaskRejected subscription errors
-		case err := <-taskRejErrCh:
-			logger.Error(fmt.Sprintf("Error in TaskRejected subscription: %v", err))
-			taskRejSub = nil
-			if !taskRejSubReconnecting {
-				go reconnectTaskRejectedSubscription(
-					baseWsClient,
-					attestationCenterAddress,
-					taskRejectedCh,
-					&taskRejSub,
-					&taskRejSubReconnecting,
-				)
-			}
-
-		// Handle OperatorRegistered events
-		case event := <-operatorRegisteredCh:
-			// Log operator registration details
-			logger.Info("🟢 Operator Registered Event Detected!")
-			logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
-
-			// Log BLS Key details (array of 4 big integers)
-			blsKeyStr := "BLS Key: ["
-			for i, num := range event.BlsKey {
-				if i > 0 {
-					blsKeyStr += ", "
-				}
-				blsKeyStr += num.String()
-			}
-			blsKeyStr += "]"
-			logger.Info(blsKeyStr)
-
-			// Log transaction details
-			logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
-			logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
-
-			// Add keeper to database
-			err := addKeeperToDatabase(event.Operator.Hex(), event.BlsKey, event.Raw.TxHash.Hex())
-			if err != nil {
-				logger.Error(fmt.Sprintf("Failed to add keeper to database: %v", err))
-			}
-
-		// Handle OperatorUnregistered events
-		case event := <-operatorUnregisteredCh:
-			// Log operator unregistration details
-			logger.Info("🔴 Operator Unregistered Event Detected!")
-			logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
-
-			// Log transaction details
-			logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
-			logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
-
-			// Update keeper status in database
-			// err := updateKeeperStatusAsUnregistered(event.Operator.Hex())
-			// if err != nil {
-			// 	logger.Error(fmt.Sprintf("Failed to update keeper status in database: %v", err))
-			// }
-
-		// Handle TaskSubmitted events
-		case event := <-taskSubmittedCh:
-			// Log task submission details
-			logger.Info("📥 Task Submitted Event Detected!")
-			logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
-			logger.Info(fmt.Sprintf("Task Number: %d", event.TaskNumber))
-			logger.Info(fmt.Sprintf("Proof of Task: %s", event.ProofOfTask))
-			logger.Info(fmt.Sprintf("Task Definition ID: %d", event.TaskDefinitionId))
-
-			// Log data as hex if non-empty
-			if len(event.Data) > 0 {
-				logger.Info(fmt.Sprintf("Data: 0x%x", event.Data))
-			} else {
-				logger.Info("Data: <empty>")
-			}
-
-			///====================================================================
-
-			// Log transaction details
-			logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
-			logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
-			tx, isPending, err := ethWsClient.TransactionByHash(context.Background(), event.Raw.TxHash)
-			if err != nil {
-				logger.Error(fmt.Sprintf("Failed to fetch transaction: %v", err))
-				return
-			}
-			if isPending {
-				logger.Info("Transaction is pending.")
-			}
-
-			// Decode the input data to extract performer address and operator IDs
-			performerAddress, proofOfTask, data, taskDefinitionId, isApproved, tpSignature, taSignature, attestersIds, err := decodeTaskInputData(tx.Data())
-			if err != nil {
-				logger.Error(fmt.Sprintf("Failed to decode input data: %v", err))
-				return
-			}
-
-			// Fetch the task information from IPFS using the CID
-			cid := string(data) // Assuming data is the CID
-			IPFSData, err := fetchDataFromCID(cid)
-			if err != nil {
-				logger.Error(fmt.Sprintf("Failed to fetch task data from CID: %v", err))
-				return
-			}
-
-			// Unmarshal the IPFS data into the IPFSData struct
-			var ipfsData types.IPFSData
-			err = json.Unmarshal([]byte(IPFSData), &ipfsData)
-			if err != nil {
-				logger.Error(fmt.Sprintf("Failed to unmarshal IPFS data: %v", err))
-				return
-			}
-
-			// Now you can access the TaskID from the TriggerData
-			taskID := ipfsData.TriggerData.TaskID
-			logger.Info(fmt.Sprintf("Task ID: %d", taskID))
-			logger.Info(fmt.Sprintf("Performer Address: %s", performerAddress.Hex()))
-			logger.Info(fmt.Sprintf("Proof of Task: %s", proofOfTask))
-			logger.Info(fmt.Sprintf("Data: %x", data))
-			logger.Info(fmt.Sprintf("Task Definition ID: %d", taskDefinitionId))
-			logger.Info(fmt.Sprintf("Is Approved: %v", isApproved))
-			logger.Info(fmt.Sprintf("TP Signature: %x", tpSignature))
-			logger.Info(fmt.Sprintf("TA Signature: %x", taSignature))
-			logger.Info(fmt.Sprintf("Attesters IDs: %v", attestersIds))
-
-			// Replace the database update section with this single call
-			if err := updatePointsInDatabase(taskID, performerAddress, attestersIds); err != nil {
-				logger.Error(fmt.Sprintf("Failed to update points in database: %v", err))
-				return
-			}
-
-		// Handle TaskRejected events
-		case event := <-taskRejectedCh:
-			// Log task rejection details
-			logger.Info("❌ Task Rejected Event Detected!")
-			logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
-			logger.Info(fmt.Sprintf("Task Number: %d", event.TaskNumber))
-			logger.Info(fmt.Sprintf("Proof of Task: %s", event.ProofOfTask))
-			logger.Info(fmt.Sprintf("Task Definition ID: %d", event.TaskDefinitionId))
-
-			// Log data as hex if non-empty
-			if len(event.Data) > 0 {
-				logger.Info(fmt.Sprintf("Data: 0x%x", event.Data))
-			} else {
-				logger.Info("Data: <empty>")
-			}
-
-			// Log transaction details
-			logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
-			logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
-		}
+	// Then poll according to the ticker
+	for range ticker.C {
+		pollEvents(avsGovernanceAddress, attestationCenterAddress)
 	}
 }
 
-// Forward subscription errors to a dedicated channel
-func forwardSubscriptionErrors(sub event.Subscription, errCh chan<- error) {
-	errCh <- <-sub.Err()
-}
-
-// Reconnect OperatorRegistered subscription
-func reconnectRegisteredSubscription(
-	ethWsClient *ethclient.Client,
+func pollEvents(
 	avsGovernanceAddress common.Address,
-	operatorRegisteredCh chan *OperatorRegistered,
-	regSub *event.Subscription,
-	isReconnecting *bool,
-) {
-	// Set reconnecting flag
-	*isReconnecting = true
-	defer func() { *isReconnecting = false }()
-
-	// Clean up any existing subscription
-	if *regSub != nil {
-		(*regSub).Unsubscribe()
-		*regSub = nil
-	}
-
-	// Wait before reconnecting to avoid hammering the server
-	time.Sleep(2 * time.Second)
-
-	// Reconnect to Ethereum WebSocket if needed
-	if ethWsClient == nil {
-		var err error
-		ethWsClient, err = ethclient.Dial(EthWsRpcUrl)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to reconnect to Ethereum WebSocket for OperatorRegistered: %v", err))
-			return
-		}
-	}
-
-	// Restart watching for OperatorRegistered events
-	newRegSub, err := SetupRegisteredSubscription(ethWsClient, avsGovernanceAddress, operatorRegisteredCh)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to restart watching for OperatorRegistered events: %v", err))
-	} else {
-		*regSub = newRegSub
-		logger.Info("Successfully reconnected OperatorRegistered subscription")
-	}
-}
-
-// Reconnect OperatorUnregistered subscription
-func reconnectUnregisteredSubscription(
-	ethWsClient *ethclient.Client,
-	avsGovernanceAddress common.Address,
-	operatorUnregisteredCh chan *OperatorUnregistered,
-	unregSub *event.Subscription,
-	isReconnecting *bool,
-) {
-	// Set reconnecting flag
-	*isReconnecting = true
-	defer func() { *isReconnecting = false }()
-
-	// Clean up any existing subscription
-	if *unregSub != nil {
-		(*unregSub).Unsubscribe()
-		*unregSub = nil
-	}
-
-	// Wait before reconnecting to avoid hammering the server
-	time.Sleep(2 * time.Second)
-
-	// Reconnect to Ethereum WebSocket if needed
-	if ethWsClient == nil {
-		var err error
-		ethWsClient, err = ethclient.Dial(EthWsRpcUrl)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to reconnect to Ethereum WebSocket for OperatorUnregistered: %v", err))
-			return
-		}
-	}
-
-	// Restart watching for OperatorUnregistered events
-	newUnregSub, err := SetupUnregisteredSubscription(ethWsClient, avsGovernanceAddress, operatorUnregisteredCh)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to restart watching for OperatorUnregistered events: %v", err))
-	} else {
-		*unregSub = newUnregSub
-		logger.Info("Successfully reconnected OperatorUnregistered subscription")
-	}
-}
-
-// Reconnect TaskSubmitted subscription
-func reconnectTaskSubmittedSubscription(
-	baseWsClient *ethclient.Client,
 	attestationCenterAddress common.Address,
-	taskSubmittedCh chan *TaskSubmitted,
-	taskSubSub *event.Subscription,
-	isReconnecting *bool,
 ) {
-	// Set reconnecting flag
-	*isReconnecting = true
-	defer func() { *isReconnecting = false }()
+	logger.Info("Polling for new events...")
 
-	// Clean up any existing subscription
-	if *taskSubSub != nil {
-		(*taskSubSub).Unsubscribe()
-		*taskSubSub = nil
-	}
-
-	// Wait before reconnecting to avoid hammering the server
-	time.Sleep(2 * time.Second)
-
-	// Reconnect to Base WebSocket if needed
-	if baseWsClient == nil {
-		var err error
-		baseWsClient, err = ethclient.Dial(BaseWsRpcUrl)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to reconnect to Base WebSocket for TaskSubmitted: %v", err))
-			return
-		}
-	}
-
-	// Restart watching for TaskSubmitted events
-	newTaskSubSub, err := SetupTaskSubmittedSubscription(baseWsClient, attestationCenterAddress, taskSubmittedCh)
+	// Create clients (non-WebSocket)
+	ethClient, err := ethclient.Dial(EthRpcUrl)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to restart watching for TaskSubmitted events: %v", err))
-	} else {
-		*taskSubSub = newTaskSubSub
-		logger.Info("Successfully reconnected TaskSubmitted subscription")
+		logger.Error(fmt.Sprintf("Failed to connect to Ethereum node: %v", err))
+		return
 	}
+	defer ethClient.Close()
+
+	baseClient, err := ethclient.Dial(BaseRpcUrl)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to connect to Base node: %v", err))
+		return
+	}
+	defer baseClient.Close()
+
+	// Get current block numbers
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get latest blocks from each network
+	ethLatestBlock, err := ethClient.BlockNumber(ctx)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to get ETH latest block: %v", err))
+		return
+	}
+
+	baseLatestBlock, err := baseClient.BlockNumber(ctx)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to get BASE latest block: %v", err))
+		return
+	}
+
+	// Process events from AVS Governance contract
+	if ethLatestBlock > lastProcessedBlockAVS {
+		fromBlock := lastProcessedBlockAVS + 1
+		logger.Info(fmt.Sprintf("Checking for AVS Governance events from block %d to %d", fromBlock, ethLatestBlock))
+
+		// Process operator registration events
+		err = processOperatorRegisteredEvents(ethClient, avsGovernanceAddress, fromBlock, ethLatestBlock)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to process OperatorRegistered events: %v", err))
+		}
+
+		// Process operator unregistration events
+		err = processOperatorUnregisteredEvents(ethClient, avsGovernanceAddress, fromBlock, ethLatestBlock)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to process OperatorUnregistered events: %v", err))
+		}
+
+		// Update last processed block for AVS
+		blockProcessingMutex.Lock()
+		lastProcessedBlockAVS = ethLatestBlock
+		blockProcessingMutex.Unlock()
+	}
+
+	// Process events from Attestation Center contract
+	if baseLatestBlock > lastProcessedBlockBase {
+		fromBlock := lastProcessedBlockBase + 1
+		logger.Info(fmt.Sprintf("Checking for Attestation Center events from block %d to %d", fromBlock, baseLatestBlock))
+
+		// Process task submission events
+		err = processTaskSubmittedEvents(baseClient, ethClient, attestationCenterAddress, fromBlock, baseLatestBlock)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to process TaskSubmitted events: %v", err))
+		}
+
+		// Process task rejection events
+		err = processTaskRejectedEvents(baseClient, attestationCenterAddress, fromBlock, baseLatestBlock)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to process TaskRejected events: %v", err))
+		}
+
+		// Update last processed block for Base
+		blockProcessingMutex.Lock()
+		lastProcessedBlockBase = baseLatestBlock
+		blockProcessingMutex.Unlock()
+	}
+
+	logger.Info("Event polling completed")
 }
 
-// Reconnect TaskRejected subscription
-func reconnectTaskRejectedSubscription(
-	baseWsClient *ethclient.Client,
-	attestationCenterAddress common.Address,
-	taskRejectedCh chan *TaskRejected,
-	taskRejSub *event.Subscription,
-	isReconnecting *bool,
-) {
-	// Set reconnecting flag
-	*isReconnecting = true
-	defer func() { *isReconnecting = false }()
-
-	// Clean up any existing subscription
-	if *taskRejSub != nil {
-		(*taskRejSub).Unsubscribe()
-		*taskRejSub = nil
+func processOperatorRegisteredEvents(
+	ethClient *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+) error {
+	// Create filter query for OperatorRegistered events
+	query := ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+		ToBlock:   new(big.Int).SetUint64(toBlock),
+		Addresses: []common.Address{contractAddress},
+		Topics: [][]common.Hash{
+			{OperatorRegisteredEventSignature()}, // Event signature for OperatorRegistered
+		},
 	}
 
-	// Wait before reconnecting to avoid hammering the server
-	time.Sleep(2 * time.Second)
+	logs, err := ethClient.FilterLogs(context.Background(), query)
+	if err != nil {
+		return fmt.Errorf("failed to filter OperatorRegistered logs: %v", err)
+	}
 
-	// Reconnect to Base WebSocket if needed
-	if baseWsClient == nil {
-		var err error
-		baseWsClient, err = ethclient.Dial(BaseWsRpcUrl)
+	logger.Info(fmt.Sprintf("Found %d OperatorRegistered events", len(logs)))
+
+	// Process each event
+	for _, vLog := range logs {
+		event, err := ParseOperatorRegistered(vLog)
 		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to reconnect to Base WebSocket for TaskRejected: %v", err))
-			return
+			logger.Error(fmt.Sprintf("Failed to parse OperatorRegistered event: %v", err))
+			continue
+		}
+
+		// Log operator registration details
+		logger.Info("🟢 Operator Registered Event Detected!")
+		logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
+
+		// Log BLS Key details
+		blsKeyStr := "BLS Key: ["
+		for i, num := range event.BlsKey {
+			if i > 0 {
+				blsKeyStr += ", "
+			}
+			blsKeyStr += num.String()
+		}
+		blsKeyStr += "]"
+		logger.Info(blsKeyStr)
+
+		// Log transaction details
+		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
+		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
+
+		// Add keeper to database
+		err = addKeeperToDatabase(event.Operator.Hex(), event.BlsKey, event.Raw.TxHash.Hex())
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to add keeper to database: %v", err))
 		}
 	}
 
-	// Restart watching for TaskRejected events
-	newTaskRejSub, err := SetupTaskRejectedSubscription(baseWsClient, attestationCenterAddress, taskRejectedCh)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to restart watching for TaskRejected events: %v", err))
-	} else {
-		*taskRejSub = newTaskRejSub
-		logger.Info("Successfully reconnected TaskRejected subscription")
+	return nil
+}
+
+// Process OperatorUnregistered events
+func processOperatorUnregisteredEvents(
+	ethClient *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+) error {
+	// Create filter query for OperatorUnregistered events
+	query := ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+		ToBlock:   new(big.Int).SetUint64(toBlock),
+		Addresses: []common.Address{contractAddress},
+		Topics: [][]common.Hash{
+			{OperatorUnregisteredEventSignature()}, // Event signature for OperatorUnregistered
+		},
 	}
+
+	logs, err := ethClient.FilterLogs(context.Background(), query)
+	if err != nil {
+		return fmt.Errorf("failed to filter OperatorUnregistered logs: %v", err)
+	}
+
+	logger.Info(fmt.Sprintf("Found %d OperatorUnregistered events", len(logs)))
+
+	// Process each event
+	for _, vLog := range logs {
+		event, err := ParseOperatorUnregistered(vLog)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse OperatorUnregistered event: %v", err))
+			continue
+		}
+
+		// Log operator unregistration details
+		logger.Info("🔴 Operator Unregistered Event Detected!")
+		logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
+
+		// Log transaction details
+		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
+		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
+
+		// Update keeper status in database
+		err = updateKeeperStatusAsUnregistered(event.Operator.Hex())
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to update keeper status in database: %v", err))
+		}
+	}
+
+	return nil
+}
+
+// Function to update keeper status as unregistered in the database via API
+func updateKeeperStatusAsUnregistered(operatorAddress string) error {
+	logger.Info(fmt.Sprintf("Updating operator %s status to unregistered in database", operatorAddress))
+
+	// Create the request payload
+	updateData := map[string]interface{}{
+		"status": false,
+	}
+
+	// Convert to JSON
+	jsonData, err := json.Marshal(updateData)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to marshal update data: %v", err))
+		return err
+	}
+
+	// Create the HTTP request
+	dbServerURL := fmt.Sprintf("%s/api/keepers/%s/status", DatabaseIPAddress, operatorAddress)
+	req, err := http.NewRequest("PUT", dbServerURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to create HTTP request: %v", err))
+		return err
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to send HTTP request: %v", err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Read the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to read response body: %v", err))
+		return err
+	}
+
+	// Check the response status
+	if resp.StatusCode != http.StatusOK {
+		logger.Error(fmt.Sprintf("Failed to update keeper status. Status: %d, Response: %s", resp.StatusCode, string(body)))
+		return fmt.Errorf("failed to update keeper status: %s", string(body))
+	}
+
+	logger.Info(fmt.Sprintf("Successfully updated keeper %s status to unregistered", operatorAddress))
+	return nil
+}
+
+// Process TaskSubmitted events
+func processTaskSubmittedEvents(
+	baseClient *ethclient.Client,
+	ethClient *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+) error {
+	// Create filter query for TaskSubmitted events
+	query := ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+		ToBlock:   new(big.Int).SetUint64(toBlock),
+		Addresses: []common.Address{contractAddress},
+		Topics: [][]common.Hash{
+			{TaskSubmittedEventSignature()}, // Event signature for TaskSubmitted
+		},
+	}
+
+	logs, err := baseClient.FilterLogs(context.Background(), query)
+	if err != nil {
+		return fmt.Errorf("failed to filter TaskSubmitted logs: %v", err)
+	}
+
+	logger.Info(fmt.Sprintf("Found %d TaskSubmitted events", len(logs)))
+
+	// Process each event
+	for _, vLog := range logs {
+		event, err := ParseTaskSubmitted(vLog)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse TaskSubmitted event: %v", err))
+			continue
+		}
+
+		// Log task submission details
+		logger.Info("📥 Task Submitted Event Detected!")
+		logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
+		logger.Info(fmt.Sprintf("Task Number: %d", event.TaskNumber))
+		logger.Info(fmt.Sprintf("Proof of Task: %s", event.ProofOfTask))
+		logger.Info(fmt.Sprintf("Task Definition ID: %d", event.TaskDefinitionId))
+
+		// Log data as hex if non-empty
+		if len(event.Data) > 0 {
+			logger.Info(fmt.Sprintf("Data: 0x%x", event.Data))
+		} else {
+			logger.Info("Data: <empty>")
+		}
+
+		// Log transaction details
+		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
+		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
+
+		// Fetch the transaction to decode input data
+		tx, isPending, err := baseClient.TransactionByHash(context.Background(), event.Raw.TxHash)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to fetch transaction: %v", err))
+			continue
+		}
+		if isPending {
+			logger.Info("Transaction is pending.")
+			continue
+		}
+
+		// Decode the input data to extract performer address and operator IDs
+		performerAddress, proofOfTask, data, taskDefinitionId, isApproved, tpSignature, taSignature, attestersIds, err := decodeTaskInputData(tx.Data())
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to decode input data: %v", err))
+			continue
+		}
+
+		// Fetch the task information from IPFS using the CID
+		cid := string(data) // Assuming data is the CID
+		IPFSData, err := fetchDataFromCID(cid)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to fetch task data from CID: %v", err))
+			continue
+		}
+
+		// Unmarshal the IPFS data into the IPFSData struct
+		var ipfsData types.IPFSData
+		err = json.Unmarshal([]byte(IPFSData), &ipfsData)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to unmarshal IPFS data: %v", err))
+			continue
+		}
+
+		// Now you can access the TaskID from the TriggerData
+		taskID := ipfsData.TriggerData.TaskID
+		logger.Info(fmt.Sprintf("Task ID: %d", taskID))
+		logger.Info(fmt.Sprintf("Performer Address: %s", performerAddress.Hex()))
+		logger.Info(fmt.Sprintf("Proof of Task: %s", proofOfTask))
+		logger.Info(fmt.Sprintf("Data: %x", data))
+		logger.Info(fmt.Sprintf("Task Definition ID: %d", taskDefinitionId))
+		logger.Info(fmt.Sprintf("Is Approved: %v", isApproved))
+		logger.Info(fmt.Sprintf("TP Signature: %x", tpSignature))
+		logger.Info(fmt.Sprintf("TA Signature: %x", taSignature))
+		logger.Info(fmt.Sprintf("Attesters IDs: %v", attestersIds))
+
+		// Update points in database
+		if err := updatePointsInDatabase(taskID, performerAddress, attestersIds); err != nil {
+			logger.Error(fmt.Sprintf("Failed to update points in database: %v", err))
+			continue
+		}
+	}
+
+	return nil
+}
+
+// Process TaskRejected events
+func processTaskRejectedEvents(
+	baseClient *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+) error {
+	// Create filter query for TaskRejected events
+	query := ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+		ToBlock:   new(big.Int).SetUint64(toBlock),
+		Addresses: []common.Address{contractAddress},
+		Topics: [][]common.Hash{
+			{TaskRejectedEventSignature()}, // Event signature for TaskRejected
+		},
+	}
+
+	logs, err := baseClient.FilterLogs(context.Background(), query)
+	if err != nil {
+		return fmt.Errorf("failed to filter TaskRejected logs: %v", err)
+	}
+
+	logger.Info(fmt.Sprintf("Found %d TaskRejected events", len(logs)))
+
+	// Process each event
+	for _, vLog := range logs {
+		event, err := ParseTaskRejected(vLog)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse TaskRejected event: %v", err))
+			continue
+		}
+
+		// Log task rejection details
+		logger.Info("❌ Task Rejected Event Detected!")
+		logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
+		logger.Info(fmt.Sprintf("Task Number: %d", event.TaskNumber))
+		logger.Info(fmt.Sprintf("Proof of Task: %s", event.ProofOfTask))
+		logger.Info(fmt.Sprintf("Task Definition ID: %d", event.TaskDefinitionId))
+
+		// Log data as hex if non-empty
+		if len(event.Data) > 0 {
+			logger.Info(fmt.Sprintf("Data: 0x%x", event.Data))
+		} else {
+			logger.Info("Data: <empty>")
+		}
+
+		// Log transaction details
+		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
+		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
+	}
+
+	return nil
+}
+
+// Helper functions for getting event signatures
+
+// OperatorRegisteredEventSignature returns the signature hash for the OperatorRegistered event
+func OperatorRegisteredEventSignature() common.Hash {
+	return crypto.Keccak256Hash([]byte("OperatorRegistered(address,uint256[4])"))
+}
+
+// OperatorUnregisteredEventSignature returns the signature hash for the OperatorUnregistered event
+func OperatorUnregisteredEventSignature() common.Hash {
+	return crypto.Keccak256Hash([]byte("OperatorUnregistered(address)"))
+}
+
+// TaskSubmittedEventSignature returns the signature hash for the TaskSubmitted event
+func TaskSubmittedEventSignature() common.Hash {
+	return crypto.Keccak256Hash([]byte("TaskSubmitted(address,uint256,string,bytes,uint16)"))
+}
+
+// TaskRejectedEventSignature returns the signature hash for the TaskRejected event
+func TaskRejectedEventSignature() common.Hash {
+	return crypto.Keccak256Hash([]byte("TaskRejected(address,uint256,string,bytes,uint16)"))
+}
+
+func ParseOperatorRegistered(log ethtypes.Log) (*OperatorRegisteredEvent, error) {
+	// Define the event ABI exactly as emitted by the contract
+	eventABI := `[{
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "name": "operator", "type": "address"},
+            {"indexed": false, "name": "blsKey", "type": "uint256[4]"}
+        ],
+        "name": "OperatorRegistered",
+        "type": "event"
+    }]`
+
+	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ABI: %v", err)
+	}
+
+	// Verify the event signature
+	expectedTopic := crypto.Keccak256Hash([]byte("OperatorRegistered(address,uint256[4])"))
+	if log.Topics[0] != expectedTopic {
+		return nil, fmt.Errorf("unexpected event signature")
+	}
+
+	// The operator address is in the first indexed parameter (topic 1)
+	if len(log.Topics) < 2 {
+		return nil, fmt.Errorf("missing operator address in topics")
+	}
+	operator := common.BytesToAddress(log.Topics[1].Bytes())
+
+	// We'll unpack just the BLS key data
+	var blsKey struct {
+		BlsKey [4]*big.Int
+	}
+
+	err = parsedABI.UnpackIntoInterface(&blsKey, "OperatorRegistered", log.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack log data: %v", err)
+	}
+
+	return &OperatorRegisteredEvent{
+		Operator: operator,
+		BlsKey:   blsKey.BlsKey,
+		Raw:      log,
+	}, nil
+}
+
+// ParseOperatorUnregistered parses a log into the OperatorUnregistered event
+// ParseOperatorUnregistered parses a log into the OperatorUnregistered event
+func ParseOperatorUnregistered(log ethtypes.Log) (*OperatorUnregisteredEvent, error) {
+	// Verify the event signature
+	expectedTopic := OperatorUnregisteredEventSignature()
+	if log.Topics[0] != expectedTopic {
+		return nil, fmt.Errorf("unexpected event signature")
+	}
+
+	// The operator address is in the first indexed parameter (topic 1)
+	if len(log.Topics) < 2 {
+		return nil, fmt.Errorf("missing operator address in topics")
+	}
+	operator := common.BytesToAddress(log.Topics[1].Bytes())
+
+	return &OperatorUnregisteredEvent{
+		Operator: operator,
+		Raw:      log,
+	}, nil
+}
+
+// ParseTaskSubmitted parses a log into the TaskSubmitted event
+func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
+	// Define the event ABI
+	eventSignature := "TaskSubmitted(address,uint256,string,bytes,uint16)"
+	eventABI := fmt.Sprintf(`[{"name":"TaskSubmitted","type":"event","inputs":[
+        {"name":"operator","type":"address","indexed":false},
+        {"name":"taskNumber","type":"uint256","indexed":false},
+        {"name":"proofOfTask","type":"string","indexed":false},
+        {"name":"data","type":"bytes","indexed":false},
+        {"name":"taskDefinitionId","type":"uint16","indexed":false}
+    ]}]`)
+
+	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ABI: %v", err)
+	}
+
+	// Verify the event signature
+	expectedTopic := crypto.Keccak256Hash([]byte(eventSignature))
+	if log.Topics[0] != expectedTopic {
+		return nil, fmt.Errorf("unexpected event signature")
+	}
+
+	// Prepare event result
+	var event TaskSubmittedEvent
+	event.Raw = log
+
+	// Unpack the non-indexed fields
+	unpacked := make(map[string]interface{})
+	err = parsedABI.UnpackIntoMap(unpacked, "TaskSubmitted", log.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack into map: %v", err)
+	}
+
+	// Extract the fields from the unpacked data
+	if operator, ok := unpacked["operator"].(common.Address); ok {
+		event.Operator = operator
+	} else {
+		return nil, fmt.Errorf("failed to extract operator address")
+	}
+
+	if taskNumber, ok := unpacked["taskNumber"].(*big.Int); ok {
+		event.TaskNumber = taskNumber
+	} else {
+		return nil, fmt.Errorf("failed to extract task number")
+	}
+
+	if proofOfTask, ok := unpacked["proofOfTask"].(string); ok {
+		event.ProofOfTask = proofOfTask
+	} else {
+		return nil, fmt.Errorf("failed to extract proof of task")
+	}
+
+	if data, ok := unpacked["data"].([]byte); ok {
+		event.Data = data
+	} else {
+		return nil, fmt.Errorf("failed to extract data")
+	}
+
+	if taskDefinitionId, ok := unpacked["taskDefinitionId"].(uint16); ok {
+		event.TaskDefinitionId = taskDefinitionId
+	} else {
+		return nil, fmt.Errorf("failed to extract task definition ID")
+	}
+
+	return &event, nil
+}
+
+// ParseTaskRejected parses a log into the TaskRejected event
+func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
+	// Define the event ABI
+	eventSignature := "TaskRejected(address,uint256,string,bytes,uint16)"
+	eventABI := fmt.Sprintf(`[{"name":"TaskRejected","type":"event","inputs":[
+        {"name":"operator","type":"address","indexed":false},
+        {"name":"taskNumber","type":"uint256","indexed":false},
+        {"name":"proofOfTask","type":"string","indexed":false},
+        {"name":"data","type":"bytes","indexed":false},
+        {"name":"taskDefinitionId","type":"uint16","indexed":false}
+    ]}]`)
+
+	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ABI: %v", err)
+	}
+
+	// Verify the event signature
+	expectedTopic := crypto.Keccak256Hash([]byte(eventSignature))
+	if log.Topics[0] != expectedTopic {
+		return nil, fmt.Errorf("unexpected event signature")
+	}
+
+	// Prepare event result
+	var event TaskRejectedEvent
+	event.Raw = log
+
+	// Unpack the non-indexed fields
+	unpacked := make(map[string]interface{})
+	err = parsedABI.UnpackIntoMap(unpacked, "TaskRejected", log.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack into map: %v", err)
+	}
+
+	// Extract the fields from the unpacked data
+	if operator, ok := unpacked["operator"].(common.Address); ok {
+		event.Operator = operator
+	} else {
+		return nil, fmt.Errorf("failed to extract operator address")
+	}
+
+	if taskNumber, ok := unpacked["taskNumber"].(*big.Int); ok {
+		event.TaskNumber = taskNumber
+	} else {
+		return nil, fmt.Errorf("failed to extract task number")
+	}
+
+	if proofOfTask, ok := unpacked["proofOfTask"].(string); ok {
+		event.ProofOfTask = proofOfTask
+	} else {
+		return nil, fmt.Errorf("failed to extract proof of task")
+	}
+
+	if data, ok := unpacked["data"].([]byte); ok {
+		event.Data = data
+	} else {
+		return nil, fmt.Errorf("failed to extract data")
+	}
+
+	if taskDefinitionId, ok := unpacked["taskDefinitionId"].(uint16); ok {
+		event.TaskDefinitionId = taskDefinitionId
+	} else {
+		return nil, fmt.Errorf("failed to extract task definition ID")
+	}
+
+	return &event, nil
 }
 
 // Function to add a keeper to the database via the API when an operator is registered
@@ -647,7 +856,7 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 	}
 
 	// Check the response status
-	if resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusOK {
 		logger.Error(fmt.Sprintf("Failed to add keeper to database. Status: %d, Response: %s", resp.StatusCode, string(body)))
 		return fmt.Errorf("failed to add keeper to database: %s", string(body))
 	}

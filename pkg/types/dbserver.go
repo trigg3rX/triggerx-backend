@@ -64,8 +64,8 @@ type CreateTaskResponse struct {
 }
 
 type GetPerformerData struct {
-	KeeperID          int64  `json:"keeper_id"`
-	KeeperAddress     string `json:"keeper_address"`
+	KeeperID      int64  `json:"keeper_id"`
+	KeeperAddress string `json:"keeper_address"`
 }
 
 type CreateKeeperData struct {
@@ -115,4 +115,8 @@ type UserLeaderboardEntry struct {
 	TotalJobs      int64  `json:"total_jobs"`
 	TasksCompleted int64  `json:"tasks_completed"`
 	UserPoints     int64  `json:"user_points"`
+}
+
+type KeeperStatusUpdate struct {
+	Status bool `json:"status"`
 }

@@ -85,6 +85,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}/task-count", handler.GetKeeperTaskCount).Methods("GET")
 	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
 	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
+	api.HandleFunc("/keepers/{address}/status", handler.HandleUpdateKeeperStatus).Methods("PUT")
 
 	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
 	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")

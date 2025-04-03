@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -13,37 +14,29 @@ import (
 var logger logging.Logger
 
 func main() {
+	
 	if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
-	logger.Info("Starting registrar node...")
+	logger.Info("Starting registrar node (poll-based)...")
 
+	// Initialize registrar configuration
 	registrar.Init()
 
-	// Initialize ABI parsers
-	if err := registrar.InitABI(); err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to initialize ABI parsers: %v", err))
-	}
-
-	// Check if WebSocket URL is available
-	if registrar.EthWsRpcUrl == "" {
-		logger.Fatal("WebSocket URL (L1_WS_RPC) is required for event subscriptions but not provided in .env")
-	}
-
-	// Connect to Ethereum network via WebSocket - for event subscriptions
-	ethWsClient, err := ethclient.Dial(registrar.EthWsRpcUrl)
+	// Connect to Ethereum network via HTTP RPC
+	ethClient, err := ethclient.Dial(registrar.EthRpcUrl)
 	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to Ethereum WebSocket: %v", err))
+		logger.Fatal(fmt.Sprintf("Failed to connect to Ethereum RPC: %v", err))
 	}
-	logger.Info("Connected to Ethereum WebSocket RPC")
+	logger.Info("Connected to Ethereum HTTP RPC")
 
-	// Connect to Base network via WebSocket - for event subscriptions
-	baseWsClient, err := ethclient.Dial(registrar.BaseWsRpcUrl)
+	// Connect to Base network via HTTP RPC
+	baseClient, err := ethclient.Dial(registrar.BaseRpcUrl)
 	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to Base WebSocket: %v", err))
+		logger.Fatal(fmt.Sprintf("Failed to connect to Base RPC: %v", err))
 	}
-	logger.Info("Connected to Base WebSocket RPC")
+	logger.Info("Connected to Base HTTP RPC")
 
 	// Get contract addresses
 	avsGovernanceAddress := common.HexToAddress(registrar.AvsGovernanceAddress)
@@ -52,64 +45,19 @@ func main() {
 	logger.Info(fmt.Sprintf("Using AVS Governance contract at address: %s", registrar.AvsGovernanceAddress))
 	logger.Info(fmt.Sprintf("Using Attestation Center contract at address: %s", registrar.AttestationCenterAddress))
 
-	// Create channels for events
-	operatorRegisteredCh := make(chan *registrar.OperatorRegistered)
-	operatorUnregisteredCh := make(chan *registrar.OperatorUnregistered)
-	taskSubmittedCh := make(chan *registrar.TaskSubmitted)
-	taskRejectedCh := make(chan *registrar.TaskRejected)
-
-	// Set up event subscriptions
-	regSub, err := registrar.SetupRegisteredSubscription(
-		ethWsClient,
-		avsGovernanceAddress,
-		operatorRegisteredCh,
-	)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to set up initial OperatorRegistered subscription: %v", err))
+	// Initialize event processing
+	if err := registrar.InitEventProcessing(ethClient, baseClient); err != nil {
+		logger.Fatal(fmt.Sprintf("Failed to initialize event processing: %v", err))
 	}
 
-	unregSub, err := registrar.SetupUnregisteredSubscription(
-		ethWsClient,
-		avsGovernanceAddress,
-		operatorUnregisteredCh,
-	)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to set up initial OperatorUnregistered subscription: %v", err))
+	// Start the polling service in a goroutine
+	go registrar.StartEventPolling(avsGovernanceAddress, attestationCenterAddress)
+
+	// Keep the program running
+	logger.Info("Registrar node is running. Press Ctrl+C to exit.")
+	
+	// Keep the main thread alive
+	for {
+		time.Sleep(time.Hour)
 	}
-
-	taskSubSub, err := registrar.SetupTaskSubmittedSubscription(
-		baseWsClient,
-		attestationCenterAddress,
-		taskSubmittedCh,
-	)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to set up initial TaskSubmitted subscription: %v", err))
-	}
-
-	taskRejSub, err := registrar.SetupTaskRejectedSubscription(
-		baseWsClient,
-		attestationCenterAddress,
-		taskRejectedCh,
-	)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to set up initial TaskRejected subscription: %v", err))
-	}
-
-	// Manage all subscriptions
-	go registrar.ManageSubscriptions(
-		ethWsClient,
-		avsGovernanceAddress,
-		baseWsClient,
-		attestationCenterAddress,
-		operatorRegisteredCh,
-		operatorUnregisteredCh,
-		taskSubmittedCh,
-		taskRejectedCh,
-		regSub,
-		unregSub,
-		taskSubSub,
-		taskRejSub,
-	)
-
-	select {} // Block forever
 }
