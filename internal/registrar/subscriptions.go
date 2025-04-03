@@ -367,10 +367,9 @@ func processOperatorUnregisteredEvents(
 func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 	logger.Info(fmt.Sprintf("Updating operator %s status to unregistered in database", operatorAddress))
 
-	// Create the request payload with more details for debugging
+	// Create the request payload with only the status field
 	updateData := map[string]interface{}{
-		"status":  false,
-		"address": operatorAddress,
+		"status": false,
 	}
 
 	// Convert to JSON
