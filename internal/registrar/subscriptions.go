@@ -30,16 +30,15 @@ var (
 	dbMain   *gocql.Session
 	db       *gocql.Session
 	loggerdb = logging.GetLogger(logging.Development, logging.DatabaseProcess)
-	logger   = logging.GetLogger(logging.Development, logging.RegistrarProcess)
+	//logger   = logging.GetLogger(logging.Development, logging.EventService)
 
 	// Variables to track the last processed block for each contract
 	lastProcessedBlockAVS  uint64
 	lastProcessedBlockBase uint64
 	blockProcessingMutex   sync.Mutex
-	// Configuration variables
-	EthRpcUrl         = "https://eth-sepolia.g.alchemy.com/v2/your-api-key"  // Regular RPC URL (not WebSocket)
-	BaseRpcUrl        = "https://base-sepolia.g.alchemy.com/v2/your-api-key" // Regular RPC URL (not WebSocket)
-	DatabaseIPAddress = "http://localhost:8080"                              // Your database API URL
+	//EthRpcUrl                  string // Regular RPC URL (not WebSocket)
+	//BaseRpcUrl                 string // Regular RPC URL (not WebSocket)
+	//DatabaseIPAddress          string // Your database API URL
 )
 
 type OperatorRegisteredEvent struct {
