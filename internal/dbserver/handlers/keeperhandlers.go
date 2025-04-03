@@ -30,10 +30,13 @@ func (h *Handler) HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Reques
 
 	// First check if the keeper exists
 	var exists bool
+	var count int
 	err = h.db.Session().Query(`
-    SELECT COUNT(*) > 0 FROM triggerx.keeper_data 
-    WHERE keeper_address = ?`,
-		keeperAddress).Scan(&exists)
+    SELECT COUNT(*) FROM triggerx.keeper_data 
+    WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperAddress).Scan(&count)
+
+	exists = count > 0
 	if err != nil {
 		h.logger.Error("Failed to check if keeper exists: " + err.Error())
 		http.Error(w, "Database error while checking keeper existence", http.StatusInternalServerError)
