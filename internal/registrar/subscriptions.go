@@ -973,12 +973,13 @@ func updatePerformerPoints(performerAddress string, taskFee int64) error {
 		return err
 	}
 
-	newPerformerPoints := performerPoints + taskFee
+	//multiplyer 2 till 7th April
+	newPerformerPoints := performerPoints + 2*taskFee
 
 	if err := db.Query(`
 		UPDATE triggerx.keeper_data 
 		SET keeper_points = ? 
-		WHERE keeper_address = ?`,
+		WHERE keeper_address = ? ALLOW FILTERING`,
 		newPerformerPoints, performerAddress).Exec(); err != nil {
 		logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
 		return err
@@ -993,18 +994,19 @@ func updateAttesterPoints(attesterId string, taskFee int64) error {
 	var attesterPoints int64
 	if err := db.Query(`
 		SELECT keeper_points FROM triggerx.keeper_data 
-		WHERE keeper_id = ?`,
+		WHERE keeper_id = ? ALLOW FILTERING`,
 		attesterId).Scan(&attesterPoints); err != nil {
 		logger.Error(fmt.Sprintf("Failed to get attester points for ID %s: %v", attesterId, err))
 		return err
 	}
 
-	newAttesterPoints := attesterPoints + taskFee
+	//multiplyer 2 till 7th April
+	newAttesterPoints := attesterPoints + 2*taskFee
 
 	if err := db.Query(`
 		UPDATE triggerx.keeper_data 
 		SET keeper_points = ? 
-		WHERE keeper_id = ?`,
+		WHERE keeper_id = ? ALLOW FILTERING`,
 		newAttesterPoints, attesterId).Exec(); err != nil {
 		logger.Error(fmt.Sprintf("Failed to update attester points for ID %s: %v", attesterId, err))
 		return err

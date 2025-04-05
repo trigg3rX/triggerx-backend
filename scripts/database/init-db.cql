@@ -103,5 +103,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     consensus_keys list<text>,
     no_exctask int,
     keeper_points bigint,
+    chat_id bigint,
+    email_id text,
     PRIMARY KEY (keeper_id)
 );

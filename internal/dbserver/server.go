@@ -54,27 +54,44 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	return s
 }
 
+// Middleware to check API key
+func apiKeyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey != "your-secure-api-key" { // Replace with your actual API key check
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) routes() {
 	handler := handlers.NewHandler(s.db, s.logger)
 
 	api := s.router.PathPrefix("/api").Subrouter()
 
+	// Protected endpoints (with API key check)
+	protected := api.PathPrefix("/").Subrouter()
+	protected.Use(apiKeyMiddleware)
+ 
+
 	// User routes
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
 	api.HandleFunc("/wallet/points/{wallet_address}", handler.GetWalletPoints).Methods("GET")
 
-	// // Job routes
+	// Job routes
 	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
 	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
 	api.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
 
-	// // Task routes
+	// Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
 
-	// // Keeper routes
+	// Keeper routes
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
 	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
@@ -86,6 +103,12 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
 	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
 	api.HandleFunc("/keepers/{address}/status", handler.HandleUpdateKeeperStatus).Methods("PUT")
+
+	// New route for updating chat ID
+	api.HandleFunc("/keepers/update-chat-id", handler.UpdateKeeperChatID).Methods("POST")
+
+	// New route for getting chat ID and keeper name
+	api.HandleFunc("/keepers/com-info/{id}", handler.GetKeeperCommunicationInfo).Methods("GET")
 
 	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
 	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
