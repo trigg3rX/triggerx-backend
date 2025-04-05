@@ -106,3 +106,13 @@ type KeeperData struct {
 	ChatID            int64     `json:"chat_id"`
 	EmailID           string    `json:"email_id"`
 }
+
+// ApiKey represents an API key in the system
+type ApiKey struct {
+	Key       string    `json:"key"`
+	Owner     string    `json:"owner"`
+	IsActive  bool      `json:"isActive"`
+	RateLimit int       `json:"rateLimit"`
+	LastUsed  time.Time `json:"lastUsed"`
+	CreatedAt time.Time `json:"createdAt"`
+}

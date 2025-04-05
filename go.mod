@@ -9,12 +9,14 @@ require (
 	github.com/ethereum/go-ethereum v1.15.7
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gocql/gocql v1.7.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/ipfs/go-ipfs-api v0.7.0
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.38.1
 	github.com/multiformats/go-multiaddr v0.14.0
 	github.com/prometheus/client_golang v1.21.0
+	github.com/redis/go-redis/v9 v9.7.3
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -46,6 +48,7 @@ require (
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -71,7 +74,6 @@ require (
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
