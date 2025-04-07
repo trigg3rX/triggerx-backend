@@ -53,7 +53,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		logger.Errorf("Failed to initialize Redis client: %v", err)
 		// Continue without Redis if unavailable, but this will affect rate limiting
 	}
-	
+
 	// Initialize rate limiter with our Redis client
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
@@ -62,7 +62,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 			logger.Errorf("Failed to initialize rate limiter: %v", err)
 		}
 	}
-	
+
 	s := &Server{
 		router:        router,
 		db:            db,
@@ -72,7 +72,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
 	}
-	
+
 	// Initialize API key middleware
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
@@ -84,14 +84,14 @@ func (s *Server) routes() {
 	handler := handlers.NewHandler(s.db, s.logger)
 
 	api := s.router.PathPrefix("/api").Subrouter()
-	
+
 	// Public routes (no API key required)
 	// You can add routes here that don't need authentication
-	
+
 	// Protected routes (API key required)
 	protected := api.PathPrefix("").Subrouter()
 	protected.Use(s.apiKeyAuth.Middleware)
-	
+
 	// User routes
 	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
 	api.HandleFunc("/wallet/points/{wallet_address}", handler.GetWalletPoints).Methods("GET")
@@ -124,7 +124,13 @@ func (s *Server) routes() {
 
 	// Fees routes
 	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
-	
+
+	// New route for updating chat ID
+	api.HandleFunc("/keepers/update-chat-id", handler.UpdateKeeperChatID).Methods("POST")
+
+	// New route for getting chat ID and keeper name
+	api.HandleFunc("/keepers/com-info/{id}", handler.GetKeeperCommunicationInfo).Methods("GET")
+
 	// API key management routes (these should be admin-only and properly secured)
 	admin := api.PathPrefix("/admin").Subrouter()
 	// Add authentication for admin routes here

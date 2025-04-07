@@ -81,7 +81,7 @@ func (a *ApiKeyAuth) Middleware(next http.Handler) http.Handler {
 func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, error) {
 	// CQL query to retrieve the API key
 	query := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
-			  FROM apikeys WHERE key = ? AND isActive = ?`
+			  FROM triggerx.apikeys WHERE key = ? AND isActive = ? ALLOW FILTERING`
 
 	var apiKey types.ApiKey
 
@@ -96,6 +96,7 @@ func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, 
 	)
 
 	if err != nil {
+		a.logger.Errorf("Failed to retrieve API key for key %s: %v", key, err)
 		return nil, err
 	}
 
@@ -105,7 +106,7 @@ func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, 
 // updateLastUsed updates the last used timestamp for an API key
 func (a *ApiKeyAuth) updateLastUsed(key string) {
 	// CQL query to update the lastUsed field in the database
-	query := `UPDATE apikeys SET lastUsed = ? WHERE key = ?`
+	query := `UPDATE triggerx.apikeys SET lastUsed = ? WHERE key = ? ALLOW FILTERING`
 
 	// Execute the update query
 	if err := a.db.Session().Query(query, time.Now(), key).Exec(); err != nil {

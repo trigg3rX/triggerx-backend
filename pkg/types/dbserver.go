@@ -73,14 +73,14 @@ type CreateKeeperData struct {
 	RegisteredTx   string   `json:"registered_tx"`
 	RewardsAddress string   `json:"rewards_address"`
 	ConsensusKeys  []string `json:"consensus_keys"`
-	ChatID         int64     `json:"chat_id"` // Add this line
+	ChatID         int64    `json:"chat_id"` // Add this line
 }
 
 type GoogleFormCreateKeeperData struct {
 	KeeperAddress  string `json:"keeper_address"`
 	RewardsAddress string `json:"rewards_address"`
 	KeeperName     string `json:"keeper_name"`
-	EmailID           string    `json:"email_id"`
+	EmailID        string `json:"email_id"`
 }
 
 type UpdateKeeperConnectionData struct {
@@ -121,4 +121,10 @@ type UserLeaderboardEntry struct {
 
 type KeeperStatusUpdate struct {
 	Status bool `json:"status"`
+}
+
+// CreateApiKeyRequest represents a request to create a new API key
+type CreateApiKeyRequest struct {
+	Owner     string `json:"owner"`
+	RateLimit int    `json:"rateLimit"`
 }

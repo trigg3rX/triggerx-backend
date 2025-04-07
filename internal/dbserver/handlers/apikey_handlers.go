@@ -11,12 +11,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// CreateApiKeyRequest represents a request to create a new API key
-type CreateApiKeyRequest struct {
-	Owner     string `json:"owner"`
-	RateLimit int    `json:"rateLimit"`
-}
-
 // ApiKeyResponse represents an API key response
 type ApiKeyResponse struct {
 	Key       string    `json:"key"`
@@ -29,7 +23,7 @@ type ApiKeyResponse struct {
 
 // CreateApiKey creates a new API key
 func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
-	var req CreateApiKeyRequest
+	var req types.CreateApiKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -56,7 +50,7 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save to database using CQL
-	query := `INSERT INTO apikeys (key, owner, isActive, rateLimit, lastUsed, createdAt) 
+	query := `INSERT INTO triggerx.apikeys (key, owner, isActive, rateLimit, lastUsed, createdAt) 
 	          VALUES (?, ?, ?, ?, ?, ?)`
 
 	if err := h.db.Session().Query(query,
@@ -96,7 +90,7 @@ func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 	// Get the current API key
 	var apiKey types.ApiKey
 	query := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
-	          FROM apikeys WHERE key = ?`
+	          FROM triggerx.apikeys WHERE key = ?`
 
 	if err := h.db.Session().Query(query, keyID).Scan(
 		&apiKey.Key,
@@ -121,7 +115,7 @@ func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save the updated API key using CQL
-	updateQuery := `UPDATE apikeys SET isActive = ?, rateLimit = ? WHERE key = ?`
+	updateQuery := `UPDATE triggerx.apikeys SET isActive = ?, rateLimit = ? WHERE key = ?`
 	if err := h.db.Session().Query(updateQuery,
 		apiKey.IsActive,
 		apiKey.RateLimit,

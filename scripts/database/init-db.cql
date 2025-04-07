@@ -107,3 +107,14 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     email_id text,
     PRIMARY KEY (keeper_id)
 );
+
+-- Create ApiKey table
+CREATE TABLE IF NOT EXISTS apikeys (
+    key text PRIMARY KEY,
+    owner text,
+    isActive boolean,
+    rateLimit int,
+    lastUsed timestamp,
+    createdAt timestamp
+);
+
