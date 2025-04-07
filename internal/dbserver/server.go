@@ -100,6 +100,7 @@ func (s *Server) routes() {
 	protected.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
 	protected.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
 	protected.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
+	api.HandleFunc("/jobs/{id}/lastexecuted", handler.UpdateJobLastExecutedAt).Methods("PUT")
 	protected.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
 	protected.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
 
