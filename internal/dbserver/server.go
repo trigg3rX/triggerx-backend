@@ -97,12 +97,12 @@ func (s *Server) routes() {
 	api.HandleFunc("/wallet/points/{wallet_address}", handler.GetWalletPoints).Methods("GET")
 
 	// Job routes
-	protected.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
-	protected.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
-	protected.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
+	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
+	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
+	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
 	api.HandleFunc("/jobs/{id}/lastexecuted", handler.UpdateJobLastExecutedAt).Methods("PUT")
-	protected.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
-	protected.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
+	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
+	api.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
 
 	// // Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
