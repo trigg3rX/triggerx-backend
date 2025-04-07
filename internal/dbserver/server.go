@@ -3,6 +3,7 @@ package dbserver
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -15,14 +16,15 @@ import (
 )
 
 type Server struct {
-	router        *mux.Router
-	db            *database.Connection
-	cors          *cors.Cors
-	logger        logging.Logger
-	metricsServer *metrics.MetricsServer
-	rateLimiter   *middleware.RateLimiter
-	apiKeyAuth    *middleware.ApiKeyAuth
-	redisClient   *redis.Client
+	router             *mux.Router
+	db                 *database.Connection
+	cors               *cors.Cors
+	logger             logging.Logger
+	metricsServer      *metrics.MetricsServer
+	rateLimiter        *middleware.RateLimiter
+	apiKeyAuth         *middleware.ApiKeyAuth
+	redisClient        *redis.Client
+	notificationConfig handlers.NotificationConfig
 }
 
 func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
@@ -71,6 +73,11 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
+		notificationConfig: handlers.NotificationConfig{
+			EmailFrom:     os.Getenv("EMAIL_USER"),
+			EmailPassword: os.Getenv("EMAIL_PASS"),
+			BotToken:      os.Getenv("BOT_TOKEN"),
+		},
 	}
 
 	// Initialize API key middleware
@@ -81,7 +88,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 }
 
 func (s *Server) routes() {
-	handler := handlers.NewHandler(s.db, s.logger)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig)
 
 	api := s.router.PathPrefix("/api").Subrouter()
 

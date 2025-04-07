@@ -1,14 +1,25 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"gopkg.in/gomail.v2"
 )
+
+// Add these new types for notification configuration
+type NotificationConfig struct {
+	EmailFrom     string
+	EmailPassword string
+	BotToken      string
+}
 
 func (h *Handler) HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request) {
 	// Extract keeper address from URL parameters
@@ -450,6 +461,113 @@ func (h *Handler) GetKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int64{"keeper_points": points})
 }
 
+// Add these new functions for notifications
+func (h *Handler) sendTelegramNotification(chatID int64, message string) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.config.BotToken)
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		"text":    message,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		h.logger.Errorf("[Notification] Failed to marshal Telegram payload: %v", err)
+		return err
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		h.logger.Errorf("[Notification] Failed to send Telegram message: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	h.logger.Infof("[Notification] Telegram message sent successfully to chat ID: %d (Status: %d)", chatID, resp.StatusCode)
+	return nil
+}
+
+func (h *Handler) sendEmailNotification(to, subject, body string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", h.config.EmailFrom)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
+
+	d := gomail.NewDialer("smtp.gmail.com", 587, h.config.EmailFrom, h.config.EmailPassword)
+	if err := d.DialAndSend(m); err != nil {
+		h.logger.Errorf("[Notification] Failed to send email to %s: %v", to, err)
+		return err
+	}
+
+	h.logger.Infof("[Notification] Email sent successfully to: %s", to)
+	return nil
+}
+
+func (h *Handler) checkAndNotifyOfflineKeeper(keeperID string) {
+	// Wait for 10 minutes
+	time.Sleep(1 * time.Minute)
+
+	h.logger.Infof("[OfflineCheck] Checking current status for keeper ID: %s", keeperID)
+
+	// Check if keeper is still offline
+	var online bool
+	err := h.db.Session().Query(`
+		SELECT online FROM triggerx.keeper_data WHERE keeper_id = ?`,
+		keeperID).Scan(&online)
+
+	if err != nil {
+		h.logger.Errorf("[OfflineCheck] Error checking keeper online status: %v", err)
+		return
+	}
+
+	if !online {
+		// Fetch keeper communication info
+		var chatID int64
+		var keeperName, emailID string
+		err := h.db.Session().Query(`
+			SELECT chat_id, keeper_name, email_id 
+			FROM triggerx.keeper_data 
+			WHERE keeper_id = ?`,
+			keeperID).Scan(&chatID, &keeperName, &emailID)
+
+		if err != nil {
+			h.logger.Errorf("[OfflineCheck] Error fetching keeper communication info: %v", err)
+			return
+		}
+
+		// Send Telegram notification
+		if chatID != 0 {
+			telegramMsg := fmt.Sprintf("Keeper %s is down for more than 10 minutes. Please check and start it.", keeperName)
+			if err := h.sendTelegramNotification(chatID, telegramMsg); err != nil {
+				h.logger.Errorf("[OfflineCheck] Failed to send Telegram notification to keeper %s: %v", keeperName, err)
+			}
+		} else {
+			h.logger.Warn("[OfflineCheck] No Telegram chat ID found for keeper %s", keeperName)
+		}
+
+		// Send email notification
+		if emailID != "" {
+			subject := fmt.Sprintf("TriggerX Keeper Down Alert - %s", keeperName)
+			emailBody := fmt.Sprintf(`
+				<h2>Keeper Update</h2>
+				<p>This is a critical information from TriggerX. Your keeper <strong>%s</strong> has been down for more than 10 minutes. Please take action immediately.</p>
+				<p>Regards,<br>TriggerX Team</p>
+			`, keeperName)
+
+			if err := h.sendEmailNotification(emailID, subject, emailBody); err != nil {
+				h.logger.Errorf("[OfflineCheck] Failed to send email notification to keeper %s: %v", keeperName, err)
+			}
+		} else {
+			h.logger.Warn("[OfflineCheck] No email address found for keeper %s", keeperName)
+		}
+
+		h.logger.Infof("[OfflineCheck] Completed notification process for offline keeper %s", keeperName)
+	} else {
+		h.logger.Infof("[OfflineCheck] Keeper %s is back online, no notifications needed", keeperID)
+	}
+}
+
+// Modify the KeeperHealthCheckIn function
 func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 	var keeperHealth types.UpdateKeeperHealth
 	if err := json.NewDecoder(r.Body).Decode(&keeperHealth); err != nil {
@@ -492,6 +610,11 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+
+	if !keeperHealth.Active {
+		// Start a goroutine to check status after 10 minutes
+		go h.checkAndNotifyOfflineKeeper(keeperID)
 	}
 
 	h.logger.Infof("[KeeperHealthCheckIn] Updated Keeper status for ID: %s", keeperID)

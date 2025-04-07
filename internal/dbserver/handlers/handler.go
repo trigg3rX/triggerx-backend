@@ -16,13 +16,15 @@ import (
 type Handler struct {
 	db     *database.Connection
 	logger logging.Logger
+	config NotificationConfig
 }
 
 // NewHandler function update
-func NewHandler(db *database.Connection, logger logging.Logger) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig) *Handler {
 	return &Handler{
 		db:     db,
 		logger: logger,
+		config: config,
 	}
 }
 
