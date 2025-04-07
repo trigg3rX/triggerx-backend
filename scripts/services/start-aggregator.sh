@@ -16,8 +16,7 @@ othentic-cli node aggregator \
     --p2p.datadir data/peerstore/aggregator \
     --p2p.discovery-interval 10000 \
     --internal-tasks \
-    --sync-interval $SYNC_INTERVAL \
+    --sync-interval 60000 \
     --metrics \
-    --metrics.port 9009 &
     --delay $DELAY \
     --keystore .keystore/aggregator.json 
