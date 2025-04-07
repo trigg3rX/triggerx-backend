@@ -294,3 +294,12 @@ func (w *EventBasedWorker) handleError(err error) {
 		w.status = "failed"
 	}
 }
+
+// Add UpdateLastExecutedTime method to allow updating the last execution timestamp
+func (w *EventBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
+	// Update the jobData with the new timestamp
+	if w.jobData != nil {
+		w.jobData.LastExecutedAt = timestamp
+		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)
+	}
+}

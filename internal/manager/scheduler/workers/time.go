@@ -220,3 +220,12 @@ func (w *BaseWorker) handleLinkedJob(scheduler JobScheduler, jobData *types.Hand
 		return fmt.Errorf("invalid job type for linked job %d", linkedJob.JobID)
 	}
 }
+
+// Add this method to TimeBasedWorker to allow updating the last execution timestamp
+func (w *TimeBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
+	// Update the jobData with the new timestamp
+	if w.jobData != nil {
+		w.jobData.LastExecutedAt = timestamp
+		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)
+	}
+}

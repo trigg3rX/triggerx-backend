@@ -20,6 +20,9 @@ start-registrar: ## Start the Registrar
 start-health: ## Start the Health Check
 	./scripts/services/start-health.sh
 
+start-nexus: ## Start the Nexus Node
+	./scripts/services/start-nexus.sh
+
 ############################# DATABASE #############################
 
 db-setup: ## Setup ScyllaDB container
@@ -44,3 +47,8 @@ build-keeper: ## Build the Keeper
 
 start-keeper: ## Start the Keeper
 	./scripts/services/start-keeper.sh
+
+############################ HELPERS ####################################
+
+clear-peerstore: ## Clear the peerstore
+	rm -rf data/peerstore/*
