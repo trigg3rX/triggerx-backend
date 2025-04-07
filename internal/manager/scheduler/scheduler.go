@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
@@ -297,4 +298,77 @@ func (s *JobScheduler) GetJobDetails(jobID int64) (*types.HandleCreateJobData, e
 		return nil, err
 	}
 	return &jobDetails, nil
+}
+
+// GetWorker retrieves the worker for a specific job ID
+func (s *JobScheduler) GetWorker(jobID int64) workers.Worker {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	worker, exists := s.workers[jobID]
+	if !exists {
+		return nil
+	}
+
+	return worker
+}
+
+// UpdateJobLastExecutedTime updates the last executed timestamp for a specific job
+func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Time) error {
+	s.mu.RLock()
+	worker, exists := s.workers[jobID]
+	s.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("worker for job %d not found", jobID)
+	}
+
+	// For time-based workers, we need to cast to access specific fields
+	if timeWorker, ok := worker.(*workers.TimeBasedWorker); ok {
+		timeWorker.UpdateLastExecutedTime(timestamp)
+		s.logger.Infof("Updated last executed time for time-based job %d to %v", jobID, timestamp)
+		return nil
+	}
+
+	// For event-based workers
+	if eventWorker, ok := worker.(*workers.EventBasedWorker); ok {
+		eventWorker.UpdateLastExecutedTime(timestamp)
+		s.logger.Infof("Updated last executed time for event-based job %d to %v", jobID, timestamp)
+		return nil
+	}
+
+	// For condition-based workers
+	if conditionWorker, ok := worker.(*workers.ConditionBasedWorker); ok {
+		conditionWorker.UpdateLastExecutedTime(timestamp)
+		s.logger.Infof("Updated last executed time for condition-based job %d to %v", jobID, timestamp)
+		return nil
+	}
+
+	return fmt.Errorf("unsupported worker type for job %d", jobID)
+}
+
+// UpdateJobStateCache updates a specific field in the job's state cache
+func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value interface{}) error {
+	s.cacheMutex.Lock()
+	defer s.cacheMutex.Unlock()
+
+	jobState, exists := s.stateCache[jobID]
+	if !exists {
+		return fmt.Errorf("no state cache for job %d", jobID)
+	}
+
+	// Convert to map to update the field
+	if jobStateMap, ok := jobState.(map[string]interface{}); ok {
+		jobStateMap[field] = value
+		s.stateCache[jobID] = jobStateMap
+
+		// Persist the updated state
+		if err := s.cacheManager.SaveState(); err != nil {
+			return fmt.Errorf("failed to save state after update: %w", err)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("invalid state cache format for job %d", jobID)
 }

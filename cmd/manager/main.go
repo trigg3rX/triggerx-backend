@@ -14,6 +14,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -48,6 +49,10 @@ func main() {
 	router.POST("/job/update", manager.HandleUpdateJobEvent)
 	router.POST("/job/pause", manager.HandlePauseJobEvent)
 	router.POST("/job/resume", manager.HandleResumeJobEvent)
+	router.POST("/job/state/update", manager.HandleJobStateUpdate)
+
+	router.POST("/p2p/message", services.ExecuteTask)
+	router.POST("/task/validate", services.ValidateTask)
 	
 	// Create HTTP server
 	srv := &http.Server{

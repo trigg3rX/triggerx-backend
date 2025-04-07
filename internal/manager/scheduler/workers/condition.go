@@ -236,3 +236,12 @@ func (w *ConditionBasedWorker) GetError() string {
 func (w *ConditionBasedWorker) GetRetries() int {
 	return w.currentRetry
 }
+
+// Add UpdateLastExecutedTime method to allow updating the last execution timestamp
+func (w *ConditionBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
+	// Update the jobData with the new timestamp
+	if w.jobData != nil {
+		w.jobData.LastExecutedAt = timestamp
+		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)
+	}
+}
