@@ -63,7 +63,7 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 	ctx := r.Context()
 	rateLimitKey := fmt.Sprintf("rate-limit:%s", apiKey.Key)
 	windowSeconds := 60 // 1-minute window
-	currentTimestamp := time.Now().Unix()
+	currentTimestamp := time.Now().UTC().Unix()
 	
 	// Execute the rate limiting script
 	result, err := rl.redis.Eval(ctx, rateLimitScript, []string{rateLimitKey}, 
@@ -126,7 +126,7 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 // GetRateLimitStatus retrieves the current rate limit status for an API key
 func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.ApiKey) (*RateLimitInfo, error) {
 	rateLimitKey := fmt.Sprintf("rate-limit:%s", apiKey.Key)
-	currentTimestamp := time.Now().Unix()
+	currentTimestamp := time.Now().UTC().Unix()
 	
 	// Get the current count
 	countStr, err := rl.redis.Get(ctx, rateLimitKey)

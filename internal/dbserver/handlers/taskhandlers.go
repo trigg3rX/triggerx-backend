@@ -51,7 +51,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
             task_performer_id, is_approved
         ) VALUES (?, ?, ?, ?, ?, ?)`,
 		taskResponse.TaskID, taskData.JobID, taskData.TaskDefinitionID,
-		time.Now(), taskData.TaskPerformerID, false).Exec(); err != nil {
+		time.Now().UTC(), taskData.TaskPerformerID, false).Exec(); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error inserting task with ID %d: %v", taskResponse.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

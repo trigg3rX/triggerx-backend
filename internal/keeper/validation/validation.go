@@ -68,7 +68,7 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 		return false, nil
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// Check if this is the job's first execution
 	if job.LastExecutedAt.IsZero() {
@@ -158,7 +158,7 @@ func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, 
 	v.logger.Infof("Transaction hash validation successful for job %d", job.JobID)
 
 	// Check if job is within its timeframe
-	now := time.Now()
+	now := time.Now().UTC()
 	if job.TimeFrame > 0 {
 		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second)
 		if now.After(endTime) {

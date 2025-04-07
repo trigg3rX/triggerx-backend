@@ -204,10 +204,10 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	memoryUsedMB := float64(stats.MemoryUsage) / (1024 * 1024) // Convert to MB
 
 	ComputationCost := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)
-	NetworkScalingFactor := (1 + NoOfAttesters )
+	NetworkScalingFactor := (1 + NoOfAttesters)
 
 	// Calculate TotalTG using the new formula
-	TotalTG := (ComputationCost * float64(NetworkScalingFactor))  + Fixedcost + TransactionSimulation
+	TotalTG := (ComputationCost * float64(NetworkScalingFactor)) + Fixedcost + TransactionSimulation
 
 	// Calculate total fee based on TG units
 	totalFee := TotalTG * PriceperTG
@@ -223,7 +223,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	var executionStartTime time.Time
 	var executionEndTime time.Time
 	var codeExecutionTime time.Duration
-	var dockerStartTime = time.Now() // Track when Docker operations begin
+	var dockerStartTime = time.Now().UTC()
 	executionStarted := false
 
 	// Get container info to find the mounted directory
@@ -248,7 +248,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	}
 
 	// Start container
-	containerStartTime := time.Now()
+	containerStartTime := time.Now().UTC()
 	err = cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start container: %v", err)
@@ -311,11 +311,11 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 
 			// Check for timing markers
 			if strings.Contains(line, "START_EXECUTION") {
-				executionStartTime = time.Now()
+				executionStartTime = time.Now().UTC()
 				executionStarted = true
 				fmt.Println("Code execution started")
 			} else if strings.Contains(line, "END_EXECUTION") && executionStarted {
-				executionEndTime = time.Now()
+				executionEndTime = time.Now().UTC()
 				codeExecutionTime = executionEndTime.Sub(executionStartTime)
 				fmt.Printf("Code execution completed in: %v\n", codeExecutionTime)
 			}

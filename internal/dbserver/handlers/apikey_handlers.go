@@ -46,7 +46,7 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		IsActive:  true,
 		RateLimit: req.RateLimit,
 		LastUsed:  time.Time{}, // Zero time
-		CreatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
 	}
 
 	// Save to database using CQL

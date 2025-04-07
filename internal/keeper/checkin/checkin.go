@@ -29,7 +29,7 @@ func CheckInWithHealthService() error {
 	payload := types.KeeperHealth{
 		KeeperAddress: config.KeeperAddress,
 		Version:       "0.0.5",
-		Timestamp:     time.Now(),
+		Timestamp:     time.Now().UTC(),
 		Signature:     signature,
 	}
 

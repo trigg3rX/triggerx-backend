@@ -64,7 +64,7 @@ func (ksm *KeeperStateManager) startCleanupRoutine() {
 
 // checkInactiveKeepers identifies and processes inactive keepers
 func (ksm *KeeperStateManager) checkInactiveKeepers() {
-	now := time.Now()
+	now := time.Now().UTC()
 	var inactiveKeepers []string
 
 	ksm.mu.Lock()
@@ -91,7 +91,7 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 	defer ksm.mu.Unlock()
 
 	address := health.KeeperAddress
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// Check if keeper exists in our state
 	existingState, exists := ksm.keepers[address]
@@ -135,7 +135,7 @@ func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, vers
 	payload := types.UpdateKeeperHealth{
 		KeeperAddress: address,
 		Active:        isActive,
-		Timestamp:     time.Now(),
+		Timestamp:     time.Now().UTC(),
 		Version:       version,
 	}
 	

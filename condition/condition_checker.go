@@ -25,7 +25,7 @@ func condition() ConditionResult {
     if err != nil {
         return ConditionResult{
             Satisfied: false,
-            Timestamp: time.Now(),
+            Timestamp: time.Now().UTC(),
             Response:  0,
             Price:     0,
         }
@@ -36,7 +36,7 @@ func condition() ConditionResult {
     if err != nil {
         return ConditionResult{
             Satisfied: false,
-            Timestamp: time.Now(),
+            Timestamp: time.Now().UTC(),
             Response:  0,
             Price:     0,
         }
@@ -46,7 +46,7 @@ func condition() ConditionResult {
     if err := json.Unmarshal(body, &result); err != nil {
         return ConditionResult{
             Satisfied: false,
-            Timestamp: time.Now(),
+            Timestamp: time.Now().UTC(),
             Response:  0,
             Price:     0,
         }
@@ -56,7 +56,7 @@ func condition() ConditionResult {
     if !ok {
         return ConditionResult{
             Satisfied: false,
-            Timestamp: time.Now(),
+            Timestamp: time.Now().UTC(),
             Response:  0,
         }
     }
@@ -74,7 +74,7 @@ func condition() ConditionResult {
     // Return the condition result
     return ConditionResult{
         Satisfied: satisfied,
-        Timestamp: time.Now(),
+        Timestamp: time.Now().UTC(),
         Response:  response,
         Price:     ethPrice,
     }

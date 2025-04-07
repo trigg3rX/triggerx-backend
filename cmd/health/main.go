@@ -52,7 +52,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"service":   "TriggerX Health Service",
 			"status":    "running",
-			"timestamp": time.Now().Format(time.RFC3339),
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
 		})
 	})
 

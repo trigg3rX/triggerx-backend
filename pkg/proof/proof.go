@@ -89,7 +89,7 @@ func GenerateAndStoreProof(
 	}
 
 	tempData.ProofData.TaskID = tempData.ActionData.TaskID
-	tempData.ProofData.Timestamp = time.Now()
+	tempData.ProofData.Timestamp = time.Now().UTC()
 	tempData.ProofData.CertificateHash = proof.CertificateHash
 	tempData.ProofData.ResponseHash = proof.ResponseHash
 
