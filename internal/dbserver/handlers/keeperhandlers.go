@@ -493,7 +493,7 @@ func (h *Handler) sendEmailNotification(to, subject, body string) error {
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
 
-	d := gomail.NewDialer("smtp.gmail.com", 587, h.config.EmailFrom, h.config.EmailPassword)
+	d := gomail.NewDialer("smtp.zoho.in", 587, h.config.EmailFrom, h.config.EmailPassword)
 	if err := d.DialAndSend(m); err != nil {
 		h.logger.Errorf("[Notification] Failed to send email to %s: %v", to, err)
 		return err
@@ -505,7 +505,7 @@ func (h *Handler) sendEmailNotification(to, subject, body string) error {
 
 func (h *Handler) checkAndNotifyOfflineKeeper(keeperID string) {
 	// Wait for 10 minutes
-	time.Sleep(1 * time.Minute)
+	time.Sleep(10 * time.Minute)
 
 	h.logger.Infof("[OfflineCheck] Checking current status for keeper ID: %s", keeperID)
 

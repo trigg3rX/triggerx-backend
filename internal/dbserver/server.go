@@ -9,6 +9,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/telegram"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
@@ -25,6 +26,7 @@ type Server struct {
 	apiKeyAuth         *middleware.ApiKeyAuth
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
+	telegramBot        *telegram.Bot
 }
 
 func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
@@ -65,6 +67,12 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		}
 	}
 
+	// Initialize Telegram bot
+	bot, err := telegram.NewBot(os.Getenv("BOT_TOKEN"), logger, db)
+	if err != nil {
+		logger.Errorf("Failed to initialize Telegram bot: %v", err)
+	}
+
 	s := &Server{
 		router:        router,
 		db:            db,
@@ -73,6 +81,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
+		telegramBot:   bot,
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     os.Getenv("EMAIL_USER"),
 			EmailPassword: os.Getenv("EMAIL_PASS"),
@@ -156,6 +165,11 @@ func (s *Server) Start(port string) error {
 	// Defer closing Redis client when server stops
 	if s.redisClient != nil {
 		defer s.redisClient.Close()
+	}
+
+	// Start the Telegram bot in a goroutine
+	if s.telegramBot != nil {
+		go s.telegramBot.Start()
 	}
 
 	handler := s.cors.Handler(s.router)
