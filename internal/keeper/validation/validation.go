@@ -112,7 +112,7 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 	}
 
 	v.logger.Infof("Job %d is eligible for execution", job.JobID)
-	return false, nil
+	return true, nil
 }
 
 func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error) {
