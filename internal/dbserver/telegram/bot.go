@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"strconv"
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -80,7 +81,7 @@ func (b *Bot) Start() {
 func (b *Bot) updateKeeperChatID(keeperAddress string, chatID int64) error {
 	b.logger.Infof("[UpdateKeeperChatID] Finding keeper ID for keeper: %s", keeperAddress)
 
-	// Step 1: Find the keeper_id using keeper_name
+	// Step 1: Find the keeper_id using keeper_address
 	var keeperID string
 	if err := b.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data 
@@ -91,12 +92,15 @@ func (b *Bot) updateKeeperChatID(keeperAddress string, chatID int64) error {
 
 	b.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %s", keeperID)
 
+	// Convert chatID to string before storing
+	chatIDStr := strconv.FormatInt(chatID, 10)
+
 	// Step 2: Update the chat_id for the specified keeper_id
 	if err := b.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET chat_id = ? 
 		WHERE keeper_id = ?`,
-		chatID, keeperID).Exec(); err != nil {
+		chatIDStr, keeperID).Exec(); err != nil {
 		b.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper ID %s: %v", keeperID, err)
 		return err
 	}
