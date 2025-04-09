@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -25,19 +26,24 @@ type ApiKeyResponse struct {
 func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 	var req types.CreateApiKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Errorf("[CreateApiKey] Error decoding request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	// Validate request
 	if req.Owner == "" {
+		h.logger.Warnf("[CreateApiKey] Validation failed: Owner is required")
 		http.Error(w, "Owner is required", http.StatusBadRequest)
 		return
 	}
 
 	if req.RateLimit <= 0 {
+		h.logger.Infof("[CreateApiKey] RateLimit not provided or invalid for owner %s, defaulting to 60", req.Owner)
 		req.RateLimit = 60 // Default rate limit: 60 requests per minute
 	}
+
+	h.logger.Infof("[CreateApiKey] Checking for existing API key for owner: %s", req.Owner)
 
 	// First check if user already has an API key
 	var existingKey types.ApiKey
@@ -54,6 +60,8 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err == nil {
+		h.logger.Infof("[CreateApiKey] Existing API key found for owner %s (Key: %s). Proceeding with update.", req.Owner, existingKey.Key)
+
 		// User already has an API key, update it
 		updateQuery := `UPDATE triggerx.apikeys 
 					   SET isActive = ?, rateLimit = ?, lastUsed = ? 
@@ -65,7 +73,7 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 			time.Time{},
 			existingKey.Key,
 		).Exec(); err != nil {
-			h.logger.Errorf("Failed to update existing API key: %v", err)
+			h.logger.Errorf("[CreateApiKey] Failed to update existing API key for owner %s (Key: %s): %v", req.Owner, existingKey.Key, err)
 			http.Error(w, "Failed to update API key", http.StatusInternalServerError)
 			return
 		}
@@ -74,9 +82,15 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		existingKey.RateLimit = req.RateLimit
 		existingKey.LastUsed = time.Time{}
 
+		h.logger.Infof("[CreateApiKey] Successfully updated API key for owner %s (Key: %s)", req.Owner, existingKey.Key)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(existingKey)
+		return
+	} else if err != gocql.ErrNotFound {
+		h.logger.Errorf("[CreateApiKey] Error checking for existing API key for owner %s: %v", req.Owner, err)
+		http.Error(w, "Failed to check for existing API key", http.StatusInternalServerError)
 		return
 	}
 
@@ -102,10 +116,12 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		apiKey.LastUsed,
 		apiKey.CreatedAt,
 	).Exec(); err != nil {
-		h.logger.Errorf("Failed to create API key: %v", err)
+		h.logger.Errorf("[CreateApiKey] Failed to create API key for owner %s: %v", req.Owner, err)
 		http.Error(w, "Failed to create API key", http.StatusInternalServerError)
 		return
 	}
+
+	h.logger.Infof("[CreateApiKey] Successfully created new API key for owner %s (Key: %s)", req.Owner, apiKey.Key)
 
 	// Return the newly created API key
 	w.Header().Set("Content-Type", "application/json")
