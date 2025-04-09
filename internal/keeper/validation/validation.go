@@ -47,7 +47,7 @@ func NewJobValidator(logger Logger, ethClient *ethclient.Client) *JobValidator {
 // based on its time interval, timeframe, and last execution time
 func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
 	// Define tolerance constant (3 seconds)
-	const timeTolerance = 2 * time.Second
+	const timeTolerance = 1500 * time.Millisecond
 
 	// Ensure this is a time-based job
 	if job.TaskDefinitionID != 1 && job.TaskDefinitionID != 2 {

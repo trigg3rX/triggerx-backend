@@ -156,7 +156,7 @@ func StartEventPolling(
 	logger.Info("Starting event polling service...")
 
 	// Create ticker for 20-minute interval
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(20 * time.Minute)
 	defer ticker.Stop()
 
 	// Initial poll immediately on startup
