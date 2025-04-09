@@ -59,6 +59,7 @@ type JobData struct {
 type TaskData struct {
 	// Fixed Values
 	TaskID           int64     `json:"task_id"`
+	TaskNumber       int       `json:"task_number"`
 	JobID            int64     `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`

@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -22,39 +22,20 @@ func main() {
 	logger.Info("Starting registrar node (poll-based)...")
 
 	// Initialize registrar configuration
-	registrar.Init()
-
-	// Connect to Ethereum network via HTTP RPC
-	ethClient, err := ethclient.Dial(registrar.EthRpcUrl)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to Ethereum RPC: %v", err))
-	}
-	logger.Info("Connected to Ethereum HTTP RPC")
-
-	// Connect to Base network via HTTP RPC
-	baseClient, err := ethclient.Dial(registrar.BaseRpcUrl)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to Base RPC: %v", err))
-	}
-	logger.Info("Connected to Base HTTP RPC")
+	config.Init()
 
 	// Get contract addresses
-	avsGovernanceAddress := common.HexToAddress(registrar.AvsGovernanceAddress)
-	attestationCenterAddress := common.HexToAddress(registrar.AttestationCenterAddress)
+	avsGovernanceAddress := common.HexToAddress(config.AvsGovernanceAddress)
+	attestationCenterAddress := common.HexToAddress(config.AttestationCenterAddress)
 
-	logger.Info(fmt.Sprintf("Using AVS Governance contract at address: %s", registrar.AvsGovernanceAddress))
-	logger.Info(fmt.Sprintf("Using Attestation Center contract at address: %s", registrar.AttestationCenterAddress))
-
-	// Initialize event processing
-	if err := registrar.InitEventProcessing(ethClient, baseClient); err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to initialize event processing: %v", err))
-	}
+	logger.Info(fmt.Sprintf("Using AVS Governance contract at address: %s", config.AvsGovernanceAddress))
+	logger.Info(fmt.Sprintf("Using Attestation Center contract at address: %s", config.AttestationCenterAddress))
 
 	// Start the polling service in a goroutine
 	go registrar.StartEventPolling(avsGovernanceAddress, attestationCenterAddress)
 
 	// Keep the program running
-	logger.Info("Registrar node is running. Press Ctrl+C to exit.")
+	logger.Info("Registrar node is running.")
 
 	// Keep the main thread alive
 	for {

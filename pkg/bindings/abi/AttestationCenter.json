@@ -1,1260 +1,1088 @@
 [
   {
-    "type": "function",
-    "name": "DEFAULT_ADMIN_ROLE",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "avsLogic",
-    "inputs": [],
-    "outputs": [
-      { "name": "", "type": "address", "internalType": "contract IAvsLogic" }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "baseRewardFee",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "beforePaymentsLogic",
-    "inputs": [],
-    "outputs": [
+    "inputs": [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "contract IBeforePaymentsLogic"
+        "internalType": "address",
+        "name": "_extensionImplementation",
+        "type": "address"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "nonpayable",
+    "type": "constructor"
   },
+  { "inputs": [], "name": "AccessControlBadConfirmation", "type": "error" },
   {
-    "type": "function",
-    "name": "clearBatchPayment",
     "inputs": [
-      {
-        "name": "_operators",
-        "type": "tuple[]",
-        "internalType": "struct IAttestationCenter.PaymentRequestMessage[]",
-        "components": [
-          { "name": "operator", "type": "address", "internalType": "address" },
-          { "name": "feeToClaim", "type": "uint256", "internalType": "uint256" }
-        ]
-      },
-      {
-        "name": "_paidTaskNumber",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+      { "internalType": "address", "name": "account", "type": "address" },
+      { "internalType": "bytes32", "name": "neededRole", "type": "bytes32" }
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "clearPayment",
-    "inputs": [
-      { "name": "_operator", "type": "address", "internalType": "address" },
-      {
-        "name": "_lastPaidTaskNumber",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      { "name": "_amountClaimed", "type": "uint256", "internalType": "uint256" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "createNewTaskDefinition",
-    "inputs": [
-      { "name": "_name", "type": "string", "internalType": "string" },
-      {
-        "name": "_taskDefinitionParams",
-        "type": "tuple",
-        "internalType": "struct TaskDefinitionParams",
-        "components": [
-          {
-            "name": "blockExpiry",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "baseRewardFeeForAttesters",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "baseRewardFeeForPerformer",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "baseRewardFeeForAggregator",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "disputePeriodBlocks",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "minimumVotingPower",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "restrictedOperatorIndexes",
-            "type": "uint256[]",
-            "internalType": "uint256[]"
-          }
-        ]
-      }
-    ],
-    "outputs": [{ "name": "_id", "type": "uint16", "internalType": "uint16" }],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "getOperatorPaymentDetail",
-    "inputs": [
-      { "name": "_operatorId", "type": "uint256", "internalType": "uint256" }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct IAttestationCenter.PaymentDetails",
-        "components": [
-          { "name": "operator", "type": "address", "internalType": "address" },
-          {
-            "name": "lastPaidTaskNumber",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "feeToClaim",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "paymentStatus",
-            "type": "uint8",
-            "internalType": "enum IAttestationCenter.PaymentStatus"
-          }
-        ]
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getRoleAdmin",
-    "inputs": [
-      { "name": "role", "type": "bytes32", "internalType": "bytes32" }
-    ],
-    "outputs": [{ "name": "", "type": "bytes32", "internalType": "bytes32" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getTaskDefinitionMinimumVotingPower",
-    "inputs": [
-      {
-        "name": "_taskDefinitionId",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getTaskDefinitionRestrictedOperators",
-    "inputs": [
-      {
-        "name": "_taskDefinitionId",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "outputs": [
-      { "name": "", "type": "uint256[]", "internalType": "uint256[]" }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "grantRole",
-    "inputs": [
-      { "name": "role", "type": "bytes32", "internalType": "bytes32" },
-      { "name": "account", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "hasRole",
-    "inputs": [
-      { "name": "role", "type": "bytes32", "internalType": "bytes32" },
-      { "name": "account", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "initialize",
-    "inputs": [
-      {
-        "name": "_avsGovernanceMultisigOwner",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_operationsMultisig",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_communityMultisig",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_messageHandler",
-        "type": "address",
-        "internalType": "address"
-      },
-      { "name": "_obls", "type": "address", "internalType": "address" },
-      { "name": "_vault", "type": "address", "internalType": "address" },
-      { "name": "_isRewardsOnL2", "type": "bool", "internalType": "bool" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "isFlowPaused",
-    "inputs": [
-      { "name": "_pausableFlow", "type": "bytes4", "internalType": "bytes4" }
-    ],
-    "outputs": [
-      { "name": "_isPaused", "type": "bool", "internalType": "bool" }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "numOfActiveOperators",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "numOfOperators",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "numOfTaskDefinitions",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint16", "internalType": "uint16" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "numOfTotalOperators",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "obls",
-    "inputs": [],
-    "outputs": [
-      { "name": "", "type": "address", "internalType": "contract IOBLS" }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "operatorsIdsByAddress",
-    "inputs": [
-      { "name": "_operator", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "pause",
-    "inputs": [
-      { "name": "_pausableFlow", "type": "bytes4", "internalType": "bytes4" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "registerToNetwork",
-    "inputs": [
-      { "name": "_operator", "type": "address", "internalType": "address" },
-      { "name": "_votingPower", "type": "uint256", "internalType": "uint256" },
-      { "name": "_blsKey", "type": "uint256[4]", "internalType": "uint256[4]" },
-      {
-        "name": "_rewardsReceiver",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "renounceRole",
-    "inputs": [
-      { "name": "role", "type": "bytes32", "internalType": "bytes32" },
-      {
-        "name": "callerConfirmation",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "requestBatchPayment",
-    "inputs": [
-      { "name": "_from", "type": "uint256", "internalType": "uint256" },
-      { "name": "_to", "type": "uint256", "internalType": "uint256" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "requestBatchPayment",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "requestPayment",
-    "inputs": [
-      { "name": "_operatorId", "type": "uint256", "internalType": "uint256" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "revokeRole",
-    "inputs": [
-      { "name": "role", "type": "bytes32", "internalType": "bytes32" },
-      { "name": "account", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setAvsLogic",
-    "inputs": [
-      {
-        "name": "_avsLogic",
-        "type": "address",
-        "internalType": "contract IAvsLogic"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setBeforePaymentsLogic",
-    "inputs": [
-      {
-        "name": "_beforePaymentsLogic",
-        "type": "address",
-        "internalType": "contract IBeforePaymentsLogic"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setFeeCalculator",
-    "inputs": [
-      {
-        "name": "_feeCalculator",
-        "type": "address",
-        "internalType": "contract IFeeCalculator"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setOblsSharesSyncer",
-    "inputs": [
-      {
-        "name": "_oblsSharesSyncer",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setTaskDefinitionMinVotingPower",
-    "inputs": [
-      {
-        "name": "_taskDefinitionId",
-        "type": "uint16",
-        "internalType": "uint16"
-      },
-      {
-        "name": "_minimumVotingPower",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setTaskDefinitionRestrictedOperators",
-    "inputs": [
-      {
-        "name": "_taskDefinitionId",
-        "type": "uint16",
-        "internalType": "uint16"
-      },
-      {
-        "name": "_restrictedOperatorIndexes",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "submitTask",
-    "inputs": [
-      {
-        "name": "_taskInfo",
-        "type": "tuple",
-        "internalType": "struct IAttestationCenter.TaskInfo",
-        "components": [
-          { "name": "proofOfTask", "type": "string", "internalType": "string" },
-          { "name": "data", "type": "bytes", "internalType": "bytes" },
-          {
-            "name": "taskPerformer",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "taskDefinitionId",
-            "type": "uint16",
-            "internalType": "uint16"
-          }
-        ]
-      },
-      { "name": "_isApproved", "type": "bool", "internalType": "bool" },
-      { "name": "_tpSignature", "type": "bytes", "internalType": "bytes" },
-      {
-        "name": "_taSignature",
-        "type": "uint256[2]",
-        "internalType": "uint256[2]"
-      },
-      {
-        "name": "_attestersIds",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "submitTask",
-    "inputs": [
-      {
-        "name": "_taskInfo",
-        "type": "tuple",
-        "internalType": "struct IAttestationCenter.TaskInfo",
-        "components": [
-          { "name": "proofOfTask", "type": "string", "internalType": "string" },
-          { "name": "data", "type": "bytes", "internalType": "bytes" },
-          {
-            "name": "taskPerformer",
-            "type": "address",
-            "internalType": "address"
-          },
-          {
-            "name": "taskDefinitionId",
-            "type": "uint16",
-            "internalType": "uint16"
-          }
-        ]
-      },
-      {
-        "name": "_taskSubmissionDetails",
-        "type": "tuple",
-        "internalType": "struct IAttestationCenter.TaskSubmissionDetails",
-        "components": [
-          { "name": "isApproved", "type": "bool", "internalType": "bool" },
-          { "name": "tpSignature", "type": "bytes", "internalType": "bytes" },
-          {
-            "name": "taSignature",
-            "type": "uint256[2]",
-            "internalType": "uint256[2]"
-          },
-          {
-            "name": "attestersIds",
-            "type": "uint256[]",
-            "internalType": "uint256[]"
-          }
-        ]
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "supportsInterface",
-    "inputs": [
-      { "name": "interfaceId", "type": "bytes4", "internalType": "bytes4" }
-    ],
-    "outputs": [{ "name": "", "type": "bool", "internalType": "bool" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "taskNumber",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "uint32", "internalType": "uint32" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "transferAvsGovernanceMultisig",
-    "inputs": [
-      {
-        "name": "_newAvsGovernanceMultisig",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "transferMessageHandler",
-    "inputs": [
-      {
-        "name": "_newMessageHandler",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "unRegisterOperatorFromNetwork",
-    "inputs": [
-      { "name": "_operator", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "unpause",
-    "inputs": [
-      { "name": "_pausableFlow", "type": "bytes4", "internalType": "bytes4" }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "updateBlsKey",
-    "inputs": [
-      { "name": "_blsKey", "type": "uint256[4]", "internalType": "uint256[4]" },
-      {
-        "name": "_authSignature",
-        "type": "tuple",
-        "internalType": "struct BLSAuthLibrary.Signature",
-        "components": [
-          {
-            "name": "signature",
-            "type": "uint256[2]",
-            "internalType": "uint256[2]"
-          }
-        ]
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "vault",
-    "inputs": [],
-    "outputs": [{ "name": "", "type": "address", "internalType": "address" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "votingPower",
-    "inputs": [
-      { "name": "_operator", "type": "address", "internalType": "address" }
-    ],
-    "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
-    "stateMutability": "view"
-  },
-  {
-    "type": "event",
-    "name": "ClearPaymentRejected",
-    "inputs": [
-      {
-        "name": "operator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "requestedTaskNumber",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "requestedAmountClaimed",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "FlowPaused",
-    "inputs": [
-      {
-        "name": "_pausableFlow",
-        "type": "bytes4",
-        "indexed": false,
-        "internalType": "bytes4"
-      },
-      {
-        "name": "_pauser",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "FlowUnpaused",
-    "inputs": [
-      {
-        "name": "_pausableFlowFlag",
-        "type": "bytes4",
-        "indexed": false,
-        "internalType": "bytes4"
-      },
-      {
-        "name": "_unpauser",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "Initialized",
-    "inputs": [
-      {
-        "name": "version",
-        "type": "uint64",
-        "indexed": false,
-        "internalType": "uint64"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "OperatorBlsKeyUpdated",
-    "inputs": [
-      {
-        "name": "operator",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "blsKey",
-        "type": "uint256[4]",
-        "indexed": false,
-        "internalType": "uint256[4]"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "OperatorRegisteredToNetwork",
-    "inputs": [
-      {
-        "name": "operator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "votingPower",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "OperatorUnregisteredFromNetwork",
-    "inputs": [
-      {
-        "name": "operatorId",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PaymentRequested",
-    "inputs": [
-      {
-        "name": "operator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "lastPaidTaskNumber",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "feeToClaim",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "PaymentsRequested",
-    "inputs": [
-      {
-        "name": "operators",
-        "type": "tuple[]",
-        "indexed": false,
-        "internalType": "struct IAttestationCenter.PaymentRequestMessage[]",
-        "components": [
-          { "name": "operator", "type": "address", "internalType": "address" },
-          { "name": "feeToClaim", "type": "uint256", "internalType": "uint256" }
-        ]
-      },
-      {
-        "name": "lastPaidTaskNumber",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RewardAccumulated",
-    "inputs": [
-      {
-        "name": "_operatorId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "_baseRewardFeeForOperator",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "_taskNumber",
-        "type": "uint32",
-        "indexed": true,
-        "internalType": "uint32"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RoleAdminChanged",
-    "inputs": [
-      {
-        "name": "role",
-        "type": "bytes32",
-        "indexed": true,
-        "internalType": "bytes32"
-      },
-      {
-        "name": "previousAdminRole",
-        "type": "bytes32",
-        "indexed": true,
-        "internalType": "bytes32"
-      },
-      {
-        "name": "newAdminRole",
-        "type": "bytes32",
-        "indexed": true,
-        "internalType": "bytes32"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RoleGranted",
-    "inputs": [
-      {
-        "name": "role",
-        "type": "bytes32",
-        "indexed": true,
-        "internalType": "bytes32"
-      },
-      {
-        "name": "account",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "sender",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "RoleRevoked",
-    "inputs": [
-      {
-        "name": "role",
-        "type": "bytes32",
-        "indexed": true,
-        "internalType": "bytes32"
-      },
-      {
-        "name": "account",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "sender",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetAvsGovernanceMultisig",
-    "inputs": [
-      {
-        "name": "newAvsGovernanceMultisig",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetAvsLogic",
-    "inputs": [
-      {
-        "name": "avsLogic",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetBeforePaymentsLogic",
-    "inputs": [
-      {
-        "name": "paymentsLogic",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetFeeCalculator",
-    "inputs": [
-      {
-        "name": "feeCalculator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetMessageHandler",
-    "inputs": [
-      {
-        "name": "newMessageHandler",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetMinimumTaskDefinitionVotingPower",
-    "inputs": [
-      {
-        "name": "minimumVotingPower",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "SetRestrictedOperator",
-    "inputs": [
-      {
-        "name": "taskDefinitionId",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "restrictedOperatorIndexes",
-        "type": "uint256[]",
-        "indexed": false,
-        "internalType": "uint256[]"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "TaskDefinitionCreated",
-    "inputs": [
-      {
-        "name": "taskDefinitionId",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "name",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
-      },
-      {
-        "name": "blockExpiry",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "baseRewardFeeForAttesters",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "baseRewardFeeForPerformer",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "baseRewardFeeForAggregator",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "disputePeriodBlocks",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "minimumVotingPower",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "restrictedOperatorIndexes",
-        "type": "uint256[]",
-        "indexed": false,
-        "internalType": "uint256[]"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "TaskDefinitionRestrictedOperatorsModified",
-    "inputs": [
-      {
-        "name": "taskDefinitionId",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      },
-      {
-        "name": "restrictedOperatorIndexes",
-        "type": "uint256[]",
-        "indexed": false,
-        "internalType": "uint256[]"
-      },
-      {
-        "name": "isRestricted",
-        "type": "bool[]",
-        "indexed": false,
-        "internalType": "bool[]"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "TaskRejected",
-    "inputs": [
-      {
-        "name": "operator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "taskNumber",
-        "type": "uint32",
-        "indexed": false,
-        "internalType": "uint32"
-      },
-      {
-        "name": "proofOfTask",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
-      },
-      {
-        "name": "data",
-        "type": "bytes",
-        "indexed": false,
-        "internalType": "bytes"
-      },
-      {
-        "name": "taskDefinitionId",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "TaskSubmitted",
-    "inputs": [
-      {
-        "name": "operator",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "taskNumber",
-        "type": "uint32",
-        "indexed": false,
-        "internalType": "uint32"
-      },
-      {
-        "name": "proofOfTask",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
-      },
-      {
-        "name": "data",
-        "type": "bytes",
-        "indexed": false,
-        "internalType": "bytes"
-      },
-      {
-        "name": "taskDefinitionId",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
-      }
-    ],
-    "anonymous": false
-  },
-  { "type": "error", "name": "AccessControlBadConfirmation", "inputs": [] },
-  {
-    "type": "error",
     "name": "AccessControlUnauthorizedAccount",
-    "inputs": [
-      { "name": "account", "type": "address", "internalType": "address" },
-      { "name": "neededRole", "type": "bytes32", "internalType": "bytes32" }
-    ]
+    "type": "error"
   },
-  { "type": "error", "name": "ECDSAInvalidSignature", "inputs": [] },
+  { "inputs": [], "name": "ECDSAInvalidSignature", "type": "error" },
   {
-    "type": "error",
+    "inputs": [
+      { "internalType": "uint256", "name": "length", "type": "uint256" }
+    ],
     "name": "ECDSAInvalidSignatureLength",
-    "inputs": [
-      { "name": "length", "type": "uint256", "internalType": "uint256" }
-    ]
+    "type": "error"
   },
   {
-    "type": "error",
+    "inputs": [{ "internalType": "bytes32", "name": "s", "type": "bytes32" }],
     "name": "ECDSAInvalidSignatureS",
-    "inputs": [{ "name": "s", "type": "bytes32", "internalType": "bytes32" }]
-  },
-  { "type": "error", "name": "FlowIsCurrentlyPaused", "inputs": [] },
-  { "type": "error", "name": "FlowIsCurrentlyUnpaused", "inputs": [] },
-  { "type": "error", "name": "InactiveAggregator", "inputs": [] },
-  { "type": "error", "name": "InactiveTaskPerformer", "inputs": [] },
-  { "type": "error", "name": "InvalidArrayLength", "inputs": [] },
-  { "type": "error", "name": "InvalidAttesterSet", "inputs": [] },
-  { "type": "error", "name": "InvalidBlockExpiry", "inputs": [] },
-  { "type": "error", "name": "InvalidBlsKeyUpdateSignature", "inputs": [] },
-  { "type": "error", "name": "InvalidInitialization", "inputs": [] },
-  { "type": "error", "name": "InvalidOperatorId", "inputs": [] },
-  { "type": "error", "name": "InvalidOperatorsForPayment", "inputs": [] },
-  { "type": "error", "name": "InvalidPaymentClaim", "inputs": [] },
-  { "type": "error", "name": "InvalidPerformerSignature", "inputs": [] },
-  {
-    "type": "error",
-    "name": "InvalidRangeForBatchPaymentRequest",
-    "inputs": []
+    "type": "error"
   },
   {
-    "type": "error",
-    "name": "InvalidRestrictedOperator",
+    "inputs": [],
+    "name": "EigenRewardsDurationExceedsMaximum",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EigenRewardsDurationNotMultipleOfInterval",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "totalRewards", "type": "uint256" }
+    ],
+    "name": "EigenRewardsMaxRewardsAmountExceeded",
+    "type": "error"
+  },
+  { "inputs": [], "name": "EigenRewardsMustBeRetroactive", "type": "error" },
+  { "inputs": [], "name": "EigenRewardsNotSupportedOnL2", "type": "error" },
+  {
+    "inputs": [],
+    "name": "EigenRewardsStartTimestampNotMultipleOfInterval",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EigenRewardsStartTimestampTooFarInPast",
+    "type": "error"
+  },
+  { "inputs": [], "name": "FlowIsCurrentlyPaused", "type": "error" },
+  { "inputs": [], "name": "FlowIsCurrentlyUnpaused", "type": "error" },
+  { "inputs": [], "name": "InactiveAggregator", "type": "error" },
+  { "inputs": [], "name": "InactiveTaskPerformer", "type": "error" },
+  {
     "inputs": [
       {
+        "internalType": "uint16",
         "name": "taskDefinitionId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "uint16"
       },
-      { "name": "operatorIndex", "type": "uint256", "internalType": "uint256" }
-    ]
+      { "internalType": "uint256", "name": "minVotingPower", "type": "uint256" }
+    ],
+    "name": "InsufficientVotingPowerForTaskDefinition",
+    "type": "error"
   },
-  { "type": "error", "name": "InvalidRestrictedOperatorIndexes", "inputs": [] },
-  { "type": "error", "name": "InvalidTaskDefinition", "inputs": [] },
-  { "type": "error", "name": "MessageAlreadySigned", "inputs": [] },
-  { "type": "error", "name": "NotInitializing", "inputs": [] },
+  { "inputs": [], "name": "InvalidAttesterSet", "type": "error" },
+  { "inputs": [], "name": "InvalidInitialization", "type": "error" },
+  { "inputs": [], "name": "InvalidMaximumNumberOfAttesters", "type": "error" },
+  { "inputs": [], "name": "InvalidOperatorsForPayment", "type": "error" },
+  { "inputs": [], "name": "InvalidPerformerSignature", "type": "error" },
   {
-    "type": "error",
-    "name": "OperatorNotRegistered",
+    "inputs": [],
+    "name": "InvalidRangeForBatchPaymentRequest",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
-        "name": "_operatorAddress",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
+        "internalType": "uint256",
+        "name": "taskDefinitionId",
+        "type": "uint256"
+      },
+      { "internalType": "uint256", "name": "operatorIndex", "type": "uint256" }
+    ],
+    "name": "InvalidRestrictedAttester",
+    "type": "error"
   },
-  { "type": "error", "name": "PauseFlowIsAlreadyPaused", "inputs": [] },
-  { "type": "error", "name": "PaymentClaimed", "inputs": [] },
-  { "type": "error", "name": "PaymentReedemed", "inputs": [] },
-  { "type": "error", "name": "ReentrancyGuardReentrantCall", "inputs": [] },
+  { "inputs": [], "name": "InvalidTaskDefinition", "type": "error" },
+  { "inputs": [], "name": "MessageAlreadySigned", "type": "error" },
+  { "inputs": [], "name": "NotInitializing", "type": "error" },
   {
-    "type": "error",
-    "name": "TaskDefinitionNotFound",
     "inputs": [
-      { "name": "taskDefinitionId", "type": "uint16", "internalType": "uint16" }
-    ]
+      {
+        "internalType": "address",
+        "name": "_operatorAddress",
+        "type": "address"
+      }
+    ],
+    "name": "OperatorNotRegistered",
+    "type": "error"
   },
-  { "type": "error", "name": "UnpausingFlowIsAlreadyUnpaused", "inputs": [] }
+  { "inputs": [], "name": "PauseFlowIsAlreadyPaused", "type": "error" },
+  { "inputs": [], "name": "ReentrancyGuardReentrantCall", "type": "error" },
+  {
+    "inputs": [
+      { "internalType": "uint16", "name": "taskDefinitionId", "type": "uint16" }
+    ],
+    "name": "TaskDefinitionNotFound",
+    "type": "error"
+  },
+  { "inputs": [], "name": "UnpausingFlowIsAlreadyUnpaused", "type": "error" },
+  { "inputs": [], "name": "ZeroAddress", "type": "error" },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "requestedTaskNumber",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "requestedAmountClaimed",
+        "type": "uint256"
+      }
+    ],
+    "name": "ClearPaymentRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "startTimestamp",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "duration",
+        "type": "uint32"
+      },
+      {
+        "components": [
+          { "internalType": "address", "name": "operator", "type": "address" },
+          { "internalType": "uint256", "name": "feeToClaim", "type": "uint256" }
+        ],
+        "indexed": false,
+        "internalType": "struct IAttestationCenter.PaymentRequestMessage[]",
+        "name": "operators",
+        "type": "tuple[]"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lastPaidTaskNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "EigenPaymentsRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes4",
+        "name": "_pausableFlow",
+        "type": "bytes4"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_pauser",
+        "type": "address"
+      }
+    ],
+    "name": "FlowPaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes4",
+        "name": "_pausableFlowFlag",
+        "type": "bytes4"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_unpauser",
+        "type": "address"
+      }
+    ],
+    "name": "FlowUnpaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[4]",
+        "name": "blsKey",
+        "type": "uint256[4]"
+      }
+    ],
+    "name": "OperatorBlsKeyUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "votingPower",
+        "type": "uint256"
+      }
+    ],
+    "name": "OperatorRegisteredToNetwork",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "operatorId",
+        "type": "uint256"
+      }
+    ],
+    "name": "OperatorUnregisteredFromNetwork",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "address", "name": "operator", "type": "address" },
+          { "internalType": "uint256", "name": "feeToClaim", "type": "uint256" }
+        ],
+        "indexed": false,
+        "internalType": "struct IAttestationCenter.PaymentRequestMessage[]",
+        "name": "operators",
+        "type": "tuple[]"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lastPaidTaskNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "PaymentsRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "_operatorId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_baseRewardFeeForOperator",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint32",
+        "name": "_taskNumber",
+        "type": "uint32"
+      }
+    ],
+    "name": "RewardAccumulated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "previousAdminRole",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "newAdminRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RoleAdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newMessageHandler",
+        "type": "address"
+      }
+    ],
+    "name": "SetMessageHandler",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "taskNumber",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "proofOfTask",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint16",
+        "name": "taskDefinitionId",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[]",
+        "name": "attestersIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "TaskRejected",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "taskNumber",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "proofOfTask",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint16",
+        "name": "taskDefinitionId",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[]",
+        "name": "attestersIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "TaskSubmitted",
+    "type": "event"
+  },
+  { "stateMutability": "nonpayable", "type": "fallback" },
+  {
+    "inputs": [],
+    "name": "DEFAULT_ADMIN_ROLE",
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "EXTENSION_IMPLEMENTATION",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "avsLogic",
+    "outputs": [
+      { "internalType": "contract IAvsLogic", "name": "", "type": "address" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "avsTreasury",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "beforePaymentsLogic",
+    "outputs": [
+      {
+        "internalType": "contract IBeforePaymentsLogic",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "address", "name": "operator", "type": "address" },
+          { "internalType": "uint256", "name": "feeToClaim", "type": "uint256" }
+        ],
+        "internalType": "struct IAttestationCenter.PaymentRequestMessage[]",
+        "name": "_operators",
+        "type": "tuple[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_paidTaskNumber",
+        "type": "uint256"
+      }
+    ],
+    "name": "clearBatchPayment",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getActiveOperatorsDetails",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "address", "name": "operator", "type": "address" },
+          {
+            "internalType": "uint256",
+            "name": "operatorId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "votingPower",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.OperatorDetails[]",
+        "name": "_operators",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "_operatorId", "type": "uint256" }
+    ],
+    "name": "getOperatorPaymentDetail",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "address", "name": "operator", "type": "address" },
+          {
+            "internalType": "uint256",
+            "name": "lastPaidTaskNumber",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "feeToClaim",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum IAttestationCenter.PaymentStatus",
+            "name": "paymentStatus",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.PaymentDetails",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" }
+    ],
+    "name": "getRoleAdmin",
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "_taskDefinitionId",
+        "type": "uint16"
+      }
+    ],
+    "name": "getTaskDefinitionMaximumNumberOfAttesters",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "_taskDefinitionId",
+        "type": "uint16"
+      }
+    ],
+    "name": "getTaskDefinitionMinimumVotingPower",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "_taskDefinitionId",
+        "type": "uint16"
+      }
+    ],
+    "name": "getTaskDefinitionRestrictedAttesters",
+    "outputs": [
+      { "internalType": "uint256[]", "name": "", "type": "uint256[]" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      { "internalType": "address", "name": "account", "type": "address" }
+    ],
+    "name": "grantRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      { "internalType": "address", "name": "account", "type": "address" }
+    ],
+    "name": "hasRole",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "avsGovernanceMultisigOwner",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "operationsMultisig",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "communityMultisig",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "messageHandler",
+            "type": "address"
+          },
+          { "internalType": "address", "name": "obls", "type": "address" },
+          {
+            "internalType": "address",
+            "name": "avsTreasury",
+            "type": "address"
+          },
+          { "internalType": "bool", "name": "isRewardsOnL2", "type": "bool" },
+          {
+            "internalType": "address",
+            "name": "internalTaskHandler",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.InitializationParams",
+        "name": "_initializationParams",
+        "type": "tuple"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "internalTaskHandler",
+    "outputs": [
+      {
+        "internalType": "contract IInternalTaskHandler",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "_pausableFlow", "type": "bytes4" }
+    ],
+    "name": "isFlowPaused",
+    "outputs": [
+      { "internalType": "bool", "name": "_isPaused", "type": "bool" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "nextEigenRewardsBatchStartTimestamp",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numOfActiveOperators",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numOfTaskDefinitions",
+    "outputs": [{ "internalType": "uint16", "name": "", "type": "uint16" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numOfTotalOperators",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "obls",
+    "outputs": [
+      { "internalType": "contract IOBLS", "name": "", "type": "address" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" }
+    ],
+    "name": "operatorsIdsByAddress",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "_pausableFlow", "type": "bytes4" }
+    ],
+    "name": "pause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" },
+      { "internalType": "uint256", "name": "_votingPower", "type": "uint256" },
+      { "internalType": "uint256[4]", "name": "_blsKey", "type": "uint256[4]" },
+      {
+        "internalType": "address",
+        "name": "_rewardsReceiver",
+        "type": "address"
+      }
+    ],
+    "name": "registerToNetwork",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      {
+        "internalType": "address",
+        "name": "callerConfirmation",
+        "type": "address"
+      }
+    ],
+    "name": "renounceRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "_from", "type": "uint256" },
+      { "internalType": "uint256", "name": "_to", "type": "uint256" }
+    ],
+    "name": "requestBatchPayment",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "requestBatchPayment",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint32", "name": "_startTimestamp", "type": "uint32" },
+      { "internalType": "uint32", "name": "_duration", "type": "uint32" },
+      { "internalType": "uint256", "name": "_from", "type": "uint256" },
+      { "internalType": "uint256", "name": "_to", "type": "uint256" }
+    ],
+    "name": "requestEigenBatchPayment",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      { "internalType": "address", "name": "account", "type": "address" }
+    ],
+    "name": "revokeRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_oblsSharesSyncer",
+        "type": "address"
+      }
+    ],
+    "name": "setOblsSharesSyncer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "string", "name": "proofOfTask", "type": "string" },
+          { "internalType": "bytes", "name": "data", "type": "bytes" },
+          {
+            "internalType": "address",
+            "name": "taskPerformer",
+            "type": "address"
+          },
+          {
+            "internalType": "uint16",
+            "name": "taskDefinitionId",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.TaskInfo",
+        "name": "_taskInfo",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          { "internalType": "bool", "name": "isApproved", "type": "bool" },
+          {
+            "internalType": "uint256[2]",
+            "name": "tpSignature",
+            "type": "uint256[2]"
+          },
+          {
+            "internalType": "uint256[2]",
+            "name": "taSignature",
+            "type": "uint256[2]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "attestersIds",
+            "type": "uint256[]"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.BlsTaskSubmissionDetails",
+        "name": "_blsTaskSubmissionDetails",
+        "type": "tuple"
+      }
+    ],
+    "name": "submitTask",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "string", "name": "proofOfTask", "type": "string" },
+          { "internalType": "bytes", "name": "data", "type": "bytes" },
+          {
+            "internalType": "address",
+            "name": "taskPerformer",
+            "type": "address"
+          },
+          {
+            "internalType": "uint16",
+            "name": "taskDefinitionId",
+            "type": "uint16"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.TaskInfo",
+        "name": "_taskInfo",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          { "internalType": "bool", "name": "isApproved", "type": "bool" },
+          { "internalType": "bytes", "name": "tpSignature", "type": "bytes" },
+          {
+            "internalType": "uint256[2]",
+            "name": "taSignature",
+            "type": "uint256[2]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "attestersIds",
+            "type": "uint256[]"
+          }
+        ],
+        "internalType": "struct IAttestationCenter.EcdsaTaskSubmissionDetails",
+        "name": "_ecdsaTaskSubmissionDetails",
+        "type": "tuple"
+      }
+    ],
+    "name": "submitTask",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "interfaceId", "type": "bytes4" }
+    ],
+    "name": "supportsInterface",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "taskNumber",
+    "outputs": [{ "internalType": "uint32", "name": "", "type": "uint32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" }
+    ],
+    "name": "unRegisterOperatorFromNetwork",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "_pausableFlow", "type": "bytes4" }
+    ],
+    "name": "unpause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256[4]", "name": "_blsKey", "type": "uint256[4]" },
+      {
+        "components": [
+          {
+            "internalType": "uint256[2]",
+            "name": "signature",
+            "type": "uint256[2]"
+          }
+        ],
+        "internalType": "struct BLSAuthLibrary.Signature",
+        "name": "_authSignature",
+        "type": "tuple"
+      }
+    ],
+    "name": "updateBlsKey",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" },
+      {
+        "internalType": "uint16",
+        "name": "_taskDefinitionId",
+        "type": "uint16"
+      }
+    ],
+    "name": "verifyOperatorValidForTaskDefinition",
+    "outputs": [],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" }
+    ],
+    "name": "votingPower",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
 ]
