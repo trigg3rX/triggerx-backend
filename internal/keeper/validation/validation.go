@@ -47,7 +47,7 @@ func NewJobValidator(logger Logger, ethClient *ethclient.Client) *JobValidator {
 // based on its time interval, timeframe, and last execution time
 func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
 	// Define tolerance constant (3 seconds)
-	const timeTolerance = 3 * time.Second
+	const timeTolerance = 2 * time.Second
 
 	// Ensure this is a time-based job
 	if job.TaskDefinitionID != 1 && job.TaskDefinitionID != 2 {
@@ -89,11 +89,11 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 
 	// Calculate the next scheduled execution time with tolerance
 	nextExecution := job.LastExecutedAt.Add(time.Duration(job.TimeInterval) * time.Second).Add(-timeTolerance)
-	
+
 	// Store current time for logging but don't update job.LastExecutedAt yet
 	// (this should be done by the caller after successful execution)
 	//currentTime := now
-	
+
 	// Check if enough time has passed since the last execution (with tolerance)
 	if now.Before(nextExecution) {
 		v.logger.Infof("Not enough time has passed for job %d. Last executed: %s, next execution: %s (with %v tolerance)",
@@ -104,7 +104,7 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 	// If timeframe is set, check if job is still within its timeframe (with tolerance)
 	if job.TimeFrame > 0 {
 		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
-		if now.After(endTime) {
+		if job.LastExecutedAt.After(endTime) {
 			v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds, with %v tolerance)",
 				job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame, timeTolerance)
 			return false, nil
@@ -112,7 +112,7 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 	}
 
 	v.logger.Infof("Job %d is eligible for execution", job.JobID)
-	return true, nil
+	return false, nil
 }
 
 func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error) {

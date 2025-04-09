@@ -3,6 +3,7 @@ package registrar
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,7 +55,7 @@ type OperatorUnregisteredEvent struct {
 
 type TaskSubmittedEvent struct {
 	Operator         common.Address
-	TaskNumber       *big.Int
+	TaskNumber       uint32
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
@@ -63,10 +64,11 @@ type TaskSubmittedEvent struct {
 
 type TaskRejectedEvent struct {
 	Operator         common.Address
-	TaskNumber       *big.Int
+	TaskNumber       uint32
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
+	AttestersIds     []string // Add this field
 	Raw              ethtypes.Log
 }
 
@@ -178,6 +180,7 @@ func pollEvents(
 		logger.Error(fmt.Sprintf("Failed to connect to Ethereum node: %v", err))
 		return
 	}
+	logger.Info("Ethereum node connected")
 	defer ethClient.Close()
 
 	baseClient, err := ethclient.Dial(BaseRpcUrl)
@@ -185,6 +188,7 @@ func pollEvents(
 		logger.Error(fmt.Sprintf("Failed to connect to Base node: %v", err))
 		return
 	}
+	logger.Info("Base node connected")
 	defer baseClient.Close()
 
 	// Get current block numbers
@@ -197,12 +201,14 @@ func pollEvents(
 		logger.Error(fmt.Sprintf("Failed to get ETH latest block: %v", err))
 		return
 	}
+	//logger.Info("Ethereum Last Block: %d", ethLatestBlock)
 
 	baseLatestBlock, err := baseClient.BlockNumber(ctx)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to get BASE latest block: %v", err))
 		return
 	}
+	//logger.Info("Base Last Block: %d", baseLatestBlock)
 
 	// Process events from AVS Governance contract
 	if ethLatestBlock > lastProcessedBlockAVS {
@@ -229,11 +235,19 @@ func pollEvents(
 
 	// Process events from Attestation Center contract
 	if baseLatestBlock > lastProcessedBlockBase {
-		fromBlock := lastProcessedBlockBase + 1
-		logger.Info(fmt.Sprintf("Checking for Attestation Center events from block %d to %d", fromBlock, baseLatestBlock))
+		fromBlock := lastProcessedBlockBase
+		overlap := uint64(5)
+		if fromBlock > overlap {
+			fromBlock -= overlap
+		}
+
+		// Ensure we don't go past current block
+		toBlock := baseLatestBlock
+
+		logger.Info(fmt.Sprintf("Checking for Attestation Center events from block %d to %d", fromBlock, toBlock))
 
 		// Process task submission events
-		err = processTaskSubmittedEvents(baseClient, ethClient, attestationCenterAddress, fromBlock, baseLatestBlock)
+		err = processTaskSubmittedEvents(baseClient, attestationCenterAddress, fromBlock, baseLatestBlock)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Failed to process TaskSubmitted events: %v", err))
 		}
@@ -422,7 +436,6 @@ func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 // Process TaskSubmitted events
 func processTaskSubmittedEvents(
 	baseClient *ethclient.Client,
-	ethClient *ethclient.Client,
 	contractAddress common.Address,
 	fromBlock uint64,
 	toBlock uint64,
@@ -437,12 +450,17 @@ func processTaskSubmittedEvents(
 		},
 	}
 
+	logger.Info(fmt.Sprintf("Filter query: FromBlock=%d, ToBlock=%d, Address=%s, Topics=%v",
+		query.FromBlock, query.ToBlock, contractAddress.Hex(), query.Topics))
 	logs, err := baseClient.FilterLogs(context.Background(), query)
 	if err != nil {
 		return fmt.Errorf("failed to filter TaskSubmitted logs: %v", err)
 	}
 
-	logger.Info(fmt.Sprintf("Found %d TaskSubmitted events", len(logs)))
+	logger.Info(fmt.Sprintf("Found %d raw logs", len(logs)))
+	for i, log := range logs {
+		logger.Info(fmt.Sprintf("Log %d: Topics=%v, Data=%x", i, log.Topics, log.Data))
+	}
 
 	// Process each event
 	for _, vLog := range logs {
@@ -543,12 +561,17 @@ func processTaskRejectedEvents(
 		},
 	}
 
+	logger.Info(fmt.Sprintf("Filter query: FromBlock=%d, ToBlock=%d, Address=%s, Topics=%v",
+		query.FromBlock, query.ToBlock, contractAddress.Hex(), query.Topics))
 	logs, err := baseClient.FilterLogs(context.Background(), query)
 	if err != nil {
 		return fmt.Errorf("failed to filter TaskRejected logs: %v", err)
 	}
 
-	logger.Info(fmt.Sprintf("Found %d TaskRejected events", len(logs)))
+	// logger.Info(fmt.Sprintf("Found %d raw logs", len(logs)))
+	// for i, log := range logs {
+	// 	logger.Info(fmt.Sprintf("Log %d: Topics=%v, Data=%x", i, log.Topics, log.Data))
+	// }
 
 	// Process each event
 	for _, vLog := range logs {
@@ -558,20 +581,20 @@ func processTaskRejectedEvents(
 			continue
 		}
 
-		// Log task rejection details
+		// In processTaskRejectedEvents function, after parsing the event:
+		// In processTaskRejectedEvents function:
 		logger.Info("❌ Task Rejected Event Detected!")
 		logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
 		logger.Info(fmt.Sprintf("Task Number: %d", event.TaskNumber))
 		logger.Info(fmt.Sprintf("Proof of Task: %s", event.ProofOfTask))
 		logger.Info(fmt.Sprintf("Task Definition ID: %d", event.TaskDefinitionId))
+		logger.Info(fmt.Sprintf("Attesters IDs: %v", event.AttestersIds)) // Now this will work
 
-		// Log data as hex if non-empty
 		if len(event.Data) > 0 {
 			logger.Info(fmt.Sprintf("Data: 0x%x", event.Data))
 		} else {
 			logger.Info("Data: <empty>")
 		}
-
 		// Log transaction details
 		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
 		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
@@ -594,12 +617,13 @@ func OperatorUnregisteredEventSignature() common.Hash {
 
 // TaskSubmittedEventSignature returns the signature hash for the TaskSubmitted event
 func TaskSubmittedEventSignature() common.Hash {
-	return crypto.Keccak256Hash([]byte("TaskSubmitted(address,uint256,string,bytes,uint16)"))
+	return crypto.Keccak256Hash([]byte("TaskSubmitted(address,uint32,string,bytes,uint16)"))
+	// Exactly matches the Solidity event definition, no extra spaces
 }
 
-// TaskRejectedEventSignature returns the signature hash for the TaskRejected event
 func TaskRejectedEventSignature() common.Hash {
-	return crypto.Keccak256Hash([]byte("TaskRejected(address,uint256,string,bytes,uint16)"))
+	return crypto.Keccak256Hash([]byte("TaskRejected(address,uint32,string,bytes,uint16,uint256[])"))
+
 }
 
 func ParseOperatorRegistered(log ethtypes.Log) (*OperatorRegisteredEvent, error) {
@@ -672,14 +696,14 @@ func ParseOperatorUnregistered(log ethtypes.Log) (*OperatorUnregisteredEvent, er
 // ParseTaskSubmitted parses a log into the TaskSubmitted event
 func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 	// Define the event ABI
-	eventSignature := "TaskSubmitted(address,uint256,string,bytes,uint16)"
+	eventSignature := "TaskSubmitted(address,uint32,string,bytes,uint16)"
 	eventABI := fmt.Sprintf(`[{"name":"TaskSubmitted","type":"event","inputs":[
-        {"name":"operator","type":"address","indexed":false},
-        {"name":"taskNumber","type":"uint256","indexed":false},
-        {"name":"proofOfTask","type":"string","indexed":false},
-        {"name":"data","type":"bytes","indexed":false},
-        {"name":"taskDefinitionId","type":"uint16","indexed":false}
-    ]}]`)
+    {"name":"operator","type":"address","indexed":false},
+    {"name":"taskNumber","type":"uint32","indexed":false},
+    {"name":"proofOfTask","type":"string","indexed":false},
+    {"name":"data","type":"bytes","indexed":false},
+    {"name":"taskDefinitionId","type":"uint16","indexed":false}
+]}]`)
 
 	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
 	if err != nil {
@@ -689,7 +713,8 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 	// Verify the event signature
 	expectedTopic := crypto.Keccak256Hash([]byte(eventSignature))
 	if log.Topics[0] != expectedTopic {
-		return nil, fmt.Errorf("unexpected event signature")
+		return nil, fmt.Errorf("unexpected event signature: got %s, expected %s",
+			log.Topics[0].Hex(), expectedTopic.Hex())
 	}
 
 	// Prepare event result
@@ -710,7 +735,7 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 		return nil, fmt.Errorf("failed to extract operator address")
 	}
 
-	if taskNumber, ok := unpacked["taskNumber"].(*big.Int); ok {
+	if taskNumber, ok := unpacked["taskNumber"].(uint32); ok {
 		event.TaskNumber = taskNumber
 	} else {
 		return nil, fmt.Errorf("failed to extract task number")
@@ -739,15 +764,20 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 
 // ParseTaskRejected parses a log into the TaskRejected event
 func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
-	// Define the event ABI
-	eventSignature := "TaskRejected(address,uint256,string,bytes,uint16)"
-	eventABI := fmt.Sprintf(`[{"name":"TaskRejected","type":"event","inputs":[
-        {"name":"operator","type":"address","indexed":false},
-        {"name":"taskNumber","type":"uint256","indexed":false},
-        {"name":"proofOfTask","type":"string","indexed":false},
-        {"name":"data","type":"bytes","indexed":false},
-        {"name":"taskDefinitionId","type":"uint16","indexed":false}
-    ]}]`)
+	// Define the complete event ABI including attestersIds
+	eventABI := `[{
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "name": "operator", "type": "address"},
+            {"indexed": false, "name": "taskNumber", "type": "uint32"},
+            {"indexed": false, "name": "proofOfTask", "type": "string"},
+            {"indexed": false, "name": "data", "type": "bytes"},
+            {"indexed": true, "name": "taskDefinitionId", "type": "uint16"},
+            {"indexed": false, "name": "attestersIds", "type": "uint256[]"}
+        ],
+        "name": "TaskRejected",
+        "type": "event"
+    }]`
 
 	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
 	if err != nil {
@@ -755,54 +785,47 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 	}
 
 	// Verify the event signature
-	expectedTopic := crypto.Keccak256Hash([]byte(eventSignature))
+	expectedTopic := TaskRejectedEventSignature()
 	if log.Topics[0] != expectedTopic {
-		return nil, fmt.Errorf("unexpected event signature")
+		return nil, fmt.Errorf("unexpected event signature: got %s, expected %s",
+			log.Topics[0].Hex(), expectedTopic.Hex())
 	}
 
-	// Prepare event result
-	var event TaskRejectedEvent
-	event.Raw = log
-
-	// Unpack the non-indexed fields
-	unpacked := make(map[string]interface{})
-	err = parsedABI.UnpackIntoMap(unpacked, "TaskRejected", log.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unpack into map: %v", err)
+	// Extract indexed parameters
+	if len(log.Topics) < 3 {
+		return nil, fmt.Errorf("not enough topics for TaskRejected event")
 	}
 
-	// Extract the fields from the unpacked data
-	if operator, ok := unpacked["operator"].(common.Address); ok {
-		event.Operator = operator
-	} else {
-		return nil, fmt.Errorf("failed to extract operator address")
+	operator := common.BytesToAddress(log.Topics[1].Bytes())
+	taskDefinitionId := binary.BigEndian.Uint16(log.Topics[2].Bytes()[30:32]) // Last 2 bytes
+
+	// Unpack non-indexed parameters
+	var unpacked struct {
+		TaskNumber   uint32
+		ProofOfTask  string
+		Data         []byte
+		AttestersIds []*big.Int
 	}
 
-	if taskNumber, ok := unpacked["taskNumber"].(*big.Int); ok {
-		event.TaskNumber = taskNumber
-	} else {
-		return nil, fmt.Errorf("failed to extract task number")
+	if err := parsedABI.UnpackIntoInterface(&unpacked, "TaskRejected", log.Data); err != nil {
+		return nil, fmt.Errorf("failed to unpack event data: %v", err)
 	}
 
-	if proofOfTask, ok := unpacked["proofOfTask"].(string); ok {
-		event.ProofOfTask = proofOfTask
-	} else {
-		return nil, fmt.Errorf("failed to extract proof of task")
+	// Convert attestersIds to strings
+	attestersIds := make([]string, len(unpacked.AttestersIds))
+	for i, id := range unpacked.AttestersIds {
+		attestersIds[i] = id.String()
 	}
 
-	if data, ok := unpacked["data"].([]byte); ok {
-		event.Data = data
-	} else {
-		return nil, fmt.Errorf("failed to extract data")
-	}
-
-	if taskDefinitionId, ok := unpacked["taskDefinitionId"].(uint16); ok {
-		event.TaskDefinitionId = taskDefinitionId
-	} else {
-		return nil, fmt.Errorf("failed to extract task definition ID")
-	}
-
-	return &event, nil
+	return &TaskRejectedEvent{
+		Operator:         operator,
+		TaskNumber:       unpacked.TaskNumber,
+		ProofOfTask:      unpacked.ProofOfTask,
+		Data:             unpacked.Data,
+		TaskDefinitionId: taskDefinitionId,
+		AttestersIds:     attestersIds, // Include the attesters IDs
+		Raw:              log,
+	}, nil
 }
 
 // Function to add a keeper to the database via the API when an operator is registered
