@@ -64,7 +64,7 @@ func (ksm *KeeperStateManager) startCleanupRoutine() {
 
 // checkInactiveKeepers identifies and processes inactive keepers
 func (ksm *KeeperStateManager) checkInactiveKeepers() {
-	now := time.Now()
+	now := time.Now().UTC()
 	var inactiveKeepers []string
 
 	ksm.mu.Lock()
@@ -79,7 +79,7 @@ func (ksm *KeeperStateManager) checkInactiveKeepers() {
 
 	// Update database for inactive keepers
 	for _, address := range inactiveKeepers {
-		if err := ksm.updateKeeperStatusInDatabase(address, "", false); err != nil {
+		if err := ksm.updateKeeperStatusInDatabase(address, "", "", false); err != nil {
 			logger.Errorf("Failed to update inactive status for keeper %s: %v", address, err)
 		}
 	}
@@ -91,7 +91,7 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 	defer ksm.mu.Unlock()
 
 	address := health.KeeperAddress
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// Check if keeper exists in our state
 	existingState, exists := ksm.keepers[address]
@@ -105,7 +105,7 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 		}
 
 		// Update database to set keeper as active
-		if err := ksm.updateKeeperStatusInDatabase(health.KeeperAddress, health.Version,true); err != nil {
+		if err := ksm.updateKeeperStatusInDatabase(health.KeeperAddress, health.Version, health.PeerID, true); err != nil {
 			return fmt.Errorf("failed to update active status in database: %w", err)
 		}
 
@@ -120,7 +120,7 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 
 		// If the keeper was inactive and is now active, update database
 		if !wasActive {
-			if err := ksm.updateKeeperStatusInDatabase(health.KeeperAddress, health.Version, true); err != nil {
+			if err := ksm.updateKeeperStatusInDatabase(health.KeeperAddress, health.Version, health.PeerID, true); err != nil {
 				return fmt.Errorf("failed to update reactivated status in database: %w", err)
 			}
 			logger.Infof("Keeper %s reactivated", address)
@@ -131,12 +131,13 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 }
 
 // updateKeeperStatusInDatabase calls the database API to update a keeper's active status
-func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, version string, isActive bool) error {
+func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, version string, peerID string, isActive bool) error {
 	payload := types.UpdateKeeperHealth{
 		KeeperAddress: address,
 		Active:        isActive,
-		Timestamp:     time.Now(),
+		Timestamp:     time.Now().UTC(),
 		Version:       version,
+		PeerID:        peerID,
 	}
 	
 	payloadBytes, err := json.Marshal(payload)

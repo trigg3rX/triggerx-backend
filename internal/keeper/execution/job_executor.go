@@ -354,7 +354,7 @@ func (e *JobExecutor) Execute(job *jobtypes.HandleCreateJobData) (jobtypes.Actio
 		ActionTxHash: "0x",
 		GasUsed:      "0",
 		Status:       false,
-		Timestamp:    time.Now(),
+		Timestamp:    time.Now().UTC(),
 	}
 
 	e.logger.Infof("Validating job %d (taskDefID: %d) before execution", job.JobID, job.TaskDefinitionID)
@@ -388,7 +388,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 		ActionTxHash: "0x",
 		GasUsed:      "0",
 		Status:       false,
-		Timestamp:    time.Now(),
+		Timestamp:    time.Now().UTC(),
 	}
 
 	logger.Infof("Executing contract call for job %s with static arguments", job.JobID)
@@ -475,7 +475,7 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 		ActionTxHash: "0x",
 		GasUsed:      "0",
 		Status:       false,
-		Timestamp:    time.Now(),
+		Timestamp:    time.Now().UTC(),
 	}
 
 	logger.Infof("Executing job %d with dynamic arguments", job.JobID)

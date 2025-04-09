@@ -32,7 +32,7 @@ RUN apk --no-cache add ca-certificates curl \
 RUN apk --no-cache add nodejs npm
 
 # Install othentic-cli globally
-RUN npm i -g @othentic/othentic-cli@1.8.1
+RUN npm i -g @othentic/othentic-cli@1.10.0
 
 # Set working directory
 WORKDIR /root/
@@ -40,9 +40,9 @@ WORKDIR /root/
 # Copy the built binary from the builder stage
 COPY --from=builder /app/keeper-execution .
 
-# Copy the docker-compose.yaml file from the builder stage
+# Copy the startup script
 COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
-RUN mkdir -p /root/peerstore
+RUN mkdir -p /root/data/peerstore/attester
 RUN touch .env
 
 # Set environment variables (customize as needed)

@@ -1,13 +1,79 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"gopkg.in/gomail.v2"
 )
+
+// Add these new types for notification configuration
+type NotificationConfig struct {
+	EmailFrom     string
+	EmailPassword string
+	BotToken      string
+}
+
+func (h *Handler) HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request) {
+	// Extract keeper address from URL parameters
+	vars := mux.Vars(r)
+	keeperAddress := vars["address"]
+
+	if keeperAddress == "" {
+		http.Error(w, "Keeper address is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body
+	var statusUpdate types.KeeperStatusUpdate
+	err := json.NewDecoder(r.Body).Decode(&statusUpdate)
+	if err != nil {
+		h.logger.Error("Failed to decode request body: " + err.Error())
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// First get the keeper_id using the keeper_address
+	var keeperID int64
+	err = h.db.Session().Query(`
+    SELECT keeper_id FROM triggerx.keeper_data 
+    WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperAddress).Scan(&keeperID)
+
+	if err != nil {
+		h.logger.Error("Failed to get keeper ID: " + err.Error())
+		http.Error(w, "Database error while getting keeper ID", http.StatusInternalServerError)
+		return
+	}
+
+	// Update keeper status in database using the keeper_id (primary key)
+	err = h.db.Session().Query(`
+    UPDATE triggerx.keeper_data 
+    SET status = ? 
+    WHERE keeper_id = ?`,
+		statusUpdate.Status, keeperID).Exec()
+
+	if err != nil {
+		h.logger.Error("Failed to update keeper status: " + err.Error())
+		http.Error(w, "Failed to update keeper status: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Keeper status updated successfully",
+	})
+}
 
 func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.CreateKeeperData
@@ -30,9 +96,9 @@ func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[CreateKeeperData] Updating keeper with ID: %d", currentKeeperID)
 	if err := h.db.Session().Query(`
         UPDATE triggerx.keeper_data SET 
-            registered_tx = ?, consensus_keys = ?, status = ?
+            registered_tx = ?, consensus_keys = ?, status = ?, chat_id = ?
         WHERE keeper_id = ?`,
-		keeperData.RegisteredTx, keeperData.ConsensusKeys, true, currentKeeperID).Exec(); err != nil {
+		keeperData.RegisteredTx, keeperData.ConsensusKeys, true, keeperData.ChatID, currentKeeperID).Exec(); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -75,10 +141,10 @@ func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Requ
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.keeper_data (
             keeper_id, keeper_name, keeper_address, 
-            rewards_address, no_exctask, keeper_points, verified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            rewards_address, no_exctask, keeper_points, verified, email_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress,
-		keeperData.RewardsAddress, 0, 0, true).Exec(); err != nil {
+		keeperData.RewardsAddress, 0, 0, true, keeperData.EmailID).Exec(); err != nil {
 		h.logger.Errorf("[GoogleFormCreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -98,14 +164,15 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT keeper_id, keeper_address, rewards_address, stakes, strategies, 
                verified, registered_tx, status, consensus_keys, connection_address, 
-               no_exctask, keeper_points, keeper_name
+               no_exctask, keeper_points, keeper_name, chat_id
         FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Scan(
 		&keeperData.KeeperID, &keeperData.KeeperAddress,
 		&keeperData.RewardsAddress, &keeperData.Stakes, &keeperData.Strategies,
 		&keeperData.Verified, &keeperData.RegisteredTx, &keeperData.Status,
 		&keeperData.ConsensusKeys, &keeperData.ConnectionAddress,
-		&keeperData.NoExcTask, &keeperData.KeeperPoints, &keeperData.KeeperName); err != nil {
+		&keeperData.NoExcTask, &keeperData.KeeperPoints, &keeperData.KeeperName,
+		&keeperData.ChatID); err != nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper with ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -167,7 +234,7 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 		SELECT keeper_id, keeper_address, registered_tx, 
 		       rewards_address, stakes, strategies,
 		       verified, status, consensus_keys,
-		       connection_address, no_exctask, keeper_points 
+		       connection_address, no_exctask, keeper_points, chat_id
 		FROM triggerx.keeper_data`).Iter()
 
 	var keeper types.KeeperData
@@ -178,7 +245,8 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 		&keeper.KeeperID, &keeper.KeeperAddress, &keeper.RegisteredTx,
 		&keeper.RewardsAddress, &tmpStakes, &tmpStrategies,
 		&keeper.Verified, &keeper.Status, &tmpConsensusKeys,
-		&keeper.ConnectionAddress, &keeper.NoExcTask, &keeper.KeeperPoints) {
+		&keeper.ConnectionAddress, &keeper.NoExcTask, &keeper.KeeperPoints,
+		&keeper.ChatID) {
 
 		// Make deep copies of the slices to avoid reference issues
 		keeper.Stakes = make([]float64, len(tmpStakes))
@@ -393,6 +461,113 @@ func (h *Handler) GetKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int64{"keeper_points": points})
 }
 
+// Add these new functions for notifications
+func (h *Handler) sendTelegramNotification(chatID int64, message string) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.config.BotToken)
+	payload := map[string]interface{}{
+		"chat_id": chatID,
+		"text":    message,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		h.logger.Errorf("[Notification] Failed to marshal Telegram payload: %v", err)
+		return err
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		h.logger.Errorf("[Notification] Failed to send Telegram message: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	h.logger.Infof("[Notification] Telegram message sent successfully to chat ID: %d (Status: %d)", chatID, resp.StatusCode)
+	return nil
+}
+
+func (h *Handler) sendEmailNotification(to, subject, body string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", h.config.EmailFrom)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
+
+	d := gomail.NewDialer("smtp.zoho.in", 587, h.config.EmailFrom, h.config.EmailPassword)
+	if err := d.DialAndSend(m); err != nil {
+		h.logger.Errorf("[Notification] Failed to send email to %s: %v", to, err)
+		return err
+	}
+
+	h.logger.Infof("[Notification] Email sent successfully to: %s", to)
+	return nil
+}
+
+func (h *Handler) checkAndNotifyOfflineKeeper(keeperID string) {
+	// Wait for 10 minutes
+	time.Sleep(10 * time.Minute)
+
+	h.logger.Infof("[OfflineCheck] Checking current status for keeper ID: %s", keeperID)
+
+	// Check if keeper is still offline
+	var online bool
+	err := h.db.Session().Query(`
+		SELECT online FROM triggerx.keeper_data WHERE keeper_id = ?`,
+		keeperID).Scan(&online)
+
+	if err != nil {
+		h.logger.Errorf("[OfflineCheck] Error checking keeper online status: %v", err)
+		return
+	}
+
+	if !online {
+		// Fetch keeper communication info
+		var chatID int64
+		var keeperName, emailID string
+		err := h.db.Session().Query(`
+			SELECT chat_id, keeper_name, email_id 
+			FROM triggerx.keeper_data 
+			WHERE keeper_id = ?`,
+			keeperID).Scan(&chatID, &keeperName, &emailID)
+
+		if err != nil {
+			h.logger.Errorf("[OfflineCheck] Error fetching keeper communication info: %v", err)
+			return
+		}
+
+		// Send Telegram notification
+		if chatID != 0 {
+			telegramMsg := fmt.Sprintf("Keeper %s is down for more than 10 minutes. Please check and start it.", keeperName)
+			if err := h.sendTelegramNotification(chatID, telegramMsg); err != nil {
+				h.logger.Errorf("[OfflineCheck] Failed to send Telegram notification to keeper %s: %v", keeperName, err)
+			}
+		} else {
+			h.logger.Warn("[OfflineCheck] No Telegram chat ID found for keeper %s", keeperName)
+		}
+
+		// Send email notification
+		if emailID != "" {
+			subject := fmt.Sprintf("TriggerX Keeper Down Alert - %s", keeperName)
+			emailBody := fmt.Sprintf(`
+				<h2>Keeper Update</h2>
+				<p>This is a critical information from TriggerX. Your keeper <strong>%s</strong> has been down for more than 10 minutes. Please take action immediately.</p>
+				<p>Regards,<br>TriggerX Team</p>
+			`, keeperName)
+
+			if err := h.sendEmailNotification(emailID, subject, emailBody); err != nil {
+				h.logger.Errorf("[OfflineCheck] Failed to send email notification to keeper %s: %v", keeperName, err)
+			}
+		} else {
+			h.logger.Warn("[OfflineCheck] No email address found for keeper %s", keeperName)
+		}
+
+		h.logger.Infof("[OfflineCheck] Completed notification process for offline keeper %s", keeperName)
+	} else {
+		h.logger.Infof("[OfflineCheck] Keeper %s is back online, no notifications needed", keeperID)
+	}
+}
+
+// Modify the KeeperHealthCheckIn function
 func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 	var keeperHealth types.UpdateKeeperHealth
 	if err := json.NewDecoder(r.Body).Decode(&keeperHealth); err != nil {
@@ -401,11 +576,16 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(keeperHealth.KeeperAddress) > 0 && !bytes.HasPrefix([]byte(keeperHealth.KeeperAddress), []byte("0x")) {
+		h.logger.Infof("[KeeperHealthCheckIn] Adding 0x prefix to keeper address: %s", keeperHealth.KeeperAddress)
+		keeperHealth.KeeperAddress = "0x" + keeperHealth.KeeperAddress
+	}
+
 	var keeperID string
 	if err := h.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperHealth.KeeperAddress).Scan(&keeperID); err != nil {
-		h.logger.Errorf("[KeeperHealthCheckIn] Error retrieving keeper_id for address %s: %v", 
+		h.logger.Errorf("[KeeperHealthCheckIn] Error retrieving keeper_id for address %s: %v",
 			keeperHealth.KeeperAddress, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -416,28 +596,102 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Keeper not found", http.StatusNotFound)
 		return
 	}
+	if keeperHealth.PeerID == "" {
+		keeperHealth.PeerID = "no-peer-id"
+	}
 
 	h.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %s | Online: %t", keeperID, keeperHealth.Active)
 
 	if keeperHealth.Version == "" {
 		if err := h.db.Session().Query(`
-			UPDATE triggerx.keeper_data SET online = ? WHERE keeper_id = ?`,
-			keeperHealth.Active, keeperID).Exec(); err != nil {
+			UPDATE triggerx.keeper_data SET online = ?, peer_id = ? WHERE keeper_id = ?`,
+			keeperHealth.Active, keeperHealth.PeerID, keeperID).Exec(); err != nil {
 			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	} else {
 		if err := h.db.Session().Query(`
-			UPDATE triggerx.keeper_data SET online = ?, version = ? WHERE keeper_id = ?`,
-			keeperHealth.Active, keeperHealth.Version, keeperID).Exec(); err != nil {
+			UPDATE triggerx.keeper_data SET online = ?, version = ?, peer_id = ? WHERE keeper_id = ?`,
+			keeperHealth.Active, keeperHealth.Version, keeperHealth.PeerID, keeperID).Exec(); err != nil {
 			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	
+
+	if !keeperHealth.Active {
+		// Start a goroutine to check status after 10 minutes
+		go h.checkAndNotifyOfflineKeeper(keeperID)
+	}
+
 	h.logger.Infof("[KeeperHealthCheckIn] Updated Keeper status for ID: %s", keeperID)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(keeperHealth)
+}
+
+func (h *Handler) UpdateKeeperChatID(w http.ResponseWriter, r *http.Request) {
+	var requestData struct {
+		KeeperName string `json:"keeper_name"`
+		ChatID     int64  `json:"chat_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		h.logger.Errorf("[UpdateKeeperChatID] Error decoding request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.logger.Infof("[UpdateKeeperChatID] Finding keeper ID for keeper: %s", requestData.KeeperName)
+
+	// Step 1: Find the keeper_id using keeper_name
+	var keeperID string // Adjust the type based on your schema
+	if err := h.db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data 
+		WHERE keeper_name = ?  ALLOW FILTERING`, requestData.KeeperName).Consistency(gocql.One).Scan(&keeperID); err != nil {
+		h.logger.Errorf("[UpdateKeeperChatID] Error finding keeper ID for keeper %s: %v", requestData.KeeperName, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %s", keeperID)
+
+	// Step 2: Update the chat_id for the specified keeper_id
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.keeper_data 
+		SET chat_id = ? 
+		WHERE keeper_id = ?`,
+		requestData.ChatID, keeperID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper ID %s: %v", keeperID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[UpdateKeeperChatID] Successfully updated chat ID for keeper: %s", requestData.KeeperName)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Chat ID updated successfully "})
+}
+
+func (h *Handler) GetKeeperCommunicationInfo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	keeperID := vars["id"]
+	h.logger.Infof("[GetKeeperChatInfo] Retrieving chat ID, keeper name, and email for keeper with ID: %s", keeperID)
+
+	var keeperData struct {
+		ChatID     int64  `json:"chat_id"`
+		KeeperName string `json:"keeper_name"`
+		EmailID    string `json:"email_id"`
+	}
+
+	if err := h.db.Session().Query(`
+        SELECT chat_id, keeper_name, email_id 
+        FROM triggerx.keeper_data 
+        WHERE keeper_id = ? ALLOW FILTERING`, keeperID).Scan(&keeperData.ChatID, &keeperData.KeeperName, &keeperData.EmailID); err != nil {
+		h.logger.Errorf("[GetKeeperChatInfo] Error retrieving chat ID, keeper name, and email for ID %s: %v", keeperID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[GetKeeperChatInfo] Successfully retrieved chat ID, keeper name, and email for ID: %s", keeperID)
+	json.NewEncoder(w).Encode(keeperData)
 }

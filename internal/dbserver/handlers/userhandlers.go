@@ -10,6 +10,7 @@ import (
 )
 
 func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
+	
 	vars := mux.Vars(r)
 	userID := vars["id"]
 	h.logger.Infof("[GetUserData] Retrieving user with ID: %s", userID)

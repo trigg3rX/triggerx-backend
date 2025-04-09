@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS job_data (
 -- Create Task_data table
 CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
+    task_number int,
     job_id bigint,
     task_definition_id int,
     created_at timestamp,
@@ -83,7 +84,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_submission_tx_hash text,
     
     is_successful boolean,
-    PRIMARY KEY (task_id)
+    PRIMARY KEY (task_id, task_number)
 );
 
 -- Create Keeper_data table
@@ -103,5 +104,18 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     consensus_keys list<text>,
     no_exctask int,
     keeper_points bigint,
+    chat_id bigint,
+    email_id text,
     PRIMARY KEY (keeper_id)
 );
+
+-- Create ApiKey table
+CREATE TABLE IF NOT EXISTS apikeys (
+    key text PRIMARY KEY,
+    owner text,
+    isActive boolean,
+    rateLimit int,
+    lastUsed timestamp,
+    createdAt timestamp
+);
+

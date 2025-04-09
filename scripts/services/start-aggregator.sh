@@ -11,11 +11,12 @@ SYNC_INTERVAL=7200000
 othentic-cli node aggregator \
     --json-rpc \
     --json-rpc.port $AGGREGATOR_RPC_PORT \
+    --json-rpc.custom-message-enabled \
     --p2p.port $AGGREGATOR_P2P_PORT \
-    --p2p.datadir data/peerstore \
+    --p2p.datadir data/peerstore/aggregator \
+    --p2p.discovery-interval 10000 \
     --internal-tasks \
+    --sync-interval 60000 \
     --metrics \
     --delay $DELAY \
-    --sync-interval $SYNC_INTERVAL \
-    --keystore .keystore/aggregator.json \
-    --json-rpc.custom-message-enabled
+    --keystore .keystore/aggregator.json 

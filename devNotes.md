@@ -35,3 +35,12 @@
 
     Recurring means the job will be scheduled again and again until TimeFrame is reached.
 
+## Rename the Services ?
+
+I think we should rename the services to make it more intuitive and exciting for developer users.
+
+- `manager` -> `engine` [Handles scheduling, load balancing, and task assignment, "Engine" appropriately conveys its central, driving role in the system]
+- `registrar` -> `sentinel` [A sentinel watches over something important, which aligns with tracking keeper registration and actions]
+- `health` -> `pulse` [This service actively monitors keeper health and online status, this name conveys the heartbeat-like monitoring functions]
+- `dbserver` -> `librarian` [Don't know, couldn't think of a good name]
+- `attester` -> `nexus` [This service connects to the keeper p2p network and relays events to other services, it serves as a crucial interconnection point]

@@ -74,7 +74,7 @@ func (cm *CacheManager) SaveState() error {
 	cacheData.ConditionJobs = make([]int64, 0, len(cm.scheduler.conditions))
 	cacheData.JobQueue = cm.scheduler.balancer.jobQueue
 	cacheData.SystemResources = cm.scheduler.balancer.resources
-	cacheData.LastUpdated = time.Now()
+	cacheData.LastUpdated = time.Now().UTC()
 
 	// Add job chains to cache
 	cacheData.JobChains = make(map[int64]int64)

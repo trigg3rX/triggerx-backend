@@ -5,6 +5,7 @@ import (
 	// "encoding/json"
 	// "fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -101,6 +102,46 @@ func HandleResumeJobEvent(c *gin.Context) {
 	// TODO: Implement job resume logic using scheduler
 	logger.Infof("Job resume requested for ID: %d", resumeJobData.JobID)
 	c.JSON(http.StatusOK, gin.H{"message": "Job resume request received"})
+}
+
+// HandleJobStateUpdate handles requests to update a job's state in the scheduler
+func HandleJobStateUpdate(c *gin.Context) {
+	var updateData struct {
+		JobID     int64     `json:"job_id"`
+		Timestamp time.Time `json:"timestamp"`
+	}
+
+	if err := c.BindJSON(&updateData); err != nil {
+		logger.Error("Failed to parse job state update data", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	logger.Infof("Updating state for job ID: %d with timestamp: %v", updateData.JobID, updateData.Timestamp)
+
+	// Retrieve the worker for this job
+	worker := jobScheduler.GetWorker(updateData.JobID)
+	if worker == nil {
+		logger.Warnf("No active worker found for job ID: %d", updateData.JobID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found or not active"})
+		return
+	}
+
+	// Update the job's last executed timestamp in the worker
+	if err := jobScheduler.UpdateJobLastExecutedTime(updateData.JobID, updateData.Timestamp); err != nil {
+		logger.Errorf("Failed to update job %d last executed time: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update job state"})
+		return
+	}
+
+	// Update the job's state in the cache
+	if err := jobScheduler.UpdateJobStateCache(updateData.JobID, "last_executed", updateData.Timestamp); err != nil {
+		logger.Warnf("Failed to update job %d state cache: %v", updateData.JobID, err)
+		// Continue even if cache update fails
+	}
+
+	logger.Infof("Successfully updated state for job ID: %d", updateData.JobID)
+	c.JSON(http.StatusOK, gin.H{"message": "Job state updated successfully"})
 }
 
 // func HandleKeeperConnectEvent(c *gin.Context) {

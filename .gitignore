@@ -2,7 +2,6 @@
 
 go.sum
 
-config-files/*.yaml
 release/*
 
 .keystore/*
@@ -10,14 +9,15 @@ release/*
 
 data/cache/*
 data/logs/*/*.log
-data/peer_registry/services_privKeys.json
-data/peer_registry/*_identity.json
+data/logs/*/*.json
 !data/logs/*/.gitkeep
-data/peerstore
-peerstore
+data/peerstore/*/*
+!data/peerstore/*/.gitkeep
 
-data/logs/*/*.log
 cosign.key
 cosign.pub
 
 references
+
+data/peer_registry/
+peerstore/

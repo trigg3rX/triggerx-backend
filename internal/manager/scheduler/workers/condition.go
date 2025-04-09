@@ -43,13 +43,13 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 	var triggerData types.TriggerData
 	triggerData.TimeInterval = w.jobData.TimeInterval
-	triggerData.LastExecuted = time.Now()
+	triggerData.LastExecuted = time.Now().UTC()
 	triggerData.TriggerTxHash = ""
 
 	// Calculate end time if timeframe is specified
 	var endTime time.Time
 	if w.jobData.TimeFrame > 0 {
-		endTime = time.Now().Add(time.Duration(w.jobData.TimeFrame) * time.Second)
+		endTime = time.Now().UTC().Add(time.Duration(w.jobData.TimeFrame) * time.Second)
 	}
 
 	go func() {
@@ -72,7 +72,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 
 			case <-w.ticker.C:
 				// Check if we've exceeded the timeframe
-				if w.jobData.TimeFrame > 0 && time.Now().After(endTime) {
+				if w.jobData.TimeFrame > 0 && time.Now().UTC().After(endTime) {
 					w.scheduler.Logger().Infof("Timeframe reached for job %d, stopping worker", w.jobID)
 					return
 				}
@@ -92,7 +92,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 				if satisfied {
 					w.scheduler.Logger().Infof("Condition satisfied for job %d", w.jobID)
 
-					triggerData.Timestamp = time.Now()
+					triggerData.Timestamp = time.Now().UTC()
 					triggerData.ConditionParams = make(map[string]interface{})
 
 					if err := w.executeTask(w.jobData, &triggerData); err != nil {
@@ -110,7 +110,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					}
 
 					// Update last execution time
-					triggerData.LastExecuted = time.Now()
+					triggerData.LastExecuted = time.Now().UTC()
 					w.scheduler.Logger().Infof("Job %d executed. Continuing to monitor condition due to recurring flag", w.jobID)
 
 					// Optional: add a small pause after execution before checking again
@@ -235,4 +235,13 @@ func (w *ConditionBasedWorker) GetError() string {
 
 func (w *ConditionBasedWorker) GetRetries() int {
 	return w.currentRetry
+}
+
+// Add UpdateLastExecutedTime method to allow updating the last execution timestamp
+func (w *ConditionBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
+	// Update the jobData with the new timestamp
+	if w.jobData != nil {
+		w.jobData.LastExecutedAt = timestamp
+		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)
+	}
 }

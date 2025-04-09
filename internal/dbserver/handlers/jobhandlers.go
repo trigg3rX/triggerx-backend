@@ -73,8 +73,8 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				user_id, user_address, created_at, 
 				job_ids, account_balance, token_balance,  last_updated_at
 			) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			existingUserID, tempJobs[0].UserAddress, time.Now(),
-			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now()).Exec(); err != nil {
+			existingUserID, tempJobs[0].UserAddress, time.Now().UTC(),
+			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now().UTC()).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -89,7 +89,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			SET account_balance = ?, token_balance = ?, last_updated_at = ?
 			WHERE user_id = ?`,
 			existingAccountBalance, existingTokenBalance,
-			time.Now(), existingUserID).Exec(); err != nil {
+			time.Now().UTC(), existingUserID).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user data for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -133,7 +133,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
 			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now(), nil, []int64{}).Exec(); err != nil {
+			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -164,7 +164,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			ArgType:                tempJobs[i].ArgType,
 			Arguments:              tempJobs[i].Arguments,
 			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
-			CreatedAt:              time.Now(),
+			CreatedAt:              time.Now().UTC(),
 			LastExecutedAt:         time.Time{},
 		}
 
@@ -194,7 +194,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		UPDATE triggerx.user_data 
 		SET job_ids = ?, last_updated_at = ?
 		WHERE user_id = ?`,
-		existingJobIDs, time.Now(), existingUserID).Exec(); err != nil {
+		existingJobIDs, time.Now().UTC(), existingUserID).Exec(); err != nil {
 		h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
 		http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -261,7 +261,7 @@ func (h *Handler) UpdateJobLastExecutedAt(w http.ResponseWriter, r *http.Request
 		UPDATE triggerx.job_data 
 		SET last_executed_at = ?
 		WHERE job_id = ?`,
-		time.Now(), jobID).Exec(); err != nil {
+		time.Now().UTC(), jobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating last executed at for jobID %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -1,10 +1,5 @@
 package main
 
-/*
-	TODO:
-	1. Add P2P message receiver to know what's going with Aggregator
-*/
-
 import (
 	"context"
 	"fmt"
@@ -19,8 +14,8 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/network"
 )
 
 var logger logging.Logger
@@ -42,13 +37,6 @@ func main() {
 
 	wg.Add(1)
 
-	err := network.ConnectToAggregator()
-	if err != nil {
-		logger.Fatalf("Failed to connect to aggregator: %v", err)
-	} else {
-		logger.Info("Connected to aggregator successfully.")
-	}
-
 	// Initialize the job scheduler
 	manager.JobSchedulerInit()
 	logger.Info("Job scheduler initialized successfully.")
@@ -61,7 +49,10 @@ func main() {
 	router.POST("/job/update", manager.HandleUpdateJobEvent)
 	router.POST("/job/pause", manager.HandlePauseJobEvent)
 	router.POST("/job/resume", manager.HandleResumeJobEvent)
-	// router.POST("/keeper/connect", manager.HandleKeeperConnectEvent)
+	router.POST("/job/state/update", manager.HandleJobStateUpdate)
+
+	router.POST("/p2p/message", services.ExecuteTask)
+	router.POST("/task/validate", services.ValidateTask)
 	
 	// Create HTTP server
 	srv := &http.Server{

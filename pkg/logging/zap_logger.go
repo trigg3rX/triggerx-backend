@@ -61,7 +61,7 @@ func NewZapLogger(env LogLevel, processName string) (Logger, error) {
 	var config zap.Config
 
 	// Create timestamp for log file
-	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05Z")
+	timestamp := time.Now().UTC().Format(time.RFC3339)
 
 	// Create service-specific log directory
 	logDir := filepath.Join(BaseDataDir, LogsDir, processName)
@@ -92,7 +92,7 @@ func NewZapLogger(env LogLevel, processName string) (Logger, error) {
 		LineEnding:    zapcore.DefaultLineEnding,
 		EncodeLevel:   zapcore.LowercaseLevelEncoder,
 		EncodeTime: func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
-			encoder.AppendString(t.Format("2006-01-02 15:04:05"))
+			encoder.AppendString(t.UTC().Format("2006-01-02 15:04:05"))
 		},
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller: func(caller zapcore.EntryCaller, encoder zapcore.PrimitiveArrayEncoder) {

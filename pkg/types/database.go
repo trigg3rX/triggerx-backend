@@ -59,6 +59,7 @@ type JobData struct {
 type TaskData struct {
 	// Fixed Values
 	TaskID           int64     `json:"task_id"`
+	TaskNumber       int       `json:"task_number"`
 	JobID            int64     `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -103,4 +104,16 @@ type KeeperData struct {
 	ConnectionAddress string    `json:"connection_address"`
 	NoExcTask         int       `json:"no_exctask"`
 	KeeperPoints      int64     `json:"keeper_points"`
+	ChatID            int64     `json:"chat_id"`
+	EmailID           string    `json:"email_id"`
+}
+
+// ApiKey represents an API key in the system
+type ApiKey struct {
+	Key       string    `json:"key"`
+	Owner     string    `json:"owner"`
+	IsActive  bool      `json:"isActive"`
+	RateLimit int       `json:"rateLimit"`
+	LastUsed  time.Time `json:"lastUsed"`
+	CreatedAt time.Time `json:"createdAt"`
 }

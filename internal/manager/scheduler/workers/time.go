@@ -50,7 +50,7 @@ func NewTimeBasedWorker(jobData types.HandleCreateJobData, schedule string, sche
 		cron:      cron.New(cron.WithSeconds()),
 		schedule:  schedule,
 		jobData:   &jobData,
-		startTime: time.Now(),
+		startTime: time.Now().UTC(),
 		BaseWorker: BaseWorker{
 			status:     "pending",
 			maxRetries: 3,
@@ -73,8 +73,8 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 	w.status = "running"
 
 	// time.AfterFunc(1*time.Second, func() {
-	// 	triggerData.Timestamp = time.Now()
-	// 	triggerData.LastExecuted = time.Now()
+	// 	triggerData.Timestamp = time.Now().UTC()
+	// 	triggerData.LastExecuted = time.Now().UTC()
 
 	// 	if err := w.executeTask(w.jobData, &triggerData); err != nil {
 	// 		w.handleError(err)
@@ -91,13 +91,13 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 			return
 		}
 
-		triggerData.Timestamp = time.Now()
+		triggerData.Timestamp = time.Now().UTC()
 
 		if err := w.executeTask(w.jobData, &triggerData); err != nil {
 			w.handleError(err)
 		}
 
-		triggerData.LastExecuted = time.Now()
+		triggerData.LastExecuted = time.Now().UTC()
 	})
 	w.cron.Start()
 
@@ -218,5 +218,14 @@ func (w *BaseWorker) handleLinkedJob(scheduler JobScheduler, jobData *types.Hand
 		return scheduler.StartConditionBasedJob(*linkedJob)
 	default:
 		return fmt.Errorf("invalid job type for linked job %d", linkedJob.JobID)
+	}
+}
+
+// Add this method to TimeBasedWorker to allow updating the last execution timestamp
+func (w *TimeBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
+	// Update the jobData with the new timestamp
+	if w.jobData != nil {
+		w.jobData.LastExecutedAt = timestamp
+		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)
 	}
 }
