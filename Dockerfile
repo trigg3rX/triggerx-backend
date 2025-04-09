@@ -49,10 +49,6 @@ RUN touch .env
 ENV GIN_MODE=release
 ENV LOG_LEVEL=info
 
-# Expose configurable ports 
-# Note: These are just documentation, actual ports used will depend on run command
-EXPOSE 9005 9006 9009 33333
-
 # Disable SSL verification for HTTP client
 ENV GODEBUG=http2client=0
 ENV HTTPS_PROXY=""

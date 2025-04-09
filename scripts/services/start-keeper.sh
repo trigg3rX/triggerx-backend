@@ -19,7 +19,8 @@ KEEPER_PID=$!
 #     --p2p.datadir data/peerstore/attester \
 #     --p2p.discovery-interval 60000 \
 #     --metrics \
-#     --metrics.port $OPERATOR_METRICS_PORT &
+#     --metrics.port $OPERATOR_METRICS_PORT \
+#     --announce-addresses /ip4/$PUBLIC_IPV4_ADDRESS/tcp/$OPERATOR_P2P_PORT/p2p/$PEER_ID &
 # OTHENTIC_PID=$!
 
 # Start othentic-cli in the background
@@ -33,7 +34,8 @@ othentic-cli node attester \
     --p2p.datadir data/peerstore/attester \
     --p2p.discovery-interval 60000 \
     --metrics \
-    --metrics.port $OPERATOR_METRICS_PORT &
+    --metrics.port $OPERATOR_METRICS_PORT \
+    --announce-addresses /ip4/$PUBLIC_IPV4_ADDRESS/tcp/$OPERATOR_P2P_PORT/p2p/$PEER_ID &
 OTHENTIC_PID=$!
 
 # Handle shutdown signals to properly terminate both processes
