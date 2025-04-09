@@ -6,7 +6,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar"
+	// "github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -51,7 +51,7 @@ func main() {
 
 	// Set both connections where needed
 	server := dbserver.NewServer(conn, logging.DatabaseProcess)
-	registrar.SetDatabaseConnection(mainSession, registrarSession)
+	// registrar.SetDatabaseConnection(mainSession, registrarSession)
 
 	// Initialize and start HTTP server with database connection
 	logger.Infof("Database Server initialized, starting on port %s...", config.DatabasePort)

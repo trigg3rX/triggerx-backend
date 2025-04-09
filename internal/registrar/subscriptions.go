@@ -21,17 +21,20 @@ import (
 	// "github.com/ethereum/go-ethereum/event"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/gocql/gocql"
+
+	// "github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 var (
-	dbMain   *gocql.Session
-	db       *gocql.Session
+	// dbMain   *gocql.Session
+	// db       *gocql.Session
+	db       *database.Connection
 	dbLogger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
 	logger   = logging.GetLogger(logging.Development, logging.RegistrarProcess)
 
@@ -75,25 +78,25 @@ type TaskRejectedEvent struct {
 }
 
 // SetDatabaseConnection sets both database connections for the registrar package
-func SetDatabaseConnection(mainSession *gocql.Session, registrarSession *gocql.Session) {
-	if mainSession == nil || registrarSession == nil {
-		dbLogger.Fatal("Database sessions cannot be nil")
-		return
-	}
+// func SetDatabaseConnection(mainSession *gocql.Session, registrarSession *gocql.Session) {
+// 	if mainSession == nil || registrarSession == nil {
+// 		dbLogger.Fatal("Database sessions cannot be nil")
+// 		return
+// 	}
 
-	// Close existing connections before reassigning
-	if dbMain != nil {
-		dbMain.Close()
-	}
-	dbMain = mainSession
+// 	// Close existing connections before reassigning
+// 	if dbMain != nil {
+// 		dbMain.Close()
+// 	}
+// 	dbMain = mainSession
 
-	if db != nil {
-		db.Close()
-	}
-	db = registrarSession
+// 	if db != nil {
+// 		db.Close()
+// 	}
+// 	db = registrarSession
 
-	dbLogger.Info("Database connections set for registrar package")
-}
+// 	dbLogger.Info("Database connections set for registrar package")
+// }
 
 // StartEventPolling begins the event polling process
 func StartEventPolling(
@@ -141,6 +144,18 @@ func StartEventPolling(
 	// Create ticker for 20-minute interval
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
+
+	dbConfig := &database.Config{
+		Hosts:       []string{"localhost:9042"},
+		Timeout:     time.Second * 30,
+		Retries:     3,
+		ConnectWait: time.Second * 20,
+	}
+	db, err = database.NewConnection(dbConfig)
+	if err != nil {
+		logger.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
 
 	// Initial poll immediately on startup
 	pollEvents(avsGovernanceAddress, attestationCenterAddress)
@@ -452,7 +467,7 @@ func processTaskSubmittedEvents(
 			logger.Error(fmt.Sprintf("Failed to fetch IPFS content: %v", err))
 			continue
 		}
-		
+
 		var ipfsData types.IPFSData
 		if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
 			logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
@@ -822,8 +837,9 @@ func updatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 
 	// Get task fee
 	var taskFee int64
-	if err := db.Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
-		taskID).Scan(&taskFee); err != nil {
+	err := db.Session().Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+		taskID).Scan(&taskFee)
+	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
 		return fmt.Errorf("failed to get task fee for task ID %d: %v", taskID, err)
 	}
@@ -853,37 +869,49 @@ func updatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 // Helper function to update performer points
 func updatePerformerPoints(performerAddress string, taskFee int64) error {
 	var performerPoints int64
-	if err := db.Query(`
-		SELECT keeper_points FROM triggerx.keeper_data 
+	var performerId int64
+
+	// First, get the keeper_id using the keeper_address (requires a scan with ALLOW FILTERING)
+	if err := db.Session().Query(`
+		SELECT keeper_id, keeper_points FROM triggerx.keeper_data 
 		WHERE keeper_address = ? ALLOW FILTERING`,
-		performerAddress).Scan(&performerPoints); err != nil {
-		logger.Error(fmt.Sprintf("Failed to get performer points: %v", err))
+		performerAddress).Scan(&performerId, &performerPoints); err != nil {
+		logger.Error(fmt.Sprintf("Failed to get performer ID and points: %v", err))
 		return err
 	}
 
 	//multiplyer 2 till 7th April
 	newPerformerPoints := performerPoints + 2*taskFee
 
-	if err := db.Query(`
+	// Now update using the primary key (keeper_id)
+	if err := db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET keeper_points = ? 
-		WHERE keeper_address = ? ALLOW FILTERING`,
-		newPerformerPoints, performerAddress).Exec(); err != nil {
+		WHERE keeper_id = ?`,
+		newPerformerPoints, performerId).Exec(); err != nil {
 		logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Added %d points to performer %s", taskFee, performerAddress))
+	logger.Info(fmt.Sprintf("Added %d points to performer %s (ID: %d)", taskFee, performerAddress, performerId))
 	return nil
 }
 
 // Helper function to update attester points
 func updateAttesterPoints(attesterId string, taskFee int64) error {
 	var attesterPoints int64
-	if err := db.Query(`
+	// Convert attesterId from string to int64
+	var attesterIdInt int64
+	_, err := fmt.Sscanf(attesterId, "%d", &attesterIdInt)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to convert attester ID %s to integer: %v", attesterId, err))
+		return err
+	}
+
+	if err := db.Session().Query(`
 		SELECT keeper_points FROM triggerx.keeper_data 
-		WHERE keeper_id = ? ALLOW FILTERING`,
-		attesterId).Scan(&attesterPoints); err != nil {
+		WHERE keeper_id = ?`,
+		attesterIdInt).Scan(&attesterPoints); err != nil {
 		logger.Error(fmt.Sprintf("Failed to get attester points for ID %s: %v", attesterId, err))
 		return err
 	}
@@ -891,11 +919,11 @@ func updateAttesterPoints(attesterId string, taskFee int64) error {
 	//multiplyer 2 till 7th April
 	newAttesterPoints := attesterPoints + 2*taskFee
 
-	if err := db.Query(`
+	if err := db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET keeper_points = ? 
-		WHERE keeper_id = ? ALLOW FILTERING`,
-		newAttesterPoints, attesterId).Exec(); err != nil {
+		WHERE keeper_id = ?`,
+		newAttesterPoints, attesterIdInt).Exec(); err != nil {
 		logger.Error(fmt.Sprintf("Failed to update attester points for ID %s: %v", attesterId, err))
 		return err
 	}
