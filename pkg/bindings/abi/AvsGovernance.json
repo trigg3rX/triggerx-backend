@@ -1,1 +1,1016 @@
-[{"type":"function","name":"DEFAULT_ADMIN_ROLE","inputs":[],"outputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"stateMutability":"view"},{"type":"function","name":"avsDirectory","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},{"type":"function","name":"avsName","inputs":[],"outputs":[{"name":"","type":"string","internalType":"string"}],"stateMutability":"view"},{"type":"function","name":"completeRewardsReceiverModification","inputs":[],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"depositERC20","inputs":[{"name":"_amount","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"getDefaultStrategies","inputs":[],"outputs":[{"name":"","type":"address[]","internalType":"address[]"}],"stateMutability":"view"},{"type":"function","name":"getIsAllowlisted","inputs":[],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},{"type":"function","name":"getNumOfOperatorsLimit","inputs":[],"outputs":[{"name":"numOfOperatorsLimitView","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"getOperatorRestakedStrategies","inputs":[{"name":"_operator","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"address[]","internalType":"address[]"}],"stateMutability":"view"},{"type":"function","name":"getRestakeableStrategies","inputs":[],"outputs":[{"name":"","type":"address[]","internalType":"address[]"}],"stateMutability":"view"},{"type":"function","name":"getRewardsReceiver","inputs":[{"name":"_operator","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},{"type":"function","name":"getRoleAdmin","inputs":[{"name":"role","type":"bytes32","internalType":"bytes32"}],"outputs":[{"name":"","type":"bytes32","internalType":"bytes32"}],"stateMutability":"view"},{"type":"function","name":"grantRole","inputs":[{"name":"role","type":"bytes32","internalType":"bytes32"},{"name":"account","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"hasRole","inputs":[{"name":"role","type":"bytes32","internalType":"bytes32"},{"name":"account","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},{"type":"function","name":"initialize","inputs":[{"name":"_initializationParams","type":"tuple","internalType":"struct IAvsGovernance.InitializationParams","components":[{"name":"avsGovernanceMultisigOwner","type":"address","internalType":"address"},{"name":"operationsMultisig","type":"address","internalType":"address"},{"name":"communityMultisig","type":"address","internalType":"address"},{"name":"othenticRegistry","type":"address","internalType":"address"},{"name":"messageHandler","type":"address","internalType":"address"},{"name":"vault","type":"address","internalType":"address"},{"name":"avsDirectoryContract","type":"address","internalType":"address"},{"name":"allowlistSigner","type":"address","internalType":"address"},{"name":"avsName","type":"string","internalType":"string"},{"name":"blsAuthSingleton","type":"address","internalType":"address"}]}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"isFlowPaused","inputs":[{"name":"_pausableFlow","type":"bytes4","internalType":"bytes4"}],"outputs":[{"name":"_isPaused","type":"bool","internalType":"bool"}],"stateMutability":"view"},{"type":"function","name":"isOperatorRegistered","inputs":[{"name":"operator","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},{"type":"function","name":"maxEffectiveBalance","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"minSharesForStrategy","inputs":[{"name":"_strategy","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"minVotingPower","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"numOfActiveOperators","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"numOfOperators","inputs":[],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"numOfShares","inputs":[{"name":"_operator","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"pause","inputs":[{"name":"_pausableFlow","type":"bytes4","internalType":"bytes4"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"queueRewardsReceiverModification","inputs":[{"name":"_newRewardsReceiver","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"registerAsAllowedOperator","inputs":[{"name":"_blsKey","type":"uint256[4]","internalType":"uint256[4]"},{"name":"_authToken","type":"bytes","internalType":"bytes"},{"name":"_rewardsReceiver","type":"address","internalType":"address"},{"name":"_operatorSignature","type":"tuple","internalType":"struct ISignatureUtils.SignatureWithSaltAndExpiry","components":[{"name":"signature","type":"bytes","internalType":"bytes"},{"name":"salt","type":"bytes32","internalType":"bytes32"},{"name":"expiry","type":"uint256","internalType":"uint256"}]},{"name":"_blsRegistrationSignature","type":"tuple","internalType":"struct BLSAuthLibrary.Signature","components":[{"name":"signature","type":"uint256[2]","internalType":"uint256[2]"}]}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"registerAsOperator","inputs":[{"name":"_blsKey","type":"uint256[4]","internalType":"uint256[4]"},{"name":"_rewardsReceiver","type":"address","internalType":"address"},{"name":"_operatorSignature","type":"tuple","internalType":"struct ISignatureUtils.SignatureWithSaltAndExpiry","components":[{"name":"signature","type":"bytes","internalType":"bytes"},{"name":"salt","type":"bytes32","internalType":"bytes32"},{"name":"expiry","type":"uint256","internalType":"uint256"}]},{"name":"_blsRegistrationSignature","type":"tuple","internalType":"struct BLSAuthLibrary.Signature","components":[{"name":"signature","type":"uint256[2]","internalType":"uint256[2]"}]}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"renounceRole","inputs":[{"name":"role","type":"bytes32","internalType":"bytes32"},{"name":"callerConfirmation","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"revokeRole","inputs":[{"name":"role","type":"bytes32","internalType":"bytes32"},{"name":"account","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setAllowlistSigner","inputs":[{"name":"_allowlistSigner","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setAvsGovernanceLogic","inputs":[{"name":"_avsGovernanceLogic","type":"address","internalType":"contract IAvsGovernanceLogic"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setAvsGovernanceMultiplierSyncer","inputs":[{"name":"_newAvsGovernanceMultiplierSyncer","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setAvsName","inputs":[{"name":"_avsName","type":"string","internalType":"string"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setBLSAuthSingleton","inputs":[{"name":"_blsAuthSingleton","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setIsAllowlisted","inputs":[{"name":"_isAllowlisted","type":"bool","internalType":"bool"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setMaxEffectiveBalance","inputs":[{"name":"_maxBalance","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setMinSharesForStrategy","inputs":[{"name":"_strategy","type":"address","internalType":"address"},{"name":"_minShares","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setMinVotingPower","inputs":[{"name":"_minVotingPower","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setNumOfOperatorsLimit","inputs":[{"name":"_newLimitOfNumOfOperators","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setOthenticRegistry","inputs":[{"name":"_othenticRegistry","type":"address","internalType":"contract IOthenticRegistry"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setRewardsReceiverModificationDelay","inputs":[{"name":"_rewardsReceiverModificationDelay","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setStrategyMultiplier","inputs":[{"name":"_strategyMultiplier","type":"tuple","internalType":"struct IAvsGovernance.StrategyMultiplier","components":[{"name":"strategy","type":"address","internalType":"address"},{"name":"multiplier","type":"uint256","internalType":"uint256"}]}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setStrategyMultiplierBatch","inputs":[{"name":"_strategyMultipliers","type":"tuple[]","internalType":"struct IAvsGovernance.StrategyMultiplier[]","components":[{"name":"strategy","type":"address","internalType":"address"},{"name":"multiplier","type":"uint256","internalType":"uint256"}]}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"setSupportedStrategies","inputs":[{"name":"_strategies","type":"address[]","internalType":"address[]"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"strategies","inputs":[],"outputs":[{"name":"","type":"address[]","internalType":"address[]"}],"stateMutability":"view"},{"type":"function","name":"strategyMultiplier","inputs":[{"name":"_strategy","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"supportsInterface","inputs":[{"name":"interfaceId","type":"bytes4","internalType":"bytes4"}],"outputs":[{"name":"","type":"bool","internalType":"bool"}],"stateMutability":"view"},{"type":"function","name":"transferAvsGovernanceMultisig","inputs":[{"name":"_newAvsGovernanceMultisig","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"transferMessageHandler","inputs":[{"name":"_newMessageHandler","type":"address","internalType":"address"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"unpause","inputs":[{"name":"_pausableFlow","type":"bytes4","internalType":"bytes4"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"unregisterAsOperator","inputs":[],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"updateAVSMetadataURI","inputs":[{"name":"metadataURI","type":"string","internalType":"string"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"vault","inputs":[],"outputs":[{"name":"","type":"address","internalType":"address"}],"stateMutability":"view"},{"type":"function","name":"votingPower","inputs":[{"name":"_operator","type":"address","internalType":"address"}],"outputs":[{"name":"","type":"uint256","internalType":"uint256"}],"stateMutability":"view"},{"type":"function","name":"withdrawBatchRewards","inputs":[{"name":"_operators","type":"tuple[]","internalType":"struct IAvsGovernance.PaymentRequestMessage[]","components":[{"name":"operator","type":"address","internalType":"address"},{"name":"feeToClaim","type":"uint256","internalType":"uint256"}]},{"name":"_lastPayedTask","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"function","name":"withdrawRewards","inputs":[{"name":"_operator","type":"address","internalType":"address"},{"name":"_lastPayedTask","type":"uint256","internalType":"uint256"},{"name":"_feeToClaim","type":"uint256","internalType":"uint256"}],"outputs":[],"stateMutability":"nonpayable"},{"type":"event","name":"BLSAuthSingletonSet","inputs":[{"name":"blsAuthSingleton","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"FlowPaused","inputs":[{"name":"_pausableFlow","type":"bytes4","indexed":false,"internalType":"bytes4"},{"name":"_pauser","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"FlowUnpaused","inputs":[{"name":"_pausableFlowFlag","type":"bytes4","indexed":false,"internalType":"bytes4"},{"name":"_unpauser","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"Initialized","inputs":[{"name":"version","type":"uint64","indexed":false,"internalType":"uint64"}],"anonymous":false},{"type":"event","name":"MaxEffectiveBalanceSet","inputs":[{"name":"maxEffectiveBalance","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"MinSharesPerStrategySet","inputs":[{"name":"strategy","type":"address","indexed":false,"internalType":"address"},{"name":"minShares","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"MinVotingPowerSet","inputs":[{"name":"minVotingPower","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"OperatorRegistered","inputs":[{"name":"operator","type":"address","indexed":true,"internalType":"address"},{"name":"blsKey","type":"uint256[4]","indexed":false,"internalType":"uint256[4]"}],"anonymous":false},{"type":"event","name":"OperatorUnregistered","inputs":[{"name":"operator","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"QueuedRewardsReceiverModification","inputs":[{"name":"operator","type":"address","indexed":false,"internalType":"address"},{"name":"receiver","type":"address","indexed":false,"internalType":"address"},{"name":"delay","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"RoleAdminChanged","inputs":[{"name":"role","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"previousAdminRole","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"newAdminRole","type":"bytes32","indexed":true,"internalType":"bytes32"}],"anonymous":false},{"type":"event","name":"RoleGranted","inputs":[{"name":"role","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"account","type":"address","indexed":true,"internalType":"address"},{"name":"sender","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},{"type":"event","name":"RoleRevoked","inputs":[{"name":"role","type":"bytes32","indexed":true,"internalType":"bytes32"},{"name":"account","type":"address","indexed":true,"internalType":"address"},{"name":"sender","type":"address","indexed":true,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetAllowlistSigner","inputs":[{"name":"allowlistSigner","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetAvsGovernanceLogic","inputs":[{"name":"avsGovernanceLogic","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetAvsGovernanceMultiplierSyncer","inputs":[{"name":"avsGovernanceMultiplierSyncer","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetAvsGovernanceMultisig","inputs":[{"name":"newAvsGovernanceMultisig","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetAvsName","inputs":[{"name":"avsName","type":"string","indexed":false,"internalType":"string"}],"anonymous":false},{"type":"event","name":"SetIsAllowlisted","inputs":[{"name":"isAllowlisted","type":"bool","indexed":false,"internalType":"bool"}],"anonymous":false},{"type":"event","name":"SetMessageHandler","inputs":[{"name":"newMessageHandler","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetNumOfOperatorsLimit","inputs":[{"name":"newLimitOfNumOfOperators","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"SetOthenticRegistry","inputs":[{"name":"othenticRegistry","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetRewardsReceiver","inputs":[{"name":"operator","type":"address","indexed":false,"internalType":"address"},{"name":"receiver","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"event","name":"SetRewardsReceiverModificationDelay","inputs":[{"name":"modificationDelay","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"SetStrategyMultiplier","inputs":[{"name":"strategy","type":"address","indexed":false,"internalType":"address"},{"name":"multiplier","type":"uint256","indexed":false,"internalType":"uint256"}],"anonymous":false},{"type":"event","name":"SetSupportedStrategies","inputs":[{"name":"strategies","type":"address[]","indexed":false,"internalType":"address[]"}],"anonymous":false},{"type":"event","name":"SetToken","inputs":[{"name":"token","type":"address","indexed":false,"internalType":"address"}],"anonymous":false},{"type":"error","name":"AccessControlBadConfirmation","inputs":[]},{"type":"error","name":"AccessControlInvalidMultiplierSyncer","inputs":[]},{"type":"error","name":"AccessControlUnauthorizedAccount","inputs":[{"name":"account","type":"address","internalType":"address"},{"name":"neededRole","type":"bytes32","internalType":"bytes32"}]},{"type":"error","name":"AllowlistDisabled","inputs":[]},{"type":"error","name":"AllowlistEnabled","inputs":[]},{"type":"error","name":"ECDSAInvalidSignature","inputs":[]},{"type":"error","name":"ECDSAInvalidSignatureLength","inputs":[{"name":"length","type":"uint256","internalType":"uint256"}]},{"type":"error","name":"ECDSAInvalidSignatureS","inputs":[{"name":"s","type":"bytes32","internalType":"bytes32"}]},{"type":"error","name":"FlowIsCurrentlyPaused","inputs":[]},{"type":"error","name":"FlowIsCurrentlyUnpaused","inputs":[]},{"type":"error","name":"InvalidAllowlistAuthToken","inputs":[]},{"type":"error","name":"InvalidBlsRegistrationSignature","inputs":[]},{"type":"error","name":"InvalidInitialization","inputs":[]},{"type":"error","name":"InvalidMultiplierNotSet","inputs":[]},{"type":"error","name":"InvalidRewardsReceiver","inputs":[]},{"type":"error","name":"InvalidSlashingRate","inputs":[]},{"type":"error","name":"InvalidStrategy","inputs":[]},{"type":"error","name":"ModificationDelayNotPassed","inputs":[]},{"type":"error","name":"NotEnoughVotingPower","inputs":[]},{"type":"error","name":"NotInitializing","inputs":[]},{"type":"error","name":"NumOfActiveOperatorsIsGreaterThanNumOfOperatorLimit","inputs":[{"name":"numOfOperatorsLimit","type":"uint256","internalType":"uint256"},{"name":"numOfActiveOperators","type":"uint256","internalType":"uint256"}]},{"type":"error","name":"NumOfOperatorsLimitReached","inputs":[{"name":"numOfOperatorsLimit","type":"uint256","internalType":"uint256"}]},{"type":"error","name":"OperatorAlreadyRegistered","inputs":[]},{"type":"error","name":"OperatorNotRegistered","inputs":[]},{"type":"error","name":"PauseFlowIsAlreadyPaused","inputs":[]},{"type":"error","name":"ReentrancyGuardReentrantCall","inputs":[]},{"type":"error","name":"Unauthorized","inputs":[{"name":"message","type":"string","internalType":"string"}]},{"type":"error","name":"UnpausingFlowIsAlreadyUnpaused","inputs":[]}]
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_extensionImplementation",
+        "type": "address"
+      },
+      {
+        "internalType": "contract IOthenticRegistry",
+        "name": "_othenticRegistryAddress",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  { "inputs": [], "name": "AccessControlBadConfirmation", "type": "error" },
+  {
+    "inputs": [],
+    "name": "AccessControlInvalidMultiplierSyncer",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "account", "type": "address" },
+      { "internalType": "bytes32", "name": "neededRole", "type": "bytes32" }
+    ],
+    "name": "AccessControlUnauthorizedAccount",
+    "type": "error"
+  },
+  { "inputs": [], "name": "AllowlistDisabled", "type": "error" },
+  { "inputs": [], "name": "AllowlistEnabled", "type": "error" },
+  { "inputs": [], "name": "ECDSAInvalidSignature", "type": "error" },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "length", "type": "uint256" }
+    ],
+    "name": "ECDSAInvalidSignatureLength",
+    "type": "error"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "s", "type": "bytes32" }],
+    "name": "ECDSAInvalidSignatureS",
+    "type": "error"
+  },
+  { "inputs": [], "name": "EmptyAvsName", "type": "error" },
+  { "inputs": [], "name": "EmptySharedSecurityProvidersList", "type": "error" },
+  { "inputs": [], "name": "FlowIsCurrentlyPaused", "type": "error" },
+  { "inputs": [], "name": "FlowIsCurrentlyUnpaused", "type": "error" },
+  { "inputs": [], "name": "InvalidAllowlistAuthToken", "type": "error" },
+  { "inputs": [], "name": "InvalidBlsRegistrationSignature", "type": "error" },
+  { "inputs": [], "name": "InvalidInitialization", "type": "error" },
+  { "inputs": [], "name": "InvalidMultiplier", "type": "error" },
+  { "inputs": [], "name": "InvalidMultiplierNotSet", "type": "error" },
+  { "inputs": [], "name": "InvalidRewardsReceiver", "type": "error" },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "arrayIndex", "type": "uint256" }
+    ],
+    "name": "InvalidSharedSecurityProviderList",
+    "type": "error"
+  },
+  { "inputs": [], "name": "InvalidSlashingRate", "type": "error" },
+  { "inputs": [], "name": "InvalidStakingContract", "type": "error" },
+  {
+    "inputs": [{ "internalType": "bytes", "name": "", "type": "bytes" }],
+    "name": "MissingAuthToken",
+    "type": "error"
+  },
+  { "inputs": [], "name": "ModificationDelayNotPassed", "type": "error" },
+  { "inputs": [], "name": "NotEnoughVotingPower", "type": "error" },
+  { "inputs": [], "name": "NotInitializing", "type": "error" },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "numOfOperatorsLimit",
+        "type": "uint256"
+      }
+    ],
+    "name": "NumOfOperatorsLimitReached",
+    "type": "error"
+  },
+  { "inputs": [], "name": "OperatorAlreadyRegistered", "type": "error" },
+  { "inputs": [], "name": "OperatorNotRegistered", "type": "error" },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "operator", "type": "address" }
+    ],
+    "name": "OperatorStillRegisteredToSharedSecurityProviders",
+    "type": "error"
+  },
+  { "inputs": [], "name": "PauseFlowIsAlreadyPaused", "type": "error" },
+  { "inputs": [], "name": "ReentrancyGuardReentrantCall", "type": "error" },
+  {
+    "inputs": [],
+    "name": "StakingContractsNotInAscendingOrder",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "message", "type": "string" }
+    ],
+    "name": "Unauthorized",
+    "type": "error"
+  },
+  { "inputs": [], "name": "UnpausingFlowIsAlreadyUnpaused", "type": "error" },
+  { "inputs": [], "name": "ZeroAddress", "type": "error" },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "DepositRewardsBackFailed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes4",
+        "name": "_pausableFlow",
+        "type": "bytes4"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_pauser",
+        "type": "address"
+      }
+    ],
+    "name": "FlowPaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes4",
+        "name": "_pausableFlowFlag",
+        "type": "bytes4"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_unpauser",
+        "type": "address"
+      }
+    ],
+    "name": "FlowUnpaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "NativeCoinNotSupportedForEigenRewards",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256[4]",
+        "name": "blsKey",
+        "type": "uint256[4]"
+      }
+    ],
+    "name": "OperatorRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "OperatorRegisteredToEigenLayer",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "OperatorRegisteredToSymbiotic",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "OperatorUnregistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "OperatorUnregisteredToEigenLayer",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "OperatorUnregisteredToSymbiotic",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "delay",
+        "type": "uint256"
+      }
+    ],
+    "name": "QueuedRewardsReceiverModification",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "revertData",
+        "type": "bytes"
+      }
+    ],
+    "name": "RewardsCoordinatorReverted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "previousAdminRole",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "newAdminRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RoleAdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleRevoked",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "avsName",
+        "type": "string"
+      }
+    ],
+    "name": "SetAvsName",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "isAllowlisted",
+        "type": "bool"
+      }
+    ],
+    "name": "SetIsAllowlisted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      }
+    ],
+    "name": "SetRewardsReceiver",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "stakingContract",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "multiplier",
+        "type": "uint256"
+      }
+    ],
+    "name": "SetStakingContractMultiplier",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "SetToken",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address[]",
+        "name": "stakingContracts",
+        "type": "address[]"
+      }
+    ],
+    "name": "setNewSupportedStakingContracts",
+    "type": "event"
+  },
+  { "stateMutability": "nonpayable", "type": "fallback" },
+  {
+    "inputs": [],
+    "name": "DEFAULT_ADMIN_ROLE",
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "EXTENSION_IMPLEMENTATION",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "avsName",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "avsTreasury",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "completeRewardsReceiverModification",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "address", "name": "operator", "type": "address" },
+          { "internalType": "uint256", "name": "amount", "type": "uint256" }
+        ],
+        "internalType": "struct IRewardsCoordinator.OperatorReward[]",
+        "name": "_operators",
+        "type": "tuple[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_lastPayedTask",
+        "type": "uint256"
+      },
+      { "internalType": "bytes", "name": "_rewardsData", "type": "bytes" },
+      { "internalType": "uint32", "name": "_remoteEid", "type": "uint32" }
+    ],
+    "name": "createOperatorDirectedAVSRewardsSubmission",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getIsAllowlisted",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" }
+    ],
+    "name": "getOperatorRestakedStrategies",
+    "outputs": [
+      { "internalType": "address[]", "name": "", "type": "address[]" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getRestakeableStrategies",
+    "outputs": [
+      { "internalType": "address[]", "name": "", "type": "address[]" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" }
+    ],
+    "name": "getRewardsReceiver",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" }
+    ],
+    "name": "getRoleAdmin",
+    "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      { "internalType": "address", "name": "account", "type": "address" }
+    ],
+    "name": "grantRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      { "internalType": "address", "name": "account", "type": "address" }
+    ],
+    "name": "hasRole",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "avsGovernanceMultisigOwner",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "operationsMultisig",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "communityMultisig",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "othenticRegistry",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "messageHandler",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "avsTreasury",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "avsDirectoryContract",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "allowlistSigner",
+            "type": "address"
+          },
+          { "internalType": "string", "name": "avsName", "type": "string" },
+          {
+            "internalType": "address",
+            "name": "blsAuthSingleton",
+            "type": "address"
+          }
+        ],
+        "internalType": "struct IAvsGovernance.InitializationParams",
+        "name": "_initializationParams",
+        "type": "tuple"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "_pausableFlow", "type": "bytes4" }
+    ],
+    "name": "isFlowPaused",
+    "outputs": [
+      { "internalType": "bool", "name": "_isPaused", "type": "bool" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "operator", "type": "address" }
+    ],
+    "name": "isOperatorRegistered",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "maxEffectiveBalance",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_stakingContract",
+        "type": "address"
+      }
+    ],
+    "name": "minStakeAmountPerStakingContract",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minVotingPower",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_stakingContract",
+        "type": "address"
+      }
+    ],
+    "name": "multiplier",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numOfActiveOperators",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "_pausableFlow", "type": "bytes4" }
+    ],
+    "name": "pause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_newRewardsReceiver",
+        "type": "address"
+      }
+    ],
+    "name": "queueRewardsReceiverModification",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256[4]",
+            "name": "blsKey",
+            "type": "uint256[4]"
+          },
+          {
+            "internalType": "address",
+            "name": "rewardsReceiver",
+            "type": "address"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint256[2]",
+                "name": "signature",
+                "type": "uint256[2]"
+              }
+            ],
+            "internalType": "struct BLSAuthLibrary.Signature",
+            "name": "blsRegistrationSignature",
+            "type": "tuple"
+          },
+          { "internalType": "bytes", "name": "authToken", "type": "bytes" }
+        ],
+        "internalType": "struct IAvsGovernance.OperatorRegistrationParams",
+        "name": "_operatorRegistrationParams",
+        "type": "tuple"
+      }
+    ],
+    "name": "registerAsOperator",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "metadataURI", "type": "string" }
+    ],
+    "name": "registerAvsToEigenLayer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "registerAvsToSymbiotic",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "bytes", "name": "signature", "type": "bytes" },
+          { "internalType": "bytes32", "name": "salt", "type": "bytes32" },
+          { "internalType": "uint256", "name": "expiry", "type": "uint256" }
+        ],
+        "internalType": "struct ISignatureUtils.SignatureWithSaltAndExpiry",
+        "name": "_eigenSig",
+        "type": "tuple"
+      },
+      { "internalType": "bytes", "name": "_authToken", "type": "bytes" }
+    ],
+    "name": "registerOperatorToEigenLayer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "uint48", "name": "deadline", "type": "uint48" },
+          { "internalType": "bytes", "name": "data", "type": "bytes" }
+        ],
+        "internalType": "struct IAvsGovernance.SymbioticOptInSignature",
+        "name": "_symbioticSig",
+        "type": "tuple"
+      },
+      { "internalType": "bytes", "name": "_authToken", "type": "bytes" }
+    ],
+    "name": "registerOperatorToSymbiotic",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      {
+        "internalType": "address",
+        "name": "callerConfirmation",
+        "type": "address"
+      }
+    ],
+    "name": "renounceRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "role", "type": "bytes32" },
+      { "internalType": "address", "name": "account", "type": "address" }
+    ],
+    "name": "revokeRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "stakingContract",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "multiplier",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum IAvsGovernance.SharedSecurityProvider",
+            "name": "sharedSecurityProvider",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IAvsGovernance.VotingPowerMultiplier",
+        "name": "_votingPowerMultiplier",
+        "type": "tuple"
+      }
+    ],
+    "name": "setStakingContractMultiplier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "stakingContract",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "multiplier",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum IAvsGovernance.SharedSecurityProvider",
+            "name": "sharedSecurityProvider",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IAvsGovernance.VotingPowerMultiplier[]",
+        "name": "_votingPowerMultipliers",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "setStakingContractMultiplierBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "stakingContract",
+            "type": "address"
+          },
+          {
+            "internalType": "enum IAvsGovernance.SharedSecurityProvider",
+            "name": "sharedSecurityProvider",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct IAvsGovernance.StakingContractInfo[]",
+        "name": "_stakingContractsDetails",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "setSupportedStakingContracts",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "stakingContracts",
+    "outputs": [
+      { "internalType": "address[]", "name": "", "type": "address[]" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "interfaceId", "type": "bytes4" }
+    ],
+    "name": "supportsInterface",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes4", "name": "_pausableFlow", "type": "bytes4" }
+    ],
+    "name": "unpause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unregisterAsOperatorFromAvs",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unregisterAsOperatorFromEigenLayer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          { "internalType": "uint48", "name": "deadline", "type": "uint48" },
+          { "internalType": "bytes", "name": "data", "type": "bytes" }
+        ],
+        "internalType": "struct IAvsGovernance.SymbioticOptOutSignature",
+        "name": "_unregistrationSignature",
+        "type": "tuple"
+      }
+    ],
+    "name": "unregisterAsOperatorFromSymbiotic",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" }
+    ],
+    "name": "votingPower",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "_operator", "type": "address" },
+      {
+        "internalType": "address[]",
+        "name": "_stakingContracts",
+        "type": "address[]"
+      }
+    ],
+    "name": "votingPowerPerStakingContracts",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

@@ -22,29 +22,31 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gocql/gocql"
+
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 var (
 	dbMain   *gocql.Session
 	db       *gocql.Session
-	loggerdb = logging.GetLogger(logging.Development, logging.DatabaseProcess)
-	//logger   = logging.GetLogger(logging.Development, logging.EventService)
+	dbLogger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
+	logger   = logging.GetLogger(logging.Development, logging.RegistrarProcess)
 
-	// Variables to track the last processed block for each contract
-	lastProcessedBlockAVS  uint64
+	ethClient  *ethclient.Client
+	baseClient *ethclient.Client
+
+	lastProcessedBlockEth  uint64
 	lastProcessedBlockBase uint64
 	blockProcessingMutex   sync.Mutex
-	//EthRpcUrl                  string // Regular RPC URL (not WebSocket)
-	//BaseRpcUrl                 string // Regular RPC URL (not WebSocket)
-	//DatabaseIPAddress          string // Your database API URL
 )
 
 type OperatorRegisteredEvent struct {
 	Operator common.Address
 	BlsKey   [4]*big.Int
-	Raw      ethtypes.Log // This contains metadata about the event
+	Raw      ethtypes.Log
 }
 
 type OperatorUnregisteredEvent struct {
@@ -58,7 +60,7 @@ type TaskSubmittedEvent struct {
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
-	AttestersIds     []string // Added this field
+	AttestersIds     []string
 	Raw              ethtypes.Log
 }
 
@@ -68,21 +70,14 @@ type TaskRejectedEvent struct {
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
-	AttestersIds     []string // Add this field
+	AttestersIds     []string
 	Raw              ethtypes.Log
-}
-
-// Add this init function
-func init() {
-	// Remove any database operations from here
-	// Only initialize other necessary components
-	// ... other non-database initializations ...
 }
 
 // SetDatabaseConnection sets both database connections for the registrar package
 func SetDatabaseConnection(mainSession *gocql.Session, registrarSession *gocql.Session) {
 	if mainSession == nil || registrarSession == nil {
-		loggerdb.Fatal("Database sessions cannot be nil")
+		dbLogger.Fatal("Database sessions cannot be nil")
 		return
 	}
 
@@ -97,55 +92,7 @@ func SetDatabaseConnection(mainSession *gocql.Session, registrarSession *gocql.S
 	}
 	db = registrarSession
 
-	loggerdb.Info("Database connections set for registrar package")
-}
-
-// GetDatabaseConnection returns the current database session
-func GetDatabaseConnection() *gocql.Session {
-	return db
-}
-
-// Helper function to check database connection
-func isDatabaseConnected() bool {
-	return db != nil && !db.Closed()
-}
-
-// For any function that needs database access, add a check:
-// func someFunction() error {
-// 	if !isDatabaseConnected() {
-// 		return fmt.Errorf("database connection not initialized")
-// 	}
-// 	// Use db safely here
-// 	return nil
-// }
-
-func InitEventProcessing(ethClient *ethclient.Client, baseClient *ethclient.Client) error {
-	var err error
-
-	// Get current block numbers
-	blockProcessingMutex.Lock()
-	defer blockProcessingMutex.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Get latest block numbers from each network
-	ethLatestBlock, err := ethClient.BlockNumber(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get ETH latest block: %v", err)
-	}
-
-	baseLatestBlock, err := baseClient.BlockNumber(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get BASE latest block: %v", err)
-	}
-
-	// Initialize with current block numbers (could also load from database if you want to restore from a previous state)
-	lastProcessedBlockAVS = ethLatestBlock
-	lastProcessedBlockBase = baseLatestBlock
-
-	logger.Info(fmt.Sprintf("Initialized event processing from ETH block %d and BASE block %d", lastProcessedBlockAVS, lastProcessedBlockBase))
-	return nil
+	dbLogger.Info("Database connections set for registrar package")
 }
 
 // StartEventPolling begins the event polling process
@@ -153,10 +100,46 @@ func StartEventPolling(
 	avsGovernanceAddress common.Address,
 	attestationCenterAddress common.Address,
 ) {
+	// Create clients (non-WebSocket)
+	var err error
+	ethClient, err = ethclient.Dial(config.EthRpcUrl)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to connect to Ethereum node: %v", err))
+		return
+	}
+	logger.Info("Ethereum node connected")
+	defer ethClient.Close()
+
+	baseClient, err = ethclient.Dial(config.BaseRpcUrl)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to connect to Base node: %v", err))
+		return
+	}
+	logger.Info("Base node connected")
+	defer baseClient.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get latest block numbers from each network
+	ethLatestBlock, err := ethClient.BlockNumber(ctx)
+	if err != nil {
+		logger.Error(fmt.Sprintf("failed to get ETH latest block: %v", err))
+	}
+
+	baseLatestBlock, err := baseClient.BlockNumber(ctx)
+	if err != nil {
+		logger.Error(fmt.Sprintf("failed to get BASE latest block: %v", err))
+	}
+
+	// Initialize with current block numbers (could also load from database if you want to restore from a previous state)
+	lastProcessedBlockEth = ethLatestBlock
+	lastProcessedBlockBase = baseLatestBlock
+
 	logger.Info("Starting event polling service...")
 
 	// Create ticker for 20-minute interval
-	ticker := time.NewTicker(20 * time.Minute)
+	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 
 	// Initial poll immediately on startup
@@ -173,23 +156,6 @@ func pollEvents(
 	attestationCenterAddress common.Address,
 ) {
 	logger.Info("Polling for new events...")
-
-	// Create clients (non-WebSocket)
-	ethClient, err := ethclient.Dial(EthRpcUrl)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to connect to Ethereum node: %v", err))
-		return
-	}
-	logger.Info("Ethereum node connected")
-	defer ethClient.Close()
-
-	baseClient, err := ethclient.Dial(BaseRpcUrl)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to connect to Base node: %v", err))
-		return
-	}
-	logger.Info("Base node connected")
-	defer baseClient.Close()
 
 	// Get current block numbers
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -211,8 +177,8 @@ func pollEvents(
 	//logger.Info("Base Last Block: %d", baseLatestBlock)
 
 	// Process events from AVS Governance contract
-	if ethLatestBlock > lastProcessedBlockAVS {
-		fromBlock := lastProcessedBlockAVS + 1
+	if ethLatestBlock > lastProcessedBlockEth {
+		fromBlock := lastProcessedBlockEth + 1
 		logger.Info(fmt.Sprintf("Checking for AVS Governance events from block %d to %d", fromBlock, ethLatestBlock))
 
 		// Process operator registration events
@@ -229,7 +195,7 @@ func pollEvents(
 
 		// Update last processed block for AVS
 		blockProcessingMutex.Lock()
-		lastProcessedBlockAVS = ethLatestBlock
+		lastProcessedBlockEth = ethLatestBlock
 		blockProcessingMutex.Unlock()
 	}
 
@@ -394,7 +360,7 @@ func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 	}
 
 	// Log the request details for debugging
-	dbServerURL := fmt.Sprintf("%s/api/keepers/%s/status", DatabaseIPAddress, operatorAddress)
+	dbServerURL := fmt.Sprintf("%s/api/keepers/%s/status", config.DatabaseIPAddress, operatorAddress)
 	logger.Info(fmt.Sprintf("Making API request to: %s with payload: %s", dbServerURL, string(jsonData)))
 
 	// Create the HTTP request
@@ -476,9 +442,27 @@ func processTaskSubmittedEvents(
 		logger.Infof("Attester IDs: %v", event.AttestersIds)
 		logger.Infof("Task Number: %d", event.TaskNumber)
 		logger.Infof("Task Definition ID: %d", event.TaskDefinitionId)
+		// logger.Infof("Data: %x", event.Data)
+
+		decodedData := string(event.Data)
+		logger.Infof("Decoded Data: %s", decodedData)
+
+		ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to fetch IPFS content: %v", err))
+			continue
+		}
+		
+		var ipfsData types.IPFSData
+		if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
+			logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
+			continue
+		}
+
+		// logger.Infof("IPFS Data: %+v", ipfsData)
 
 		// Update points in database
-		if err := updatePointsInDatabase(int(event.TaskNumber), event.Operator, event.AttestersIds); err != nil {
+		if err := updatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, event.AttestersIds); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update points in database: %v", err))
 			continue
 		}
@@ -793,7 +777,7 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 	}
 
 	// Create the HTTP request
-	dbServerURL := fmt.Sprintf("%s/api/keepers", DatabaseIPAddress)
+	dbServerURL := fmt.Sprintf("%s/api/keepers", config.DatabaseIPAddress)
 	req, err := http.NewRequest("POST", dbServerURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to create HTTP request: %v", err))
@@ -832,15 +816,19 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 // New function to handle database updates
 func updatePointsInDatabase(taskID int, performerAddress common.Address, attestersIds []string) error {
 	if db == nil {
-		return fmt.Errorf("database connection not initialized")
+		logger.Error("Database connection is not initialized")
+		return fmt.Errorf("database connection not initialized, please restart the service")
 	}
 
 	// Get task fee
 	var taskFee int64
 	if err := db.Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
 		taskID).Scan(&taskFee); err != nil {
-		return fmt.Errorf("failed to get task fee: %v", err)
+		logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
+		return fmt.Errorf("failed to get task fee for task ID %d: %v", taskID, err)
 	}
+
+	logger.Info(fmt.Sprintf("Task ID %d has a fee of %d", taskID, taskFee))
 
 	// Skip if performer address is empty
 	if performerAddress != (common.Address{}) {
