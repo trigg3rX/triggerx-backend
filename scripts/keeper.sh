@@ -37,17 +37,17 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 # Build Docker image once
-docker build --no-cache -t jtriggerx-keeper:${VERSION} .
+docker build --no-cache -t triggerx-keeper:${VERSION} .
 
 # Tag images with version and latest
-# docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:${VERSION}
-# docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:latest
+docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:${VERSION}
+docker tag triggerx-keeper:${VERSION} trigg3rx/triggerx-keeper:latest
 
-# # Login to Docker Hub
-# docker login
+# Login to Docker Hub
+docker login
 
-# # Push both version and latest tags
-# docker push trigg3rx/triggerx-keeper:${VERSION}
-# docker push trigg3rx/triggerx-keeper:latest
+# Push both version and latest tags
+docker push trigg3rx/triggerx-keeper:${VERSION}
+docker push trigg3rx/triggerx-keeper:latest
 
-# echo "Successfully built and pushed version: $VERSION and latest tag"
+echo "Successfully built and pushed version: $VERSION and latest tag"

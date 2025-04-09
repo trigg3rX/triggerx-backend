@@ -25,7 +25,7 @@ KEEPER_PID=$!
 # Start othentic-cli in the background
 echo "Starting othentic-cli..."
 othentic-cli node attester \
-    /ip4/127.0.0.1/tcp/9876/p2p/$OTHENTIC_BOOTSTRAP_ID \
+    /ip4/192.168.1.57/tcp/9876/p2p/$OTHENTIC_BOOTSTRAP_ID \
     --avs-webapi http://127.0.0.1 \
     --avs-webapi-port $OPERATOR_RPC_PORT \
     --json-rpc.custom-message-enabled \
