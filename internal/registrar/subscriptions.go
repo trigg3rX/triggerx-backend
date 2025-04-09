@@ -1,14 +1,14 @@
 package registrar
 
 import (
-	"bytes"
+	// "bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
+	// "io"
 	"math/big"
-	"net/http"
+	// "net/http"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +25,7 @@ import (
 	// "github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/bindings/contractAttestationCenter"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -298,6 +299,23 @@ func processOperatorRegisteredEvents(
 		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
 		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
 
+		// Sleep for 5 seconds to allow for network propagation
+		logger.Info("Sleeping for 5 seconds to allow for network propagation...")
+		time.Sleep(5 * time.Second)
+		logger.Info("Resuming operation after sleep")
+		// Get operator ID from the contract
+		attestationCenter, err := contractAttestationCenter.NewAttestationCenter(contractAddress, ethClient)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to create AttestationCenter instance: %v", err))
+		} else {
+			operatorId, err := attestationCenter.OperatorsIdsByAddress(nil, event.Operator)
+			if err != nil {
+				logger.Error(fmt.Sprintf("Failed to get operator ID: %v", err))
+			} else {
+				logger.Info(fmt.Sprintf("Operator ID: %s", operatorId.String()))
+			}
+		}
+
 		// Add keeper to database
 		err = addKeeperToDatabase(event.Operator.Hex(), event.BlsKey, event.Raw.TxHash.Hex())
 		if err != nil {
@@ -362,54 +380,24 @@ func processOperatorUnregisteredEvents(
 func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 	logger.Info(fmt.Sprintf("Updating operator %s status to unregistered in database", operatorAddress))
 
-	// Create the request payload with only the status field
-	updateData := map[string]interface{}{
-		"status": false,
-	}
-
-	// Convert to JSON
-	jsonData, err := json.Marshal(updateData)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to marshal update data: %v", err))
+	var currentKeeperID int64
+	if err := db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		operatorAddress).Scan(&currentKeeperID); err != nil {
+		dbLogger.Errorf("[CreateKeeperData] Error getting max keeper ID: %v", err)
 		return err
 	}
 
-	// Log the request details for debugging
-	dbServerURL := fmt.Sprintf("%s/api/keepers/%s/status", config.DatabaseIPAddress, operatorAddress)
-	logger.Info(fmt.Sprintf("Making API request to: %s with payload: %s", dbServerURL, string(jsonData)))
-
-	// Create the HTTP request
-	req, err := http.NewRequest("PUT", dbServerURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to create HTTP request: %v", err))
+	dbLogger.Infof("[CreateKeeperData] Updating keeper with ID: %d", currentKeeperID)
+	if err := db.Session().Query(`
+        UPDATE triggerx.keeper_data SET 
+            status = ?
+        WHERE keeper_id = ?`,
+		true, currentKeeperID).Exec(); err != nil {
+		dbLogger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		return err
 	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to send HTTP request: %v", err))
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Read the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to read response body: %v", err))
-		return err
-	}
-
-	// Check the response status
-	if resp.StatusCode != http.StatusOK {
-		logger.Error(fmt.Sprintf("Failed to update keeper status. Status: %d, Response: %s", resp.StatusCode, string(body)))
-		return fmt.Errorf("failed to update keeper status: %s", string(body))
-	}
-
+	
 	logger.Info(fmt.Sprintf("Successfully updated keeper %s status to unregistered", operatorAddress))
 	return nil
 }
@@ -776,52 +764,22 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 		blsKeys[i] = key.String()
 	}
 
-	// Create the request payload
-	keeperData := types.CreateKeeperData{
-		KeeperAddress:  operatorAddress,
-		RegisteredTx:   txHash,
-		RewardsAddress: operatorAddress,
-		ConsensusKeys:  blsKeys,
-	}
-
-	// Convert to JSON
-	jsonData, err := json.Marshal(keeperData)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to marshal keeper data: %v", err))
+	var currentKeeperID int64
+	if err := db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		operatorAddress).Scan(&currentKeeperID); err != nil {
+		dbLogger.Errorf("[CreateKeeperData] Error getting max keeper ID: %v", err)
 		return err
 	}
 
-	// Create the HTTP request
-	dbServerURL := fmt.Sprintf("%s/api/keepers", config.DatabaseIPAddress)
-	req, err := http.NewRequest("POST", dbServerURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to create HTTP request: %v", err))
+	dbLogger.Infof("[CreateKeeperData] Updating keeper with ID: %d", currentKeeperID)
+	if err := db.Session().Query(`
+        UPDATE triggerx.keeper_data SET 
+            registered_tx = ?, consensus_keys = ?, status = ?
+        WHERE keeper_id = ?`,
+		txHash, blsKeys, true, currentKeeperID).Exec(); err != nil {
+		dbLogger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		return err
-	}
-
-	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send the request
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to send HTTP request: %v", err))
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Read the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to read response body: %v", err))
-		return err
-	}
-
-	// Check the response status
-	if resp.StatusCode != http.StatusOK {
-		logger.Error(fmt.Sprintf("Failed to add keeper to database. Status: %d, Response: %s", resp.StatusCode, string(body)))
-		return fmt.Errorf("failed to add keeper to database: %s", string(body))
 	}
 
 	logger.Info(fmt.Sprintf("Successfully added keeper %s to database", operatorAddress))
