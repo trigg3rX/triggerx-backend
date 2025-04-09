@@ -14,7 +14,7 @@ import (
 var logger logging.Logger
 
 func main() {
-	
+
 	if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
@@ -55,7 +55,7 @@ func main() {
 
 	// Keep the program running
 	logger.Info("Registrar node is running. Press Ctrl+C to exit.")
-	
+
 	// Keep the main thread alive
 	for {
 		time.Sleep(time.Hour)

@@ -22,7 +22,6 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gocql/gocql"
-	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -59,6 +58,7 @@ type TaskSubmittedEvent struct {
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
+	AttestersIds     []string // Added this field
 	Raw              ethtypes.Log
 }
 
@@ -111,13 +111,13 @@ func isDatabaseConnected() bool {
 }
 
 // For any function that needs database access, add a check:
-func someFunction() error {
-	if !isDatabaseConnected() {
-		return fmt.Errorf("database connection not initialized")
-	}
-	// Use db safely here
-	return nil
-}
+// func someFunction() error {
+// 	if !isDatabaseConnected() {
+// 		return fmt.Errorf("database connection not initialized")
+// 	}
+// 	// Use db safely here
+// 	return nil
+// }
 
 func InitEventProcessing(ethClient *ethclient.Client, baseClient *ethclient.Client) error {
 	var err error
@@ -446,7 +446,9 @@ func processTaskSubmittedEvents(
 		ToBlock:   new(big.Int).SetUint64(toBlock),
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
-			{TaskSubmittedEventSignature()}, // Event signature for TaskSubmitted
+			{TaskSubmittedEventSignature()},
+			nil, // For operator (indexed)
+			nil, // For taskDefinitionId (indexed)
 		},
 	}
 
@@ -470,72 +472,13 @@ func processTaskSubmittedEvents(
 			continue
 		}
 
-		// Log task submission details
-		logger.Info("📥 Task Submitted Event Detected!")
-		logger.Info(fmt.Sprintf("Operator Address: %s", event.Operator.Hex()))
-		logger.Info(fmt.Sprintf("Task Number: %d", event.TaskNumber))
-		logger.Info(fmt.Sprintf("Proof of Task: %s", event.ProofOfTask))
-		logger.Info(fmt.Sprintf("Task Definition ID: %d", event.TaskDefinitionId))
-
-		// Log data as hex if non-empty
-		if len(event.Data) > 0 {
-			logger.Info(fmt.Sprintf("Data: 0x%x", event.Data))
-		} else {
-			logger.Info("Data: <empty>")
-		}
-
-		// Log transaction details
-		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
-		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
-
-		// Fetch the transaction to decode input data
-		tx, isPending, err := baseClient.TransactionByHash(context.Background(), event.Raw.TxHash)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to fetch transaction: %v", err))
-			continue
-		}
-		if isPending {
-			logger.Info("Transaction is pending.")
-			continue
-		}
-
-		// Decode the input data to extract performer address and operator IDs
-		performerAddress, proofOfTask, data, taskDefinitionId, isApproved, tpSignature, taSignature, attestersIds, err := decodeTaskInputData(tx.Data())
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to decode input data: %v", err))
-			continue
-		}
-
-		// Fetch the task information from IPFS using the CID
-		cid := string(data) // Assuming data is the CID
-		IPFSData, err := fetchDataFromCID(cid)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to fetch task data from CID: %v", err))
-			continue
-		}
-
-		// Unmarshal the IPFS data into the IPFSData struct
-		var ipfsData types.IPFSData
-		err = json.Unmarshal([]byte(IPFSData), &ipfsData)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to unmarshal IPFS data: %v", err))
-			continue
-		}
-
-		// Now you can access the TaskID from the TriggerData
-		taskID := ipfsData.TriggerData.TaskID
-		logger.Info(fmt.Sprintf("Task ID: %d", taskID))
-		logger.Info(fmt.Sprintf("Performer Address: %s", performerAddress.Hex()))
-		logger.Info(fmt.Sprintf("Proof of Task: %s", proofOfTask))
-		logger.Info(fmt.Sprintf("Data: %x", data))
-		logger.Info(fmt.Sprintf("Task Definition ID: %d", taskDefinitionId))
-		logger.Info(fmt.Sprintf("Is Approved: %v", isApproved))
-		logger.Info(fmt.Sprintf("TP Signature: %x", tpSignature))
-		logger.Info(fmt.Sprintf("TA Signature: %x", taSignature))
-		logger.Info(fmt.Sprintf("Attesters IDs: %v", attestersIds))
+		logger.Infof("Performer Address: %s", event.Operator)
+		logger.Infof("Attester IDs: %v", event.AttestersIds)
+		logger.Infof("Task Number: %d", event.TaskNumber)
+		logger.Infof("Task Definition ID: %d", event.TaskDefinitionId)
 
 		// Update points in database
-		if err := updatePointsInDatabase(taskID, performerAddress, attestersIds); err != nil {
+		if err := updatePointsInDatabase(int(event.TaskNumber), event.Operator, event.AttestersIds); err != nil {
 			logger.Error(fmt.Sprintf("Failed to update points in database: %v", err))
 			continue
 		}
@@ -617,8 +560,7 @@ func OperatorUnregisteredEventSignature() common.Hash {
 
 // TaskSubmittedEventSignature returns the signature hash for the TaskSubmitted event
 func TaskSubmittedEventSignature() common.Hash {
-	return crypto.Keccak256Hash([]byte("TaskSubmitted(address,uint32,string,bytes,uint16)"))
-	// Exactly matches the Solidity event definition, no extra spaces
+	return crypto.Keccak256Hash([]byte("TaskSubmitted(address,uint32,string,bytes,uint16,uint256[])"))
 }
 
 func TaskRejectedEventSignature() common.Hash {
@@ -695,15 +637,20 @@ func ParseOperatorUnregistered(log ethtypes.Log) (*OperatorUnregisteredEvent, er
 
 // ParseTaskSubmitted parses a log into the TaskSubmitted event
 func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
-	// Define the event ABI
-	eventSignature := "TaskSubmitted(address,uint32,string,bytes,uint16)"
-	eventABI := fmt.Sprintf(`[{"name":"TaskSubmitted","type":"event","inputs":[
-    {"name":"operator","type":"address","indexed":false},
-    {"name":"taskNumber","type":"uint32","indexed":false},
-    {"name":"proofOfTask","type":"string","indexed":false},
-    {"name":"data","type":"bytes","indexed":false},
-    {"name":"taskDefinitionId","type":"uint16","indexed":false}
-]}]`)
+	// Define the complete event ABI including attestersIds
+	eventABI := `[{
+        "anonymous": false,
+        "inputs": [
+            {"indexed": true, "name": "operator", "type": "address"},
+            {"indexed": false, "name": "taskNumber", "type": "uint32"},
+            {"indexed": false, "name": "proofOfTask", "type": "string"},
+            {"indexed": false, "name": "data", "type": "bytes"},
+            {"indexed": true, "name": "taskDefinitionId", "type": "uint16"},
+            {"indexed": false, "name": "attestersIds", "type": "uint256[]"}
+        ],
+        "name": "TaskSubmitted",
+        "type": "event"
+    }]`
 
 	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
 	if err != nil {
@@ -711,55 +658,47 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 	}
 
 	// Verify the event signature
-	expectedTopic := crypto.Keccak256Hash([]byte(eventSignature))
+	expectedTopic := TaskSubmittedEventSignature()
 	if log.Topics[0] != expectedTopic {
 		return nil, fmt.Errorf("unexpected event signature: got %s, expected %s",
 			log.Topics[0].Hex(), expectedTopic.Hex())
 	}
 
-	// Prepare event result
-	var event TaskSubmittedEvent
-	event.Raw = log
-
-	// Unpack the non-indexed fields
-	unpacked := make(map[string]interface{})
-	err = parsedABI.UnpackIntoMap(unpacked, "TaskSubmitted", log.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unpack into map: %v", err)
+	// Extract indexed parameters
+	if len(log.Topics) < 3 {
+		return nil, fmt.Errorf("not enough topics for TaskSubmitted event")
 	}
 
-	// Extract the fields from the unpacked data
-	if operator, ok := unpacked["operator"].(common.Address); ok {
-		event.Operator = operator
-	} else {
-		return nil, fmt.Errorf("failed to extract operator address")
+	operator := common.BytesToAddress(log.Topics[1].Bytes())
+	taskDefinitionId := binary.BigEndian.Uint16(log.Topics[2].Bytes()[30:32]) // Last 2 bytes
+
+	// Unpack non-indexed parameters
+	var unpacked struct {
+		TaskNumber   uint32
+		ProofOfTask  string
+		Data         []byte
+		AttestersIds []*big.Int
 	}
 
-	if taskNumber, ok := unpacked["taskNumber"].(uint32); ok {
-		event.TaskNumber = taskNumber
-	} else {
-		return nil, fmt.Errorf("failed to extract task number")
+	if err := parsedABI.UnpackIntoInterface(&unpacked, "TaskSubmitted", log.Data); err != nil {
+		return nil, fmt.Errorf("failed to unpack event data: %v", err)
 	}
 
-	if proofOfTask, ok := unpacked["proofOfTask"].(string); ok {
-		event.ProofOfTask = proofOfTask
-	} else {
-		return nil, fmt.Errorf("failed to extract proof of task")
+	// Convert attestersIds to strings
+	attestersIds := make([]string, len(unpacked.AttestersIds))
+	for i, id := range unpacked.AttestersIds {
+		attestersIds[i] = id.String()
 	}
 
-	if data, ok := unpacked["data"].([]byte); ok {
-		event.Data = data
-	} else {
-		return nil, fmt.Errorf("failed to extract data")
-	}
-
-	if taskDefinitionId, ok := unpacked["taskDefinitionId"].(uint16); ok {
-		event.TaskDefinitionId = taskDefinitionId
-	} else {
-		return nil, fmt.Errorf("failed to extract task definition ID")
-	}
-
-	return &event, nil
+	return &TaskSubmittedEvent{
+		Operator:         operator,
+		TaskNumber:       unpacked.TaskNumber,
+		ProofOfTask:      unpacked.ProofOfTask,
+		Data:             unpacked.Data,
+		TaskDefinitionId: taskDefinitionId,
+		AttestersIds:     attestersIds,
+		Raw:              log,
+	}, nil
 }
 
 // ParseTaskRejected parses a log into the TaskRejected event
@@ -890,95 +829,33 @@ func addKeeperToDatabase(operatorAddress string, blsKeysArray [4]*big.Int, txHas
 	return nil
 }
 
-// Function to decode the input data of the task submission
-func decodeTaskInputData(data []byte) (common.Address, string, []byte, uint16, bool, [2]*big.Int, [2]*big.Int, []string, error) {
-	// Define the ABI of the contract containing the submitTask function
-	const submitTaskABI = `[{"inputs":[{"components":[{"internalType":"string","name":"proofOfTask","type":"string"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"address","name":"taskPerformer","type":"address"},{"internalType":"uint16","name":"taskDefinitionId","type":"uint16"}],"internalType":"tuple","name":"_taskInfo","type":"tuple"},{"components":[{"internalType":"bool","name":"isApproved","type":"bool"},{"internalType":"uint256[2]","name":"tpSignature","type":"uint256[2]"},{"internalType":"uint256[2]","name":"taSignature","type":"uint256[2]"},{"internalType":"string[]","name":"attestersIds","type":"string[]"}],"internalType":"tuple","name":"_blsTaskSubmissionDetails","type":"tuple"}],"name":"submitTask","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
-
-	// Parse the ABI
-	parsedABI, err := abi.JSON(strings.NewReader(submitTaskABI))
-	if err != nil {
-		return common.Address{}, "", nil, 0, false, [2]*big.Int{}, [2]*big.Int{}, nil, fmt.Errorf("failed to parse ABI: %v", err)
-	}
-
-	// Variables to hold the decoded values
-	var taskInfo struct {
-		ProofOfTask      string
-		Data             []byte
-		TaskPerformer    common.Address
-		TaskDefinitionId uint16
-	}
-	var blsTaskSubmissionDetails struct {
-		IsApproved   bool
-		TpSignature  [2]*big.Int
-		TaSignature  [2]*big.Int
-		AttestersIds []string
-	}
-
-	// Decode the input data
-	err = parsedABI.UnpackIntoInterface(&struct {
-		TaskInfo *struct {
-			ProofOfTask      string
-			Data             []byte
-			TaskPerformer    common.Address
-			TaskDefinitionId uint16
-		}
-		BlsTaskSubmissionDetails *struct {
-			IsApproved   bool
-			TpSignature  [2]*big.Int
-			TaSignature  [2]*big.Int
-			AttestersIds []string
-		}
-	}{&taskInfo, &blsTaskSubmissionDetails}, "submitTask", data)
-	if err != nil {
-		return common.Address{}, "", nil, 0, false, [2]*big.Int{}, [2]*big.Int{}, nil, fmt.Errorf("failed to unpack input data: %v", err)
-	}
-
-	return taskInfo.TaskPerformer, taskInfo.ProofOfTask, taskInfo.Data, taskInfo.TaskDefinitionId, blsTaskSubmissionDetails.IsApproved, blsTaskSubmissionDetails.TpSignature, blsTaskSubmissionDetails.TaSignature, blsTaskSubmissionDetails.AttestersIds, nil
-}
-
-// Function to fetch data from IPFS using CID
-func fetchDataFromCID(cid string) ([]byte, error) {
-	// Create a new IPFS shell instance
-	sh := shell.NewShell("https://api.pinata.cloud/pinning/pinJSONToIPFS") // Adjust the address if your IPFS node is running elsewhere
-
-	// Fetch the data from IPFS
-	data, err := sh.Cat(cid)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch data from IPFS: %v", err)
-	}
-	defer data.Close()
-
-	// Read the data into a byte slice
-	body, err := io.ReadAll(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read data from IPFS: %v", err)
-	}
-
-	return body, nil
-}
-
 // New function to handle database updates
-func updatePointsInDatabase(taskID int64, performerAddress common.Address, attestersIds []string) error {
-	// Get task fee from task_data table
+func updatePointsInDatabase(taskID int, performerAddress common.Address, attestersIds []string) error {
+	if db == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
+
+	// Get task fee
 	var taskFee int64
-	if err := db.Query(`
-		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+	if err := db.Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
 		taskID).Scan(&taskFee); err != nil {
-		logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", taskID, err))
-		return err
+		return fmt.Errorf("failed to get task fee: %v", err)
 	}
 
-	// Update performer points
-	if err := updatePerformerPoints(performerAddress.Hex(), taskFee); err != nil {
-		return err
+	// Skip if performer address is empty
+	if performerAddress != (common.Address{}) {
+		if err := updatePerformerPoints(performerAddress.Hex(), taskFee); err != nil {
+			return err
+		}
 	}
 
-	// Update attester points
+	// Process attesters
 	for _, attesterId := range attestersIds {
-		if err := updateAttesterPoints(attesterId, taskFee); err != nil {
-			logger.Error(fmt.Sprintf("Failed to update points for attester %s: %v", attesterId, err))
-			continue
+		if attesterId != "" {
+			if err := updateAttesterPoints(attesterId, taskFee); err != nil {
+				logger.Error(fmt.Sprintf("Attester points update failed: %v", err))
+				continue
+			}
 		}
 	}
 
