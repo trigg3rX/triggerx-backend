@@ -2,31 +2,42 @@ package config
 
 import (
 	"os"
-	// "github.com/gin-gonic/gin"
+
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 var (
-	logger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
+	logger logging.Logger
 
-	ManagerIPAddress           string
-	DatabasePort             string
+	EthRpcUrl                string
+	BaseRpcUrl               string
+	AvsGovernanceAddress     string
+	AttestationCenterAddress string
+
+	DatabaseIPAddress string
 )
 
 func Init() {
+	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
+
+	// var err error
 	err := godotenv.Load()
 	if err != nil {
-		logger.Error("Error loading .env file", "error", err)
+		logger.Fatal("Error loading .env file")
 	}
 
-	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
-	DatabasePort = os.Getenv("DATABASE_RPC_PORT")
-	
-	if ManagerIPAddress == "" || DatabasePort == "" {
-		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
+	EthRpcUrl = os.Getenv("L1_RPC")
+	BaseRpcUrl = os.Getenv("L2_RPC")
+	AvsGovernanceAddress = os.Getenv("AVS_GOVERNANCE_ADDRESS")
+	AttestationCenterAddress = os.Getenv("ATTESTATION_CENTER_ADDRESS")
+	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
+
+	if EthRpcUrl == "" || BaseRpcUrl == "" || DatabaseIPAddress == "" || AvsGovernanceAddress == "" || AttestationCenterAddress == "" {
+		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 }
