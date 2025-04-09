@@ -96,7 +96,7 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 
 	// If no existing key found, create a new one
 	apiKey := &types.ApiKey{
-		Key:       uuid.New().String(),
+		Key:       "trgX_" + uuid.New().String(),
 		Owner:     req.Owner,
 		IsActive:  true,
 		RateLimit: req.RateLimit,
