@@ -39,7 +39,48 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		req.RateLimit = 60 // Default rate limit: 60 requests per minute
 	}
 
-	// Generate a new API key
+	// First check if user already has an API key
+	var existingKey types.ApiKey
+	checkQuery := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
+				  FROM triggerx.apikeys WHERE owner = ? ALLOW FILTERING`
+
+	err := h.db.Session().Query(checkQuery, req.Owner).Scan(
+		&existingKey.Key,
+		&existingKey.Owner,
+		&existingKey.IsActive,
+		&existingKey.RateLimit,
+		&existingKey.LastUsed,
+		&existingKey.CreatedAt,
+	)
+
+	if err == nil {
+		// User already has an API key, update it
+		updateQuery := `UPDATE triggerx.apikeys 
+					   SET isActive = ?, rateLimit = ?, lastUsed = ? 
+					   WHERE key = ?`
+
+		if err := h.db.Session().Query(updateQuery,
+			true,
+			req.RateLimit,
+			time.Time{},
+			existingKey.Key,
+		).Exec(); err != nil {
+			h.logger.Errorf("Failed to update existing API key: %v", err)
+			http.Error(w, "Failed to update API key", http.StatusInternalServerError)
+			return
+		}
+
+		existingKey.IsActive = true
+		existingKey.RateLimit = req.RateLimit
+		existingKey.LastUsed = time.Time{}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(existingKey)
+		return
+	}
+
+	// If no existing key found, create a new one
 	apiKey := &types.ApiKey{
 		Key:       uuid.New().String(),
 		Owner:     req.Owner,
