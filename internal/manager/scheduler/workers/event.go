@@ -18,15 +18,16 @@ import (
 )
 
 type EventBasedWorker struct {
-	jobID        int64
-	scheduler    JobScheduler
-	chainID      string
-	jobData      *types.HandleCreateJobData
-	client       *ethclient.Client
-	subscription ethereum.Subscription
-	logsChan     chan gethtypes.Log
-	stopChan     chan struct{}
-	wg           sync.WaitGroup
+	jobID           int64
+	scheduler       JobScheduler
+	chainID         string
+	jobData         *types.HandleCreateJobData
+	client          *ethclient.Client
+	subscription    ethereum.Subscription
+	logsChan        chan gethtypes.Log
+	stopChan        chan struct{}
+	wg              sync.WaitGroup
+	processedEvents map[string]struct{}
 	BaseWorker
 }
 
@@ -74,8 +75,6 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	triggerData.LastExecuted = time.Now().UTC()
 	triggerData.ConditionParams = make(map[string]interface{})
 
-	// Main event loop
-	// Main event loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -104,26 +103,56 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 			}
 
 		case log := <-w.logsChan:
+			// Detailed event logging for debugging
+			w.scheduler.Logger().Infof("Received event (Block: %d, TxIndex: %d, LogIndex: %d, TxHash: %s)",
+				log.BlockNumber, log.TxIndex, log.Index, log.TxHash.Hex())
+
+			// Check if we've already processed this event (deduplication)
+			if w.isEventProcessed(log) {
+				w.scheduler.Logger().Debugf("Skipping already processed event for job %d", w.jobID)
+				continue
+			}
+
 			// Check timeframe
 			if w.jobData.TimeFrame > 0 && time.Now().UTC().After(endTime) {
 				w.scheduler.Logger().Infof("Timeframe reached for job %d, stopping worker", w.jobID)
 				return
 			}
 
-			w.scheduler.Logger().Infof("Event detected for job %d: %v", w.jobID, log.TxHash.Hex())
-
 			// Handle the event exactly once
 			w.handleEvent(log, &triggerData)
+			w.markEventProcessed(log) // Mark event as processed
 
-			// For non-recurring jobs, exit immediately after handling the event
+			// For non-recurring jobs, add small delay then exit
 			if !w.jobData.Recurring {
+				time.Sleep(200 * time.Millisecond) // Allow pending operations to complete
 				w.scheduler.Logger().Infof("Non-recurring job %d completed, stopping worker", w.jobID)
 				return
 			}
-
-			// For recurring jobs, continue listening for new events
 		}
 	}
+	// For recurring jobs, continue listening for new events
+}
+
+func (w *EventBasedWorker) isEventProcessed(log gethtypes.Log) bool {
+	// Use a combination of block number, tx index and log index as unique identifier
+	eventID := fmt.Sprintf("%d-%d-%d", log.BlockNumber, log.TxIndex, log.Index)
+
+	// Check if we've seen this event before (you might want to use a sync.Map for thread safety)
+	_, exists := w.processedEvents[eventID]
+	return exists
+}
+
+// markEventProcessed records that we've handled this event
+func (w *EventBasedWorker) markEventProcessed(log gethtypes.Log) {
+	eventID := fmt.Sprintf("%d-%d-%d", log.BlockNumber, log.TxIndex, log.Index)
+
+	// Initialize map if needed
+	if w.processedEvents == nil {
+		w.processedEvents = make(map[string]struct{})
+	}
+
+	w.processedEvents[eventID] = struct{}{}
 }
 
 func (w *EventBasedWorker) connect(ctx context.Context) error {
