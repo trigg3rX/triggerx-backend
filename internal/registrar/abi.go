@@ -17,32 +17,34 @@ var (
 )
 
 // Custom event structures to replace the binding-generated ones
-type OperatorRegistered struct {
+type OperatorRegisteredEvent struct {
 	Operator common.Address
 	BlsKey   [4]*big.Int
 	Raw      types.Log
 }
 
-type OperatorUnregistered struct {
+type OperatorUnregisteredEvent struct {
 	Operator common.Address
 	Raw      types.Log
 }
 
-type TaskSubmitted struct {
+type TaskSubmittedEvent struct {
 	Operator         common.Address
 	TaskNumber       uint32
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
+	AttestersIds     []*big.Int
 	Raw              types.Log
 }
 
-type TaskRejected struct {
+type TaskRejectedEvent struct {
 	Operator         common.Address
 	TaskNumber       uint32
 	ProofOfTask      string
 	Data             []byte
 	TaskDefinitionId uint16
+	AttestersIds     []*big.Int
 	Raw              types.Log
 }
 
@@ -51,6 +53,7 @@ func InitABI() error {
 	// Load AvsGovernance ABI
 	avsGovernanceABIJSON, err := os.ReadFile("pkg/bindings/abi/AvsGovernance.json")
 	if err != nil {
+		logger.Fatalf("Failed to read AvsGovernance ABI: %v", err)
 		return fmt.Errorf("failed to read AvsGovernance ABI: %v", err)
 	}
 	avsGovernanceABI, err = abi.JSON(strings.NewReader(string(avsGovernanceABIJSON)))
@@ -61,6 +64,7 @@ func InitABI() error {
 	// Load AttestationCenter ABI
 	attestationCenterABIJSON, err := os.ReadFile("pkg/bindings/abi/AttestationCenter.json")
 	if err != nil {
+		logger.Fatalf("Failed to read AttestationCenter ABI: %v", err)
 		return fmt.Errorf("failed to read AttestationCenter ABI: %v", err)
 	}
 	attestationCenterABI, err = abi.JSON(strings.NewReader(string(attestationCenterABIJSON)))

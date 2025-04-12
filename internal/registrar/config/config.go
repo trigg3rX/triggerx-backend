@@ -17,7 +17,8 @@ var (
 	AvsGovernanceAddress     string
 	AttestationCenterAddress string
 
-	DatabaseIPAddress string
+	DatabaseDockerIPAddress string
+	DatabaseDockerPort      string
 )
 
 func Init() {
@@ -33,9 +34,10 @@ func Init() {
 	BaseRpcUrl = os.Getenv("L2_RPC")
 	AvsGovernanceAddress = os.Getenv("AVS_GOVERNANCE_ADDRESS")
 	AttestationCenterAddress = os.Getenv("ATTESTATION_CENTER_ADDRESS")
-	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
+	DatabaseDockerIPAddress = os.Getenv("DATABASE_DOCKER_IP_ADDRESS")
+	DatabaseDockerPort = os.Getenv("DATABASE_DOCKER_PORT")
 
-	if EthRpcUrl == "" || BaseRpcUrl == "" || DatabaseIPAddress == "" || AvsGovernanceAddress == "" || AttestationCenterAddress == "" {
+	if EthRpcUrl == "" || BaseRpcUrl == "" || DatabaseDockerIPAddress == "" || DatabaseDockerPort == "" || AvsGovernanceAddress == "" || AttestationCenterAddress == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
