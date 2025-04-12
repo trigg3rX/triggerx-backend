@@ -75,6 +75,7 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	triggerData.ConditionParams = make(map[string]interface{})
 
 	// Main event loop
+	// Main event loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -110,13 +111,17 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 			}
 
 			w.scheduler.Logger().Infof("Event detected for job %d: %v", w.jobID, log.TxHash.Hex())
+
+			// Handle the event exactly once
 			w.handleEvent(log, &triggerData)
 
-			// If not recurring, exit after first execution
+			// For non-recurring jobs, exit immediately after handling the event
 			if !w.jobData.Recurring {
-				w.scheduler.Logger().Infof("Non-recurring job %d completed", w.jobID)
+				w.scheduler.Logger().Infof("Non-recurring job %d completed, stopping worker", w.jobID)
 				return
 			}
+
+			// For recurring jobs, continue listening for new events
 		}
 	}
 }
