@@ -72,8 +72,7 @@ type CreateKeeperData struct {
 	KeeperAddress  string   `json:"keeper_address"`
 	RegisteredTx   string   `json:"registered_tx"`
 	RewardsAddress string   `json:"rewards_address"`
-	ConsensusKeys  []string `json:"consensus_keys"`
-	ChatID         int64    `json:"chat_id"` // Add this line
+	ChatID         int64    `json:"chat_id"`
 }
 
 type GoogleFormCreateKeeperData struct {
@@ -81,11 +80,6 @@ type GoogleFormCreateKeeperData struct {
 	RewardsAddress string `json:"rewards_address"`
 	KeeperName     string `json:"keeper_name"`
 	EmailID        string `json:"email_id"`
-}
-
-type UpdateKeeperConnectionData struct {
-	KeeperAddress     string `json:"keeper_address"`
-	ConnectionAddress string `json:"connection_address"`
 }
 
 type UpdateKeeperConnectionDataResponse struct {
