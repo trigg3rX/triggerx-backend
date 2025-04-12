@@ -39,7 +39,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	w.done = make(chan bool) // Ensure we have a fresh channel
 
 	w.scheduler.Logger().Infof("Starting condition-based job %d", w.jobID)
-	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptIPFSUrl)
+	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptTriggerFunction)
 
 	var triggerData types.TriggerData
 	triggerData.TimeInterval = w.jobData.TimeInterval
@@ -157,7 +157,7 @@ func (w *ConditionBasedWorker) handleError(err error) {
 }
 
 func (w *ConditionBasedWorker) checkCondition() (bool, error) {
-	resp, err := http.Get(w.jobData.ScriptIPFSUrl)
+	resp, err := http.Get(w.jobData.ScriptTriggerFunction)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch API data: %v", err)
 	}
