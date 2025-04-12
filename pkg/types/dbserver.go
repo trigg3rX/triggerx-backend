@@ -122,3 +122,9 @@ type CreateApiKeyRequest struct {
 	Owner     string `json:"owner"`
 	RateLimit int    `json:"rateLimit"`
 }
+
+type DailyRewardsPoints struct {
+	KeeperID      int64  `json:"keeper_id"`
+	RewardsBooster int    `json:"rewards_booster"`
+	KeeperPoints   int64  `json:"keeper_points"`
+}
