@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+
 	// "io"
 	"math/big"
 	// "net/http"
@@ -147,7 +148,7 @@ func StartEventPolling(
 	defer ticker.Stop()
 
 	dbConfig := &database.Config{
-		Hosts:       []string{"localhost:9042"},
+		Hosts:       []string{"192.168.1.57:9042"},
 		Timeout:     time.Second * 30,
 		Retries:     3,
 		ConnectWait: time.Second * 20,
@@ -397,7 +398,7 @@ func updateKeeperStatusAsUnregistered(operatorAddress string) error {
 		dbLogger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
 		return err
 	}
-	
+
 	logger.Info(fmt.Sprintf("Successfully updated keeper %s status to unregistered", operatorAddress))
 	return nil
 }
@@ -528,6 +529,39 @@ func processTaskRejectedEvents(
 		// Log transaction details
 		logger.Info(fmt.Sprintf("Transaction Hash: %s", event.Raw.TxHash.Hex()))
 		logger.Info(fmt.Sprintf("Block Number: %d", event.Raw.BlockNumber))
+		decodedData := string(event.Data)
+		ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to fetch IPFS content: %v", err))
+			continue
+		}
+
+		var ipfsData types.IPFSData
+		if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
+			logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
+			continue
+		}
+
+		// Get task fee
+		var taskFee int64
+		err = db.Session().Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+			ipfsData.TriggerData.TaskID).Scan(&taskFee)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to get task fee for task ID %d: %v", ipfsData.TriggerData.TaskID, err))
+			continue
+		}
+
+		logger.Info(fmt.Sprintf("Task ID %d has a fee of %d", ipfsData.TriggerData.TaskID, taskFee))
+
+		// Process attesters - they still get points even if task was rejected
+		for _, attesterId := range event.AttestersIds {
+			if attesterId != "" {
+				if err := updateAttesterPoints(attesterId, taskFee); err != nil {
+					logger.Error(fmt.Sprintf("Attester points update failed: %v", err))
+					continue
+				}
+			}
+		}
 	}
 
 	return nil
@@ -858,34 +892,37 @@ func updatePerformerPoints(performerAddress string, taskFee int64) error {
 // Helper function to update attester points
 func updateAttesterPoints(attesterId string, taskFee int64) error {
 	var attesterPoints int64
-	// Convert attesterId from string to int64
-	var attesterIdInt int64
-	_, err := fmt.Sscanf(attesterId, "%d", &attesterIdInt)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to convert attester ID %s to integer: %v", attesterId, err))
-		return err
-	}
+	var keeperID int
 
 	if err := db.Session().Query(`
-		SELECT keeper_points FROM triggerx.keeper_data 
-		WHERE keeper_id = ?`,
-		attesterIdInt).Scan(&attesterPoints); err != nil {
-		logger.Error(fmt.Sprintf("Failed to get attester points for ID %s: %v", attesterId, err))
+		SELECT keeper_id FROM triggerx.keeper_data
+		WHERE attester_id = ? ALLOW FILTERING`,
+	attesterId).Scan(&keeperID); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update attester points: %v", err))
 		return err
-	}
-
-	//multiplyer 2 till 7th April
-	newAttesterPoints := attesterPoints + 2*taskFee
+	}	
 
 	if err := db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET keeper_points = ? 
-		WHERE keeper_id = ?`,
-		newAttesterPoints, attesterIdInt).Exec(); err != nil {
-		logger.Error(fmt.Sprintf("Failed to update attester points for ID %s: %v", attesterId, err))
+        SELECT keeper_points FROM triggerx.keeper_data 
+        WHERE keeper_id = ? ALLOW FILTERING`,
+	keeperID).Scan(&attesterPoints); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update attester points: %v", err))
 		return err
-	}
+	}	
 
-	logger.Info(fmt.Sprintf("Added %d points to attester ID %s", taskFee, attesterId))
+	// Calculate new points (2x multiplier until April 7th)
+	newAttesterPoints := attesterPoints + 2 * taskFee
+
+	// Try updating with integer ID first
+	if err := db.Session().Query(`
+        UPDATE triggerx.keeper_data 
+        SET keeper_points = ? 
+        WHERE keeper_id = ?`,
+	newAttesterPoints, keeperID).Exec(); err != nil {
+		logger.Error(fmt.Sprintf("Failed to update attester points: %v", err))
+		return err
+	}	
+
+	logger.Info(fmt.Sprintf("Added %d points to attester ID %s (total: %d)", taskFee, attesterId, newAttesterPoints))
 	return nil
 }

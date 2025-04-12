@@ -3,6 +3,7 @@ package metrics
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -139,6 +140,12 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	if keeperAddress == "" {
 		http.Error(w, "keeper address parameter 'address' is required", http.StatusBadRequest)
 		return
+	}
+
+	// Ensure the keeper address has the 0x prefix
+	if !strings.HasPrefix(keeperAddress, "0x") {
+		keeperAddress = "0x" + keeperAddress
+		m.logger.Infof("Added 0x prefix to keeper address: %s", keeperAddress)
 	}
 
 	// Create a registry for this specific keeper
