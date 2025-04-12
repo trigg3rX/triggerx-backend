@@ -4,31 +4,13 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/big"
-	"strings"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
 func ParseOperatorRegistered(log ethtypes.Log) (*OperatorRegisteredEvent, error) {
-	// Define the event ABI exactly as emitted by the contract
-	eventABI := `[{
-        "anonymous": false,
-        "inputs": [
-            {"indexed": true, "name": "operator", "type": "address"},
-            {"indexed": false, "name": "blsKey", "type": "uint256[4]"}
-        ],
-        "name": "OperatorRegistered",
-        "type": "event"
-    }]`
-
-	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse ABI: %v", err)
-	}
-
 	// Verify the event signature
 	expectedTopic := crypto.Keccak256Hash([]byte("OperatorRegistered(address,uint256[4])"))
 	if log.Topics[0] != expectedTopic {
@@ -46,7 +28,8 @@ func ParseOperatorRegistered(log ethtypes.Log) (*OperatorRegisteredEvent, error)
 		BlsKey [4]*big.Int
 	}
 
-	err = parsedABI.UnpackIntoInterface(&blsKey, "OperatorRegistered", log.Data)
+	// Use the AvsGovernanceABI from abi.go
+	err := AvsGovernanceABI.UnpackIntoInterface(&blsKey, "OperatorRegistered", log.Data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unpack log data: %v", err)
 	}
@@ -58,7 +41,6 @@ func ParseOperatorRegistered(log ethtypes.Log) (*OperatorRegisteredEvent, error)
 	}, nil
 }
 
-// ParseOperatorUnregistered parses a log into the OperatorUnregistered event
 // ParseOperatorUnregistered parses a log into the OperatorUnregistered event
 func ParseOperatorUnregistered(log ethtypes.Log) (*OperatorUnregisteredEvent, error) {
 	// Verify the event signature
@@ -81,26 +63,6 @@ func ParseOperatorUnregistered(log ethtypes.Log) (*OperatorUnregisteredEvent, er
 
 // ParseTaskSubmitted parses a log into the TaskSubmitted event
 func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
-	// Define the complete event ABI including attestersIds
-	eventABI := `[{
-        "anonymous": false,
-        "inputs": [
-            {"indexed": true, "name": "operator", "type": "address"},
-            {"indexed": false, "name": "taskNumber", "type": "uint32"},
-            {"indexed": false, "name": "proofOfTask", "type": "string"},
-            {"indexed": false, "name": "data", "type": "bytes"},
-            {"indexed": true, "name": "taskDefinitionId", "type": "uint16"},
-            {"indexed": false, "name": "attestersIds", "type": "uint256[]"}
-        ],
-        "name": "TaskSubmitted",
-        "type": "event"
-    }]`
-
-	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse ABI: %v", err)
-	}
-
 	// Verify the event signature
 	expectedTopic := TaskSubmittedEventSignature()
 	if log.Topics[0] != expectedTopic {
@@ -124,14 +86,9 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 		AttestersIds []*big.Int
 	}
 
-	if err := parsedABI.UnpackIntoInterface(&unpacked, "TaskSubmitted", log.Data); err != nil {
+	// Use the AttestationCenterABI from abi.go
+	if err := AttestationCenterABI.UnpackIntoInterface(&unpacked, "TaskSubmitted", log.Data); err != nil {
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
-	}
-
-	// Convert attestersIds to strings
-	attestersIds := make([]string, len(unpacked.AttestersIds))
-	for i, id := range unpacked.AttestersIds {
-		attestersIds[i] = id.String()
 	}
 
 	return &TaskSubmittedEvent{
@@ -147,26 +104,6 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 
 // ParseTaskRejected parses a log into the TaskRejected event
 func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
-	// Define the complete event ABI including attestersIds
-	eventABI := `[{
-        "anonymous": false,
-        "inputs": [
-            {"indexed": true, "name": "operator", "type": "address"},
-            {"indexed": false, "name": "taskNumber", "type": "uint32"},
-            {"indexed": false, "name": "proofOfTask", "type": "string"},
-            {"indexed": false, "name": "data", "type": "bytes"},
-            {"indexed": true, "name": "taskDefinitionId", "type": "uint16"},
-            {"indexed": false, "name": "attestersIds", "type": "uint256[]"}
-        ],
-        "name": "TaskRejected",
-        "type": "event"
-    }]`
-
-	parsedABI, err := abi.JSON(strings.NewReader(eventABI))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse ABI: %v", err)
-	}
-
 	// Verify the event signature
 	expectedTopic := TaskRejectedEventSignature()
 	if log.Topics[0] != expectedTopic {
@@ -190,14 +127,9 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 		AttestersIds []*big.Int
 	}
 
-	if err := parsedABI.UnpackIntoInterface(&unpacked, "TaskRejected", log.Data); err != nil {
+	// Use the AttestationCenterABI from abi.go
+	if err := AttestationCenterABI.UnpackIntoInterface(&unpacked, "TaskRejected", log.Data); err != nil {
 		return nil, fmt.Errorf("failed to unpack event data: %v", err)
-	}
-
-	// Convert attestersIds to strings
-	attestersIds := make([]string, len(unpacked.AttestersIds))
-	for i, id := range unpacked.AttestersIds {
-		attestersIds[i] = id.String()
 	}
 
 	return &TaskRejectedEvent{
@@ -206,7 +138,7 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 		ProofOfTask:      unpacked.ProofOfTask,
 		Data:             unpacked.Data,
 		TaskDefinitionId: taskDefinitionId,
-		AttestersIds:     unpacked.AttestersIds, // Include the attesters IDs
+		AttestersIds:     unpacked.AttestersIds,
 		Raw:              log,
 	}, nil
 }

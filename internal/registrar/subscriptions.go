@@ -2,34 +2,18 @@ package registrar
 
 import (
 	"context"
-	// "encoding/binary"
-	// "encoding/json"
-
-	// "math/big"
-	// "strings"
 	"sync"
 	"time"
 
-	// "github.com/ethereum/go-ethereum"
-	// "github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	// ethtypes "github.com/ethereum/go-ethereum/core/types"
-	// "github.com/ethereum/go-ethereum/crypto"
-
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	// "github.com/trigg3rX/triggerx-backend/pkg/bindings/contractAttestationCenter"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	// "github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	// "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 var (
-	db       *database.Connection
-	dbLogger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
-	logger   = logging.GetLogger(logging.Development, logging.RegistrarProcess)
+	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
 
 	ethClient  *ethclient.Client
 	baseClient *ethclient.Client
@@ -73,21 +57,9 @@ func StartEventPolling(
 		logger.Error("failed to get BASE latest block: %v", err)
 	}
 
-	dbConfig := &database.Config{
-		Hosts:       []string{config.DatabaseDockerIPAddress + ":" + config.DatabaseDockerPort},
-		Timeout:     time.Second * 30,
-		Retries:     3,
-		ConnectWait: time.Second * 20,
-	}
-	db, err = database.NewConnection(dbConfig)
-	if err != nil {
-		logger.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close()
-
 	logger.Info("Starting event polling service...")
 
-	ticker := time.NewTicker(20 * time.Second)
+	ticker := time.NewTicker(20 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -160,6 +132,4 @@ func pollEvents(
 		lastProcessedBlockBase = baseLatestBlock
 		blockProcessingMutex.Unlock()
 	}
-
-	logger.Info("Event polling completed")
 }

@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	avsGovernanceABI     abi.ABI
-	attestationCenterABI abi.ABI
+	AvsGovernanceABI     abi.ABI
+	AttestationCenterABI abi.ABI
 )
 
 // Custom event structures to replace the binding-generated ones
@@ -56,7 +56,7 @@ func InitABI() error {
 		logger.Fatalf("Failed to read AvsGovernance ABI: %v", err)
 		return fmt.Errorf("failed to read AvsGovernance ABI: %v", err)
 	}
-	avsGovernanceABI, err = abi.JSON(strings.NewReader(string(avsGovernanceABIJSON)))
+	AvsGovernanceABI, err = abi.JSON(strings.NewReader(string(avsGovernanceABIJSON)))
 	if err != nil {
 		return fmt.Errorf("failed to parse AvsGovernance ABI: %v", err)
 	}
@@ -67,7 +67,7 @@ func InitABI() error {
 		logger.Fatalf("Failed to read AttestationCenter ABI: %v", err)
 		return fmt.Errorf("failed to read AttestationCenter ABI: %v", err)
 	}
-	attestationCenterABI, err = abi.JSON(strings.NewReader(string(attestationCenterABIJSON)))
+	AttestationCenterABI, err = abi.JSON(strings.NewReader(string(attestationCenterABIJSON)))
 	if err != nil {
 		return fmt.Errorf("failed to parse AttestationCenter ABI: %v", err)
 	}
