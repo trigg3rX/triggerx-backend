@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,35 +179,30 @@ func (w *ConditionBasedWorker) checkCondition() (bool, map[string]interface{}, e
 	w.scheduler.Logger().Infof("API response: %s", string(body))
 
 	// Parse the response to determine if the condition is satisfied
-	// The IPFS script will print multiple lines, we need to extract the condition satisfaction
 	responseStr := string(body)
 
-	// Check if the response contains "Condition satisfied: true"
-	// This is a simple approach - in a production environment, we might want to parse this more robustly
 	if responseStr == "" {
 		return false, nil, fmt.Errorf("empty response from condition script")
 	}
 
-	// Check for "Condition satisfied: true" in the response
+	// Create default condition parameters
+	timestamp := time.Now().UTC()
 	satisfied := false
-	var conditionParams map[string]interface{}
+	var response interface{} = nil
 
-	// For a more robust approach, we could try to parse the actual structured data
-	// For example, if the response is JSON, we could unmarshal it
-	type ConditionResult struct {
-		Satisfied bool      `json:"Satisfied"`
-		Timestamp time.Time `json:"Timestamp"`
-		Response  float64   `json:"Response"`
-	}
-
-	// Try to unmarshal if it looks like JSON
+	// First, check if the response is JSON
 	if len(responseStr) > 0 && (responseStr[0] == '{' || responseStr[0] == '[') {
+		type ConditionResult struct {
+			Satisfied bool        `json:"Satisfied"`
+			Timestamp time.Time   `json:"Timestamp"`
+			Response  interface{} `json:"Response"`
+		}
+
 		var result ConditionResult
 		if err := json.Unmarshal(body, &result); err == nil {
-			w.scheduler.Logger().Infof("Parsed condition result: satisfied=%v, response=%v", result.Satisfied, result.Response)
+			w.scheduler.Logger().Infof("Parsed JSON condition result: satisfied=%v", result.Satisfied)
 
-			// Store only the three requested condition parameters
-			conditionParams = map[string]interface{}{
+			conditionParams := map[string]interface{}{
 				"satisfied": result.Satisfied,
 				"timestamp": result.Timestamp.Format(time.RFC3339),
 				"response":  result.Response,
@@ -214,28 +210,85 @@ func (w *ConditionBasedWorker) checkCondition() (bool, map[string]interface{}, e
 
 			return result.Satisfied, conditionParams, nil
 		}
-		// If JSON parsing failed, fall back to string checking
 	}
 
-	// Simple string-based check as fallback
-	if containsString(responseStr, "Condition satisfied: true") {
+	// If not JSON, check for specific patterns in the output
+
+	// Case 1: Check if this is actually the executed output with "Condition satisfied:" line
+	if strings.Contains(responseStr, "Condition satisfied: true") {
 		satisfied = true
-		// Create basic condition params for string-based check with only the three requested fields
-		conditionParams = map[string]interface{}{
-			"satisfied": satisfied,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"response":  responseStr, // In string-based mode, use the raw response as the response value
+
+		// Try to extract response value if present
+		responseMatch := strings.Index(responseStr, "Response:")
+		if responseMatch != -1 {
+			responseLine := responseStr[responseMatch:]
+			endOfLine := strings.Index(responseLine, "\n")
+			if endOfLine != -1 {
+				responseLine = responseLine[:endOfLine]
+				// Extract value from the line
+				parts := strings.Split(responseLine, ":")
+				if len(parts) > 1 {
+					responseValue := strings.TrimSpace(parts[1])
+					// Try to parse as numeric first
+					if responseFloat, err := strconv.ParseFloat(responseValue, 64); err == nil {
+						response = responseFloat
+					} else {
+						// If not numeric, use as string
+						response = responseValue
+					}
+				}
+			}
+		}
+	} else if strings.Contains(responseStr, "Condition satisfied: false") {
+		satisfied = false
+
+		// Try to extract response value if present
+		responseMatch := strings.Index(responseStr, "Response:")
+		if responseMatch != -1 {
+			responseLine := responseStr[responseMatch:]
+			endOfLine := strings.Index(responseLine, "\n")
+			if endOfLine != -1 {
+				responseLine = responseLine[:endOfLine]
+				// Extract value from the line
+				parts := strings.Split(responseLine, ":")
+				if len(parts) > 1 {
+					responseValue := strings.TrimSpace(parts[1])
+					// Try to parse as numeric first
+					if responseFloat, err := strconv.ParseFloat(responseValue, 64); err == nil {
+						response = responseFloat
+					} else {
+						// If not numeric, use as string
+						response = responseValue
+					}
+				}
+			}
 		}
 	} else {
-		// Even if not satisfied, still provide the three parameters
-		conditionParams = map[string]interface{}{
-			"satisfied": satisfied,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"response":  responseStr,
+		// Case 2: This appears to be source code, not output
+		// We'll check for generic condition patterns
+		if strings.Contains(responseStr, "satisfied :=") {
+			// We're seeing source code
+			w.scheduler.Logger().Infof("Received source code instead of execution result")
+
+			// We can't determine if the condition is satisfied without executing the code
+			// Return a reasonable default
+			satisfied = false
+			response = "Source code received instead of execution result"
 		}
 	}
 
-	w.scheduler.Logger().Infof("Condition satisfied (string check): %v", satisfied)
+	// If response is still nil, use the responseStr as a fallback
+	if response == nil {
+		response = responseStr
+	}
+
+	conditionParams := map[string]interface{}{
+		"satisfied": satisfied,
+		"timestamp": timestamp.Format(time.RFC3339),
+		"response":  response,
+	}
+
+	w.scheduler.Logger().Infof("Condition analysis result: satisfied=%v", satisfied)
 	return satisfied, conditionParams, nil
 }
 
