@@ -2,9 +2,11 @@ package workers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
@@ -45,6 +47,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	triggerData.TimeInterval = w.jobData.TimeInterval
 	triggerData.LastExecuted = time.Now().UTC()
 	triggerData.TriggerTxHash = ""
+	triggerData.ConditionParams = make(map[string]interface{})
 
 	// Calculate end time if timeframe is specified
 	var endTime time.Time
@@ -77,7 +80,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					return
 				}
 
-				satisfied, err := w.checkCondition()
+				satisfied, conditionParams, err := w.checkCondition()
 				if err != nil {
 					w.error = err.Error()
 					w.currentRetry++
@@ -93,7 +96,11 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					w.scheduler.Logger().Infof("Condition satisfied for job %d", w.jobID)
 
 					triggerData.Timestamp = time.Now().UTC()
-					triggerData.ConditionParams = make(map[string]interface{})
+
+					// Update condition parameters with the latest values
+					if conditionParams != nil {
+						triggerData.ConditionParams = conditionParams
+					}
 
 					if err := w.executeTask(w.jobData, &triggerData); err != nil {
 						w.handleError(err)
@@ -156,21 +163,85 @@ func (w *ConditionBasedWorker) handleError(err error) {
 	}
 }
 
-func (w *ConditionBasedWorker) checkCondition() (bool, error) {
+func (w *ConditionBasedWorker) checkCondition() (bool, map[string]interface{}, error) {
 	resp, err := http.Get(w.jobData.ScriptTriggerFunction)
 	if err != nil {
-		return false, fmt.Errorf("failed to fetch API data: %v", err)
+		return false, nil, fmt.Errorf("failed to fetch API data: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, fmt.Errorf("failed to read response body: %v", err)
+		return false, nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	w.scheduler.Logger().Infof("API response: %s", string(body))
 
-	return true, nil
+	// Parse the response to determine if the condition is satisfied
+	// The IPFS script will print multiple lines, we need to extract the condition satisfaction
+	responseStr := string(body)
+
+	// Check if the response contains "Condition satisfied: true"
+	// This is a simple approach - in a production environment, we might want to parse this more robustly
+	if responseStr == "" {
+		return false, nil, fmt.Errorf("empty response from condition script")
+	}
+
+	// Check for "Condition satisfied: true" in the response
+	satisfied := false
+	var conditionParams map[string]interface{}
+
+	// For a more robust approach, we could try to parse the actual structured data
+	// For example, if the response is JSON, we could unmarshal it
+	type ConditionResult struct {
+		Satisfied bool      `json:"Satisfied"`
+		Timestamp time.Time `json:"Timestamp"`
+		Response  float64   `json:"Response"`
+	}
+
+	// Try to unmarshal if it looks like JSON
+	if len(responseStr) > 0 && (responseStr[0] == '{' || responseStr[0] == '[') {
+		var result ConditionResult
+		if err := json.Unmarshal(body, &result); err == nil {
+			w.scheduler.Logger().Infof("Parsed condition result: satisfied=%v, response=%v", result.Satisfied, result.Response)
+
+			// Store only the three requested condition parameters
+			conditionParams = map[string]interface{}{
+				"satisfied": result.Satisfied,
+				"timestamp": result.Timestamp.Format(time.RFC3339),
+				"response":  result.Response,
+			}
+
+			return result.Satisfied, conditionParams, nil
+		}
+		// If JSON parsing failed, fall back to string checking
+	}
+
+	// Simple string-based check as fallback
+	if containsString(responseStr, "Condition satisfied: true") {
+		satisfied = true
+		// Create basic condition params for string-based check with only the three requested fields
+		conditionParams = map[string]interface{}{
+			"satisfied": satisfied,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"response":  responseStr, // In string-based mode, use the raw response as the response value
+		}
+	} else {
+		// Even if not satisfied, still provide the three parameters
+		conditionParams = map[string]interface{}{
+			"satisfied": satisfied,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"response":  responseStr,
+		}
+	}
+
+	w.scheduler.Logger().Infof("Condition satisfied (string check): %v", satisfied)
+	return satisfied, conditionParams, nil
+}
+
+// Helper function to check if a string contains another string
+func containsString(s, substr string) bool {
+	return strings.Contains(s, substr)
 }
 
 func (w *ConditionBasedWorker) executeTask(jobData *types.HandleCreateJobData, triggerData *types.TriggerData) error {
