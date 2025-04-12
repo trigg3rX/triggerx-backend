@@ -97,7 +97,7 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 }
 
 // Move the core logic to a service function
-func (h *Handler) calculateTaskFees(ipfsURLs string) (float64, error) {
+func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	if ipfsURLs == "" {
 		return 0, fmt.Errorf("missing IPFS URLs")
 	}
@@ -161,7 +161,7 @@ func (h *Handler) calculateTaskFees(ipfsURLs string) (float64, error) {
 func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	ipfsURLs := r.URL.Query().Get("ipfs_url")
 
-	totalFee, err := h.calculateTaskFees(ipfsURLs)
+	totalFee, err := h.CalculateTaskFees(ipfsURLs)
 	if err != nil {
 		h.logger.Errorf("[GetTaskFees] Error calculating fees: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

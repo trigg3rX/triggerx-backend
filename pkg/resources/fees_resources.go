@@ -2,6 +2,7 @@ package resources
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -89,6 +90,8 @@ type ResourceStats struct {
 	DynamicComplexity float64 `json:"dynamic_complexity"`
 	ComplexityIndex   float64 `json:"complexity_index"`
 	GasFees           float64 `json:"gas_fees"`
+	Output            string  `json:"output"` // Add this field for script output
+	Status            bool    `json:"status"` // Add this field for condition status
 }
 
 func DownloadIPFSFile(ipfsURL string) (string, error) {
@@ -225,6 +228,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	var codeExecutionTime time.Duration
 	var dockerStartTime = time.Now().UTC()
 	executionStarted := false
+	var outputBuffer bytes.Buffer
 
 	// Get container info to find the mounted directory
 	containerInfo, err := cli.ContainerInspect(ctx, containerID)
@@ -303,7 +307,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 		}
 	}()
 
-	// Print container output and track execution time
+	// Modify the log handling goroutine to capture output
 	go func() {
 		scanner := bufio.NewScanner(logReader)
 		for scanner.Scan() {
@@ -318,6 +322,9 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 				executionEndTime = time.Now().UTC()
 				codeExecutionTime = executionEndTime.Sub(executionStartTime)
 				fmt.Printf("Code execution completed in: %v\n", codeExecutionTime)
+			} else if executionStarted {
+				// Capture output between START_EXECUTION and END_EXECUTION
+				outputBuffer.WriteString(line + "\n")
 			}
 
 			// Print all container logs
@@ -398,6 +405,12 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 
 	// Calculate fees using the measured execution time
 	calculateFees(content, stats, codeExecutionTime)
+
+	// Set the captured output in stats
+	stats.Output = outputBuffer.String()
+
+	// Set status based on successful execution
+	stats.Status = executionStarted && codeExecutionTime > 0
 
 	return stats, nil
 }

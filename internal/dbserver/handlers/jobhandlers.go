@@ -41,7 +41,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate fees for all jobs in one call
-	totalFee, err := h.calculateTaskFees(strings.Join(ipfsURLs, ","))
+	totalFee, err := h.CalculateTaskFees(strings.Join(ipfsURLs, ","))
 	if err != nil {
 		h.logger.Errorf("[CreateJobData] Error calculating fees: %v", err)
 		http.Error(w, "Error calculating fees", http.StatusInternalServerError)

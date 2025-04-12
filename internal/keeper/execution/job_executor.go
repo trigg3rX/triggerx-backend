@@ -28,6 +28,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+
+	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 )
 
 // JobExecutor handles execution of blockchain transactions and contract calls
@@ -328,7 +332,7 @@ func (ac *ArgumentConverter) convertToStruct(value interface{}, targetType abi.T
 }
 
 type JobExecutor struct {
-	ethClient       *ethclient.Client
+	ethClient       EthClientInterface
 	etherscanAPIKey string
 	argConverter    *ArgumentConverter
 	validator       *validation.JobValidator
@@ -483,15 +487,43 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 	// Step 1: Check if we need to evaluate a condition from the script
 	if job.TaskDefinitionID == 6 {
 		if job.ScriptTriggerFunction != "" {
-			satisfied, err := e.evaluateConditionScript(job.ScriptTriggerFunction)
+			// Create Docker client for script execution
+			cli, err := client.NewClientWithOpts(
+				client.FromEnv,
+				client.WithAPIVersionNegotiation(),
+			)
 			if err != nil {
-				logger.Errorf("Failed to evaluate condition script: %v", err)
-				return executionResult, fmt.Errorf("condition script evaluation failed: %v", err)
+				return executionResult, fmt.Errorf("failed to create Docker client: %v", err)
+			}
+			defer cli.Close()
+
+			// Download and execute the condition script
+			codePath, err := resources.DownloadIPFSFile(job.ScriptTriggerFunction)
+			if err != nil {
+				logger.Errorf("Failed to download condition script: %v", err)
+				return executionResult, fmt.Errorf("failed to download condition script: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(codePath))
+
+			// Create and execute container for condition script
+			containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
+			if err != nil {
+				logger.Errorf("Failed to create container for condition script: %v", err)
+				return executionResult, fmt.Errorf("failed to create container: %v", err)
+			}
+			defer cli.ContainerRemove(context.Background(), containerID, dockertypes.ContainerRemoveOptions{Force: true})
+
+			// Monitor resources and get script output
+			stats, err := resources.MonitorResources(context.Background(), cli, containerID)
+			if err != nil {
+				logger.Errorf("Failed to monitor condition script resources: %v", err)
+				return executionResult, fmt.Errorf("failed to monitor resources: %v", err)
 			}
 
-			if !satisfied {
+			// Check if condition was satisfied based on script output
+			if !stats.Status {
 				logger.Infof("Condition not satisfied for job %d, skipping execution", job.JobID)
-				return executionResult, nil // Return without error, but execution was skipped
+				return executionResult, nil
 			}
 			logger.Infof("Condition satisfied for job %d, proceeding with execution", job.JobID)
 		}
@@ -505,70 +537,46 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 		return executionResult, err
 	}
 
-	// Step 3: Fetch dynamic arguments from IPFS or use provided arguments
+	// Step 3: Execute the script to get dynamic arguments if ScriptIPFSUrl is provided
 	var argData interface{}
-
 	if job.ScriptIPFSUrl != "" {
-		// Check if the IPFS URL points to a Go script (detection based on content)
-		scriptContent, err := e.fetchFromIPFS(job.ScriptIPFSUrl)
+		// Create Docker client for argument script
+		cli, err := client.NewClientWithOpts(
+			client.FromEnv,
+			client.WithAPIVersionNegotiation(),
+		)
 		if err != nil {
-			logger.Errorf("Failed to fetch from IPFS: %v", err)
-			return executionResult, fmt.Errorf("failed to fetch from IPFS: %v", err)
+			return executionResult, fmt.Errorf("failed to create Docker client: %v", err)
+		}
+		defer cli.Close()
+
+		// Download and execute the argument generation script
+		codePath, err := resources.DownloadIPFSFile(job.ScriptIPFSUrl)
+		if err != nil {
+			logger.Errorf("Failed to download argument script: %v", err)
+			return executionResult, fmt.Errorf("failed to download argument script: %v", err)
+		}
+		defer os.RemoveAll(filepath.Dir(codePath))
+
+		// Create and execute container for argument script
+		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
+		if err != nil {
+			logger.Errorf("Failed to create container for argument script: %v", err)
+			return executionResult, fmt.Errorf("failed to create container: %v", err)
+		}
+		defer cli.ContainerRemove(context.Background(), containerID, dockertypes.ContainerRemoveOptions{Force: true})
+
+		// Monitor resources and get script output
+		stats, err := resources.MonitorResources(context.Background(), cli, containerID)
+		if err != nil {
+			logger.Errorf("Failed to monitor argument script resources: %v", err)
+			return executionResult, fmt.Errorf("failed to monitor resources: %v", err)
 		}
 
-		// Check if this is a Go script that needs to be executed
-		if strings.HasPrefix(strings.TrimSpace(scriptContent), "package main") {
-			// It's a Go script, execute it to get the result
-			result, err := e.executeGoScript(scriptContent)
-			if err != nil {
-				logger.Errorf("Failed to execute Go script: %v", err)
-				return executionResult, fmt.Errorf("failed to execute Go script: %v", err)
-			}
-
-			// Try to parse the result
-			scriptOutput := strings.TrimSpace(result)
-			logger.Infof("Go script execution result: %s", scriptOutput)
-
-			// Look for "Payload received:" in the output
-			if strings.Contains(scriptOutput, "Payload received:") {
-				parts := strings.Split(scriptOutput, "Payload received:")
-				if len(parts) > 1 {
-					payload := strings.TrimSpace(parts[1])
-
-					// Try to parse as number for uint256 argument
-					if floatVal, err := strconv.ParseFloat(payload, 64); err == nil {
-						// Create a big.Int from the float value
-						intVal := big.NewInt(int64(floatVal))
-						argData = []interface{}{intVal}
-						logger.Infof("Parsed payload as number: %v", intVal)
-					} else {
-						// Use as string
-						argData = []interface{}{payload}
-						logger.Infof("Using payload as string: %s", payload)
-					}
-				}
-			} else {
-				// Try to parse the entire output as a number
-				if floatVal, err := strconv.ParseFloat(scriptOutput, 64); err == nil {
-					argData = []interface{}{big.NewInt(int64(floatVal))}
-					logger.Infof("Parsed output as number: %v", floatVal)
-				} else {
-					// Use as string
-					argData = []interface{}{scriptOutput}
-					logger.Infof("Using output as string: %s", scriptOutput)
-				}
-			}
-		} else {
-			// Not a Go script, try to parse as JSON
-			var parsedData interface{}
-			if err := json.Unmarshal([]byte(scriptContent), &parsedData); err == nil {
-				argData = parsedData
-				logger.Infof("Successfully parsed JSON data from IPFS")
-			} else {
-				// If not JSON, treat as a string array
-				argData = strings.Split(strings.TrimSpace(scriptContent), "\n")
-				logger.Infof("Using raw data from IPFS as string array")
-			}
+		// Parse the script output as arguments
+		if err := json.Unmarshal([]byte(stats.Output), &argData); err != nil {
+			logger.Errorf("Failed to parse script output as arguments: %v", err)
+			return executionResult, fmt.Errorf("failed to parse script output: %v", err)
 		}
 	} else {
 		// Use provided arguments
