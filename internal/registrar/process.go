@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -55,6 +56,8 @@ func ProcessOperatorRegisteredEvents(
 		if err != nil {
 			logger.Errorf("Failed to add keeper to database: %v", err)
 		}
+
+		FetchOperatorDetailsAfterDelay(event.Operator, 5*time.Minute)
 	}
 	return nil
 }

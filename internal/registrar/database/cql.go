@@ -202,7 +202,7 @@ func DailyRewardsPoints() error {
 
 	for _, currentKeeperPoint := range currentKeeperPoints {
 		newPoints := currentKeeperPoint.KeeperPoints + int64(10*currentKeeperPoint.RewardsBooster)
-		
+
 		if err := db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET keeper_points = ? 
@@ -211,12 +211,37 @@ func DailyRewardsPoints() error {
 			logger.Errorf("Failed to update daily rewards for keeper ID %d: %v", currentKeeperPoint.KeeperID, err)
 			continue
 		}
-		
-		logger.Infof("Added %d daily reward points to keeper ID %d (new total: %d)", 
-			10*currentKeeperPoint.RewardsBooster, 
-			currentKeeperPoint.KeeperID, 
+
+		logger.Infof("Added %d daily reward points to keeper ID %d (new total: %d)",
+			10*currentKeeperPoint.RewardsBooster,
+			currentKeeperPoint.KeeperID,
 			newPoints)
 	}
 
+	return nil
+}
+
+// UpdateOperatorDetails updates the keeper_data table with details fetched from contracts
+func UpdateOperatorDetails(operatorAddress string, operatorId string, votingPower string, rewardsReceiver string, strategies []string) error {
+	logger.Infof("Updating operator details for %s in database", operatorAddress)
+
+	var keeperId int64
+	if err := db.Session().Query(`
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		operatorAddress).Scan(&keeperId); err != nil {
+		logger.Errorf("Could not find keeper with address %s: %v", operatorAddress, err)
+		return err
+	}
+
+	if err := db.Session().Query(`
+		UPDATE triggerx.keeper_data 
+		SET operator_id = ?, rewards_address = ?, voting_power = ?, strategies = ?
+		WHERE keeper_id = ?`,
+		operatorId, rewardsReceiver, votingPower, strategies, keeperId).Exec(); err != nil {
+		logger.Errorf("Failed to update operator_id for keeper ID %d: %v", keeperId, err)
+		return err
+	}
+
+	logger.Infof("Successfully updated keeper %s details in database", operatorAddress)
 	return nil
 }
