@@ -167,80 +167,125 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	w.scheduler.Logger().Infof("Fetching condition script from: %s", w.jobData.ScriptTriggerFunction)
+
 	// 1. Fetch the Go code
 	req, err := http.NewRequestWithContext(ctx, "GET", w.jobData.ScriptTriggerFunction, nil)
 	if err != nil {
+		w.scheduler.Logger().Errorf("Failed to create request: %v", err)
 		return false, fmt.Errorf("failed to create request: %v", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		w.scheduler.Logger().Errorf("Failed to fetch condition script: %v", err)
 		return false, fmt.Errorf("failed to fetch condition script: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("API returned status %d", resp.StatusCode)
+		errMsg := fmt.Sprintf("API returned status %d", resp.StatusCode)
+		w.scheduler.Logger().Errorf(errMsg)
+		return false, fmt.Errorf(errMsg)
 	}
 
 	scriptContent, err := io.ReadAll(resp.Body)
 	if err != nil {
+		w.scheduler.Logger().Errorf("Failed to read script content: %v", err)
 		return false, fmt.Errorf("failed to read script content: %v", err)
 	}
+
+	w.scheduler.Logger().Debugf("Received script content:\n%s", string(scriptContent))
 
 	// 2. Create and write temp file
 	tempFile, err := ioutil.TempFile("", "condition-*.go")
 	if err != nil {
+		w.scheduler.Logger().Errorf("Failed to create temp file: %v", err)
 		return false, fmt.Errorf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			w.scheduler.Logger().Warnf("Failed to remove temp file %s: %v", tempFile.Name(), err)
+		}
+	}()
 
 	if _, err := tempFile.Write(scriptContent); err != nil {
+		w.scheduler.Logger().Errorf("Failed to write script: %v", err)
 		return false, fmt.Errorf("failed to write script: %v", err)
 	}
 	if err := tempFile.Close(); err != nil {
+		w.scheduler.Logger().Errorf("Failed to close temp file: %v", err)
 		return false, fmt.Errorf("failed to close temp file: %v", err)
 	}
+
+	w.scheduler.Logger().Infof("Temporary script file created: %s", tempFile.Name())
 
 	// 3. Create temp build directory
 	tempDir, err := ioutil.TempDir("", "condition-build")
 	if err != nil {
+		w.scheduler.Logger().Errorf("Failed to create temp build dir: %v", err)
 		return false, fmt.Errorf("failed to create temp build dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			w.scheduler.Logger().Warnf("Failed to remove temp dir %s: %v", tempDir, err)
+		}
+	}()
 
 	// 4. Compile with timeout
 	outputBinary := filepath.Join(tempDir, "condition")
 	cmd := exec.CommandContext(ctx, "go", "build", "-o", outputBinary, tempFile.Name())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	w.scheduler.Logger().Infof("Compiling condition script...")
+
 	if err := cmd.Run(); err != nil {
-		return false, fmt.Errorf("compilation failed: %v\nStderr: %s", err, stderr.String())
+		compileError := fmt.Sprintf("Compilation failed: %v\nStderr: %s", err, stderr.String())
+		w.scheduler.Logger().Errorf(compileError)
+		return false, fmt.Errorf(compileError)
 	}
+
+	w.scheduler.Logger().Infof("Successfully compiled condition script to: %s", outputBinary)
 
 	// 5. Run with timeout
 	runCmd := exec.CommandContext(ctx, outputBinary)
+	w.scheduler.Logger().Infof("Executing condition script...")
+
 	stdout, err := runCmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return false, fmt.Errorf("script execution failed: %v\nStderr: %s", err, exitErr.Stderr)
+			execError := fmt.Sprintf("Script execution failed: %v\nStderr: %s", err, exitErr.Stderr)
+			w.scheduler.Logger().Errorf(execError)
+			return false, fmt.Errorf(execError)
 		}
+		w.scheduler.Logger().Errorf("Failed to run script: %v", err)
 		return false, fmt.Errorf("failed to run script: %v", err)
 	}
 
-	// 6. Parse output
 	output := string(stdout)
+	w.scheduler.Logger().Infof("Condition script output:\n%s", output)
+
+	// 6. Parse output
 	switch {
 	case strings.Contains(output, "Condition satisfied: true"):
+		w.scheduler.Logger().Infof("Condition SATISFIED")
 		return true, nil
 	case strings.Contains(output, "Condition satisfied: false"):
+		w.scheduler.Logger().Infof("Condition NOT SATISFIED")
 		return false, nil
 	default:
 		var result struct{ Satisfied bool }
 		if json.Unmarshal(stdout, &result) == nil {
+			if result.Satisfied {
+				w.scheduler.Logger().Infof("Condition SATISFIED (from JSON)")
+			} else {
+				w.scheduler.Logger().Infof("Condition NOT SATISFIED (from JSON)")
+			}
 			return result.Satisfied, nil
 		}
-		return false, fmt.Errorf("unable to determine condition from output: %s", output)
+		errMsg := fmt.Sprintf("Unable to determine condition from output: %s", output)
+		w.scheduler.Logger().Errorf(errMsg)
+		return false, fmt.Errorf(errMsg)
 	}
 }
 
