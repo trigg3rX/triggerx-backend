@@ -94,16 +94,15 @@ type KeeperData struct {
 
 	// Active Values
 	RewardsAddress    string    `json:"rewards_address"`
-	Stakes            []float64 `json:"stakes"`
+	RewardsBooster    int64     `json:"rewards_booster"`
+	KeeperPoints      int64     `json:"keeper_points"`
+	ConnectionAddress string    `json:"connection_address"`
 	Strategies        []string  `json:"strategies"`
 	Verified          bool      `json:"verified"`
 	Status            bool      `json:"status"`
 	Online            bool      `json:"online"`
 	Version           string    `json:"version"`
-	ConsensusKeys     []string  `json:"consensus_keys"`
-	ConnectionAddress string    `json:"connection_address"`
 	NoExcTask         int       `json:"no_exctask"`
-	KeeperPoints      int64     `json:"keeper_points"`
 	ChatID            int64     `json:"chat_id"`
 	EmailID           string    `json:"email_id"`
 }
