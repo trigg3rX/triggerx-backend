@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"os"
 	"testing"
@@ -9,20 +10,40 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/trigg3rX/triggerx-backend/pkg/common"
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Mock EthClient
+// Add at the top of the file, after imports
+const testPrivateKey = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // 64-char hex string (256 bits)
+
+// Verify interface implementations
+var (
+	_ common.EthClientInterface = (*MockEthClient)(nil)
+	_ common.Logger             = (*MockLogger)(nil)
+	_ common.ValidatorInterface = (*MockValidator)(nil)
+)
+
+// Mock implementations
 type MockEthClient struct {
 	mock.Mock
 }
 
-func (m *MockEthClient) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
+type MockLogger struct {
+	mock.Mock
+}
+
+type MockValidator struct {
+	mock.Mock
+}
+
+// Implement EthClientInterface methods
+func (m *MockEthClient) PendingNonceAt(ctx context.Context, account ethcommon.Address) (uint64, error) {
 	args := m.Called(ctx, account)
 	return uint64(args.Int(0)), args.Error(1)
 }
@@ -37,7 +58,7 @@ func (m *MockEthClient) SendTransaction(ctx context.Context, tx *types.Transacti
 	return args.Error(0)
 }
 
-func (m *MockEthClient) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
+func (m *MockEthClient) CodeAt(ctx context.Context, contract ethcommon.Address, blockNumber *big.Int) ([]byte, error) {
 	args := m.Called(ctx, contract, blockNumber)
 	return args.Get(0).([]byte), args.Error(1)
 }
@@ -52,16 +73,12 @@ func (m *MockEthClient) HeaderByNumber(ctx context.Context, number *big.Int) (*t
 	return args.Get(0).(*types.Header), args.Error(1)
 }
 
-func (m *MockEthClient) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+func (m *MockEthClient) TransactionReceipt(ctx context.Context, txHash ethcommon.Hash) (*types.Receipt, error) {
 	args := m.Called(ctx, txHash)
 	return args.Get(0).(*types.Receipt), args.Error(1)
 }
 
-// Mock Logger
-type MockLogger struct {
-	mock.Mock
-}
-
+// Implement Logger methods
 func (m *MockLogger) Infof(format string, args ...interface{}) {
 	m.Called(format, args)
 }
@@ -74,17 +91,40 @@ func (m *MockLogger) Warnf(format string, args ...interface{}) {
 	m.Called(format, args)
 }
 
+// Implement ValidatorInterface methods
+func (m *MockValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
+	args := m.Called(job)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error) {
+	args := m.Called(job, ipfsData)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockValidator) ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData, triggerData *jobtypes.TriggerData) (bool, error) {
+	args := m.Called(job, triggerData)
+	return args.Bool(0), args.Error(1)
+}
+
 func TestExecuteActionWithDynamicArgs(t *testing.T) {
+	// Get the actual private key from environment
+	originalKey := os.Getenv("PRIVATE_KEY_CONTROLLER")
+	if originalKey == "" {
+		t.Skip("PRIVATE_KEY_CONTROLLER environment variable not set")
+	}
+
 	// Setup test cases
 	tests := []struct {
 		name           string
 		job            *jobtypes.HandleCreateJobData
-		setupMocks     func(*MockEthClient)
+		setupMocks     func(*MockEthClient, *MockLogger, *MockValidator)
 		expectedError  bool
 		expectedResult jobtypes.ActionData
+		errorContains  string
 	}{
 		{
-			name: "Test with script trigger function",
+			name: "Successful execution with script trigger function",
 			job: &jobtypes.HandleCreateJobData{
 				JobID:                 1,
 				TaskDefinitionID:      6,
@@ -93,12 +133,10 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 				TargetFunction:        "addTaskId",
 				Arguments:             []string{`{"jobId": "2", "taskId": "5"}`},
 			},
-			setupMocks: func(mockEth *MockEthClient) {
+			setupMocks: func(mockEth *MockEthClient, mockLogger *MockLogger, mockValidator *MockValidator) {
 				mockEth.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(1), nil)
 				mockEth.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(20000000000), nil)
 				mockEth.On("SendTransaction", mock.Anything, mock.Anything).Return(nil)
-
-				// Add contract related mocks
 				mockEth.On("CodeAt", mock.Anything, mock.Anything, mock.Anything).Return([]byte("contract-code"), nil)
 				mockEth.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte(`{"jobId": 2, "taskId": 5}`), nil)
 				mockEth.On("HeaderByNumber", mock.Anything, mock.Anything).Return(&types.Header{}, nil)
@@ -106,6 +144,9 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 					Status:  1,
 					GasUsed: 21000,
 				}, nil)
+
+				mockLogger.On("Infof", mock.Anything, mock.Anything).Return()
+				mockValidator.On("ValidateAndPrepareJob", mock.Anything, mock.Anything).Return(true, nil)
 			},
 			expectedError: false,
 			expectedResult: jobtypes.ActionData{
@@ -116,7 +157,7 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 			},
 		},
 		{
-			name: "Test with script IPFS URL",
+			name: "Successful execution with script IPFS URL",
 			job: &jobtypes.HandleCreateJobData{
 				JobID:                 2,
 				TaskDefinitionID:      4,
@@ -125,19 +166,20 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 				TargetFunction:        "addTaskId",
 				Arguments:             []string{`{"jobId": "2", "taskId": "5"}`},
 			},
-			setupMocks: func(mockEth *MockEthClient) {
+			setupMocks: func(mockEth *MockEthClient, mockLogger *MockLogger, mockValidator *MockValidator) {
 				mockEth.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(1), nil)
 				mockEth.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(20000000000), nil)
 				mockEth.On("SendTransaction", mock.Anything, mock.Anything).Return(nil)
-
-				// Add contract related mocks
 				mockEth.On("CodeAt", mock.Anything, mock.Anything, mock.Anything).Return([]byte("contract-code"), nil)
-				mockEth.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte(`{"jobId": 2, "taskId": 5}`), nil)
+				mockEth.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte(`{"arguments": ["2", "5"]}`), nil)
 				mockEth.On("HeaderByNumber", mock.Anything, mock.Anything).Return(&types.Header{}, nil)
 				mockEth.On("TransactionReceipt", mock.Anything, mock.Anything).Return(&types.Receipt{
 					Status:  1,
 					GasUsed: 21000,
 				}, nil)
+
+				mockLogger.On("Infof", mock.Anything, mock.Anything).Return()
+				mockValidator.On("ValidateAndPrepareJob", mock.Anything, mock.Anything).Return(true, nil)
 			},
 			expectedError: false,
 			expectedResult: jobtypes.ActionData{
@@ -147,6 +189,78 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 				Timestamp: time.Now().UTC(),
 			},
 		},
+		{
+			name: "Failed execution - Invalid script URL",
+			job: &jobtypes.HandleCreateJobData{
+				JobID:                 3,
+				TaskDefinitionID:      4,
+				ScriptIPFSUrl:         "invalid-url",
+				TargetContractAddress: "0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d",
+				TargetFunction:        "addTaskId",
+			},
+			setupMocks: func(mockEth *MockEthClient, mockLogger *MockLogger, mockValidator *MockValidator) {
+				mockLogger.On("Errorf", mock.Anything, mock.Anything).Return()
+				mockValidator.On("ValidateAndPrepareJob", mock.Anything, mock.Anything).Return(true, nil)
+			},
+			expectedError: true,
+			errorContains: "failed to download script",
+		},
+		{
+			name: "Failed execution - Empty arguments",
+			job: &jobtypes.HandleCreateJobData{
+				JobID:                 4,
+				TaskDefinitionID:      4,
+				TargetContractAddress: "0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d",
+				TargetFunction:        "addTaskId",
+			},
+			setupMocks: func(mockEth *MockEthClient, mockLogger *MockLogger, mockValidator *MockValidator) {
+				mockLogger.On("Errorf", mock.Anything, mock.Anything).Return()
+				mockValidator.On("ValidateAndPrepareJob", mock.Anything, mock.Anything).Return(true, nil)
+			},
+			expectedError: true,
+			errorContains: "no script URL or arguments provided",
+		},
+		{
+			name: "Failed execution - Transaction error",
+			job: &jobtypes.HandleCreateJobData{
+				JobID:                 5,
+				TaskDefinitionID:      4,
+				ScriptIPFSUrl:         "https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a",
+				TargetContractAddress: "0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d",
+				TargetFunction:        "addTaskId",
+				Arguments:             []string{`{"jobId": "2", "taskId": "5"}`},
+			},
+			setupMocks: func(mockEth *MockEthClient, mockLogger *MockLogger, mockValidator *MockValidator) {
+				mockEth.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(1), nil)
+				mockEth.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(20000000000), nil)
+				mockEth.On("SendTransaction", mock.Anything, mock.Anything).Return(fmt.Errorf("transaction failed"))
+				mockEth.On("CodeAt", mock.Anything, mock.Anything, mock.Anything).Return([]byte("contract-code"), nil)
+				mockEth.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte(`{"arguments": ["2", "5"]}`), nil)
+
+				mockLogger.On("Infof", mock.Anything, mock.Anything).Return()
+				mockLogger.On("Errorf", mock.Anything, mock.Anything).Return()
+				mockValidator.On("ValidateAndPrepareJob", mock.Anything, mock.Anything).Return(true, nil)
+			},
+			expectedError: true,
+			errorContains: "transaction failed",
+		},
+		{
+			name: "Failed execution - Invalid JSON arguments",
+			job: &jobtypes.HandleCreateJobData{
+				JobID:                 6,
+				TaskDefinitionID:      4,
+				ScriptIPFSUrl:         "https://gateway.lighthouse.storage/ipfs/bafkreiaeuy3fyzaecbh2zolndnebccpnrkpwobigtmugzntnyew5oprb4a",
+				TargetContractAddress: "0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d",
+				TargetFunction:        "addTaskId",
+				Arguments:             []string{`invalid-json`},
+			},
+			setupMocks: func(mockEth *MockEthClient, mockLogger *MockLogger, mockValidator *MockValidator) {
+				mockLogger.On("Errorf", mock.Anything, mock.Anything).Return()
+				mockValidator.On("ValidateAndPrepareJob", mock.Anything, mock.Anything).Return(true, nil)
+			},
+			expectedError: true,
+			errorContains: "failed to parse argument",
+		},
 	}
 
 	for _, tt := range tests {
@@ -154,12 +268,10 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 			// Create mocks
 			mockEth := new(MockEthClient)
 			mockLogger := new(MockLogger)
+			mockValidator := new(MockValidator)
 
 			// Setup mocks
-			tt.setupMocks(mockEth)
-			mockLogger.On("Infof", mock.Anything, mock.Anything).Return()
-			mockLogger.On("Errorf", mock.Anything, mock.Anything).Return()
-			mockLogger.On("Warnf", mock.Anything, mock.Anything).Return()
+			tt.setupMocks(mockEth, mockLogger, mockValidator)
 
 			// Create executor
 			executor := &JobExecutor{
@@ -167,6 +279,7 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 				etherscanAPIKey: "test-key",
 				argConverter:    &ArgumentConverter{},
 				logger:          mockLogger,
+				validator:       mockValidator,
 			}
 
 			// Execute test
@@ -175,17 +288,25 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 			// Assert results
 			if tt.expectedError {
 				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedResult.Status, result.Status)
+				assert.Equal(t, tt.expectedResult.GasUsed, result.GasUsed)
 				assert.NotEmpty(t, result.ActionTxHash)
 			}
 
 			// Verify mocks
 			mockEth.AssertExpectations(t)
 			mockLogger.AssertExpectations(t)
+			mockValidator.AssertExpectations(t)
 		})
 	}
+
+	// Clean up environment variable after tests
+	os.Unsetenv("PRIVATE_KEY_CONTROLLER")
 }
 
 // Test helper functions
@@ -231,12 +352,11 @@ func TestIntegration(t *testing.T) {
 	}
 
 	// Setup real ethclient
-	client, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/")
+	client, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	executor := NewJobExecutor(client, "ETHERSCAN_API_KEY")
+	executor := NewJobExecutor(client, os.Getenv("ETHERSCAN_API_KEY"))
 
 	// Create test job
 	job := &jobtypes.HandleCreateJobData{
@@ -251,4 +371,16 @@ func TestIntegration(t *testing.T) {
 	result, err := executor.executeActionWithDynamicArgs(job)
 	assert.NoError(t, err)
 	assert.True(t, result.Status)
+}
+
+// Add helper function to create test jobs
+func createTestJob(id int64, taskDefID int, scriptUrl string, args []string) *jobtypes.HandleCreateJobData {
+	return &jobtypes.HandleCreateJobData{
+		JobID:                 id,
+		TaskDefinitionID:      taskDefID,
+		ScriptIPFSUrl:         scriptUrl,
+		TargetContractAddress: "0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d",
+		TargetFunction:        "addTaskId",
+		Arguments:             args,
+	}
 }
