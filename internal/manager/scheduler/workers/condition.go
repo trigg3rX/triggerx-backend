@@ -2,9 +2,15 @@ package workers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
@@ -39,7 +45,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 	w.done = make(chan bool) // Ensure we have a fresh channel
 
 	w.scheduler.Logger().Infof("Starting condition-based job %d", w.jobID)
-	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptIPFSUrl)
+	w.scheduler.Logger().Infof("Listening to %s", w.jobData.ScriptTriggerFunction)
 
 	var triggerData types.TriggerData
 	triggerData.TimeInterval = w.jobData.TimeInterval
@@ -77,7 +83,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					return
 				}
 
-				satisfied, err := w.checkCondition()
+				satisfied, conditionParams, err := w.checkCondition()
 				if err != nil {
 					w.error = err.Error()
 					w.currentRetry++
@@ -93,7 +99,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					w.scheduler.Logger().Infof("Condition satisfied for job %d", w.jobID)
 
 					triggerData.Timestamp = time.Now().UTC()
-					triggerData.ConditionParams = make(map[string]interface{})
+					triggerData.ConditionParams = conditionParams
 
 					if err := w.executeTask(w.jobData, &triggerData); err != nil {
 						w.handleError(err)
@@ -156,21 +162,187 @@ func (w *ConditionBasedWorker) handleError(err error) {
 	}
 }
 
-func (w *ConditionBasedWorker) checkCondition() (bool, error) {
-	resp, err := http.Get(w.jobData.ScriptIPFSUrl)
+func (w *ConditionBasedWorker) checkCondition() (bool, map[string]interface{}, error) {
+	resp, err := http.Get(w.jobData.ScriptTriggerFunction)
 	if err != nil {
-		return false, fmt.Errorf("failed to fetch API data: %v", err)
+		return false, nil, fmt.Errorf("failed to fetch API data: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, fmt.Errorf("failed to read response body: %v", err)
+		return false, nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	w.scheduler.Logger().Infof("API response: %s", string(body))
 
-	return true, nil
+	// Parse the response to determine if the condition is satisfied
+	responseStr := string(body)
+
+	if responseStr == "" {
+		return false, nil, fmt.Errorf("empty response from condition script")
+	}
+
+	// Create default condition parameters
+	timestamp := time.Now().UTC()
+	satisfied := false
+	var response interface{} = nil
+
+	// First, check if the response is already in JSON format
+	if len(responseStr) > 0 && (responseStr[0] == '{' || responseStr[0] == '[') {
+		type ConditionResult struct {
+			Satisfied bool        `json:"Satisfied"`
+			Timestamp time.Time   `json:"Timestamp"`
+			Response  interface{} `json:"Response"`
+		}
+
+		var result ConditionResult
+		if err := json.Unmarshal(body, &result); err == nil {
+			w.scheduler.Logger().Infof("Parsed JSON condition result: satisfied=%v", result.Satisfied)
+
+			conditionParams := map[string]interface{}{
+				"satisfied": result.Satisfied,
+				"timestamp": result.Timestamp.Format(time.RFC3339),
+				"response":  result.Response,
+			}
+
+			return result.Satisfied, conditionParams, nil
+		}
+	}
+
+	// Second, check if we received the output of the executed code
+	if strings.Contains(responseStr, "Condition satisfied:") {
+		// This appears to be executed program output
+		w.scheduler.Logger().Infof("Received execution output from condition script")
+
+		// Check if condition is satisfied
+		satisfied = strings.Contains(responseStr, "Condition satisfied: true")
+
+		// Try to extract response value from the output
+		responseMatch := strings.Index(responseStr, "Response:")
+		if responseMatch != -1 {
+			responseLine := responseStr[responseMatch:]
+			endOfLine := strings.Index(responseLine, "\n")
+			if endOfLine != -1 {
+				responseLine = responseLine[:endOfLine]
+				// Extract value from the line
+				parts := strings.Split(responseLine, ":")
+				if len(parts) > 1 {
+					responseValue := strings.TrimSpace(parts[1])
+					// Try to parse as numeric first
+					if responseFloat, err := strconv.ParseFloat(responseValue, 64); err == nil {
+						response = responseFloat
+					} else {
+						// If not numeric, use as string
+						response = responseValue
+					}
+				}
+			}
+		}
+
+		// Try to extract timestamp if present
+		timestampMatch := strings.Index(responseStr, "Timestamp:")
+		if timestampMatch != -1 {
+			timestampLine := responseStr[timestampMatch:]
+			endOfLine := strings.Index(timestampLine, "\n")
+			if endOfLine != -1 {
+				timestampLine = timestampLine[:endOfLine]
+				parts := strings.Split(timestampLine, ":")
+				if len(parts) > 1 {
+					timestampStr := strings.TrimSpace(parts[1])
+					if parsedTime, err := time.Parse(time.RFC3339, timestampStr); err == nil {
+						timestamp = parsedTime
+					}
+				}
+			}
+		}
+	} else {
+		// This appears to be source code
+		w.scheduler.Logger().Infof("Received source code, will attempt to execute it")
+
+		// Create a temporary directory to store and execute the code
+		tempDir, err := os.MkdirTemp("", "condition-script")
+		if err != nil {
+			w.scheduler.Logger().Errorf("Failed to create temp directory: %v", err)
+			return false, nil, fmt.Errorf("failed to create temp directory: %v", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		// Write the source code to a file
+		scriptPath := filepath.Join(tempDir, "condition_script.go")
+		if err := os.WriteFile(scriptPath, body, 0644); err != nil {
+			w.scheduler.Logger().Errorf("Failed to write script to file: %v", err)
+			return false, nil, fmt.Errorf("failed to write script to file: %v", err)
+		}
+
+		// Create a command to execute the Go script
+		cmd := exec.Command("go", "run", scriptPath)
+		outputBytes, err := cmd.CombinedOutput()
+		if err != nil {
+			w.scheduler.Logger().Errorf("Failed to execute script: %v, output: %s", err, string(outputBytes))
+			return false, nil, fmt.Errorf("failed to execute script: %v, output: %s", err, string(outputBytes))
+		}
+
+		output := string(outputBytes)
+		w.scheduler.Logger().Infof("Script execution output: %s", output)
+
+		// Parse the output to extract satisfied, timestamp, and response
+		satisfied = strings.Contains(output, "Condition satisfied: true")
+
+		// Extract response
+		responseMatch := strings.Index(output, "Response:")
+		if responseMatch != -1 {
+			responseLine := output[responseMatch:]
+			endOfLine := strings.Index(responseLine, "\n")
+			if endOfLine != -1 {
+				responseLine = responseLine[:endOfLine]
+				parts := strings.Split(responseLine, ":")
+				if len(parts) > 1 {
+					responseValue := strings.TrimSpace(parts[1])
+					if responseFloat, err := strconv.ParseFloat(responseValue, 64); err == nil {
+						response = responseFloat
+					} else {
+						response = responseValue
+					}
+				}
+			}
+		}
+
+		// Extract timestamp
+		timestampMatch := strings.Index(output, "Timestamp:")
+		if timestampMatch != -1 {
+			timestampLine := output[timestampMatch:]
+			endOfLine := strings.Index(timestampLine, "\n")
+			if endOfLine != -1 {
+				timestampLine = timestampLine[:endOfLine]
+				parts := strings.Split(timestampLine, ":")
+				if len(parts) > 1 {
+					timestampStr := strings.TrimSpace(parts[1])
+					if parsedTime, err := time.Parse(time.RFC3339, timestampStr); err == nil {
+						timestamp = parsedTime
+					}
+				}
+			}
+		}
+	}
+
+	// If response is still nil, provide a default value
+	if response == nil {
+		if satisfied {
+			response = "Condition satisfied"
+		} else {
+			response = "Condition not satisfied"
+		}
+	}
+
+	conditionParams := map[string]interface{}{
+		"satisfied": satisfied,
+		"timestamp": timestamp.Format(time.RFC3339),
+		"response":  response,
+	}
+
+	w.scheduler.Logger().Infof("Condition result: satisfied=%v", satisfied)
+	return satisfied, conditionParams, nil
 }
 
 func (w *ConditionBasedWorker) executeTask(jobData *types.HandleCreateJobData, triggerData *types.TriggerData) error {
