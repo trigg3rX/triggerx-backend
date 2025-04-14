@@ -195,7 +195,7 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 		return false, fmt.Errorf("failed to read script content: %v", err)
 	}
 
-	w.scheduler.Logger().Debugf("Received script content:\n%s", string(scriptContent))
+	// w.scheduler.Logger().Debugf("Received script content:\n%s", string(scriptContent))
 
 	// 2. Create and write temp file
 	tempFile, err := ioutil.TempFile("", "condition-*.go")
