@@ -1,15 +1,16 @@
 package workers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -83,7 +84,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					return
 				}
 
-				satisfied, conditionParams, err := w.checkCondition()
+				satisfied, err := w.checkCondition()
 				if err != nil {
 					w.error = err.Error()
 					w.currentRetry++
@@ -99,7 +100,7 @@ func (w *ConditionBasedWorker) Start(ctx context.Context) {
 					w.scheduler.Logger().Infof("Condition satisfied for job %d", w.jobID)
 
 					triggerData.Timestamp = time.Now().UTC()
-					triggerData.ConditionParams = conditionParams
+					triggerData.ConditionParams = make(map[string]interface{})
 
 					if err := w.executeTask(w.jobData, &triggerData); err != nil {
 						w.handleError(err)
@@ -162,187 +163,85 @@ func (w *ConditionBasedWorker) handleError(err error) {
 	}
 }
 
-func (w *ConditionBasedWorker) checkCondition() (bool, map[string]interface{}, error) {
-	resp, err := http.Get(w.jobData.ScriptTriggerFunction)
+func (w *ConditionBasedWorker) checkCondition() (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// 1. Fetch the Go code
+	req, err := http.NewRequestWithContext(ctx, "GET", w.jobData.ScriptTriggerFunction, nil)
 	if err != nil {
-		return false, nil, fmt.Errorf("failed to fetch API data: %v", err)
+		return false, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch condition script: %v", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	scriptContent, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return false, nil, fmt.Errorf("failed to read response body: %v", err)
+		return false, fmt.Errorf("failed to read script content: %v", err)
 	}
 
-	w.scheduler.Logger().Infof("API response: %s", string(body))
+	// 2. Create and write temp file
+	tempFile, err := ioutil.TempFile("", "condition-*.go")
+	if err != nil {
+		return false, fmt.Errorf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
 
-	// Parse the response to determine if the condition is satisfied
-	responseStr := string(body)
-
-	if responseStr == "" {
-		return false, nil, fmt.Errorf("empty response from condition script")
+	if _, err := tempFile.Write(scriptContent); err != nil {
+		return false, fmt.Errorf("failed to write script: %v", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return false, fmt.Errorf("failed to close temp file: %v", err)
 	}
 
-	// Create default condition parameters
-	timestamp := time.Now().UTC()
-	satisfied := false
-	var response interface{} = nil
+	// 3. Create temp build directory
+	tempDir, err := ioutil.TempDir("", "condition-build")
+	if err != nil {
+		return false, fmt.Errorf("failed to create temp build dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
 
-	// First, check if the response is already in JSON format
-	if len(responseStr) > 0 && (responseStr[0] == '{' || responseStr[0] == '[') {
-		type ConditionResult struct {
-			Satisfied bool        `json:"Satisfied"`
-			Timestamp time.Time   `json:"Timestamp"`
-			Response  interface{} `json:"Response"`
-		}
-
-		var result ConditionResult
-		if err := json.Unmarshal(body, &result); err == nil {
-			w.scheduler.Logger().Infof("Parsed JSON condition result: satisfied=%v", result.Satisfied)
-
-			conditionParams := map[string]interface{}{
-				"satisfied": result.Satisfied,
-				"timestamp": result.Timestamp.Format(time.RFC3339),
-				"response":  result.Response,
-			}
-
-			return result.Satisfied, conditionParams, nil
-		}
+	// 4. Compile with timeout
+	outputBinary := filepath.Join(tempDir, "condition")
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", outputBinary, tempFile.Name())
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return false, fmt.Errorf("compilation failed: %v\nStderr: %s", err, stderr.String())
 	}
 
-	// Second, check if we received the output of the executed code
-	if strings.Contains(responseStr, "Condition satisfied:") {
-		// This appears to be executed program output
-		w.scheduler.Logger().Infof("Received execution output from condition script")
-
-		// Check if condition is satisfied
-		satisfied = strings.Contains(responseStr, "Condition satisfied: true")
-
-		// Try to extract response value from the output
-		responseMatch := strings.Index(responseStr, "Response:")
-		if responseMatch != -1 {
-			responseLine := responseStr[responseMatch:]
-			endOfLine := strings.Index(responseLine, "\n")
-			if endOfLine != -1 {
-				responseLine = responseLine[:endOfLine]
-				// Extract value from the line
-				parts := strings.Split(responseLine, ":")
-				if len(parts) > 1 {
-					responseValue := strings.TrimSpace(parts[1])
-					// Try to parse as numeric first
-					if responseFloat, err := strconv.ParseFloat(responseValue, 64); err == nil {
-						response = responseFloat
-					} else {
-						// If not numeric, use as string
-						response = responseValue
-					}
-				}
-			}
+	// 5. Run with timeout
+	runCmd := exec.CommandContext(ctx, outputBinary)
+	stdout, err := runCmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return false, fmt.Errorf("script execution failed: %v\nStderr: %s", err, exitErr.Stderr)
 		}
-
-		// Try to extract timestamp if present
-		timestampMatch := strings.Index(responseStr, "Timestamp:")
-		if timestampMatch != -1 {
-			timestampLine := responseStr[timestampMatch:]
-			endOfLine := strings.Index(timestampLine, "\n")
-			if endOfLine != -1 {
-				timestampLine = timestampLine[:endOfLine]
-				parts := strings.Split(timestampLine, ":")
-				if len(parts) > 1 {
-					timestampStr := strings.TrimSpace(parts[1])
-					if parsedTime, err := time.Parse(time.RFC3339, timestampStr); err == nil {
-						timestamp = parsedTime
-					}
-				}
-			}
-		}
-	} else {
-		// This appears to be source code
-		w.scheduler.Logger().Infof("Received source code, will attempt to execute it")
-
-		// Create a temporary directory to store and execute the code
-		tempDir, err := os.MkdirTemp("", "condition-script")
-		if err != nil {
-			w.scheduler.Logger().Errorf("Failed to create temp directory: %v", err)
-			return false, nil, fmt.Errorf("failed to create temp directory: %v", err)
-		}
-		defer os.RemoveAll(tempDir)
-
-		// Write the source code to a file
-		scriptPath := filepath.Join(tempDir, "condition_script.go")
-		if err := os.WriteFile(scriptPath, body, 0644); err != nil {
-			w.scheduler.Logger().Errorf("Failed to write script to file: %v", err)
-			return false, nil, fmt.Errorf("failed to write script to file: %v", err)
-		}
-
-		// Create a command to execute the Go script
-		cmd := exec.Command("go", "run", scriptPath)
-		outputBytes, err := cmd.CombinedOutput()
-		if err != nil {
-			w.scheduler.Logger().Errorf("Failed to execute script: %v, output: %s", err, string(outputBytes))
-			return false, nil, fmt.Errorf("failed to execute script: %v, output: %s", err, string(outputBytes))
-		}
-
-		output := string(outputBytes)
-		w.scheduler.Logger().Infof("Script execution output: %s", output)
-
-		// Parse the output to extract satisfied, timestamp, and response
-		satisfied = strings.Contains(output, "Condition satisfied: true")
-
-		// Extract response
-		responseMatch := strings.Index(output, "Response:")
-		if responseMatch != -1 {
-			responseLine := output[responseMatch:]
-			endOfLine := strings.Index(responseLine, "\n")
-			if endOfLine != -1 {
-				responseLine = responseLine[:endOfLine]
-				parts := strings.Split(responseLine, ":")
-				if len(parts) > 1 {
-					responseValue := strings.TrimSpace(parts[1])
-					if responseFloat, err := strconv.ParseFloat(responseValue, 64); err == nil {
-						response = responseFloat
-					} else {
-						response = responseValue
-					}
-				}
-			}
-		}
-
-		// Extract timestamp
-		timestampMatch := strings.Index(output, "Timestamp:")
-		if timestampMatch != -1 {
-			timestampLine := output[timestampMatch:]
-			endOfLine := strings.Index(timestampLine, "\n")
-			if endOfLine != -1 {
-				timestampLine = timestampLine[:endOfLine]
-				parts := strings.Split(timestampLine, ":")
-				if len(parts) > 1 {
-					timestampStr := strings.TrimSpace(parts[1])
-					if parsedTime, err := time.Parse(time.RFC3339, timestampStr); err == nil {
-						timestamp = parsedTime
-					}
-				}
-			}
-		}
+		return false, fmt.Errorf("failed to run script: %v", err)
 	}
 
-	// If response is still nil, provide a default value
-	if response == nil {
-		if satisfied {
-			response = "Condition satisfied"
-		} else {
-			response = "Condition not satisfied"
+	// 6. Parse output
+	output := string(stdout)
+	switch {
+	case strings.Contains(output, "Condition satisfied: true"):
+		return true, nil
+	case strings.Contains(output, "Condition satisfied: false"):
+		return false, nil
+	default:
+		var result struct{ Satisfied bool }
+		if json.Unmarshal(stdout, &result) == nil {
+			return result.Satisfied, nil
 		}
+		return false, fmt.Errorf("unable to determine condition from output: %s", output)
 	}
-
-	conditionParams := map[string]interface{}{
-		"satisfied": satisfied,
-		"timestamp": timestamp.Format(time.RFC3339),
-		"response":  response,
-	}
-
-	w.scheduler.Logger().Infof("Condition result: satisfied=%v", satisfied)
-	return satisfied, conditionParams, nil
 }
 
 func (w *ConditionBasedWorker) executeTask(jobData *types.HandleCreateJobData, triggerData *types.TriggerData) error {
