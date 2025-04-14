@@ -93,10 +93,11 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_name text,
     keeper_address text,
     registered_tx text,
+    operator_id string,
     
     rewards_address text,
     rewards_booster int,
-    voting_power bigint,
+    voting_power string,
     keeper_points bigint,
     connection_address text,
     strategies list<text>,
