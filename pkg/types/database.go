@@ -89,15 +89,17 @@ type KeeperData struct {
 	// Fixed Values
 	KeeperID      int64  `json:"keeper_id"`
 	KeeperAddress string `json:"keeper_address"`
-	KeeperName        string    `json:"keeper_name"`
+	KeeperName    string `json:"keeper_name"`
 	RegisteredTx  string `json:"registered_tx"`
+	RewardsBooster    float32     `json:"rewards_booster"`
 
 	// Active Values
+	OperatorID        int64     `json:"operator_id"`
 	RewardsAddress    string    `json:"rewards_address"`
-	RewardsBooster    int64     `json:"rewards_booster"`
 	KeeperPoints      int64     `json:"keeper_points"`
 	ConnectionAddress string    `json:"connection_address"`
 	Strategies        []string  `json:"strategies"`
+	VotingPower       int64     `json:"voting_power"`
 	Verified          bool      `json:"verified"`
 	Status            bool      `json:"status"`
 	Online            bool      `json:"online"`

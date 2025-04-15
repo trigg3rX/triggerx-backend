@@ -93,11 +93,11 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_name text,
     keeper_address text,
     registered_tx text,
-    operator_id string,
+    operator_id bigint,
     
     rewards_address text,
-    rewards_booster int,
-    voting_power string,
+    rewards_booster float,
+    voting_power bigint,
     keeper_points bigint,
     connection_address text,
     strategies list<text>,
@@ -113,11 +113,12 @@ CREATE TABLE IF NOT EXISTS keeper_data (
 
 -- Create ApiKey table
 CREATE TABLE IF NOT EXISTS apikeys (
-    key text PRIMARY KEY,
+    key text,
     owner text,
     isActive boolean,
     rateLimit int,
     lastUsed timestamp,
-    createdAt timestamp
+    createdAt timestamp,
+    PRIMARY KEY (key)
 );
 
