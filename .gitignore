@@ -9,6 +9,7 @@ release/*
 
 data/cache/*
 data/logs/*/*.log
+data/logs/*/*.json
 !data/logs/*/.gitkeep
 data/peerstore/*/*
 !data/peerstore/*/.gitkeep

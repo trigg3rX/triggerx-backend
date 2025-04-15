@@ -21,6 +21,8 @@ var (
 	KeeperAddress             	string
 	KeeperRPCPort               string
 	KeeperP2PPort       		string
+	PublicIPV4Address           string
+	PeerID                       string
 
 	// Provided Information
 	PinataApiKey        string
@@ -57,6 +59,8 @@ func Init() {
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
 	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
 	KeeperP2PPort = os.Getenv("OPERATOR_P2P_PORT")
+	PublicIPV4Address = os.Getenv("PUBLIC_IPV4_ADDRESS")
+	PeerID = os.Getenv("PEER_ID")
 
 	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" || KeeperP2PPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")

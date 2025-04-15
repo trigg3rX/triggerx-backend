@@ -5,59 +5,58 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/database"
+	dbpkg "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 var logger logging.Logger
 
 func main() {
-	
 	if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
-	logger.Info("Starting registrar node (poll-based)...")
+	logger.Info("Starting registrar service ...")
 
-	// Initialize registrar configuration
-	registrar.Init()
+	config.Init()
+	registrar.InitABI()
 
-	// Connect to Ethereum network via HTTP RPC
-	ethClient, err := ethclient.Dial(registrar.EthRpcUrl)
+	// Initialize database connection
+	dbConfig := &dbpkg.Config{
+		Hosts:       []string{config.DatabaseDockerIPAddress + ":" + config.DatabaseDockerPort},
+		Timeout:     time.Second * 30,
+		Retries:     3,
+		ConnectWait: time.Second * 20,
+	}
+	dbConn, err := dbpkg.NewConnection(dbConfig)
 	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to Ethereum RPC: %v", err))
+		logger.Fatalf("Failed to connect to database: %v", err)
 	}
-	logger.Info("Connected to Ethereum HTTP RPC")
+	defer dbConn.Close()
 
-	// Connect to Base network via HTTP RPC
-	baseClient, err := ethclient.Dial(registrar.BaseRpcUrl)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to connect to Base RPC: %v", err))
-	}
-	logger.Info("Connected to Base HTTP RPC")
+	// Set the database connection in the database package
+	database.SetDatabaseConnection(dbConn)
+	logger.Info("Database connection initialized")
 
-	// Get contract addresses
-	avsGovernanceAddress := common.HexToAddress(registrar.AvsGovernanceAddress)
-	attestationCenterAddress := common.HexToAddress(registrar.AttestationCenterAddress)
+	avsGovernanceAddress := common.HexToAddress(config.AvsGovernanceAddress)
+	attestationCenterAddress := common.HexToAddress(config.AttestationCenterAddress)
 
-	logger.Info(fmt.Sprintf("Using AVS Governance contract at address: %s", registrar.AvsGovernanceAddress))
-	logger.Info(fmt.Sprintf("Using Attestation Center contract at address: %s", registrar.AttestationCenterAddress))
+	logger.Info(fmt.Sprintf("AVS Governance     [L1]: %s", config.AvsGovernanceAddress))
+	logger.Info(fmt.Sprintf("Attestation Center [L2]: %s", config.AttestationCenterAddress))
 
-	// Initialize event processing
-	if err := registrar.InitEventProcessing(ethClient, baseClient); err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to initialize event processing: %v", err))
-	}
+	go func() {
+		registrar.StartEventPolling(avsGovernanceAddress, attestationCenterAddress)
+	}()
 
-	// Start the polling service in a goroutine
-	go registrar.StartEventPolling(avsGovernanceAddress, attestationCenterAddress)
+	go func() {
+		registrar.StartDailyRewardsPoints()
+	}()
 
-	// Keep the program running
-	logger.Info("Registrar node is running. Press Ctrl+C to exit.")
-	
-	// Keep the main thread alive
-	for {
-		time.Sleep(time.Hour)
-	}
+	logger.Info("Registrar service is running.")
+
+	select {}
 }

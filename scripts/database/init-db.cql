@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS job_data (
 -- Create Task_data table
 CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
+    task_number int,
     job_id bigint,
     task_definition_id int,
     created_at timestamp,
@@ -83,7 +84,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_submission_tx_hash text,
     
     is_successful boolean,
-    PRIMARY KEY (task_id)
+    PRIMARY KEY (task_id, task_number)
 );
 
 -- Create Keeper_data table
@@ -92,17 +93,19 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_name text,
     keeper_address text,
     registered_tx text,
+    operator_id string,
     
     rewards_address text,
-    stakes list<decimal>,
+    rewards_booster int,
+    voting_power string,
+    keeper_points bigint,
+    connection_address text,
     strategies list<text>,
     verified boolean,
     status boolean,
     online boolean,
     version text,
-    consensus_keys list<text>,
     no_exctask int,
-    keeper_points bigint,
     chat_id bigint,
     email_id text,
     PRIMARY KEY (keeper_id)

@@ -35,7 +35,8 @@ func HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
-	if keeperHealth.Version != "0.0.5" {
+	if keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" {
+	} else {
 		logger.Error("Invalid version for keeper", "keeper", keeperHealth.KeeperAddress)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid version, authorization failed"})
 		return

@@ -47,7 +47,7 @@ func NewJobValidator(logger Logger, ethClient *ethclient.Client) *JobValidator {
 // based on its time interval, timeframe, and last execution time
 func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
 	// Define tolerance constant (3 seconds)
-	const timeTolerance = 2 * time.Second
+	const timeTolerance = 1500 * time.Millisecond
 
 	// Ensure this is a time-based job
 	if job.TaskDefinitionID != 1 && job.TaskDefinitionID != 2 {
@@ -75,12 +75,12 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 		// For first execution, check if it's within the timeframe from creation
 		if job.TimeFrame > 0 {
 			// Add tolerance to timeframe check
-			endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
-			if now.After(endTime) {
-				v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds, with %v tolerance)",
-					job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame, timeTolerance)
-				return false, nil
-			}
+			// endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
+			// if now.After(endTime) {
+			// 	v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds, with %v tolerance)",
+			// 		job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame, timeTolerance)
+			// 	return false, nil
+			// }
 		}
 
 		v.logger.Infof("Job %d is eligible for first execution", job.JobID)
@@ -112,7 +112,7 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 	}
 
 	v.logger.Infof("Job %d is eligible for execution", job.JobID)
-	return false, nil
+	return true, nil
 }
 
 func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error) {
