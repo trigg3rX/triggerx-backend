@@ -98,6 +98,7 @@ type KeeperData struct {
 	RewardsAddress    string    `json:"rewards_address"`
 	KeeperPoints      int64     `json:"keeper_points"`
 	ConnectionAddress string    `json:"connection_address"`
+	PeerID            string    `json:"peer_id"`
 	Strategies        []string  `json:"strategies"`
 	VotingPower       int64     `json:"voting_power"`
 	Verified          bool      `json:"verified"`

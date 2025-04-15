@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     voting_power bigint,
     keeper_points bigint,
     connection_address text,
+    peer_id text,
     strategies list<text>,
     verified boolean,
     status boolean,
