@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -95,20 +96,16 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(taskData)
 }
 
-func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
-	
-	ipfsURLs := r.URL.Query().Get("ipfs_url") // Get the single string of URLs
+// Move the core logic to a service function
+func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	if ipfsURLs == "" {
-		http.Error(w, "Missing ipfs_url query parameter", http.StatusBadRequest)
-		return
+		return 0, fmt.Errorf("missing IPFS URLs")
 	}
 
-	h.logger.Infof("[GetTaskFees] IPFS URLs: %s", ipfsURLs)
-	// // Split the IPFS URLs by comma
 	urlList := strings.Split(ipfsURLs, ",")
 	totalFee := 0.0
-	var mu sync.Mutex // Mutex to protect totalFee
-	var wg sync.WaitGroup // WaitGroup to wait for all goroutines to finish
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
 	ctx := context.Background()
 
@@ -118,69 +115,65 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 		client.WithAPIVersionNegotiation(),
 	)
 	if err != nil {
-		h.logger.Errorf("[GetTaskFees] Error creating Docker client: %v", err)
-		http.Error(w, "Failed to create Docker client", http.StatusInternalServerError)
-		return
+		return 0, fmt.Errorf("failed to create Docker client: %v", err)
 	}
 	defer cli.Close()
 
 	// Process each IPFS URL concurrently
 	for _, ipfsURL := range urlList {
-		ipfsURL = strings.TrimSpace(ipfsURL) // Trim any whitespace
-		wg.Add(1) // Increment the WaitGroup counter
+		ipfsURL = strings.TrimSpace(ipfsURL)
+		wg.Add(1)
 
 		go func(url string) {
-			defer wg.Done() // Decrement the counter when the goroutine completes
-			h.logger.Infof("[GetTaskFees] Starting processing for URL: %s", url) // Log when goroutine starts
+			defer wg.Done()
 
-			// Download and process the IPFS file
 			codePath, err := resources.DownloadIPFSFile(url)
 			if err != nil {
-				h.logger.Errorf("[GetTaskFees] Error downloading IPFS file for URL %s: %v", url, err)
-				return // Exit the goroutine on error
+				h.logger.Errorf("Error downloading IPFS file: %v", err)
+				return
 			}
 			defer os.RemoveAll(filepath.Dir(codePath))
 
-			// Create container
 			containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
 			if err != nil {
-				h.logger.Errorf("[GetTaskFees] Error creating container for URL %s: %v", url, err)
-				return // Exit the goroutine on error
+				h.logger.Errorf("Error creating container: %v", err)
+				return
 			}
 			defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
 
-			// Monitor resources and get stats
 			stats, err := resources.MonitorResources(ctx, cli, containerID)
 			if err != nil {
-				h.logger.Errorf("[GetTaskFees] Error monitoring resources for URL %s: %v", url, err)
-				return // Exit the goroutine on error
+				h.logger.Errorf("Error monitoring resources: %v", err)
+				return
 			}
 
-			// Add the fee for this URL to the total fee
-			mu.Lock() // Lock the mutex before updating totalFee
+			mu.Lock()
 			totalFee += stats.TotalFee
-			mu.Unlock() // Unlock the mutex
-
-			h.logger.Infof("[GetTaskFees] Finished processing for URL: %s, Fee: %f", url, stats.TotalFee) // Log when goroutine finishes
-		}(ipfsURL) // Pass the current URL to the goroutine
+			mu.Unlock()
+		}(ipfsURL)
 	}
 
-	wg.Wait() // Wait for all goroutines to finish
+	wg.Wait()
+	return totalFee, nil
+}
 
-	// Return the total fee calculation
+// Update the HTTP handler to use the service function
+func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
+	ipfsURLs := r.URL.Query().Get("ipfs_url")
+
+	totalFee, err := h.CalculateTaskFees(ipfsURLs)
+	if err != nil {
+		h.logger.Errorf("[GetTaskFees] Error calculating fees: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	response := struct {
 		TotalFee float64 `json:"total_fee"`
 	}{
 		TotalFee: totalFee,
 	}
 
-	h.logger.Infof("[GetTaskFees] Total fee calculated: %v", response)
-
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.Errorf("[GetTaskFees] Error encoding response: %v", err)
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		return
-	}
+	json.NewEncoder(w).Encode(response)
 }
-

@@ -19,16 +19,26 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-
-	// "github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
+	"github.com/trigg3rX/triggerx-backend/pkg/common"
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+
+	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 )
+
+// ValidatorInterface defines the contract for job validation
+type ValidatorInterface interface {
+	ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error)
+	ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error)
+	ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData, triggerData *jobtypes.TriggerData) (bool, error)
+}
 
 // JobExecutor handles execution of blockchain transactions and contract calls
 // Can be extended with additional configuration and dependencies as needed
@@ -150,25 +160,25 @@ func (ac *ArgumentConverter) convertToBool(value interface{}) (bool, error) {
 	}
 }
 
-func (ac *ArgumentConverter) convertToAddress(value interface{}) (common.Address, error) {
+func (ac *ArgumentConverter) convertToAddress(value interface{}) (ethcommon.Address, error) {
 	// Convert to Ethereum address
 	switch v := value.(type) {
 	case string:
-		if !common.IsHexAddress(v) {
-			return common.Address{}, fmt.Errorf("invalid Ethereum address: %s", v)
+		if !ethcommon.IsHexAddress(v) {
+			return ethcommon.Address{}, fmt.Errorf("invalid Ethereum address: %s", v)
 		}
-		return common.HexToAddress(v), nil
+		return ethcommon.HexToAddress(v), nil
 	case map[string]interface{}:
 		// Check if we have a string representation in the map
 		if addrStr, ok := v["address"].(string); ok {
-			if !common.IsHexAddress(addrStr) {
-				return common.Address{}, fmt.Errorf("invalid Ethereum address: %s", addrStr)
+			if !ethcommon.IsHexAddress(addrStr) {
+				return ethcommon.Address{}, fmt.Errorf("invalid Ethereum address: %s", addrStr)
 			}
-			return common.HexToAddress(addrStr), nil
+			return ethcommon.HexToAddress(addrStr), nil
 		}
-		return common.Address{}, fmt.Errorf("cannot convert map to address")
+		return ethcommon.Address{}, fmt.Errorf("cannot convert map to address")
 	default:
-		return common.Address{}, fmt.Errorf("cannot convert type %T to address", v)
+		return ethcommon.Address{}, fmt.Errorf("cannot convert type %T to address", v)
 	}
 }
 
@@ -178,7 +188,7 @@ func (ac *ArgumentConverter) convertToBytes(value interface{}) ([]byte, error) {
 	case string:
 		// Check if it's a hex string
 		if strings.HasPrefix(v, "0x") {
-			return common.FromHex(v), nil
+			return ethcommon.FromHex(v), nil
 		}
 		return []byte(v), nil
 	case []byte:
@@ -328,11 +338,11 @@ func (ac *ArgumentConverter) convertToStruct(value interface{}, targetType abi.T
 }
 
 type JobExecutor struct {
-	ethClient       *ethclient.Client
+	ethClient       common.EthClientInterface
 	etherscanAPIKey string
 	argConverter    *ArgumentConverter
-	validator       *validation.JobValidator
-	logger          validation.Logger
+	validator       common.ValidatorInterface
+	logger          common.Logger
 }
 
 func NewJobExecutor(ethClient *ethclient.Client, etherscanAPIKey string) *JobExecutor {
@@ -392,23 +402,63 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 	}
 
 	logger.Infof("Executing contract call for job %s with static arguments", job.JobID)
-	if job.TaskDefinitionID == 5 {
-		if job.ScriptTriggerFunction != "" {
-			satisfied, err := e.evaluateConditionScript(job.ScriptTriggerFunction)
-			if err != nil {
-				logger.Errorf("Failed to evaluate condition script: %v", err)
-				return executionResult, fmt.Errorf("condition script evaluation failed: %v", err)
-			}
 
-			if !satisfied {
-				logger.Infof("Condition not satisfied for job %d, skipping execution", job.JobID)
-				return executionResult, nil // Return without error, but execution was skipped
-			}
-			logger.Infof("Condition satisfied for job %d, proceeding with execution", job.JobID)
+	// Create Docker client for script execution if needed
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return executionResult, fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
+
+	if job.TaskDefinitionID == 5 && job.ScriptTriggerFunction != "" {
+		// Download and execute the condition script
+		codePath, err := resources.DownloadIPFSFile(job.ScriptTriggerFunction)
+		if err != nil {
+			logger.Errorf("Failed to download condition script: %v", err)
+			return executionResult, fmt.Errorf("failed to download condition script: %v", err)
 		}
+		defer os.RemoveAll(filepath.Dir(codePath))
+
+		// Create and execute container for condition script
+		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
+		if err != nil {
+			logger.Errorf("Failed to create container for condition script: %v", err)
+			return executionResult, fmt.Errorf("failed to create container: %v", err)
+		}
+		defer cli.ContainerRemove(context.Background(), containerID, dockertypes.ContainerRemoveOptions{Force: true})
+
+		// Monitor resources and get script output
+		stats, err := resources.MonitorResources(context.Background(), cli, containerID)
+		if err != nil {
+			logger.Errorf("Failed to monitor condition script resources: %v", err)
+			return executionResult, fmt.Errorf("failed to monitor resources: %v", err)
+		}
+
+		// Check if condition was satisfied based on script output
+		if !stats.Status {
+			logger.Infof("Condition not satisfied for job %d, skipping execution", job.JobID)
+			return executionResult, nil
+		}
+		logger.Infof("Condition satisfied for job %d, proceeding with execution", job.JobID)
+
+		// Update execution result with resource usage from condition script
+		executionResult.MemoryUsage = stats.MemoryUsage
+		executionResult.CPUPercentage = stats.CPUPercentage
+		executionResult.NetworkRx = stats.RxBytes
+		executionResult.NetworkTx = stats.TxBytes
+		executionResult.BlockRead = stats.BlockRead
+		executionResult.BlockWrite = stats.BlockWrite
+		executionResult.BandwidthRate = stats.BandwidthRate
+		executionResult.TotalFee = stats.TotalFee
+		executionResult.StaticComplexity = stats.StaticComplexity
+		executionResult.DynamicComplexity = stats.DynamicComplexity
+		executionResult.ComplexityIndex = stats.ComplexityIndex
 	}
 
-	contractAddress := common.HexToAddress(job.TargetContractAddress)
+	contractAddress := ethcommon.HexToAddress(job.TargetContractAddress)
 	contractABI, method, err := e.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
 	if err != nil {
 		return executionResult, err
@@ -432,7 +482,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 		return executionResult, fmt.Errorf("failed to parse private key: %v", err)
 	}
 
-	nonce, err := e.ethClient.PendingNonceAt(context.Background(), common.HexToAddress(config.KeeperAddress))
+	nonce, err := e.ethClient.PendingNonceAt(context.Background(), ethcommon.HexToAddress(config.KeeperAddress))
 	if err != nil {
 		return executionResult, err
 	}
@@ -480,140 +530,164 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 
 	logger.Infof("Executing job %d with dynamic arguments", job.JobID)
 
-	// Step 1: Check if we need to evaluate a condition from the script
-	if job.TaskDefinitionID == 6 {
-		if job.ScriptTriggerFunction != "" {
-			satisfied, err := e.evaluateConditionScript(job.ScriptTriggerFunction)
-			if err != nil {
-				logger.Errorf("Failed to evaluate condition script: %v", err)
-				return executionResult, fmt.Errorf("condition script evaluation failed: %v", err)
-			}
+	// Create Docker client for script execution
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return executionResult, fmt.Errorf("failed to create Docker client: %v", err)
+	}
+	defer cli.Close()
 
-			if !satisfied {
-				logger.Infof("Condition not satisfied for job %d, skipping execution", job.JobID)
-				return executionResult, nil // Return without error, but execution was skipped
-			}
-			logger.Infof("Condition satisfied for job %d, proceeding with execution", job.JobID)
+	// Step 1: Check if we need to evaluate a condition from the script
+	if job.TaskDefinitionID == 6 && job.ScriptTriggerFunction != "" {
+		// Download and execute the condition script
+		codePath, err := resources.DownloadIPFSFile(job.ScriptTriggerFunction)
+		if err != nil {
+			logger.Errorf("Failed to download condition script: %v", err)
+			return executionResult, fmt.Errorf("failed to download condition script: %v", err)
 		}
+		defer os.RemoveAll(filepath.Dir(codePath))
+
+		// Create and execute container for condition script
+		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
+		if err != nil {
+			logger.Errorf("Failed to create container for condition script: %v", err)
+			return executionResult, fmt.Errorf("failed to create container: %v", err)
+		}
+		defer cli.ContainerRemove(context.Background(), containerID, dockertypes.ContainerRemoveOptions{Force: true})
+
+		// Monitor resources and get script output
+		stats, err := resources.MonitorResources(context.Background(), cli, containerID)
+		if err != nil {
+			logger.Errorf("Failed to monitor condition script resources: %v", err)
+			return executionResult, fmt.Errorf("failed to monitor resources: %v", err)
+		}
+
+		// Check if condition was satisfied based on script output
+		if !stats.Status {
+			logger.Infof("Condition not satisfied for job %d, skipping execution", job.JobID)
+			return executionResult, nil
+		}
+		logger.Infof("Condition satisfied for job %d, proceeding with execution", job.JobID)
+
+		// Update execution result with resource usage from condition script
+		executionResult.MemoryUsage = stats.MemoryUsage
+		executionResult.CPUPercentage = stats.CPUPercentage
+		executionResult.NetworkRx = stats.RxBytes
+		executionResult.NetworkTx = stats.TxBytes
+		executionResult.BlockRead = stats.BlockRead
+		executionResult.BlockWrite = stats.BlockWrite
+		executionResult.BandwidthRate = stats.BandwidthRate
+		executionResult.TotalFee = stats.TotalFee
+		executionResult.StaticComplexity = stats.StaticComplexity
+		executionResult.DynamicComplexity = stats.DynamicComplexity
+		executionResult.ComplexityIndex = stats.ComplexityIndex
 	}
 
 	// Step 2: Get the contract method and ABI
-	contractAddress := common.HexToAddress(job.TargetContractAddress)
+	contractAddress := ethcommon.HexToAddress(job.TargetContractAddress)
 	contractABI, method, err := e.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
 	if err != nil {
 		logger.Errorf("Failed to get contract method and ABI: %v", err)
 		return executionResult, err
 	}
 
-	// Step 3: Fetch dynamic arguments from IPFS or use provided arguments
+	// Step 3: Execute the script to get dynamic arguments if ScriptIPFSUrl is provided
 	var argData interface{}
-
 	if job.ScriptIPFSUrl != "" {
-		// Check if the IPFS URL points to a Go script (detection based on content)
-		scriptContent, err := e.fetchFromIPFS(job.ScriptIPFSUrl)
+		// Download and execute the script
+		codePath, err := resources.DownloadIPFSFile(job.ScriptIPFSUrl)
 		if err != nil {
-			logger.Errorf("Failed to fetch from IPFS: %v", err)
-			return executionResult, fmt.Errorf("failed to fetch from IPFS: %v", err)
+			logger.Errorf("Failed to download script: %v", err)
+			return executionResult, fmt.Errorf("failed to download script: %v", err)
+		}
+		defer os.RemoveAll(filepath.Dir(codePath))
+
+		// Create and execute container for script
+		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
+		if err != nil {
+			logger.Errorf("Failed to create container: %v", err)
+			return executionResult, fmt.Errorf("failed to create container: %v", err)
+		}
+		defer cli.ContainerRemove(context.Background(), containerID, dockertypes.ContainerRemoveOptions{Force: true})
+
+		// Monitor resources and get script output
+		stats, err := resources.MonitorResources(context.Background(), cli, containerID)
+		if err != nil {
+			logger.Errorf("Failed to monitor script resources: %v", err)
+			return executionResult, fmt.Errorf("failed to monitor resources: %v", err)
 		}
 
-		// Check if this is a Go script that needs to be executed
-		if strings.HasPrefix(strings.TrimSpace(scriptContent), "package main") {
-			// It's a Go script, execute it to get the result
-			result, err := e.executeGoScript(scriptContent)
-			if err != nil {
-				logger.Errorf("Failed to execute Go script: %v", err)
-				return executionResult, fmt.Errorf("failed to execute Go script: %v", err)
-			}
-
-			// Try to parse the result
-			scriptOutput := strings.TrimSpace(result)
-			logger.Infof("Go script execution result: %s", scriptOutput)
-
-			// Look for "Payload received:" in the output
-			if strings.Contains(scriptOutput, "Payload received:") {
-				parts := strings.Split(scriptOutput, "Payload received:")
-				if len(parts) > 1 {
-					payload := strings.TrimSpace(parts[1])
-
-					// Try to parse as number for uint256 argument
-					if floatVal, err := strconv.ParseFloat(payload, 64); err == nil {
-						// Create a big.Int from the float value
-						intVal := big.NewInt(int64(floatVal))
-						argData = []interface{}{intVal}
-						logger.Infof("Parsed payload as number: %v", intVal)
-					} else {
-						// Use as string
-						argData = []interface{}{payload}
-						logger.Infof("Using payload as string: %s", payload)
-					}
-				}
-			} else {
-				// Try to parse the entire output as a number
-				if floatVal, err := strconv.ParseFloat(scriptOutput, 64); err == nil {
-					argData = []interface{}{big.NewInt(int64(floatVal))}
-					logger.Infof("Parsed output as number: %v", floatVal)
-				} else {
-					// Use as string
-					argData = []interface{}{scriptOutput}
-					logger.Infof("Using output as string: %s", scriptOutput)
-				}
-			}
-		} else {
-			// Not a Go script, try to parse as JSON
-			var parsedData interface{}
-			if err := json.Unmarshal([]byte(scriptContent), &parsedData); err == nil {
-				argData = parsedData
-				logger.Infof("Successfully parsed JSON data from IPFS")
-			} else {
-				// If not JSON, treat as a string array
-				argData = strings.Split(strings.TrimSpace(scriptContent), "\n")
-				logger.Infof("Using raw data from IPFS as string array")
-			}
+		// Parse the script output
+		if len(stats.Output) == 0 {
+			logger.Errorf("Script output is empty")
+			return executionResult, fmt.Errorf("script output is empty")
 		}
+
+		// Try to parse the output as JSON
+		if err := json.Unmarshal([]byte(stats.Output), &argData); err != nil {
+			logger.Errorf("Failed to parse script output as arguments: %v", err)
+			return executionResult, fmt.Errorf("failed to parse script output: %v", err)
+		}
+
+		logger.Infof("Successfully parsed JSON data from script output")
+
+		// Update execution result with resource usage from script
+		executionResult.MemoryUsage = stats.MemoryUsage
+		executionResult.CPUPercentage = stats.CPUPercentage
+		executionResult.NetworkRx = stats.RxBytes
+		executionResult.NetworkTx = stats.TxBytes
+		executionResult.BlockRead = stats.BlockRead
+		executionResult.BlockWrite = stats.BlockWrite
+		executionResult.BandwidthRate = stats.BandwidthRate
+		executionResult.TotalFee = stats.TotalFee
+		executionResult.StaticComplexity = stats.StaticComplexity
+		executionResult.DynamicComplexity = stats.DynamicComplexity
+		executionResult.ComplexityIndex = stats.ComplexityIndex
+	} else if len(job.Arguments) > 0 {
+		// If no script URL but arguments are provided, try to parse the first argument as JSON
+		if err := json.Unmarshal([]byte(job.Arguments[0]), &argData); err != nil {
+			logger.Errorf("Failed to parse argument as JSON: %v", err)
+			return executionResult, fmt.Errorf("failed to parse argument: %v", err)
+		}
+		logger.Infof("Successfully parsed JSON data from single argument")
 	} else {
-		// Use provided arguments
-		// Check if arguments are already structured
-		if len(job.Arguments) == 1 {
-			// Try to parse as JSON if it's a single argument
-			var parsedData interface{}
-			if err := json.Unmarshal([]byte(job.Arguments[0]), &parsedData); err == nil {
-				argData = parsedData
-				logger.Infof("Successfully parsed JSON data from single argument")
-			} else {
-				argData = job.Arguments
-			}
-		} else {
-			argData = job.Arguments
-		}
+		logger.Errorf("No script URL or arguments provided")
+		return executionResult, fmt.Errorf("no script URL or arguments provided")
 	}
 
-	// Step 4: Process the arguments based on the contract method requirements
+	// Step 4: Process the arguments
 	convertedArgs, err := e.processArguments(argData, method.Inputs, contractABI)
 	if err != nil {
-		logger.Errorf("Failed to process arguments: %v", err)
+		logger.Errorf("Error processing arguments: %v", err)
 		return executionResult, fmt.Errorf("error processing arguments: %v", err)
 	}
 
-	// Pack arguments for the contract call
+	// Step 5: Pack the arguments
 	input, err := contractABI.Pack(method.Name, convertedArgs...)
 	if err != nil {
 		logger.Errorf("Error packing arguments: %v", err)
 		return executionResult, err
 	}
 
-	// Create and send transaction
+	// Step 6: Create and send transaction
 	privateKey, err := crypto.HexToECDSA(config.PrivateKeyController)
 	if err != nil {
+		logger.Errorf("Failed to parse private key: %v", err)
 		return executionResult, fmt.Errorf("failed to parse private key: %v", err)
 	}
 
-	nonce, err := e.ethClient.PendingNonceAt(context.Background(), common.HexToAddress(config.KeeperAddress))
+	nonce, err := e.ethClient.PendingNonceAt(context.Background(), ethcommon.HexToAddress(config.KeeperAddress))
 	if err != nil {
+		logger.Errorf("Failed to get nonce: %v", err)
 		return executionResult, err
 	}
 
 	gasPrice, err := e.ethClient.SuggestGasPrice(context.Background())
 	if err != nil {
+		logger.Errorf("Failed to get gas price: %v", err)
 		return executionResult, err
 	}
 
@@ -621,16 +695,18 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 	tx := types.NewTransaction(nonce, contractAddress, big.NewInt(0), 300000, gasPrice, input)
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(big.NewInt(11155420)), privateKey)
 	if err != nil {
+		logger.Errorf("Failed to sign transaction: %v", err)
 		return executionResult, err
 	}
 
 	// Send transaction
 	err = e.ethClient.SendTransaction(context.Background(), signedTx)
 	if err != nil {
+		logger.Errorf("Failed to send transaction: %v", err)
 		return executionResult, err
 	}
 
-	// Wait for transaction receipt
+	// Step 7: Wait for transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), e.ethClient, signedTx)
 	if err != nil {
 		logger.Errorf("Error waiting for transaction: %v", err)

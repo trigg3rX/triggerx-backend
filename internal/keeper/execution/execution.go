@@ -4,8 +4,8 @@ import (
 	// "bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 
 	// "fmt"
 
@@ -64,7 +64,7 @@ func ExecuteTask(c *gin.Context) {
 	if len(hexData) > 2 && hexData[:2] == "0x" {
 		hexData = hexData[2:]
 	}
-	
+
 	// Decode the hex string to bytes
 	decodedData, err := hex.DecodeString(hexData)
 	if err != nil {
