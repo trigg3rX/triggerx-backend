@@ -66,5 +66,12 @@ func Init() {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
+	if  PeerID == "" {
+		logger.Info("Peer ID or Public IPV4 Address not set properly !!!")
+		logger.Info("Please set the variables in the .env file")
+		logger.Info("Without them the keeper will not be able to reconnect to the network")
+		logger.Fatal("Get Peer ID from https://triggerx.gitbook.io/triggerx-docs/join-as-keeper#p2p-config")
+	}
+
 	gin.SetMode(gin.ReleaseMode)
 }
