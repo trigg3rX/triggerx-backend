@@ -21,136 +21,59 @@ type NotificationConfig struct {
 	BotToken      string
 }
 
-func (h *Handler) HandleUpdateKeeperStatus(w http.ResponseWriter, r *http.Request) {
-	// Extract keeper address from URL parameters
-	vars := mux.Vars(r)
-	keeperAddress := vars["address"]
-
-	if keeperAddress == "" {
-		http.Error(w, "Keeper address is required", http.StatusBadRequest)
-		return
-	}
-
-	// Parse request body
-	var statusUpdate types.KeeperStatusUpdate
-	err := json.NewDecoder(r.Body).Decode(&statusUpdate)
-	if err != nil {
-		h.logger.Error("Failed to decode request body: " + err.Error())
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// First get the keeper_id using the keeper_address
-	var keeperID int64
-	err = h.db.Session().Query(`
-    SELECT keeper_id FROM triggerx.keeper_data 
-    WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperAddress).Scan(&keeperID)
-
-	if err != nil {
-		h.logger.Error("Failed to get keeper ID: " + err.Error())
-		http.Error(w, "Database error while getting keeper ID", http.StatusInternalServerError)
-		return
-	}
-
-	// Update keeper status in database using the keeper_id (primary key)
-	err = h.db.Session().Query(`
-    UPDATE triggerx.keeper_data 
-    SET status = ? 
-    WHERE keeper_id = ?`,
-		statusUpdate.Status, keeperID).Exec()
-
-	if err != nil {
-		h.logger.Error("Failed to update keeper status: " + err.Error())
-		http.Error(w, "Failed to update keeper status: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Return success response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Keeper status updated successfully",
-	})
-}
-
-func (h *Handler) CreateKeeperData(w http.ResponseWriter, r *http.Request) {
-	var keeperData types.CreateKeeperData
-	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-		h.logger.Errorf("[CreateKeeperData] Error decoding request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Get the maximum keeper ID from the database
-	var currentKeeperID int64
-	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperData.KeeperAddress).Scan(&currentKeeperID); err != nil {
-		h.logger.Errorf("[CreateKeeperData] Error getting max keeper ID: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.logger.Infof("[CreateKeeperData] Updating keeper with ID: %d", currentKeeperID)
-	if err := h.db.Session().Query(`
-        UPDATE triggerx.keeper_data SET 
-            registered_tx = ?, consensus_keys = ?, status = ?, chat_id = ?
-        WHERE keeper_id = ?`,
-		keeperData.RegisteredTx, keeperData.ConsensusKeys, true, keeperData.ChatID, currentKeeperID).Exec(); err != nil {
-		h.logger.Errorf("[CreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.logger.Infof("[CreateKeeperData] Successfully updated keeper with ID: %d", currentKeeperID)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(keeperData)
-}
-
-func (h *Handler) GoogleFormCreateKeeperData(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-		h.logger.Errorf("[GoogleFormCreateKeeperData] Error decoding request body: %v", err)
+		h.logger.Errorf("Error decoding request body: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Check if the keeper_address already exists
 	var existingKeeperID int64
 	if err := h.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperData.KeeperAddress).Scan(&existingKeeperID); err == nil {
-		h.logger.Warnf("[GoogleFormCreateKeeperData] Keeper with address %s already exists with ID: %d", keeperData.KeeperAddress, existingKeeperID)
-		http.Error(w, "Keeper with this address already exists", http.StatusConflict)
-		return
+		h.logger.Infof(" Keeper already exists with ID: %d", existingKeeperID)
 	}
 
-	// Get the maximum keeper ID from the database
-	var maxKeeperID int64
-	if err := h.db.Session().Query(`
-		SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
-		h.logger.Errorf("[GoogleFormCreateKeeperData] Error getting max keeper ID : %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	currentKeeperID := maxKeeperID + 1
+	if existingKeeperID != 0 {
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.keeper_data SET 
+			keeper_name = ?, keeper_address = ?, rewards_address = ?, email_id = ?
+			WHERE keeper_id = ?`,
+			keeperData.KeeperName, keeperData.KeeperAddress, keeperData.RewardsAddress,
+			keeperData.EmailID, existingKeeperID).Exec(); err != nil {
+		h.logger.Errorf(" Error updating keeper with ID %d: %v", existingKeeperID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Get the maximum keeper ID from the database
+		var maxKeeperID int64
+		if err := h.db.Session().Query(`
+			SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
+			h.logger.Errorf(" Error getting max keeper ID : %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		currentKeeperID := maxKeeperID + 1
 
-	h.logger.Infof("[GoogleFormCreateKeeperData] Creating keeper with ID: %d", currentKeeperID)
-	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.keeper_data (
-            keeper_id, keeper_name, keeper_address, 
-            rewards_address, no_exctask, keeper_points, verified, email_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress,
-		keeperData.RewardsAddress, 0, 0, true, keeperData.EmailID).Exec(); err != nil {
-		h.logger.Errorf("[GoogleFormCreateKeeperData] Error creating keeper with ID %d: %v", currentKeeperID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		h.logger.Infof(" Creating keeper with ID: %d", currentKeeperID)
+		if err := h.db.Session().Query(`
+			INSERT INTO triggerx.keeper_data (
+				keeper_id, keeper_name, keeper_address, rewards_booster,
+				rewards_address, no_exctask, keeper_points, verified, email_id
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress, 2,
+			keeperData.RewardsAddress, 0, 0, true, keeperData.EmailID).Exec(); err != nil {
+			h.logger.Errorf(" Error creating keeper with ID %d: %v", currentKeeperID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		h.logger.Infof(" Successfully created keeper with ID: %d", currentKeeperID)
 	}
 
-	h.logger.Infof("[GoogleFormCreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(keeperData)
 }
@@ -162,17 +85,18 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 
 	var keeperData types.KeeperData
 	if err := h.db.Session().Query(`
-        SELECT keeper_id, keeper_address, rewards_address, stakes, strategies, 
-               verified, registered_tx, status, consensus_keys, connection_address, 
-               no_exctask, keeper_points, keeper_name, chat_id
-        FROM triggerx.keeper_data 
+        SELECT keeper_id, keeper_name, keeper_address, registered_tx, operator_id,
+			rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
+			strategies, verified, status, online, version, no_exctask, chat_id, email_id
+		FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Scan(
-		&keeperData.KeeperID, &keeperData.KeeperAddress,
-		&keeperData.RewardsAddress, &keeperData.Stakes, &keeperData.Strategies,
-		&keeperData.Verified, &keeperData.RegisteredTx, &keeperData.Status,
-		&keeperData.ConsensusKeys, &keeperData.ConnectionAddress,
-		&keeperData.NoExcTask, &keeperData.KeeperPoints, &keeperData.KeeperName,
-		&keeperData.ChatID); err != nil {
+		&keeperData.KeeperID, &keeperData.KeeperName, &keeperData.KeeperAddress,
+		&keeperData.RegisteredTx, &keeperData.OperatorID,
+		&keeperData.RewardsAddress, &keeperData.RewardsBooster, &keeperData.VotingPower,
+		&keeperData.KeeperPoints, &keeperData.ConnectionAddress,
+		&keeperData.Strategies, &keeperData.Verified, &keeperData.Status,
+		&keeperData.Online, &keeperData.Version, &keeperData.NoExcTask,
+		&keeperData.ChatID, &keeperData.EmailID); err != nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper with ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -186,7 +110,7 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
 	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
 			FROM triggerx.keeper_data 
-			WHERE verified = true AND status = true AND online = true
+			WHERE verified = true AND status = true AND online = true AND keeper_id = 2
 			ALLOW FILTERING`).Iter()
 
 	var performer types.GetPerformerData
@@ -229,34 +153,25 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	h.logger.Infof("[GetAllKeepers] Retrieving all keepers")
 	var keepers []types.KeeperData
 
-	// Explicitly name columns instead of using SELECT *
 	iter := h.db.Session().Query(`
-		SELECT keeper_id, keeper_address, registered_tx, 
-		       rewards_address, stakes, strategies,
-		       verified, status, consensus_keys,
-		       connection_address, no_exctask, keeper_points, chat_id
+		SELECT keeper_id, keeper_name, keeper_address, registered_tx, operator_id,
+		       rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
+		       strategies, verified, status, online, version, no_exctask, chat_id, email_id
 		FROM triggerx.keeper_data`).Iter()
 
 	var keeper types.KeeperData
-	var tmpConsensusKeys, tmpStrategies []string
-	var tmpStakes []float64
+	var tmpStrategies []string
 
 	for iter.Scan(
-		&keeper.KeeperID, &keeper.KeeperAddress, &keeper.RegisteredTx,
-		&keeper.RewardsAddress, &tmpStakes, &tmpStrategies,
-		&keeper.Verified, &keeper.Status, &tmpConsensusKeys,
-		&keeper.ConnectionAddress, &keeper.NoExcTask, &keeper.KeeperPoints,
-		&keeper.ChatID) {
+		&keeper.KeeperID, &keeper.KeeperName, &keeper.KeeperAddress, &keeper.RegisteredTx,
+		&keeper.OperatorID, &keeper.RewardsAddress, &keeper.RewardsBooster, &keeper.VotingPower,
+		&keeper.KeeperPoints, &keeper.ConnectionAddress, &tmpStrategies,
+		&keeper.Verified, &keeper.Status, &keeper.Online, &keeper.Version, &keeper.NoExcTask,
+		&keeper.ChatID, &keeper.EmailID) {
 
-		// Make deep copies of the slices to avoid reference issues
-		keeper.Stakes = make([]float64, len(tmpStakes))
-		copy(keeper.Stakes, tmpStakes)
 
 		keeper.Strategies = make([]string, len(tmpStrategies))
 		copy(keeper.Strategies, tmpStrategies)
-
-		keeper.ConsensusKeys = make([]string, len(tmpConsensusKeys))
-		copy(keeper.ConsensusKeys, tmpConsensusKeys)
 
 		keepers = append(keepers, keeper)
 	}
@@ -282,47 +197,6 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
-}
-
-func (h *Handler) UpdateKeeperConnectionData(w http.ResponseWriter, r *http.Request) {
-	var keeperData types.UpdateKeeperConnectionData
-	var response types.UpdateKeeperConnectionDataResponse
-	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
-		h.logger.Errorf("[UpdateKeeperData] Error decoding request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	h.logger.Infof("[UpdateKeeperData] Processing update for keeper with address: %s", keeperData.KeeperAddress)
-
-	var keeperID int64
-	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperData.KeeperAddress).Scan(&keeperID); err != nil {
-		h.logger.Errorf("[UpdateKeeperData] Error retrieving keeper ID for address %s: %v", keeperData.KeeperAddress, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.logger.Infof("[UpdateKeeperData] Found keeper with ID: %d, updating connection data", keeperID)
-
-	if err := h.db.Session().Query(`
-        UPDATE triggerx.keeper_data 
-        SET connection_address = ?, verified = ?
-        WHERE keeper_id = ?`,
-		keeperData.ConnectionAddress, true, keeperID).Exec(); err != nil {
-		h.logger.Errorf("[UpdateKeeperData] Error updating keeper with ID %d: %v", keeperID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	response.KeeperID = keeperID
-	response.KeeperAddress = keeperData.KeeperAddress
-	response.Verified = true
-
-	h.logger.Infof("[UpdateKeeperData] Successfully updated keeper with ID: %d", keeperID)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
 }
 
 // IncrementKeeperTaskCount increments the no_exctask counter for a keeper

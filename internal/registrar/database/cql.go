@@ -43,9 +43,9 @@ func KeeperRegistered(operatorAddress string, txHash string) error {
 
 		if err := db.Session().Query(`
 			INSERT INTO triggerx.keeper_data (
-				keeper_id, keeper_address, registered_tx, status
-			) VALUES (?, ?, ?, ?)`,
-			currentKeeperID, operatorAddress, txHash, true).Exec(); err != nil {
+				keeper_id, keeper_address, registered_tx, status, rewards_booster
+			) VALUES (?, ?, ?, ?, ?)`,
+			currentKeeperID, operatorAddress, txHash, true, 2).Exec(); err != nil {
 			logger.Errorf(" Error creating new keeper: %v", err)
 		}
 
