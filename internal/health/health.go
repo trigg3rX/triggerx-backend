@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/crypto"
+	// "github.com/trigg3rX/triggerx-backend/pkg/crypto"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -21,21 +21,21 @@ func HandleCheckInEvent(c *gin.Context) {
 	}
 
 	// Verify signature
-	message := keeperHealth.KeeperAddress
-	isValid, err := crypto.VerifySignature(message, keeperHealth.Signature, keeperHealth.KeeperAddress)
-	if err != nil {
-		logger.Error("Failed to verify signature", "error", err, "keeper", keeperHealth.KeeperAddress)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature"})
-		return
-	}
+	// message := keeperHealth.KeeperAddress
+	// isValid, err := crypto.VerifySignature(message, keeperHealth.Signature, keeperHealth.KeeperAddress)
+	// if err != nil {
+	// 	logger.Error("Failed to verify signature", "error", err, "keeper", keeperHealth.KeeperAddress)
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature"})
+	// 	return
+	// }
 
-	if !isValid {
-		logger.Error("Invalid signature for keeper", "keeper", keeperHealth.KeeperAddress)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature, authorization failed"})
-		return
-	}
+	// if !isValid {
+	// 	logger.Error("Invalid signature for keeper", "keeper", keeperHealth.KeeperAddress)
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature, authorization failed"})
+	// 	return
+	// }
 
-	if keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" {
+	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" {
 	} else {
 		logger.Error("Invalid version for keeper", "keeper", keeperHealth.KeeperAddress)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid version, authorization failed"})

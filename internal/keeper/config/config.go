@@ -62,7 +62,7 @@ func Init() {
 	PublicIPV4Address = os.Getenv("PUBLIC_IPV4_ADDRESS")
 	PeerID = os.Getenv("PEER_ID")
 
-	if PrivateKeyConsensus == "" || PrivateKeyController == "" || KeeperAddress == "" || KeeperRPCPort == "" || KeeperP2PPort == "" {
+	if PrivateKeyConsensus == "" || KeeperAddress == "" || KeeperRPCPort == "" || KeeperP2PPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
