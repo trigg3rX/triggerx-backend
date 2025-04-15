@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     job_id bigint,
     task_definition_id int,
     created_at timestamp,
-    task_fee bigint,
+    task_fee double,
     
     execution_timestamp timestamp,
     execution_tx_hash text,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     rewards_address text,
     rewards_booster float,
     voting_power bigint,
-    keeper_points bigint,
+    keeper_points double,
     connection_address text,
     peer_id text,
     strategies list<text>,
