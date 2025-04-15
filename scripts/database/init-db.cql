@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_submission_tx_hash text,
     
     is_successful boolean,
-    PRIMARY KEY (task_id, task_number)
+    PRIMARY KEY (task_id)
 );
 
 -- Create Keeper_data table
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_name text,
     keeper_address text,
     registered_tx text,
-    operator_id bigint,
+    operator_id text,
     
     rewards_address text,
     rewards_booster float,

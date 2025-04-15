@@ -144,12 +144,12 @@ func UpdatePerformerPoints(performerAddress string, taskFee int64, isAccepted bo
 
 func UpdateAttesterPoints(attesterId string, taskFee int64) error {
 	var attesterPoints int64
-	var keeperID int
+	var keeperID int64
 	var rewardsBooster int
 
 	if err := db.Session().Query(`
 		SELECT keeper_id, rewards_booster FROM triggerx.keeper_data
-		WHERE attester_id = ? ALLOW FILTERING`,
+		WHERE operator_id = ? ALLOW FILTERING`,
 		attesterId).Scan(&keeperID, &rewardsBooster); err != nil {
 		logger.Error(fmt.Sprintf("Failed to update attester points: %v", err))
 		return err

@@ -626,13 +626,40 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 			return executionResult, fmt.Errorf("script output is empty")
 		}
 
-		// Try to parse the output as JSON
+		logger.Infof("Script output: %s", stats.Output)
+
+		// Try to parse the output as JSON directly first
 		if err := json.Unmarshal([]byte(stats.Output), &argData); err != nil {
-			logger.Errorf("Failed to parse script output as arguments: %v", err)
-			return executionResult, fmt.Errorf("failed to parse script output: %v", err)
+			logger.Infof("Could not parse output as direct JSON, trying to extract value from payload format")
+
+			// Try to extract value from "Payload received: X" format
+			lines := strings.Split(stats.Output, "\n")
+			for _, line := range lines {
+				if strings.Contains(line, "Payload received:") {
+					payloadValue := strings.TrimSpace(strings.TrimPrefix(line, "Payload received:"))
+					logger.Infof("Extracted payload value: %s", payloadValue)
+
+					// Try to parse the extracted value as JSON
+					if err := json.Unmarshal([]byte(payloadValue), &argData); err != nil {
+						// If not JSON, use the raw string value
+						argData = payloadValue
+						logger.Infof("Using raw string value as argument")
+						break
+					} else {
+						logger.Infof("Successfully parsed extracted value as JSON")
+						break
+					}
+				}
+			}
+
+			// If we still couldn't parse it, return error
+			if argData == nil {
+				logger.Errorf("Failed to parse script output as arguments: %v", err)
+				return executionResult, fmt.Errorf("failed to parse script output: %v", err)
+			}
 		}
 
-		logger.Infof("Successfully parsed JSON data from script output")
+		logger.Infof("Successfully processed script output data")
 
 		// Update execution result with resource usage from script
 		executionResult.MemoryUsage = stats.MemoryUsage
@@ -819,6 +846,43 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 
 	// Handle multiple arguments or non-struct arguments
 	switch argData := args.(type) {
+	case string:
+		// Handle a single string value (like from our script)
+		// If there's only one input parameter, use the string value directly
+		if len(methodInputs) == 1 {
+			// First attempt to remove JSON string quotes if present
+			strValue := argData
+			if strings.HasPrefix(strValue, "\"") && strings.HasSuffix(strValue, "\"") {
+				strValue = strings.Trim(strValue, "\"")
+			}
+
+			convertedArg, err := e.argConverter.convertToType(strValue, methodInputs[0].Type)
+			if err != nil {
+				return nil, fmt.Errorf("error converting string argument: %v", err)
+			}
+			convertedArgs = append(convertedArgs, convertedArg)
+			return convertedArgs, nil
+		} else {
+			// Try to parse as JSON array for multiple parameters
+			var arrayData []interface{}
+			if err := json.Unmarshal([]byte(argData), &arrayData); err == nil {
+				if len(arrayData) < len(methodInputs) {
+					return nil, fmt.Errorf("not enough arguments in JSON array: expected %d, got %d",
+						len(methodInputs), len(arrayData))
+				}
+
+				for i, inputParam := range methodInputs {
+					convertedArg, err := e.argConverter.convertToType(arrayData[i], inputParam.Type)
+					if err != nil {
+						return nil, fmt.Errorf("error converting argument %d: %v", i, err)
+					}
+					convertedArgs = append(convertedArgs, convertedArg)
+				}
+				return convertedArgs, nil
+			}
+
+			return nil, fmt.Errorf("cannot convert single string to %d arguments", len(methodInputs))
+		}
 	case []string:
 		// Handle simple string array
 		if len(argData) < len(methodInputs) {

@@ -267,7 +267,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
-		Timestamps: true,
+		// Timestamps: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container logs: %v", err)
