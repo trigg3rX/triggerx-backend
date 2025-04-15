@@ -35,6 +35,28 @@
 
     Recurring means the job will be scheduled again and again until TimeFrame is reached.
 
+### Keeper Data
+
+- `keeper_id`: ID of the Keeper in DB
+- `operator_id`: ID of the Keeper on the chain
+- `keeper_address`: Address of the Keeper
+- `keeper_name`: Name of the Keeper
+- `keeper_points`: Points of the Keeper
+- `rewards_booster`: Multiplier for Rewards
+- `rewards_address`: Address to receive rewards
+- `registered_tx`: Transaction Hash of the Keeper Registration
+- `strategies`: Strategies in which Keeper has Staked
+- `voting_power`: Voting Power of the Keeper (in WEI)
+- `status`: true = Registered, false = Unregistered
+- `verified`: true = Whitelisted, false = Unverified
+- `online`: true = Online, false = Offline
+- `version`: Version of the Keeper Execution Binary (current 0.0.6)
+- `no_exctask`: Number of task executed
+- `connection_address`: Public IP Address of the Keeper
+- `peer_id`: Peer ID of the Keeper
+- `email_id`: Email ID of the Keeper
+- `chat_id`: Telegram Chat ID of the Keeper
+
 ## Rename the Services ?
 
 I think we should rename the services to make it more intuitive and exciting for developer users.
