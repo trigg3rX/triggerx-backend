@@ -4,6 +4,8 @@ source .env
 
 echo "Starting keeper node..."
 
+docker pull golang
+
 # Start keeper-execution in the background
 ./keeper-execution &
 KEEPER_PID=$!
@@ -34,8 +36,8 @@ othentic-cli node attester \
     --p2p.datadir data/peerstore/attester \
     --p2p.discovery-interval 60000 \
     --metrics \
-    --metrics.port $OPERATOR_METRICS_PORT \
-    --announce-addresses /ip4/$PUBLIC_IPV4_ADDRESS/tcp/$OPERATOR_P2P_PORT/p2p/$PEER_ID &
+    --metrics.port $OPERATOR_METRICS_PORT &
+    # --announce-addresses /ip4/$PUBLIC_IPV4_ADDRESS/tcp/$OPERATOR_P2P_PORT/p2p/$PEER_ID &
 OTHENTIC_PID=$!
 
 # Handle shutdown signals to properly terminate both processes

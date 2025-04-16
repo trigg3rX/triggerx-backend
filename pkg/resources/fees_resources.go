@@ -129,16 +129,16 @@ func CreateDockerContainer(ctx context.Context, cli *client.Client, codePath str
 
 	// Create a script to set up and run the Go code
 	setupScript := `#!/bin/sh
-    cd /code
-    go mod init code
-    go mod tidy
-    echo "START_EXECUTION"
-    go run code.go 2>&1 || {
-        echo "Error executing Go program. Exit code: $?"
-        exit 1
-    }
-    echo "END_EXECUTION"
-    `
+cd /code
+go mod init code
+go mod tidy
+echo "START_EXECUTION"
+go run code.go 2>&1 || {
+    echo "Error executing Go program. Exit code: $?"
+    exit 1
+}
+echo "END_EXECUTION"
+`
 
 	// Write setup script to the same directory as the code
 	scriptPath := filepath.Join(filepath.Dir(absCodePath), "setup.sh")
@@ -146,13 +146,8 @@ func CreateDockerContainer(ctx context.Context, cli *client.Client, codePath str
 		return "", fmt.Errorf("failed to write setup script: %v", err)
 	}
 
-	absScriptPath, err := filepath.Abs(scriptPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path for setup script: %v", err)
-	}
-
 	// Ensure the script has executable permissions
-	if err := os.Chmod(absScriptPath, 0755); err != nil {
+	if err := os.Chmod(scriptPath, 0755); err != nil {
 		return "", fmt.Errorf("failed to set permissions on setup script: %v", err)
 	}
 
@@ -162,15 +157,17 @@ func CreateDockerContainer(ctx context.Context, cli *client.Client, codePath str
 		Tty:        true,
 		WorkingDir: "/code",
 	}
-	fmt.Println("Code: ", absCodePath)
-	fmt.Println("Script: ", absScriptPath)
 
 	// Add HostConfig to mount the code and script into the container
 	hostConfig := &container.HostConfig{
 		Binds: []string{
-			fmt.Sprintf("%s:/code", filepath.Dir(absScriptPath)),
+			fmt.Sprintf("%s:/code", filepath.Dir(absCodePath)),
 		},
 	}
+
+	fmt.Printf("Code: %s\n", absCodePath)
+	fmt.Printf("Script: %s\n", scriptPath)
+	fmt.Printf("Mount path: %s\n", filepath.Dir(absCodePath))
 
 	// Create the container
 	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")

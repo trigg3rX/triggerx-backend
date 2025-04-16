@@ -66,7 +66,7 @@
 
 # CONDITION BASED JOB, SATISFIED
 
-curl -X POST http://localhost:9002/api/jobs \
+curl -X POST http://192.168.1.57:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
@@ -83,7 +83,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
       \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
       \"script_ipfs_url\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreicimunflmfgplxovjaghko5moubvzacoedhu3bqbcs37ox2ypzgbe\",
-      \"script_trigger_function\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreibqt4bpijvyoytv3cd5bqmrkknnvmy2xrmjfcyk5faehysk2a6fvy\",
+      \"script_trigger_function\": \"https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la\",
       \"target_chain_id\": \"11155420\",
       \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
       \"target_function\": \"increment\",
