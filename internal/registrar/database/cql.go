@@ -88,14 +88,14 @@ func KeeperUnregistered(operatorAddress string) error {
 }
 
 func UpdatePointsInDatabase(taskID int, performerAddress common.Address, attestersIds []string, isAccepted bool) error {
-	var taskFee int64
+	var taskFee float64
 	if err := db.Session().Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
 		taskID).Scan(&taskFee); err != nil {
 		logger.Errorf("Failed to get task fee for task ID %d: %v", taskID, err)
 		return err
 	}
 
-	logger.Infof("Task ID %d has a fee of %d", taskID, taskFee)
+	logger.Infof("Task ID %d has a fee of %f", taskID, taskFee)
 
 	err := UpdatePerformerPoints(performerAddress.Hex(), taskFee, isAccepted)
 	if err != nil {
@@ -114,10 +114,10 @@ func UpdatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 	return nil
 }
 
-func UpdatePerformerPoints(performerAddress string, taskFee int64, isAccepted bool) error {
-	var performerPoints int64
+func UpdatePerformerPoints(performerAddress string, taskFee float64, isAccepted bool) error {
+	var performerPoints float64
 	var performerId int64
-	var rewardsBooster int
+	var rewardsBooster float32
 
 	if err := db.Session().Query(`
 		SELECT keeper_id, keeper_points, rewards_booster FROM triggerx.keeper_data 
@@ -127,7 +127,7 @@ func UpdatePerformerPoints(performerAddress string, taskFee int64, isAccepted bo
 		return err
 	}
 
-	newPerformerPoints := performerPoints + int64(rewardsBooster)*taskFee
+	newPerformerPoints := performerPoints + float64(rewardsBooster)*taskFee
 
 	if err := db.Session().Query(`
 		UPDATE triggerx.keeper_data 
@@ -138,14 +138,14 @@ func UpdatePerformerPoints(performerAddress string, taskFee int64, isAccepted bo
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Added %d points to performer %s (ID: %d)", taskFee, performerAddress, performerId))
+	logger.Infof("Added %f points to performer %s (ID: %d)", taskFee, performerAddress, performerId)
 	return nil
 }
 
-func UpdateAttesterPoints(attesterId string, taskFee int64) error {
-	var attesterPoints int64
+func UpdateAttesterPoints(attesterId string, taskFee float64) error {
+	var attesterPoints float64
 	var keeperID int64
-	var rewardsBooster int
+	var rewardsBooster float32
 
 	if err := db.Session().Query(`
 		SELECT keeper_id, rewards_booster FROM triggerx.keeper_data
@@ -163,7 +163,7 @@ func UpdateAttesterPoints(attesterId string, taskFee int64) error {
 		return err
 	}
 
-	newAttesterPoints := attesterPoints + int64(rewardsBooster)*taskFee
+	newAttesterPoints := attesterPoints + float64(rewardsBooster)*taskFee
 
 	if err := db.Session().Query(`
         UPDATE triggerx.keeper_data 
@@ -174,14 +174,14 @@ func UpdateAttesterPoints(attesterId string, taskFee int64) error {
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Added %d points to attester ID %s (total: %d)", taskFee, attesterId, newAttesterPoints))
+	logger.Infof("Added %f points to attester ID %s (total: %f)", taskFee, attesterId, newAttesterPoints)
 	return nil
 }
 
 func DailyRewardsPoints() error {
 	var keeperID int64
-	var rewardsBooster int
-	var keeperPoints int64
+	var rewardsBooster float32
+	var keeperPoints float64
 	var currentKeeperPoints []types.DailyRewardsPoints
 
 	iter := db.Session().Query(`
@@ -201,7 +201,7 @@ func DailyRewardsPoints() error {
 	}
 
 	for _, currentKeeperPoint := range currentKeeperPoints {
-		newPoints := currentKeeperPoint.KeeperPoints + int64(10*currentKeeperPoint.RewardsBooster)
+		newPoints := currentKeeperPoint.KeeperPoints + float64(10*currentKeeperPoint.RewardsBooster)
 
 		if err := db.Session().Query(`
 			UPDATE triggerx.keeper_data 

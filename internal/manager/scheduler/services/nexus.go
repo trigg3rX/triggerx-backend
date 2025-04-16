@@ -135,8 +135,8 @@ func ValidateTask(c *gin.Context) {
 	}
 
 	logger.Info("Received Task Validation Request:")
-	logger.Infof("Proof of Task: %s", taskRequest.ProofOfTask)
-	logger.Infof("Data: %s", taskRequest.Data)
+	// logger.Infof("Proof of Task: %s", taskRequest.ProofOfTask)
+	// logger.Infof("Data: %s", taskRequest.Data)
 	logger.Infof("Task Definition ID: %d", taskRequest.TaskDefinitionID)
 	logger.Infof("Performer Address: %s", taskRequest.Performer)
 
@@ -172,7 +172,7 @@ func ValidateTask(c *gin.Context) {
 	}
 
 	// Log the decoded data CID for debugging
-	logger.Infof("Data CID: %s", decodedData)
+	// logger.Infof("Data CID: %s", decodedData)
 
 	// Parse IPFS data into IPFSData struct
 	var ipfsData types.IPFSData
@@ -189,6 +189,17 @@ func ValidateTask(c *gin.Context) {
 	// Extract job ID and execution timestamp
 	jobID := ipfsData.JobData.JobID
 	executionTimestamp := ipfsData.ActionData.Timestamp
+	taskID := ipfsData.ActionData.TaskID
+	taskFee := ipfsData.ActionData.TotalFee
+
+	if err := updateTaskFeeInDatabase(taskID, taskFee); err != nil {
+		logger.Errorf("Failed to update task fee in database: %v", err)
+		c.JSON(http.StatusInternalServerError, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: fmt.Sprintf("Failed to update task fee in database: %v", err),
+		})
+	}
 
 	// Update the last executed timestamp in the database
 	if err := updateJobLastExecutedTimestamp(jobID, executionTimestamp); err != nil {
@@ -198,7 +209,6 @@ func ValidateTask(c *gin.Context) {
 			Error:   true,
 			Message: fmt.Sprintf("Failed to update job last executed timestamp: %v", err),
 		})
-		return
 	}
 
 	// Update job's last execution time in the running worker
@@ -213,6 +223,42 @@ func ValidateTask(c *gin.Context) {
 		Error:   false,
 		Message: fmt.Sprintf("Successfully validated task for job ID %d", jobID),
 	})
+}
+
+func updateTaskFeeInDatabase(taskID int64, taskFee float64) error {
+	databaseURL := fmt.Sprintf("%s/api/tasks/%d/fee", config.DatabaseIPAddress, taskID)
+
+	requestBody, err := json.Marshal(map[string]float64{
+		"fee": taskFee,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal task fee data: %w", err)
+	}
+
+	// Send a PUT request to update the task fee
+	req, err := http.NewRequest(http.MethodPut, databaseURL, strings.NewReader(string(requestBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("received non-200 status code: %d", resp.StatusCode)
+	}
+
+	logger.Infof("Successfully updated task fee for task ID %d to %f", taskID, taskFee)
+	return nil
 }
 
 // updateJobLastExecutedTimestamp updates the last_executed_at timestamp in the database

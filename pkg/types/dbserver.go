@@ -110,7 +110,7 @@ type UserLeaderboardEntry struct {
 	UserAddress    string `json:"user_address"`
 	TotalJobs      int64  `json:"total_jobs"`
 	TasksCompleted int64  `json:"tasks_completed"`
-	UserPoints     int64  `json:"user_points"`
+	UserPoints     float64 `json:"user_points"`
 }
 
 type KeeperStatusUpdate struct {
@@ -124,7 +124,7 @@ type CreateApiKeyRequest struct {
 }
 
 type DailyRewardsPoints struct {
-	KeeperID      int64  `json:"keeper_id"`
-	RewardsBooster int    `json:"rewards_booster"`
-	KeeperPoints   int64  `json:"keeper_points"`
+	KeeperID      int64   `json:"keeper_id"`
+	RewardsBooster float32 `json:"rewards_booster"`
+	KeeperPoints   float64 `json:"keeper_points"`
 }

@@ -123,7 +123,8 @@ func (s *Server) routes() {
 	// // Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
-
+	api.HandleFunc("/tasks/{id}/fee", handler.UpdateTaskFee).Methods("PUT")
+	
 	// // Keeper routes
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")

@@ -177,3 +177,30 @@ func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
+
+func (h *Handler) UpdateTaskFee(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["id"]
+	h.logger.Infof("[UpdateTaskFee] Updating task fee for task with ID: %s", taskID)
+
+	var taskFee struct {
+		Fee float64 `json:"fee"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&taskFee); err != nil {
+		h.logger.Errorf("[UpdateTaskFee] Error decoding request body: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.task_data
+		SET task_fee = ?
+		WHERE task_id = ?`, taskFee.Fee, taskID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Infof("[UpdateTaskFee] Successfully updated task fee for task with ID: %s", taskID)
+	json.NewEncoder(w).Encode(taskFee)
+}

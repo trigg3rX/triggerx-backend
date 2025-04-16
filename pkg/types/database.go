@@ -63,7 +63,7 @@ type TaskData struct {
 	JobID            int64     `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`
-	TaskFee          int64     `json:"task_fee"`
+	TaskFee          float64   `json:"task_fee"`
 
 	// Action Values
 	ExecutionTimestamp time.Time `json:"execution_timestamp"`
@@ -96,7 +96,7 @@ type KeeperData struct {
 	// Active Values
 	OperatorID        int64     `json:"operator_id"`
 	RewardsAddress    string    `json:"rewards_address"`
-	KeeperPoints      int64     `json:"keeper_points"`
+	KeeperPoints      float64   `json:"keeper_points"`
 	ConnectionAddress string    `json:"connection_address"`
 	PeerID            string    `json:"peer_id"`
 	Strategies        []string  `json:"strategies"`
