@@ -493,14 +493,25 @@ func ValidateTask(c *gin.Context) {
 	})
 }
 
-func fetchIPFSContent(cid string) (string, error) {
-	ipfsGateway := "https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/"
-	resp, err := http.Get(ipfsGateway + cid)
+func fetchIPFSContent(cidOrUrl string) (string, error) {
+	// Determine if input is a full URL or just a CID
+	var requestUrl string
+	if strings.HasPrefix(cidOrUrl, "http://") || strings.HasPrefix(cidOrUrl, "https://") {
+		// Input is already a full URL
+		requestUrl = cidOrUrl
+	} else {
+		// Input is a CID, prepend the IPFS gateway
+		ipfsGateway := "https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/"
+		requestUrl = ipfsGateway + cidOrUrl
+	}
+
+	resp, err := http.Get(requestUrl)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 	defer resp.Body.Close()
 
+	// Rest of the function remains the same
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
 	}
