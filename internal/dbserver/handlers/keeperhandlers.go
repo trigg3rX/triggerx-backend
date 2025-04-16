@@ -43,7 +43,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 			WHERE keeper_id = ?`,
 			keeperData.KeeperName, keeperData.KeeperAddress, keeperData.RewardsAddress,
 			keeperData.EmailID, existingKeeperID).Exec(); err != nil {
-		h.logger.Errorf(" Error updating keeper with ID %d: %v", existingKeeperID, err)
+			h.logger.Errorf(" Error updating keeper with ID %d: %v", existingKeeperID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -69,6 +69,31 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 			h.logger.Errorf(" Error creating keeper with ID %d: %v", currentKeeperID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// Send welcome email after successful keeper creation
+		subject := "Welcome to TriggerX: Operator Whitelisting Confirmed"
+		emailBody := fmt.Sprintf(`
+			Hey %s,
+			<br><br>
+			Thanks for filling out the TriggerX whitelisting form — you're all set!
+			<br><br>
+			To stay updated on what's coming next (and not miss anything important), hop into our Telegram group:
+			<br><br>
+			<a href="https://t.me/+1I4euCfrchMxZDhl">https://t.me/+1I4euCfrchMxZDhl</a>
+			<br><br>
+			This is where we'll be sharing everything you need to know as an operator — from technical updates to rewards info and more.
+			<br><br>
+			See you there!
+			<br><br>
+			– Team TriggerX
+		`, keeperData.KeeperName)
+
+		if err := h.sendEmailNotification(keeperData.EmailID, subject, emailBody); err != nil {
+			h.logger.Errorf(" Error sending welcome email to keeper %s: %v", keeperData.KeeperName, err)
+			// Note: We don't return here as the keeper creation was successful
+		} else {
+			h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
 		}
 
 		h.logger.Infof(" Successfully created keeper with ID: %d", currentKeeperID)
@@ -168,7 +193,6 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 		&keeper.KeeperPoints, &keeper.ConnectionAddress, &tmpStrategies,
 		&keeper.Verified, &keeper.Status, &keeper.Online, &keeper.Version, &keeper.NoExcTask,
 		&keeper.ChatID, &keeper.EmailID) {
-
 
 		keeper.Strategies = make([]string, len(tmpStrategies))
 		copy(keeper.Strategies, tmpStrategies)
