@@ -153,7 +153,7 @@ echo "END_EXECUTION"
 
 	config := &container.Config{
 		Image:      "golang:latest",
-		Cmd:        []string{"./setup.sh"},
+		Cmd:        []string{"/code/setup.sh"},
 		Tty:        true,
 		WorkingDir: "/code",
 	}

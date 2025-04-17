@@ -32,7 +32,7 @@ RUN apk --no-cache add ca-certificates curl \
 RUN apk --no-cache add nodejs npm
 
 # Install othentic-cli globally
-RUN npm i -g @othentic/othentic-cli@1.10.0
+RUN npm i -g @othentic/othentic-cli@1.10.1
 
 # Set working directory
 WORKDIR /root/
