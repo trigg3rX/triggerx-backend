@@ -18,7 +18,7 @@ COPY . .
 RUN go mod tidy
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o keeper-execution ./cmd/keeper
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-keeper ./cmd/keeper
 
 # Use a minimal alpine image for the final stage
 FROM golang:1.23-alpine
@@ -28,17 +28,11 @@ RUN apk --no-cache add ca-certificates curl \
     && apk --no-cache add docker \
     && apk --no-cache add docker-compose
 
-# Install npm for othentic-cli
-RUN apk --no-cache add nodejs npm
-
-# Install othentic-cli globally
-RUN npm i -g @othentic/othentic-cli@1.10.1
-
 # Set working directory
 WORKDIR /root/
 
 # Copy the built binary from the builder stage
-COPY --from=builder /app/keeper-execution .
+COPY --from=builder /app/triggerx-keeper .
 
 # Copy the startup script
 COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh

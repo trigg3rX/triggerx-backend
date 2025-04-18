@@ -40,7 +40,7 @@ func (krw *keeperResponseWrapper) GetData() []byte {
 // 3. Stores proof on IPFS via Pinata
 // 4. Returns execution results with proof details to the attester
 func ExecuteTask(c *gin.Context) {
-	logger.Info("Executing Task")
+	// logger.Info("Executing Task")
 
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -130,11 +130,12 @@ func ExecuteTask(c *gin.Context) {
 	// logger.Infof("performerData: %v\n", performerData)
 
 	// logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
-	logger.Infof("performerAddress: %v\n", performerData.KeeperAddress)
+	// logger.Infof("performerAddress: %v\n", performerData.KeeperAddress)
 
 	if performerData.KeeperAddress != config.KeeperAddress {
-		logger.Infof("I am not the performer for this task, skipping ...")
-		c.JSON(http.StatusOK, gin.H{"error": "I am not the performer for this task, skipping ..."})
+		// logger.Infof("I am not the performer for this task, skipping ...")
+		// c.JSON(http.StatusOK, gin.H{"error": "I am not the performer for this task, skipping ..."})
+		c.Status(http.StatusOK)
 		return
 	}
 
