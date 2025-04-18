@@ -4,6 +4,8 @@ source .env
 
 echo "Starting Keeper node ..."
 
+docker pull golang
+
 ./triggerx-keeper &
 KEEPER_PID=$!
 

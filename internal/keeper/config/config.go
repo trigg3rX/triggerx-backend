@@ -20,7 +20,6 @@ var (
 	PrivateKeyController          string
 	KeeperAddress             	string
 	KeeperRPCPort               string
-	KeeperP2PPort       		string
 	PublicIPV4Address           string
 	PeerID                       string
 
@@ -29,8 +28,6 @@ var (
 	PinataSecretApiKey  string
 	IpfsHost            string
 	AggregatorIPAddress string
-	ManagerIPAddress    string
-	DatabaseIPAddress   string
 	HealthIPAddress     string
 )
 
@@ -44,11 +41,9 @@ func Init() {
 	PinataSecretApiKey = os.Getenv("PINATA_SECRET_API_KEY")
 	IpfsHost = os.Getenv("IPFS_HOST")
 	AggregatorIPAddress = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
-	ManagerIPAddress = os.Getenv("MANAGER_IP_ADDRESS")
-	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 	HealthIPAddress = os.Getenv("HEALTH_IP_ADDRESS")
 
-	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorIPAddress == "" || ManagerIPAddress == "" || DatabaseIPAddress == "" || HealthIPAddress == "" {
+	if PinataApiKey == "" || PinataSecretApiKey == "" || AggregatorIPAddress == "" || HealthIPAddress == "" {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
 
@@ -58,15 +53,14 @@ func Init() {
 	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
 	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
-	KeeperP2PPort = os.Getenv("OPERATOR_P2P_PORT")
 	PublicIPV4Address = os.Getenv("PUBLIC_IPV4_ADDRESS")
 	PeerID = os.Getenv("PEER_ID")
 
-	if PrivateKeyConsensus == "" || KeeperAddress == "" || KeeperRPCPort == "" || KeeperP2PPort == "" {
+	if PrivateKeyConsensus == "" || KeeperAddress == "" || KeeperRPCPort == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
-	if  PeerID == "" {
+	if  PeerID == "" || PublicIPV4Address == "" {
 		logger.Info("Peer ID or Public IPV4 Address not set properly !!!")
 		logger.Info("Please set the variables in the .env file")
 		logger.Info("Without them the keeper will not be able to reconnect to the network")
