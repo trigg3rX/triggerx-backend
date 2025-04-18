@@ -101,7 +101,7 @@ type KeeperLeaderboardEntry struct {
 	KeeperAddress string `json:"keeper_address"`
 	KeeperName    string `json:"keeper_name"`
 	TasksExecuted int64  `json:"tasks_executed"`
-	KeeperPoints  int64  `json:"keeper_points"`
+	KeeperPoints  float64  `json:"keeper_points"`
 }
 
 // UserLeaderboardEntry represents a single entry in the user leaderboard
