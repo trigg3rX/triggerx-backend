@@ -189,6 +189,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 		PriceperTG            = 0.0001 // Price per TG unit
 		Fixedcost             = 1      // Fixed cost in TG
 		TransactionSimulation = 1      // Weight for TransactionSimulation in TG
+		OverheadCost          = 0.1    // Overhead cost in TG
 	)
 
 	var NoOfAttesters int
@@ -207,7 +208,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	NetworkScalingFactor := (1 + NoOfAttesters)
 
 	// Calculate TotalTG using the new formula
-	TotalTG := (ComputationCost * float64(NetworkScalingFactor)) + Fixedcost + TransactionSimulation
+	TotalTG := (ComputationCost * float64(NetworkScalingFactor)) + Fixedcost + TransactionSimulation + OverheadCost
 
 	// Calculate total fee based on TG units
 	totalFee := TotalTG * PriceperTG
