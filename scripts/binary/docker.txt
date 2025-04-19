@@ -1,2 +1,0 @@
-docker pull trigg3rx/triggerx-keeper:0.0.5
-docker run -d -v /path/to/env:/root/.env --name triggerx-keeper --network host trigg3rx/triggerx-keeper:0.0.5
