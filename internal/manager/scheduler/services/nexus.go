@@ -15,7 +15,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
-	keeperConfig "github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
@@ -140,7 +139,7 @@ func ExecuteTask(c *gin.Context) {
 	defer ethClient.Close()
 
 	// Create job executor with ethClient and etherscan API key
-	jobExecutor := execution.NewJobExecutor(ethClient, keeperConfig.AlchemyAPIKey)
+	jobExecutor := execution.NewJobExecutor(ethClient, config.AlchemyApiKey)
 
 	actionData, err := jobExecutor.Execute(&jobData)
 	if err != nil {
