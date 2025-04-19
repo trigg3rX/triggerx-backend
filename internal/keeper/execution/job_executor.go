@@ -399,6 +399,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 		GasUsed:      "0",
 		Status:       false,
 		Timestamp:    time.Now().UTC(),
+		TotalFee:     0.1,
 	}
 
 	logger.Infof("Executing contract call for job %s with static arguments", job.JobID)
@@ -526,6 +527,7 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 		GasUsed:      "0",
 		Status:       false,
 		Timestamp:    time.Now().UTC(),
+		TotalFee:     0.1,
 	}
 
 	logger.Infof("Executing job %d with dynamic arguments", job.JobID)
