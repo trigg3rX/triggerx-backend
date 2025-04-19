@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"math"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -27,6 +29,38 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Collect all IPFS URLs
+	var ipfsURLs []string
+	for i, job := range tempJobs {
+		if job.ScriptIPFSUrl == "" {
+			h.logger.Errorf("[CreateJobData] Missing IPFS URL for job %d", i)
+			http.Error(w, "Missing IPFS URL", http.StatusBadRequest)
+			return
+		}
+		ipfsURLs = append(ipfsURLs, job.ScriptIPFSUrl)
+	}
+
+	// Calculate fees for all jobs in one call
+	totalFee, err := h.CalculateTaskFees(strings.Join(ipfsURLs, ","))
+	if err != nil {
+		h.logger.Errorf("[CreateJobData] Error calculating fees: %v", err)
+		http.Error(w, "Error calculating fees", http.StatusInternalServerError)
+		return
+	}
+
+	// The totalFee returned is the sum of all fees, so we need to divide by the number of jobs
+	feePerJob := totalFee / float64(len(tempJobs))
+
+	// Calculate cost prediction for each job
+	for i := range tempJobs {
+		timeframeInSeconds := float64(tempJobs[i].TimeFrame)
+		intervalInSeconds := float64(tempJobs[i].TimeInterval)
+		executionCount := math.Ceil(timeframeInSeconds / intervalInSeconds)
+
+		tempJobs[i].JobCostPrediction = executionCount * feePerJob
+		h.logger.Infof("[CreateJobData] Calculated job cost for job %d: %f", i, tempJobs[i].JobCostPrediction)
+	}
+
 	var lastJobID int64
 	if err := h.db.Session().Query(`
 		SELECT MAX(job_id) FROM triggerx.job_data`).Scan(&lastJobID); err != nil && err != gocql.ErrNotFound {
@@ -41,7 +75,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var existingJobIDs []int64 = []int64{}
 	var newJobIDs []int64
 
-	err := h.db.Session().Query(`
+	err = h.db.Session().Query(`
 		SELECT user_id, account_balance, token_balance, job_ids
 		FROM triggerx.user_data 
 		WHERE user_address = ? ALLOW FILTERING`,

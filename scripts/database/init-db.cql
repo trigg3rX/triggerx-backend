@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     job_id bigint,
     task_definition_id int,
     created_at timestamp,
-    task_fee bigint,
+    task_fee double,
     
     execution_timestamp timestamp,
     execution_tx_hash text,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_submission_tx_hash text,
     
     is_successful boolean,
-    PRIMARY KEY (task_id, task_number)
+    PRIMARY KEY (task_id)
 );
 
 -- Create Keeper_data table
@@ -93,17 +93,20 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_name text,
     keeper_address text,
     registered_tx text,
+    operator_id text,
     
     rewards_address text,
-    stakes list<decimal>,
+    rewards_booster float,
+    voting_power bigint,
+    keeper_points double,
+    connection_address text,
+    peer_id text,
     strategies list<text>,
     verified boolean,
     status boolean,
     online boolean,
     version text,
-    consensus_keys list<text>,
     no_exctask int,
-    keeper_points bigint,
     chat_id bigint,
     email_id text,
     PRIMARY KEY (keeper_id)
@@ -111,11 +114,12 @@ CREATE TABLE IF NOT EXISTS keeper_data (
 
 -- Create ApiKey table
 CREATE TABLE IF NOT EXISTS apikeys (
-    key text PRIMARY KEY,
+    key text,
     owner text,
     isActive boolean,
     rateLimit int,
     lastUsed timestamp,
-    createdAt timestamp
+    createdAt timestamp,
+    PRIMARY KEY (key)
 );
 

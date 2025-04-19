@@ -9,7 +9,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/crypto"
+	// "github.com/trigg3rX/triggerx-backend/pkg/crypto"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -19,12 +19,13 @@ var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 func CheckInWithHealthService() error {
 	healthServiceURL := fmt.Sprintf("%s/health", config.HealthIPAddress)
 
-	// Sign the message
-	signature, err := crypto.SignMessage(config.KeeperAddress, config.PrivateKeyController)
-	if err != nil {
-		logger.Error("Failed to sign check-in message", "error", err)
-		return fmt.Errorf("failed to sign check-in message: %w", err)
-	}
+	// // Sign the message
+	// signature, err := crypto.SignMessage(config.KeeperAddress, config.PrivateKeyController)
+	// if err != nil {
+	// 	logger.Error("Failed to sign check-in message", "error", err)
+	// 	return fmt.Errorf("failed to sign check-in message: %w", err)
+	// }
+	signature := "0x"
 
 	payload := types.KeeperHealth{
 		KeeperAddress: config.KeeperAddress,

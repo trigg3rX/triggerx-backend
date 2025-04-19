@@ -123,12 +123,13 @@ func (s *Server) routes() {
 	// // Task routes
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
-
+	api.HandleFunc("/tasks/{id}/fee", handler.UpdateTaskFee).Methods("PUT")
+	
 	// // Keeper routes
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
-	api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
-	api.HandleFunc("/keepers/form", handler.GoogleFormCreateKeeperData).Methods("POST")
+	// api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
+	api.HandleFunc("/keepers/form", handler.CreateKeeperDataGoogleForm).Methods("POST")
 	api.HandleFunc("/keepers/checkin", handler.KeeperHealthCheckIn).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
 	api.HandleFunc("/keepers/{id}/increment-tasks", handler.IncrementKeeperTaskCount).Methods("POST")

@@ -4,8 +4,8 @@ import (
 	// "bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 
 	// "fmt"
 
@@ -26,11 +26,11 @@ import (
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 // keeperResponseWrapper wraps execution result bytes to satisfy the proof module's interface
-type keeperResponseWrapper struct {
+type KeeperResponseWrapper struct {
 	Data []byte
 }
 
-func (krw *keeperResponseWrapper) GetData() []byte {
+func (krw *KeeperResponseWrapper) GetData() []byte {
 	return krw.Data
 }
 
@@ -40,7 +40,7 @@ func (krw *keeperResponseWrapper) GetData() []byte {
 // 3. Stores proof on IPFS via Pinata
 // 4. Returns execution results with proof details to the attester
 func ExecuteTask(c *gin.Context) {
-	logger.Info("Executing Task")
+	// logger.Info("Executing Task")
 
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -64,7 +64,7 @@ func ExecuteTask(c *gin.Context) {
 	if len(hexData) > 2 && hexData[:2] == "0x" {
 		hexData = hexData[2:]
 	}
-	
+
 	// Decode the hex string to bytes
 	decodedData, err := hex.DecodeString(hexData)
 	if err != nil {
@@ -130,11 +130,12 @@ func ExecuteTask(c *gin.Context) {
 	// logger.Infof("performerData: %v\n", performerData)
 
 	// logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
-	logger.Infof("performerAddress: %v\n", performerData.KeeperAddress)
+	// logger.Infof("performerAddress: %v\n", performerData.KeeperAddress)
 
 	if performerData.KeeperAddress != config.KeeperAddress {
-		logger.Infof("I am not the performer for this task, skipping ...")
-		c.JSON(http.StatusOK, gin.H{"error": "I am not the performer for this task, skipping ..."})
+		// logger.Infof("I am not the performer for this task, skipping ...")
+		// c.JSON(http.StatusOK, gin.H{"error": "I am not the performer for this task, skipping ..."})
+		c.Status(http.StatusOK)
 		return
 	}
 
@@ -182,7 +183,7 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal execution result"})
 		return
 	}
-	krw := &keeperResponseWrapper{Data: actionDataBytes}
+	krw := &KeeperResponseWrapper{Data: actionDataBytes}
 
 	// Mock TLS state for proof generation
 	certBytes := []byte("mock certificate data")

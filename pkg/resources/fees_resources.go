@@ -2,6 +2,7 @@ package resources
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -89,6 +90,8 @@ type ResourceStats struct {
 	DynamicComplexity float64 `json:"dynamic_complexity"`
 	ComplexityIndex   float64 `json:"complexity_index"`
 	GasFees           float64 `json:"gas_fees"`
+	Output            string  `json:"output"` // Add this field for script output
+	Status            bool    `json:"status"` // Add this field for condition status
 }
 
 func DownloadIPFSFile(ipfsURL string) (string, error) {
@@ -126,16 +129,16 @@ func CreateDockerContainer(ctx context.Context, cli *client.Client, codePath str
 
 	// Create a script to set up and run the Go code
 	setupScript := `#!/bin/sh
-    cd /code
-    go mod init code
-    go mod tidy
-    echo "START_EXECUTION"
-    go run code.go 2>&1 || {
-        echo "Error executing Go program. Exit code: $?"
-        exit 1
-    }
-    echo "END_EXECUTION"
-    `
+cd /code
+go mod init code
+go mod tidy
+echo "START_EXECUTION"
+go run code.go 2>&1 || {
+    echo "Error executing Go program. Exit code: $?"
+    exit 1
+}
+echo "END_EXECUTION"
+`
 
 	// Write setup script to the same directory as the code
 	scriptPath := filepath.Join(filepath.Dir(absCodePath), "setup.sh")
@@ -143,31 +146,28 @@ func CreateDockerContainer(ctx context.Context, cli *client.Client, codePath str
 		return "", fmt.Errorf("failed to write setup script: %v", err)
 	}
 
-	absScriptPath, err := filepath.Abs(scriptPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path for setup script: %v", err)
-	}
-
 	// Ensure the script has executable permissions
-	if err := os.Chmod(absScriptPath, 0755); err != nil {
+	if err := os.Chmod(scriptPath, 0755); err != nil {
 		return "", fmt.Errorf("failed to set permissions on setup script: %v", err)
 	}
 
 	config := &container.Config{
 		Image:      "golang:latest",
-		Cmd:        []string{"./setup.sh"},
+		Cmd:        []string{"/code/setup.sh"},
 		Tty:        true,
 		WorkingDir: "/code",
 	}
-	fmt.Println("Code: ", absCodePath)
-	fmt.Println("Script: ", absScriptPath)
 
 	// Add HostConfig to mount the code and script into the container
 	hostConfig := &container.HostConfig{
 		Binds: []string{
-			fmt.Sprintf("%s:/code", filepath.Dir(absScriptPath)),
+			fmt.Sprintf("%s:/code", filepath.Dir(absCodePath)),
 		},
 	}
+
+	fmt.Printf("Code: %s\n", absCodePath)
+	fmt.Printf("Script: %s\n", scriptPath)
+	fmt.Printf("Mount path: %s\n", filepath.Dir(absCodePath))
 
 	// Create the container
 	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
@@ -189,6 +189,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 		PriceperTG            = 0.0001 // Price per TG unit
 		Fixedcost             = 1      // Fixed cost in TG
 		TransactionSimulation = 1      // Weight for TransactionSimulation in TG
+		OverheadCost          = 0.1    // Overhead cost in TG
 	)
 
 	var NoOfAttesters int
@@ -207,7 +208,7 @@ func calculateFees(content []byte, stats *ResourceStats, executionTime time.Dura
 	NetworkScalingFactor := (1 + NoOfAttesters)
 
 	// Calculate TotalTG using the new formula
-	TotalTG := (ComputationCost * float64(NetworkScalingFactor)) + Fixedcost + TransactionSimulation
+	TotalTG := (ComputationCost * float64(NetworkScalingFactor)) + Fixedcost + TransactionSimulation + OverheadCost
 
 	// Calculate total fee based on TG units
 	totalFee := TotalTG * PriceperTG
@@ -225,6 +226,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	var codeExecutionTime time.Duration
 	var dockerStartTime = time.Now().UTC()
 	executionStarted := false
+	var outputBuffer bytes.Buffer
 
 	// Get container info to find the mounted directory
 	containerInfo, err := cli.ContainerInspect(ctx, containerID)
@@ -263,7 +265,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
-		Timestamps: true,
+		// Timestamps: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container logs: %v", err)
@@ -303,7 +305,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 		}
 	}()
 
-	// Print container output and track execution time
+	// Modify the log handling goroutine to capture output
 	go func() {
 		scanner := bufio.NewScanner(logReader)
 		for scanner.Scan() {
@@ -318,6 +320,9 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 				executionEndTime = time.Now().UTC()
 				codeExecutionTime = executionEndTime.Sub(executionStartTime)
 				fmt.Printf("Code execution completed in: %v\n", codeExecutionTime)
+			} else if executionStarted {
+				// Capture output between START_EXECUTION and END_EXECUTION
+				outputBuffer.WriteString(line + "\n")
 			}
 
 			// Print all container logs
@@ -397,101 +402,107 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	}
 
 	// Calculate fees using the measured execution time
-	calculateFees(content, stats, codeExecutionTime)
+	stats.TotalFee = calculateFees(content, stats, codeExecutionTime)
+
+	// Set the captured output in stats
+	stats.Output = outputBuffer.String()
+
+	// Set status based on successful execution
+	stats.Status = executionStarted && codeExecutionTime > 0
 
 	return stats, nil
 }
 
-func main() {
-	if err := run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-}
+// func main() {
+// 	if err := run(); err != nil {
+// 		fmt.Printf("Error: %v\n", err)
+// 		os.Exit(1)
+// 	}
+// }
 
-func run() error {
-	if len(os.Args) != 2 {
-		return fmt.Errorf("Usage: program <ipfs-url>")
-	}
+// func run() error {
+// 	if len(os.Args) != 2 {
+// 		return fmt.Errorf("Usage: program <ipfs-url>")
+// 	}
 
-	ipfsURL := os.Args[1]
-	ctx := context.Background()
+// 	ipfsURL := os.Args[1]
+// 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
-	}
-	defer cli.Close()
+// 	cli, err := client.NewClientWithOpts(
+// 		client.FromEnv,
+// 		client.WithAPIVersionNegotiation(),
+// 	)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create Docker client: %w", err)
+// 	}
+// 	defer cli.Close()
 
-	if err := pullDockerImage(ctx, cli, "golang:latest"); err != nil {
-		return fmt.Errorf("failed to pull Docker image: %w", err)
-	}
+// 	if err := pullDockerImage(ctx, cli, "golang:latest"); err != nil {
+// 		return fmt.Errorf("failed to pull Docker image: %w", err)
+// 	}
 
-	codePath, err := DownloadIPFSFile(ipfsURL)
-	if err != nil {
-		return fmt.Errorf("failed to download IPFS file: %w", err)
-	}
+// 	codePath, err := DownloadIPFSFile(ipfsURL)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to download IPFS file: %w", err)
+// 	}
 
-	fmt.Printf("Downloaded file path: %s\n", codePath)
-	content, err := os.ReadFile(codePath)
-	if err != nil {
-		return fmt.Errorf("error reading file: %w", err)
-	}
-	fmt.Printf("File content length: %d bytes\n", len(content))
+// 	fmt.Printf("Downloaded file path: %s\n", codePath)
+// 	content, err := os.ReadFile(codePath)
+// 	if err != nil {
+// 		return fmt.Errorf("error reading file: %w", err)
+// 	}
+// 	fmt.Printf("File content length: %d bytes\n", len(content))
 
-	// Move the defer after the error check to ensure cleanup
-	defer func() {
-		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
-			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
-		}
-	}()
+// 	// Move the defer after the error check to ensure cleanup
+// 	defer func() {
+// 		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+// 			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
+// 		}
+// 	}()
 
-	containerID, err := CreateDockerContainer(ctx, cli, codePath)
-	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
-	}
+// 	containerID, err := CreateDockerContainer(ctx, cli, codePath)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create container: %w", err)
+// 	}
 
-	// Create cleanup function with timeout context
-	cleanup := func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := cli.ContainerRemove(cleanupCtx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
-			fmt.Printf("Warning: failed to remove container %s: %v\n", containerID, err)
-		}
-	}
-	defer cleanup()
+// 	// Create cleanup function with timeout context
+// 	cleanup := func() {
+// 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 		defer cancel()
+// 		if err := cli.ContainerRemove(cleanupCtx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
+// 			fmt.Printf("Warning: failed to remove container %s: %v\n", containerID, err)
+// 		}
+// 	}
+// 	defer cleanup()
 
-	fmt.Println("\nStarting container and monitoring resources...")
-	stats, err := MonitorResources(ctx, cli, containerID)
-	if err != nil {
-		return fmt.Errorf("failed to monitor resources: %w", err)
-	}
+// 	fmt.Println("\nStarting container and monitoring resources...")
+// 	stats, err := MonitorResources(ctx, cli, containerID)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to monitor resources: %w", err)
+// 	}
 
-	printResourceStats(stats)
-	return nil
-}
+// 	printResourceStats(stats)
+// 	return nil
+// }
 
-func printResourceStats(stats *ResourceStats) {
-	fmt.Printf("\nResource Usage:\n")
-	fmt.Printf("Memory: %.2f MB\n", float64(stats.MemoryUsage)/(1024*1024))
-	fmt.Printf("CPU: %.2f%%\n", stats.CPUPercentage)
-	fmt.Printf("Network Statistics:\n")
-	fmt.Printf("  Received: %.2f MB (%.0f packets)\n", float64(stats.RxBytes)/(1024*1024), float64(stats.RxPackets))
-	fmt.Printf("  Transmitted: %.2f MB (%.0f packets)\n", float64(stats.TxBytes)/(1024*1024), float64(stats.TxPackets))
-	fmt.Printf("  Bandwidth Rate: %.2f MB/s\n", stats.BandwidthRate/(1024*1024))
-	fmt.Printf("  Errors: Rx=%d, Tx=%d\n", stats.RxErrors, stats.TxErrors)
-	fmt.Printf("  Dropped: Rx=%d, Tx=%d\n", stats.RxDropped, stats.TxDropped)
-	fmt.Printf("Disk I/O:\n")
-	fmt.Printf("  Read: %.2f MB\n", float64(stats.BlockRead)/(1024*1024))
-	fmt.Printf("  Write: %.2f MB\n", float64(stats.BlockWrite)/(1024*1024))
+// func printResourceStats(stats *ResourceStats) {
+// 	fmt.Printf("\nResource Usage:\n")
+// 	fmt.Printf("Memory: %.2f MB\n", float64(stats.MemoryUsage)/(1024*1024))
+// 	fmt.Printf("CPU: %.2f%%\n", stats.CPUPercentage)
+// 	fmt.Printf("Network Statistics:\n")
+// 	fmt.Printf("  Received: %.2f MB (%.0f packets)\n", float64(stats.RxBytes)/(1024*1024), float64(stats.RxPackets))
+// 	fmt.Printf("  Transmitted: %.2f MB (%.0f packets)\n", float64(stats.TxBytes)/(1024*1024), float64(stats.TxPackets))
+// 	fmt.Printf("  Bandwidth Rate: %.2f MB/s\n", stats.BandwidthRate/(1024*1024))
+// 	fmt.Printf("  Errors: Rx=%d, Tx=%d\n", stats.RxErrors, stats.TxErrors)
+// 	fmt.Printf("  Dropped: Rx=%d, Tx=%d\n", stats.RxDropped, stats.TxDropped)
+// 	fmt.Printf("Disk I/O:\n")
+// 	fmt.Printf("  Read: %.2f MB\n", float64(stats.BlockRead)/(1024*1024))
+// 	fmt.Printf("  Write: %.2f MB\n", float64(stats.BlockWrite)/(1024*1024))
 
-	fmt.Printf("\nFee Calculation:\n")
-	fmt.Printf("Static Complexity: %.6f\n", stats.StaticComplexity)
-	fmt.Printf("Dynamic Complexity: %.6f\n", stats.DynamicComplexity)
-	fmt.Printf("Complexity Index: %.6f\n", stats.ComplexityIndex)
-	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
-	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
-}
+// 	fmt.Printf("\nFee Calculation:\n")
+// 	fmt.Printf("Static Complexity: %.6f\n", stats.StaticComplexity)
+// 	fmt.Printf("Dynamic Complexity: %.6f\n", stats.DynamicComplexity)
+// 	fmt.Printf("Complexity Index: %.6f\n", stats.ComplexityIndex)
+// 	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
+// 	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
+// }

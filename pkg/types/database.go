@@ -63,7 +63,7 @@ type TaskData struct {
 	JobID            int64     `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`
-	TaskFee          int64     `json:"task_fee"`
+	TaskFee          float64   `json:"task_fee"`
 
 	// Action Values
 	ExecutionTimestamp time.Time `json:"execution_timestamp"`
@@ -89,21 +89,23 @@ type KeeperData struct {
 	// Fixed Values
 	KeeperID      int64  `json:"keeper_id"`
 	KeeperAddress string `json:"keeper_address"`
-	KeeperName        string    `json:"keeper_name"`
+	KeeperName    string `json:"keeper_name"`
 	RegisteredTx  string `json:"registered_tx"`
+	RewardsBooster    float32     `json:"rewards_booster"`
 
 	// Active Values
+	OperatorID        int64     `json:"operator_id"`
 	RewardsAddress    string    `json:"rewards_address"`
-	Stakes            []float64 `json:"stakes"`
+	KeeperPoints      float64   `json:"keeper_points"`
+	ConnectionAddress string    `json:"connection_address"`
+	PeerID            string    `json:"peer_id"`
 	Strategies        []string  `json:"strategies"`
+	VotingPower       int64     `json:"voting_power"`
 	Verified          bool      `json:"verified"`
 	Status            bool      `json:"status"`
 	Online            bool      `json:"online"`
 	Version           string    `json:"version"`
-	ConsensusKeys     []string  `json:"consensus_keys"`
-	ConnectionAddress string    `json:"connection_address"`
 	NoExcTask         int       `json:"no_exctask"`
-	KeeperPoints      int64     `json:"keeper_points"`
 	ChatID            int64     `json:"chat_id"`
 	EmailID           string    `json:"email_id"`
 }
