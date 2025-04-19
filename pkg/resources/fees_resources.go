@@ -402,7 +402,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	}
 
 	// Calculate fees using the measured execution time
-	calculateFees(content, stats, codeExecutionTime)
+	stats.TotalFee = calculateFees(content, stats, codeExecutionTime)
 
 	// Set the captured output in stats
 	stats.Output = outputBuffer.String()
@@ -413,96 +413,96 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	return stats, nil
 }
 
-func main() {
-	if err := run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-}
+// func main() {
+// 	if err := run(); err != nil {
+// 		fmt.Printf("Error: %v\n", err)
+// 		os.Exit(1)
+// 	}
+// }
 
-func run() error {
-	if len(os.Args) != 2 {
-		return fmt.Errorf("Usage: program <ipfs-url>")
-	}
+// func run() error {
+// 	if len(os.Args) != 2 {
+// 		return fmt.Errorf("Usage: program <ipfs-url>")
+// 	}
 
-	ipfsURL := os.Args[1]
-	ctx := context.Background()
+// 	ipfsURL := os.Args[1]
+// 	ctx := context.Background()
 
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
-	}
-	defer cli.Close()
+// 	cli, err := client.NewClientWithOpts(
+// 		client.FromEnv,
+// 		client.WithAPIVersionNegotiation(),
+// 	)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create Docker client: %w", err)
+// 	}
+// 	defer cli.Close()
 
-	if err := pullDockerImage(ctx, cli, "golang:latest"); err != nil {
-		return fmt.Errorf("failed to pull Docker image: %w", err)
-	}
+// 	if err := pullDockerImage(ctx, cli, "golang:latest"); err != nil {
+// 		return fmt.Errorf("failed to pull Docker image: %w", err)
+// 	}
 
-	codePath, err := DownloadIPFSFile(ipfsURL)
-	if err != nil {
-		return fmt.Errorf("failed to download IPFS file: %w", err)
-	}
+// 	codePath, err := DownloadIPFSFile(ipfsURL)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to download IPFS file: %w", err)
+// 	}
 
-	fmt.Printf("Downloaded file path: %s\n", codePath)
-	content, err := os.ReadFile(codePath)
-	if err != nil {
-		return fmt.Errorf("error reading file: %w", err)
-	}
-	fmt.Printf("File content length: %d bytes\n", len(content))
+// 	fmt.Printf("Downloaded file path: %s\n", codePath)
+// 	content, err := os.ReadFile(codePath)
+// 	if err != nil {
+// 		return fmt.Errorf("error reading file: %w", err)
+// 	}
+// 	fmt.Printf("File content length: %d bytes\n", len(content))
 
-	// Move the defer after the error check to ensure cleanup
-	defer func() {
-		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
-			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
-		}
-	}()
+// 	// Move the defer after the error check to ensure cleanup
+// 	defer func() {
+// 		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+// 			fmt.Printf("Warning: failed to cleanup temporary files: %v\n", err)
+// 		}
+// 	}()
 
-	containerID, err := CreateDockerContainer(ctx, cli, codePath)
-	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
-	}
+// 	containerID, err := CreateDockerContainer(ctx, cli, codePath)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create container: %w", err)
+// 	}
 
-	// Create cleanup function with timeout context
-	cleanup := func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := cli.ContainerRemove(cleanupCtx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
-			fmt.Printf("Warning: failed to remove container %s: %v\n", containerID, err)
-		}
-	}
-	defer cleanup()
+// 	// Create cleanup function with timeout context
+// 	cleanup := func() {
+// 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 		defer cancel()
+// 		if err := cli.ContainerRemove(cleanupCtx, containerID, types.ContainerRemoveOptions{Force: true}); err != nil {
+// 			fmt.Printf("Warning: failed to remove container %s: %v\n", containerID, err)
+// 		}
+// 	}
+// 	defer cleanup()
 
-	fmt.Println("\nStarting container and monitoring resources...")
-	stats, err := MonitorResources(ctx, cli, containerID)
-	if err != nil {
-		return fmt.Errorf("failed to monitor resources: %w", err)
-	}
+// 	fmt.Println("\nStarting container and monitoring resources...")
+// 	stats, err := MonitorResources(ctx, cli, containerID)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to monitor resources: %w", err)
+// 	}
 
-	printResourceStats(stats)
-	return nil
-}
+// 	printResourceStats(stats)
+// 	return nil
+// }
 
-func printResourceStats(stats *ResourceStats) {
-	fmt.Printf("\nResource Usage:\n")
-	fmt.Printf("Memory: %.2f MB\n", float64(stats.MemoryUsage)/(1024*1024))
-	fmt.Printf("CPU: %.2f%%\n", stats.CPUPercentage)
-	fmt.Printf("Network Statistics:\n")
-	fmt.Printf("  Received: %.2f MB (%.0f packets)\n", float64(stats.RxBytes)/(1024*1024), float64(stats.RxPackets))
-	fmt.Printf("  Transmitted: %.2f MB (%.0f packets)\n", float64(stats.TxBytes)/(1024*1024), float64(stats.TxPackets))
-	fmt.Printf("  Bandwidth Rate: %.2f MB/s\n", stats.BandwidthRate/(1024*1024))
-	fmt.Printf("  Errors: Rx=%d, Tx=%d\n", stats.RxErrors, stats.TxErrors)
-	fmt.Printf("  Dropped: Rx=%d, Tx=%d\n", stats.RxDropped, stats.TxDropped)
-	fmt.Printf("Disk I/O:\n")
-	fmt.Printf("  Read: %.2f MB\n", float64(stats.BlockRead)/(1024*1024))
-	fmt.Printf("  Write: %.2f MB\n", float64(stats.BlockWrite)/(1024*1024))
+// func printResourceStats(stats *ResourceStats) {
+// 	fmt.Printf("\nResource Usage:\n")
+// 	fmt.Printf("Memory: %.2f MB\n", float64(stats.MemoryUsage)/(1024*1024))
+// 	fmt.Printf("CPU: %.2f%%\n", stats.CPUPercentage)
+// 	fmt.Printf("Network Statistics:\n")
+// 	fmt.Printf("  Received: %.2f MB (%.0f packets)\n", float64(stats.RxBytes)/(1024*1024), float64(stats.RxPackets))
+// 	fmt.Printf("  Transmitted: %.2f MB (%.0f packets)\n", float64(stats.TxBytes)/(1024*1024), float64(stats.TxPackets))
+// 	fmt.Printf("  Bandwidth Rate: %.2f MB/s\n", stats.BandwidthRate/(1024*1024))
+// 	fmt.Printf("  Errors: Rx=%d, Tx=%d\n", stats.RxErrors, stats.TxErrors)
+// 	fmt.Printf("  Dropped: Rx=%d, Tx=%d\n", stats.RxDropped, stats.TxDropped)
+// 	fmt.Printf("Disk I/O:\n")
+// 	fmt.Printf("  Read: %.2f MB\n", float64(stats.BlockRead)/(1024*1024))
+// 	fmt.Printf("  Write: %.2f MB\n", float64(stats.BlockWrite)/(1024*1024))
 
-	fmt.Printf("\nFee Calculation:\n")
-	fmt.Printf("Static Complexity: %.6f\n", stats.StaticComplexity)
-	fmt.Printf("Dynamic Complexity: %.6f\n", stats.DynamicComplexity)
-	fmt.Printf("Complexity Index: %.6f\n", stats.ComplexityIndex)
-	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
-	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
-}
+// 	fmt.Printf("\nFee Calculation:\n")
+// 	fmt.Printf("Static Complexity: %.6f\n", stats.StaticComplexity)
+// 	fmt.Printf("Dynamic Complexity: %.6f\n", stats.DynamicComplexity)
+// 	fmt.Printf("Complexity Index: %.6f\n", stats.ComplexityIndex)
+// 	fmt.Printf("Gas Fees: $%.4f\n", stats.GasFees)
+// 	fmt.Printf("Total Fee: $%.4f\n", stats.TotalFee)
+// }
