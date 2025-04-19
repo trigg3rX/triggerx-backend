@@ -1,14 +1,126 @@
+x-othentic-cli: &othentic-cli
+  env_file:
+    - .env
+  build:
+    context: .
+    dockerfile: ./Dockerfile
+
 services:
   scylla:
+    profiles: ["database"]
     image: scylladb/scylla
     container_name: triggerx-scylla
     ports:
       - "${DATABASE_DOCKER_PORT}:9042"
     volumes:
       - scylla_data:/var/lib/scylla
-    command: --smp 1 --memory 256M --overprovisioned 1
+    command: --smp 1 --memory 512M --overprovisioned 1
     logging:
       driver: "json-file"
+
+  aggregator:
+    profiles: ["othentic"]
+    container_name: triggerx-aggregator
+    <<: *othentic-cli
+    env_file:
+      - .env
+    command: [
+      "node",
+      "aggregator",
+      "--l1-chain", "holesky",
+      "--l2-chain", "base-sepolia",
+      "--json-rpc",
+      "--json-rpc.port", "${AGGREGATOR_RPC_PORT}",
+      "--json-rpc.custom-message-enabled",
+      "--p2p.port", "${AGGREGATOR_P2P_PORT}",
+      "--p2p.datadir", "peerstore/othentic",
+      "--p2p.discovery-interval", "${AGGREGATOR_P2P_DISCOVERY_INTERVAL}",
+      "--internal-tasks",
+      "--sync-interval", "${AGGREGATOR_SYNC_INTERVAL}",
+      "--metrics",
+      "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
+      "--delay", "${AGGREGATOR_DELAY}",
+      "--keystore", "${AGGREGATOR_KEYSTORE}",
+      "--keystore-password", "${AGGREGATOR_KEYSTORE_PASSWORD}"   
+    ]
+    environment:
+      - L1_RPC=${L1_RPC}
+      - L2_RPC=${L2_RPC}
+      - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
+      - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
+      - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
+      - OTHENTIC_BOOTSTRAP_SEED=${OTHENTIC_BOOTSTRAP_SEED}
+      - LOG_DIR=logs/othentic/aggregator
+      - AGGREGATOR_RPC_PORT=${AGGREGATOR_RPC_PORT}
+      - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
+      - AGGREGATOR_P2P_DISCOVERY_INTERVAL=${AGGREGATOR_P2P_DISCOVERY_INTERVAL}
+      - AGGREGATOR_SYNC_INTERVAL=${AGGREGATOR_SYNC_INTERVAL}
+      - AGGREGATOR_METRICS_PORT=${AGGREGATOR_METRICS_PORT}
+      - AGGREGATOR_DELAY=${AGGREGATOR_DELAY}
+      - AGGREGATOR_KEYSTORE=${AGGREGATOR_KEYSTORE}
+      - AGGREGATOR_KEYSTORE_PASSWORD=${AGGREGATOR_KEYSTORE_PASSWORD}
+    volumes:
+      - othentic_peerstore:/app/peerstore/othentic
+    ports:
+      - "${AGGREGATOR_P2P_PORT}:${AGGREGATOR_P2P_PORT}"
+      - "${AGGREGATOR_RPC_PORT}:${AGGREGATOR_RPC_PORT}"
+    networks:
+      p2p:
+        ipv4_address: 172.28.0.69
+
+  
+
+  nexus:
+    profiles: ["othentic"]
+    container_name: triggerx-nexus
+    <<: *othentic-cli
+    env_file:
+      - .env
+    command: [
+      "node",
+      "attester",
+      "/ip4/172.28.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi", "http://172.28.0.42",
+      "--avs-webapi-port", "${AGGREGATOR_RPC_PORT}",
+      "--l1-chain", "holesky",
+      "--l2-chain", "base-sepolia",
+      "--json-rpc.custom-message-enabled",
+      "--p2p.port", "${OPERATOR_P2P_PORT}",
+      "--p2p.datadir", "peerstore/othentic",
+      "--p2p.discovery-interval", "60000",
+      "--metrics",
+      "--metrics.port", "${OPERATOR_METRICS_PORT}",
+      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${OPERATOR_P2P_PORT}/p2p/${PEER_ID}"
+    ]
+    environment:
+      - L1_RPC=${L1_RPC}
+      - L2_RPC=${L2_RPC}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${OPERATOR_ADDRESS}
+      - LOG_DIR=logs/othentic
+    volumes:
+      - othentic_peerstore:/app/peerstore/othentic
+    ports:
+      - "${OPERATOR_P2P_PORT}:${OPERATOR_P2P_PORT}"
+    depends_on:
+      keeper:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 172.28.0.69
+
+
+networks:
+  p2p:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 172.28.0.0/16
+         gateway: 172.28.0.1
+
+
+
+  
 
 volumes:
 

@@ -26,11 +26,11 @@ import (
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 // keeperResponseWrapper wraps execution result bytes to satisfy the proof module's interface
-type keeperResponseWrapper struct {
+type KeeperResponseWrapper struct {
 	Data []byte
 }
 
-func (krw *keeperResponseWrapper) GetData() []byte {
+func (krw *KeeperResponseWrapper) GetData() []byte {
 	return krw.Data
 }
 
@@ -183,7 +183,7 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal execution result"})
 		return
 	}
-	krw := &keeperResponseWrapper{Data: actionDataBytes}
+	krw := &KeeperResponseWrapper{Data: actionDataBytes}
 
 	// Mock TLS state for proof generation
 	certBytes := []byte("mock certificate data")
