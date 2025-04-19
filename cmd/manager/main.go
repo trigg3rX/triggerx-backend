@@ -16,6 +16,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+
+	kconfig "github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 )
 
 var logger logging.Logger
@@ -28,6 +30,7 @@ func main() {
 	logger.Info("Starting manager node...")
 
 	config.Init()
+	kconfig.Init()
 
 	var wg sync.WaitGroup
 
