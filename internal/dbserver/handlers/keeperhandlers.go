@@ -20,7 +20,20 @@ type NotificationConfig struct {
 	EmailPassword string
 	BotToken      string
 }
+	// // Update keeper metrics after successful job execution
+	// keeperID := os.Getenv("KEEPER_ID")
+	// if keeperID == "" {
+	// 	logger.Warn("KEEPER_ID environment variable not set, using default value")
+	// }
+	// taskID := triggerData.TaskID
 
+	// // Call the metrics server to store keeper execution metrics
+	// if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
+	// 	logger.Warnf("Failed to store keeper metrics: %v", err)
+	// 	// Continue execution even if metrics storage fails
+	// } else {
+	// 	logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
+	// }
 func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
@@ -135,7 +148,7 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
 	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
 			FROM triggerx.keeper_data 
-			WHERE verified = true AND status = true AND online = true AND keeper_id = 2
+			WHERE keeper_id = 6
 			ALLOW FILTERING`).Iter()
 
 	var performer types.GetPerformerData
