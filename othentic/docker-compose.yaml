@@ -26,8 +26,6 @@ services:
       "--metrics",
       "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
       "--delay", "${AGGREGATOR_DELAY}"
-      # "--keystore", "${AGGREGATOR_KEYSTORE}",
-      # "--keystore-password", "${AGGREGATOR_KEYSTORE_PASSWORD}"   
     ]
     environment:
       - PRIVATE_KEY=${PRIVATE_KEY_AGGREGATOR}
@@ -47,7 +45,6 @@ services:
       - AGGREGATOR_KEYSTORE=${AGGREGATOR_KEYSTORE}
       - AGGREGATOR_KEYSTORE_PASSWORD=${AGGREGATOR_KEYSTORE_PASSWORD}
     volumes:
-      - ./data/peerstore/aggregator:/peerstore/aggregator
       - ./data/logs/aggregator:/logs/aggregator
     ports:
       - "0.0.0.0:${AGGREGATOR_P2P_PORT}:${AGGREGATOR_P2P_PORT}"
@@ -86,7 +83,6 @@ services:
       - OPERATOR_ADDRESS=${NEXUS_ADDRESS}
       - LOG_DIR=/logs/nexus
     volumes:
-      - ./data/peerstore/nexus:/peerstore/nexus
       - ./data/logs/nexus:/logs/nexus
     ports:
       - "0.0.0.0:${NEXUS_P2P_PORT}:${NEXUS_P2P_PORT}"
