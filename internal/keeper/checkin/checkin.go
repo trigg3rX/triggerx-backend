@@ -9,6 +9,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+
 	// "github.com/trigg3rX/triggerx-backend/pkg/crypto"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -29,7 +30,7 @@ func CheckInWithHealthService() error {
 
 	payload := types.KeeperHealth{
 		KeeperAddress: config.KeeperAddress,
-		Version:       "0.0.6",
+		Version:       "0.0.7",
 		Timestamp:     time.Now().UTC(),
 		Signature:     signature,
 		PeerID:        config.PeerID,
