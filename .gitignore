@@ -5,17 +5,18 @@ go.sum
 
 release/*
 
-.keystore/*
-othentic/.keystore/*
 .cursor
+
+othentic/.keystore/*
+othentic/data/peerstore/*
+othentic/data/logs/*/*.json
+othentic/data/logs/*/*.log
+othentic/data/logs/*/*.log.gz
+
 
 data/cache/*
 data/logs/*/*.log
-data/logs/*/*.log.gz
-data/logs/*/*.json
 !data/logs/*/.gitkeep
-data/peerstore/*/*
-!data/peerstore/*/.gitkeep
 
 cosign.key
 cosign.pub
