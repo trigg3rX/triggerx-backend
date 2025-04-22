@@ -1,10 +1,12 @@
 .env
+othentic/.env
 
 go.sum
 
 release/*
 
 .keystore/*
+othentic/.keystore/*
 .cursor
 
 data/cache/*
