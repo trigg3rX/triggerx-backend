@@ -3,26 +3,6 @@
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-############################# RUN #############################
-
-start-manager: ## Start the task manager
-	./scripts/services/start-manager.sh
-
-start-aggregator: ## Start the Aggregator
-	./scripts/services/start-aggregator.sh
-
-start-attester: ## Start the Attester
-	./scripts/services/start-attester.sh
-
-start-registrar: ## Start the Registrar
-	./scripts/services/start-registrar.sh
-
-start-health: ## Start the Health Check
-	./scripts/services/start-health.sh
-
-start-nexus: ## Start the Nexus Node
-	./scripts/services/start-nexus.sh
-
 ############################# DATABASE #############################
 
 db-setup: ## Setup ScyllaDB container
@@ -40,6 +20,21 @@ db-shell: ## Open CQL shell
 db-backup:  ##backup data
 	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_backup triggerx -cf keeper_data
 
+############################# RUN #############################
+
+start-othentic: ## Start the Othentic Node
+	./scripts/services/start-othentic.sh
+
+start-manager: ## Start the task manager
+	./scripts/services/start-manager.sh
+
+start-registrar: ## Start the Registrar
+	./scripts/services/start-registrar.sh
+
+start-health: ## Start the Health Check
+	./scripts/services/start-health.sh
+
+
 ############################ KEEPER NODE ####################################
 
 build-keeper: ## Build the Keeper
@@ -47,8 +42,3 @@ build-keeper: ## Build the Keeper
 
 start-keeper: ## Start the Keeper
 	./scripts/services/start-keeper.sh
-
-############################ HELPERS ####################################
-
-clear-peerstore: ## Clear the peerstore
-	rm -rf data/peerstore/*
