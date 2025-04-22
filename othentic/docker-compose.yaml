@@ -65,7 +65,7 @@ services:
       "node",
       "attester",
       "/ip4/172.28.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
-      "--avs-webapi", "http://172.28.0.42",
+      "--avs-webapi", "http://host.docker.internal",
       "--avs-webapi-port", "${NEXUS_RPC_PORT}",
       "--l1-chain", "holesky",
       "--l2-chain", "base-sepolia",
@@ -93,7 +93,9 @@ services:
     restart: unless-stopped
     depends_on:
       aggregator:
-        condition: service_started   
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   p2p:
