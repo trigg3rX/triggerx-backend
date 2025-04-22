@@ -23,7 +23,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
+var logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
 
 // keeperResponseWrapper wraps execution result bytes to satisfy the proof module's interface
 type KeeperResponseWrapper struct {
