@@ -68,7 +68,7 @@ The **Aggregator** ensures the consensus of tasks by:
        go mod tidy
        ```
      - ```sh
-       npm i -g @othentic/othentic-cli@1.8.1  # (Node v22.6.0 is required)
+       npm i -g @othentic/othentic-cli  # (Node v22.6.0 is required)
        ```
 3. Copy the `.env.example` file to `.env` and set the environment variables.
 
@@ -84,7 +84,7 @@ The **Aggregator** ensures the consensus of tasks by:
 
 6. Start the Aggregator.
    - ```sh
-     make start-aggregator
+     make start-othentic
      ```
 
 7. Start the Task Manager.
@@ -93,13 +93,13 @@ The **Aggregator** ensures the consensus of tasks by:
      ```
 
 7. Start the Keepers.
-   - Pull the Docker image for executing tasks:
+   - Clone the repo:
      - ```sh
-       docker pull trigg3rx/triggerx-keeper:latest
+       git clone https://github.com/trigg3rX/triggerx-keeper-setup.git
        ```
    - Run the Docker image:
      - ```sh
-       docker run --env .env --name triggerx_keeper -d trigg3rx/ triggerx-keeper:latest
+       ./triggerx.sh start
        ```
 
 8. Run the Keeper node without docker.
