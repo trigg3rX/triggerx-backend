@@ -36,7 +36,6 @@ func HandleCheckInEvent(c *gin.Context) {
 	// }
 
 	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" || keeperHealth.Version == "" {
-		} else {
 		logger.Debugf("OBSOLETE VERSION !!!  for %s", keeperHealth.KeeperAddress)
 		c.JSON(http.StatusPreconditionFailed, gin.H{"error": "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.0"})
 		return

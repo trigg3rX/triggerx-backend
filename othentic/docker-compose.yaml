@@ -74,8 +74,7 @@ services:
       "--p2p.datadir", "/peerstore/nexus",
       "--p2p.discovery-interval", "60000",
       "--metrics",
-      "--metrics.port", "${NEXUS_METRICS_PORT}",
-      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${NEXUS_P2P_PORT}/p2p/${PEER_ID}"
+      "--metrics.port", "${NEXUS_METRICS_PORT}"
     ]
     environment:
       - L1_RPC=${L1_RPC}

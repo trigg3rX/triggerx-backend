@@ -104,7 +104,7 @@ func (m *MetricsServer) updateKeeperMetrics() {
 		keeperID      int64
 		keeperAddress string
 		taskCount     int
-		points        int64
+		points        float64
 	)
 
 	keeperCount := 0
@@ -145,7 +145,7 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	// Ensure the keeper address has the 0x prefix
 	if !strings.HasPrefix(keeperAddress, "0x") {
 		keeperAddress = "0x" + keeperAddress
-		m.logger.Infof("Added 0x prefix to keeper address: %s", keeperAddress)
+		// m.logger.Infof("Added 0x prefix to keeper address: %s", keeperAddress)
 	}
 
 	// Create a registry for this specific keeper
@@ -154,7 +154,7 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	// Query just this keeper's data
 	var keeperID int64
 	var taskCount int
-	var points int64
+	var points float64
 
 	err := m.db.Session().Query(`
 		SELECT keeper_id, no_exctask, keeper_points 
@@ -163,7 +163,7 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	`, keeperAddress).Scan(&keeperID, &taskCount, &points)
 
 	if err != nil {
-		m.logger.Errorf("Error fetching keeper metrics for %s: %v", keeperAddress, err)
+		// m.logger.Errorf("Error fetching keeper metrics for %s: %v", keeperAddress, err)
 		http.Error(w, "Error fetching keeper data", http.StatusInternalServerError)
 		return
 	}
