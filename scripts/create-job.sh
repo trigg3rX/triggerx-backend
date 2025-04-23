@@ -62,32 +62,32 @@ curl -X POST http://192.168.1.57:9002/api/jobs \
 #     }
 #   ]"
 
-# CONDITION BASED JOB, SATISFIED
+# CONDITION BASED JOB, SATISFIED, AA ENABLED
 
-# curl -X POST http://192.168.1.57:9002/api/jobs \
-#   -H "Content-Type: application/json" \
-#   -d "[
-#     {
-#       \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E\",
-#       \"stake_amount\": 101,
-#       \"token_amount\": 111,
-#       \"task_definition_id\": 5,
-#       \"priority\": 1,
-#       \"security\": 1,
-#       \"time_frame\": 40,
-#       \"recurring\": false,
-#       \"time_interval\": 30,
-#       \"trigger_chain_id\": \"11155420\",
-#       \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-#       \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
-#       \"script_ipfs_url\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreicimunflmfgplxovjaghko5moubvzacoedhu3bqbcs37ox2ypzgbe\",
-#       \"script_trigger_function\": \"https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la\",
-#       \"target_chain_id\": \"11155420\",
-#       \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-#       \"target_function\": \"increment\",
-#       \"arg_type\": 1,
-#       \"arguments\": [\"19\"],
-#       \"script_target_function\": \"checker\",
-#       \"job_cost_prediction\": 253
-#     }
-#   ]"
+curl -X POST http://192.168.1.57:9002/api/jobs \
+  -H "Content-Type: application/json" \
+  -d "[
+    {
+      \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E\",
+      \"stake_amount\": 101,
+      \"token_amount\": 111,
+      \"task_definition_id\": 1,
+      \"priority\": 1,
+      \"security\": 1,
+      \"time_frame\": 300,
+      \"recurring\": false,
+      \"time_interval\": 60,
+      \"trigger_chain_id\": \"11155420\",
+      \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
+      \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
+      \"script_ipfs_url\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreicimunflmfgplxovjaghko5moubvzacoedhu3bqbcs37ox2ypzgbe\",
+      \"script_trigger_function\": \"https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la\",
+      \"target_chain_id\": \"11155420\",
+      \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
+      \"target_function\": \"increment\",
+      \"arg_type\": 1,
+      \"arguments\": [\"19\"],
+      \"script_target_function\": \"checker\",
+      \"job_cost_prediction\": 253
+    }
+  ]"
