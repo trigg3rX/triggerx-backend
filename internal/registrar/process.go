@@ -141,24 +141,27 @@ func ProcessTaskSubmittedEvents(
 		logger.Debugf("Task Number: %d", event.TaskNumber)
 		logger.Debugf("Task Definition ID: %d", event.TaskDefinitionId)
 
-		decodedData := string(event.Data)
-		logger.Debugf("Decoded Data: %s", decodedData)
+		if event.TaskDefinitionId == 10001 || event.TaskDefinitionId == 10002 {
+		} else {
+			decodedData := string(event.Data)
+			logger.Debugf("Decoded Data: %s", decodedData)
 
-		ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
-		if err != nil {
-			logger.Errorf("Failed to fetch IPFS content: %v", err)
-			continue
-		}
+			ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
+			if err != nil {
+				logger.Errorf("Failed to fetch IPFS content: %v", err)
+				continue
+			}
 
-		var ipfsData types.IPFSData
-		if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
-			logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
-			continue
-		}
+			var ipfsData types.IPFSData
+			if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
+				logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
+				continue
+			}
 
-		if err := database.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, convertBigIntToStrings(event.AttestersIds), true); err != nil {
-			logger.Errorf("Failed to update points in database: %v", err)
-			continue
+			if err := database.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, convertBigIntToStrings(event.AttestersIds), true); err != nil {
+				logger.Errorf("Failed to update points in database: %v", err)
+				continue
+			}
 		}
 	}
 	return nil
