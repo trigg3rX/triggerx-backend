@@ -49,7 +49,7 @@ func main() {
 
 	routerValidation := gin.New()
 	routerValidation.Use(gin.Recovery())
-	routerValidation.Use(gin.Logger())
+	// routerValidation.Use(gin.Logger())
 	
 	routerValidation.POST("/p2p/message", execution.ExecuteTask)
 	routerValidation.POST("/task/validate", validation.ValidateTask)
