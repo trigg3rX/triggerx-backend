@@ -35,14 +35,16 @@ func HandleCheckInEvent(c *gin.Context) {
 	// 	return
 	// }
 
-	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" {
-	} else {
-		logger.Error("Invalid version for keeper", "keeper", keeperHealth.KeeperAddress)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid version, authorization failed"})
+	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" || keeperHealth.Version == "" {
+		} else {
+		logger.Debugf("OBSOLETE VERSION !!!  for %s", keeperHealth.KeeperAddress)
+		c.JSON(http.StatusPreconditionFailed, gin.H{"error": "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.0"})
 		return
 	}
 
-	logger.Infof("Signature verification successful for keeper %s", keeperHealth.KeeperAddress)
+	if keeperHealth.Version == "0.1.0" {
+		logger.Infof("Check In: %s | %s", keeperHealth.KeeperAddress, c.ClientIP())
+	}
 
 	// Update the keeper state in our in-memory store
 	stateManager := GetKeeperStateManager()
