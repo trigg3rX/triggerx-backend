@@ -36,11 +36,11 @@ type LoadBalancer struct {
 func NewLoadBalancer() *LoadBalancer {
 	lb := &LoadBalancer{
 		resources: SystemResources{
-			MaxCpuUsage: 50.0,
-			MaxMemUsage: 90.0,
+			MaxCpuUsage: 100.0,
+			MaxMemUsage: 100.0,
 		},
 		jobQueue: JobQueue{
-			maxSize: 1000,
+			maxSize: 10001,
 		},
 		metricsInterval: 5 * time.Second,
 	}

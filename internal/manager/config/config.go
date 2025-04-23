@@ -39,7 +39,7 @@ func Init() {
 
 	AggregatorRPCAddress = os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS")
 
-	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" || AggregatorRPCAddress == "" || P2PPrivateKey == "" {
+	if EtherscanApiKey == "" || AlchemyApiKey == "" || DeployerPrivateKey == "" || ManagerRPCPort == "" || DatabaseIPAddress == "" || AggregatorRPCAddress == "" {
 		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
 	}
 
