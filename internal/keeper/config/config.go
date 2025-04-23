@@ -49,19 +49,21 @@ func Init() {
 
 	EthRPCUrl := os.Getenv("L1_RPC")
 	AlchemyAPIKey = strings.TrimPrefix(EthRPCUrl, "https://eth-holesky.g.alchemy.com/v2/")
+
 	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY")
-	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
+	if PrivateKeyConsensus == "" { logger.Fatal(">>> PRIVATE_KEY not set in ENV !!!")}
+
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
+	if KeeperAddress == "" { logger.Fatal(">>> OPERATOR_ADDRESS not set in ENV !!!")}
+
 	KeeperRPCPort = os.Getenv("OPERATOR_RPC_PORT")
+	if KeeperRPCPort == "" { logger.Fatal(">>> OPERATOR_RPC_PORT not set in ENV !!!")}
+
 	PublicIPV4Address = os.Getenv("PUBLIC_IPV4_ADDRESS")
 	PeerID = os.Getenv("PEER_ID")
 
-	if PrivateKeyConsensus == "" || KeeperAddress == "" || KeeperRPCPort == "" {
-		logger.Fatal(".env VARIABLES NOT SET PROPERLY !!!")
-	}
-
 	if  PeerID == "" || PublicIPV4Address == "" {
-		logger.Info("Peer ID or Public IPV4 Address not set properly !!!")
+		logger.Info(">>> PEER_ID or PUBLIC_IPV4_ADDRESS not set properly in .env !!!")
 		logger.Info("Please set the variables in the .env file")
 		logger.Info("Without them the keeper will not be able to reconnect to the network")
 		logger.Fatal("Get Peer ID from https://triggerx.gitbook.io/triggerx-docs/join-as-keeper#p2p-config")
