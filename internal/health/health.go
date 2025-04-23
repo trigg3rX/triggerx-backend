@@ -38,11 +38,14 @@ func HandleCheckInEvent(c *gin.Context) {
 	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" || keeperHealth.Version == "" {
 		logger.Debugf("OBSOLETE VERSION !!!  for %s", keeperHealth.KeeperAddress)
 		c.JSON(http.StatusPreconditionFailed, gin.H{"error": "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.0"})
-		return
 	}
 
 	if keeperHealth.Version == "0.1.0" {
 		logger.Infof("Check In: %s | %s", keeperHealth.KeeperAddress, c.ClientIP())
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Keeper health check-in received",
+			"active":  true,
+		})
 	}
 
 	// Update the keeper state in our in-memory store
@@ -52,12 +55,6 @@ func HandleCheckInEvent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
 		return
 	}
-
-	// Only send to database when keeper status changes (handled by state manager)
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Keeper health check-in received",
-		"active":  true,
-	})
 }
 
 // GetKeeperStatus returns the status of keepers
