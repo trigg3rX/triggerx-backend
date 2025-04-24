@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/database"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
@@ -143,10 +144,10 @@ func ProcessTaskSubmittedEvents(
 
 		if event.TaskDefinitionId == 10001 || event.TaskDefinitionId == 10002 {
 		} else {
-			decodedData := string(event.Data)
-			logger.Debugf("Decoded Data: %s", decodedData)
+			dataCID := string(event.Data)
+			logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
+			ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, dataCID)
 			if err != nil {
 				logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -203,10 +204,10 @@ func ProcessTaskRejectedEvents(
 		logger.Debugf("Task Definition ID: %d", event.TaskDefinitionId)
 		logger.Debugf("Attesters IDs: %v", event.AttestersIds)
 
-		decodedData := string(event.Data)
-		logger.Debugf("Decoded Data: %s", decodedData)
+		dataCID := string(event.Data)
+		logger.Debugf("Decoded Data: %s", dataCID)
 
-		ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
+		ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, dataCID)
 		if err != nil {
 			logger.Errorf("Failed to fetch IPFS content: %v", err)
 			continue

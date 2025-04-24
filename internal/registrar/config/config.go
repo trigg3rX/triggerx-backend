@@ -19,6 +19,8 @@ var (
 	AvsGovernanceAddress     string
 	AttestationCenterAddress string
 
+	IpfsHost string
+
 	DatabaseDockerIPAddress string
 	DatabaseDockerPort      string
 
@@ -44,7 +46,7 @@ func Init() {
 	DatabaseDockerIPAddress = os.Getenv("DATABASE_DOCKER_IP_ADDRESS")
 	DatabaseDockerPort = os.Getenv("DATABASE_DOCKER_PORT")
 	LastRewardsUpdate = os.Getenv("LAST_REWARDS_UPDATE")
-
+	IpfsHost = os.Getenv("IPFS_HOST")
 	// If LastRewardsUpdate is not set, initialize with yesterday's date
 	if LastRewardsUpdate == "" {
 		LastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)

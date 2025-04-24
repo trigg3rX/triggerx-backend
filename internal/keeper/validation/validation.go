@@ -18,6 +18,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -245,7 +247,7 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 
 	// Fetch and execute the condition script
 	v.logger.Infof("Fetching condition script from IPFS: %s", job.ScriptTriggerFunction)
-	scriptContent, err := fetchIPFSContent(job.ScriptTriggerFunction)
+	scriptContent, err := ipfs.FetchIPFSContent(config.IpfsHost, job.ScriptTriggerFunction)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch condition script: %v", err)
 	}
@@ -404,7 +406,7 @@ func ValidateTask(c *gin.Context) {
 	}
 
 	// Fetch the ActionData from IPFS using CID from the proof of task
-	ipfsContent, err := fetchIPFSContent(decodedData)
+	ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, decodedData)
 	if err != nil {
 		logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
@@ -491,35 +493,4 @@ func ValidateTask(c *gin.Context) {
 		Error:   false,
 		Message: "",
 	})
-}
-
-func fetchIPFSContent(cidOrUrl string) (string, error) {
-	// Determine if input is a full URL or just a CID
-	var requestUrl string
-	if strings.HasPrefix(cidOrUrl, "http://") || strings.HasPrefix(cidOrUrl, "https://") {
-		// Input is already a full URL
-		requestUrl = cidOrUrl
-	} else {
-		// Input is a CID, prepend the IPFS gateway
-		ipfsGateway := "https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/"
-		requestUrl = ipfsGateway + cidOrUrl
-	}
-
-	resp, err := http.Get(requestUrl)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Rest of the function remains the same
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	return string(body), nil
 }

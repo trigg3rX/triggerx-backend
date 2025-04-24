@@ -255,7 +255,7 @@ func ValidateTask(c *gin.Context) {
 	}
 
 	// Fetch the ActionData from IPFS using CID from the proof of task
-	ipfsContent, err := ipfs.FetchIPFSContent(decodedData)
+	ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, decodedData)
 	if err != nil {
 		logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{

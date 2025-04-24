@@ -206,15 +206,7 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	// Generate TLS proof for response verification
-	tlsProof, err := proof.GenerateProof(krw, connState)
-	if err != nil {
-		logger.Errorf("Error generating TLS proof:", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Proof generation failed"})
-		return
-	}
-
-	services.SendTask(tlsProof.ResponseHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
+	services.SendTask(ipfsData.ProofData.CertificateHash, ipfsData.ProofData.ActionDataCID, jobData.TaskDefinitionID)
 
 	logger.Infof("CID: %s", ipfsData.ProofData.ActionDataCID)
 
