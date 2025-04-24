@@ -1,9 +1,5 @@
--- Create keyspace
-CREATE KEYSPACE IF NOT EXISTS triggerx
-WITH replication = {
-    'class': 'SimpleStrategy',
-    'replication_factor': 1
-};
+-- We are creating the keyspace separately in the setup script
+-- with NetworkTopologyStrategy for proper multi-DC replication
 
 -- Switch to keyspace
 USE triggerx;
@@ -122,4 +118,3 @@ CREATE TABLE IF NOT EXISTS apikeys (
     createdAt timestamp,
     PRIMARY KEY (key)
 );
-

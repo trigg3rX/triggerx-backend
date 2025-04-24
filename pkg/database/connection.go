@@ -14,7 +14,7 @@ func NewConnection(config *Config) (*Connection, error) {
 	cluster.Timeout = config.Timeout
 	cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: config.Retries}
 	cluster.ConnectTimeout = config.ConnectWait
-	cluster.Consistency = gocql.Quorum
+	cluster.Consistency = gocql.One
 
 	session, err := cluster.CreateSession()
 	if err != nil {
@@ -37,4 +37,4 @@ func (c *Connection) Close() {
 	if c.session != nil {
 		c.session.Close()
 	}
-} 
+}
