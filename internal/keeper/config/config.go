@@ -50,7 +50,7 @@ func Init() {
 	EthRPCUrl := os.Getenv("L1_RPC")
 	AlchemyAPIKey = strings.TrimPrefix(EthRPCUrl, "https://eth-holesky.g.alchemy.com/v2/")
 
-	PrivateKeyController = os.Getenv("PRIVATE_KEY_CONTROLLER")
+	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
 	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY")
 	if PrivateKeyConsensus == "" { logger.Fatal(">>> PRIVATE_KEY not set in ENV !!!")}
 
