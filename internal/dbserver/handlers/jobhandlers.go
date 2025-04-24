@@ -29,27 +29,38 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Collect all IPFS URLs
+	// Collect all IPFS URLs and check if any job needs dynamic fee calculation
 	var ipfsURLs []string
+	needsDynamicFee := false
 	for i, job := range tempJobs {
-		if job.ScriptIPFSUrl == "" {
-			h.logger.Errorf("[CreateJobData] Missing IPFS URL for job %d", i)
-			http.Error(w, "Missing IPFS URL", http.StatusBadRequest)
+		if job.ArgType == 1 { // Dynamic ArgType
+			needsDynamicFee = true
+			if job.ScriptIPFSUrl == "" {
+				h.logger.Errorf("[CreateJobData] Missing IPFS URL for job %d", i)
+				http.Error(w, "Missing IPFS URL", http.StatusBadRequest)
+				return
+			}
+			ipfsURLs = append(ipfsURLs, job.ScriptIPFSUrl)
+		}
+	}
+
+	var feePerJob float64 = 0.01 // Default fee per execution
+
+	// Only calculate dynamic fees if needed
+	if needsDynamicFee {
+		// Calculate fees for jobs that need dynamic fee calculation
+		var totalFee float64
+		var err error
+		totalFee, err = h.CalculateTaskFees(strings.Join(ipfsURLs, ","))
+		if err != nil {
+			h.logger.Errorf("[CreateJobData] Error calculating fees: %v", err)
+			http.Error(w, "Error calculating fees", http.StatusInternalServerError)
 			return
 		}
-		ipfsURLs = append(ipfsURLs, job.ScriptIPFSUrl)
-	}
 
-	// Calculate fees for all jobs in one call
-	totalFee, err := h.CalculateTaskFees(strings.Join(ipfsURLs, ","))
-	if err != nil {
-		h.logger.Errorf("[CreateJobData] Error calculating fees: %v", err)
-		http.Error(w, "Error calculating fees", http.StatusInternalServerError)
-		return
+		// The totalFee returned is the sum of all fees for dynamic jobs
+		feePerJob = totalFee / float64(len(ipfsURLs))
 	}
-
-	// The totalFee returned is the sum of all fees, so we need to divide by the number of jobs
-	feePerJob := totalFee / float64(len(tempJobs))
 
 	// Calculate cost prediction for each job
 	for i := range tempJobs {
@@ -57,8 +68,12 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		intervalInSeconds := float64(tempJobs[i].TimeInterval)
 		executionCount := math.Ceil(timeframeInSeconds / intervalInSeconds)
 
-		tempJobs[i].JobCostPrediction = executionCount * feePerJob
-		h.logger.Infof("[CreateJobData] Calculated job cost for job %d: %f", i, tempJobs[i].JobCostPrediction)
+		if tempJobs[i].ArgType == 1 {
+			tempJobs[i].JobCostPrediction = executionCount * feePerJob
+		} else {
+			tempJobs[i].JobCostPrediction = executionCount * 0.01
+		}
+		h.logger.Infof("[CreateJobData] Calculated job cost for job %d: %f (ArgType: %d)", i, tempJobs[i].JobCostPrediction, tempJobs[i].ArgType)
 	}
 
 	var lastJobID int64
@@ -74,7 +89,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var existingTokenBalance *big.Int = big.NewInt(0)
 	var existingJobIDs []int64 = []int64{}
 	var newJobIDs []int64
-
+	var err error
 	err = h.db.Session().Query(`
 		SELECT user_id, account_balance, token_balance, job_ids
 		FROM triggerx.user_data 
