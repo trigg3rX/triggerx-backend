@@ -25,7 +25,8 @@ services:
       "--sync-interval", "${AGGREGATOR_SYNC_INTERVAL}",
       "--metrics",
       "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
-      "--delay", "${AGGREGATOR_DELAY}"
+      "--delay", "${AGGREGATOR_DELAY}",
+      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
     ]
     environment:
       - PRIVATE_KEY=${PRIVATE_KEY_AGGREGATOR}
@@ -35,6 +36,7 @@ services:
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
       - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
       - OTHENTIC_BOOTSTRAP_SEED=${OTHENTIC_BOOTSTRAP_SEED}
+      - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
       - LOG_DIR=/logs/aggregator
       - AGGREGATOR_RPC_PORT=${AGGREGATOR_RPC_PORT}
       - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
@@ -74,7 +76,8 @@ services:
       "--p2p.datadir", "/peerstore/nexus",
       "--p2p.discovery-interval", "60000",
       "--metrics",
-      "--metrics.port", "${NEXUS_METRICS_PORT}"
+      "--metrics.port", "${NEXUS_METRICS_PORT}",
+      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${NEXUS_P2P_PORT}/p2p/${PEER_ID}"
     ]
     environment:
       - L1_RPC=${L1_RPC}
@@ -82,6 +85,11 @@ services:
       - PRIVATE_KEY=${NEXUS_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${NEXUS_ADDRESS}
       - LOG_DIR=/logs/nexus
+      - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
+      - PEER_ID=${PEER_ID}
+      - NEXUS_P2P_PORT=${NEXUS_P2P_PORT}
+      - NEXUS_RPC_PORT=${NEXUS_RPC_PORT}
+      - NEXUS_METRICS_PORT=${NEXUS_METRICS_PORT}
     volumes:
       - ./data/logs/nexus:/logs/nexus
     ports:
