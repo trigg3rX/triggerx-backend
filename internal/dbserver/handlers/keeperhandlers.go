@@ -77,8 +77,8 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 				keeper_id, keeper_name, keeper_address, rewards_booster,
 				rewards_address, no_exctask, keeper_points, verified, email_id
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress, 2,
-			keeperData.RewardsAddress, 0, 0, true, keeperData.EmailID).Exec(); err != nil {
+			currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress, 1.0,
+			keeperData.RewardsAddress, 0, 0.0, true, keeperData.EmailID).Exec(); err != nil {
 			h.logger.Errorf(" Error creating keeper with ID %d: %v", currentKeeperID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
