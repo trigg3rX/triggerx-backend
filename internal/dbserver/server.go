@@ -124,7 +124,7 @@ func (s *Server) routes() {
 	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
 	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
 	api.HandleFunc("/tasks/{id}/fee", handler.UpdateTaskFee).Methods("PUT")
-	
+
 	// // Keeper routes
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
@@ -148,6 +148,9 @@ func (s *Server) routes() {
 
 	// New route for getting chat ID and keeper name
 	api.HandleFunc("/keepers/com-info/{id}", handler.GetKeeperCommunicationInfo).Methods("GET")
+
+	// Claim Fund route
+	api.HandleFunc("/claim-fund", handler.ClaimFund).Methods("POST")
 
 	// API key management routes (these should be admin-only and properly secured)
 	admin := api.PathPrefix("/admin").Subrouter()
