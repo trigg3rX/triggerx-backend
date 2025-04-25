@@ -175,13 +175,13 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-				target_contract_address, target_function, arg_type, arguments, script_target_function, 
+				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
 				status, job_cost_prediction, created_at, last_executed_at, task_ids
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
-			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
+			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
 			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
@@ -210,6 +210,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			TargetChainID:          tempJobs[i].TargetChainID,
 			TargetContractAddress:  tempJobs[i].TargetContractAddress,
 			TargetFunction:         tempJobs[i].TargetFunction,
+			ABI:                    tempJobs[i].ABI,
 			ArgType:                tempJobs[i].ArgType,
 			Arguments:              tempJobs[i].Arguments,
 			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
@@ -330,14 +331,14 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
         SELECT job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
                time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
                trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-               target_contract_address, target_function, arg_type, arguments, script_target_function, 
+               target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
                status, job_cost_prediction, created_at, last_executed_at, task_ids
         FROM triggerx.job_data 
         WHERE job_id = ?`, jobID).Scan(
 		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.UserID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID, &jobData.ChainStatus,
 		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID, &jobData.TriggerContractAddress,
 		&jobData.TriggerEvent, &jobData.ScriptIPFSUrl, &jobData.ScriptTriggerFunction, &jobData.TargetChainID,
-		&jobData.TargetContractAddress, &jobData.TargetFunction, &jobData.ArgType, &jobData.Arguments, &jobData.ScriptTargetFunction,
+		&jobData.TargetContractAddress, &jobData.TargetFunction, &jobData.ABI, &jobData.ArgType, &jobData.Arguments, &jobData.ScriptTargetFunction,
 		&jobData.Status, &jobData.JobCostPrediction, &jobData.CreatedAt, &jobData.LastExecutedAt, &jobData.TaskIDs); err != nil {
 		h.logger.Errorf("[GetJobData] Error retrieving jobID %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

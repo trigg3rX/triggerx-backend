@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     target_chain_id text,
     target_contract_address text,
     target_function text,
+    abi text,
     arg_type int,
     arguments list<text>,
     script_target_function text,
