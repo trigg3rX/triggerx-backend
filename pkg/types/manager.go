@@ -20,6 +20,7 @@ type HandleCreateJobData struct {
 		ScriptTriggerFunction string    `json:"script_trigger_function"`
 		TargetChainID         string    `json:"target_chain_id"`
 		TargetContractAddress string    `json:"target_contract_address"`
+		ABI					  string   `json:"abi"`
 		TargetFunction        string    `json:"target_function"`
 		ArgType               int       `json:"arg_type"`
 		Arguments             []string  `json:"arguments"`

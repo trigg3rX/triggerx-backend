@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
@@ -169,29 +170,30 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 	return convertedArgs, nil
 }
 
-func (e *JobExecutor) getContractMethodAndABI(methodName, contractAddress string) (*abi.ABI, *abi.Method, error) {
-	// Fetch ABI
-	abiData, err := e.fetchContractABI(contractAddress)
-	if err != nil {
-		return nil, nil, err
-	}
+func (e *JobExecutor) getContractMethodAndABI(methodName string, job *jobtypes.HandleCreateJobData) (*abi.ABI, *abi.Method, error) {
+    // Use ABI from database instead of fetching it
+    if job.ABI == "" {
+        return nil, nil, fmt.Errorf("contract ABI not provided in job data")
+    }
 
-	parsed, err := abi.JSON(bytes.NewReader(abiData))
-	if err != nil {
-		log.Printf("Error parsing ABI: %v", err)
-		return nil, nil, err
-	}
+    abiData := []byte(job.ABI)
+    
+    parsed, err := abi.JSON(bytes.NewReader(abiData))
+    if err != nil {
+        log.Printf("Error parsing ABI: %v", err)
+        return nil, nil, err
+    }
 
-	log.Printf("Fetched ABI for contract %s: %s", contractAddress, string(abiData))
+    log.Printf("Using ABI from database for contract %s", job.TargetContractAddress)
 
-	method, ok := parsed.Methods[methodName]
-	if !ok {
-		log.Printf("Method %s not found in contract ABI", methodName)
-		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
-	}
+    method, ok := parsed.Methods[methodName]
+    if !ok {
+        log.Printf("Method %s not found in contract ABI", methodName)
+        return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
+    }
 
-	log.Printf("Found method: %+v", method)
-	return &parsed, &method, nil
+    log.Printf("Found method: %+v", method)
+    return &parsed, &method, nil
 }
 
 func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {

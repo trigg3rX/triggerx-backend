@@ -154,7 +154,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 	}
 
 	contractAddress := ethcommon.HexToAddress(job.TargetContractAddress)
-	contractABI, method, err := e.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
+	contractABI, method, err := e.getContractMethodAndABI(job.TargetFunction, job)
 	if err != nil {
 		return executionResult, err
 	}
@@ -299,7 +299,7 @@ func (e *JobExecutor) executeActionWithDynamicArgs(job *jobtypes.HandleCreateJob
 
 	// Step 2: Get the contract method and ABI
 	contractAddress := ethcommon.HexToAddress(job.TargetContractAddress)
-	contractABI, method, err := e.getContractMethodAndABI(job.TargetFunction, job.TargetContractAddress)
+	contractABI, method, err := e.getContractMethodAndABI(job.TargetFunction, job)
 	if err != nil {
 		return executionResult, err
 	}

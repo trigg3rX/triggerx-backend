@@ -26,6 +26,7 @@ type CreateJobData struct {
 	TargetChainID         string   `json:"target_chain_id"`
 	TargetContractAddress string   `json:"target_contract_address"`
 	TargetFunction        string   `json:"target_function"`
+	ABI					  string   `json:"abi"`
 	ArgType               int      `json:"arg_type"`
 	Arguments             []string `json:"arguments"`
 	ScriptTargetFunction  string   `json:"script_target_function"`
