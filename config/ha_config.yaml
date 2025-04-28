@@ -1,0 +1,20 @@
+manager:
+  ha:
+    enabled: true
+    heartbeat_interval: 5s
+    election_timeout: 10s
+    failover_timeout: 15s
+  
+  redis:
+    address: redis:6379
+    password: ""
+    db: 0
+    
+  cluster:
+    node_id: ${NODE_ID}  # Will be set via environment
+    rpc_port: ${MANAGER_RPC_PORT}
+    other_nodes: ${OTHER_MANAGER_ADDRESSES}
+    
+  health:
+    check_interval: 5s
+    timeout: 3s

@@ -58,12 +58,22 @@ func Init(haConfig *HAConfig) {
 	instanceID = fmt.Sprintf("%s:%s", hostname, config.ManagerRPCPort)
 
 	logger.Infof("Starting manager in HA mode with instance ID: %s", instanceID)
+	logger.Infof("Redis address: %s", haConfig.RedisAddress)
 
 	// Initialize Redis client for distributed locking
 	redisClient = redis.NewClient(&redis.Options{
 		Addr:     haConfig.RedisAddress,
 		Password: haConfig.RedisPassword,
+		DB:       0,
+		Network:  "tcp",
 	})
+
+	// Test Redis connection
+	ctx := context.Background()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		logger.Errorf("Failed to connect to Redis at %s: %v", haConfig.RedisAddress, err)
+		panic(fmt.Sprintf("Failed to connect to Redis: %v", err))
+	}
 
 	logger.Infof("Redis client initialized with address: %s", haConfig.RedisAddress)
 	// Start role election
@@ -80,6 +90,7 @@ func startElection(haConfig *HAConfig) {
 
 		if err != nil {
 			logger.Errorf("Error in leader election: %v", err)
+			logger.Errorf("Redis address being used: %s", haConfig.RedisAddress)
 			setRole(RoleFollower, haConfig.OnRoleChange)
 			time.Sleep(1 * time.Second)
 			continue

@@ -48,10 +48,15 @@ func main() {
 		// Initialize high availability
 		logger.Info("Initializing manager in high availability mode")
 
-		redisAddress := os.Getenv("REDIS_ADDRESS")
-		if redisAddress == "" {
-			redisAddress = "redis:6379" // Default Redis address
+		redisHost := os.Getenv("REDIS_HOST")
+		if redisHost == "" {
+			redisHost = "redis" // Default Redis host
 		}
+		redisPort := os.Getenv("REDIS_PORT")
+		if redisPort == "" {
+			redisPort = "6379" // Default Redis port
+		}
+		redisAddress := fmt.Sprintf("%s:%s", redisHost, redisPort)
 
 		otherManagers := []string{}
 		if otherManagersStr := os.Getenv("OTHER_MANAGER_ADDRESSES"); otherManagersStr != "" {

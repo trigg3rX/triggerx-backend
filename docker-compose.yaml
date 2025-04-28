@@ -32,60 +32,87 @@ services:
     image: redis:alpine
     container_name: triggerx-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     networks:
       - manager-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    command: redis-server --bind 0.0.0.0 --protected-mode no
 
   # Primary manager instance
   manager1:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.manager
     container_name: triggerx-manager-1
     environment:
+      - NODE_ID=manager1
       - MANAGER_RPC_PORT=8081
       - MANAGER_HA_ENABLED=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - REDIS_ADDRESS=redis:6379
-      - OTHER_MANAGER_ADDRESSES=localhost:8082
+      - OTHER_MANAGER_ADDRESSES=manager2:8082
     ports:
       - "8081:8081"
     volumes:
       - ./.env:/app/.env
     depends_on:
-      - redis
-      - scylla-node1
-      - scylla-node2
-    command: ["sh", "./scripts/services/start-manager.sh"]
+      redis:
+        condition: service_healthy
+      scylla-node1:
+        condition: service_started
+      scylla-node2:
+        condition: service_started
     networks:
       - manager-net
       - scylla-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
 
   # Secondary manager instance
   manager2:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.manager
     container_name: triggerx-manager-2
     environment:
+      - NODE_ID=manager2
       - MANAGER_RPC_PORT=8082
       - MANAGER_HA_ENABLED=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - REDIS_ADDRESS=redis:6379
-      - OTHER_MANAGER_ADDRESSES=localhost:8081
+      - OTHER_MANAGER_ADDRESSES=manager1:8081
     ports:
       - "8082:8082"
     volumes:
       - ./.env:/app/.env
     depends_on:
-      - redis
-      - scylla-node1
-      - scylla-node2
-      - manager1
-    command: ["sh", "./scripts/services/start-manager.sh"]
+      redis:
+        condition: service_healthy
+      manager1:
+        condition: service_healthy
+      scylla-node1:
+        condition: service_started
+      scylla-node2:
+        condition: service_started
     networks:
       - manager-net
       - scylla-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
 
 networks:
   scylla-net:
@@ -96,4 +123,4 @@ networks:
 volumes:
   scylla_data_1:
   scylla_data_2:
-  redis_data: 
+  redis_data:
