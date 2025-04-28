@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/ha"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/workers"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -142,6 +144,12 @@ func (s *JobScheduler) canAcceptNewJob() bool {
 // StartTimeBasedJob initializes and runs a job that executes on a time interval.
 // Jobs that can't be started due to resource constraints are queued.
 func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) error {
+	// Check if this instance is the leader before processing
+	if !isLeaderInstance() {
+		s.logger.Debugf("Skipping time-based job %d start on follower instance", jobData.JobID)
+		return nil
+	}
+
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
 		s.balancer.AddJobToQueue(jobData.JobID, 1)
@@ -177,6 +185,12 @@ func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) erro
 // StartEventBasedJob initializes and runs a job that executes in response to blockchain events.
 // Includes state persistence and resource management.
 func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) error {
+	// Check if this instance is the leader before processing
+	if !isLeaderInstance() {
+		s.logger.Debugf("Skipping event-based job %d start on follower instance", jobData.JobID)
+		return nil
+	}
+
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
 		s.balancer.AddJobToQueue(jobData.JobID, 1)
@@ -210,8 +224,14 @@ func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) err
 }
 
 // StartConditionBasedJob initializes and runs a job that executes when specific conditions are met.
-// Conditions are monitored via external scripts or APIs.
+// Handles state persistence and resource allocation for condition monitoring.
 func (s *JobScheduler) StartConditionBasedJob(jobData types.HandleCreateJobData) error {
+	// Check if this instance is the leader before processing
+	if !isLeaderInstance() {
+		s.logger.Debugf("Skipping condition-based job %d start on follower instance", jobData.JobID)
+		return nil
+	}
+
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
 		s.balancer.AddJobToQueue(jobData.JobID, 1)
@@ -371,4 +391,14 @@ func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value inte
 	}
 
 	return fmt.Errorf("invalid state cache format for job %d", jobID)
+}
+
+// Helper function to check if this is the leader instance
+func isLeaderInstance() bool {
+	// Check if HA is enabled
+	if os.Getenv("MANAGER_HA_ENABLED") != "true" {
+		return true // In non-HA mode, always act as leader
+	}
+
+	return ha.IsLeader()
 }

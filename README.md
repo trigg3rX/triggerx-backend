@@ -14,6 +14,9 @@ The **TriggerX Keeper Backend** is a decentralized system designed to automate a
     - [Keepers](#keepers)
     - [Aggregator](#aggregator)
   - [Steps to Run the Keeper Backend](#steps-to-run-the-keeper-backend)
+  - [High Availability Setup](#high-availability-setup)
+    - [Manager HA Configuration](#manager-ha-configuration)
+    - [How It Works](#how-it-works)
 
 ---
 
@@ -106,3 +109,36 @@ The **Aggregator** ensures the consensus of tasks by:
    - ```sh
      make start-keeper
      ```
+
+## High Availability Setup
+
+The TriggerX platform supports high availability for the task manager component, allowing for redundancy and automatic failover if one instance goes down.
+
+### Manager HA Configuration
+
+The manager service now supports a leader-follower architecture with automatic leader election:
+
+- Multiple manager instances can be configured to run in a cluster
+- A distributed lock using Redis ensures only one manager is the active leader
+- Automatic failover happens if the leader instance goes down
+- All instances accept task validation and p2p messages for task execution
+- Only the leader processes job creation and management requests
+
+To enable high availability mode, set the following environment variables:
+
+```
+MANAGER_HA_ENABLED=true
+REDIS_ADDRESS=redis:6379
+REDIS_PASSWORD=
+OTHER_MANAGER_ADDRESSES=manager2:8082
+```
+
+The docker-compose.yaml file includes a configuration for running two manager instances with Redis for leader election.
+
+### How It Works
+
+- Manager instances automatically elect a leader using distributed locking via Redis
+- If the leader goes down, another instance will automatically become the new leader
+- Job scheduling is only performed by the leader to avoid duplicate jobs
+- All instances can process task validation and execution, ensuring tasks are still processed if one manager is down
+- Health endpoints are available at `/health` and `/status` to monitor manager instances

@@ -27,10 +27,73 @@ services:
     networks:
       - scylla-net
 
+  # Redis for distributed locking and leader election
+  redis:
+    image: redis:alpine
+    container_name: triggerx-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - manager-net
+
+  # Primary manager instance
+  manager1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: triggerx-manager-1
+    environment:
+      - MANAGER_RPC_PORT=8081
+      - MANAGER_HA_ENABLED=true
+      - REDIS_ADDRESS=redis:6379
+      - OTHER_MANAGER_ADDRESSES=localhost:8082
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./.env:/app/.env
+    depends_on:
+      - redis
+      - scylla-node1
+      - scylla-node2
+    command: ["sh", "./scripts/services/start-manager.sh"]
+    networks:
+      - manager-net
+      - scylla-net
+
+  # Secondary manager instance
+  manager2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: triggerx-manager-2
+    environment:
+      - MANAGER_RPC_PORT=8082
+      - MANAGER_HA_ENABLED=true
+      - REDIS_ADDRESS=redis:6379
+      - OTHER_MANAGER_ADDRESSES=localhost:8081
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./.env:/app/.env
+    depends_on:
+      - redis
+      - scylla-node1
+      - scylla-node2
+      - manager1
+    command: ["sh", "./scripts/services/start-manager.sh"]
+    networks:
+      - manager-net
+      - scylla-net
+
 networks:
   scylla-net:
+    driver: bridge
+  manager-net:
     driver: bridge
 
 volumes:
   scylla_data_1:
-  scylla_data_2: 
+  scylla_data_2:
+  redis_data: 
