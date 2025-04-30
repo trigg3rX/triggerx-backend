@@ -23,6 +23,7 @@ func SetDatabaseConnection(connection *database.Connection) {
 func KeeperRegistered(operatorAddress string, txHash string) error {
 	logger.Infof("Updating keeper %s at database", operatorAddress)
 
+	var booster float32 = 1
 	var currentKeeperID int64
 	if err := db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
@@ -45,7 +46,7 @@ func KeeperRegistered(operatorAddress string, txHash string) error {
 			INSERT INTO triggerx.keeper_data (
 				keeper_id, keeper_address, registered_tx, status, rewards_booster
 			) VALUES (?, ?, ?, ?, ?)`,
-			currentKeeperID, operatorAddress, txHash, true, 2).Exec(); err != nil {
+			currentKeeperID, operatorAddress, txHash, true, booster).Exec(); err != nil {
 			logger.Errorf(" Error creating new keeper: %v", err)
 		}
 
