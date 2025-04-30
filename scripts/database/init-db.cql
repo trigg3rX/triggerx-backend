@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     
     rewards_address text,
     rewards_booster float,
-    voting_power bigint,
+    voting_power text,
     keeper_points double,
     connection_address text,
     peer_id text,
