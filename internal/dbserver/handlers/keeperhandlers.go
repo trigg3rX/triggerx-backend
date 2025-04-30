@@ -416,7 +416,7 @@ func (h *Handler) sendEmailNotification(to, subject, body string) error {
 	return nil
 }
 
-func (h *Handler) checkAndNotifyOfflineKeeper(keeperID string) {
+func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 	// Wait for 10 minutes
 	time.Sleep(10 * time.Minute)
 
@@ -494,7 +494,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		keeperHealth.KeeperAddress = "0x" + keeperHealth.KeeperAddress
 	}
 
-	var keeperID string
+	var keeperID int64
 	if err := h.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperHealth.KeeperAddress).Scan(&keeperID); err != nil {
@@ -504,7 +504,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if keeperID == "" {
+	if keeperID == 0 {
 		h.logger.Errorf("[KeeperHealthCheckIn] No keeper found with address: %s", keeperHealth.KeeperAddress)
 		http.Error(w, "Keeper not found", http.StatusNotFound)
 		return
