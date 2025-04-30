@@ -13,8 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Create a new Job, and send it to the Manager
-// If User doesn't exist, create a new user, or update the existing user
+// Create a new Job, and store it in the database
 func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var tempJobs []types.CreateJobData
 	if err := json.NewDecoder(r.Body).Decode(&tempJobs); err != nil {
@@ -161,61 +160,19 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
 				target_contract_address, target_function, arg_type, arguments, script_target_function, 
-				status, job_cost_prediction, created_at, last_executed_at, task_ids
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				status, job_cost_prediction, created_at, last_executed_at, task_ids, job_status
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
 			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}).Exec(); err != nil {
+			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, "pending").Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		h.logger.Infof("[CreateJobData] Successfully created jobID %d", currentJobID)
-
-		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
-		jobData := types.HandleCreateJobData{
-			JobID:                  currentJobID,
-			TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
-			UserID:                 existingUserID,
-			Priority:               tempJobs[i].Priority,
-			Security:               tempJobs[i].Security,
-			LinkJobID:              linkJobID,
-			ChainStatus:            chainStatus,
-			TimeFrame:              tempJobs[i].TimeFrame,
-			Recurring:              tempJobs[i].Recurring,
-			TimeInterval:           tempJobs[i].TimeInterval,
-			TriggerChainID:         tempJobs[i].TriggerChainID,
-			TriggerContractAddress: tempJobs[i].TriggerContractAddress,
-			TriggerEvent:           tempJobs[i].TriggerEvent,
-			ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
-			ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
-			TargetChainID:          tempJobs[i].TargetChainID,
-			TargetContractAddress:  tempJobs[i].TargetContractAddress,
-			TargetFunction:         tempJobs[i].TargetFunction,
-			ArgType:                tempJobs[i].ArgType,
-			Arguments:              tempJobs[i].Arguments,
-			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
-			CreatedAt:              time.Now().UTC(),
-			LastExecutedAt:         time.Time{},
-		}
-
-		success, err := h.SendDataToManager("/job/create", jobData)
-		if err != nil {
-			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
-			http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
-			return
-		}
-
-		if !success {
-			h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
-			http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
-			return
-		}
-
-		h.logger.Infof("[CreateJobData] Successfully sent job data to manager for jobID %d", currentJobID)
 
 		createdJobs.JobIDs[i] = currentJobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
@@ -418,4 +375,63 @@ func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[DeleteJobData] Successfully deleted jobID %s", jobID)
 	w.WriteHeader(http.StatusOK)
+}
+
+// GetPendingJobs returns all jobs that are pending assignment
+func (h *Handler) GetPendingJobs() ([]types.JobData, error) {
+	query := `SELECT * FROM triggerx.job_data WHERE job_status = 'pending' ALLOW FILTERING`
+	iter := h.db.Session().Query(query).Iter()
+
+	var jobs []types.JobData
+	var job types.JobData
+
+	for iter.Scan(
+		&job.JobID, &job.TaskDefinitionID, &job.UserID, &job.Priority, &job.Security,
+		&job.LinkJobID, &job.ChainStatus, &job.TimeFrame, &job.Recurring,
+		&job.TimeInterval, &job.TriggerChainID, &job.TriggerContractAddress,
+		&job.TriggerEvent, &job.ScriptIPFSUrl, &job.ScriptTriggerFunction,
+		&job.TargetChainID, &job.TargetContractAddress, &job.TargetFunction,
+		&job.ArgType, &job.Arguments, &job.ScriptTargetFunction,
+		&job.Status, &job.JobCostPrediction, &job.CreatedAt, &job.LastExecutedAt,
+		&job.TaskIDs, &job.ManagerID, &job.JobStatus, &job.AssignedAt, &job.LastUpdatedAt,
+	) {
+		jobs = append(jobs, job)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+
+	return jobs, nil
+}
+
+// AssignJobToManager assigns a job to a specific manager
+func (h *Handler) AssignJobToManager(jobID int64, managerID string) error {
+	query := `UPDATE job_data SET 
+		manager_id = ?,
+		job_status = 'assigned',
+		assigned_at = ?,
+		last_updated_at = ?
+	WHERE job_id = ?`
+
+	return h.db.Session().Query(query,
+		managerID,
+		time.Now(),
+		time.Now(),
+		jobID,
+	).Exec()
+}
+
+// UpdateJobStatus updates the status of a job
+func (h *Handler) UpdateJobStatus(jobID int64, status string) error {
+	query := `UPDATE job_data SET 
+		job_status = ?,
+		last_updated_at = ?
+	WHERE job_id = ?`
+
+	return h.db.Session().Query(query,
+		status,
+		time.Now(),
+		jobID,
+	).Exec()
 }

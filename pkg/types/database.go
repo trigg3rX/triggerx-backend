@@ -54,6 +54,12 @@ type JobData struct {
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	TaskIDs           []int64   `json:"task_ids"`
+
+	// Job Assignment Values
+	ManagerID     string    `json:"manager_id"`
+	JobStatus     string    `json:"job_status"` // pending, assigned, running, completed, failed
+	AssignedAt    time.Time `json:"assigned_at"`
+	LastUpdatedAt time.Time `json:"last_updated_at"`
 }
 
 type TaskData struct {
@@ -87,27 +93,27 @@ type TaskData struct {
 
 type KeeperData struct {
 	// Fixed Values
-	KeeperID      int64  `json:"keeper_id"`
-	KeeperAddress string `json:"keeper_address"`
-	KeeperName    string `json:"keeper_name"`
-	RegisteredTx  string `json:"registered_tx"`
-	RewardsBooster    float32     `json:"rewards_booster"`
+	KeeperID       int64   `json:"keeper_id"`
+	KeeperAddress  string  `json:"keeper_address"`
+	KeeperName     string  `json:"keeper_name"`
+	RegisteredTx   string  `json:"registered_tx"`
+	RewardsBooster float32 `json:"rewards_booster"`
 
 	// Active Values
-	OperatorID        int64     `json:"operator_id"`
-	RewardsAddress    string    `json:"rewards_address"`
-	KeeperPoints      float64   `json:"keeper_points"`
-	ConnectionAddress string    `json:"connection_address"`
-	PeerID            string    `json:"peer_id"`
-	Strategies        []string  `json:"strategies"`
-	VotingPower       int64     `json:"voting_power"`
-	Verified          bool      `json:"verified"`
-	Status            bool      `json:"status"`
-	Online            bool      `json:"online"`
-	Version           string    `json:"version"`
-	NoExcTask         int       `json:"no_exctask"`
-	ChatID            int64     `json:"chat_id"`
-	EmailID           string    `json:"email_id"`
+	OperatorID        int64    `json:"operator_id"`
+	RewardsAddress    string   `json:"rewards_address"`
+	KeeperPoints      float64  `json:"keeper_points"`
+	ConnectionAddress string   `json:"connection_address"`
+	PeerID            string   `json:"peer_id"`
+	Strategies        []string `json:"strategies"`
+	VotingPower       int64    `json:"voting_power"`
+	Verified          bool     `json:"verified"`
+	Status            bool     `json:"status"`
+	Online            bool     `json:"online"`
+	Version           string   `json:"version"`
+	NoExcTask         int      `json:"no_exctask"`
+	ChatID            int64    `json:"chat_id"`
+	EmailID           string   `json:"email_id"`
 }
 
 // ApiKey represents an API key in the system

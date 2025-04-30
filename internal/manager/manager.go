@@ -10,13 +10,18 @@ import (
 	"github.com/gin-gonic/gin"
 
 	// "github.com/trigg3rX/triggerx-backend/internal/manager/config"
+	"context"
+	"os"
+
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+
+	"github.com/trigg3rX/triggerx-backend/internal/manager/loadbalancer"
 )
 
 var (
-	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
+	logger       = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	jobScheduler *scheduler.JobScheduler
 )
 
@@ -189,3 +194,46 @@ func HandleJobStateUpdate(c *gin.Context) {
 // 	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
 // 	c.JSON(http.StatusOK, response)
 // }
+
+type Manager struct {
+	ID           string
+	LoadBalancer *loadbalancer.LoadBalancer
+	JobPoller    *loadbalancer.JobPoller
+	logger       logging.Logger
+}
+
+func NewManager(dbClient loadbalancer.DatabaseClient) *Manager {
+	managerID := os.Getenv("NODE_ID")
+	if managerID == "" {
+		managerID = "manager1" // Default to manager1 if not specified
+	}
+
+	lb := loadbalancer.NewLoadBalancer()
+
+	// Register this manager with the load balancer
+	lb.AddManager(managerID, "localhost:8081") // TODO: Get actual address from config
+
+	// Create job poller
+	poller := loadbalancer.NewJobPoller(managerID, dbClient, lb)
+
+	return &Manager{
+		ID:           managerID,
+		LoadBalancer: lb,
+		JobPoller:    poller,
+		logger:       logging.GetLogger(logging.Development, logging.ManagerProcess),
+	}
+}
+
+func (m *Manager) Start(ctx context.Context) {
+	// Start health checks
+	go m.LoadBalancer.StartHealthChecks(ctx)
+
+	// Start job polling
+	go m.JobPoller.Start(ctx)
+
+	m.logger.Infof("Manager %s started", m.ID)
+
+	// Wait for context cancellation
+	<-ctx.Done()
+	m.logger.Infof("Manager %s shutting down", m.ID)
+}

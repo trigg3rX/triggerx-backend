@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS job_data (
     created_at timestamp,
     last_executed_at timestamp,
     task_ids set<bigint>,
+
+    -- New columns for job assignment
+    manager_id text,
+    job_status text,  -- pending, assigned, running, completed, failed
+    assigned_at timestamp,
+    last_updated_at timestamp,
     PRIMARY KEY (job_id)
 );
 
