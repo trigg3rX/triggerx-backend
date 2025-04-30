@@ -46,6 +46,7 @@ func main() {
 	router.Use(gin.Logger())
 	router.POST("/health", health.HandleCheckInEvent)
 	router.GET("/status", health.GetKeeperStatus)
+	router.GET("/operators", health.GetDetailedKeeperStatus)
 
 	// Add a simple health check endpoint
 	router.GET("/", func(c *gin.Context) {

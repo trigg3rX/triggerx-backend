@@ -2,6 +2,7 @@ package health
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -70,5 +71,23 @@ func GetKeeperStatus(c *gin.Context) {
 		"total_keepers":      total,
 		"active_keepers":     active,
 		"active_keeper_list": activeKeepers,
+	})
+}
+
+// GetDetailedKeeperStatus returns detailed information about all keepers
+func GetDetailedKeeperStatus(c *gin.Context) {
+	stateManager := GetKeeperStateManager()
+
+	// Get basic counts
+	total, active := stateManager.GetKeeperCount()
+
+	// Get detailed information about all keepers
+	detailedInfo := stateManager.GetDetailedKeeperInfo()
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_keepers":  total,
+		"active_keepers": active,
+		"keepers":        detailedInfo,
+		"timestamp":      time.Now().UTC().Format(time.RFC3339),
 	})
 }

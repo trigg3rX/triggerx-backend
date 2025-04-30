@@ -139,7 +139,7 @@ func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, vers
 		Version:       version,
 		PeerID:        peerID,
 	}
-	
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal database update payload: %w", err)
@@ -202,4 +202,34 @@ func (ksm *KeeperStateManager) GetKeeperCount() (total int, active int) {
 	}
 
 	return total, active
+}
+
+// KeeperInfo represents detailed information about a keeper
+type KeeperInfo struct {
+	Address     string    `json:"address"`
+	IsActive    bool      `json:"is_active"`
+	Version     string    `json:"version,omitempty"`
+	PeerID      string    `json:"peer_id,omitempty"`
+	LastUpdated time.Time `json:"last_updated"`
+}
+
+// GetDetailedKeeperInfo returns detailed information about all keepers
+func (ksm *KeeperStateManager) GetDetailedKeeperInfo() []KeeperInfo {
+	ksm.mu.RLock()
+	defer ksm.mu.RUnlock()
+
+	var keeperInfoList []KeeperInfo
+
+	for address, state := range ksm.keepers {
+		info := KeeperInfo{
+			Address:     address,
+			IsActive:    state.IsActive,
+			Version:     state.Health.Version,
+			PeerID:      state.Health.PeerID,
+			LastUpdated: state.LastUpdated,
+		}
+		keeperInfoList = append(keeperInfoList, info)
+	}
+
+	return keeperInfoList
 }
