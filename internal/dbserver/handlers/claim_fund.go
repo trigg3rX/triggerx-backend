@@ -29,7 +29,7 @@ type ClaimFundResponse struct {
 const (
 	OP_SEPOLIA_RPC   = "https://sepolia.optimism.io"
 	BASE_SEPOLIA_RPC = "https://sepolia.base.org"
-	FUND_AMOUNT      = 0.05 // ETH
+	FUND_AMOUNT      = 0.02 // ETH
 )
 
 func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
