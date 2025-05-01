@@ -54,6 +54,7 @@ type JobData struct {
 	CreatedAt         time.Time `json:"created_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	TaskIDs           []int64   `json:"task_ids"`
+	NextExecutionTime time.Time `json:"next_execution_time"` // When the job should be executed next
 
 	// Job Assignment Values
 	ManagerID     string    `json:"manager_id"`

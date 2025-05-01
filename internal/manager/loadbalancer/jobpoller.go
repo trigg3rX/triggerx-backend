@@ -12,6 +12,7 @@ import (
 // DatabaseClient defines the interface for database operations
 type DatabaseClient interface {
 	GetPendingJobs() ([]types.JobData, error)
+	GetJobsForExecution(window time.Duration) ([]types.JobData, error)
 	AssignJobToManager(jobID int64, managerID string) error
 	UpdateJobStatus(jobID int64, status string) error
 	GetJobByID(jobID int64) (*types.HandleCreateJobData, error)
@@ -24,6 +25,7 @@ type JobPoller struct {
 	logger       logging.Logger
 	batchSize    int
 	pollInterval time.Duration
+	execWindow   time.Duration
 }
 
 func NewJobPoller(managerID string, dbClient DatabaseClient, lb *LoadBalancer) *JobPoller {
@@ -34,6 +36,7 @@ func NewJobPoller(managerID string, dbClient DatabaseClient, lb *LoadBalancer) *
 		logger:       logging.GetLogger(logging.Development, logging.ManagerProcess),
 		batchSize:    10, // Process 10 jobs at a time
 		pollInterval: 5 * time.Second,
+		execWindow:   5 * time.Second,
 	}
 }
 
@@ -53,16 +56,25 @@ func (jp *JobPoller) Start(ctx context.Context) {
 }
 
 func (jp *JobPoller) pollJobs() {
-	// Get pending jobs from database
-	jobs, err := jp.dbClient.GetPendingJobs()
+	// Get jobs that need execution in the next window
+	jobs, err := jp.dbClient.GetJobsForExecution(jp.execWindow)
 	if err != nil {
-		jp.logger.Errorf("Failed to get pending jobs: %v", err)
+		jp.logger.Errorf("Failed to get jobs for execution: %v", err)
 		return
 	}
 
-	// Sort jobs by priority (higher priority first)
+	if len(jobs) == 0 {
+		jp.logger.Debug("No jobs need execution in the next window")
+		return
+	}
+
+	// Sort jobs by priority and execution time
 	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].Priority > jobs[j].Priority
+		if jobs[i].Priority != jobs[j].Priority {
+			return jobs[i].Priority > jobs[j].Priority
+		}
+		// If priorities are equal, sort by execution time
+		return jobs[i].NextExecutionTime.Before(jobs[j].NextExecutionTime)
 	})
 
 	// Process jobs in batches
@@ -107,7 +119,8 @@ func (jp *JobPoller) processJobBatch(jobs []types.JobData) {
 		// Update load balancer's view of manager load
 		jp.loadBalancer.UpdateManagerLoad(managerID, 1)
 
-		jp.logger.Infof("Assigned job %d to manager %s", job.JobID, managerID)
+		jp.logger.Infof("Assigned job %d to manager %s for execution at %v",
+			job.JobID, managerID, job.NextExecutionTime)
 	}
 }
 

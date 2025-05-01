@@ -160,13 +160,13 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
 				target_contract_address, target_function, arg_type, arguments, script_target_function, 
-				status, job_cost_prediction, created_at, last_executed_at, task_ids, job_status
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				status, job_cost_prediction, created_at, last_executed_at, task_ids, job_status, next_execution_time
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
 			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, "pending").Exec(); err != nil {
+			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, "pending", calculateNextExecutionTime(tempJobs[i])).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -434,4 +434,23 @@ func (h *Handler) UpdateJobStatus(jobID int64, status string) error {
 		time.Now(),
 		jobID,
 	).Exec()
+}
+
+// calculateNextExecutionTime determines when the job should be executed next
+func calculateNextExecutionTime(job types.CreateJobData) time.Time {
+	now := time.Now().UTC()
+
+	// For time-based jobs (TaskDefinitionID 1 or 2)
+	if job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2 {
+		// If it's a recurring job, set next execution to now + interval
+		if job.Recurring {
+			return now.Add(time.Duration(job.TimeInterval) * time.Second)
+		}
+		// For one-time jobs, set next execution to now + timeframe
+		return now.Add(time.Duration(job.TimeFrame) * time.Second)
+	}
+
+	// For event-based and condition-based jobs, set to now
+	// as they will be executed when the event occurs or condition is met
+	return now
 }
