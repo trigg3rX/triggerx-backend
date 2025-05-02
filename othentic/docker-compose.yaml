@@ -48,8 +48,8 @@ services:
     volumes:
       - ./data/logs/aggregator:/logs/aggregator
     ports:
-      - "0.0.0.0:${AGGREGATOR_P2P_PORT}:${AGGREGATOR_P2P_PORT}"
-      - "0.0.0.0:${AGGREGATOR_RPC_PORT}:${AGGREGATOR_RPC_PORT}"
+      - "${AGGREGATOR_P2P_PORT}:${AGGREGATOR_P2P_PORT}"
+      - "${AGGREGATOR_RPC_PORT}:${AGGREGATOR_RPC_PORT}"
     networks:
       p2p:
         ipv4_address: 172.28.0.69
@@ -90,7 +90,7 @@ services:
     volumes:
       - ./data/logs/nexus:/logs/nexus
     ports:
-      - "0.0.0.0:${NEXUS_P2P_PORT}:${NEXUS_P2P_PORT}"
+      - "${NEXUS_P2P_PORT}:${NEXUS_P2P_PORT}"
     networks:
       p2p:
         ipv4_address: 172.28.0.70
