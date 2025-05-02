@@ -176,19 +176,36 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
 				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
-				status, job_cost_prediction, created_at, last_executed_at, task_ids
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
 			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}).Exec(); err != nil {
+			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, tempJobs[i].Custom).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Successfully created jobID %d", currentJobID)
+		// Add points based on whether the job is custom or not
+		pointsToAdd := 10.0
+		if tempJobs[i].Custom {
+			pointsToAdd = 20.0
+		}
+
+		// Update user points in user_data table
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.user_data 
+			SET user_points = user_points + ?, last_updated_at = ?
+			WHERE user_id = ?`,
+			pointsToAdd, time.Now().UTC(), existingUserID).Exec(); err != nil {
+			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
+			http.Error(w, "Error updating user points: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		h.logger.Infof("[CreateJobData] Successfully created jobID %d and added %.2f points to user", currentJobID, pointsToAdd)
 
 		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
 		jobData := types.HandleCreateJobData{

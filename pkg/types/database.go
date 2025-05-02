@@ -16,6 +16,7 @@ type UserData struct {
 	AccountBalance *big.Int  `json:"account_balance"` // Balance in Wei (ETH)
 	TokenBalance   *big.Int  `json:"token_balance"`   // Balance in Wei (ETH)
 	LastUpdatedAt  time.Time `json:"last_updated_at"`
+	UserPoints     float64   `json:"user_points"` // Points earned by user
 }
 
 type JobData struct {
@@ -28,6 +29,7 @@ type JobData struct {
 	LinkJobID        int64 `json:"link_job_id"`
 	ChainStatus      int   `json:"chain_status"`
 	// 0 = Chain Head, 1 = Chain Block
+	Custom bool `json:"custom"` // Indicates if job is customized or fixed
 
 	// Can be Updated By User
 	TimeFrame int64 `json:"time_frame"`

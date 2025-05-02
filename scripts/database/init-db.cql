@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     account_balance varint,
     token_balance varint,
     last_updated_at timestamp,
+    user_points double,
     PRIMARY KEY (user_id)
 );
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     security int,
     link_job_id bigint,
     chain_status int,
+    custom boolean,
      
     time_frame bigint,
     recurring boolean,

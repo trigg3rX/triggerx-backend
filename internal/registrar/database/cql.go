@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 
@@ -90,19 +91,38 @@ func KeeperUnregistered(operatorAddress string) error {
 
 func UpdatePointsInDatabase(taskID int, performerAddress common.Address, attestersIds []string, isAccepted bool) error {
 	var taskFee float64
-	if err := db.Session().Query(`SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
-		taskID).Scan(&taskFee); err != nil {
-		logger.Errorf("Failed to get task fee for task ID %d: %v", taskID, err)
+	var jobID int64
+	var userID int64
+
+	// Get task fee and job ID
+	if err := db.Session().Query(`
+		SELECT task_fee, job_id 
+		FROM triggerx.task_data 
+		WHERE task_id = ?`,
+		taskID).Scan(&taskFee, &jobID); err != nil {
+		logger.Errorf("Failed to get task fee and job ID for task ID %d: %v", taskID, err)
 		return err
 	}
 
-	logger.Infof("Task ID %d has a fee of %f", taskID, taskFee)
+	logger.Infof("Task ID %d has a fee of %f and job ID %d", taskID, taskFee, jobID)
 
+	// Get user ID from job ID
+	if err := db.Session().Query(`
+		SELECT user_id 
+		FROM triggerx.job_data 
+		WHERE job_id = ?`,
+		jobID).Scan(&userID); err != nil {
+		logger.Errorf("Failed to get user ID for job ID %d: %v", jobID, err)
+		return err
+	}
+
+	// Update performer points
 	err := UpdatePerformerPoints(performerAddress.Hex(), taskFee, isAccepted)
 	if err != nil {
 		return err
 	}
 
+	// Update attester points
 	for _, attesterId := range attestersIds {
 		if attesterId != "" {
 			if err := UpdateAttesterPoints(attesterId, taskFee); err != nil {
@@ -110,6 +130,12 @@ func UpdatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 				continue
 			}
 		}
+	}
+
+	// Update user points
+	if err := UpdateUserPoints(userID, taskFee); err != nil {
+		logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
+		return err
 	}
 
 	return nil
@@ -176,6 +202,19 @@ func UpdateAttesterPoints(attesterId string, taskFee float64) error {
 	}
 
 	logger.Infof("Added %f points to attester ID %s (total: %f)", taskFee, attesterId, newAttesterPoints)
+	return nil
+}
+
+func UpdateUserPoints(userID int64, points float64) error {
+	if err := db.Session().Query(`
+		UPDATE triggerx.user_data 
+		SET user_points = user_points + ?, last_updated_at = ?
+		WHERE user_id = ?`,
+		points, time.Now().UTC(), userID).Exec(); err != nil {
+		logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
+		return err
+	}
+	logger.Infof("Successfully updated points for user ID %d: added %.2f points", userID, points)
 	return nil
 }
 

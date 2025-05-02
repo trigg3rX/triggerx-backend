@@ -9,9 +9,10 @@ type CreateJobData struct {
 	StakeAmount *big.Int `json:"stake_amount"`
 	TokenAmount *big.Int `json:"token_amount"`
 
-	TaskDefinitionID int `json:"task_definition_id"`
-	Priority         int `json:"priority"`
-	Security         int `json:"security"`
+	TaskDefinitionID int  `json:"task_definition_id"`
+	Priority         int  `json:"priority"`
+	Security         int  `json:"security"`
+	Custom           bool `json:"custom"`
 
 	TimeFrame int64 `json:"time_frame"`
 	Recurring bool  `json:"recurring"`
@@ -26,7 +27,7 @@ type CreateJobData struct {
 	TargetChainID         string   `json:"target_chain_id"`
 	TargetContractAddress string   `json:"target_contract_address"`
 	TargetFunction        string   `json:"target_function"`
-	ABI					  string   `json:"abi"`
+	ABI                   string   `json:"abi"`
 	ArgType               int      `json:"arg_type"`
 	Arguments             []string `json:"arguments"`
 	ScriptTargetFunction  string   `json:"script_target_function"`
@@ -70,10 +71,10 @@ type GetPerformerData struct {
 }
 
 type CreateKeeperData struct {
-	KeeperAddress  string   `json:"keeper_address"`
-	RegisteredTx   string   `json:"registered_tx"`
-	RewardsAddress string   `json:"rewards_address"`
-	ChatID         int64    `json:"chat_id"`
+	KeeperAddress  string `json:"keeper_address"`
+	RegisteredTx   string `json:"registered_tx"`
+	RewardsAddress string `json:"rewards_address"`
+	ChatID         int64  `json:"chat_id"`
 }
 
 type GoogleFormCreateKeeperData struct {
@@ -98,19 +99,19 @@ type UpdateKeeperStakeData struct {
 
 // KeeperLeaderboardEntry represents a single entry in the keeper leaderboard
 type KeeperLeaderboardEntry struct {
-	KeeperID      int64  `json:"keeper_id"`
-	KeeperAddress string `json:"keeper_address"`
-	KeeperName    string `json:"keeper_name"`
-	TasksExecuted int64  `json:"tasks_executed"`
-	KeeperPoints  float64  `json:"keeper_points"`
+	KeeperID      int64   `json:"keeper_id"`
+	KeeperAddress string  `json:"keeper_address"`
+	KeeperName    string  `json:"keeper_name"`
+	TasksExecuted int64   `json:"tasks_executed"`
+	KeeperPoints  float64 `json:"keeper_points"`
 }
 
 // UserLeaderboardEntry represents a single entry in the user leaderboard
 type UserLeaderboardEntry struct {
-	UserID         int64  `json:"user_id"`
-	UserAddress    string `json:"user_address"`
-	TotalJobs      int64  `json:"total_jobs"`
-	TasksCompleted int64  `json:"tasks_completed"`
+	UserID         int64   `json:"user_id"`
+	UserAddress    string  `json:"user_address"`
+	TotalJobs      int64   `json:"total_jobs"`
+	TasksCompleted int64   `json:"tasks_completed"`
 	UserPoints     float64 `json:"user_points"`
 }
 
@@ -125,7 +126,7 @@ type CreateApiKeyRequest struct {
 }
 
 type DailyRewardsPoints struct {
-	KeeperID      int64   `json:"keeper_id"`
+	KeeperID       int64   `json:"keeper_id"`
 	RewardsBooster float32 `json:"rewards_booster"`
 	KeeperPoints   float64 `json:"keeper_points"`
 }
