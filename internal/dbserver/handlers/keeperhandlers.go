@@ -20,20 +20,23 @@ type NotificationConfig struct {
 	EmailPassword string
 	BotToken      string
 }
-	// // Update keeper metrics after successful job execution
-	// keeperID := os.Getenv("KEEPER_ID")
-	// if keeperID == "" {
-	// 	logger.Warn("KEEPER_ID environment variable not set, using default value")
-	// }
-	// taskID := triggerData.TaskID
 
-	// // Call the metrics server to store keeper execution metrics
-	// if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
-	// 	logger.Warnf("Failed to store keeper metrics: %v", err)
-	// 	// Continue execution even if metrics storage fails
-	// } else {
-	// 	logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
-	// }
+// // Update keeper metrics after successful job execution
+// keeperID := os.Getenv("KEEPER_ID")
+// if keeperID == "" {
+// 	logger.Warn("KEEPER_ID environment variable not set, using default value")
+// }
+// taskID := triggerData.TaskID
+
+// // Call the metrics server to store keeper execution metrics
+//
+//	if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
+//		logger.Warnf("Failed to store keeper metrics: %v", err)
+//		// Continue execution even if metrics storage fails
+//	} else {
+//
+//		logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
+//	}
 func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {
@@ -515,7 +518,31 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %s | Online: %t", keeperID, keeperHealth.Active)
 
-	if keeperHealth.Version == "" {
+	// First check if keeper is new and eligible for initial points
+	var keeperPoints float64
+	var isVerified bool
+	var status bool
+	if err := h.db.Session().Query(`
+		SELECT keeper_points, verified, status FROM triggerx.keeper_data WHERE keeper_id = ?`,
+		keeperID).Scan(&keeperPoints, &isVerified, &status); err != nil {
+		h.logger.Errorf("[KeeperHealthCheckIn] Error checking keeper points: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// If keeper has 0 points, is verified, active, and status is true, give them initial points
+	if keeperPoints == 0 && isVerified && keeperHealth.Active && status {
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.keeper_data 
+			SET online = ?, peer_id = ?, keeper_points = ? 
+			WHERE keeper_id = ?`,
+			keeperHealth.Active, keeperHealth.PeerID, 10.0, keeperID).Exec(); err != nil {
+			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status and points: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.logger.Infof("[KeeperHealthCheckIn] Added initial 10 points to keeper ID %d", keeperID)
+	} else {
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.keeper_data SET online = ?, peer_id = ? WHERE keeper_id = ?`,
 			keeperHealth.Active, keeperHealth.PeerID, keeperID).Exec(); err != nil {
@@ -523,15 +550,8 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	} else {
-		if err := h.db.Session().Query(`
-			UPDATE triggerx.keeper_data SET online = ?, version = ?, peer_id = ? WHERE keeper_id = ?`,
-			keeperHealth.Active, keeperHealth.Version, keeperHealth.PeerID, keeperID).Exec(); err != nil {
-			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
+	
 
 	if !keeperHealth.Active {
 		// Start a goroutine to check status after 10 minutes
