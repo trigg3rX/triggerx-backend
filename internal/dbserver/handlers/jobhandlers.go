@@ -175,11 +175,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-<<<<<<< HEAD
 				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
-=======
-				target_contract_address, target_function, contractABI, arg_type, arguments, script_target_function, 
->>>>>>> 6442bb6 (fix: updated user point)
 				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
