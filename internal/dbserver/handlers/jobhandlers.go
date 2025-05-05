@@ -175,7 +175,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
+<<<<<<< HEAD
 				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
+=======
+				target_contract_address, target_function, contractABI, arg_type, arguments, script_target_function, 
+>>>>>>> 6442bb6 (fix: updated user point)
 				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
@@ -194,12 +198,24 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			pointsToAdd = 20.0
 		}
 
-		// Update user points in user_data table
+		// Get current user points
+		var currentPoints float64
+		if err := h.db.Session().Query(`
+			SELECT user_points FROM triggerx.user_data 
+			WHERE user_id = ?`,
+			existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
+			h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
+			http.Error(w, "Error getting current points: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Update user points with new total
+		newPoints := currentPoints + pointsToAdd
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.user_data 
-			SET user_points = user_points + ?, last_updated_at = ?
+			SET user_points = ?, last_updated_at = ?
 			WHERE user_id = ?`,
-			pointsToAdd, time.Now().UTC(), existingUserID).Exec(); err != nil {
+			newPoints, time.Now().UTC(), existingUserID).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user points: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -282,7 +298,6 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
 // Update a Job, and send it to the Manager
 func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 	var tempData types.UpdateJobData
