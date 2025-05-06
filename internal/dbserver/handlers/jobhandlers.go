@@ -29,6 +29,13 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Set default value for custom field if not provided
+	for i := range tempJobs {
+		// The custom field will be false by default since it's a bool
+		// We don't need to explicitly set it as Go's zero value for bool is false
+		h.logger.Infof("[CreateJobData] Job %d custom field value: %v", i, tempJobs[i].Custom)
+	}
+
 	// Collect all IPFS URLs and check if any job needs dynamic fee calculation
 	var ipfsURLs []string
 	needsDynamicFee := false
