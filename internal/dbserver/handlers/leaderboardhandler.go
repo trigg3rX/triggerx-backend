@@ -50,7 +50,7 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	// CQL query to get user leaderboard data
 	query := `SELECT user_id, user_address, user_points 
               FROM triggerx.user_data 
-              WHERE status = true ALLOW FILTERING`
+              ALLOW FILTERING`
 
 	iter := h.db.Session().Query(query).Iter()
 
@@ -97,4 +97,101 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(userLeaderboard)
+}
+
+// GetKeeperByIdentifier retrieves keeper data by either keeper_address or keeper_name
+func (h *Handler) GetKeeperByIdentifier(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("[GetKeeperByIdentifier] Fetching keeper data by identifier")
+
+	// Get query parameters
+	keeperAddress := r.URL.Query().Get("keeper_address")
+	keeperName := r.URL.Query().Get("keeper_name")
+
+	if keeperAddress == "" && keeperName == "" {
+		http.Error(w, "Either keeper_address or keeper_name must be provided", http.StatusBadRequest)
+		return
+	}
+
+	var query string
+	var args []interface{}
+
+	if keeperAddress != "" {
+		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
+                FROM triggerx.keeper_data 
+                WHERE status = true AND keeper_address = ? ALLOW FILTERING`
+		args = append(args, keeperAddress)
+	} else {
+		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
+                FROM triggerx.keeper_data 
+                WHERE status = true AND keeper_name = ? ALLOW FILTERING`
+		args = append(args, keeperName)
+	}
+
+	var keeperEntry types.KeeperLeaderboardEntry
+	if err := h.db.Session().Query(query, args...).Scan(
+		&keeperEntry.KeeperID,
+		&keeperEntry.KeeperAddress,
+		&keeperEntry.KeeperName,
+		&keeperEntry.TasksExecuted,
+		&keeperEntry.KeeperPoints,
+	); err != nil {
+		h.logger.Errorf("[GetKeeperByIdentifier] Error fetching keeper data: %v", err)
+		http.Error(w, "Keeper not found", http.StatusNotFound)
+		return
+	}
+
+	h.logger.Infof("[GetKeeperByIdentifier] Successfully retrieved keeper data for %s", keeperEntry.KeeperAddress)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(keeperEntry)
+}
+
+// GetUserByAddress retrieves user data by user_address
+func (h *Handler) GetUserByAddress(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("[GetUserByAddress] Fetching user data by address")
+
+	userAddress := r.URL.Query().Get("user_address")
+	if userAddress == "" {
+		http.Error(w, "user_address must be provided", http.StatusBadRequest)
+		return
+	}
+
+	// Get user data
+	query := `SELECT user_id, user_address, user_points 
+              FROM triggerx.user_data 
+              WHERE user_address = ? ALLOW FILTERING`
+
+	var userEntry types.UserLeaderboardEntry
+	if err := h.db.Session().Query(query, userAddress).Scan(
+		&userEntry.UserID,
+		&userEntry.UserAddress,
+		&userEntry.UserPoints,
+	); err != nil {
+		h.logger.Errorf("[GetUserByAddress] Error fetching user data: %v", err)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Count total jobs for the user
+	jobCountQuery := `SELECT COUNT(*) FROM triggerx.job_data WHERE user_address = ? ALLOW FILTERING`
+	var totalJobs int
+	if err := h.db.Session().Query(jobCountQuery, userAddress).Scan(&totalJobs); err != nil {
+		h.logger.Errorf("[GetUserByAddress] Error counting jobs for user %s: %v", userAddress, err)
+		totalJobs = 0
+	}
+	userEntry.TotalJobs = int64(totalJobs)
+
+	// Count tasks completed for the user
+	tasksCountQuery := `SELECT COUNT(*) FROM triggerx.task_data WHERE user_address = ? AND execution_timestamp IS NOT NULL ALLOW FILTERING`
+	var tasksCompleted int
+	if err := h.db.Session().Query(tasksCountQuery, userAddress).Scan(&tasksCompleted); err != nil {
+		h.logger.Errorf("[GetUserByAddress] Error counting tasks for user %s: %v", userAddress, err)
+		tasksCompleted = 0
+	}
+	userEntry.TasksCompleted = int64(tasksCompleted)
+
+	h.logger.Infof("[GetUserByAddress] Successfully retrieved user data for %s", userAddress)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(userEntry)
 }

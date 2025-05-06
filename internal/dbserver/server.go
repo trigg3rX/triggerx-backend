@@ -138,7 +138,9 @@ func (s *Server) routes() {
 	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
 
 	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
-	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
+	api.HandleFunc("/leaderboard/users", handler.GetUserLeaderboard).Methods("GET")
+	api.HandleFunc("/leaderboard/users/search", handler.GetUserByAddress).Methods("GET")
+	api.HandleFunc("/leaderboard/keepers/search", handler.GetKeeperByIdentifier).Methods("GET")
 
 	// Fees routes
 	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
