@@ -140,12 +140,23 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		existingAccountBalance = new(big.Int).Add(existingAccountBalance, tempJobs[0].StakeAmount)
 		existingTokenBalance = new(big.Int).Add(existingTokenBalance, tempJobs[0].TokenAmount)
 
+		// First get the current user points since it's part of the primary key
+		var currentPoints float64
+		if err := h.db.Session().Query(`
+			SELECT user_points FROM triggerx.user_data 
+			WHERE partition_key = 'user' AND user_id = ?`,
+			existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
+			h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
+			http.Error(w, "Error getting current points: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.user_data 
 			SET account_balance = ?, token_balance = ?, last_updated_at = ?
-			WHERE user_id = ?`,
+			WHERE partition_key = 'user' AND user_id = ? AND user_points = ?`,
 			existingAccountBalance, existingTokenBalance,
-			time.Now().UTC(), existingUserID).Exec(); err != nil {
+			time.Now().UTC(), existingUserID, currentPoints).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user data for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -212,13 +223,28 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Update user points with new total
+		// Update user points with new total using batch operation
 		newPoints := currentPoints + pointsToAdd
-		if err := h.db.Session().Query(`
-			UPDATE triggerx.user_data 
-			SET user_points = ?, last_updated_at = ?
-			WHERE partition_key = 'user' AND user_id = ?`,
-			newPoints, time.Now().UTC(), existingUserID).Exec(); err != nil {
+		batch := h.db.Session().NewBatch(gocql.LoggedBatch)
+
+		// Insert new row with updated points
+		batch.Query(`
+			INSERT INTO triggerx.user_data (
+				partition_key, user_id, user_points, user_address, created_at,
+				job_ids, account_balance, token_balance, last_updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			"user", existingUserID, newPoints, tempJobs[0].UserAddress, time.Now().UTC(),
+			existingJobIDs, existingAccountBalance, existingTokenBalance, time.Now().UTC(),
+		)
+
+		// Delete old row with previous points
+		batch.Query(`
+			DELETE FROM triggerx.user_data
+			WHERE partition_key = ? AND user_id = ? AND user_points = ?`,
+			"user", existingUserID, currentPoints,
+		)
+
+		if err := h.db.Session().ExecuteBatch(batch); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user points: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -276,11 +302,22 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	existingJobIDs = append(existingJobIDs, newJobIDs...)
 
+	// First get the current user points since it's part of the primary key
+	var currentPoints float64
+	if err := h.db.Session().Query(`
+		SELECT user_points FROM triggerx.user_data 
+		WHERE partition_key = 'user' AND user_id = ?`,
+		existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
+		http.Error(w, "Error getting current points: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.user_data 
 		SET job_ids = ?, last_updated_at = ?
-		WHERE partition_key = 'user' AND user_id = ?`,
-		existingJobIDs, time.Now().UTC(), existingUserID).Exec(); err != nil {
+		WHERE partition_key = 'user' AND user_id = ? AND user_points = ?`,
+		existingJobIDs, time.Now().UTC(), existingUserID, currentPoints).Exec(); err != nil {
 		h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
 		http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 		return
