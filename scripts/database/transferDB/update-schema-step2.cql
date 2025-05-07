@@ -1,8 +1,14 @@
 -- Switch to keyspace
 USE triggerx;
 
--- Create new tables with sorting functionality
-CREATE TABLE IF NOT EXISTS user_data_new (
+-- Drop old tables first
+DROP TABLE IF EXISTS user_data;
+DROP TABLE IF EXISTS job_data;
+DROP TABLE IF EXISTS task_data;
+DROP TABLE IF EXISTS keeper_data;
+
+-- Create new tables with original names
+CREATE TABLE IF NOT EXISTS user_data (
     partition_key text,
     user_id bigint,
     user_address text,
@@ -12,10 +18,10 @@ CREATE TABLE IF NOT EXISTS user_data_new (
     token_balance varint,
     last_updated_at timestamp,
     user_points double,
-    PRIMARY KEY ((partition_key), user_points, user_id)
-) WITH CLUSTERING ORDER BY (user_points DESC, user_id ASC);
+    PRIMARY KEY ((partition_key), user_id, user_points)
+) WITH CLUSTERING ORDER BY (user_id ASC, user_points DESC);
 
-CREATE TABLE IF NOT EXISTS job_data_new (
+CREATE TABLE IF NOT EXISTS job_data (
     partition_key text,
     job_id bigint,
     task_definition_id int,
@@ -48,7 +54,7 @@ CREATE TABLE IF NOT EXISTS job_data_new (
     PRIMARY KEY ((partition_key), created_at, job_id)
 ) WITH CLUSTERING ORDER BY (created_at DESC, job_id ASC);
 
-CREATE TABLE IF NOT EXISTS task_data_new (
+CREATE TABLE IF NOT EXISTS task_data (
     partition_key text,
     task_id bigint,
     task_number int,
@@ -70,7 +76,7 @@ CREATE TABLE IF NOT EXISTS task_data_new (
     PRIMARY KEY ((partition_key), created_at, task_id)
 ) WITH CLUSTERING ORDER BY (created_at DESC, task_id ASC);
 
-CREATE TABLE IF NOT EXISTS keeper_data_new (
+CREATE TABLE IF NOT EXISTS keeper_data (
     partition_key text,
     keeper_id bigint,
     keeper_name text,
@@ -92,4 +98,4 @@ CREATE TABLE IF NOT EXISTS keeper_data_new (
     chat_id bigint,
     email_id text,
     PRIMARY KEY ((partition_key), keeper_points, keeper_id)
-) WITH CLUSTERING ORDER BY (keeper_points DESC, keeper_id ASC); 
+) WITH CLUSTERING ORDER BY (keeper_points DESC, keeper_id ASC);

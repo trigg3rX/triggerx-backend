@@ -8,13 +8,13 @@ docker exec -i triggerx-scylla cqlsh -e "USE triggerx; DESCRIBE TABLES;" || {
 }
 
 # Create new tables
-docker exec -i triggerx-scylla cqlsh < scripts/database/update-schema-step1.cql
+docker exec -i triggerx-scylla cqlsh < scripts/database/transferDB/update-schema-step1.cql
 if [ $? -eq 0 ]; then
     echo "New tables created successfully"
     
     # Step 2: Transfer data using Python script
     echo "Step 2: Transferring data..."
-    python3 scripts/database/transfer_data.py
+    python3 scripts/database/transferDB/transfer_data.py
     
     if [ $? -eq 0 ]; then
         echo "Data transfer completed successfully"
@@ -31,14 +31,14 @@ if [ $? -eq 0 ]; then
         
         # Step 3: Create new tables with original names
         echo "Step 3: Creating new tables with original names..."
-        docker exec -i triggerx-scylla cqlsh < scripts/database/update-schema-step2.cql
+        docker exec -i triggerx-scylla cqlsh < scripts/database/transferDB/update-schema-step2.cql
         
         if [ $? -eq 0 ]; then
             echo "New tables created successfully"
             
             # Step 4: Transfer data from new tables to original tables
             echo "Step 4: Transferring data to original tables..."
-            python3 scripts/database/transfer_data_step2.py
+            python3 scripts/database/transferDB/transfer_data_step2.py
             
             if [ $? -eq 0 ]; then
                 echo "Data transfer completed successfully"
@@ -55,7 +55,7 @@ if [ $? -eq 0 ]; then
                 
                 # Step 5: Drop temporary tables
                 echo "Step 5: Dropping temporary tables..."
-                docker exec -i triggerx-scylla cqlsh < scripts/database/update-schema-step3.cql
+                docker exec -i triggerx-scylla cqlsh < scripts/database/transferDB/update-schema-step3.cql
                 
                 if [ $? -eq 0 ]; then
                     echo "Database schema updated successfully"

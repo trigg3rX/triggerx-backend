@@ -13,7 +13,7 @@ func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 	query := `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
               FROM triggerx.keeper_data 
-              WHERE status = true ALLOW FILTERING`
+              WHERE partition_key = 'keeper' AND status = true ALLOW FILTERING`
 
 	iter := h.db.Session().Query(query).Iter()
 
@@ -48,11 +48,10 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
 	// CQL query to get user leaderboard data
-	query := `SELECT user_id, user_address, user_points 
-              FROM triggerx.user_data 
-              ALLOW FILTERING`
-
-	iter := h.db.Session().Query(query).Iter()
+	iter := h.db.Session().Query(`
+		SELECT user_id, user_address, user_points
+		FROM triggerx.user_data 
+		WHERE partition_key = 'user' ALLOW FILTERING`).Iter()
 
 	var userLeaderboard []types.UserLeaderboardEntry
 	var userEntry types.UserLeaderboardEntry
@@ -118,12 +117,12 @@ func (h *Handler) GetKeeperByIdentifier(w http.ResponseWriter, r *http.Request) 
 	if keeperAddress != "" {
 		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
                 FROM triggerx.keeper_data 
-                WHERE status = true AND keeper_address = ? ALLOW FILTERING`
+                WHERE partition_key = 'keeper' AND status = true AND keeper_address = ? ALLOW FILTERING`
 		args = append(args, keeperAddress)
 	} else {
 		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
                 FROM triggerx.keeper_data 
-                WHERE status = true AND keeper_name = ? ALLOW FILTERING`
+                WHERE partition_key = 'keeper' AND status = true AND keeper_name = ? ALLOW FILTERING`
 		args = append(args, keeperName)
 	}
 
@@ -159,7 +158,7 @@ func (h *Handler) GetUserByAddress(w http.ResponseWriter, r *http.Request) {
 	// Get user data
 	query := `SELECT user_id, user_address, user_points 
               FROM triggerx.user_data 
-              WHERE user_address = ? ALLOW FILTERING`
+              WHERE partition_key = 'user' AND user_address = ? ALLOW FILTERING`
 
 	var userEntry types.UserLeaderboardEntry
 	if err := h.db.Session().Query(query, userAddress).Scan(
