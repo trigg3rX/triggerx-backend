@@ -1,44 +1,70 @@
 package config
 
 import (
-	"fmt"
+	"context"
+	"math/big"
 	"os"
-	"strings"
 	"regexp"
-	
+	"strings"
+
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+// AttestationCenterABI contains the minimal ABI for calling operatorsIdsByAddress
+const AttestationCenterABI = `[{
+  "inputs": [
+    {
+      "internalType": "address",
+      "name": "_operator",
+      "type": "address"
+    }
+  ],
+  "name": "operatorsIdsByAddress",
+  "outputs": [
+    {
+      "internalType": "uint256",
+      "name": "",
+      "type": "uint256"
+    }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+}]`
+
 var (
 	logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 	// User Entered Information
-	EthRPCUrl                   string
-	AlchemyAPIKey               string
-	PrivateKeyConsensus         string
-	PrivateKeyController        string
-	KeeperAddress               string
-	KeeperRPCPort               string
-	PublicIPV4Address           string
-	PeerID                      string
-	KeeperP2PPort               string
-	KeeperMetricsPort           string
-	GrafanaPort                 string
-	L2RPC                       string
+	EthRPCUrl            string
+	AlchemyAPIKey        string
+	PrivateKeyConsensus  string
+	PrivateKeyController string
+	KeeperAddress        string
+	KeeperRPCPort        string
+	PublicIPV4Address    string
+	PeerID               string
+	KeeperP2PPort        string
+	KeeperMetricsPort    string
+	GrafanaPort          string
+	L2RPC                string
 	// Provided Information
-	PinataApiKey                string
-	PinataSecretApiKey          string
-	IpfsHost                    string
-	AggregatorIPAddress         string
-	HealthIPAddress             string
-	L1Chain                     string
-	L2Chain                     string
-	AVSGovernanceAddress        string
-	AttestationCenterAddress    string
-	OthenticBootstrapID         string
+	PinataApiKey             string
+	PinataSecretApiKey       string
+	IpfsHost                 string
+	AggregatorIPAddress      string
+	HealthIPAddress          string
+	L1Chain                  string
+	L2Chain                  string
+	AVSGovernanceAddress     string
+	AttestationCenterAddress string
+	OthenticBootstrapID      string
 )
 
 // validateHexAddress ensures an Ethereum address is valid (0x followed by 40 hex chars)
@@ -81,12 +107,68 @@ func validateRPCUrl(url string) bool {
 	if url == "" {
 		return false
 	}
-	
+
 	// Basic check for http(s):// prefix
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return false
 	}
-	
+
+	return true
+}
+
+// checkKeeperRegistration verifies that the keeper address is registered in the L2 smart contract
+func checkKeeperRegistration() bool {
+	// logger.Info("Checking if keeper address is registered on L2...")
+
+	// Connect to L2 network
+	client, err := ethclient.Dial(L2RPC)
+	if err != nil {
+		logger.Error("Failed to connect to L2 network", "error", err)
+		return false
+	}
+	defer client.Close()
+
+	// Create a binding for the AttestationCenter contract
+	parsedABI, err := abi.JSON(strings.NewReader(AttestationCenterABI))
+	if err != nil {
+		logger.Error("Failed to parse AttestationCenter ABI", "error", err)
+		return false
+	}
+
+	// Prepare the call data for operatorsIdsByAddress function
+	keeperAddr := common.HexToAddress(KeeperAddress)
+	data, err := parsedABI.Pack("operatorsIdsByAddress", keeperAddr)
+	if err != nil {
+		logger.Error("Failed to pack function call data", "error", err)
+		return false
+	}
+
+	// Call the contract
+	attestationCenterAddr := common.HexToAddress(AttestationCenterAddress)
+	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
+		To:   &attestationCenterAddr,
+		Data: data,
+	}, nil)
+	if err != nil {
+		logger.Error("Failed to call AttestationCenter contract", "error", err)
+		return false
+	}
+
+	// Since we know this returns a uint256, we can directly create a big.Int from the result
+	if len(result) == 0 {
+		logger.Error("Empty result from contract call")
+		return false
+	}
+
+	operatorID := new(big.Int).SetBytes(result)
+
+	// Check if the operator ID is valid (non-zero)
+	if operatorID.Cmp(big.NewInt(0)) == 0 {
+		logger.Error("Keeper address is not registered on L2", "address", KeeperAddress)
+		return false
+	}
+
+	// logger.Info("Keeper address is registered on L2")
 	return true
 }
 
@@ -98,6 +180,11 @@ func Init() {
 
 	// Load and validate required environment variables
 	loadAndValidateEnvVars()
+
+	// Check if the keeper address is registered on L2
+	if !checkKeeperRegistration() {
+		logger.Fatal("Keeper address is not registered on L2. Please register the address before continuing.")
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 }
@@ -116,10 +203,10 @@ func loadAndValidateEnvVars() {
 	OthenticBootstrapID = os.Getenv("OTHENTIC_BOOTSTRAP_ID")
 
 	// Check required provided variables
-	if PinataApiKey == "" || PinataSecretApiKey == "" || IpfsHost == "" || 
-	   AggregatorIPAddress == "" || HealthIPAddress == "" || L1Chain == "" || 
-	   L2Chain == "" || AVSGovernanceAddress == "" || 
-	   AttestationCenterAddress == "" || OthenticBootstrapID == "" {
+	if PinataApiKey == "" || PinataSecretApiKey == "" || IpfsHost == "" ||
+		AggregatorIPAddress == "" || HealthIPAddress == "" || L1Chain == "" ||
+		L2Chain == "" || AVSGovernanceAddress == "" ||
+		AttestationCenterAddress == "" || OthenticBootstrapID == "" {
 		logger.Fatal("Required environment variables are missing in .env file")
 	}
 
@@ -133,7 +220,7 @@ func loadAndValidateUserEnvVars() {
 	if !validateRPCUrl(EthRPCUrl) {
 		logger.Fatal("L1_RPC URL is missing or invalid. Please set a valid Ethereum RPC URL")
 	}
-	
+
 	L2RPC = os.Getenv("L2_RPC")
 	if !validateRPCUrl(L2RPC) {
 		logger.Fatal("L2_RPC URL is missing or invalid. Please set a valid L2 RPC URL")
@@ -212,16 +299,6 @@ func loadAndValidateUserEnvVars() {
 	} else if !validatePort(GrafanaPort) {
 		logger.Fatal("GRAFANA_PORT is invalid. It should be a number between 1 and 65535")
 	}
-
-	// Log configuration summary
-	logConfigSummary()
+	
 }
 
-func logConfigSummary() {
-	logger.Info("Configuration loaded successfully")
-	logger.Info(fmt.Sprintf("Operator Address: %s", KeeperAddress))
-	logger.Info(fmt.Sprintf("P2P Configuration: %s:%s (Peer ID: %s...)", 
-		PublicIPV4Address, KeeperP2PPort, PeerID))
-	logger.Info(fmt.Sprintf("RPC Port: %s, Metrics Port: %s", KeeperRPCPort, KeeperMetricsPort))
-	logger.Info(fmt.Sprintf("Grafana Port: %s", GrafanaPort))
-}
