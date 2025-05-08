@@ -74,6 +74,7 @@ type IPFSData struct {
 // KeeperHealth represents the health status of a keeper
 type KeeperHealth struct {
 	KeeperAddress string    `json:"keeper_address"`
+	ConsensusAddress string    `json:"consensus_address"`
 	Version           string    `json:"version"`
 	Timestamp         time.Time `json:"timestamp"`
 	Signature         string    `json:"signature"`

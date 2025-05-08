@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -46,7 +45,7 @@ func NewJobExecutor(ethClient *ethclient.Client, etherscanAPIKey string) *JobExe
 }
 
 func (e *JobExecutor) Execute(job *jobtypes.HandleCreateJobData) (jobtypes.ActionData, error) {
-	e.logger.Infof("DEBUG: executionContractAddress value: %s", executionContractAddress)
+	e.logger.Infof("executionContractAddress value: %s", executionContractAddress)
 
 	executionResult := jobtypes.ActionData{
 		TaskID:       0,
@@ -59,7 +58,7 @@ func (e *JobExecutor) Execute(job *jobtypes.HandleCreateJobData) (jobtypes.Actio
 	e.logger.Infof("Validating job %d (taskDefID: %d) before execution", job.JobID, job.TaskDefinitionID)
 	shouldExecute, err := e.validator.ValidateAndPrepareJob(job, nil)
 	if err != nil {
-		e.logger.Errorf("Job validation error: %v", err)
+		e.logger.Warnf("Job validation error: %v", err)
 		return executionResult, fmt.Errorf("job validation failed: %v", err)
 	}
 
@@ -69,7 +68,7 @@ func (e *JobExecutor) Execute(job *jobtypes.HandleCreateJobData) (jobtypes.Actio
 	}
 
 	e.logger.Infof("Job %d validated successfully, proceeding with execution", job.JobID)
-	logger.Infof("Executing job: %d (Function: %s)", job.JobID, job.TargetFunction)
+	e.logger.Infof("Executing job: %d (Function: %s)", job.JobID, job.TargetFunction)
 
 	switch job.TaskDefinitionID {
 	case 1, 3, 5:
@@ -169,7 +168,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 	var callData []byte // Declare callData first
 	callData, err = contractABI.Pack(method.Name, convertedArgs...)
 	if err != nil {
-		log.Printf("Error packing arguments: %v", err)
+		e.logger.Warnf("Error packing arguments: %v", err)
 		return executionResult, err
 	}
 
@@ -217,7 +216,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 	// Wait for transaction receipt
 	receipt, err := bind.WaitMined(context.Background(), e.ethClient, signedTx)
 	if err != nil {
-		log.Printf("Error waiting for transaction: %v", err)
+		e.logger.Warnf("Error waiting for transaction: %v", err)
 		return executionResult, err
 	}
 
@@ -225,7 +224,7 @@ func (e *JobExecutor) executeActionWithStaticArgs(job *jobtypes.HandleCreateJobD
 	executionResult.ActionTxHash = signedTx.Hash().Hex()
 	executionResult.GasUsed = strconv.FormatUint(receipt.GasUsed, 10)
 
-	log.Printf("✅ Job %d executed successfully. Transaction: %s", job.JobID, signedTx.Hash().Hex())
+	e.logger.Infof("Job %d executed successfully. Transaction: %s", job.JobID, signedTx.Hash().Hex())
 
 	return executionResult, nil
 }

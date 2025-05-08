@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strconv"
 	"reflect"
+	"strconv"
 	"strings"
-	"log"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -267,7 +266,7 @@ func (ac *ArgumentConverter) convertToStruct(value interface{}, targetType abi.T
 		}
 
 		if !exists {
-			log.Printf("Warning: field %s not found in input data", fieldName)
+			logger.Warnf("Field %s not found in input data", fieldName)
 			continue
 		}
 
