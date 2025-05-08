@@ -193,7 +193,7 @@ func (v *JobValidator) fetchContractABI(contractAddress string) (string, error) 
 	resp, err := http.Get(blockscoutUrl)
 	if err == nil && resp.StatusCode == http.StatusOK {
 		defer resp.Body.Close()
-		
+
 		body, err := io.ReadAll(resp.Body)
 		if err == nil {
 			var response struct {
@@ -407,11 +407,8 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	logger.Info("Received Task Validation Request:")
-	logger.Infof("Proof of Task: %s", taskRequest.ProofOfTask)
-	logger.Infof("Data: %s", taskRequest.Data)
-	logger.Infof("Task Definition ID: %d", taskRequest.TaskDefinitionID)
-	logger.Infof("Performer Address: %s", taskRequest.Performer)
+	// Combine request info logs into one concise Infof
+	logger.Infof("Received Task Validation Request: ProofOfTask=%s, TaskDefinitionID=%d, Performer=%s", taskRequest.ProofOfTask, taskRequest.TaskDefinitionID, taskRequest.Performer)
 
 	// Decode the data if it's hex-encoded (with 0x prefix)
 	var decodedData string
@@ -427,7 +424,7 @@ func ValidateTask(c *gin.Context) {
 			return
 		}
 		decodedData = string(dataBytes)
-		logger.Infof("Decoded Data: %s", decodedData)
+		logger.Infof("Decoded Data CID: %s", decodedData)
 	} else {
 		decodedData = taskRequest.Data
 	}
@@ -444,7 +441,7 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	// Log the decoded data CID for debugging
+	// Log the decoded data CID for context
 	logger.Infof("Data CID: %s", decodedData)
 
 	// Parse IPFS data into IPFSData struct

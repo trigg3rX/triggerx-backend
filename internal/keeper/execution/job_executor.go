@@ -27,7 +27,6 @@ import (
 	// "github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
 	// "github.com/trigg3rX/triggerx-backend/pkg/common"
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
-
 	// dockertypes "github.com/docker/docker/api/types"
 	// "github.com/docker/docker/client"
 	// "github.com/trigg3rX/triggerx-backend/pkg/resources"
@@ -40,13 +39,7 @@ type ValidatorInterface interface {
 	ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData, triggerData *jobtypes.TriggerData) (bool, error)
 }
 
-
-
-
-
-
-
-
+const executionContractAddress = "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
 
 // type JobExecutor struct {
 // 	ethClient       common.EthClientInterface
@@ -72,11 +65,6 @@ type ValidatorInterface interface {
 
 // // Execute routes jobs to appropriate handlers based on the target function
 // Currently supports 'transfer' for token transfers and 'execute' for generic contract calls
-
-
-
-
-
 
 // func (e *JobExecutor) executeGoScript(scriptContent string) (string, error) {
 // 	// Create a temporary file for the script
@@ -118,13 +106,3 @@ type ValidatorInterface interface {
 
 // 	return string(stdout), nil
 // }
-
-
-
-
-
-
-
-
-
-

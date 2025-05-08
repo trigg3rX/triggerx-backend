@@ -175,7 +175,7 @@ func ExecuteTask(c *gin.Context) {
 
 	actionData.TaskID = triggerData.TaskID
 
-	logger.Infof("actionData: %v\n", actionData)
+	logger.Infof("actionData: %+v", actionData)
 
 	actionDataBytes, err := json.Marshal(actionData)
 	if err != nil {

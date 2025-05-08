@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
+	// "io/ioutil"
+	// "net/http"
 	"reflect"
 	"strings"
 
@@ -171,35 +170,35 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 }
 
 func (e *JobExecutor) getContractMethodAndABI(methodName string, job *jobtypes.HandleCreateJobData) (*abi.ABI, *abi.Method, error) {
-    // Use ABI from database instead of fetching it
-    if job.ABI == "" {
-        return nil, nil, fmt.Errorf("contract ABI not provided in job data")
-    }
+	// Use ABI from database instead of fetching it
+	if job.ABI == "" {
+		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
+	}
 
-    abiData := []byte(job.ABI)
-    
-    parsed, err := abi.JSON(bytes.NewReader(abiData))
-    if err != nil {
-        log.Printf("Error parsing ABI: %v", err)
-        return nil, nil, err
-    }
+	abiData := []byte(job.ABI)
 
-    log.Printf("Using ABI from database for contract %s", job.TargetContractAddress)
+	parsed, err := abi.JSON(bytes.NewReader(abiData))
+	if err != nil {
+		logger.Warnf("Error parsing ABI: %v", err)
+		return nil, nil, err
+	}
 
-    method, ok := parsed.Methods[methodName]
-    if !ok {
-        log.Printf("Method %s not found in contract ABI", methodName)
-        return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
-    }
+	logger.Infof("Using ABI from database for contract %s", job.TargetContractAddress)
 
-    log.Printf("Found method: %+v", method)
-    return &parsed, &method, nil
+	method, ok := parsed.Methods[methodName]
+	if !ok {
+		logger.Warnf("Method %s not found in contract ABI", methodName)
+		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
+	}
+
+	logger.Infof("Found method: %+v", method)
+	return &parsed, &method, nil
 }
 
 func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
 	// Handle different output scenarios
 	if len(method.Outputs) == 0 {
-		log.Printf("Method %s has no outputs to decode", method.Name)
+		logger.Infof("Method %s has no outputs to decode", method.Name)
 		return nil, nil
 	}
 
@@ -210,11 +209,11 @@ func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Met
 
 		err := contractABI.UnpackIntoInterface(result.Addr().Interface(), method.Name, output)
 		if err != nil {
-			log.Printf("Error unpacking single output: %v", err)
+			logger.Warnf("Error unpacking single output: %v", err)
 			return nil, err
 		}
 
-		log.Printf("Decoded single output: %v", result.Interface())
+		logger.Infof("Decoded single output: %v", result.Interface())
 		return result.Interface(), nil
 	}
 
@@ -222,52 +221,51 @@ func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Met
 	results := make([]interface{}, len(method.Outputs))
 	err := contractABI.UnpackIntoInterface(&results, method.Name, output)
 	if err != nil {
-		log.Printf("Error unpacking multiple outputs: %v", err)
+		logger.Warnf("Error unpacking multiple outputs: %v", err)
 		return nil, err
 	}
 
-	log.Printf("Decoded multiple outputs: %+v", results)
+	logger.Infof("Decoded multiple outputs: %+v", results)
 	return results, nil
 }
 
-func (e *JobExecutor) fetchContractABI(contractAddress string) ([]byte, error) {
-	if e.etherscanAPIKey == "" {
-		return nil, fmt.Errorf("missing Etherscan API key")
-	}
+// func (e *JobExecutor) fetchContractABI(contractAddress string) ([]byte, error) {
+// 	if e.etherscanAPIKey == "" {
+// 		return nil, fmt.Errorf("missing Etherscan API key")
+// 	}
 
-	// Update the URL to use Optimism Sepolia's API endpoint
-	blockscoutUrl := fmt.Sprintf(
-		"https://optimism-sepolia.blockscout.com/api?module=contract&action=getabi&address=%s",
-		contractAddress)
+// 	// Update the URL to use Optimism Sepolia's API endpoint
+// 	blockscoutUrl := fmt.Sprintf(
+// 		"https://optimism-sepolia.blockscout.com/api?module=contract&action=getabi&address=%s",
+// 		contractAddress)
 
-	resp, err := http.Get(blockscoutUrl)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		logger.Warnf("Failed to fetch ABI from Blockscout: %v", err)
-		// Fall back to another source or handle accordingly
-	}
+// 	resp, err := http.Get(blockscoutUrl)
+// 	if err != nil || resp.StatusCode != http.StatusOK {
+// 		logger.Warnf("Failed to fetch ABI from Blockscout: %v", err)
+// 		// Fall back to another source or handle accordingly
+// 	}
 
-	defer resp.Body.Close()
+// 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+// 	body, err := ioutil.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	var response struct {
-		Status  string `json:"status"`
-		Message string `json:"message"`
-		Result  string `json:"result"`
-	}
+// 	var response struct {
+// 		Status  string `json:"status"`
+// 		Message string `json:"message"`
+// 		Result  string `json:"result"`
+// 	}
 
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return nil, err
-	}
+// 	err = json.Unmarshal(body, &response)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	if response.Status != "1" {
-		return nil, fmt.Errorf("error fetching contract ABI: %s", response.Message)
-	}
+// 	if response.Status != "1" {
+// 		return nil, fmt.Errorf("error fetching contract ABI: %s", response.Message)
+// 	}
 
-	return []byte(response.Result), nil
-}
-
+// 	return []byte(response.Result), nil
+// }
