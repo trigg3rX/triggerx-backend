@@ -37,7 +37,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	// Get the next task ID
 	var maxTaskID int64
 	if err := h.db.Session().Query(`
-		SELECT MAX(task_id) FROM triggerx.task_data`).Scan(&maxTaskID); err != nil {
+		SELECT MAX(task_id) FROM triggerx.task_data WHERE partition_key = 'task'`).Scan(&maxTaskID); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error getting max task ID: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -48,10 +48,10 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.db.Session().Query(`
         INSERT INTO triggerx.task_data (
-            task_id, job_id, task_definition_id, created_at,
+            partition_key, task_id, job_id, task_definition_id, created_at,
             task_performer_id, is_approved
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-		taskResponse.TaskID, taskData.JobID, taskData.TaskDefinitionID,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"task", taskResponse.TaskID, taskData.JobID, taskData.TaskDefinitionID,
 		time.Now().UTC(), taskData.TaskPerformerID, false).Exec(); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error inserting task with ID %d: %v", taskResponse.TaskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -81,7 +81,7 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 			   is_approved, tp_signature, ta_signature, task_submission_tx_hash,
 			   is_successful
         FROM triggerx.task_data
-        WHERE task_id = ?`, taskID).Scan(
+        WHERE partition_key = 'task' AND task_id = ?`, taskID).Scan(
 		&taskData.TaskID, &taskData.JobID, &taskData.TaskDefinitionID, &taskData.CreatedAt,
 		&taskData.TaskFee, &taskData.ExecutionTimestamp, &taskData.ExecutionTxHash, &taskData.TaskPerformerID,
 		&taskData.ProofOfTask, &taskData.ActionDataCID, &taskData.TaskAttesterIDs,
@@ -195,7 +195,7 @@ func (h *Handler) UpdateTaskFee(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.task_data
 		SET task_fee = ?
-		WHERE task_id = ?`, taskFee.Fee, taskID).Exec(); err != nil {
+		WHERE partition_key = 'task' AND task_id = ?`, taskFee.Fee, taskID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
