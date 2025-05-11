@@ -148,6 +148,8 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 		// m.logger.Infof("Added 0x prefix to keeper address: %s", keeperAddress)
 	}
 
+	keeperAddress = strings.ToLower(keeperAddress)
+
 	// Create a registry for this specific keeper
 	registry := prometheus.NewRegistry()
 
