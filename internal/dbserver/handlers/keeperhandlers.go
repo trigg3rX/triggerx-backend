@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -44,6 +45,8 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	keeperData.KeeperAddress = strings.ToLower(keeperData.KeeperAddress)
 
 	var existingKeeperID int64
 	if err := h.db.Session().Query(`
@@ -89,30 +92,30 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		// Send welcome email after successful keeper creation
-		subject := "Welcome to TriggerX: Operator Whitelisting Confirmed"
-		emailBody := fmt.Sprintf(`
-			Hey %s,
-			<br><br>
-			Thanks for filling out the TriggerX whitelisting form — you're all set!
-			<br><br>
-			To stay updated on what's coming next (and not miss anything important), hop into our Telegram group:
-			<br><br>
-			<a href="https://t.me/+1I4euCfrchMxZDhl">https://t.me/+1I4euCfrchMxZDhl</a>
-			<br><br>
-			This is where we'll be sharing everything you need to know as an operator — from technical updates to rewards info and more.
-			<br><br>
-			See you there!
-			<br><br>
-			– Team TriggerX
-		`, keeperData.KeeperName)
+		// // Send welcome email after successful keeper creation
+		// subject := "Welcome to TriggerX: Operator Whitelisting Confirmed"
+		// emailBody := fmt.Sprintf(`
+		// 	Hey %s,
+		// 	<br><br>
+		// 	Thanks for filling out the TriggerX whitelisting form — you're all set!
+		// 	<br><br>
+		// 	To stay updated on what's coming next (and not miss anything important), hop into our Telegram group:
+		// 	<br><br>
+		// 	<a href="https://t.me/+1I4euCfrchMxZDhl">https://t.me/+1I4euCfrchMxZDhl</a>
+		// 	<br><br>
+		// 	This is where we'll be sharing everything you need to know as an operator — from technical updates to rewards info and more.
+		// 	<br><br>
+		// 	See you there!
+		// 	<br><br>
+		// 	– Team TriggerX
+		// `, keeperData.KeeperName)
 
-		if err := h.sendEmailNotification(keeperData.EmailID, subject, emailBody); err != nil {
-			h.logger.Errorf(" Error sending welcome email to keeper %s: %v", keeperData.KeeperName, err)
-			// Note: We don't return here as the keeper creation was successful
-		} else {
-			h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
-		}
+		// if err := h.sendEmailNotification(keeperData.EmailID, subject, emailBody); err != nil {
+		// 	h.logger.Errorf(" Error sending welcome email to keeper %s: %v", keeperData.KeeperName, err)
+		// 	// Note: We don't return here as the keeper creation was successful
+		// } else {
+		// 	h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
+		// }
 
 		h.logger.Infof(" Successfully created keeper with ID: %d", currentKeeperID)
 	}
@@ -153,7 +156,7 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 	var performers []types.GetPerformerData
 	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
 			FROM triggerx.keeper_data 
-			WHERE partition_key = 'keeper' AND keeper_id = 6
+			WHERE keeper_id = 2
 			ALLOW FILTERING`).Iter()
 
 	var performer types.GetPerformerData
@@ -491,6 +494,8 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 
 	if len(keeperHealth.KeeperAddress) > 0 && !bytes.HasPrefix([]byte(keeperHealth.KeeperAddress), []byte("0x")) {
 		h.logger.Infof("[KeeperHealthCheckIn] Adding 0x prefix to keeper address: %s", keeperHealth.KeeperAddress)

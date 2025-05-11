@@ -13,8 +13,7 @@ func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 	query := `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
               FROM triggerx.keeper_data 
-              WHERE partition_key = 'keeper' AND status = true ALLOW FILTERING`
-
+              WHERE status = true AND verified = true ALLOW FILTERING`
 	iter := h.db.Session().Query(query).Iter()
 
 	var keeperLeaderboard []types.KeeperLeaderboardEntry
@@ -48,10 +47,10 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
 	// CQL query to get user leaderboard data
-	iter := h.db.Session().Query(`
-		SELECT user_id, user_address, user_points
-		FROM triggerx.user_data 
-		WHERE partition_key = 'user' ALLOW FILTERING`).Iter()
+	query := `SELECT user_id, user_address, account_balance 
+              FROM triggerx.user_data`
+
+	iter := h.db.Session().Query(query).Iter()
 
 	var userLeaderboard []types.UserLeaderboardEntry
 	var userEntry types.UserLeaderboardEntry

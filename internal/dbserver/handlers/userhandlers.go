@@ -3,7 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-
+	"strings"
+	
 	"github.com/gorilla/mux"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -40,7 +41,7 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	walletAddress := vars["wallet_address"]
+	walletAddress := strings.ToLower(vars["wallet_address"])
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
 	var userPoints int
