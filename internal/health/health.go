@@ -2,6 +2,7 @@ package health
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,8 @@ func HandleCheckInEvent(c *gin.Context) {
 			"active":  true,
 		})
 	}
+
+	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 
 	// Update the keeper state in our in-memory store
 	stateManager := GetKeeperStateManager()
