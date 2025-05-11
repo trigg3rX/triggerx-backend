@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	
+
 	"github.com/gorilla/mux"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -20,7 +20,7 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT user_id, user_address, job_ids, account_balance
         FROM triggerx.user_data 
-        WHERE partition_key = 'user' AND user_id = ? ALLOW FILTERING`, userID).Scan(
+        WHERE user_id = ? ALLOW FILTERING`, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.AccountBalance); err != nil {
 		h.logger.Errorf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -51,14 +51,14 @@ func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT account_balance
         FROM triggerx.user_data 
-        WHERE partition_key = 'user' AND user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {
+        WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {
 	}
 
 	// Query keeper_data table
 	if err := h.db.Session().Query(`
         SELECT keeper_points
         FROM triggerx.keeper_data 
-        WHERE partition_key = 'keeper' AND keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {
+        WHERE keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {
 	}
 
 	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)

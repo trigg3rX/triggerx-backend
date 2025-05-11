@@ -116,12 +116,12 @@ func (h *Handler) GetKeeperByIdentifier(w http.ResponseWriter, r *http.Request) 
 	if keeperAddress != "" {
 		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
                 FROM triggerx.keeper_data 
-                WHERE partition_key = 'keeper' AND status = true AND keeper_address = ? ALLOW FILTERING`
+                WHERE status = true AND keeper_address = ? ALLOW FILTERING`
 		args = append(args, keeperAddress)
 	} else {
 		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
                 FROM triggerx.keeper_data 
-                WHERE partition_key = 'keeper' AND status = true AND keeper_name = ? ALLOW FILTERING`
+                WHERE status = true AND keeper_name = ? ALLOW FILTERING`
 		args = append(args, keeperName)
 	}
 
@@ -157,7 +157,7 @@ func (h *Handler) GetUserByAddress(w http.ResponseWriter, r *http.Request) {
 	// Get user data
 	query := `SELECT user_id, user_address, user_points 
               FROM triggerx.user_data 
-              WHERE partition_key = 'user' AND user_address = ? ALLOW FILTERING`
+              WHERE user_address = ? ALLOW FILTERING`
 
 	var userEntry types.UserLeaderboardEntry
 	if err := h.db.Session().Query(query, userAddress).Scan(

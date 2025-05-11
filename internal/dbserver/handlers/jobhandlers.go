@@ -85,7 +85,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 	var lastJobID int64
 	if err := h.db.Session().Query(`
-		SELECT MAX(job_id) FROM triggerx.job_data WHERE partition_key = 'job'`).Scan(&lastJobID); err != nil && err != gocql.ErrNotFound {
+		SELECT MAX(job_id) FROM triggerx.job_data`).Scan(&lastJobID); err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting max job ID: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -100,7 +100,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	err = h.db.Session().Query(`
 		SELECT user_id, account_balance, token_balance, job_ids
 		FROM triggerx.user_data 
-		WHERE partition_key = 'user' AND user_address = ? ALLOW FILTERING`,
+		WHERE user_address = ? ALLOW FILTERING`,
 		tempJobs[0].UserAddress).Scan(&existingUserID, &existingAccountBalance, &existingTokenBalance, &existingJobIDs)
 
 	if err != nil && err != gocql.ErrNotFound {
@@ -113,8 +113,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		h.logger.Infof("[CreateJobData] Creating new user for address %s", tempJobs[0].UserAddress)
 		var maxUserID int64
 		if err := h.db.Session().Query(`
-			SELECT MAX(user_id) FROM triggerx.user_data WHERE partition_key = 'user'
-		`).Scan(&maxUserID); err != nil && err != gocql.ErrNotFound {
+			SELECT MAX(user_id) FROM triggerx.user_data`).Scan(&maxUserID); err != nil && err != gocql.ErrNotFound {
 			h.logger.Errorf("[CreateJobData] Error getting max user ID: %v", err)
 			http.Error(w, "Error getting max userID: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -126,10 +125,10 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.user_data (
-				partition_key, user_id, user_address, created_at, 
+				user_id, user_address, created_at, 
 				job_ids, account_balance, token_balance, last_updated_at, user_points
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			"user", existingUserID, tempJobs[0].UserAddress, time.Now().UTC(),
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			existingUserID, tempJobs[0].UserAddress, time.Now().UTC(),
 			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now().UTC(), 0.0).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
@@ -144,7 +143,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		var currentPoints float64
 		if err := h.db.Session().Query(`
 			SELECT user_points FROM triggerx.user_data 
-			WHERE partition_key = 'user' AND user_id = ?`,
+			WHERE user_id = ?`,
 			existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
 			h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error getting current points: "+err.Error(), http.StatusInternalServerError)
@@ -154,7 +153,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.user_data 
 			SET account_balance = ?, token_balance = ?, last_updated_at = ?
-			WHERE partition_key = 'user' AND user_id = ? AND user_points = ?`,
+			WHERE user_id = ? AND user_points = ?`,
 			existingAccountBalance, existingTokenBalance,
 			time.Now().UTC(), existingUserID, currentPoints).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user data for userID %d: %v", existingUserID, err)
@@ -190,13 +189,13 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.job_data (
-				partition_key, job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
+				job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
 				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
 				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			"job", currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
 			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
@@ -216,7 +215,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		var currentPoints float64
 		if err := h.db.Session().Query(`
 			SELECT user_points FROM triggerx.user_data 
-			WHERE partition_key = 'user' AND user_id = ?`,
+			WHERE user_id = ?`,
 			existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
 			h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error getting current points: "+err.Error(), http.StatusInternalServerError)
@@ -230,18 +229,18 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		// Insert new row with updated points
 		batch.Query(`
 			INSERT INTO triggerx.user_data (
-				partition_key, user_id, user_points, user_address, created_at,
+				user_id, user_points, user_address, created_at,
 				job_ids, account_balance, token_balance, last_updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			"user", existingUserID, newPoints, tempJobs[0].UserAddress, time.Now().UTC(),
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			existingUserID, newPoints, tempJobs[0].UserAddress, time.Now().UTC(),
 			existingJobIDs, existingAccountBalance, existingTokenBalance, time.Now().UTC(),
 		)
 
 		// Delete old row with previous points
 		batch.Query(`
 			DELETE FROM triggerx.user_data
-			WHERE partition_key = ? AND user_id = ? AND user_points = ?`,
-			"user", existingUserID, currentPoints,
+			WHERE user_id = ? AND user_points = ?`,
+			existingUserID, currentPoints,
 		)
 
 		if err := h.db.Session().ExecuteBatch(batch); err != nil {
@@ -306,7 +305,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var currentPoints float64
 	if err := h.db.Session().Query(`
 		SELECT user_points FROM triggerx.user_data 
-		WHERE partition_key = 'user' AND user_id = ?`,
+		WHERE user_id = ?`,
 		existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
 		http.Error(w, "Error getting current points: "+err.Error(), http.StatusInternalServerError)
@@ -316,7 +315,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.user_data 
 		SET job_ids = ?, last_updated_at = ?
-		WHERE partition_key = 'user' AND user_id = ? AND user_points = ?`,
+		WHERE user_id = ? AND user_points = ?`,
 		existingJobIDs, time.Now().UTC(), existingUserID, currentPoints).Exec(); err != nil {
 		h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
 		http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
@@ -351,7 +350,7 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.job_data 	
 		SET time_frame = ?, recurring = ?
-		WHERE partition_key = 'job' AND job_id = ?`,
+		WHERE job_id = ?`,
 		tempData.TimeFrame, tempData.Recurring, tempData.JobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error updating jobID %s: %v", tempData.JobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -383,7 +382,7 @@ func (h *Handler) UpdateJobLastExecutedAt(w http.ResponseWriter, r *http.Request
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.job_data 
 		SET last_executed_at = ?
-		WHERE partition_key = 'job' AND job_id = ?`,
+		WHERE job_id = ?`,
 		time.Now().UTC(), jobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating last executed at for jobID %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -407,7 +406,7 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
                target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
                status, job_cost_prediction, created_at, last_executed_at, task_ids
         FROM triggerx.job_data 
-        WHERE partition_key = 'job' AND job_id = ?`, jobID).Scan(
+        WHERE job_id = ?`, jobID).Scan(
 		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.UserID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID, &jobData.ChainStatus,
 		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID, &jobData.TriggerContractAddress,
 		&jobData.TriggerEvent, &jobData.ScriptIPFSUrl, &jobData.ScriptTriggerFunction, &jobData.TargetChainID,
@@ -442,7 +441,7 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		SELECT user_id 
 		FROM triggerx.user_data 
-		WHERE partition_key = 'user' AND user_address = ? ALLOW FILTERING
+		WHERE user_address = ? ALLOW FILTERING
 	`, userAddress).Scan(&userID); err != nil {
 		// Instead of returning a 404, return a 200 with a message
 		h.logger.Infof("[GetJobsByUserAddress] User address %s not found", userAddress)
@@ -465,7 +464,7 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	iter := h.db.Session().Query(`
         SELECT job_id, task_definition_id, status, chain_status, link_job_id
         FROM triggerx.job_data 
-        WHERE partition_key = 'job' AND user_id = ? ALLOW FILTERING
+        WHERE user_id = ? ALLOW FILTERING
     `, userID).Iter()
 
 	var job JobSummary
@@ -498,7 +497,7 @@ func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.job_data 
         SET status = ?
-        WHERE partition_key = 'job' AND job_id = ?`,
+        WHERE job_id = ?`,
 		true, jobID).Exec(); err != nil {
 		h.logger.Errorf("[DeleteJobData] Error deleting jobID %s: %v", jobID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

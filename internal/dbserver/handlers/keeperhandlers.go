@@ -50,7 +50,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 
 	var existingKeeperID int64
 	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_address = ? ALLOW FILTERING`,
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperData.KeeperAddress).Scan(&existingKeeperID); err == nil {
 		h.logger.Infof(" Keeper already exists with ID: %d", existingKeeperID)
 	}
@@ -59,7 +59,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.keeper_data SET 
 			keeper_name = ?, keeper_address = ?, rewards_address = ?, email_id = ?
-			WHERE partition_key = 'keeper' AND keeper_id = ?`,
+			WHERE keeper_id = ?`,
 			keeperData.KeeperName, keeperData.KeeperAddress, keeperData.RewardsAddress,
 			keeperData.EmailID, existingKeeperID).Exec(); err != nil {
 			h.logger.Errorf(" Error updating keeper with ID %d: %v", existingKeeperID, err)
@@ -70,7 +70,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 		// Get the maximum keeper ID from the database
 		var maxKeeperID int64
 		if err := h.db.Session().Query(`
-			SELECT MAX(keeper_id) FROM triggerx.keeper_data WHERE partition_key = 'keeper'`).Scan(&maxKeeperID); err != nil {
+			SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
 			h.logger.Errorf(" Error getting max keeper ID : %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -82,10 +82,10 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 		h.logger.Infof(" Creating keeper with ID: %d", currentKeeperID)
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.keeper_data (
-				partition_key, keeper_id, keeper_name, keeper_address, rewards_booster,
+				keeper_id, keeper_name, keeper_address, rewards_booster,
 				rewards_address, keeper_points, verified, email_id
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			"keeper", currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress, booster,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress, booster,
 			keeperData.RewardsAddress, rewards, true, keeperData.EmailID).Exec(); err != nil {
 			h.logger.Errorf(" Error creating keeper with ID %d: %v", currentKeeperID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -135,7 +135,7 @@ func (h *Handler) GetKeeperData(w http.ResponseWriter, r *http.Request) {
 			rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
 			strategies, verified, status, online, version, no_exctask, chat_id, email_id
 		FROM triggerx.keeper_data 
-        WHERE partition_key = 'keeper' AND keeper_id = ?`, keeperID).Scan(
+        WHERE keeper_id = ?`, keeperID).Scan(
 		&keeperData.KeeperID, &keeperData.KeeperName, &keeperData.KeeperAddress,
 		&keeperData.RegisteredTx, &keeperData.OperatorID,
 		&keeperData.RewardsAddress, &keeperData.RewardsBooster, &keeperData.VotingPower,
@@ -253,7 +253,7 @@ func (h *Handler) IncrementKeeperTaskCount(w http.ResponseWriter, r *http.Reques
 	// First get the current count
 	var currentCount int
 	if err := h.db.Session().Query(`
-		SELECT no_exctask FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		SELECT no_exctask FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&currentCount); err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving current task count: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -265,7 +265,7 @@ func (h *Handler) IncrementKeeperTaskCount(w http.ResponseWriter, r *http.Reques
 
 	// Update the database
 	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET no_exctask = ? WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		UPDATE triggerx.keeper_data SET no_exctask = ? WHERE keeper_id = ?`,
 		newCount, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error updating task count: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -286,7 +286,7 @@ func (h *Handler) GetKeeperTaskCount(w http.ResponseWriter, r *http.Request) {
 	// Get the current count
 	var taskCount int
 	if err := h.db.Session().Query(`
-		SELECT no_exctask FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		SELECT no_exctask FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&taskCount); err != nil {
 		h.logger.Errorf("[GetKeeperTaskCount] Error retrieving task count: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -320,7 +320,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 	// First get the task fee from the task_data table
 	var taskFee int64
 	if err := h.db.Session().Query(`
-		SELECT task_fee FROM triggerx.task_data WHERE partition_key = 'task' AND task_id = ?`,
+		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
 		taskID).Scan(&taskFee); err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving task fee for task ID %d: %v", taskID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -330,7 +330,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 	// Then get the current keeper points
 	var currentPoints int64
 	if err := h.db.Session().Query(`
-		SELECT keeper_points FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&currentPoints); err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving current points: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -342,7 +342,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 
 	// Update the database
 	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET keeper_points = ? WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		UPDATE triggerx.keeper_data SET keeper_points = ? WHERE keeper_id = ?`,
 		newPoints, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error updating keeper points: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -368,7 +368,7 @@ func (h *Handler) GetKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	// Get the current points
 	var points int64
 	if err := h.db.Session().Query(`
-		SELECT keeper_points FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&points); err != nil {
 		h.logger.Errorf("[GetKeeperPoints] Error retrieving keeper points: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -431,7 +431,7 @@ func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 	// Check if keeper is still offline
 	var online bool
 	err := h.db.Session().Query(`
-		SELECT online FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		SELECT online FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&online)
 
 	if err != nil {
@@ -446,7 +446,7 @@ func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 		err := h.db.Session().Query(`
 			SELECT chat_id, keeper_name, email_id 
 			FROM triggerx.keeper_data 
-			WHERE partition_key = 'keeper' AND keeper_id = ?`,
+			WHERE keeper_id = ?`,
 			keeperID).Scan(&chatID, &keeperName, &emailID)
 
 		if err != nil {
@@ -504,7 +504,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 
 	var keeperID int64
 	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_address = ? ALLOW FILTERING`,
+		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperHealth.KeeperAddress).Scan(&keeperID); err != nil {
 		h.logger.Errorf("[KeeperHealthCheckIn] Error retrieving keeper_id for address %s: %v",
 			keeperHealth.KeeperAddress, err)
@@ -528,7 +528,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 	var isVerified bool
 	var status bool
 	if err := h.db.Session().Query(`
-		SELECT keeper_points, verified, status FROM triggerx.keeper_data WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		SELECT keeper_points, verified, status FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&keeperPoints, &isVerified, &status); err != nil {
 		h.logger.Errorf("[KeeperHealthCheckIn] Error checking keeper points: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -540,7 +540,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET online = ?, peer_id = ?, keeper_points = ? 
-			WHERE partition_key = 'keeper' AND keeper_id = ?`,
+			WHERE keeper_id = ?`,
 			keeperHealth.Active, keeperHealth.PeerID, 10.0, keeperID).Exec(); err != nil {
 			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status and points: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -549,7 +549,7 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		h.logger.Infof("[KeeperHealthCheckIn] Added initial 10 points to keeper ID %d", keeperID)
 	} else {
 		if err := h.db.Session().Query(`
-			UPDATE triggerx.keeper_data SET online = ?, peer_id = ? WHERE partition_key = 'keeper' AND keeper_id = ?`,
+			UPDATE triggerx.keeper_data SET online = ?, peer_id = ? WHERE keeper_id = ?`,
 			keeperHealth.Active, keeperHealth.PeerID, keeperID).Exec(); err != nil {
 			h.logger.Errorf("[KeeperHealthCheckIn] Error updating keeper status: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -585,7 +585,7 @@ func (h *Handler) UpdateKeeperChatID(w http.ResponseWriter, r *http.Request) {
 	var keeperID string // Adjust the type based on your schema
 	if err := h.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data 
-		WHERE partition_key = 'keeper' AND keeper_name = ?  ALLOW FILTERING`, requestData.KeeperName).Consistency(gocql.One).Scan(&keeperID); err != nil {
+		WHERE keeper_name = ?  ALLOW FILTERING`, requestData.KeeperName).Consistency(gocql.One).Scan(&keeperID); err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error finding keeper ID for keeper %s: %v", requestData.KeeperName, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -597,7 +597,7 @@ func (h *Handler) UpdateKeeperChatID(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET chat_id = ? 
-		WHERE partition_key = 'keeper' AND keeper_id = ?`,
+		WHERE keeper_id = ?`,
 		requestData.ChatID, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -623,7 +623,7 @@ func (h *Handler) GetKeeperCommunicationInfo(w http.ResponseWriter, r *http.Requ
 	if err := h.db.Session().Query(`
         SELECT chat_id, keeper_name, email_id 
         FROM triggerx.keeper_data 
-        WHERE partition_key = 'keeper' AND keeper_id = ? ALLOW FILTERING`, keeperID).Scan(&keeperData.ChatID, &keeperData.KeeperName, &keeperData.EmailID); err != nil {
+        WHERE keeper_id = ? ALLOW FILTERING`, keeperID).Scan(&keeperData.ChatID, &keeperData.KeeperName, &keeperData.EmailID); err != nil {
 		h.logger.Errorf("[GetKeeperChatInfo] Error retrieving chat ID, keeper name, and email for ID %s: %v", keeperID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
