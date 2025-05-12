@@ -89,12 +89,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var existingTokenBalance *big.Int = big.NewInt(0)
 	var existingJobIDs []int64 = []int64{}
 	var newJobIDs []int64
-	var err error
-	err = h.db.Session().Query(`
+	err := h.db.Session().Query(`
 		SELECT user_id, account_balance, token_balance, job_ids
 		FROM triggerx.user_data 
 		WHERE user_address = ? ALLOW FILTERING`,
-		tempJobs[0].UserAddress).Scan(&existingUserID, &existingAccountBalance, &existingTokenBalance, &existingJobIDs)
+		strings.ToLower(tempJobs[0].UserAddress)).Scan(&existingUserID, &existingAccountBalance, &existingTokenBalance, &existingJobIDs)
 
 	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error checking user existence for address %s: %v", tempJobs[0].UserAddress, err)
@@ -223,7 +222,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		batch.Query(`
 			DELETE FROM triggerx.user_data
 			WHERE user_id = ?`,
-			newPoints, time.Now().UTC(), existingUserID).Exec(); err != nil {
+			existingUserID)
+
+		if err := h.db.Session().ExecuteBatch(batch); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user points: "+err.Error(), http.StatusInternalServerError)
 			return
