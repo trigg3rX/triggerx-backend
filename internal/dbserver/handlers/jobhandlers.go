@@ -40,7 +40,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var ipfsURLs []string
 	needsDynamicFee := false
 	for i, job := range tempJobs {
-		if job.ArgType == 1 { // Dynamic ArgType
+		if job.ArgType == 2 { // Dynamic ArgType
 			needsDynamicFee = true
 			if job.ScriptIPFSUrl == "" {
 				h.logger.Errorf("[CreateJobData] Missing IPFS URL for job %d", i)
@@ -75,7 +75,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		intervalInSeconds := float64(tempJobs[i].TimeInterval)
 		executionCount := math.Ceil(timeframeInSeconds / intervalInSeconds)
 
-		if tempJobs[i].ArgType == 1 {
+		if tempJobs[i].ArgType == 2 {
 			tempJobs[i].JobCostPrediction = executionCount * feePerJob
 		} else {
 			tempJobs[i].JobCostPrediction = executionCount * 0.01
