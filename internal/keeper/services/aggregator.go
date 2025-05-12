@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -84,10 +85,21 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 
 func makeRPCRequest(client *rpc.Client, params Params) interface{} {
 	var result interface{}
+	maxRetries := 3
+	retryDelay := time.Second * 2
 
-	err := client.Call(&result, "sendTask", params.proofOfTask, params.data, params.taskDefinitionId, params.performerAddress, params.signature)
-	if err != nil {
-		logger.Errorf("Error making RPC request: %v", err)
+	for i := 0; i < maxRetries; i++ {
+		err := client.Call(&result, "sendTask", params.proofOfTask, params.data, params.taskDefinitionId, params.performerAddress, params.signature)
+		if err == nil {
+			return result
+		}
+
+		logger.Warnf("RPC request attempt %d failed: %v", i+1, err)
+		if i < maxRetries-1 {
+			time.Sleep(retryDelay)
+		}
 	}
-	return result
+
+	logger.Errorf("All RPC request attempts failed")
+	return nil
 }
