@@ -22,11 +22,11 @@ func StartDailyRewardsPoints() {
 
 	// Check if we need to reward immediately upon service start
 	now := time.Now()
-	rewardTime := time.Date(now.Year(), now.Month(), now.Day(), 15, 30, 0, 0, now.Location())
+	rewardTime := time.Date(now.Year(), now.Month(), now.Day(), 06, 30, 0, 0, time.UTC)
 
 	// If the scheduled time for today has already passed AND we haven't rewarded today yet
 	if now.After(rewardTime) && lastRewardsUpdate.Day() != now.Day() {
-		logger.Info("15:30 has already passed for today and rewards haven't been distributed yet, distributing rewards now...")
+		logger.Info("07:30 has already passed for today and rewards haven't been distributed yet, distributing rewards now...")
 		err := database.DailyRewardsPoints()
 		if err != nil {
 			logger.Errorf("Failed to distribute daily rewards: %v", err)
@@ -44,7 +44,7 @@ func StartDailyRewardsPoints() {
 func scheduleNextReward() {
 	for {
 		now := time.Now()
-		nextReward := time.Date(now.Year(), now.Month(), now.Day(), 05, 30, 0, 0, time.UTC)
+		nextReward := time.Date(now.Year(), now.Month(), now.Day(), 06, 30, 0, 0, time.UTC)
 
 		// If we've already passed 15:30 today, schedule for tomorrow
 		if now.After(nextReward) {
@@ -59,7 +59,7 @@ func scheduleNextReward() {
 		time.Sleep(waitDuration)
 
 		// It's time to distribute rewards
-		logger.Info("It's 15:30, distributing daily rewards now...")
+		logger.Info("It's 07:30, distributing daily rewards now...")
 		err := database.DailyRewardsPoints()
 		if err != nil {
 			logger.Errorf("Failed to distribute daily rewards: %v", err)
