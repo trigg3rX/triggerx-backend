@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -145,6 +146,8 @@ func UpdatePerformerPoints(performerAddress string, taskFee float64, isAccepted 
 	var performerPoints float64
 	var performerId int64
 	var rewardsBooster float32
+
+	performerAddress = strings.ToLower(performerAddress)
 
 	if err := db.Session().Query(`
 		SELECT keeper_id, keeper_points, rewards_booster FROM triggerx.keeper_data 
