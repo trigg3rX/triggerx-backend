@@ -206,25 +206,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		// Update user points with new total
 		newPoints := currentPoints + pointsToAdd
-		batch := h.db.Session().NewBatch(gocql.LoggedBatch)
-
-		// Insert new row with updated points
-		batch.Query(`
-			INSERT INTO triggerx.user_data (
-				user_id, user_points, user_address, created_at,
-				job_ids, account_balance, token_balance, last_updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			existingUserID, newPoints, strings.ToLower(tempJobs[0].UserAddress), time.Now().UTC(),
-			existingJobIDs, existingAccountBalance, existingTokenBalance, time.Now().UTC(),
-		)
-
-		// Delete old row with previous points
-		batch.Query(`
-			DELETE FROM triggerx.user_data
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.user_data 
+			SET user_points = ?, last_updated_at = ?
 			WHERE user_id = ?`,
-			existingUserID)
-
-		if err := h.db.Session().ExecuteBatch(batch); err != nil {
+			newPoints, time.Now().UTC(), existingUserID).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user points: "+err.Error(), http.StatusInternalServerError)
 			return
