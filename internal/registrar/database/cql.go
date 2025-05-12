@@ -209,11 +209,25 @@ func UpdateAttesterPoints(attesterId string, taskFee float64) error {
 }
 
 func UpdateUserPoints(userID int64, points float64) error {
+	var userPoints float64
+	var lastUpdatedAt time.Time
+
+	if err := db.Session().Query(`
+		SELECT user_points, last_updated_at FROM triggerx.user_data
+		WHERE user_id = ?`,
+		userID).Scan(&userPoints, &lastUpdatedAt); err != nil {
+		logger.Errorf("Failed to get user points and last updated at: %v", err)
+		return err
+	}
+
+	userPoints = userPoints + points
+	lastUpdatedAt = time.Now().UTC()
+
 	if err := db.Session().Query(`
 		UPDATE triggerx.user_data 
-		SET user_points = user_points + ?, last_updated_at = ?
+		SET user_points = ?, last_updated_at = ?
 		WHERE user_id = ?`,
-		points, time.Now().UTC(), userID).Exec(); err != nil {
+		userPoints, lastUpdatedAt, userID).Exec(); err != nil {
 		logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
 	}
