@@ -120,10 +120,10 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.user_data (
 				user_id, user_address, created_at, 
-				job_ids, account_balance, token_balance,  last_updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			existingUserID, tempJobs[0].UserAddress, time.Now().UTC(),
-			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now().UTC()).Exec(); err != nil {
+				job_ids, account_balance, token_balance, last_updated_at, user_points
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			existingUserID, strings.ToLower(tempJobs[0].UserAddress), time.Now().UTC(),
+			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now().UTC(), 0.0).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -207,9 +207,21 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 
 		// Update user points with new total
 		newPoints := currentPoints + pointsToAdd
-		if err := h.db.Session().Query(`
-			UPDATE triggerx.user_data 
-			SET user_points = ?, last_updated_at = ?
+		batch := h.db.Session().NewBatch(gocql.LoggedBatch)
+
+		// Insert new row with updated points
+		batch.Query(`
+			INSERT INTO triggerx.user_data (
+				user_id, user_points, user_address, created_at,
+				job_ids, account_balance, token_balance, last_updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			existingUserID, newPoints, strings.ToLower(tempJobs[0].UserAddress), time.Now().UTC(),
+			existingJobIDs, existingAccountBalance, existingTokenBalance, time.Now().UTC(),
+		)
+
+		// Delete old row with previous points
+		batch.Query(`
+			DELETE FROM triggerx.user_data
 			WHERE user_id = ?`,
 			newPoints, time.Now().UTC(), existingUserID).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
@@ -380,7 +392,7 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	userAddress := vars["user_address"]
+	userAddress := strings.ToLower(vars["user_address"])
 	h.logger.Infof("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
