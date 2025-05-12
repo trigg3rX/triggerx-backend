@@ -137,9 +137,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			UPDATE triggerx.user_data 
 			SET account_balance = ?, token_balance = ?, last_updated_at = ?
 			WHERE user_id = ?`,
-			WHERE user_id = ?`,
 			existingAccountBalance, existingTokenBalance,
-			time.Now().UTC(), existingUserID).Exec(); err != nil {
 			time.Now().UTC(), existingUserID).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user data for userID %d: %v", existingUserID, err)
 			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
