@@ -105,7 +105,38 @@ func ProcessOperatorUnregisteredEvents(
 	return nil
 }
 
+// Helper function to process events in batches
+func processEventsInBatches(
+	client *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+	batchSize uint64,
+	processFunc func(client *ethclient.Client, contractAddress common.Address, start uint64, end uint64) error,
+) error {
+	for start := fromBlock; start < toBlock; start += batchSize {
+		end := start + batchSize - 1
+		if end > toBlock {
+			end = toBlock
+		}
+
+		if err := processFunc(client, contractAddress, start, end); err != nil {
+			return fmt.Errorf("failed to process batch from %d to %d: %v", start, end, err)
+		}
+	}
+	return nil
+}
+
 func ProcessTaskSubmittedEvents(
+	baseClient *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+) error {
+	return processEventsInBatches(baseClient, contractAddress, fromBlock, toBlock, 500, processTaskSubmittedBatch)
+}
+
+func processTaskSubmittedBatch(
 	baseClient *ethclient.Client,
 	contractAddress common.Address,
 	fromBlock uint64,
@@ -127,7 +158,7 @@ func ProcessTaskSubmittedEvents(
 		return fmt.Errorf("failed to filter TaskSubmitted logs: %v", err)
 	}
 
-	logger.Debugf("Found %d TaskSubmitted events", len(logs))
+	logger.Debugf("Found %d TaskSubmitted events in batch [%d-%d]", len(logs), fromBlock, toBlock)
 
 	for _, vLog := range logs {
 		event, err := ParseTaskSubmitted(vLog)
@@ -174,6 +205,15 @@ func ProcessTaskRejectedEvents(
 	fromBlock uint64,
 	toBlock uint64,
 ) error {
+	return processEventsInBatches(baseClient, contractAddress, fromBlock, toBlock, 500, processTaskRejectedBatch)
+}
+
+func processTaskRejectedBatch(
+	baseClient *ethclient.Client,
+	contractAddress common.Address,
+	fromBlock uint64,
+	toBlock uint64,
+) error {
 	query := ethereum.FilterQuery{
 		FromBlock: new(big.Int).SetUint64(fromBlock),
 		ToBlock:   new(big.Int).SetUint64(toBlock),
@@ -188,7 +228,7 @@ func ProcessTaskRejectedEvents(
 		return fmt.Errorf("failed to filter TaskRejected logs: %v", err)
 	}
 
-	logger.Debugf("Found %d TaskRejected events", len(logs))
+	logger.Debugf("Found %d TaskRejected events in batch [%d-%d]", len(logs), fromBlock, toBlock)
 
 	for _, vLog := range logs {
 		event, err := ParseTaskRejected(vLog)
@@ -199,7 +239,7 @@ func ProcessTaskRejectedEvents(
 
 		logger.Infof("Task Rejected Event Detected!")
 		logger.Debugf("Performer Address: %s", event.Operator)
-		logger.Debugf("Attesters IDs: %v", event.AttestersIds)
+		logger.Debugf("Attester IDs: %v", event.AttestersIds)
 		logger.Debugf("Task Number: %d", event.TaskNumber)
 		logger.Debugf("Task Definition ID: %d", event.TaskDefinitionId)
 
