@@ -1,11 +1,7 @@
 package database
 
 import (
-	"fmt"
-	"os"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -16,17 +12,9 @@ type Config struct {
 	ConnectWait time.Duration
 }
 
-func NewConfig() *Config {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Error loading .env file", "error", err)
-	}
-
-	dbHost := os.Getenv("DATABASE_DOCKER_IP_ADDRESS")
-	dbPort := os.Getenv("DATABASE_DOCKER_PORT")
-
+func NewConfig(DatabaseHost string, DatabaseHostPort string) *Config {
 	return &Config{
-		Hosts:       []string{dbHost + ":" + dbPort},
+		Hosts:       []string{DatabaseHost + ":" + DatabaseHostPort},
 		Keyspace:    "triggerx",
 		Timeout:     time.Second * 30,
 		Retries:     5,
