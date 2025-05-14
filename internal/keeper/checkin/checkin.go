@@ -19,7 +19,7 @@ import (
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
 func CheckInWithHealthService() error {
-	healthServiceURL := fmt.Sprintf("%s/health", config.HealthIPAddress)
+	healthServiceURL := fmt.Sprintf("%s/health", config.HealthRPCAddress)
 
 	privateKeyHex := config.PrivateKeyConsensus
 	operatorAddress := config.KeeperAddress

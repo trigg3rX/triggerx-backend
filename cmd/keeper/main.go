@@ -13,19 +13,27 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/checkin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func main() {
-	if err := logging.InitLogger(logging.Development, logging.KeeperProcess); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
-	logger := logging.GetLogger(logging.Development, logging.KeeperProcess)
-	logger.Info("Starting keeper node...")
+var logger logging.Logger
 
-	services.Init()
+func main() {
+	config.Init()
+
+	if config.DevMode {
+		if err := logging.InitLogger(logging.Development, logging.KeeperProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
+	} else {
+		if err := logging.InitLogger(logging.Production, logging.KeeperProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Production, logging.KeeperProcess)
+	}
+	logger.Info("Starting keeper node...")
 
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)

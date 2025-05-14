@@ -63,7 +63,7 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	serializedSignature := hexutil.Encode(sig)
 	logger.Infof("Serialized signature: %s", serializedSignature)
 
-	client, err := rpc.Dial(config.AggregatorIPAddress)
+	client, err := rpc.Dial(config.AggregatorRPCAddress)
 	if err != nil {
 		logger.Errorf("Error dialing RPC", "error", err)
 		return
