@@ -1,8 +1,11 @@
 package database
 
 import (
+    "fmt"
     "os"
     "time"
+
+    "github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -14,6 +17,11 @@ type Config struct {
 }
 
 func NewConfig() *Config {
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("Error loading .env file", "error", err)
+	}
+
 	dbHost := os.Getenv("DATABASE_DOCKER_IP_ADDRESS")
 	dbPort := os.Getenv("DATABASE_DOCKER_PORT")
 
