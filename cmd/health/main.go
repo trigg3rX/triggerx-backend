@@ -20,13 +20,20 @@ import (
 var logger logging.Logger
 
 func main() {
-	if err := logging.InitLogger(logging.Development, logging.HealthProcess); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
-	logger = logging.GetLogger(logging.Development, logging.HealthProcess)
-	logger.Info("Starting health node...")
-
 	config.Init()
+
+	if config.DevMode {
+		if err := logging.InitLogger(logging.Development, logging.HealthProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Development, logging.HealthProcess)
+	} else {
+		if err := logging.InitLogger(logging.Production, logging.HealthProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Production, logging.HealthProcess)
+	}
+	logger.Info("Starting health node...")
 
 	var wg sync.WaitGroup
 

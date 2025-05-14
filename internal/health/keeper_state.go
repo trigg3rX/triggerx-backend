@@ -127,7 +127,7 @@ func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, vers
 		return fmt.Errorf("failed to marshal database update payload: %w", err)
 	}
 
-	databaseURL := fmt.Sprintf("%s/api/keepers/checkin", config.DatabaseIPAddress)
+	databaseURL := fmt.Sprintf("%s/api/keepers/checkin", config.DatabaseRPCAddress)
 
 	response, err := http.Post(databaseURL, "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
