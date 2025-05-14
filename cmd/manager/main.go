@@ -23,14 +23,21 @@ import (
 var logger logging.Logger
 
 func main() {
-	if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
-	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
-	logger.Info("Starting manager node...")
-
 	config.Init()
 	kconfig.Init()
+
+	if config.DevMode {
+		if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
+	} else {
+		if err := logging.InitLogger(logging.Production, logging.ManagerProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Production, logging.ManagerProcess)
+	}
+	logger.Info("Starting manager node...")
 
 	var wg sync.WaitGroup
 

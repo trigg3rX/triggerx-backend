@@ -111,7 +111,7 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 }
 
 func GetPerformer() (types.GetPerformerData, error) {
-	url := fmt.Sprintf("%s/api/keepers/performers", config.DatabaseIPAddress)
+	url := fmt.Sprintf("%s/api/keepers/performers", config.DatabaseRPCAddress)
 
 	logger.Debugf("Fetching performer data from %s", url)
 
@@ -173,7 +173,7 @@ func GetPerformer() (types.GetPerformerData, error) {
 }
 
 func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
-	url := fmt.Sprintf("%s/api/keepers/jobs/%d", config.DatabaseIPAddress, jobID)
+	url := fmt.Sprintf("%s/api/keepers/jobs/%d", config.DatabaseRPCAddress, jobID)
 
 	logger.Debugf("Fetching job details for job %d from %s", jobID, url)
 
@@ -239,7 +239,7 @@ func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
 }
 
 func CreateTaskData(taskData *types.CreateTaskData) (int64, bool, error) {
-	url := fmt.Sprintf("%s/api/tasks", config.DatabaseIPAddress)
+	url := fmt.Sprintf("%s/api/tasks", config.DatabaseRPCAddress)
 
 	logger.Debugf("Creating task for job %d with performer %d", taskData.JobID, taskData.TaskPerformerID)
 

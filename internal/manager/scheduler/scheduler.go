@@ -240,7 +240,7 @@ func (s *JobScheduler) SendDataToDatabase(route string, callType int, data inter
 		return false, fmt.Errorf("error loading .env file: %v", err)
 	}
 
-	databaseURL := fmt.Sprintf("%s/%s", config.DatabaseIPAddress, route)
+	databaseURL := fmt.Sprintf("%s/%s", config.DatabaseRPCAddress, route)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {

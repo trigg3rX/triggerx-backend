@@ -276,7 +276,7 @@ func ValidateTask(c *gin.Context) {
 }
 
 func updateTaskFeeInDatabase(taskID int64, taskFee float64) error {
-	databaseURL := fmt.Sprintf("%s/api/tasks/%d/fee", config.DatabaseIPAddress, taskID)
+	databaseURL := fmt.Sprintf("%s/api/tasks/%d/fee", config.DatabaseRPCAddress, taskID)
 
 	requestBody, err := json.Marshal(map[string]float64{
 		"fee": taskFee,
@@ -311,7 +311,7 @@ func updateTaskFeeInDatabase(taskID int64, taskFee float64) error {
 }
 
 func updateJobLastExecutedTimestamp(jobID int64, timestamp time.Time) error {
-	databaseURL := fmt.Sprintf("%s/api/jobs/%d/lastexecuted", config.DatabaseIPAddress, jobID)
+	databaseURL := fmt.Sprintf("%s/api/jobs/%d/lastexecuted", config.DatabaseRPCAddress, jobID)
 
 	requestBody, err := json.Marshal(map[string]string{
 		"timestamp": timestamp.Format(time.RFC3339),
