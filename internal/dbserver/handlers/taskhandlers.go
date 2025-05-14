@@ -19,12 +19,6 @@ import (
 	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-/*
-	TODO:
-		- Add GetTasksByJobId
-		- Add GetTasksByPerformerId
-*/
-
 func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	var taskData ttypes.CreateTaskData
 	var taskResponse ttypes.CreateTaskResponse
@@ -34,7 +28,6 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the next task ID
 	var maxTaskID int64
 	if err := h.db.Session().Query(`
 		SELECT MAX(task_id) FROM triggerx.task_data`).Scan(&maxTaskID); err != nil {
@@ -96,7 +89,6 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(taskData)
 }
 
-// Move the core logic to a service function
 func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	if ipfsURLs == "" {
 		return 0, fmt.Errorf("missing IPFS URLs")
@@ -109,7 +101,6 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 
 	ctx := context.Background()
 
-	// Create Docker client
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -119,7 +110,6 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	}
 	defer cli.Close()
 
-	// Process each IPFS URL concurrently
 	for _, ipfsURL := range urlList {
 		ipfsURL = strings.TrimSpace(ipfsURL)
 		wg.Add(1)
@@ -157,7 +147,6 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	return totalFee, nil
 }
 
-// Update the HTTP handler to use the service function
 func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
 	ipfsURLs := r.URL.Query().Get("ipfs_url")
 

@@ -15,22 +15,19 @@ import (
 	"gopkg.in/gomail.v2"
 )
 
-// Add these new types for notification configuration
 type NotificationConfig struct {
 	EmailFrom     string
 	EmailPassword string
 	BotToken      string
 }
 
-// // Update keeper metrics after successful job execution
 // keeperID := os.Getenv("KEEPER_ID")
 // if keeperID == "" {
 // 	logger.Warn("KEEPER_ID environment variable not set, using default value")
 // }
 // taskID := triggerData.TaskID
 
-// // Call the metrics server to store keeper execution metrics
-//
+
 //	if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
 //		logger.Warnf("Failed to store keeper metrics: %v", err)
 //		// Continue execution even if metrics storage fails
@@ -67,7 +64,6 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	} else {
-		// Get the maximum keeper ID from the database
 		var maxKeeperID int64
 		if err := h.db.Session().Query(`
 			SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
@@ -92,7 +88,6 @@ func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
-		// // Send welcome email after successful keeper creation
 		// subject := "Welcome to TriggerX: Operator Whitelisting Confirmed"
 		// emailBody := fmt.Sprintf(`
 		// 	Hey %s,
@@ -175,7 +170,6 @@ func (h *Handler) GetPerformers(w http.ResponseWriter, r *http.Request) {
 		performers = []types.GetPerformerData{}
 	}
 
-	// Sort the results in memory after fetching them
 	sort.Slice(performers, func(i, j int) bool {
 		return performers[i].KeeperID < performers[j].KeeperID
 	})
@@ -244,13 +238,11 @@ func (h *Handler) GetAllKeepers(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonData)
 }
 
-// IncrementKeeperTaskCount increments the no_exctask counter for a keeper
 func (h *Handler) IncrementKeeperTaskCount(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperID := vars["id"]
 	h.logger.Infof("[IncrementKeeperTaskCount] Incrementing task count for keeper with ID: %s", keeperID)
 
-	// First get the current count
 	var currentCount int
 	if err := h.db.Session().Query(`
 		SELECT no_exctask FROM triggerx.keeper_data WHERE keeper_id = ?`,
@@ -260,10 +252,8 @@ func (h *Handler) IncrementKeeperTaskCount(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Increment the count
 	newCount := currentCount + 1
 
-	// Update the database
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.keeper_data SET no_exctask = ? WHERE keeper_id = ?`,
 		newCount, keeperID).Exec(); err != nil {
@@ -277,13 +267,11 @@ func (h *Handler) IncrementKeeperTaskCount(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(map[string]int{"no_exctask": newCount})
 }
 
-// GetKeeperTaskCount retrieves the no_exctask counter for a keeper
 func (h *Handler) GetKeeperTaskCount(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperID := vars["id"]
 	h.logger.Infof("[GetKeeperTaskCount] Retrieving task count for keeper with ID: %s", keeperID)
 
-	// Get the current count
 	var taskCount int
 	if err := h.db.Session().Query(`
 		SELECT no_exctask FROM triggerx.keeper_data WHERE keeper_id = ?`,
@@ -298,12 +286,10 @@ func (h *Handler) GetKeeperTaskCount(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"no_exctask": taskCount})
 }
 
-// AddTaskFeeToKeeperPoints adds the task fee from a specific task to the keeper's points
 func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperID := vars["id"]
 
-	// Parse the task ID from the request body
 	var requestBody struct {
 		TaskID int64 `json:"task_id"`
 	}
@@ -317,7 +303,6 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 	taskID := requestBody.TaskID
 	h.logger.Infof("[AddTaskFeeToKeeperPoints] Processing task fee for task ID %d to keeper with ID: %s", taskID, keeperID)
 
-	// First get the task fee from the task_data table
 	var taskFee int64
 	if err := h.db.Session().Query(`
 		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
@@ -327,7 +312,6 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Then get the current keeper points
 	var currentPoints int64
 	if err := h.db.Session().Query(`
 		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`,
@@ -337,10 +321,8 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Add the task fee to the points
 	newPoints := currentPoints + taskFee
 
-	// Update the database
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.keeper_data SET keeper_points = ? WHERE keeper_id = ?`,
 		newPoints, keeperID).Exec(); err != nil {
@@ -359,13 +341,11 @@ func (h *Handler) AddTaskFeeToKeeperPoints(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// GetKeeperPoints retrieves the keeper_points for a keeper
 func (h *Handler) GetKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keeperID := vars["id"]
 	h.logger.Infof("[GetKeeperPoints] Retrieving points for keeper with ID: %s", keeperID)
 
-	// Get the current points
 	var points int64
 	if err := h.db.Session().Query(`
 		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`,
@@ -380,7 +360,6 @@ func (h *Handler) GetKeeperPoints(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int64{"keeper_points": points})
 }
 
-// Add these new functions for notifications
 func (h *Handler) sendTelegramNotification(chatID int64, message string) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", h.config.BotToken)
 	payload := map[string]interface{}{
@@ -423,12 +402,10 @@ func (h *Handler) sendEmailNotification(to, subject, body string) error {
 }
 
 func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
-	// Wait for 10 minutes
 	time.Sleep(10 * time.Minute)
 
 	h.logger.Infof("[OfflineCheck] Checking current status for keeper ID: %s", keeperID)
 
-	// Check if keeper is still offline
 	var online bool
 	err := h.db.Session().Query(`
 		SELECT online FROM triggerx.keeper_data WHERE keeper_id = ?`,
@@ -440,7 +417,6 @@ func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 	}
 
 	if !online {
-		// Fetch keeper communication info
 		var chatID int64
 		var keeperName, emailID string
 		err := h.db.Session().Query(`
@@ -454,7 +430,6 @@ func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 			return
 		}
 
-		// Send Telegram notification
 		if chatID != 0 {
 			telegramMsg := fmt.Sprintf("Keeper %s is down for more than 10 minutes. Please check and start it.", keeperName)
 			if err := h.sendTelegramNotification(chatID, telegramMsg); err != nil {
@@ -464,7 +439,6 @@ func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 			h.logger.Warn("[OfflineCheck] No Telegram chat ID found for keeper %s", keeperName)
 		}
 
-		// Send email notification
 		if emailID != "" {
 			subject := fmt.Sprintf("TriggerX Keeper Down Alert - %s", keeperName)
 			emailBody := fmt.Sprintf(`
@@ -486,7 +460,6 @@ func (h *Handler) checkAndNotifyOfflineKeeper(keeperID int64) {
 	}
 }
 
-// Modify the KeeperHealthCheckIn function
 func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 	var keeperHealth types.UpdateKeeperHealth
 	if err := json.NewDecoder(r.Body).Decode(&keeperHealth); err != nil {
@@ -523,7 +496,6 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %s | Online: %t", keeperID, keeperHealth.Active)
 
-	// First check if keeper is new and eligible for initial points
 	var keeperPoints float64
 	var isVerified bool
 	var status bool
@@ -535,7 +507,6 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If keeper has 0 points, is verified, active, and status is true, give them initial points
 	if keeperPoints == 0 && isVerified && keeperHealth.Active && status {
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
@@ -558,7 +529,6 @@ func (h *Handler) KeeperHealthCheckIn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !keeperHealth.Active {
-		// Start a goroutine to check status after 10 minutes
 		go h.checkAndNotifyOfflineKeeper(keeperID)
 	}
 
@@ -581,8 +551,7 @@ func (h *Handler) UpdateKeeperChatID(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[UpdateKeeperChatID] Finding keeper ID for keeper: %s", requestData.KeeperName)
 
-	// Step 1: Find the keeper_id using keeper_name
-	var keeperID string // Adjust the type based on your schema
+	var keeperID string
 	if err := h.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data 
 		WHERE keeper_name = ?  ALLOW FILTERING`, requestData.KeeperName).Consistency(gocql.One).Scan(&keeperID); err != nil {
@@ -593,7 +562,6 @@ func (h *Handler) UpdateKeeperChatID(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %s", keeperID)
 
-	// Step 2: Update the chat_id for the specified keeper_id
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET chat_id = ? 

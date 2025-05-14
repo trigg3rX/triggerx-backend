@@ -30,17 +30,14 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Channel to collect setup errors
 	serverErrors := make(chan error, 3)
 	ready := make(chan struct{})
 
 	wg.Add(1)
 
-	// Initialize the keeper state manager
 	_ = health.GetKeeperStateManager()
 	logger.Info("Keeper state manager initialized")
 
-	// Setup Gin router
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
@@ -48,7 +45,6 @@ func main() {
 	router.GET("/status", health.GetKeeperStatus)
 	router.GET("/operators", health.GetDetailedKeeperStatus)
 
-	// Add a simple health check endpoint
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"service":   "TriggerX Health Service",
@@ -57,13 +53,11 @@ func main() {
 		})
 	})
 
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.HealthRPCPort),
 		Handler: router,
 	}
 
-	// Start server in goroutine
 	go func() {
 		defer wg.Done()
 		logger.Info("Starting HTTP server...")
@@ -72,15 +66,12 @@ func main() {
 		}
 	}()
 
-	// Signal server is ready
 	close(ready)
 	logger.Infof("Health node is READY on port %s...", config.HealthRPCPort)
 
-	// Handle shutdown signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	// Wait for shutdown signal
 	select {
 	case err := <-serverErrors:
 		logger.Error("Server error received", "error", err)
@@ -88,14 +79,10 @@ func main() {
 		logger.Info("Received shutdown signal")
 	}
 
-	// Begin graceful shutdown
 	logger.Info("Initiating graceful shutdown...")
 
-	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
-
-	// Shutdown HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
@@ -103,7 +90,6 @@ func main() {
 		}
 	}
 
-	// Wait for all goroutines to finish
 	wg.Wait()
 	logger.Info("Shutdown complete")
 }

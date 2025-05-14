@@ -45,18 +45,15 @@ func (b *Bot) Start() {
 				continue
 			}
 
-			// Handle /start command
 			if update.Message.IsCommand() && update.Message.Command() == "start" {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Enter Your Operator address (Keeper address)")
 				b.api.Send(msg)
 				continue
 			}
 
-			// Handle keeper name input
 			chatID := update.Message.Chat.ID
 			keeperAddress := update.Message.Text
 
-			// Update the keeper's chat_id in the database
 			err := b.updateKeeperChatID(keeperAddress, chatID)
 			if err != nil {
 				b.logger.Errorf("Failed to update keeper chat ID: %v", err)
@@ -65,11 +62,9 @@ func (b *Bot) Start() {
 				continue
 			}
 
-			// Send confirmation message
 			msg := tgbotapi.NewMessage(chatID, "Thanks! You will get the latest notifications")
 			b.api.Send(msg)
 
-			// Send test message
 			testMsg := tgbotapi.NewMessage(chatID, "This is a test message to confirm your chat ID works!")
 			b.api.Send(testMsg)
 		}
@@ -81,7 +76,6 @@ func (b *Bot) Start() {
 func (b *Bot) updateKeeperChatID(keeperAddress string, chatID int64) error {
 	b.logger.Infof("[UpdateKeeperChatID] Finding keeper ID for keeper: %s", keeperAddress)
 
-	// Step 1: Find the keeper_id using keeper_address
 	var keeperID string
 	if err := b.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data 
@@ -92,10 +86,8 @@ func (b *Bot) updateKeeperChatID(keeperAddress string, chatID int64) error {
 
 	b.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %s", keeperID)
 
-	// Convert chatID to string before storing
 	chatIDStr := strconv.FormatInt(chatID, 10)
 
-	// Step 2: Update the chat_id for the specified keeper_id
 	if err := b.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET chat_id = ? 

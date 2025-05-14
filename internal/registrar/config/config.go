@@ -26,14 +26,12 @@ var (
 
 	LastRewardsUpdate string
 
-	// Mutex to protect config updates
 	configMutex sync.Mutex
 )
 
 func Init() {
 	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
 
-	// var err error
 	err := godotenv.Load()
 	if err != nil {
 		logger.Fatal("Error loading .env file")
@@ -47,7 +45,7 @@ func Init() {
 	DatabaseDockerPort = os.Getenv("DATABASE_DOCKER_PORT")
 	LastRewardsUpdate = os.Getenv("LAST_REWARDS_UPDATE")
 	IpfsHost = os.Getenv("IPFS_HOST")
-	// If LastRewardsUpdate is not set, initialize with yesterday's date
+
 	if LastRewardsUpdate == "" {
 		LastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
 		logger.Info("LastRewardsUpdate not set, initializing with yesterday's date")
@@ -60,8 +58,6 @@ func Init() {
 	gin.SetMode(gin.ReleaseMode)
 }
 
-// UpdateLastRewardsTimestamp updates the LastRewardsUpdate timestamp in memory
-// It doesn't persist the change to the .env file for simplicity, but logs the update
 func UpdateLastRewardsTimestamp(timestamp string) {
 	configMutex.Lock()
 	defer configMutex.Unlock()

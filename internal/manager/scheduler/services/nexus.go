@@ -54,13 +54,11 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	// Handle hex-encoded data (remove "0x" prefix if present)
 	hexData := requestBody.Data
 	if len(hexData) > 2 && hexData[:2] == "0x" {
 		hexData = hexData[2:]
 	}
 
-	// Decode the hex string to bytes
 	decodedData, err := hex.DecodeString(hexData)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -83,11 +81,6 @@ func ExecuteTask(c *gin.Context) {
 	triggerDataRaw := requestData["triggerData"]
 	performerDataRaw := requestData["performerData"]
 
-	// logger.Infof("jobDataRaw: %v\n", jobDataRaw)
-	// logger.Infof("triggerDataRaw: %v\n", triggerDataRaw)
-	// logger.Infof("performerDataRaw: %v\n", performerDataRaw)
-
-	// Convert to proper types
 	var jobData types.HandleCreateJobData
 	jobDataBytes, err := json.Marshal(jobDataRaw)
 	if err != nil {
@@ -98,7 +91,6 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse job data"})
 		return
 	}
-	// logger.Infof("jobData: %v\n", jobData)
 
 	var triggerData types.TriggerData
 	triggerDataBytes, err := json.Marshal(triggerDataRaw)
@@ -110,7 +102,6 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
 		return
 	}
-	// logger.Infof("triggerData: %v\n", triggerData)
 
 	var performerData types.GetPerformerData
 	performerDataBytes, err := json.Marshal(performerDataRaw)
@@ -122,14 +113,10 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse performer data"})
 		return
 	}
-	// logger.Infof("performerData: %v\n", performerData)
-
-	// logger.Infof("taskDefinitionId: %v\n", jobData.TaskDefinitionID)
 	logger.Infof("performerAddress: %v\n", performerData.KeeperAddress)
 	logger.Info(">>> Oh, I am the performer...")
 	logger.Info(">>> Don't mind if I do...")
 
-	// Create ethClient using config
 	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
 	if err != nil {
 		logger.Errorf("Failed to connect to Ethereum client: %v", err)
@@ -138,7 +125,6 @@ func ExecuteTask(c *gin.Context) {
 	}
 	defer ethClient.Close()
 
-	// Create job executor with ethClient and etherscan API key
 	jobExecutor := execution.NewJobExecutor(ethClient, config.AlchemyApiKey)
 
 	actionData, err := jobExecutor.Execute(&jobData)
@@ -147,21 +133,6 @@ func ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Job execution failed"})
 		return
 	}
-
-	// // Update keeper metrics after successful job execution
-	// keeperID := os.Getenv("KEEPER_ID")
-	// if keeperID == "" {
-	// 	logger.Warn("KEEPER_ID environment variable not set, using default value")
-	// }
-	// taskID := triggerData.TaskID
-
-	// // Call the metrics server to store keeper execution metrics
-	// if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
-	// 	logger.Warnf("Failed to store keeper metrics: %v", err)
-	// 	// Continue execution even if metrics storage fails
-	// } else {
-	// 	logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
-	// }
 
 	actionData.TaskID = triggerData.TaskID
 
@@ -175,7 +146,6 @@ func ExecuteTask(c *gin.Context) {
 	}
 	krw := &execution.KeeperResponseWrapper{Data: actionDataBytes}
 
-	// Mock TLS state for proof generation
 	certBytes := []byte("mock certificate data")
 	mockCert := &x509.Certificate{Raw: certBytes}
 	connState := &tls.ConnectionState{
@@ -188,7 +158,6 @@ func ExecuteTask(c *gin.Context) {
 		ActionData:  actionData,
 	}
 
-	// Generate and store proof on IPFS, returning content identifier (CID)
 	ipfsData, err := proof.GenerateAndStoreProof(krw, connState, tempData)
 	if err != nil {
 		logger.Errorf("Error generating/storing proof:", "error", err)
@@ -196,7 +165,6 @@ func ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	// Generate TLS proof for response verification
 	tlsProof, err := proof.GenerateProof(krw, connState)
 	if err != nil {
 		logger.Errorf("Error generating TLS proof:", "error", err)
@@ -230,15 +198,12 @@ func ValidateTask(c *gin.Context) {
 	}
 
 	logger.Info("Received Task Validation Request:")
-	// logger.Infof("Proof of Task: %s", taskRequest.ProofOfTask)
-	// logger.Infof("Data: %s", taskRequest.Data)
 	logger.Infof("Task Definition ID: %d", taskRequest.TaskDefinitionID)
 	logger.Infof("Performer Address: %s", taskRequest.Performer)
 
-	// Decode the data if it's hex-encoded (with 0x prefix)
 	var decodedData string
 	if strings.HasPrefix(taskRequest.Data, "0x") {
-		dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
+		dataBytes, err := hex.DecodeString(taskRequest.Data[2:])
 		if err != nil {
 			logger.Errorf("Failed to hex-decode data: %v", err)
 			c.JSON(http.StatusBadRequest, ValidationResponse{
@@ -254,7 +219,6 @@ func ValidateTask(c *gin.Context) {
 		decodedData = taskRequest.Data
 	}
 
-	// Fetch the ActionData from IPFS using CID from the proof of task
 	ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, decodedData)
 	if err != nil {
 		logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
@@ -266,10 +230,6 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	// Log the decoded data CID for debugging
-	// logger.Infof("Data CID: %s", decodedData)
-
-	// Parse IPFS data into IPFSData struct
 	var ipfsData types.IPFSData
 	if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
 		logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
@@ -281,7 +241,6 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	// Extract job ID and execution timestamp
 	jobID := ipfsData.JobData.JobID
 	executionTimestamp := ipfsData.ActionData.Timestamp
 	taskID := ipfsData.ActionData.TaskID
@@ -296,7 +255,6 @@ func ValidateTask(c *gin.Context) {
 		})
 	}
 
-	// Update the last executed timestamp in the database
 	if err := updateJobLastExecutedTimestamp(jobID, executionTimestamp); err != nil {
 		logger.Errorf("Failed to update job last executed timestamp in database: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
@@ -306,13 +264,10 @@ func ValidateTask(c *gin.Context) {
 		})
 	}
 
-	// Update job's last execution time in the running worker
 	if err := updateJobStateInScheduler(jobID, executionTimestamp); err != nil {
 		logger.Warnf("Failed to update job state in scheduler: %v", err)
-		// Continue processing even if scheduler update fails
 	}
 
-	// Return success response
 	c.JSON(http.StatusOK, ValidationResponse{
 		Data:    true,
 		Error:   false,
@@ -330,7 +285,6 @@ func updateTaskFeeInDatabase(taskID int64, taskFee float64) error {
 		return fmt.Errorf("failed to marshal task fee data: %w", err)
 	}
 
-	// Send a PUT request to update the task fee
 	req, err := http.NewRequest(http.MethodPut, databaseURL, strings.NewReader(string(requestBody)))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
@@ -356,11 +310,9 @@ func updateTaskFeeInDatabase(taskID int64, taskFee float64) error {
 	return nil
 }
 
-// updateJobLastExecutedTimestamp updates the last_executed_at timestamp in the database
 func updateJobLastExecutedTimestamp(jobID int64, timestamp time.Time) error {
 	databaseURL := fmt.Sprintf("%s/api/jobs/%d/lastexecuted", config.DatabaseIPAddress, jobID)
 
-	// Create the request body
 	requestBody, err := json.Marshal(map[string]string{
 		"timestamp": timestamp.Format(time.RFC3339),
 	})
@@ -368,7 +320,6 @@ func updateJobLastExecutedTimestamp(jobID int64, timestamp time.Time) error {
 		return fmt.Errorf("failed to marshal timestamp data: %w", err)
 	}
 
-	// Send a PUT request to update the last executed timestamp
 	req, err := http.NewRequest(http.MethodPut, databaseURL, strings.NewReader(string(requestBody)))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
@@ -394,21 +345,17 @@ func updateJobLastExecutedTimestamp(jobID int64, timestamp time.Time) error {
 	return nil
 }
 
-// updateJobStateInScheduler updates the last execution time in the running scheduler worker
 func updateJobStateInScheduler(jobID int64, timestamp time.Time) error {
-	// Define the update data structure
 	updateData := map[string]interface{}{
 		"job_id":    jobID,
 		"timestamp": timestamp,
 	}
 
-	// Marshal the update data
 	jsonData, err := json.Marshal(updateData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal job state update data: %w", err)
 	}
 
-	// Send the update to the scheduler through an internal endpoint
 	schedulerURL := fmt.Sprintf("http://localhost:%s/job/state/update", config.ManagerRPCPort)
 
 	req, err := http.NewRequest(http.MethodPost, schedulerURL, strings.NewReader(string(jsonData)))

@@ -27,12 +27,10 @@ func main() {
 
 	services.Init()
 
-	// Start a goroutine for periodic health check-ins
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 
-		// Do an initial checkin at startup
 		if err := checkin.CheckInWithHealthService(); err != nil {
 			logger.Error("Initial health check-in failed", "error", err)
 		}
@@ -62,7 +60,6 @@ func main() {
 		})
 	})
 
-	// Custom middleware for error handling
 	errorHandler := func(c *gin.Context) {
 		c.Next()
 		if len(c.Errors) > 0 {
@@ -82,10 +79,8 @@ func main() {
 		Handler: routerValidation,
 	}
 
-	// Channel to collect server errors from both goroutines
 	serverErrors := make(chan error, 1)
 
-	// Start both servers with automatic recovery
 	go func() {
 		for {
 			logger.Info("Validation Service starting", "address", srvValidation.Addr)
@@ -99,7 +94,6 @@ func main() {
 		}
 	}()
 
-	// Handle graceful shutdown on interrupt/termination signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 

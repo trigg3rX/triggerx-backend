@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	// "strings"
 	"time"
 	"crypto/ecdsa"
 	"encoding/hex"
@@ -156,13 +155,8 @@ func GetPerformer() (types.GetPerformerData, error) {
 
 	var selectedPerformer types.GetPerformerData
 
-	
-	// Simple round-robin based on array index
-	// If this is the first time, start with index 0
-	// Otherwise, use the next index in the array
 	nextIndex := 0
 	if config.FoundNextPerformer {
-		// Get the next index, wrapping around if needed
 		nextIndex = (lastIndex + 1) % len(performers)
 	}
 	
@@ -171,7 +165,6 @@ func GetPerformer() (types.GetPerformerData, error) {
 	logger.Debugf("Selected performer at index %d with ID %d", 
 		nextIndex, selectedPerformer.KeeperID)
 	
-	// Store the current index for the next round
 	lastIndex = nextIndex
 	config.FoundNextPerformer = true
 
@@ -195,7 +188,7 @@ func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{
-		Timeout: 10 * time.Second, // Add a timeout to prevent hanging requests
+		Timeout: 10 * time.Second,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -211,14 +204,12 @@ func GetJobDetails(jobID int64) (types.HandleCreateJobData, error) {
 		return types.HandleCreateJobData{}, fmt.Errorf("job details returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	// First decode into JobData structure
 	var jobData types.JobData
 	if err := json.NewDecoder(resp.Body).Decode(&jobData); err != nil {
 		logger.Errorf("Failed to decode job details for job %d: %v", jobID, err)
 		return types.HandleCreateJobData{}, fmt.Errorf("failed to decode job details: %w", err)
 	}
 
-	// Convert JobData to HandleCreateJobData
 	handleCreateJobData := types.HandleCreateJobData{
 		JobID:                  jobData.JobID,
 		TaskDefinitionID:       jobData.TaskDefinitionID,
@@ -269,7 +260,7 @@ func CreateTaskData(taskData *types.CreateTaskData) (int64, bool, error) {
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{
-		Timeout: 10 * time.Second, // Add a timeout to prevent hanging requests
+		Timeout: 10 * time.Second,
 	}
 	resp, err := client.Do(req)
 	if err != nil {

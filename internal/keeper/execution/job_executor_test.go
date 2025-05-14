@@ -19,17 +19,12 @@ import (
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Add at the top of the file, after imports
-const testPrivateKey = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // 64-char hex string (256 bits)
-
-// Verify interface implementations
 var (
 	_ common.EthClientInterface = (*MockEthClient)(nil)
 	_ common.Logger             = (*MockLogger)(nil)
 	_ common.ValidatorInterface = (*MockValidator)(nil)
 )
 
-// Mock implementations
 type MockEthClient struct {
 	mock.Mock
 }
@@ -42,7 +37,6 @@ type MockValidator struct {
 	mock.Mock
 }
 
-// Implement EthClientInterface methods
 func (m *MockEthClient) PendingNonceAt(ctx context.Context, account ethcommon.Address) (uint64, error) {
 	args := m.Called(ctx, account)
 	return uint64(args.Int(0)), args.Error(1)
@@ -78,7 +72,6 @@ func (m *MockEthClient) TransactionReceipt(ctx context.Context, txHash ethcommon
 	return args.Get(0).(*types.Receipt), args.Error(1)
 }
 
-// Implement Logger methods
 func (m *MockLogger) Infof(format string, args ...interface{}) {
 	m.Called(format, args)
 }
@@ -91,7 +84,6 @@ func (m *MockLogger) Warnf(format string, args ...interface{}) {
 	m.Called(format, args)
 }
 
-// Implement ValidatorInterface methods
 func (m *MockValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
 	args := m.Called(job)
 	return args.Bool(0), args.Error(1)
@@ -108,13 +100,11 @@ func (m *MockValidator) ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData,
 }
 
 func TestExecuteActionWithDynamicArgs(t *testing.T) {
-	// Get the actual private key from environment
 	originalKey := os.Getenv("PRIVATE_KEY_CONTROLLER")
 	if originalKey == "" {
 		t.Skip("PRIVATE_KEY_CONTROLLER environment variable not set")
 	}
 
-	// Setup test cases
 	tests := []struct {
 		name           string
 		job            *jobtypes.HandleCreateJobData
@@ -265,15 +255,12 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create mocks
 			mockEth := new(MockEthClient)
 			mockLogger := new(MockLogger)
 			mockValidator := new(MockValidator)
 
-			// Setup mocks
 			tt.setupMocks(mockEth, mockLogger, mockValidator)
 
-			// Create executor
 			executor := &JobExecutor{
 				ethClient:       mockEth,
 				etherscanAPIKey: "test-key",
@@ -282,10 +269,8 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 				validator:       mockValidator,
 			}
 
-			// Execute test
 			result, err := executor.executeActionWithDynamicArgs(tt.job)
 
-			// Assert results
 			if tt.expectedError {
 				assert.Error(t, err)
 				if tt.errorContains != "" {
@@ -298,18 +283,15 @@ func TestExecuteActionWithDynamicArgs(t *testing.T) {
 				assert.NotEmpty(t, result.ActionTxHash)
 			}
 
-			// Verify mocks
 			mockEth.AssertExpectations(t)
 			mockLogger.AssertExpectations(t)
 			mockValidator.AssertExpectations(t)
 		})
 	}
 
-	// Clean up environment variable after tests
 	os.Unsetenv("PRIVATE_KEY_CONTROLLER")
 }
 
-// Test helper functions
 func TestProcessArguments(t *testing.T) {
 	executor := &JobExecutor{
 		argConverter: &ArgumentConverter{},
@@ -330,7 +312,6 @@ func TestProcessArguments(t *testing.T) {
 			},
 			expectedError: false,
 		},
-		// Add more test cases for different argument types
 	}
 
 	for _, tt := range tests {
@@ -346,19 +327,16 @@ func TestProcessArguments(t *testing.T) {
 }
 
 func TestIntegration(t *testing.T) {
-	// Skip if not in integration test environment
 	if os.Getenv("INTEGRATION_TEST") != "true" {
 		t.Skip("Skipping integration test")
 	}
 
-	// Setup real ethclient
 	client, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
 	if err != nil {
 		t.Fatal(err)
 	}
 	executor := NewJobExecutor(client, os.Getenv("ETHERSCAN_API_KEY"))
 
-	// Create test job
 	job := &jobtypes.HandleCreateJobData{
 		JobID:                 1,
 		TaskDefinitionID:      4,
@@ -367,13 +345,11 @@ func TestIntegration(t *testing.T) {
 		TargetFunction:        "addTaskId",
 	}
 
-	// Execute test
 	result, err := executor.executeActionWithDynamicArgs(job)
 	assert.NoError(t, err)
 	assert.True(t, result.Status)
 }
 
-// Add helper function to create test jobs
 // func createTestJob(id int64, taskDefID int, scriptUrl string, args []string) *jobtypes.HandleCreateJobData {
 // 	return &jobtypes.HandleCreateJobData{
 // 		JobID:                 id,

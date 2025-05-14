@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	// "github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -27,6 +26,4 @@ func Init() {
 	if ManagerIPAddress == "" || DatabasePort == "" {
 		logger.Fatal(".env FILE NOT PRESENT AT EXPEXTED PATH")
 	}
-
-	// gin.SetMode(gin.ReleaseMode)
 }

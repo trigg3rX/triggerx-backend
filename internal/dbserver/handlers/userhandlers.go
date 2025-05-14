@@ -47,14 +47,12 @@ func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
 	var userPoints int
 	var keeperPoints int
 
-	// Query user_data table
 	if err := h.db.Session().Query(`
         SELECT account_balance
         FROM triggerx.user_data 
         WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {
 	}
 
-	// Query keeper_data table
 	if err := h.db.Session().Query(`
         SELECT keeper_points
         FROM triggerx.keeper_data 

@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	// Define Prometheus metrics
 	keeperPoints = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "triggerx_keeper_points",
@@ -39,14 +38,12 @@ var (
 	)
 )
 
-// MetricsServer handles the metrics collection and HTTP server
 type MetricsServer struct {
 	db     *database.Connection
 	logger logging.Logger
 	done   chan bool
 }
 
-// NewMetricsServer creates a new metrics server
 func NewMetricsServer(db *database.Connection, logger logging.Logger) *MetricsServer {
 	return &MetricsServer{
 		db:     db,
@@ -55,15 +52,11 @@ func NewMetricsServer(db *database.Connection, logger logging.Logger) *MetricsSe
 	}
 }
 
-// Start begins the metrics collection and HTTP server
 func (m *MetricsServer) Start() {
-	// Register the default metrics handler
 	http.Handle("/metrics", promhttp.Handler())
 
-	// Register a filtered metrics handler
 	http.HandleFunc("/metrics/keeper", m.filteredMetricsHandler)
 
-	// Start the HTTP server on port 8081
 	go func() {
 		m.logger.Infof("Starting metrics server on :8081")
 		if err := http.ListenAndServe(":8081", nil); err != nil {
@@ -72,12 +65,10 @@ func (m *MetricsServer) Start() {
 	}()
 }
 
-// Stop signals the metrics collection to stop
 func (m *MetricsServer) Stop() {
 	m.done <- true
 }
 
-// collectMetrics periodically collects metrics from the database
 func (m *MetricsServer) collectMetrics() {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -92,9 +83,7 @@ func (m *MetricsServer) collectMetrics() {
 	}
 }
 
-// updateKeeperMetrics fetches keeper data from the database and updates Prometheus metrics
 func (m *MetricsServer) updateKeeperMetrics() {
-	// Query all keepers
 	iter := m.db.Session().Query(`
 		SELECT keeper_id, keeper_address, no_exctask, keeper_points 
 		FROM triggerx.keeper_data
@@ -109,24 +98,19 @@ func (m *MetricsServer) updateKeeperMetrics() {
 
 	keeperCount := 0
 
-	// Reset metrics before updating to handle removed keepers
 	keeperPoints.Reset()
 	keeperTaskCount.Reset()
 
-	// Process each keeper
 	for iter.Scan(&keeperID, &keeperAddress, &taskCount, &points) {
 		keeperIDStr := strconv.FormatInt(keeperID, 10)
 
-		// Update keeper points metric
 		keeperPoints.WithLabelValues(keeperIDStr, keeperAddress).Set(float64(points))
 
-		// Update keeper task count metric
 		keeperTaskCount.WithLabelValues(keeperIDStr, keeperAddress).Set(float64(taskCount))
 
 		keeperCount++
 	}
 
-	// Update total keepers metric
 	totalKeepers.Set(float64(keeperCount))
 
 	if err := iter.Close(); err != nil {
@@ -134,7 +118,6 @@ func (m *MetricsServer) updateKeeperMetrics() {
 	}
 }
 
-// filteredMetricsHandler provides metrics filtered by keeper_address
 func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	keeperAddress := r.URL.Query().Get("address")
 	if keeperAddress == "" {
@@ -142,18 +125,14 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Ensure the keeper address has the 0x prefix
 	if !strings.HasPrefix(keeperAddress, "0x") {
 		keeperAddress = "0x" + keeperAddress
-		// m.logger.Infof("Added 0x prefix to keeper address: %s", keeperAddress)
 	}
 
 	keeperAddress = strings.ToLower(keeperAddress)
 
-	// Create a registry for this specific keeper
 	registry := prometheus.NewRegistry()
 
-	// Query just this keeper's data
 	var keeperID int64
 	var taskCount int
 	var points float64
@@ -165,12 +144,10 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	`, keeperAddress).Scan(&keeperID, &taskCount, &points)
 
 	if err != nil {
-		// m.logger.Errorf("Error fetching keeper metrics for %s: %v", keeperAddress, err)
 		http.Error(w, "Error fetching keeper data", http.StatusInternalServerError)
 		return
 	}
 
-	// Create keeper-specific metrics
 	keeperPointsMetric := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "triggerx_keeper_points",
 		Help: "The total points accumulated by this keeper",
@@ -180,15 +157,12 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 		Help: "The number of tasks executed by this keeper",
 	})
 
-	// Register metrics with this registry
 	registry.MustRegister(keeperPointsMetric)
 	registry.MustRegister(keeperTaskCountMetric)
 
-	// Set values
 	keeperPointsMetric.Set(float64(points))
 	keeperTaskCountMetric.Set(float64(taskCount))
 
-	// Generate response
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
 }

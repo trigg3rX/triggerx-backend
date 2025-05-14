@@ -22,7 +22,6 @@ func HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
-	// Verify signature
 	// message := keeperHealth.KeeperAddress
 	// isValid, err := crypto.VerifySignature(message, keeperHealth.Signature, keeperHealth.KeeperAddress)
 	// if err != nil {
@@ -52,7 +51,6 @@ func HandleCheckInEvent(c *gin.Context) {
 
 	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 
-	// Update the keeper state in our in-memory store
 	stateManager := GetKeeperStateManager()
 	if err := stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
 		logger.Error("Failed to update keeper state", "error", err, "keeper", keeperHealth.KeeperAddress)
@@ -61,13 +59,10 @@ func HandleCheckInEvent(c *gin.Context) {
 	}
 }
 
-// GetKeeperStatus returns the status of keepers
 func GetKeeperStatus(c *gin.Context) {
-	// Get the state manager and query for counts
 	stateManager := GetKeeperStateManager()
 	total, active := stateManager.GetKeeperCount()
 
-	// Get list of active keepers
 	activeKeepers := stateManager.GetAllActiveKeepers()
 
 	c.JSON(http.StatusOK, gin.H{
@@ -77,14 +72,11 @@ func GetKeeperStatus(c *gin.Context) {
 	})
 }
 
-// GetDetailedKeeperStatus returns detailed information about all keepers
 func GetDetailedKeeperStatus(c *gin.Context) {
 	stateManager := GetKeeperStateManager()
 
-	// Get basic counts
 	total, active := stateManager.GetKeeperCount()
 
-	// Get detailed information about all keepers
 	detailedInfo := stateManager.GetDetailedKeeperInfo()
 
 	c.JSON(http.StatusOK, gin.H{

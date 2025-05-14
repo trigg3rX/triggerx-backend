@@ -16,7 +16,6 @@ var (
 	AttestationCenterABI abi.ABI
 )
 
-// Custom event structures to replace the binding-generated ones
 type OperatorRegisteredEvent struct {
 	Operator common.Address
 	BlsKey   [4]*big.Int
@@ -48,9 +47,7 @@ type TaskRejectedEvent struct {
 	Raw              types.Log
 }
 
-// Initialize ABI parsers
 func InitABI() error {
-	// Load AvsGovernance ABI
 	avsGovernanceABIJSON, err := os.ReadFile("pkg/bindings/abi/AvsGovernance.json")
 	if err != nil {
 		logger.Fatalf("Failed to read AvsGovernance ABI: %v", err)
@@ -61,7 +58,6 @@ func InitABI() error {
 		return fmt.Errorf("failed to parse AvsGovernance ABI: %v", err)
 	}
 
-	// Load AttestationCenter ABI
 	attestationCenterABIJSON, err := os.ReadFile("pkg/bindings/abi/AttestationCenter.json")
 	if err != nil {
 		logger.Fatalf("Failed to read AttestationCenter ABI: %v", err)

@@ -11,7 +11,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
-	// "github.com/trigg3rX/triggerx-backend/pkg/crypto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -19,15 +18,12 @@ import (
 
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
-// CheckInWithHealthService sends a health check-in request to the health service
 func CheckInWithHealthService() error {
 	healthServiceURL := fmt.Sprintf("%s/health", config.HealthIPAddress)
 
-	// Load private key and operator address from config
-	privateKeyHex := config.PrivateKeyConsensus      // Should be loaded from .env
-	operatorAddress := config.KeeperAddress // Should be loaded from .env
+	privateKeyHex := config.PrivateKeyConsensus
+	operatorAddress := config.KeeperAddress
 
-	// Derive consensus address from private key
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		logger.Error("Invalid private key", "error", err)
@@ -40,7 +36,6 @@ func CheckInWithHealthService() error {
 	}
 	consensusAddress := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
 
-	// Sign the operator address (keeper address) as message
 	msg := []byte(operatorAddress)
 	msgHash := crypto.Keccak256Hash(msg)
 	signatureBytes, err := crypto.Sign(msgHash.Bytes(), privateKey)
@@ -65,7 +60,6 @@ func CheckInWithHealthService() error {
 		return fmt.Errorf("failed to marshal check-in payload: %w", err)
 	}
 
-	// Create request
 	req, err := http.NewRequest("POST", healthServiceURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		logger.Error("Failed to create check-in request", "error", err)
@@ -74,7 +68,6 @@ func CheckInWithHealthService() error {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Send request
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -86,7 +79,6 @@ func CheckInWithHealthService() error {
 	}
 	defer resp.Body.Close()
 
-	// Check response
 	if resp.StatusCode != http.StatusOK {
 		logger.Error("Health service returned non-OK status", "status", resp.StatusCode)
 		return fmt.Errorf("health service returned status: %d", resp.StatusCode)

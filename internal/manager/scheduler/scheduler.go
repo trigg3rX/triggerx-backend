@@ -20,8 +20,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// JobScheduler orchestrates different types of jobs (time-based, event-based, condition-based)
-// and manages their lifecycle, state persistence, and resource allocation
 type JobScheduler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -46,8 +44,6 @@ type JobScheduler struct {
 	chainMutex     sync.RWMutex
 }
 
-// ConditionMonitor tracks external conditions for condition-based jobs
-// and triggers job execution when conditions are met
 type ConditionMonitor struct {
 	ctx           context.Context
 	jobID         string
@@ -63,11 +59,9 @@ func NewConditionMonitor(ctx context.Context, jobID string, scriptIPFSUrl string
 }
 
 func (c *ConditionMonitor) Start(callback func()) {
-	// TODO: Implement condition monitoring logic
 }
 
 func (c *ConditionMonitor) Stop() {
-	// TODO: Implement condition monitoring logic
 }
 
 type EventWatcher struct {
@@ -89,15 +83,11 @@ func NewEventWatcher(ctx context.Context, jobID string, chainID string, contract
 }
 
 func (e *EventWatcher) Start() {
-	// TODO: Implement event watching logic
 }
 
 func (e *EventWatcher) Stop() {
-	// TODO: Implement event watching logic
 }
 
-// NewJobScheduler initializes a new scheduler with resource monitoring,
-// state persistence, and job management capabilities
 func NewJobScheduler(logger logging.Logger) (*JobScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -131,7 +121,6 @@ func NewJobScheduler(logger logging.Logger) (*JobScheduler, error) {
 	return scheduler, nil
 }
 
-// canAcceptNewJob checks if system has enough resources to handle a new job
 func (s *JobScheduler) canAcceptNewJob() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -139,8 +128,6 @@ func (s *JobScheduler) canAcceptNewJob() bool {
 	return s.balancer.CheckResourceAvailability()
 }
 
-// StartTimeBasedJob initializes and runs a job that executes on a time interval.
-// Jobs that can't be started due to resource constraints are queued.
 func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
@@ -174,8 +161,6 @@ func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) erro
 	return nil
 }
 
-// StartEventBasedJob initializes and runs a job that executes in response to blockchain events.
-// Includes state persistence and resource management.
 func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
@@ -209,8 +194,6 @@ func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) err
 	return nil
 }
 
-// StartConditionBasedJob initializes and runs a job that executes when specific conditions are met.
-// Conditions are monitored via external scripts or APIs.
 func (s *JobScheduler) StartConditionBasedJob(jobData types.HandleCreateJobData) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
@@ -244,7 +227,6 @@ func (s *JobScheduler) StartConditionBasedJob(jobData types.HandleCreateJobData)
 	return nil
 }
 
-// UpdateJobChainStatus updates the status of a job in a chain
 func (s *JobScheduler) UpdateJobChainStatus(jobID int64, status string) {
 	s.chainMutex.Lock()
 	defer s.chainMutex.Unlock()
@@ -285,14 +267,11 @@ func (s *JobScheduler) SendDataToDatabase(route string, callType int, data inter
 	return true, nil
 }
 
-// Add this method to implement the Logger() method from the workers.JobScheduler interface
 func (s *JobScheduler) Logger() logging.Logger {
 	return s.logger
 }
 
-// GetJobDetails retrieves job details by ID
 func (s *JobScheduler) GetJobDetails(jobID int64) (*types.HandleCreateJobData, error) {
-	// Delegate to the services package
 	jobDetails, err := services.GetJobDetails(jobID)
 	if err != nil {
 		return nil, err
@@ -300,7 +279,6 @@ func (s *JobScheduler) GetJobDetails(jobID int64) (*types.HandleCreateJobData, e
 	return &jobDetails, nil
 }
 
-// GetWorker retrieves the worker for a specific job ID
 func (s *JobScheduler) GetWorker(jobID int64) workers.Worker {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -313,7 +291,6 @@ func (s *JobScheduler) GetWorker(jobID int64) workers.Worker {
 	return worker
 }
 
-// UpdateJobLastExecutedTime updates the last executed timestamp for a specific job
 func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Time) error {
 	s.mu.RLock()
 	worker, exists := s.workers[jobID]
@@ -323,21 +300,18 @@ func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Tim
 		return fmt.Errorf("worker for job %d not found", jobID)
 	}
 
-	// For time-based workers, we need to cast to access specific fields
 	if timeWorker, ok := worker.(*workers.TimeBasedWorker); ok {
 		timeWorker.UpdateLastExecutedTime(timestamp)
 		s.logger.Infof("Updated last executed time for time-based job %d to %v", jobID, timestamp)
 		return nil
 	}
 
-	// For event-based workers
 	if eventWorker, ok := worker.(*workers.EventBasedWorker); ok {
 		eventWorker.UpdateLastExecutedTime(timestamp)
 		s.logger.Infof("Updated last executed time for event-based job %d to %v", jobID, timestamp)
 		return nil
 	}
 
-	// For condition-based workers
 	if conditionWorker, ok := worker.(*workers.ConditionBasedWorker); ok {
 		conditionWorker.UpdateLastExecutedTime(timestamp)
 		s.logger.Infof("Updated last executed time for condition-based job %d to %v", jobID, timestamp)
@@ -347,7 +321,6 @@ func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Tim
 	return fmt.Errorf("unsupported worker type for job %d", jobID)
 }
 
-// UpdateJobStateCache updates a specific field in the job's state cache
 func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value interface{}) error {
 	s.cacheMutex.Lock()
 	defer s.cacheMutex.Unlock()
@@ -357,12 +330,10 @@ func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value inte
 		return fmt.Errorf("no state cache for job %d", jobID)
 	}
 
-	// Convert to map to update the field
 	if jobStateMap, ok := jobState.(map[string]interface{}); ok {
 		jobStateMap[field] = value
 		s.stateCache[jobID] = jobStateMap
 
-		// Persist the updated state
 		if err := s.cacheManager.SaveState(); err != nil {
 			return fmt.Errorf("failed to save state after update: %w", err)
 		}

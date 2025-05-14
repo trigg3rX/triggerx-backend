@@ -25,7 +25,6 @@ func main() {
 	config.Init()
 	registrar.InitABI()
 
-	// Initialize database connection
 	dbConfig := &dbpkg.Config{
 		Hosts:       []string{config.DatabaseDockerIPAddress + ":" + config.DatabaseDockerPort},
 		Timeout:     time.Second * 30,
@@ -38,7 +37,6 @@ func main() {
 	}
 	defer dbConn.Close()
 
-	// Set the database connection in the database package
 	database.SetDatabaseConnection(dbConn)
 	logger.Info("Database connection initialized")
 

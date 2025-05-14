@@ -34,17 +34,14 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Channel to collect setup errors
 	serverErrors := make(chan error, 3)
 	ready := make(chan struct{})
 
 	wg.Add(1)
 
-	// Initialize the job scheduler
 	manager.JobSchedulerInit()
 	logger.Info("Job scheduler initialized successfully.")
 
-	// Setup Gin router
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
@@ -57,13 +54,11 @@ func main() {
 	router.POST("/p2p/message", services.ExecuteTask)
 	router.POST("/task/validate", services.ValidateTask)
 	
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.ManagerRPCPort),
 		Handler: router,
 	}
 
-	// Start server in goroutine
 	go func() {
 		defer wg.Done()
 		logger.Info("Starting HTTP server...")
@@ -72,15 +67,12 @@ func main() {
 		}
 	}()
 
-	// Signal server is ready
 	close(ready)
 	logger.Infof("Manager node is READY on port %s...", config.ManagerRPCPort)
 
-	// Handle shutdown signals
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	// Wait for shutdown signal
 	select {
 	case err := <-serverErrors:
 		logger.Error("Server error received", "error", err)
@@ -88,14 +80,11 @@ func main() {
 		logger.Info("Received shutdown signal")
 	}
 
-	// Begin graceful shutdown
 	logger.Info("Initiating graceful shutdown...")
 
-	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	// Shutdown HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
@@ -103,7 +92,6 @@ func main() {
 		}
 	}
 
-	// Wait for all goroutines to finish
 	wg.Wait()
 	logger.Info("Shutdown complete")
 }

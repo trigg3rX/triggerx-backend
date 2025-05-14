@@ -10,21 +10,18 @@ import (
 	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// ValidatorInterface defines the contract for job validation
 type ValidatorInterface interface {
 	ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error)
 	ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error)
 	ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData, triggerData *jobtypes.TriggerData) (bool, error)
 }
 
-// Logger defines the logging interface
 type Logger interface {
 	Infof(format string, args ...interface{})
 	Errorf(format string, args ...interface{})
 	Warnf(format string, args ...interface{})
 }
 
-// EthClientInterface defines the interface for Ethereum client operations
 type EthClientInterface interface {
 	PendingNonceAt(ctx context.Context, account common.Address) (uint64, error)
 	SuggestGasPrice(ctx context.Context) (*big.Int, error)

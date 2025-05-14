@@ -105,7 +105,6 @@ func ProcessOperatorUnregisteredEvents(
 	return nil
 }
 
-// Helper function to process events in batches
 func processEventsInBatches(
 	client *ethclient.Client,
 	contractAddress common.Address,
@@ -148,8 +147,8 @@ func processTaskSubmittedBatch(
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
 			{TaskSubmittedEventSignature()},
-			nil, // For operator (indexed)
-			nil, // For taskDefinitionId (indexed)
+			nil,
+			nil,
 		},
 	}
 

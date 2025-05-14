@@ -8,7 +8,6 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-// SystemResources tracks CPU and memory usage against configured thresholds
 type SystemResources struct {
 	CpuUsage    float64
 	MemUsage    float64
@@ -16,14 +15,12 @@ type SystemResources struct {
 	MaxMemUsage float64
 }
 
-// JobQueue maintains ordered lists of job IDs and their types with a maximum capacity
 type JobQueue struct {
 	jobIDs   []int64
 	jobTypes []int
 	maxSize  int
 }
 
-// LoadBalancer manages system resources and job queuing to prevent overload
 type LoadBalancer struct {
 	resources       SystemResources
 	jobQueue        JobQueue
@@ -31,8 +28,6 @@ type LoadBalancer struct {
 	metricsInterval time.Duration
 }
 
-// NewLoadBalancer creates a load balancer with default resource thresholds
-// CPU max 10%, Memory max 80%, Queue size 1000 jobs
 func NewLoadBalancer() *LoadBalancer {
 	lb := &LoadBalancer{
 		resources: SystemResources{
@@ -47,8 +42,6 @@ func NewLoadBalancer() *LoadBalancer {
 	return lb
 }
 
-// MonitorResources continuously samples system metrics on an interval
-// Updates current CPU and memory usage percentages
 func (lb *LoadBalancer) MonitorResources() {
 	ticker := time.NewTicker(lb.metricsInterval)
 	defer ticker.Stop()
@@ -66,15 +59,11 @@ func (lb *LoadBalancer) MonitorResources() {
 	}
 }
 
-// CheckResourceAvailability verifies system has capacity for new jobs
-// Returns true if both CPU and memory are below configured thresholds
 func (lb *LoadBalancer) CheckResourceAvailability() bool {
 	return lb.resources.CpuUsage < lb.resources.MaxCpuUsage &&
 		lb.resources.MemUsage < lb.resources.MaxMemUsage
 }
 
-// AddJobToQueue appends a new job to the queue when system is at capacity
-// Thread-safe via mutex protection
 func (lb *LoadBalancer) AddJobToQueue(jobID int64, jobType int) {
 	lb.jobQueueMutex.Lock()
 	defer lb.jobQueueMutex.Unlock()
@@ -83,8 +72,6 @@ func (lb *LoadBalancer) AddJobToQueue(jobID int64, jobType int) {
 	lb.jobQueue.jobTypes = append(lb.jobQueue.jobTypes, jobType)
 }
 
-// GetNextJob removes and returns the next job from the queue
-// Returns the job and true if queue has items, nil and false if empty
 func (lb *LoadBalancer) GetNextJob() (*JobQueue, bool) {
 	lb.jobQueueMutex.Lock()
 	defer lb.jobQueueMutex.Unlock()
@@ -104,7 +91,6 @@ func (lb *LoadBalancer) GetNextJob() (*JobQueue, bool) {
 	}, true
 }
 
-// GetQueueStatus returns the current number of jobs in the queue
 func (lb *LoadBalancer) GetQueueStatus() int {
 	lb.jobQueueMutex.RLock()
 	defer lb.jobQueueMutex.RUnlock()

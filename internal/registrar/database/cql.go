@@ -95,7 +95,6 @@ func UpdatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 	var jobID int64
 	var userID int64
 
-	// Get task fee and job ID
 	if err := db.Session().Query(`
 		SELECT task_fee, job_id 
 		FROM triggerx.task_data 
@@ -107,7 +106,6 @@ func UpdatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 
 	logger.Infof("Task ID %d has a fee of %f and job ID %d", taskID, taskFee, jobID)
 
-	// Get user ID from job ID
 	if err := db.Session().Query(`
 		SELECT user_id 
 		FROM triggerx.job_data 
@@ -117,13 +115,11 @@ func UpdatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 		return err
 	}
 
-	// Update performer points
 	err := UpdatePerformerPoints(performerAddress.Hex(), taskFee, isAccepted)
 	if err != nil {
 		return err
 	}
 
-	// Update attester points
 	for _, attesterId := range attestersIds {
 		if attesterId != "" {
 			if err := UpdateAttesterPoints(attesterId, taskFee); err != nil {
@@ -133,7 +129,6 @@ func UpdatePointsInDatabase(taskID int, performerAddress common.Address, atteste
 		}
 	}
 
-	// Update user points
 	if err := UpdateUserPoints(userID, taskFee); err != nil {
 		logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
@@ -278,7 +273,6 @@ func DailyRewardsPoints() error {
 	return nil
 }
 
-// UpdateOperatorDetails updates the keeper_data table with details fetched from contracts
 func UpdateOperatorDetails(operatorAddress string, operatorId string, votingPower string, rewardsReceiver string, strategies []string) error {
 	logger.Infof("Updating operator details for %s in database", operatorAddress)
 

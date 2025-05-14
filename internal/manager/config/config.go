@@ -34,7 +34,6 @@ func Init() {
 	EtherscanApiKey = os.Getenv("ETHERSCAN_API_KEY")
 	AlchemyApiKey = os.Getenv("ALCHEMY_API_KEY")
 	DeployerPrivateKey = os.Getenv("PRIVATE_KEY_DEPLOYER")
-	P2PPrivateKey = os.Getenv("PRIVATE_KEY_MANAGER_P2P")
 	ManagerRPCPort = os.Getenv("MANAGER_RPC_PORT")
 	DatabaseIPAddress = os.Getenv("DATABASE_IP_ADDRESS")
 

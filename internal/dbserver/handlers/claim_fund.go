@@ -17,7 +17,7 @@ import (
 
 type ClaimFundRequest struct {
 	WalletAddress string `json:"wallet_address"`
-	Network       string `json:"network"` // "op_sepolia" or "base_sepolia"
+	Network       string `json:"network"`
 }
 
 type ClaimFundResponse struct {
@@ -29,7 +29,7 @@ type ClaimFundResponse struct {
 const (
 	OP_SEPOLIA_RPC   = "https://sepolia.optimism.io"
 	BASE_SEPOLIA_RPC = "https://sepolia.base.org"
-	FUND_AMOUNT      = 0.03 // ETH
+	FUND_AMOUNT      = 0.03
 )
 
 func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
@@ -39,13 +39,11 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate wallet address
 	if !common.IsHexAddress(req.WalletAddress) {
 		http.Error(w, "Invalid wallet address", http.StatusBadRequest)
 		return
 	}
 
-	// Select RPC URL based on network
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
@@ -57,7 +55,6 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Connect to the network
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		h.logger.Errorf("Failed to connect to network: %v", err)
@@ -65,7 +62,6 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check recipient's balance
 	address := common.HexToAddress(req.WalletAddress)
 	balance, err := client.BalanceAt(context.Background(), address, nil)
 	if err != nil {
@@ -74,7 +70,6 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert 0.005 ETH to Wei
 	threshold := new(big.Float).Mul(big.NewFloat(FUND_AMOUNT), big.NewFloat(1e18))
 	thresholdWei, _ := threshold.Int(nil)
 
@@ -86,7 +81,6 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the private key for the funding wallet
 	privateKey, err := crypto.HexToECDSA(os.Getenv("FUNDER_PRIVATE_KEY"))
 	if err != nil {
 		h.logger.Errorf("Failed to load private key: %v", err)
@@ -94,7 +88,6 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create and send the transaction
 	tx, err := h.sendFunds(client, privateKey, address)
 	if err != nil {
 		h.logger.Errorf("Failed to send funds: %v", err)
@@ -112,7 +105,6 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) sendFunds(client *ethclient.Client, privateKey *ecdsa.PrivateKey, to common.Address) (*types.Transaction, error) {
 	ctx := context.Background()
 
-	// Get the funding wallet address
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
@@ -120,30 +112,24 @@ func (h *Handler) sendFunds(client *ethclient.Client, privateKey *ecdsa.PrivateK
 	}
 	from := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	// Get nonce
 	nonce, err := client.PendingNonceAt(ctx, from)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get gas price
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction data
 	value := new(big.Int)
 	fundAmountWei := new(big.Float).Mul(big.NewFloat(FUND_AMOUNT), big.NewFloat(1e18))
-	value, _ = fundAmountWei.Int(value) // Convert to Wei
+	value, _ = fundAmountWei.Int(value)
 
-	// Estimate gas limit
-	gasLimit := uint64(21000) // Standard ETH transfer gas limit
+	gasLimit := uint64(21000)
 
-	// Create transaction
 	tx := types.NewTransaction(nonce, to, value, gasLimit, gasPrice, nil)
 
-	// Sign transaction
 	chainID, err := client.NetworkID(ctx)
 	if err != nil {
 		return nil, err
@@ -154,7 +140,6 @@ func (h *Handler) sendFunds(client *ethclient.Client, privateKey *ecdsa.PrivateK
 		return nil, err
 	}
 
-	// Send transaction
 	err = client.SendTransaction(ctx, signedTx)
 	if err != nil {
 		return nil, err

@@ -12,7 +12,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// ApiKeyResponse represents an API key response
 type ApiKeyResponse struct {
 	Key       string    `json:"key"`
 	Owner     string    `json:"owner"`
@@ -22,7 +21,6 @@ type ApiKeyResponse struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// CreateApiKey creates a new API key
 func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 	var req types.CreateApiKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -31,7 +29,6 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
 	if req.Owner == "" {
 		h.logger.Warnf("[CreateApiKey] Validation failed: Owner is required")
 		http.Error(w, "Owner is required", http.StatusBadRequest)
@@ -40,12 +37,11 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 
 	if req.RateLimit <= 0 {
 		h.logger.Infof("[CreateApiKey] RateLimit not provided or invalid for owner %s, defaulting to 60", req.Owner)
-		req.RateLimit = 60 // Default rate limit: 60 requests per minute
+		req.RateLimit = 60
 	}
 
 	h.logger.Infof("[CreateApiKey] Checking for existing API key for owner: %s", req.Owner)
 
-	// First check if user already has an API key
 	var existingKey types.ApiKey
 	checkQuery := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
 				  FROM triggerx.apikeys WHERE owner = ? ALLOW FILTERING`
@@ -62,7 +58,6 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		h.logger.Infof("[CreateApiKey] Existing API key found for owner %s (Key: %s). Proceeding with update.", req.Owner, existingKey.Key)
 
-		// User already has an API key, update it
 		updateQuery := `UPDATE triggerx.apikeys 
 					   SET isActive = ?, rateLimit = ?, lastUsed = ? 
 					   WHERE key = ?`
@@ -94,17 +89,15 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If no existing key found, create a new one
 	apiKey := &types.ApiKey{
 		Key:       "trgX_" + uuid.New().String(),
 		Owner:     req.Owner,
 		IsActive:  true,
 		RateLimit: req.RateLimit,
-		LastUsed:  time.Time{}, // Zero time
+		LastUsed:  time.Time{},
 		CreatedAt: time.Now().UTC(),
 	}
 
-	// Save to database using CQL
 	query := `INSERT INTO triggerx.apikeys (key, owner, isActive, rateLimit, lastUsed, createdAt) 
 	          VALUES (?, ?, ?, ?, ?, ?)`
 
@@ -123,13 +116,11 @@ func (h *Handler) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Infof("[CreateApiKey] Successfully created new API key for owner %s (Key: %s)", req.Owner, apiKey.Key)
 
-	// Return the newly created API key
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(apiKey)
 }
 
-// UpdateApiKey updates an existing API key
 func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keyID := vars["key"]
@@ -144,7 +135,6 @@ func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the current API key
 	var apiKey types.ApiKey
 	query := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
 	          FROM triggerx.apikeys WHERE key = ?`
@@ -162,7 +152,6 @@ func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update fields if provided
 	if req.IsActive != nil {
 		apiKey.IsActive = *req.IsActive
 	}
@@ -171,7 +160,6 @@ func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 		apiKey.RateLimit = *req.RateLimit
 	}
 
-	// Save the updated API key using CQL
 	updateQuery := `UPDATE triggerx.apikeys SET isActive = ?, rateLimit = ? WHERE key = ?`
 	if err := h.db.Session().Query(updateQuery,
 		apiKey.IsActive,
@@ -183,17 +171,14 @@ func (h *Handler) UpdateApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the updated API key
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(apiKey)
 }
 
-// DeleteApiKey deactivates an API key
 func (h *Handler) DeleteApiKey(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	keyID := vars["key"]
 
-	// Mark the API key as inactive (soft delete) using CQL
 	query := `UPDATE apikeys SET isActive = ? WHERE key = ?`
 	if err := h.db.Session().Query(query, false, keyID).Exec(); err != nil {
 		h.logger.Errorf("Failed to delete API key: %v", err)

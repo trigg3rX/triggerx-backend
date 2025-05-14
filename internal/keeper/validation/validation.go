@@ -26,20 +26,17 @@ import (
 
 var logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
 
-// Logger interface for logging
 type Logger interface {
 	Infof(format string, args ...interface{})
 	Errorf(format string, args ...interface{})
 	Warnf(format string, args ...interface{})
 }
 
-// JobValidator handles validation of jobs
 type JobValidator struct {
 	logger    Logger
 	ethClient *ethclient.Client
 }
 
-// NewJobValidator creates a new job validator
 func NewJobValidator(logger Logger, ethClient *ethclient.Client) *JobValidator {
 	return &JobValidator{
 		logger:    logger,
@@ -47,25 +44,19 @@ func NewJobValidator(logger Logger, ethClient *ethclient.Client) *JobValidator {
 	}
 }
 
-// ValidateTimeBasedJob checks if a time-based job (task definitions 1 and 2) should be executed
-// based on its time interval, timeframe, and last execution time
 func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
-	// Define tolerance constant (3 seconds)
 	const timeTolerance = 1500 * time.Millisecond
 
-	// Ensure this is a time-based job
 	if job.TaskDefinitionID != 1 && job.TaskDefinitionID != 2 {
 		return false, fmt.Errorf("not a time-based job: task definition ID %d", job.TaskDefinitionID)
 	}
 
 	v.logger.Infof("Validating time-based job %d (taskDefID: %d)", job.JobID, job.TaskDefinitionID)
 
-	// Check for zero or negative values
 	if job.TimeInterval <= 0 {
 		return false, fmt.Errorf("invalid time interval: %d (must be positive)", job.TimeInterval)
 	}
 
-	// For non-recurring jobs, check if job has already been executed and shouldn't run again
 	if !job.Recurring && !job.LastExecutedAt.IsZero() {
 		v.logger.Infof("Job %d is non-recurring and has already been executed on %s",
 			job.JobID, job.LastExecutedAt.Format(time.RFC3339))
@@ -74,11 +65,8 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 
 	now := time.Now().UTC()
 
-	// Check if this is the job's first execution
 	if job.LastExecutedAt.IsZero() {
-		// For first execution, check if it's within the timeframe from creation
 		if job.TimeFrame > 0 {
-			// Add tolerance to timeframe check
 			// endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
 			// if now.After(endTime) {
 			// 	v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds, with %v tolerance)",
@@ -91,21 +79,14 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 		return true, nil
 	}
 
-	// Calculate the next scheduled execution time with tolerance
 	nextExecution := job.LastExecutedAt.Add(time.Duration(job.TimeInterval) * time.Second).Add(-timeTolerance)
 
-	// Store current time for logging but don't update job.LastExecutedAt yet
-	// (this should be done by the caller after successful execution)
-	//currentTime := now
-
-	// Check if enough time has passed since the last execution (with tolerance)
 	if now.Before(nextExecution) {
 		v.logger.Infof("Not enough time has passed for job %d. Last executed: %s, next execution: %s (with %v tolerance)",
 			job.JobID, job.LastExecutedAt.Format(time.RFC3339), nextExecution.Add(timeTolerance).Format(time.RFC3339), timeTolerance)
 		return false, nil
 	}
 
-	// If timeframe is set, check if job is still within its timeframe (with tolerance)
 	if job.TimeFrame > 0 {
 		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
 		if job.LastExecutedAt.After(endTime) {
@@ -120,21 +101,18 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 }
 
 func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, ipfsData *jobtypes.IPFSData) (bool, error) {
-	// Ensure this is an event-based job
 	if job.TaskDefinitionID != 3 && job.TaskDefinitionID != 4 {
 		return false, fmt.Errorf("not an event-based job: task definition ID %d", job.TaskDefinitionID)
 	}
 
 	v.logger.Infof("Validating event-based job %d (taskDefID: %d)", job.JobID, job.TaskDefinitionID)
 
-	// For non-recurring jobs, check if job has already been executed and shouldn't run again
 	if !job.Recurring && !job.LastExecutedAt.IsZero() {
 		v.logger.Infof("Job %d is non-recurring and has already been executed on %s",
 			job.JobID, job.LastExecutedAt.Format(time.RFC3339))
 		return false, nil
 	}
 
-	// Check if TriggerContractAddress and TriggerEvent are provided
 	if job.TriggerContractAddress == "" {
 		return false, fmt.Errorf("missing TriggerContractAddress for event-based job %d", job.JobID)
 	}
@@ -145,12 +123,10 @@ func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, 
 
 	v.logger.Infof("Validating contract address '%s' and event '%s'", job.TriggerContractAddress, job.TriggerEvent)
 
-	// Verify the contract address is valid
 	if !common.IsHexAddress(job.TriggerContractAddress) {
 		return false, fmt.Errorf("invalid Ethereum contract address: %s", job.TriggerContractAddress)
 	}
 
-	// Check if the contract exists on chain
 	contractCode, err := v.ethClient.CodeAt(context.Background(), common.HexToAddress(job.TriggerContractAddress), nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to check contract existence: %v", err)
@@ -160,16 +136,11 @@ func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, 
 		return false, fmt.Errorf("no contract found at address: %s", job.TriggerContractAddress)
 	}
 
-	// Optional: Check if the contract ABI contains the specified event
-	// (This is a simple check to see if we can get the ABI, but we don't validate the event itself
-	// since that would require parsing the ABI)
 	_, err = v.fetchContractABI(job.TriggerContractAddress)
 	if err != nil {
 		v.logger.Warnf("Could not fetch ABI for contract %s: %v", job.TriggerContractAddress, err)
-		// We don't fail validation just because we can't fetch the ABI
 	}
 
-	// Check if job is within its timeframe
 	now := time.Now().UTC()
 	if job.TimeFrame > 0 {
 		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second)
@@ -185,7 +156,6 @@ func (v *JobValidator) ValidateEventBasedJob(job *jobtypes.HandleCreateJobData, 
 }
 
 func (v *JobValidator) fetchContractABI(contractAddress string) (string, error) {
-	// First try using Blockscout API for Optimism Sepolia network
 	blockscoutUrl := fmt.Sprintf(
 		"https://optimism-sepolia.blockscout.com/api?module=contract&action=getabi&address=%s",
 		contractAddress)
@@ -212,7 +182,7 @@ func (v *JobValidator) fetchContractABI(contractAddress string) (string, error) 
 	if OptimismAPIKey == "" {
 		return "", fmt.Errorf("OPTIMISM environment variable not set")
 	}
-	// If we reach here, Blockscout API failed, try Etherscan API as fallback
+
 	etherscanUrl := fmt.Sprintf(
 		"https://api-sepolia-optimism.etherscan.io/api?module=contract&action=getabi&address=%s&apikey=%s",
 		contractAddress, OptimismAPIKey)
@@ -250,29 +220,23 @@ func (v *JobValidator) fetchContractABI(contractAddress string) (string, error) 
 	return response.Result, nil
 }
 
-// ValidateConditionBasedJob validates a condition-based job by executing the condition script
-// and checking if it returns true
 func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobData) (bool, error) {
-	// Ensure this is a condition-based job
 	if job.TaskDefinitionID != 5 && job.TaskDefinitionID != 6 {
 		return false, fmt.Errorf("not a condition-based job: task definition ID %d", job.TaskDefinitionID)
 	}
 
 	v.logger.Infof("Validating condition-based job %d (taskDefID: %d)", job.JobID, job.TaskDefinitionID)
 
-	// For non-recurring jobs, check if job has already been executed and shouldn't run again
 	if !job.Recurring && !job.LastExecutedAt.IsZero() {
 		v.logger.Infof("Job %d is non-recurring and has already been executed on %s",
 			job.JobID, job.LastExecutedAt.Format(time.RFC3339))
 		return false, nil
 	}
 
-	// Check if the ScriptTriggerFunction is provided
 	if job.ScriptTriggerFunction == "" {
 		return false, fmt.Errorf("missing ScriptTriggerFunction for condition-based job %d", job.JobID)
 	}
 
-	// Fetch and execute the condition script
 	v.logger.Infof("Fetching condition script from IPFS: %s", job.ScriptTriggerFunction)
 	scriptContent, err := ipfs.FetchIPFSContent(config.IpfsHost, job.ScriptTriggerFunction)
 	if err != nil {
@@ -280,7 +244,6 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 	}
 	v.logger.Infof("Successfully fetched condition script for job %d", job.JobID)
 
-	// Check if job is within its timeframe before executing script
 	now := time.Now().UTC()
 	if job.TimeFrame > 0 {
 		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second)
@@ -291,7 +254,6 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 		}
 	}
 
-	// Create a temporary file for the script
 	tempFile, err := ioutil.TempFile("", "condition-*.go")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary file: %v", err)
@@ -305,14 +267,12 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 		return false, fmt.Errorf("failed to close temporary file: %v", err)
 	}
 
-	// Create a temp directory for the script's build output
 	tempDir, err := ioutil.TempDir("", "condition-build")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary build directory: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Compile the script
 	v.logger.Infof("Compiling condition script for job %d", job.JobID)
 	outputBinary := filepath.Join(tempDir, "condition")
 	cmd := exec.Command("go", "build", "-o", outputBinary, tempFile.Name())
@@ -322,7 +282,6 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 		return false, fmt.Errorf("failed to compile condition script: %v, stderr: %s", err, stderr.String())
 	}
 
-	// Run the compiled script
 	v.logger.Infof("Executing condition script for job %d", job.JobID)
 	result := exec.Command(outputBinary)
 	stdout, err := result.Output()
@@ -330,8 +289,6 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 		return false, fmt.Errorf("failed to run condition script: %v", err)
 	}
 
-	// Parse the output to determine if condition is satisfied
-	// Look for a line containing "Condition satisfied: true" or "Condition satisfied: false"
 	lines := strings.Split(string(stdout), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "Condition satisfied: true") {
@@ -343,7 +300,6 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 		}
 	}
 
-	// If no explicit condition found, try parsing as JSON
 	var conditionResult struct {
 		Satisfied bool `json:"satisfied"`
 	}
@@ -356,21 +312,18 @@ func (v *JobValidator) ValidateConditionBasedJob(job *jobtypes.HandleCreateJobDa
 	return conditionResult.Satisfied, nil
 }
 
-// ValidateAndPrepareJob validates job based on its task definition ID and prepares it for execution
 func (v *JobValidator) ValidateAndPrepareJob(job *jobtypes.HandleCreateJobData, triggerData *jobtypes.TriggerData) (bool, error) {
 	switch job.TaskDefinitionID {
-	case 1, 2: // Time-based jobs
+	case 1, 2:
 		return v.ValidateTimeBasedJob(job)
-	case 3, 4: // Event-based jobs
+	case 3, 4:
 		return v.ValidateEventBasedJob(job, nil)
-	case 5, 6: // Condition-based jobs
+	case 5, 6:
 		return v.ValidateConditionBasedJob(job)
 	default:
 		return false, fmt.Errorf("unsupported task definition ID: %d", job.TaskDefinitionID)
 	}
 }
-
-// HTTP API related validation structs and handlers
 
 type ProofResponse struct {
 	ProofHash string `json:"proofHash"`
@@ -407,13 +360,11 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	// Combine request info logs into one concise Infof
 	logger.Infof("Received Task Validation Request: ProofOfTask=%s, TaskDefinitionID=%d, Performer=%s", taskRequest.ProofOfTask, taskRequest.TaskDefinitionID, taskRequest.Performer)
 
-	// Decode the data if it's hex-encoded (with 0x prefix)
 	var decodedData string
 	if strings.HasPrefix(taskRequest.Data, "0x") {
-		dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
+		dataBytes, err := hex.DecodeString(taskRequest.Data[2:])
 		if err != nil {
 			logger.Errorf("Failed to hex-decode data: %v", err)
 			c.JSON(http.StatusBadRequest, ValidationResponse{
@@ -429,7 +380,6 @@ func ValidateTask(c *gin.Context) {
 		decodedData = taskRequest.Data
 	}
 
-	// Fetch the ActionData from IPFS using CID from the proof of task
 	ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, decodedData)
 	if err != nil {
 		logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
@@ -441,10 +391,8 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	// Log the decoded data CID for context
 	logger.Infof("Data CID: %s", decodedData)
 
-	// Parse IPFS data into IPFSData struct
 	var ipfsData jobtypes.IPFSData
 	if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
 		logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
@@ -456,7 +404,6 @@ func ValidateTask(c *gin.Context) {
 		return
 	}
 
-	// Create a job validator
 	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
 	if err != nil {
 		logger.Errorf("Failed to connect to Ethereum client: %v", err)
@@ -471,21 +418,18 @@ func ValidateTask(c *gin.Context) {
 
 	jobValidator := NewJobValidator(logger, ethClient)
 
-	// Validate job based on task definition ID
 	isValid := false
 	var validationErr error
 
 	switch taskRequest.TaskDefinitionID {
-	case 1, 2: // Time-based jobs
+	case 1, 2:
 		isValid, validationErr = jobValidator.ValidateTimeBasedJob(&ipfsData.JobData)
-	case 3, 4: // Event-based jobs
+	case 3, 4:
 		isValid, validationErr = jobValidator.ValidateEventBasedJob(&ipfsData.JobData, nil)
-	case 5, 6: // Condition-based jobs
-		// For condition-based jobs, make sure we have the ScriptTriggerFunction
+	case 5, 6:
 		if ipfsData.JobData.ScriptTriggerFunction == "" {
 			logger.Warnf("Missing ScriptTriggerFunction for condition-based job %d", ipfsData.JobData.JobID)
 
-			// Try to extract from trigger data if available
 			scriptURL, ok := ipfsData.TriggerData.ConditionParams["script_url"].(string)
 			if ok && scriptURL != "" {
 				logger.Infof("Found script URL in TriggerData.ConditionParams: %s", scriptURL)

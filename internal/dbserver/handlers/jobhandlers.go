@@ -13,8 +13,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Create a new Job, and send it to the Manager
-// If User doesn't exist, create a new user, or update the existing user
 func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var tempJobs []types.CreateJobData
 	if err := json.NewDecoder(r.Body).Decode(&tempJobs); err != nil {
@@ -29,11 +27,10 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Collect all IPFS URLs and check if any job needs dynamic fee calculation
 	var ipfsURLs []string
 	needsDynamicFee := false
 	for i, job := range tempJobs {
-		if job.ArgType == 2 { // Dynamic ArgType
+		if job.ArgType == 2 {
 			needsDynamicFee = true
 			if job.ScriptIPFSUrl == "" {
 				h.logger.Errorf("[CreateJobData] Missing IPFS URL for job %d", i)
@@ -44,11 +41,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var feePerJob float64 = 0.01 // Default fee per execution
+	var feePerJob float64 = 0.01
 
-	// Only calculate dynamic fees if needed
 	if needsDynamicFee {
-		// Calculate fees for jobs that need dynamic fee calculation
 		var totalFee float64
 		var err error
 		totalFee, err = h.CalculateTaskFees(strings.Join(ipfsURLs, ","))
@@ -58,11 +53,9 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// The totalFee returned is the sum of all fees for dynamic jobs
 		feePerJob = totalFee / float64(len(ipfsURLs))
 	}
 
-	// Calculate cost prediction for each job
 	for i := range tempJobs {
 		timeframeInSeconds := float64(tempJobs[i].TimeFrame)
 		intervalInSeconds := float64(tempJobs[i].TimeInterval)
@@ -187,13 +180,11 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Add points based on whether the job is custom or not
 		pointsToAdd := 10.0
 		if tempJobs[i].Custom {
 			pointsToAdd = 20.0
 		}
 
-		// Get current user points
 		var currentPoints float64
 		if err := h.db.Session().Query(`
 			SELECT user_points FROM triggerx.user_data 
@@ -204,7 +195,6 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Update user points with new total
 		newPoints := currentPoints + pointsToAdd
 		if err := h.db.Session().Query(`
 			UPDATE triggerx.user_data 
@@ -294,7 +284,6 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Update a Job, and send it to the Manager
 func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 	var tempData types.UpdateJobData
 	if err := json.NewDecoder(r.Body).Decode(&tempData); err != nil {
@@ -392,21 +381,19 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 
 	var userJobs []JobSummary
 
-	// First, get the user_id from the user_address
 	var userID int64
 	if err := h.db.Session().Query(`
 		SELECT user_id 
 		FROM triggerx.user_data 
 		WHERE user_address = ? ALLOW FILTERING
 	`, userAddress).Scan(&userID); err != nil {
-		// Instead of returning a 404, return a 200 with a message
 		h.logger.Infof("[GetJobsByUserAddress] User address %s not found", userAddress)
 		w.Header().Set("Content-Type", "application/json")
 		response := map[string]interface{}{
 			"message": "User address not registered",
-			"jobs":    userJobs, // Return an empty list of jobs
+			"jobs":    userJobs,
 		}
-		w.WriteHeader(http.StatusOK) // Set status to 200
+		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			h.logger.Errorf("[GetJobsByUserAddress] Error encoding response for user_address %s: %v", userAddress, err)
 			http.Error(w, "Error encoding response", http.StatusInternalServerError)

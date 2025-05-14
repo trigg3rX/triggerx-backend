@@ -14,45 +14,36 @@ import (
 )
 
 const (
-	// InactivityThreshold defines how long a keeper can be without a check-in before being marked inactive
 	InactivityThreshold = 70 * time.Second
-
-	// StateCleanupInterval defines how often to check for inactive keepers
 	StateCleanupInterval = 5 * time.Second
 )
 
-// KeeperState represents the current state of a keeper
 type KeeperState struct {
 	Health      types.KeeperHealth
 	IsActive    bool
 	LastUpdated time.Time
 }
 
-// KeeperStateManager manages the state of all keepers
 type KeeperStateManager struct {
 	keepers     map[string]*KeeperState
 	mu          sync.RWMutex
 	initialized bool
 }
 
-// Global instance of the state manager
 var stateManager *KeeperStateManager
 var stateManagerOnce sync.Once
 
-// GetKeeperStateManager returns the singleton instance of KeeperStateManager
 func GetKeeperStateManager() *KeeperStateManager {
 	stateManagerOnce.Do(func() {
 		stateManager = &KeeperStateManager{
 			keepers:     make(map[string]*KeeperState),
 			initialized: true,
 		}
-		// Start background cleanup routine
 		go stateManager.startCleanupRoutine()
 	})
 	return stateManager
 }
 
-// startCleanupRoutine periodically checks for inactive keepers
 func (ksm *KeeperStateManager) startCleanupRoutine() {
 	ticker := time.NewTicker(StateCleanupInterval)
 	defer ticker.Stop()
@@ -62,7 +53,6 @@ func (ksm *KeeperStateManager) startCleanupRoutine() {
 	}
 }
 
-// checkInactiveKeepers identifies and processes inactive keepers
 func (ksm *KeeperStateManager) checkInactiveKeepers() {
 	now := time.Now().UTC()
 	var inactiveKeepers []string
@@ -77,7 +67,6 @@ func (ksm *KeeperStateManager) checkInactiveKeepers() {
 	}
 	ksm.mu.Unlock()
 
-	// Update database for inactive keepers
 	for _, address := range inactiveKeepers {
 		if err := ksm.updateKeeperStatusInDatabase(address, "", "", false); err != nil {
 			logger.Errorf("Failed to update inactive status for keeper %s: %v", address, err)
@@ -85,7 +74,6 @@ func (ksm *KeeperStateManager) checkInactiveKeepers() {
 	}
 }
 
-// UpdateKeeperHealth updates the state for a keeper based on a health check-in
 func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) error {
 	ksm.mu.Lock()
 	defer ksm.mu.Unlock()
@@ -93,32 +81,27 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 	address := health.KeeperAddress
 	now := time.Now().UTC()
 
-	// Check if keeper exists in our state
 	existingState, exists := ksm.keepers[address]
 
 	if !exists {
-		// New keeper or previously inactive keeper
 		ksm.keepers[address] = &KeeperState{
 			Health:      health,
 			IsActive:    true,
 			LastUpdated: now,
 		}
 
-		// Update database to set keeper as active
 		if err := ksm.updateKeeperStatusInDatabase(health.KeeperAddress, health.Version, health.PeerID, true); err != nil {
 			return fmt.Errorf("failed to update active status in database: %w", err)
 		}
 
 		logger.Infof("New keeper %s added to active state", address)
 	} else {
-		// Existing keeper - update health info
 		wasActive := existingState.IsActive
 
 		existingState.Health = health
 		existingState.LastUpdated = now
 		existingState.IsActive = true
 
-		// If the keeper was inactive and is now active, update database
 		if !wasActive {
 			if err := ksm.updateKeeperStatusInDatabase(health.KeeperAddress, health.Version, health.PeerID, true); err != nil {
 				return fmt.Errorf("failed to update reactivated status in database: %w", err)
@@ -130,7 +113,6 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 	return nil
 }
 
-// updateKeeperStatusInDatabase calls the database API to update a keeper's active status
 func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, version string, peerID string, isActive bool) error {
 	payload := types.UpdateKeeperHealth{
 		KeeperAddress: address,
@@ -145,17 +127,14 @@ func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, vers
 		return fmt.Errorf("failed to marshal database update payload: %w", err)
 	}
 
-	// Construct database URL for status update
 	databaseURL := fmt.Sprintf("%s/api/keepers/checkin", config.DatabaseIPAddress)
 
-	// Send update to database
 	response, err := http.Post(databaseURL, "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return fmt.Errorf("failed to send status update to database: %w", err)
 	}
 	defer response.Body.Close()
 
-	// Check response
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
 		return fmt.Errorf("database returned non-OK status %d: %s", response.StatusCode, string(body))
@@ -165,7 +144,6 @@ func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, vers
 	return nil
 }
 
-// IsKeeperActive checks if a keeper is currently active
 func (ksm *KeeperStateManager) IsKeeperActive(keeperAddress string) bool {
 	ksm.mu.RLock()
 	defer ksm.mu.RUnlock()
@@ -174,7 +152,6 @@ func (ksm *KeeperStateManager) IsKeeperActive(keeperAddress string) bool {
 	return exists && state.IsActive
 }
 
-// GetAllActiveKeepers returns a list of all active keepers
 func (ksm *KeeperStateManager) GetAllActiveKeepers() []string {
 	ksm.mu.RLock()
 	defer ksm.mu.RUnlock()
@@ -189,7 +166,6 @@ func (ksm *KeeperStateManager) GetAllActiveKeepers() []string {
 	return activeKeepers
 }
 
-// GetKeeperCount returns the count of all keepers and active keepers
 func (ksm *KeeperStateManager) GetKeeperCount() (total int, active int) {
 	ksm.mu.RLock()
 	defer ksm.mu.RUnlock()
@@ -204,7 +180,6 @@ func (ksm *KeeperStateManager) GetKeeperCount() (total int, active int) {
 	return total, active
 }
 
-// KeeperInfo represents detailed information about a keeper
 type KeeperInfo struct {
 	Address     string    `json:"address"`
 	IsActive    bool      `json:"is_active"`
@@ -213,7 +188,6 @@ type KeeperInfo struct {
 	LastUpdated time.Time `json:"last_updated"`
 }
 
-// GetDetailedKeeperInfo returns detailed information about all keepers
 func (ksm *KeeperStateManager) GetDetailedKeeperInfo() []KeeperInfo {
 	ksm.mu.RLock()
 	defer ksm.mu.RUnlock()

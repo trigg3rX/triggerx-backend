@@ -13,20 +13,17 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/redis"
 )
 
-// RateLimitInfo contains information about the rate limit status
 type RateLimitInfo struct {
 	Remaining int   `json:"remaining"`
 	Limit     int   `json:"limit"`
 	Reset     int64 `json:"reset"`
 }
 
-// RateLimiter handles API rate limiting using Redis
 type RateLimiter struct {
 	redis  *redis.Client
 	logger logging.Logger
 }
 
-// NewRateLimiterWithClient creates a new rate limiter with an existing Redis client
 func NewRateLimiterWithClient(redisClient *redis.Client, logger logging.Logger) (*RateLimiter, error) {
 	if redisClient == nil {
 		return nil, fmt.Errorf("redis client is nil")
@@ -38,7 +35,6 @@ func NewRateLimiterWithClient(redisClient *redis.Client, logger logging.Logger) 
 	}, nil
 }
 
-// The Lua script for rate limiting
 const rateLimitScript = `
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -58,21 +54,18 @@ else
 end
 `
 
-// ApplyRateLimit checks if the request should be rate limited
 func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*http.Response, error) {
 	ctx := r.Context()
 	rateLimitKey := fmt.Sprintf("rate-limit:%s", apiKey.Key)
-	windowSeconds := 60 // 1-minute window
+	windowSeconds := 60
 	currentTimestamp := time.Now().UTC().Unix()
 	
-	// Execute the rate limiting script
 	result, err := rl.redis.Eval(ctx, rateLimitScript, []string{rateLimitKey}, 
 		apiKey.RateLimit, windowSeconds)
 	if err != nil {
 		rl.logger.Errorf("Rate limiting error: %v", err)
 		
-		// Fail open in production
-		if true { // You can change this to check for production env
+		if true {
 			return nil, nil
 		}
 		
@@ -96,12 +89,10 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 	rl.logger.Infof("Rate Limit Debug: API Key: %s, Owner: %s, Rate Limit: %d, Current Count: %d, Remaining: %d, TTL: %d",
 		apiKey.Key, apiKey.Owner, apiKey.RateLimit, count, remaining, ttl)
 	
-	// Add rate limit headers to the response
 	r.Header.Set("X-RateLimit-Limit", strconv.Itoa(apiKey.RateLimit))
 	r.Header.Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 	r.Header.Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
 	
-	// Check if rate limit exceeded
 	if count > apiKey.RateLimit {
 		rl.logger.Warnf("Rate limit exceeded: API Key: %s, Owner: %s, Count: %d, Limit: %d",
 			apiKey.Key, apiKey.Owner, count, apiKey.RateLimit)
@@ -123,22 +114,19 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 	return nil, nil
 }
 
-// GetRateLimitStatus retrieves the current rate limit status for an API key
 func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.ApiKey) (*RateLimitInfo, error) {
 	rateLimitKey := fmt.Sprintf("rate-limit:%s", apiKey.Key)
 	currentTimestamp := time.Now().UTC().Unix()
 	
-	// Get the current count
 	countStr, err := rl.redis.Get(ctx, rateLimitKey)
 	count := 0
 	if err == nil && countStr != "" {
 		count, _ = strconv.Atoi(countStr)
 	}
 	
-	// Get TTL
 	ttl, err := rl.redis.TTL(ctx, rateLimitKey)
 	if err != nil || ttl < 0 {
-		ttl = 60 * time.Second // Default 60 seconds
+		ttl = 60 * time.Second
 	}
 	
 	return &RateLimitInfo{
@@ -146,4 +134,4 @@ func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.Api
 		Limit:     apiKey.RateLimit,
 		Reset:     currentTimestamp + int64(ttl.Seconds()),
 	}, nil
-} 
+}

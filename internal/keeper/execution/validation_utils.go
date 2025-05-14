@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	// "io/ioutil"
-	// "net/http"
 	"reflect"
 	"strings"
 
@@ -16,12 +14,9 @@ import (
 func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
 	convertedArgs := make([]interface{}, 0)
 
-	// Handle the case where we have a single struct argument
 	if len(methodInputs) == 1 && methodInputs[0].Type.T == abi.TupleTy {
-		// Check if the input is a map or JSON string representing the struct
 		switch v := args.(type) {
 		case map[string]interface{}:
-			// Direct map to struct conversion
 			convertedArg, err := e.argConverter.convertToStruct(v, methodInputs[0].Type)
 			if err != nil {
 				return nil, fmt.Errorf("error converting to struct: %v", err)
@@ -29,7 +24,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 			convertedArgs = append(convertedArgs, convertedArg)
 			return convertedArgs, nil
 		case string:
-			// Try to parse as JSON struct
 			var structData map[string]interface{}
 			if err := json.Unmarshal([]byte(v), &structData); err == nil {
 				convertedArg, err := e.argConverter.convertToStruct(structData, methodInputs[0].Type)
@@ -40,7 +34,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 				return convertedArgs, nil
 			}
 		case []interface{}:
-			// If there's a single array element and it's a map, try to use it as a struct
 			if len(v) == 1 {
 				if mapVal, ok := v[0].(map[string]interface{}); ok {
 					convertedArg, err := e.argConverter.convertToStruct(mapVal, methodInputs[0].Type)
@@ -50,7 +43,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 					convertedArgs = append(convertedArgs, convertedArg)
 					return convertedArgs, nil
 				} else if strVal, ok := v[0].(string); ok {
-					// Try to parse as JSON struct
 					var structData map[string]interface{}
 					if err := json.Unmarshal([]byte(strVal), &structData); err == nil {
 						convertedArg, err := e.argConverter.convertToStruct(structData, methodInputs[0].Type)
@@ -65,13 +57,9 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 		}
 	}
 
-	// Handle multiple arguments or non-struct arguments
 	switch argData := args.(type) {
 	case string:
-		// Handle a single string value (like from our script)
-		// If there's only one input parameter, use the string value directly
 		if len(methodInputs) == 1 {
-			// First attempt to remove JSON string quotes if present
 			strValue := argData
 			if strings.HasPrefix(strValue, "\"") && strings.HasSuffix(strValue, "\"") {
 				strValue = strings.Trim(strValue, "\"")
@@ -84,7 +72,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 			convertedArgs = append(convertedArgs, convertedArg)
 			return convertedArgs, nil
 		} else {
-			// Try to parse as JSON array for multiple parameters
 			var arrayData []interface{}
 			if err := json.Unmarshal([]byte(argData), &arrayData); err == nil {
 				if len(arrayData) < len(methodInputs) {
@@ -105,7 +92,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 			return nil, fmt.Errorf("cannot convert single string to %d arguments", len(methodInputs))
 		}
 	case []string:
-		// Handle simple string array
 		if len(argData) < len(methodInputs) {
 			return nil, fmt.Errorf("not enough arguments provided: expected %d, got %d",
 				len(methodInputs), len(argData))
@@ -119,7 +105,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 			convertedArgs = append(convertedArgs, convertedArg)
 		}
 	case []interface{}:
-		// Handle array of mixed types
 		if len(argData) < len(methodInputs) {
 			return nil, fmt.Errorf("not enough arguments provided: expected %d, got %d",
 				len(methodInputs), len(argData))
@@ -133,7 +118,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 			convertedArgs = append(convertedArgs, convertedArg)
 		}
 	case map[string]interface{}:
-		// Handle map of named arguments
 		for _, inputParam := range methodInputs {
 			paramName := inputParam.Name
 			if paramName == "" {
@@ -142,7 +126,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 
 			argValue, exists := argData[paramName]
 			if !exists {
-				// Try with case-insensitive match
 				for k, v := range argData {
 					if strings.EqualFold(k, paramName) {
 						argValue = v
@@ -170,7 +153,6 @@ func (e *JobExecutor) processArguments(args interface{}, methodInputs []abi.Argu
 }
 
 func (e *JobExecutor) getContractMethodAndABI(methodName string, job *jobtypes.HandleCreateJobData) (*abi.ABI, *abi.Method, error) {
-	// Use ABI from database instead of fetching it
 	if job.ABI == "" {
 		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
 	}
@@ -196,13 +178,11 @@ func (e *JobExecutor) getContractMethodAndABI(methodName string, job *jobtypes.H
 }
 
 func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
-	// Handle different output scenarios
 	if len(method.Outputs) == 0 {
 		logger.Infof("Method %s has no outputs to decode", method.Name)
 		return nil, nil
 	}
 
-	// Single output case
 	if len(method.Outputs) == 1 {
 		outputType := method.Outputs[0]
 		result := reflect.New(outputType.Type.GetType()).Elem()
@@ -217,7 +197,6 @@ func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Met
 		return result.Interface(), nil
 	}
 
-	// Multiple outputs case
 	results := make([]interface{}, len(method.Outputs))
 	err := contractABI.UnpackIntoInterface(&results, method.Name, output)
 	if err != nil {
@@ -228,44 +207,3 @@ func (e *JobExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Met
 	logger.Infof("Decoded multiple outputs: %+v", results)
 	return results, nil
 }
-
-// func (e *JobExecutor) fetchContractABI(contractAddress string) ([]byte, error) {
-// 	if e.etherscanAPIKey == "" {
-// 		return nil, fmt.Errorf("missing Etherscan API key")
-// 	}
-
-// 	// Update the URL to use Optimism Sepolia's API endpoint
-// 	blockscoutUrl := fmt.Sprintf(
-// 		"https://optimism-sepolia.blockscout.com/api?module=contract&action=getabi&address=%s",
-// 		contractAddress)
-
-// 	resp, err := http.Get(blockscoutUrl)
-// 	if err != nil || resp.StatusCode != http.StatusOK {
-// 		logger.Warnf("Failed to fetch ABI from Blockscout: %v", err)
-// 		// Fall back to another source or handle accordingly
-// 	}
-
-// 	defer resp.Body.Close()
-
-// 	body, err := ioutil.ReadAll(resp.Body)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	var response struct {
-// 		Status  string `json:"status"`
-// 		Message string `json:"message"`
-// 		Result  string `json:"result"`
-// 	}
-
-// 	err = json.Unmarshal(body, &response)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if response.Status != "1" {
-// 		return nil, fmt.Errorf("error fetching contract ABI: %s", response.Message)
-// 	}
-
-// 	return []byte(response.Result), nil
-// }
