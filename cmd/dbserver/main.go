@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	// "github.com/trigg3rX/triggerx-backend/internal/registrar"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -20,13 +19,8 @@ func main() {
 
 	config.Init()
 
-	// Initialize database config
-	dbConfig := &database.Config{
-		Hosts:       []string{"localhost"},
-		Timeout:     10 * time.Second,
-		Retries:     3,
-		ConnectWait: 5 * time.Second,
-	}
+	// Initialize database config using NewConfig()
+	dbConfig := database.NewConfig()
 
 	// Initialize the existing database connection
 	conn, err := database.NewConnection(dbConfig)
@@ -35,23 +29,14 @@ func main() {
 	}
 	defer conn.Close()
 
-	// Initialize a separate connection for registrar
-	registrarConn, err := database.NewConnection(dbConfig)
-	if err != nil || registrarConn == nil {
-		logger.Fatalf("Failed to initialize registrar database connection: %v", err)
-	}
-	defer registrarConn.Close()
-
 	// Ensure session is not nil before passing to registrar
 	mainSession := conn.Session()
-	registrarSession := registrarConn.Session()
-	if mainSession == nil || registrarSession == nil {
-		logger.Fatalf("Database sessions cannot be nil")
+	if mainSession == nil {
+		logger.Fatalf("Database session cannot be nil")
 	}
 
 	// Set both connections where needed
 	server := dbserver.NewServer(conn, logging.DatabaseProcess)
-	// registrar.SetDatabaseConnection(mainSession, registrarSession)
 
 	// Initialize and start HTTP server with database connection
 	logger.Infof("Database Server initialized, starting on port %s...", config.DatabasePort)
