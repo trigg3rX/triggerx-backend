@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 
@@ -16,21 +15,25 @@ import (
 var logger logging.Logger
 
 func main() {
-	if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	config.Init()
+
+	if config.DevMode {
+		if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
+	} else {
+		if err := logging.InitLogger(logging.Production, logging.RegistrarProcess); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Production, logging.RegistrarProcess)
 	}
-	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
 	logger.Info("Starting registrar service ...")
 
-	config.Init()
 	registrar.InitABI()
 
-	dbConfig := &dbpkg.Config{
-		Hosts:       []string{config.DatabaseDockerIPAddress + ":" + config.DatabaseDockerPort},
-		Timeout:     time.Second * 30,
-		Retries:     3,
-		ConnectWait: time.Second * 20,
-	}
+	dbConfig := dbpkg.NewConfig(config.DatabaseHost, config.DatabaseHostPort)
+
 	dbConn, err := dbpkg.NewConnection(dbConfig)
 	if err != nil {
 		logger.Fatalf("Failed to connect to database: %v", err)

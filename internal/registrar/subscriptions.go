@@ -59,7 +59,7 @@ func StartEventPolling(
 
 	logger.Info("Starting event polling service...")
 
-	ticker := time.NewTicker(3 * time.Minute)
+	ticker := time.NewTicker(config.PollingInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
