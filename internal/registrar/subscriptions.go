@@ -59,11 +59,7 @@ func StartEventPolling(
 
 	logger.Info("Starting event polling service...")
 
-	// lastProcessedBlockEth = lastProcessedBlockEth - 1000
-	// lastProcessedBlockBase = lastProcessedBlockBase - 1000
-	// pollEvents(avsGovernanceAddress, attestationCenterAddress)
-
-	ticker := time.NewTicker(20 * time.Minute)
+	ticker := time.NewTicker(3 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {

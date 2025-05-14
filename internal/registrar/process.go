@@ -58,7 +58,7 @@ func ProcessOperatorRegisteredEvents(
 			logger.Errorf("Failed to add keeper to database: %v", err)
 		}
 
-		FetchOperatorDetailsAfterDelay(event.Operator, 5*time.Minute)
+		FetchOperatorDetailsAfterDelay(event.Operator, 3*time.Minute)
 	}
 	return nil
 }

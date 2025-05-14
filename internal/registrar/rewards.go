@@ -26,7 +26,7 @@ func StartDailyRewardsPoints() {
 
 	// If the scheduled time for today has already passed AND we haven't rewarded today yet
 	if now.After(rewardTime) && lastRewardsUpdate.Day() != now.Day() {
-		logger.Info("07:30 has already passed for today and rewards haven't been distributed yet, distributing rewards now...")
+		logger.Info("06:30 has already passed for today and rewards haven't been distributed yet, distributing rewards now...")
 		err := database.DailyRewardsPoints()
 		if err != nil {
 			logger.Errorf("Failed to distribute daily rewards: %v", err)
@@ -59,7 +59,7 @@ func scheduleNextReward() {
 		time.Sleep(waitDuration)
 
 		// It's time to distribute rewards
-		logger.Info("It's 07:30, distributing daily rewards now...")
+		logger.Info("It's 06:30, distributing daily rewards now...")
 		err := database.DailyRewardsPoints()
 		if err != nil {
 			logger.Errorf("Failed to distribute daily rewards: %v", err)
