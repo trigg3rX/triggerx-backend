@@ -114,7 +114,6 @@ func (s *Server) routes() {
 
 	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
 	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
-	// api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
 	api.HandleFunc("/keepers/form", handler.CreateKeeperDataGoogleForm).Methods("POST")
 	api.HandleFunc("/keepers/checkin", handler.KeeperHealthCheckIn).Methods("POST")
 	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")

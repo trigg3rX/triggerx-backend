@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	InactivityThreshold = 70 * time.Second
+	InactivityThreshold  = 70 * time.Second
 	StateCleanupInterval = 5 * time.Second
 )
 

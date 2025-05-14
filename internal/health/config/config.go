@@ -1,9 +1,9 @@
 package config
 
 import (
-	"os"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"os"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -11,9 +11,9 @@ import (
 var (
 	logger = logging.GetLogger(logging.Development, logging.HealthProcess)
 
-	HealthRPCPort    string
+	HealthRPCPort     string
 	DatabaseIPAddress string
-	ManagerIPAddress string
+	ManagerIPAddress  string
 )
 
 func Init() {

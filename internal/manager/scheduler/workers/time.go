@@ -7,8 +7,8 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type Worker interface {
@@ -63,15 +63,6 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 	triggerData.ConditionParams = make(map[string]interface{})
 
 	w.status = "running"
-
-	// time.AfterFunc(1*time.Second, func() {
-	// 	triggerData.Timestamp = time.Now().UTC()
-	// 	triggerData.LastExecuted = time.Now().UTC()
-
-	// 	if err := w.executeTask(w.jobData, &triggerData); err != nil {
-	// 		w.handleError(err)
-	// 	}
-	// })
 
 	w.cron.AddFunc(w.schedule, func() {
 		if w.jobData.TimeFrame > 0 && time.Since(w.startTime) > time.Duration(w.jobData.TimeFrame)*time.Second {

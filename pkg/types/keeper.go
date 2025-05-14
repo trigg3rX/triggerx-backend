@@ -67,12 +67,12 @@ type IPFSData struct {
 }
 
 type KeeperHealth struct {
-	KeeperAddress string    `json:"keeper_address"`
+	KeeperAddress    string    `json:"keeper_address"`
 	ConsensusAddress string    `json:"consensus_address"`
-	Version           string    `json:"version"`
-	Timestamp         time.Time `json:"timestamp"`
-	Signature         string    `json:"signature"`
-	PeerID            string    `json:"peer_id"`
+	Version          string    `json:"version"`
+	Timestamp        time.Time `json:"timestamp"`
+	Signature        string    `json:"signature"`
+	PeerID           string    `json:"peer_id"`
 }
 
 type UpdateKeeperHealth struct {

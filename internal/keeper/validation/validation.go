@@ -66,15 +66,6 @@ func (v *JobValidator) ValidateTimeBasedJob(job *jobtypes.HandleCreateJobData) (
 	now := time.Now().UTC()
 
 	if job.LastExecutedAt.IsZero() {
-		if job.TimeFrame > 0 {
-			// endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
-			// if now.After(endTime) {
-			// 	v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds, with %v tolerance)",
-			// 		job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame, timeTolerance)
-			// 	return false, nil
-			// }
-		}
-
 		v.logger.Infof("Job %d is eligible for first execution", job.JobID)
 		return true, nil
 	}

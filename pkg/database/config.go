@@ -1,19 +1,19 @@
 package database
 
 import (
-    "fmt"
-    "os"
-    "time"
+	"fmt"
+	"os"
+	"time"
 
-    "github.com/joho/godotenv"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-    Hosts       []string
-    Keyspace    string
-    Timeout     time.Duration
-    Retries     int
-    ConnectWait time.Duration
+	Hosts       []string
+	Keyspace    string
+	Timeout     time.Duration
+	Retries     int
+	ConnectWait time.Duration
 }
 
 func NewConfig() *Config {
@@ -35,11 +35,11 @@ func NewConfig() *Config {
 }
 
 func (c *Config) WithHosts(hosts []string) *Config {
-    c.Hosts = hosts
-    return c
+	c.Hosts = hosts
+	return c
 }
 
 func (c *Config) WithKeyspace(keyspace string) *Config {
-    c.Keyspace = keyspace
-    return c
+	c.Keyspace = keyspace
+	return c
 }

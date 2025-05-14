@@ -349,14 +349,3 @@ func TestIntegration(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, result.Status)
 }
-
-// func createTestJob(id int64, taskDefID int, scriptUrl string, args []string) *jobtypes.HandleCreateJobData {
-// 	return &jobtypes.HandleCreateJobData{
-// 		JobID:                 id,
-// 		TaskDefinitionID:      taskDefID,
-// 		ScriptIPFSUrl:         scriptUrl,
-// 		TargetContractAddress: "0x98a170b9b24aD4f42B6B3630A54517fd7Ff3Ac6d",
-// 		TargetFunction:        "addTaskId",
-// 		Arguments:             args,
-// 	}
-// }

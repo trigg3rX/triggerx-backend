@@ -53,7 +53,7 @@ func main() {
 
 	router.POST("/p2p/message", services.ExecuteTask)
 	router.POST("/task/validate", services.ValidateTask)
-	
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.ManagerRPCPort),
 		Handler: router,

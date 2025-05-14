@@ -5,14 +5,14 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"net/http"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/pkg/proof"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/proof"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"net/http"
 )
 
 var logger = logging.GetLogger(logging.Development, logging.ManagerProcess)

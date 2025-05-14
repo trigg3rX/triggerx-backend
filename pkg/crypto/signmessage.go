@@ -1,9 +1,7 @@
 package crypto
 
 import (
-	// "crypto/ecdsa"
 	"fmt"
-	// "math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"

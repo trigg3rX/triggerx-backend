@@ -21,20 +21,6 @@ type NotificationConfig struct {
 	BotToken      string
 }
 
-// keeperID := os.Getenv("KEEPER_ID")
-// if keeperID == "" {
-// 	logger.Warn("KEEPER_ID environment variable not set, using default value")
-// }
-// taskID := triggerData.TaskID
-
-
-//	if err := StoreKeeperMetrics(keeperID, fmt.Sprintf("%d", taskID)); err != nil {
-//		logger.Warnf("Failed to store keeper metrics: %v", err)
-//		// Continue execution even if metrics storage fails
-//	} else {
-//
-//		logger.Infof("Successfully stored metrics for keeper %d and task %d", keeperID, taskID)
-//	}
 func (h *Handler) CreateKeeperDataGoogleForm(w http.ResponseWriter, r *http.Request) {
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := json.NewDecoder(r.Body).Decode(&keeperData); err != nil {

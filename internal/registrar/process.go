@@ -244,22 +244,22 @@ func processTaskRejectedBatch(
 
 		if event.TaskDefinitionId == 10001 || event.TaskDefinitionId == 10002 {
 		} else {
-				dataCID := string(event.Data)
-				logger.Debugf("Decoded Data: %s", dataCID)
+			dataCID := string(event.Data)
+			logger.Debugf("Decoded Data: %s", dataCID)
 
-				ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, dataCID)
-				if err != nil {
-					logger.Errorf("Failed to fetch IPFS content: %v", err)
-					continue
-				}
+			ipfsContent, err := ipfs.FetchIPFSContent(config.IpfsHost, dataCID)
+			if err != nil {
+				logger.Errorf("Failed to fetch IPFS content: %v", err)
+				continue
+			}
 
-				var ipfsData types.IPFSData
-				if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
-					logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
-					continue
-				}
+			var ipfsData types.IPFSData
+			if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
+				logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
+				continue
+			}
 
-				if err := database.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, convertBigIntToStrings(event.AttestersIds), false); err != nil {
+			if err := database.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, convertBigIntToStrings(event.AttestersIds), false); err != nil {
 				logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}

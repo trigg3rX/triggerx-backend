@@ -35,8 +35,6 @@ func SendTask(proofOfTask string, data string, taskDefinitionId int) {
 	}
 	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
 
-	// performerAddress := common.HexToAddress(config.KeeperAddress)
-
 	arguments := abi.Arguments{
 		{Type: abi.Type{T: abi.StringTy}},
 		{Type: abi.Type{T: abi.BytesTy}},

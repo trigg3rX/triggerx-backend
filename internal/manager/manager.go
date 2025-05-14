@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
+	logger       = logging.GetLogger(logging.Development, logging.ManagerProcess)
 	jobScheduler *scheduler.JobScheduler
 )
 

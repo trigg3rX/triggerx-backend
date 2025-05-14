@@ -37,4 +37,4 @@ func (c *Connection) Close() {
 	if c.session != nil {
 		c.session.Close()
 	}
-} 
+}

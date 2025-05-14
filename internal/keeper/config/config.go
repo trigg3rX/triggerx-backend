@@ -148,7 +148,6 @@ func checkKeeperRegistration() bool {
 		return false
 	}
 
-	// logger.Info("Keeper address is registered on L2")
 	return true
 }
 
@@ -269,5 +268,5 @@ func loadAndValidateUserEnvVars() {
 	} else if !validatePort(GrafanaPort) {
 		logger.Fatal("GRAFANA_PORT is invalid. It should be a number between 1 and 65535")
 	}
-	
+
 }

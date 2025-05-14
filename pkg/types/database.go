@@ -6,9 +6,9 @@ import (
 )
 
 type UserData struct {
-	UserID      int64     `json:"user_id"`
-	UserAddress string    `json:"user_address"`
-	CreatedAt   time.Time `json:"created_at"`
+	UserID         int64     `json:"user_id"`
+	UserAddress    string    `json:"user_address"`
+	CreatedAt      time.Time `json:"created_at"`
 	JobIDs         []int64   `json:"job_ids"`
 	AccountBalance *big.Int  `json:"account_balance"`
 	TokenBalance   *big.Int  `json:"token_balance"`
@@ -17,62 +17,62 @@ type UserData struct {
 }
 
 type JobData struct {
-	JobID            int64 `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
-	UserID           int64 `json:"user_id"`
-	Priority         int   `json:"priority"`
-	Security         int   `json:"security"`
-	LinkJobID        int64 `json:"link_job_id"`
-	ChainStatus      int   `json:"chain_status"`
-	Custom bool `json:"custom"`
-	TimeFrame int64 `json:"time_frame"`
-	Recurring bool  `json:"recurring"`
-	TimeInterval           int64  `json:"time_interval"`
-	TriggerChainID         string `json:"trigger_chain_id"`
-	TriggerContractAddress string `json:"trigger_contract_address"`
-	TriggerEvent           string `json:"trigger_event"`
-	ScriptIPFSUrl          string `json:"script_ipfs_url"`
-	ScriptTriggerFunction  string `json:"script_trigger_function"`
-	TargetChainID         string   `json:"target_chain_id"`
-	TargetContractAddress string   `json:"target_contract_address"`
-	TargetFunction        string   `json:"target_function"`
-	ArgType               int      `json:"arg_type"`
-	Arguments             []string `json:"arguments"`
-	ScriptTargetFunction  string   `json:"script_target_function"`
-	ABI                   string   `json:"abi"`
-	Status            bool      `json:"status"`
-	JobCostPrediction float64   `json:"job_cost_prediction"`
-	CreatedAt         time.Time `json:"created_at"`
-	LastExecutedAt    time.Time `json:"last_executed_at"`
-	TaskIDs           []int64   `json:"task_ids"`
+	JobID                  int64     `json:"job_id"`
+	TaskDefinitionID       int       `json:"task_definition_id"`
+	UserID                 int64     `json:"user_id"`
+	Priority               int       `json:"priority"`
+	Security               int       `json:"security"`
+	LinkJobID              int64     `json:"link_job_id"`
+	ChainStatus            int       `json:"chain_status"`
+	Custom                 bool      `json:"custom"`
+	TimeFrame              int64     `json:"time_frame"`
+	Recurring              bool      `json:"recurring"`
+	TimeInterval           int64     `json:"time_interval"`
+	TriggerChainID         string    `json:"trigger_chain_id"`
+	TriggerContractAddress string    `json:"trigger_contract_address"`
+	TriggerEvent           string    `json:"trigger_event"`
+	ScriptIPFSUrl          string    `json:"script_ipfs_url"`
+	ScriptTriggerFunction  string    `json:"script_trigger_function"`
+	TargetChainID          string    `json:"target_chain_id"`
+	TargetContractAddress  string    `json:"target_contract_address"`
+	TargetFunction         string    `json:"target_function"`
+	ArgType                int       `json:"arg_type"`
+	Arguments              []string  `json:"arguments"`
+	ScriptTargetFunction   string    `json:"script_target_function"`
+	ABI                    string    `json:"abi"`
+	Status                 bool      `json:"status"`
+	JobCostPrediction      float64   `json:"job_cost_prediction"`
+	CreatedAt              time.Time `json:"created_at"`
+	LastExecutedAt         time.Time `json:"last_executed_at"`
+	TaskIDs                []int64   `json:"task_ids"`
 }
 
 type TaskData struct {
-	TaskID           int64     `json:"task_id"`
-	TaskNumber       int       `json:"task_number"`
-	JobID            int64     `json:"job_id"`
-	TaskDefinitionID int       `json:"task_definition_id"`
-	CreatedAt        time.Time `json:"created_at"`
-	TaskFee          float64   `json:"task_fee"`
-	ExecutionTimestamp time.Time `json:"execution_timestamp"`
-	ExecutionTxHash    string    `json:"execution_tx_hash"`
-	TaskPerformerID    int64     `json:"task_performer_id"`
-	ProofOfTask     string  `json:"proof_of_task"`
-	ActionDataCID   string  `json:"action_data_cid"`
-	TaskAttesterIDs []int64 `json:"task_attester_ids"`
-	IsApproved           bool   `json:"is_approved"`
-	TpSignature          []byte `json:"tp_signature"`
-	TaSignature          []byte `json:"ta_signature"`
-	TaskSubmissionTxHash string `json:"task_submission_tx_hash"`
-	IsSuccessful bool `json:"is_successful"`
+	TaskID               int64     `json:"task_id"`
+	TaskNumber           int       `json:"task_number"`
+	JobID                int64     `json:"job_id"`
+	TaskDefinitionID     int       `json:"task_definition_id"`
+	CreatedAt            time.Time `json:"created_at"`
+	TaskFee              float64   `json:"task_fee"`
+	ExecutionTimestamp   time.Time `json:"execution_timestamp"`
+	ExecutionTxHash      string    `json:"execution_tx_hash"`
+	TaskPerformerID      int64     `json:"task_performer_id"`
+	ProofOfTask          string    `json:"proof_of_task"`
+	ActionDataCID        string    `json:"action_data_cid"`
+	TaskAttesterIDs      []int64   `json:"task_attester_ids"`
+	IsApproved           bool      `json:"is_approved"`
+	TpSignature          []byte    `json:"tp_signature"`
+	TaSignature          []byte    `json:"ta_signature"`
+	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
+	IsSuccessful         bool      `json:"is_successful"`
 }
 
 type KeeperData struct {
-	KeeperID       int64   `json:"keeper_id"`
-	KeeperAddress  string  `json:"keeper_address"`
-	KeeperName     string  `json:"keeper_name"`
-	RegisteredTx   string  `json:"registered_tx"`
-	RewardsBooster float32 `json:"rewards_booster"`
+	KeeperID          int64    `json:"keeper_id"`
+	KeeperAddress     string   `json:"keeper_address"`
+	KeeperName        string   `json:"keeper_name"`
+	RegisteredTx      string   `json:"registered_tx"`
+	RewardsBooster    float32  `json:"rewards_booster"`
 	OperatorID        int64    `json:"operator_id"`
 	RewardsAddress    string   `json:"rewards_address"`
 	KeeperPoints      float64  `json:"keeper_points"`

@@ -1,24 +1,22 @@
-// File: services/services.go
-
 package services
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"math/big"
+	"encoding/json"
+	"fmt"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"io"
+	"math/big"
+	"net/http"
+	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -55,8 +53,8 @@ func SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.
 	}
 
 	data := map[string]interface{}{
-		"jobData": jobData,
-		"triggerData": triggerData,
+		"jobData":       jobData,
+		"triggerData":   triggerData,
 		"performerData": performerData,
 	}
 
@@ -159,12 +157,12 @@ func GetPerformer() (types.GetPerformerData, error) {
 	if config.FoundNextPerformer {
 		nextIndex = (lastIndex + 1) % len(performers)
 	}
-	
+
 	selectedPerformer = performers[nextIndex]
-	
-	logger.Debugf("Selected performer at index %d with ID %d", 
+
+	logger.Debugf("Selected performer at index %d with ID %d",
 		nextIndex, selectedPerformer.KeeperID)
-	
+
 	lastIndex = nextIndex
 	config.FoundNextPerformer = true
 
