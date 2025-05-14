@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/telegram"
@@ -78,9 +79,9 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		redisClient:   redisClient,
 		telegramBot:   bot,
 		notificationConfig: handlers.NotificationConfig{
-			EmailFrom:     os.Getenv("EMAIL_USER"),
-			EmailPassword: os.Getenv("EMAIL_PASS"),
-			BotToken:      os.Getenv("BOT_TOKEN"),
+			EmailFrom:     config.EmailUser,
+			EmailPassword: config.EmailPassword,
+			BotToken:      config.BotToken,
 		},
 	}
 

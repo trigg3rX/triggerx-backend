@@ -10,15 +10,25 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func main() {
-	if err := logging.InitLogger(logging.Development, "database"); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
-	logger := logging.GetLogger(logging.Development, logging.DatabaseProcess)
+var logger logging.Logger
 
+func main() {
 	config.Init()
 
-	dbConfig := database.NewConfig()
+	if config.DevMode {
+		if err := logging.InitLogger(logging.Development, "database"); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Development, logging.DatabaseProcess)
+	} else {
+		if err := logging.InitLogger(logging.Production, "database"); err != nil {
+			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		}
+		logger = logging.GetLogger(logging.Production, logging.DatabaseProcess)
+	}
+	logger.Info("Starting database server...")
+
+	dbConfig := database.NewConfig(config.DatabaseHost, config.DatabaseHostPort)
 
 	conn, err := database.NewConnection(dbConfig)
 	if err != nil || conn == nil {
@@ -33,8 +43,8 @@ func main() {
 
 	server := dbserver.NewServer(conn, logging.DatabaseProcess)
 
-	logger.Infof("Database Server initialized, starting on port %s...", config.DatabasePort)
-	if err := server.Start(config.DatabasePort); err != nil {
+	logger.Infof("Database Server initialized, starting on port %s...", config.DatabaseRPCPort)
+	if err := server.Start(config.DatabaseRPCPort); err != nil {
 		logger.Fatalf("Failed to start server: %v", err)
 	}
 }

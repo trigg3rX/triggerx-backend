@@ -32,7 +32,7 @@ func (a *ApiKeyAuth) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		apiKey, err := a.getApiKey(r.Context(), apiKeyHeader)
+		apiKey, err := a.getApiKey(apiKeyHeader)
 		if err != nil {
 			a.logger.Errorf("Error retrieving API key: %v", err)
 			http.Error(w, "Invalid or inactive API key", http.StatusForbidden)
@@ -68,7 +68,7 @@ func (a *ApiKeyAuth) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, error) {
+func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
 	query := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
 			  FROM triggerx.apikeys WHERE key = ? AND isActive = ? ALLOW FILTERING`
 

@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 )
 
 type ClaimFundRequest struct {
@@ -25,12 +26,6 @@ type ClaimFundResponse struct {
 	Message         string `json:"message"`
 	TransactionHash string `json:"transaction_hash,omitempty"`
 }
-
-const (
-	OP_SEPOLIA_RPC   = "https://sepolia.optimism.io"
-	BASE_SEPOLIA_RPC = "https://sepolia.base.org"
-	FUND_AMOUNT      = 0.03
-)
 
 func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 	var req ClaimFundRequest
@@ -47,9 +42,9 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
-		rpcURL = OP_SEPOLIA_RPC
+		rpcURL = fmt.Sprintf("https://optimism-sepolia.g.alchemy.com/v2/%s", config.AlchemyAPIKey)
 	case "base_sepolia":
-		rpcURL = BASE_SEPOLIA_RPC
+		rpcURL = fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.AlchemyAPIKey)
 	default:
 		http.Error(w, "Invalid network specified", http.StatusBadRequest)
 		return
@@ -70,8 +65,10 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	threshold := new(big.Float).Mul(big.NewFloat(FUND_AMOUNT), big.NewFloat(1e18))
-	thresholdWei, _ := threshold.Int(nil)
+	thresholdWei, ok := new(big.Int).SetString(config.FaucetFundAmount, 10)
+	if !ok {
+		h.logger.Warnf("Failed to parse FaucetFundAmount: %s", config.FaucetFundAmount)
+	}
 
 	if balance.Cmp(thresholdWei) >= 0 {
 		json.NewEncoder(w).Encode(ClaimFundResponse{
@@ -81,7 +78,7 @@ func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	privateKey, err := crypto.HexToECDSA(os.Getenv("FUNDER_PRIVATE_KEY"))
+	privateKey, err := crypto.HexToECDSA(config.FaucetPrivateKey)
 	if err != nil {
 		h.logger.Errorf("Failed to load private key: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -122,9 +119,10 @@ func (h *Handler) sendFunds(client *ethclient.Client, privateKey *ecdsa.PrivateK
 		return nil, err
 	}
 
-	value := new(big.Int)
-	fundAmountWei := new(big.Float).Mul(big.NewFloat(FUND_AMOUNT), big.NewFloat(1e18))
-	value, _ = fundAmountWei.Int(value)
+	value, ok := new(big.Int).SetString(config.FaucetFundAmount, 10)
+	if !ok {
+		h.logger.Warnf("Failed to parse FaucetFundAmount: %s", config.FaucetFundAmount)
+	}
 
 	gasLimit := uint64(21000)
 
