@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+
 	// "github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -20,13 +20,8 @@ func main() {
 
 	config.Init()
 
-	// Initialize database config
-	dbConfig := &database.Config{
-		Hosts:       []string{"localhost"},
-		Timeout:     10 * time.Second,
-		Retries:     3,
-		ConnectWait: 5 * time.Second,
-	}
+	// Initialize database config using NewConfig()
+	dbConfig := database.NewConfig()
 
 	// Initialize the existing database connection
 	conn, err := database.NewConnection(dbConfig)
