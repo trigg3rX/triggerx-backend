@@ -17,54 +17,43 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var logger logging.Logger
+const shutdownTimeout = 30 * time.Second
 
 func main() {
-	config.Init()
-
-	if config.DevMode {
-		if err := logging.InitLogger(logging.Development, logging.HealthProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Development, logging.HealthProcess)
-	} else {
-		if err := logging.InitLogger(logging.Production, logging.HealthProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Production, logging.HealthProcess)
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
-	logger.Info("Starting health node...")
 
+	// Initialize logger
+	logConfig := logging.LoggerConfig{
+		LogDir:      logging.BaseDataDir,
+		ProcessName: logging.HealthProcess,
+		Environment: getEnvironment(),
+		UseColors:   true,
+	}
+
+	if err := logging.InitServiceLogger(logConfig); err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	logger := logging.GetServiceLogger()
+
+	logger.Info("Starting health service...")
+
+	// Initialize server components
 	var wg sync.WaitGroup
-
 	serverErrors := make(chan error, 3)
 	ready := make(chan struct{})
 
-	wg.Add(1)
-
-	_ = health.GetKeeperStateManager()
+	// Initialize state manager
+	_ = health.InitializeStateManager(logger)
 	logger.Info("Keeper state manager initialized")
 
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
-	router.POST("/health", health.HandleCheckInEvent)
-	router.GET("/status", health.GetKeeperStatus)
-	router.GET("/operators", health.GetDetailedKeeperStatus)
+	// Setup HTTP server
+	srv := setupHTTPServer(logger)
 
-	router.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"service":   "TriggerX Health Service",
-			"status":    "running",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		})
-	})
-
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.HealthRPCPort),
-		Handler: router,
-	}
-
+	// Start server
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		logger.Info("Starting HTTP server...")
@@ -74,23 +63,54 @@ func main() {
 	}()
 
 	close(ready)
-	logger.Infof("Health node is READY on port %s...", config.HealthRPCPort)
+	logger.Infof("Health service is ready on port %s", config.GetHealthRPCPort())
 
+	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case err := <-serverErrors:
 		logger.Error("Server error received", "error", err)
-	case <-shutdown:
-		logger.Info("Received shutdown signal")
+	case sig := <-shutdown:
+		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
+	performGracefulShutdown(srv, &wg, logger)
+}
+
+func getEnvironment() logging.LogLevel {
+	if config.IsDevMode() {
+		return logging.Development
+	}
+	return logging.Production
+}
+
+func setupHTTPServer(logger logging.Logger) *http.Server {
+	if !config.IsDevMode() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(health.LoggerMiddleware(logger))
+
+	// Register routes
+	health.RegisterRoutes(router)
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),
+		Handler: router,
+	}
+}
+
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
