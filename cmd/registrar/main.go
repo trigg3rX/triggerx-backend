@@ -2,62 +2,87 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/ethereum/go-ethereum/common"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/database"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	dbpkg "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var logger logging.Logger
-
 func main() {
-	config.Init()
-
-	if config.DevMode {
-		if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
-	} else {
-		if err := logging.InitLogger(logging.Production, logging.RegistrarProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Production, logging.RegistrarProcess)
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
-	logger.Info("Starting registrar service ...")
 
-	registrar.InitABI()
+	// Initialize logger
+	logConfig := logging.LoggerConfig{
+		LogDir:      logging.BaseDataDir,
+		ProcessName: logging.RegistrarProcess,
+		Environment: getEnvironment(),
+		UseColors:   true,
+	}
 
-	dbConfig := dbpkg.NewConfig(config.DatabaseHost, config.DatabaseHostPort)
+	if err := logging.InitServiceLogger(logConfig); err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	logger := logging.GetServiceLogger()
 
+	logger.Info("Starting registrar service...")
+
+	// Initialize database connection
+	dbConfig := dbpkg.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
 	dbConn, err := dbpkg.NewConnection(dbConfig)
 	if err != nil {
-		logger.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatal("Failed to connect to database", "error", err)
 	}
 	defer dbConn.Close()
 
-	database.SetDatabaseConnection(dbConn)
-	logger.Info("Database connection initialized")
+	// Initialize database manager with logger
+	database.InitDatabaseManager(logger, dbConn)
+	logger.Info("Database manager initialized")
 
-	avsGovernanceAddress := common.HexToAddress(config.AvsGovernanceAddress)
-	attestationCenterAddress := common.HexToAddress(config.AttestationCenterAddress)
+	// Log contract addresses
+	logger.Info("Contract addresses initialized",
+		"avsGovernance", config.GetAvsGovernanceAddress(),
+		"attestationCenter", config.GetAttestationCenterAddress(),
+	)
 
-	logger.Info(fmt.Sprintf("AVS Governance     [L1]: %s", config.AvsGovernanceAddress))
-	logger.Info(fmt.Sprintf("Attestation Center [L2]: %s", config.AttestationCenterAddress))
+	// Initialize and start registrar service
+	registrarService, err := registrar.NewRegistrarService(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize registrar service", "error", err)
+	}
 
-	go func() {
-		registrar.StartEventPolling(avsGovernanceAddress, attestationCenterAddress)
-	}()
+	// Start services
+	registrarService.Start()
 
-	go func() {
-		registrar.StartDailyRewardsPoints()
-	}()
+	// Initialize and start rewards service
+	rewardsService := rewards.NewRewardsService(logger)
+	go rewardsService.StartDailyRewardsPoints()
 
-	logger.Info("Registrar service is running.")
+	logger.Info("All services started successfully")
 
-	select {}
+	// Handle graceful shutdown
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+
+	sig := <-shutdown
+	logger.Info("Received shutdown signal", "signal", sig.String())
+
+	// Cleanup
+	registrarService.Stop()
+	logger.Info("Shutdown complete")
+}
+
+func getEnvironment() logging.LogLevel {
+	if config.IsDevMode() {
+		return logging.Development
+	}
+	return logging.Production
 }

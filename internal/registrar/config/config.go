@@ -1,100 +1,156 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/utils"
+	"github.com/trigg3rX/triggerx-backend/pkg/validator"
 )
 
-var (
+type Config struct {
 	AvsGovernanceAddress     string
 	AttestationCenterAddress string
+	EthRPCURL                string
+	BaseRPCURL               string
+	PollingInterval          time.Duration
+	IPFSHost                 string
+	DatabaseHost             string
+	DatabaseHostPort         string
+	LastRewardsUpdate        string
+	DevMode                  bool
+}
 
-	EthRpcUrl  string
-	BaseRpcUrl string
+var cfg Config
 
-	PollingInterval time.Duration
-	IpfsHost        string
-
-	DatabaseHost     string
-	DatabaseHostPort string
-
-	LastRewardsUpdate string
-
-	DevMode     bool
-	configMutex sync.Mutex
-)
-
-func Init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+func Init() error {
+	if err := godotenv.Load(); err != nil {
+		return fmt.Errorf("error loading .env file: %w", err)
 	}
-	DevMode = os.Getenv("DEV_MODE") == "true"
 
-	AvsGovernanceAddress = os.Getenv("AVS_GOVERNANCE_ADDRESS")
-	if !utils.IsValidAddress(AvsGovernanceAddress) {
+	cfg = Config{
+		DevMode:                  os.Getenv("DEV_MODE") == "true",
+		AvsGovernanceAddress:     os.Getenv("AVS_GOVERNANCE_ADDRESS"),
+		AttestationCenterAddress: os.Getenv("ATTESTATION_CENTER_ADDRESS"),
+		EthRPCURL:                os.Getenv("L1_RPC"),
+		BaseRPCURL:               os.Getenv("L2_RPC"),
+		PollingInterval:          setPollingInterval(),
+		IPFSHost:                 os.Getenv("IPFS_HOST"),
+		DatabaseHost:             os.Getenv("DATABASE_HOST"),
+		DatabaseHostPort:         os.Getenv("DATABASE_HOST_PORT"),
+		LastRewardsUpdate:        os.Getenv("LAST_REWARDS_UPDATE"),
+	}
+
+	if err := validateConfig(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	if !cfg.DevMode {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	return nil
+}
+
+func validateConfig() error {
+	if !validator.IsValidAddress(cfg.AvsGovernanceAddress) {
 		log.Fatal("Invalid AvsGovernanceAddress")
 	}
 
-	AttestationCenterAddress = os.Getenv("ATTESTATION_CENTER_ADDRESS")
-	if !utils.IsValidAddress(AttestationCenterAddress) {
+	if !validator.IsValidAddress(cfg.AttestationCenterAddress) {
 		log.Fatal("Invalid AttestationCenterAddress")
 	}
 
-	EthRpcUrl = os.Getenv("L1_RPC")
-	if utils.IsEmpty(EthRpcUrl) {
+	if validator.IsEmpty(cfg.EthRPCURL) {
 		log.Fatal("Invalid EthRpcUrl")
 	}
 
-	BaseRpcUrl = os.Getenv("L2_RPC")
-	if utils.IsEmpty(BaseRpcUrl) {
+	if validator.IsEmpty(cfg.BaseRPCURL) {
 		log.Fatal("Invalid BaseRpcUrl")
 	}
 
 	pollingIntervalStr := os.Getenv("POLLING_INTERVAL")
-	if utils.IsEmpty(pollingIntervalStr) {
+	if validator.IsEmpty(pollingIntervalStr) {
 		log.Fatal("Invalid PollingInterval")
 	}
 	var parseErr error
-	PollingInterval, parseErr = time.ParseDuration(pollingIntervalStr)
+	cfg.PollingInterval, parseErr = time.ParseDuration(pollingIntervalStr)
 	if parseErr != nil {
 		log.Fatal("Invalid PollingInterval format: ", parseErr)
 	}
 
-	DatabaseHost = os.Getenv("DATABASE_HOST")
-	if !utils.IsValidIPAddress(DatabaseHost) {
+	if !validator.IsValidIPAddress(cfg.DatabaseHost) {
 		log.Fatal("Invalid DatabaseHost")
 	}
 
-	DatabaseHostPort = os.Getenv("DATABASE_HOST_PORT")
-	if !utils.IsValidPort(DatabaseHostPort) {
+	if !validator.IsValidPort(cfg.DatabaseHostPort) {
 		log.Fatal("Invalid DatabaseHostPort")
 	}
 
-	IpfsHost = os.Getenv("IPFS_HOST")
-	if utils.IsEmpty(IpfsHost) {
+	if validator.IsEmpty(cfg.IPFSHost) {
 		log.Fatal("Invalid IpfsHost")
 	}
 
-	LastRewardsUpdate = os.Getenv("LAST_REWARDS_UPDATE")
-	if utils.IsEmpty(LastRewardsUpdate) {
-		LastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
+	if validator.IsEmpty(cfg.LastRewardsUpdate) {
+		cfg.LastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
 	}
 
-	gin.SetMode(gin.ReleaseMode)
+	return nil
 }
 
-func UpdateLastRewardsTimestamp(timestamp string) {
-	configMutex.Lock()
-	defer configMutex.Unlock()
+func setPollingInterval() time.Duration {
+	pollingIntervalStr := os.Getenv("POLLING_INTERVAL")
+	if validator.IsEmpty(pollingIntervalStr) {
+		log.Fatal("Invalid PollingInterval")
+	}
+	var parseErr error
+	pollingInterval, parseErr := time.ParseDuration(pollingIntervalStr)
+	if parseErr != nil {
+		log.Fatal("Invalid PollingInterval format: ", parseErr)
+	}
+	return pollingInterval
+}
 
-	LastRewardsUpdate = timestamp
-	log.Printf("Updated LastRewardsUpdate to: %s", timestamp)
+func GetAvsGovernanceAddress() string {
+	return cfg.AvsGovernanceAddress
+}
+
+func GetAttestationCenterAddress() string {
+	return cfg.AttestationCenterAddress
+}
+
+func GetEthRPCURL() string {
+	return cfg.EthRPCURL
+}
+
+func GetBaseRPCURL() string {
+	return cfg.BaseRPCURL
+}
+
+func GetIPFSHost() string {
+	return cfg.IPFSHost
+}
+
+func GetDatabaseHost() string {
+	return cfg.DatabaseHost
+}
+
+func GetDatabaseHostPort() string {
+	return cfg.DatabaseHostPort
+}
+
+func GetLastRewardsUpdate() string {
+	return cfg.LastRewardsUpdate
+}
+
+func GetPollingInterval() time.Duration {
+	return cfg.PollingInterval
+}
+
+func IsDevMode() bool {
+	return cfg.DevMode
 }

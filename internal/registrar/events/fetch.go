@@ -1,4 +1,4 @@
-package registrar
+package events
 
 import (
 	"context"
@@ -10,48 +10,51 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/database"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/bindings/contractAttestationCenter"
 	"github.com/trigg3rX/triggerx-backend/pkg/bindings/contractAvsGovernance"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func FetchOperatorDetailsAfterDelay(operatorAddress common.Address, delay time.Duration) {
+func FetchOperatorDetailsAfterDelay(operatorAddress common.Address, delay time.Duration, logger logging.Logger) error {
 	logger.Infof("Scheduling fetch of operator details for %s after %v delay", operatorAddress.Hex(), delay)
 
 	go func() {
 		time.Sleep(delay)
 		logger.Infof("Delay completed, fetching operator details for %s", operatorAddress.Hex())
 
-		err := FetchAndLogOperatorDetails(operatorAddress)
+		err := FetchAndLogOperatorDetails(operatorAddress, logger)
 		if err != nil {
 			logger.Errorf("Failed to fetch operator details: %v", err)
 		}
 	}()
+
+	return nil
 }
 
-func FetchAndLogOperatorDetails(operatorAddress common.Address) error {
+func FetchAndLogOperatorDetails(operatorAddress common.Address, logger logging.Logger) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	l1Client, err := ethclient.Dial(config.EthRpcUrl)
+	l1Client, err := ethclient.Dial(config.GetEthRPCURL())
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum node: %v", err)
 	}
 	defer l1Client.Close()
 
-	l2Client, err := ethclient.Dial(config.BaseRpcUrl)
+	l2Client, err := ethclient.Dial(config.GetBaseRPCURL())
 	if err != nil {
 		return fmt.Errorf("failed to connect to Base node: %v", err)
 	}
 	defer l2Client.Close()
 
-	avsGovernanceAddress := common.HexToAddress(config.AvsGovernanceAddress)
+	avsGovernanceAddress := common.HexToAddress(config.GetAvsGovernanceAddress())
 	avsGovernance, err := contractAvsGovernance.NewAvsGovernanceCaller(avsGovernanceAddress, l1Client)
 	if err != nil {
 		return fmt.Errorf("failed to create AvsGovernance contract instance: %v", err)
 	}
 
-	attestationCenterAddress := common.HexToAddress(config.AttestationCenterAddress)
+	attestationCenterAddress := common.HexToAddress(config.GetAttestationCenterAddress())
 	attestationCenter, err := contractAttestationCenter.NewAttestationCenterCaller(attestationCenterAddress, l2Client)
 	if err != nil {
 		return fmt.Errorf("failed to create AttestationCenter contract instance: %v", err)
@@ -98,7 +101,7 @@ func FetchAndLogOperatorDetails(operatorAddress common.Address) error {
 	}
 
 	if operatorIdStr != "" && votingPowerStr != "" {
-		err = database.UpdateOperatorDetails(
+		err = client.UpdateOperatorDetails(
 			operatorAddress.Hex(),
 			operatorIdStr,
 			votingPowerStr,
@@ -117,8 +120,8 @@ func FetchAndLogOperatorDetails(operatorAddress common.Address) error {
 	return nil
 }
 
-func TestFetchOperatorDetails(operatorAddressHex string) error {
+func TestFetchOperatorDetails(operatorAddressHex string, logger logging.Logger) error {
 	operatorAddress := common.HexToAddress(operatorAddressHex)
 	logger.Infof("Manually triggering fetch of operator details for %s", operatorAddress.Hex())
-	return FetchAndLogOperatorDetails(operatorAddress)
+	return FetchAndLogOperatorDetails(operatorAddress, logger)
 }
