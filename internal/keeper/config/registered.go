@@ -1,14 +1,14 @@
 package config
 
 import (
-	"log"
-	"strings"
-	"math/big"
+	"context"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"	
-	"context"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"log"
+	"math/big"
+	"strings"
 )
 
 const AttestationCenterABI = `[{
@@ -74,7 +74,7 @@ func checkKeeperRegistration() bool {
 		return false
 	}
 
-	log.Println("Keeper address is registered on L2 with operator ID", operatorID)
+	log.Println("Keeper address", KeeperAddress, "is registered on L2 with operator ID", operatorID)
 
 	return true
 }

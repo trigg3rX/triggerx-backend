@@ -3,126 +3,118 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/checkin"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/validation"
+	// "github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
+	// "github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var logger logging.Logger
-
 func main() {
+	// Initialize configuration
 	config.Init()
 
-	if config.DevMode {
-		if err := logging.InitLogger(logging.Development, logging.KeeperProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Development, logging.KeeperProcess)
-	} else {
-		if err := logging.InitLogger(logging.Production, logging.KeeperProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Production, logging.KeeperProcess)
+	// Initialize logger
+	logConfig := logging.LoggerConfig{
+		LogDir:      logging.BaseDataDir,
+		ProcessName: logging.KeeperProcess,
+		Environment: getEnvironment(),
+		UseColors:   true,
 	}
+
+	if err := logging.InitServiceLogger(logConfig); err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	logger := logging.GetServiceLogger()
+
 	logger.Info("Starting keeper node...")
 
+	// Initialize clients
+	aggregatorCfg := aggregator.Config{
+		RPCAddress:     config.AggregatorRPCAddress,
+		PrivateKey:     config.PrivateKeyController,
+		KeeperAddress:  config.KeeperAddress,
+		RetryAttempts:  3,
+		RetryDelay:     2 * time.Second,
+		RequestTimeout: 10 * time.Second,
+	}
+	aggregatorClient, err := aggregator.NewClient(logger, aggregatorCfg)
+	if err != nil {
+		logger.Fatal("Failed to initialize aggregator client", "error", err)
+	}
+	defer aggregatorClient.Close()
+
+	healthCfg := health.Config{
+		HealthServiceURL: config.HealthRPCAddress,
+		PrivateKey:       config.PrivateKeyConsensus,
+		KeeperAddress:    config.KeeperAddress,
+		PeerID:           config.PeerID,
+		Version:          "0.1.0",
+		RequestTimeout:   10 * time.Second,
+	}
+	healthClient, err := health.NewClient(logger, healthCfg)
+	if err != nil {
+		logger.Fatal("Failed to initialize health client", "error", err)
+	}
+	defer healthClient.Close()
+
+	// Initialize core services
+	// executor := execution.NewExecutor(logger, aggregatorClient)
+	// validator := validation.NewValidator(logger)
+
+	// Initialize API server
+	serverCfg := api.Config{
+		Port:           config.OperatorRPCPort,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	deps := api.Dependencies{
+		Logger:    logger,
+		// Executor:  executor,
+		// Validator: validator,
+		HealthSvc: healthClient,
+	}
+
+	server := api.NewServer(serverCfg, deps)
+
+	// Start server in a goroutine
 	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-
-		if err := checkin.CheckInWithHealthService(); err != nil {
-			logger.Error("Initial health check-in failed", "error", err)
-		}
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := checkin.CheckInWithHealthService(); err != nil {
-					logger.Error("Health check-in failed", "error", err)
-				}
-			}
+		if err := server.Start(); err != nil {
+			logger.Fatal("Failed to start server", "error", err)
 		}
 	}()
 
-	routerValidation := gin.New()
-	routerValidation.Use(gin.Recovery())
-
-	routerValidation.POST("/p2p/message", execution.ExecuteTask)
-	routerValidation.POST("/task/validate", validation.ValidateTask)
-
-	routerValidation.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":         "healthy",
-			"keeper_address": config.KeeperAddress,
-			"timestamp":      time.Now().UTC().Format(time.RFC3339),
-		})
-	})
-
-	errorHandler := func(c *gin.Context) {
-		c.Next()
-		if len(c.Errors) > 0 {
-			logger.Error("request failed", "errors", c.Errors)
-			if !c.Writer.Written() {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": "Internal Server Error",
-				})
-			}
-		}
-	}
-
-	routerValidation.Use(errorHandler)
-
-	srvValidation := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.KeeperRPCPort),
-		Handler: routerValidation,
-	}
-
-	serverErrors := make(chan error, 1)
-
-	go func() {
-		for {
-			logger.Info("Validation Service starting", "address", srvValidation.Addr)
-			if err := srvValidation.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				serverErrors <- err
-				logger.Error("keeper server failed, restarting...", "error", err)
-				time.Sleep(time.Second)
-				continue
-			}
-			break
-		}
-	}()
-
+	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 
-	select {
-	case err := <-serverErrors:
-		logger.Error("Server Error Received", "error", err)
+	// Block until signal is received
+	<-shutdown
 
-	case sig := <-shutdown:
-		logger.Info("Starting Shutdown", "signal", sig)
+	// Create shutdown context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		if err := srvValidation.Shutdown(ctx); err != nil {
-			logger.Error("Graceful Shutdown Keeper Server Failed",
-				"timeout", 2*time.Second,
-				"error", err)
-
-			if err := srvValidation.Close(); err != nil {
-				logger.Fatal("Could Not Stop Keeper Server Gracefully", "error", err)
-			}
-		}
+	// Shutdown server gracefully
+	if err := server.Stop(ctx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
 	}
-	logger.Info("Shutdown Complete")
+
+	logger.Info("Server shutdown complete")
+}
+
+func getEnvironment() logging.LogLevel {
+	if config.DevMode {
+		return logging.Development
+	}
+	return logging.Production
 }

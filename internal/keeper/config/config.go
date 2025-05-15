@@ -1,26 +1,28 @@
 package config
 
 import (
-	"os"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/utils"
+	"github.com/trigg3rX/triggerx-backend/pkg/validator"
 )
 
 var (
-	EthRPCUrl            string
-	BaseRPCUrl           string
-	AlchemyAPIKey       string
+	EthRPCUrl     string
+	BaseRPCUrl    string
+	AlchemyAPIKey string
 
 	PrivateKeyConsensus  string
 	PrivateKeyController string
 	KeeperAddress        string
 
-	PublicIPV4Address    string
-	PeerID               string
+	PublicIPV4Address string
+	PeerID            string
+
+	OperatorRPCPort string
 
 	DevMode bool
 )
@@ -33,43 +35,48 @@ func Init() {
 	DevMode = os.Getenv("DEV_MODE") == "true"
 
 	EthRPCUrl = os.Getenv("L1_RPC")
-	if !utils.IsValidRPCUrl(EthRPCUrl) {
+	if validator.IsEmpty(EthRPCUrl) {
 		log.Fatal("Invalid L1 RPC Address")
 	}
 
 	AlchemyAPIKey = os.Getenv("ALCHEMY_API_KEY")
-	if utils.IsEmpty(AlchemyAPIKey) {
+	if validator.IsEmpty(AlchemyAPIKey) {
 		log.Fatal("Alchemy API Key is not set")
 	}
 
 	BaseRPCUrl = os.Getenv("L2_RPC")
-	if !utils.IsValidRPCUrl(BaseRPCUrl) {
+	if validator.IsEmpty(BaseRPCUrl) {
 		log.Fatal("Invalid L2 RPC Address")
 	}
 
 	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY")
-	if !utils.IsValidPrivateKey(PrivateKeyConsensus) {
+	if !validator.IsValidPrivateKey(PrivateKeyConsensus) {
 		log.Fatal("Invalid Private Key")
 	}
 
 	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
-	if !utils.IsValidPrivateKey(PrivateKeyController) {
+	if !validator.IsValidPrivateKey(PrivateKeyController) {
 		log.Fatal("Invalid Operator Private Key")
 	}
 
 	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
-	if !utils.IsValidAddress(KeeperAddress) {
+	if !validator.IsValidAddress(KeeperAddress) {
 		log.Fatal("Invalid Operator Address")
 	}
-	
+
 	PublicIPV4Address = os.Getenv("PUBLIC_IPV4_ADDRESS")
-	if !utils.IsValidIPAddress(PublicIPV4Address) {
+	if !validator.IsValidIPAddress(PublicIPV4Address) {
 		log.Fatal("Invalid Public IP Address")
 	}
 
 	PeerID = os.Getenv("PEER_ID")
-	if !utils.IsValidPeerID(PeerID) {
+	if !validator.IsValidPeerID(PeerID) {
 		log.Fatal("Invalid Peer ID")
+	}
+
+	OperatorRPCPort = os.Getenv("OPERATOR_RPC_PORT")
+	if validator.IsEmpty(OperatorRPCPort) {
+		log.Fatal("Invalid Operator RPC Port")
 	}
 
 	checkDefaultValues()

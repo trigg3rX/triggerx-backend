@@ -3,25 +3,25 @@ package config
 import "os"
 
 var (
-	KeeperRPCPort        string
-	KeeperP2PPort        string
-	KeeperMetricsPort    string
-	GrafanaPort          string
-	
-	PinataApiKey             string
-	PinataSecretApiKey       string
-	IpfsHost                 string
-	
-	AggregatorRPCAddress      string
-	HealthRPCAddress          string
-	
-	L1Chain                  string
-	L2Chain                  string
-	
+	KeeperRPCPort     string
+	KeeperP2PPort     string
+	KeeperMetricsPort string
+	GrafanaPort       string
+
+	PinataApiKey       string
+	PinataSecretApiKey string
+	IpfsHost           string
+
+	AggregatorRPCAddress string
+	HealthRPCAddress     string
+
+	L1Chain string
+	L2Chain string
+
 	AVSGovernanceAddress     string
 	AttestationCenterAddress string
-	
-	OthenticBootstrapID      string
+
+	OthenticBootstrapID string
 )
 
 func checkDefaultValues() {
@@ -80,5 +80,5 @@ func checkDefaultValues() {
 	OthenticBootstrapID = os.Getenv("OTHE_BOOTSTRAP_ID")
 	if OthenticBootstrapID == "" {
 		OthenticBootstrapID = "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"
-	}	
+	}
 }
