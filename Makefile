@@ -11,14 +11,39 @@ db-setup: ## Setup ScyllaDB container
 	sleep 6
 	./scripts/database/setup-db.sh
 
+db-cluster-setup: ## Setup ScyllaDB multi-node cluster
+	chmod +x ./scripts/database/setup-cluster.sh
+	./scripts/database/setup-cluster.sh
+
+db-cluster-status: ## Check ScyllaDB cluster status
+	docker exec triggerx-scylla-1 nodetool status
+
+db-test-replication: ## Test ScyllaDB replication and failover
+	chmod +x ./scripts/database/test-replication.sh
+	./scripts/database/test-replication.sh
+
+db-test-api-failover: ## Test API with node failures
+	chmod +x ./scripts/database/test-api-failover.sh
+	./scripts/database/test-api-failover.sh
+
+db-api-client: ## Manual API testing client
+	chmod +x ./scripts/database/api-test-client.sh
+	./scripts/database/api-test-client.sh $(ARGS)
+
+db-shell-node1: ## Open CQL shell for node 1
+	docker exec -it triggerx-scylla-1 cqlsh
+
+db-shell-node2: ## Open CQL shell for node 2
+	docker exec -it triggerx-scylla-2 cqlsh
+
 start-db-server: ## Start the Database Server
 	./scripts/database/start-dbserver.sh
 
 db-shell: ## Open CQL shell
-	docker exec -it triggerx-scylla cqlsh
+	docker exec -it triggerx-scylla-1 cqlsh
 
 db-backup:  ##backup data
-	docker exec -it triggerx-scylla nodetool snapshot -t triggerx_backup triggerx -cf keeper_data
+	docker exec -it triggerx-scylla-1 nodetool snapshot -t triggerx_backup triggerx -cf keeper_data
 
 ############################# RUN #############################
 
@@ -26,7 +51,7 @@ start-othentic: ## Start the Othentic Node
 	./scripts/services/start-othentic.sh
 
 start-manager: ## Start the task manager
-	./scripts/services/start-manager.sh
+	./scripts/fix-manager.sh
 
 start-registrar: ## Start the Registrar
 	./scripts/services/start-registrar.sh

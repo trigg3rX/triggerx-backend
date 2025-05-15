@@ -1,9 +1,11 @@
--- Create keyspace
+-- We are creating the keyspace separately in the setup script
 CREATE KEYSPACE IF NOT EXISTS triggerx
 WITH replication = {
     'class': 'SimpleStrategy',
     'replication_factor': 1
 };
+
+-- with NetworkTopologyStrategy for proper multi-DC replication
 
 -- Switch to keyspace
 USE triggerx;
@@ -61,6 +63,12 @@ CREATE TABLE IF NOT EXISTS job_data (
     created_at timestamp,
     last_executed_at timestamp,
     task_ids set<bigint>,
+
+    -- -- New columns for job assignment
+    -- manager_id text,
+    -- job_status text,  -- pending, assigned, running, completed, failed
+    -- assigned_at timestamp,
+    -- last_updated_at timestamp,
     PRIMARY KEY (job_id)
 );
 
@@ -125,4 +133,3 @@ CREATE TABLE IF NOT EXISTS apikeys (
     createdAt timestamp,
     PRIMARY KEY (key)
 );
-

@@ -1,0 +1,47 @@
+# Use golang:1.23-alpine as the base image
+FROM golang:1.23-alpine AS builder
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy go.mod and go.sum files
+COPY go.mod go.sum ./
+
+# Update dependencies and ensure go.sum is up to date
+RUN go mod tidy
+RUN go mod download
+
+# Copy the entire codebase into the container
+COPY . .
+
+# Run go mod tidy again with the full codebase to ensure all imports are accounted for
+RUN go mod tidy
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-manager ./cmd/manager
+
+# Use a minimal alpine image for the final stage
+FROM golang:1.23-alpine
+
+# Install ca-certificates, curl, redis-cli, and bash
+RUN apk --no-cache add ca-certificates curl redis bash
+
+# Set working directory
+WORKDIR /app
+
+# Copy the built binary from the builder stage
+COPY --from=builder /app/triggerx-manager .
+
+# Copy the startup script and config
+COPY ./scripts/services/start-ha-manager.sh /app/start-ha-manager.sh
+COPY ./config /app/config
+
+# Make the script executable
+RUN chmod +x /app/start-ha-manager.sh
+
+# Set environment variables
+ENV GIN_MODE=release
+ENV LOG_LEVEL=info
+
+# Run the startup script with bash
+CMD ["/bin/bash", "/app/start-ha-manager.sh"] 
