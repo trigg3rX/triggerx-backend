@@ -32,7 +32,7 @@ const AttestationCenterABI = `[{
 }]`
 
 func checkKeeperRegistration() bool {
-	client, err := ethclient.Dial(BaseRPCUrl)
+	client, err := ethclient.Dial(GetBaseRPCUrl())
 	if err != nil {
 		log.Fatal("Failed to connect to L2 network", "error", err)
 		return false
@@ -45,14 +45,14 @@ func checkKeeperRegistration() bool {
 		return false
 	}
 
-	keeperAddr := common.HexToAddress(KeeperAddress)
+	keeperAddr := common.HexToAddress(GetKeeperAddress())
 	data, err := parsedABI.Pack("operatorsIdsByAddress", keeperAddr)
 	if err != nil {
 		log.Fatal("Failed to pack function call data", "error", err)
 		return false
 	}
 
-	attestationCenterAddr := common.HexToAddress(AttestationCenterAddress)
+	attestationCenterAddr := common.HexToAddress(GetAttestationCenterAddress())
 	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
 		To:   &attestationCenterAddr,
 		Data: data,
@@ -74,7 +74,7 @@ func checkKeeperRegistration() bool {
 		return false
 	}
 
-	log.Println("Keeper address", KeeperAddress, "is registered on L2 with operator ID", operatorID)
+	log.Println("Keeper address", GetKeeperAddress(), "is registered on L2 with operator ID", operatorID)
 
 	return true
 }

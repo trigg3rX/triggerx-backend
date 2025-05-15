@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/validator"
 )
 
-var (
+type Config struct {
 	EthRPCUrl     string
 	BaseRPCUrl    string
 	AlchemyAPIKey string
@@ -25,61 +26,67 @@ var (
 	OperatorRPCPort string
 
 	DevMode bool
-)
 
-func Init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	KeeperRPCPort     string
+	KeeperP2PPort     string
+	KeeperMetricsPort string
+	GrafanaPort       string
+
+	PinataApiKey       string
+	PinataSecretApiKey string
+	IpfsHost           string
+
+	AggregatorRPCAddress string
+	HealthRPCAddress     string
+
+	L1Chain string
+	L2Chain string
+
+	AVSGovernanceAddress     string
+	AttestationCenterAddress string
+
+	OthenticBootstrapID string
+}
+
+var cfg Config
+
+func Init() error {
+	if err := godotenv.Load(); err != nil {
+		return fmt.Errorf("error loading .env file: %w", err)
 	}
-	DevMode = os.Getenv("DEV_MODE") == "true"
-
-	EthRPCUrl = os.Getenv("L1_RPC")
-	if validator.IsEmpty(EthRPCUrl) {
-		log.Fatal("Invalid L1 RPC Address")
+	cfg = Config{
+		DevMode:               os.Getenv("DEV_MODE") == "true",
+		EthRPCUrl:             os.Getenv("ETH_RPC_URL"),
+		BaseRPCUrl:            os.Getenv("BASE_RPC_URL"),
+		AlchemyAPIKey:        os.Getenv("ALCHEMY_API_KEY"),
+		PrivateKeyConsensus:   os.Getenv("PRIVATE_KEY"),
+		KeeperAddress:         os.Getenv("OPERATOR_ADDRESS"),
+		PublicIPV4Address:     os.Getenv("PUBLIC_IPV4_ADDRESS"),
+		PeerID:                os.Getenv("PEER_ID"),
+		OperatorRPCPort:       os.Getenv("OPERATOR_RPC_PORT"),
+		KeeperRPCPort:         os.Getenv("KEEPER_RPC_PORT"),
+		KeeperP2PPort:         os.Getenv("KEEPER_P2P_PORT"),
+		KeeperMetricsPort:     os.Getenv("KEEPER_METRICS_PORT"),
+		GrafanaPort:           os.Getenv("GRAFANA_PORT"),
+		PinataApiKey:          os.Getenv("PINATA_API_KEY"),
+		PinataSecretApiKey:    os.Getenv("PINATA_SECRET_API_KEY"),
+		IpfsHost:              os.Getenv("IPFS_HOST"),
+		AggregatorRPCAddress:  os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS"),
+		HealthRPCAddress:      os.Getenv("HEALTH_RPC_ADDRESS"),
+		L1Chain:               os.Getenv("L1_CHAIN"),
+		L2Chain:               os.Getenv("L2_CHAIN"),
+		AVSGovernanceAddress:  os.Getenv("AVS_GOVERNANCE_ADDRESS"),
+		AttestationCenterAddress: os.Getenv("ATTESTATION_CENTER_ADDRESS"),
+		OthenticBootstrapID:     os.Getenv("OTHENTIC_BOOTSTRAP_ID"),
 	}
 
-	AlchemyAPIKey = os.Getenv("ALCHEMY_API_KEY")
-	if validator.IsEmpty(AlchemyAPIKey) {
-		log.Fatal("Alchemy API Key is not set")
+	if err := validateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
 	}
 
-	BaseRPCUrl = os.Getenv("L2_RPC")
-	if validator.IsEmpty(BaseRPCUrl) {
-		log.Fatal("Invalid L2 RPC Address")
+	if !cfg.DevMode {
+		gin.SetMode(gin.ReleaseMode)
 	}
-
-	PrivateKeyConsensus = os.Getenv("PRIVATE_KEY")
-	if !validator.IsValidPrivateKey(PrivateKeyConsensus) {
-		log.Fatal("Invalid Private Key")
-	}
-
-	PrivateKeyController = os.Getenv("OPERATOR_PRIVATE_KEY")
-	if !validator.IsValidPrivateKey(PrivateKeyController) {
-		log.Fatal("Invalid Operator Private Key")
-	}
-
-	KeeperAddress = os.Getenv("OPERATOR_ADDRESS")
-	if !validator.IsValidAddress(KeeperAddress) {
-		log.Fatal("Invalid Operator Address")
-	}
-
-	PublicIPV4Address = os.Getenv("PUBLIC_IPV4_ADDRESS")
-	if !validator.IsValidIPAddress(PublicIPV4Address) {
-		log.Fatal("Invalid Public IP Address")
-	}
-
-	PeerID = os.Getenv("PEER_ID")
-	if !validator.IsValidPeerID(PeerID) {
-		log.Fatal("Invalid Peer ID")
-	}
-
-	OperatorRPCPort = os.Getenv("OPERATOR_RPC_PORT")
-	if validator.IsEmpty(OperatorRPCPort) {
-		log.Fatal("Invalid Operator RPC Port")
-	}
-
-	checkDefaultValues()
 
 	isRegistered := checkKeeperRegistration()
 	if !isRegistered {
@@ -87,5 +94,147 @@ func Init() {
 		log.Fatal("Keeper address is not registered on L2")
 	}
 
-	gin.SetMode(gin.ReleaseMode)
+	return nil
+}
+
+func validateConfig(cfg Config) error {
+	if validator.IsEmpty(cfg.EthRPCUrl) {
+		return fmt.Errorf("invalid eth rpc url: %s", cfg.EthRPCUrl)
+	}
+	if validator.IsEmpty(cfg.BaseRPCUrl) {
+		return fmt.Errorf("invalid base rpc url: %s", cfg.BaseRPCUrl)
+	}
+	if validator.IsEmpty(cfg.AlchemyAPIKey) {
+		return fmt.Errorf("invalid alchemy api key: %s", cfg.AlchemyAPIKey)
+	}
+	if !validator.IsValidPort(cfg.OperatorRPCPort) {
+		return fmt.Errorf("invalid operator rpc port: %s", cfg.OperatorRPCPort)
+	}
+	if !validator.IsValidIPAddress(cfg.PublicIPV4Address) {
+		return fmt.Errorf("invalid public ipv4 address: %s", cfg.PublicIPV4Address)
+	}
+	if !validator.IsValidPrivateKey(cfg.PrivateKeyConsensus) {
+		return fmt.Errorf("invalid private key consensus: %s", cfg.PrivateKeyConsensus)
+	}
+	if !validator.IsValidAddress(cfg.KeeperAddress) {
+		return fmt.Errorf("invalid keeper address: %s", cfg.KeeperAddress)
+	}
+	if !validator.IsValidPeerID(cfg.PeerID) {
+		return fmt.Errorf("invalid peer id: %s", cfg.PeerID)
+	}
+	if !validator.IsValidPort(cfg.KeeperRPCPort) {
+		cfg.KeeperRPCPort = "9005"
+	}
+	if !validator.IsValidPort(cfg.KeeperP2PPort) {
+		cfg.KeeperP2PPort = "9006"
+	}
+	if !validator.IsValidPort(cfg.KeeperMetricsPort) {
+		cfg.KeeperMetricsPort = "9009"
+	}
+	if !validator.IsValidPort(cfg.GrafanaPort) {
+		cfg.GrafanaPort = "3000"
+	}
+	if !validator.IsValidRPCAddress(cfg.AggregatorRPCAddress) {
+		cfg.AggregatorRPCAddress = "http://127.0.0.1:9001"
+	}
+	if !validator.IsValidRPCAddress(cfg.HealthRPCAddress) {
+		cfg.HealthRPCAddress = "http://127.0.0.1:9004"
+	}
+	if validator.IsEmpty(cfg.L1Chain) {
+		cfg.L1Chain = "17000"
+	}
+	if validator.IsEmpty(cfg.L2Chain) {
+		cfg.L2Chain = "84532"
+	}
+	if !validator.IsValidAddress(cfg.AVSGovernanceAddress) {
+		cfg.AVSGovernanceAddress = "0x0C77B6273F4852200b17193837960b2f253518FC"
+	}
+	if !validator.IsValidAddress(cfg.AttestationCenterAddress) {
+		cfg.AttestationCenterAddress = "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"
+	}
+	if !validator.IsValidPeerID(cfg.OthenticBootstrapID) {
+		cfg.OthenticBootstrapID = "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"
+	}
+	if validator.IsEmpty(cfg.IpfsHost) {
+		cfg.IpfsHost = "aquamarine-urgent-limpet-846.mypinata.cloud"
+	}
+	if validator.IsEmpty(cfg.PinataApiKey) {
+		cfg.PinataApiKey = "9f5922013fb9e2dfbc13"
+	}
+	if validator.IsEmpty(cfg.PinataSecretApiKey) {
+		cfg.PinataSecretApiKey = "190e9f1c959861bce0aed5a0e6c74a45a225658f7fa4fdc70f3fe136b76587fb"
+	}
+	return nil
+}
+
+func GetEthRPCUrl() string {
+	return cfg.EthRPCUrl
+}
+
+func GetBaseRPCUrl() string {
+	return cfg.BaseRPCUrl
+}
+
+func GetAlchemyAPIKey() string {
+	return cfg.AlchemyAPIKey
+}
+
+func GetPrivateKeyConsensus() string {
+	return cfg.PrivateKeyConsensus
+}
+
+func GetPrivateKeyController() string {
+	return cfg.PrivateKeyController
+}
+
+func GetKeeperAddress() string {
+	return cfg.KeeperAddress
+}
+
+func GetPublicIPV4Address() string {
+	return cfg.PublicIPV4Address
+}
+
+func GetPeerID() string {
+	return cfg.PeerID
+}
+
+func GetOperatorRPCPort() string {
+	return cfg.OperatorRPCPort
+}
+
+func IsDevMode() bool {
+	return cfg.DevMode
+}
+
+func GetKeeperRPCPort() string {
+	return cfg.KeeperRPCPort
+}
+
+func GetAggregatorRPCAddress() string {
+	return cfg.AggregatorRPCAddress
+}
+
+func GetHealthRPCAddress() string {
+	return cfg.HealthRPCAddress
+}
+
+func GetAvsGovernanceAddress() string {
+	return cfg.AVSGovernanceAddress
+}
+
+func GetAttestationCenterAddress() string {
+	return cfg.AttestationCenterAddress
+}
+
+func GetIpfsHost() string {
+	return cfg.IpfsHost
+}
+
+func GetPinataApiKey() string {
+	return cfg.PinataApiKey
+}
+
+func GetVersion() string {
+	return "0.1.2"
 }

@@ -11,6 +11,7 @@ import (
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/security"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Client represents a Health service client
@@ -30,16 +31,6 @@ type Config struct {
 	RequestTimeout   time.Duration
 }
 
-// KeeperHealth represents the health check payload
-type KeeperHealth struct {
-	KeeperAddress    string    `json:"keeperAddress"`
-	ConsensusAddress string    `json:"consensusAddress"`
-	Version          string    `json:"version"`
-	Timestamp        time.Time `json:"timestamp"`
-	Signature        string    `json:"signature"`
-	PeerID           string    `json:"peerId"`
-}
-
 // NewClient creates a new Health service client
 func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 	if cfg.RequestTimeout == 0 {
@@ -47,7 +38,7 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 	}
 
 	if cfg.Version == "" {
-		cfg.Version = "0.1.0"
+		cfg.Version = "0.1.2"
 	}
 
 	httpClient := &http.Client{
@@ -78,7 +69,7 @@ func (c *Client) CheckIn(ctx context.Context) error {
 	}
 
 	// Prepare health check payload
-	payload := KeeperHealth{
+	payload := types.KeeperHealth{
 		KeeperAddress:    c.config.KeeperAddress,
 		ConsensusAddress: consensusAddress,
 		Version:          c.config.Version,
@@ -86,6 +77,8 @@ func (c *Client) CheckIn(ctx context.Context) error {
 		Signature:        signature,
 		PeerID:           c.config.PeerID,
 	}
+
+	c.logger.Infof("Payload: %+v", payload)
 
 	// Send health check request
 	err = c.sendHealthCheck(ctx, payload)
@@ -101,7 +94,7 @@ func (c *Client) CheckIn(ctx context.Context) error {
 }
 
 // sendHealthCheck sends the health check request to the health service
-func (c *Client) sendHealthCheck(ctx context.Context, payload KeeperHealth) error {
+func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal health check payload: %w", err)
