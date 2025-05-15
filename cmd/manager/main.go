@@ -12,60 +12,90 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/manager"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/api"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/cache"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-
-	kconfig "github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 )
 
-var logger logging.Logger
+const (
+	shutdownTimeout = 30 * time.Second
+	cacheStatePath  = "/var/lib/triggerx/manager/cache.json"
+	defaultTimeout  = 10 * time.Second
+)
 
 func main() {
-	config.Init()
-	kconfig.Init()
-
-	if config.DevMode {
-		if err := logging.InitLogger(logging.Development, logging.ManagerProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
-	} else {
-		if err := logging.InitLogger(logging.Production, logging.ManagerProcess); err != nil {
-			panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-		}
-		logger = logging.GetLogger(logging.Production, logging.ManagerProcess)
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
-	logger.Info("Starting manager node...")
 
+	// Initialize logger
+	logConfig := logging.LoggerConfig{
+		LogDir:      logging.BaseDataDir,
+		ProcessName: logging.ManagerProcess,
+		Environment: getEnvironment(),
+		UseColors:   true,
+	}
+
+	if err := logging.InitServiceLogger(logConfig); err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+	logger := logging.GetServiceLogger()
+
+	logger.Info("Starting manager service...")
+
+	// Initialize server components
 	var wg sync.WaitGroup
-
 	serverErrors := make(chan error, 3)
 	ready := make(chan struct{})
 
-	wg.Add(1)
+	// Initialize database client
+	dbConfig := database.DatabaseClientConfig{
+		RPCAddress:  config.GetDatabaseRPCAddress(),
+		HTTPTimeout: defaultTimeout,
+	}
+	dbClient, err := database.NewDatabaseClient(logger, dbConfig)
+	if err != nil {
+		logger.Fatal("Failed to initialize database client:", err)
+	}
+	defer dbClient.Close()
 
-	manager.JobSchedulerInit()
-	logger.Info("Job scheduler initialized successfully.")
+	// Initialize aggregator client
+	aggregatorConfig := aggregator.AggregatorClientConfig{
+		RPCAddress: config.GetAggregatorRPCAddress(),
+		PrivateKey: config.GetDeployerPrivateKey(),
+		RPCTimeout: defaultTimeout,
+	}
+	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorConfig)
+	if err != nil {
+		logger.Fatal("Failed to initialize aggregator client:", err)
+	}
+	defer aggregatorClient.Close()
 
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
-	router.POST("/job/create", manager.HandleCreateJobEvent)
-	router.POST("/job/update", manager.HandleUpdateJobEvent)
-	router.POST("/job/pause", manager.HandlePauseJobEvent)
-	router.POST("/job/resume", manager.HandleResumeJobEvent)
-	router.POST("/job/state/update", manager.HandleJobStateUpdate)
-
-	router.POST("/p2p/message", services.ExecuteTask)
-	router.POST("/task/validate", services.ValidateTask)
-
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.ManagerRPCPort),
-		Handler: router,
+	// Initialize cache
+	jobCache, err := cache.NewMemoryCache(logger, cacheStatePath)
+	if err != nil {
+		logger.Fatal("Failed to initialize job cache:", err)
 	}
 
+	// Initialize scheduler
+	jobScheduler, err := scheduler.NewJobScheduler(logger, jobCache, dbClient, aggregatorClient)
+	if err != nil {
+		logger.Fatal("Failed to initialize job scheduler:", err)
+	}
+
+	// Initialize API handlers
+	handlers := api.NewHandlers(logger, jobScheduler, dbClient)
+
+	// Setup HTTP server
+	srv := setupHTTPServer(logger, handlers)
+
+	// Start server
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		logger.Info("Starting HTTP server...")
@@ -75,7 +105,7 @@ func main() {
 	}()
 
 	close(ready)
-	logger.Infof("Manager node is READY on port %s...", config.ManagerRPCPort)
+	logger.Infof("Manager node is READY on port %s...", config.GetManagerRPCPort())
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
@@ -87,16 +117,49 @@ func main() {
 		logger.Info("Received shutdown signal")
 	}
 
+	performGracefulShutdown(srv, jobCache, &wg, logger)
+}
+
+func getEnvironment() logging.LogLevel {
+	if config.IsDevMode() {
+		return logging.Development
+	}
+	return logging.Production
+}
+
+func setupHTTPServer(logger logging.Logger, handlers *api.Handlers) *http.Server {
+	if !config.IsDevMode() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(api.LoggerMiddleware(logger))
+
+	// Register routes
+	api.RegisterRoutes(router, handlers)
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%s", config.GetManagerRPCPort()),
+		Handler: router,
+	}
+}
+
+func performGracefulShutdown(srv *http.Server, jobCache cache.Cache, wg *sync.WaitGroup, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
+	}
+
+	if err := jobCache.Close(); err != nil {
+		logger.Error("Failed to close job cache", "error", err)
 	}
 
 	wg.Wait()

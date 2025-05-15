@@ -7,7 +7,6 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -118,7 +117,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 		TaskPerformerID:  0,
 	}
 
-	performerData, err := services.GetPerformer()
+	performerData, err := w.scheduler.GetDatabaseClient().GetPerformer()
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
@@ -128,7 +127,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 
 	w.scheduler.Logger().Infof("Task data: %d | %d | %d", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformerID)
 
-	taskID, status, err := services.CreateTaskData(taskData)
+	taskID, status, err := w.scheduler.GetDatabaseClient().CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
@@ -142,7 +141,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 
 	w.scheduler.Logger().Infof("Task ID %d created for job %v", taskID, w.jobID)
 
-	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData)
+	status, err = w.scheduler.GetAggregatorClient().SendTaskToPerformer(jobData, triggerData, performerData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
 		return err

@@ -13,8 +13,10 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 
+	"github.com/trigg3rX/triggerx-backend/internal/manager/cache"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/workers"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -30,11 +32,8 @@ type JobScheduler struct {
 	eventWatchers map[int64]*EventWatcher
 	conditions    map[int64]*ConditionMonitor
 
-	stateCache map[int64]interface{}
-	cacheMutex sync.RWMutex
-
-	balancer     *LoadBalancer
-	cacheManager *CacheManager
+	cache    cache.Cache
+	balancer *LoadBalancer
 
 	workers      map[int64]workers.Worker
 	workerCtx    context.Context
@@ -42,6 +41,9 @@ type JobScheduler struct {
 
 	jobChainStatus map[int64]string
 	chainMutex     sync.RWMutex
+
+	dbClient         *database.DatabaseClient
+	aggregatorClient *aggregator.AggregatorClient
 }
 
 type ConditionMonitor struct {
@@ -88,32 +90,28 @@ func (e *EventWatcher) Start() {
 func (e *EventWatcher) Stop() {
 }
 
-func NewJobScheduler(logger logging.Logger) (*JobScheduler, error) {
+// NewJobScheduler creates a new instance of JobScheduler
+func NewJobScheduler(logger logging.Logger, jobCache cache.Cache, dbClient *database.DatabaseClient, aggregatorClient *aggregator.AggregatorClient) (*JobScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	scheduler := &JobScheduler{
-		ctx:            ctx,
-		cancel:         cancel,
-		logger:         logger,
-		cronScheduler:  cron.New(cron.WithSeconds()),
-		eventWatchers:  make(map[int64]*EventWatcher),
-		conditions:     make(map[int64]*ConditionMonitor),
-		stateCache:     make(map[int64]interface{}),
-		balancer:       NewLoadBalancer(),
-		workers:        make(map[int64]workers.Worker),
-		workerCtx:      ctx,
-		workerCancel:   cancel,
-		jobChainStatus: make(map[int64]string),
-		mu:             sync.RWMutex{},
-		cacheMutex:     sync.RWMutex{},
-		chainMutex:     sync.RWMutex{},
+		ctx:              ctx,
+		cancel:           cancel,
+		logger:           logger,
+		cronScheduler:    cron.New(cron.WithSeconds()),
+		eventWatchers:    make(map[int64]*EventWatcher),
+		conditions:       make(map[int64]*ConditionMonitor),
+		cache:            jobCache,
+		balancer:         NewLoadBalancer(),
+		workers:          make(map[int64]workers.Worker),
+		workerCtx:        ctx,
+		workerCancel:     cancel,
+		jobChainStatus:   make(map[int64]string),
+		mu:               sync.RWMutex{},
+		chainMutex:       sync.RWMutex{},
+		dbClient:         dbClient,
+		aggregatorClient: aggregatorClient,
 	}
-
-	cacheManager, err := NewCacheManager(scheduler)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize cache manager: %v", err)
-	}
-	scheduler.cacheManager = cacheManager
 
 	go scheduler.balancer.MonitorResources()
 	scheduler.cronScheduler.Start()
@@ -140,22 +138,22 @@ func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) erro
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
 
-	s.cacheMutex.Lock()
-	s.stateCache[jobData.JobID] = map[string]interface{}{
-		"created":       jobData.CreatedAt,
-		"last_executed": jobData.LastExecutedAt,
-		"status":        "running",
-		"type":          "time-based",
-		"timeframe":     jobData.TimeFrame,
-		"interval":      jobData.TimeInterval,
+	state := &cache.JobState{
+		Created:      jobData.CreatedAt,
+		LastExecuted: jobData.LastExecutedAt,
+		Status:       "running",
+		Type:         "time-based",
+		Metadata: map[string]interface{}{
+			"timeframe": jobData.TimeFrame,
+			"interval":  jobData.TimeInterval,
+		},
 	}
-	s.cacheMutex.Unlock()
+
+	if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
+		s.logger.Errorf("Failed to cache job state: %v", err)
+	}
 
 	go worker.Start(s.workerCtx)
-
-	if err := s.cacheManager.SaveState(); err != nil {
-		s.logger.Errorf("Failed to save state: %v", err)
-	}
 
 	s.logger.Infof("Started time-based job %d", jobData.JobID)
 	return nil
@@ -173,22 +171,22 @@ func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) err
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
 
-	s.cacheMutex.Lock()
-	s.stateCache[jobData.JobID] = map[string]interface{}{
-		"created":       jobData.CreatedAt,
-		"last_executed": jobData.LastExecutedAt,
-		"status":        "running",
-		"type":          "event-based",
-		"chain_id":      jobData.TriggerChainID,
-		"recurring":     jobData.Recurring,
+	state := &cache.JobState{
+		Created:      jobData.CreatedAt,
+		LastExecuted: jobData.LastExecutedAt,
+		Status:       "running",
+		Type:         "event-based",
+		Metadata: map[string]interface{}{
+			"chain_id":  jobData.TriggerChainID,
+			"recurring": jobData.Recurring,
+		},
 	}
-	s.cacheMutex.Unlock()
+
+	if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
+		s.logger.Errorf("Failed to cache job state: %v", err)
+	}
 
 	go worker.Start(s.workerCtx)
-
-	if err := s.cacheManager.SaveState(); err != nil {
-		s.logger.Errorf("Failed to save state: %v", err)
-	}
 
 	s.logger.Infof("Started event-based job %d", jobData.JobID)
 	return nil
@@ -206,22 +204,22 @@ func (s *JobScheduler) StartConditionBasedJob(jobData types.HandleCreateJobData)
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
 
-	s.cacheMutex.Lock()
-	s.stateCache[jobData.JobID] = map[string]interface{}{
-		"created":       jobData.CreatedAt,
-		"last_executed": jobData.LastExecutedAt,
-		"status":        "running",
-		"type":          "condition-based",
-		"script_url":    jobData.ScriptIPFSUrl,
-		"condition":     jobData.TargetFunction,
+	state := &cache.JobState{
+		Created:      jobData.CreatedAt,
+		LastExecuted: jobData.LastExecutedAt,
+		Status:       "running",
+		Type:         "condition-based",
+		Metadata: map[string]interface{}{
+			"script_url": jobData.ScriptIPFSUrl,
+			"condition":  jobData.TargetFunction,
+		},
 	}
-	s.cacheMutex.Unlock()
+
+	if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
+		s.logger.Errorf("Failed to cache job state: %v", err)
+	}
 
 	go worker.Start(s.workerCtx)
-
-	if err := s.cacheManager.SaveState(); err != nil {
-		s.logger.Errorf("Failed to save state: %v", err)
-	}
 
 	s.logger.Infof("Started condition-based job %d", jobData.JobID)
 	return nil
@@ -240,7 +238,7 @@ func (s *JobScheduler) SendDataToDatabase(route string, callType int, data inter
 		return false, fmt.Errorf("error loading .env file: %v", err)
 	}
 
-	databaseURL := fmt.Sprintf("%s/%s", config.DatabaseRPCAddress, route)
+	databaseURL := fmt.Sprintf("%s/%s", config.GetDatabaseRPCAddress(), route)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -272,7 +270,7 @@ func (s *JobScheduler) Logger() logging.Logger {
 }
 
 func (s *JobScheduler) GetJobDetails(jobID int64) (*types.HandleCreateJobData, error) {
-	jobDetails, err := services.GetJobDetails(jobID)
+	jobDetails, err := s.dbClient.GetJobDetails(jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -292,54 +290,37 @@ func (s *JobScheduler) GetWorker(jobID int64) workers.Worker {
 }
 
 func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Time) error {
-	s.mu.RLock()
-	worker, exists := s.workers[jobID]
-	s.mu.RUnlock()
-
-	if !exists {
-		return fmt.Errorf("worker for job %d not found", jobID)
+	if err := s.cache.Update(s.ctx, jobID, "last_executed", timestamp); err != nil {
+		return fmt.Errorf("failed to update job last executed time: %w", err)
 	}
-
-	if timeWorker, ok := worker.(*workers.TimeBasedWorker); ok {
-		timeWorker.UpdateLastExecutedTime(timestamp)
-		s.logger.Infof("Updated last executed time for time-based job %d to %v", jobID, timestamp)
-		return nil
-	}
-
-	if eventWorker, ok := worker.(*workers.EventBasedWorker); ok {
-		eventWorker.UpdateLastExecutedTime(timestamp)
-		s.logger.Infof("Updated last executed time for event-based job %d to %v", jobID, timestamp)
-		return nil
-	}
-
-	if conditionWorker, ok := worker.(*workers.ConditionBasedWorker); ok {
-		conditionWorker.UpdateLastExecutedTime(timestamp)
-		s.logger.Infof("Updated last executed time for condition-based job %d to %v", jobID, timestamp)
-		return nil
-	}
-
-	return fmt.Errorf("unsupported worker type for job %d", jobID)
+	return nil
 }
 
 func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value interface{}) error {
-	s.cacheMutex.Lock()
-	defer s.cacheMutex.Unlock()
-
-	jobState, exists := s.stateCache[jobID]
-	if !exists {
-		return fmt.Errorf("no state cache for job %d", jobID)
+	if err := s.cache.Update(s.ctx, jobID, field, value); err != nil {
+		return fmt.Errorf("failed to update job state cache: %w", err)
 	}
+	return nil
+}
 
-	if jobStateMap, ok := jobState.(map[string]interface{}); ok {
-		jobStateMap[field] = value
-		s.stateCache[jobID] = jobStateMap
-
-		if err := s.cacheManager.SaveState(); err != nil {
-			return fmt.Errorf("failed to save state after update: %w", err)
-		}
-
-		return nil
+// RemoveJob removes a job from the scheduler and cache
+func (s *JobScheduler) RemoveJob(jobID int64) {
+	s.mu.Lock()
+	if worker, exists := s.workers[jobID]; exists {
+		worker.Stop()
+		delete(s.workers, jobID)
 	}
+	s.mu.Unlock()
 
-	return fmt.Errorf("invalid state cache format for job %d", jobID)
+	if err := s.cache.Delete(s.ctx, jobID); err != nil {
+		s.logger.Errorf("failed to remove job from cache: %v", err)
+	}
+}
+
+func (s *JobScheduler) GetDatabaseClient() *database.DatabaseClient {
+	return s.dbClient
+}
+
+func (s *JobScheduler) GetAggregatorClient() *aggregator.AggregatorClient {
+	return s.aggregatorClient
 }

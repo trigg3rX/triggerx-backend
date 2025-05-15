@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -13,4 +15,6 @@ type JobScheduler interface {
 	StartConditionBasedJob(jobData types.HandleCreateJobData) error
 	UpdateJobChainStatus(jobID int64, status string)
 	Logger() logging.Logger
+	GetDatabaseClient() *database.DatabaseClient
+	GetAggregatorClient() *aggregator.AggregatorClient
 }

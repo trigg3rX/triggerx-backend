@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -220,7 +219,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 		TaskPerformerID:  0,
 	}
 
-	performerData, err := services.GetPerformer()
+	performerData, err := w.scheduler.GetDatabaseClient().GetPerformer()
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
@@ -228,7 +227,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 
 	taskData.TaskPerformerID = performerData.KeeperID
 
-	taskID, status, err := services.CreateTaskData(taskData)
+	taskID, status, err := w.scheduler.GetDatabaseClient().CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
@@ -240,7 +239,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
 	}
 
-	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData)
+	status, err = w.scheduler.GetAggregatorClient().SendTaskToPerformer(w.jobData, triggerData, performerData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
 		return err
