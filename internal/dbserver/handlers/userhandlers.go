@@ -1,18 +1,16 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userID := vars["id"]
+func (h *Handler) GetUserData(c *gin.Context) {
+	userID := c.Param("id")
 	h.logger.Infof("[GetUserData] Retrieving user with ID: %s", userID)
 
 	var userData types.UserData
@@ -23,7 +21,7 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
         WHERE user_id = ? ALLOW FILTERING`, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.AccountBalance); err != nil {
 		h.logger.Errorf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -36,12 +34,11 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 		AccountBalance: userData.AccountBalance,
 	}
 
-	json.NewEncoder(w).Encode(response)
+	c.JSON(http.StatusOK, response)
 }
 
-func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	walletAddress := strings.ToLower(vars["wallet_address"])
+func (h *Handler) GetWalletPoints(c *gin.Context) {
+	walletAddress := strings.ToLower(c.Param("wallet_address"))
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
 	var userPoints int
@@ -63,9 +60,7 @@ func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
 
 	totalPoints := userPoints + keeperPoints
 
-	response := map[string]int{
+	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,
-	}
-
-	json.NewEncoder(w).Encode(response)
+	})
 }

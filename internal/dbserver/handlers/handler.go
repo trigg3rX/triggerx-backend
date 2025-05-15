@@ -12,6 +12,12 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+type NotificationConfig struct {
+	EmailFrom     string
+	EmailPassword string
+	BotToken      string
+}
+
 type Handler struct {
 	db     *database.Connection
 	logger logging.Logger
@@ -27,7 +33,7 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 }
 
 func (h *Handler) SendDataToManager(route string, data interface{}) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.ManagerRPCAddress, route)
+	apiURL := fmt.Sprintf("%s%s", config.GetManagerRPCAddress(), route)
 
 	jsonData, err := json.Marshal(data)
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/database"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	dbpkg "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -44,7 +44,7 @@ func main() {
 	defer dbConn.Close()
 
 	// Initialize database manager with logger
-	database.InitDatabaseManager(logger, dbConn)
+	client.InitDatabaseManager(logger, dbConn)
 	logger.Info("Database manager initialized")
 
 	// Log contract addresses

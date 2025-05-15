@@ -2,11 +2,9 @@ package dbserver
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
-	"github.com/rs/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
@@ -18,9 +16,8 @@ import (
 )
 
 type Server struct {
-	router             *mux.Router
+	router             *gin.Engine
 	db                 *database.Connection
-	cors               *cors.Cors
 	logger             logging.Logger
 	metricsServer      *metrics.MetricsServer
 	rateLimiter        *middleware.RateLimiter
@@ -31,22 +28,28 @@ type Server struct {
 }
 
 func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
-	router := mux.NewRouter()
+	if !config.IsDevMode() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
-	logger := logging.GetLogger(logging.Development, processName)
+	router := gin.New()
+	router.Use(gin.Recovery())
 
-	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{"*",
-			"https://app.triggerx.network",
-			"https://www.triggerx.network",
-			"http://localhost:3000",
-			"http://localhost:3001",
-			"https://data.triggerx.network",
-		},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token", "X-Api-Key"},
-		AllowCredentials: false,
-		Debug:            true,
+	logger := logging.GetServiceLogger()
+
+	// Configure CORS
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
 	})
 
 	metricsServer := metrics.NewMetricsServer(db, logger)
@@ -72,74 +75,73 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	s := &Server{
 		router:        router,
 		db:            db,
-		cors:          corsHandler,
 		logger:        logger,
 		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
 		telegramBot:   bot,
 		notificationConfig: handlers.NotificationConfig{
-			EmailFrom:     config.EmailUser,
-			EmailPassword: config.EmailPassword,
-			BotToken:      config.BotToken,
+			EmailFrom:     config.GetEmailUser(),
+			EmailPassword: config.GetEmailPassword(),
+			BotToken:      config.GetBotToken(),
 		},
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
-	s.routes()
 	return s
 }
 
-func (s *Server) routes() {
+func (s *Server) RegisterRoutes(router *gin.Engine) {
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig)
 
-	api := s.router.PathPrefix("/api").Subrouter()
+	api := router.Group("/api")
 
-	protected := api.PathPrefix("").Subrouter()
-	protected.Use(s.apiKeyAuth.Middleware)
+	// Public routes
+	api.GET("/users/:id", handler.GetUserData)
+	api.GET("/wallet/points/:wallet_address", handler.GetWalletPoints)
 
-	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
-	api.HandleFunc("/wallet/points/{wallet_address}", handler.GetWalletPoints).Methods("GET")
+	// Protected routes
+	protected := api.Group("")
+	protected.Use(s.apiKeyAuth.GinMiddleware())
 
-	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
-	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
-	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
-	api.HandleFunc("/jobs/{id}/lastexecuted", handler.UpdateJobLastExecutedAt).Methods("PUT")
-	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
-	api.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
+	protected.POST("/jobs", handler.CreateJobData)
+	protected.GET("/jobs/:id", handler.GetJobData)
+	protected.PUT("/jobs/:id", handler.UpdateJobData)
+	protected.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
+	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
 
-	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
-	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
-	api.HandleFunc("/tasks/{id}/fee", handler.UpdateTaskFee).Methods("PUT")
+	protected.POST("/tasks", handler.CreateTaskData)
+	protected.GET("/tasks/:id", handler.GetTaskData)
+	protected.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
 
-	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
-	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
-	api.HandleFunc("/keepers/form", handler.CreateKeeperDataGoogleForm).Methods("POST")
-	api.HandleFunc("/keepers/checkin", handler.KeeperHealthCheckIn).Methods("POST")
-	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
-	api.HandleFunc("/keepers/{id}/increment-tasks", handler.IncrementKeeperTaskCount).Methods("POST")
-	api.HandleFunc("/keepers/{id}/task-count", handler.GetKeeperTaskCount).Methods("GET")
-	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
-	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
+	protected.GET("/keepers/all", handler.GetAllKeepers)
+	protected.GET("/keepers/performers", handler.GetPerformers)
+	protected.POST("/keepers/form", handler.CreateKeeperDataGoogleForm)
+	protected.POST("/keepers/checkin", handler.KeeperHealthCheckIn)
+	protected.GET("/keepers/:id", handler.GetKeeperData)
+	protected.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
+	protected.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
+	protected.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
+	protected.GET("/keepers/:id/points", handler.GetKeeperPoints)
 
-	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
-	api.HandleFunc("/leaderboard/users", handler.GetUserLeaderboard).Methods("GET")
-	api.HandleFunc("/leaderboard/users/search", handler.GetUserByAddress).Methods("GET")
-	api.HandleFunc("/leaderboard/keepers/search", handler.GetKeeperByIdentifier).Methods("GET")
+	protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
+	protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
+	protected.GET("/leaderboard/users/search", handler.GetUserByAddress)
+	protected.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
-	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
+	protected.GET("/fees", handler.GetTaskFees)
 
-	api.HandleFunc("/keepers/update-chat-id", handler.UpdateKeeperChatID).Methods("POST")
+	protected.POST("/keepers/update-chat-id", handler.UpdateKeeperChatID)
+	protected.GET("/keepers/com-info/:id", handler.GetKeeperCommunicationInfo)
+	protected.POST("/claim-fund", handler.ClaimFund)
 
-	api.HandleFunc("/keepers/com-info/{id}", handler.GetKeeperCommunicationInfo).Methods("GET")
-
-	api.HandleFunc("/claim-fund", handler.ClaimFund).Methods("POST")
-
-	admin := api.PathPrefix("/admin").Subrouter()
-	admin.HandleFunc("/api-keys", handler.CreateApiKey).Methods("POST")
-	admin.HandleFunc("/api-keys/{key}", handler.UpdateApiKey).Methods("PUT")
-	admin.HandleFunc("/api-keys/{key}", handler.DeleteApiKey).Methods("DELETE")
+	// Admin routes
+	admin := protected.Group("/admin")
+	admin.POST("/api-keys", handler.CreateApiKey)
+	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
+	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
 }
 
 func (s *Server) Start(port string) error {
@@ -155,6 +157,5 @@ func (s *Server) Start(port string) error {
 		go s.telegramBot.Start()
 	}
 
-	handler := s.cors.Handler(s.router)
-	return http.ListenAndServe(fmt.Sprintf(":%s", port), handler)
+	return s.router.Run(fmt.Sprintf(":%s", port))
 }

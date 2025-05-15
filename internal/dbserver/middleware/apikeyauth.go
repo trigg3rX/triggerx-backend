@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -24,48 +24,46 @@ func NewApiKeyAuth(db *database.Connection, rateLimiter *RateLimiter, logger log
 	}
 }
 
-func (a *ApiKeyAuth) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKeyHeader := r.Header.Get("X-Api-Key")
+func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		apiKeyHeader := c.GetHeader("X-Api-Key")
 		if apiKeyHeader == "" {
-			http.Error(w, "API key is required", http.StatusUnauthorized)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "API key is required"})
+			c.Abort()
 			return
 		}
 
 		apiKey, err := a.getApiKey(apiKeyHeader)
 		if err != nil {
 			a.logger.Errorf("Error retrieving API key: %v", err)
-			http.Error(w, "Invalid or inactive API key", http.StatusForbidden)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid or inactive API key"})
+			c.Abort()
 			return
 		}
 
 		if !apiKey.IsActive {
-			http.Error(w, "API key is inactive", http.StatusForbidden)
+			c.JSON(http.StatusForbidden, gin.H{"error": "API key is inactive"})
+			c.Abort()
 			return
 		}
 
 		go a.updateLastUsed(apiKeyHeader)
 
 		if a.rateLimiter != nil {
-			resp, err := a.rateLimiter.ApplyRateLimit(r, apiKey)
-			if err != nil {
+			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
 				a.logger.Warnf("Rate limit applied: %v", err)
-
-				for key, values := range resp.Header {
-					for _, value := range values {
-						w.Header().Add(key, value)
-					}
-				}
-
-				w.WriteHeader(resp.StatusCode)
-				w.Write([]byte(`{"error":"Rate limit exceeded","message":"You have exceeded the rate limit"}`))
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"error":   "Rate limit exceeded",
+					"message": "You have exceeded the rate limit",
+				})
+				c.Abort()
 				return
 			}
 		}
 
-		ctx := context.WithValue(r.Context(), "apiKey", apiKey)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+		c.Set("apiKey", apiKey)
+		c.Next()
+	}
 }
 
 func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {

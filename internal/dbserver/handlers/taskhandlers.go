@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,20 +10,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/client"
-	"github.com/gorilla/mux"
-
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateTaskData(c *gin.Context) {
 	var taskData ttypes.CreateTaskData
 	var taskResponse ttypes.CreateTaskResponse
-	if err := json.NewDecoder(r.Body).Decode(&taskData); err != nil {
+	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -32,7 +30,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		SELECT MAX(task_id) FROM triggerx.task_data`).Scan(&maxTaskID); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error getting max task ID: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	taskResponse.TaskID = maxTaskID + 1
@@ -47,7 +45,7 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 		taskResponse.TaskID, taskData.JobID, taskData.TaskDefinitionID,
 		time.Now().UTC(), taskData.TaskPerformerID, false).Exec(); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error inserting task with ID %d: %v", taskResponse.TaskID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -57,13 +55,11 @@ func (h *Handler) CreateTaskData(w http.ResponseWriter, r *http.Request) {
 	taskResponse.IsApproved = true
 
 	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskResponse.TaskID)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(taskResponse)
+	c.JSON(http.StatusCreated, taskResponse)
 }
 
-func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	taskID := vars["id"]
+func (h *Handler) GetTaskData(c *gin.Context) {
+	taskID := c.Param("id")
 	h.logger.Infof("[GetTaskData] Fetching task with ID: %s", taskID)
 
 	var taskData ttypes.TaskData
@@ -81,12 +77,12 @@ func (h *Handler) GetTaskData(w http.ResponseWriter, r *http.Request) {
 		&taskData.IsApproved, &taskData.TpSignature, &taskData.TaSignature,
 		&taskData.TaskSubmissionTxHash, &taskData.IsSuccessful); err != nil {
 		h.logger.Errorf("[GetTaskData] Error retrieving task with ID %s: %v", taskID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[GetTaskData] Successfully retrieved task with ID: %s", taskID)
-	json.NewEncoder(w).Encode(taskData)
+	c.JSON(http.StatusOK, taskData)
 }
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
@@ -147,37 +143,31 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	return totalFee, nil
 }
 
-func (h *Handler) GetTaskFees(w http.ResponseWriter, r *http.Request) {
-	ipfsURLs := r.URL.Query().Get("ipfs_url")
+func (h *Handler) GetTaskFees(c *gin.Context) {
+	ipfsURLs := c.Query("ipfs_url")
 
 	totalFee, err := h.CalculateTaskFees(ipfsURLs)
 	if err != nil {
 		h.logger.Errorf("[GetTaskFees] Error calculating fees: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	response := struct {
-		TotalFee float64 `json:"total_fee"`
-	}{
-		TotalFee: totalFee,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	c.JSON(http.StatusOK, gin.H{
+		"total_fee": totalFee,
+	})
 }
 
-func (h *Handler) UpdateTaskFee(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	taskID := vars["id"]
+func (h *Handler) UpdateTaskFee(c *gin.Context) {
+	taskID := c.Param("id")
 	h.logger.Infof("[UpdateTaskFee] Updating task fee for task with ID: %s", taskID)
 
 	var taskFee struct {
 		Fee float64 `json:"fee"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&taskFee); err != nil {
+	if err := c.ShouldBindJSON(&taskFee); err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error decoding request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -186,10 +176,10 @@ func (h *Handler) UpdateTaskFee(w http.ResponseWriter, r *http.Request) {
 		SET task_fee = ?
 		WHERE task_id = ?`, taskFee.Fee, taskID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[UpdateTaskFee] Successfully updated task fee for task with ID: %s", taskID)
-	json.NewEncoder(w).Encode(taskFee)
+	c.JSON(http.StatusOK, taskFee)
 }

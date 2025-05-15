@@ -1,13 +1,12 @@
 package handlers
 
 import (
-	"encoding/json"
-	"net/http"
-
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"net/http"
 )
 
-func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	h.logger.Info("[GetKeeperLeaderboard] Fetching keeper leaderboard data")
 
 	query := `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
@@ -30,17 +29,15 @@ func (h *Handler) GetKeeperLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 	if err := iter.Close(); err != nil {
 		h.logger.Errorf("[GetKeeperLeaderboard] Error fetching keeper leaderboard data: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[GetKeeperLeaderboard] Successfully retrieved keeper leaderboard data for %d keepers", len(keeperLeaderboard))
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(keeperLeaderboard)
+	c.JSON(http.StatusOK, keeperLeaderboard)
 }
 
-func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
 	query := `SELECT user_id, user_address, user_points 
@@ -88,24 +85,22 @@ func (h *Handler) GetUserLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 	if err := iter.Close(); err != nil {
 		h.logger.Errorf("[GetUserLeaderboard] Error fetching user leaderboard data: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[GetUserLeaderboard] Successfully retrieved user leaderboard data for %d users", len(userLeaderboard))
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(userLeaderboard)
+	c.JSON(http.StatusOK, userLeaderboard)
 }
 
-func (h *Handler) GetKeeperByIdentifier(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	h.logger.Info("[GetKeeperByIdentifier] Fetching keeper data by identifier")
 
-	keeperAddress := r.URL.Query().Get("keeper_address")
-	keeperName := r.URL.Query().Get("keeper_name")
+	keeperAddress := c.Query("keeper_address")
+	keeperName := c.Query("keeper_name")
 
 	if keeperAddress == "" && keeperName == "" {
-		http.Error(w, "Either keeper_address or keeper_name must be provided", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Either keeper_address or keeper_name must be provided"})
 		return
 	}
 
@@ -133,22 +128,20 @@ func (h *Handler) GetKeeperByIdentifier(w http.ResponseWriter, r *http.Request) 
 		&keeperEntry.KeeperPoints,
 	); err != nil {
 		h.logger.Errorf("[GetKeeperByIdentifier] Error fetching keeper data: %v", err)
-		http.Error(w, "Keeper not found", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Keeper not found"})
 		return
 	}
 
 	h.logger.Infof("[GetKeeperByIdentifier] Successfully retrieved keeper data for %s", keeperEntry.KeeperAddress)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(keeperEntry)
+	c.JSON(http.StatusOK, keeperEntry)
 }
 
-func (h *Handler) GetUserByAddress(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetUserByAddress(c *gin.Context) {
 	h.logger.Info("[GetUserByAddress] Fetching user data by address")
 
-	userAddress := r.URL.Query().Get("user_address")
+	userAddress := c.Query("user_address")
 	if userAddress == "" {
-		http.Error(w, "user_address must be provided", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_address must be provided"})
 		return
 	}
 
@@ -163,7 +156,7 @@ func (h *Handler) GetUserByAddress(w http.ResponseWriter, r *http.Request) {
 		&userEntry.UserPoints,
 	); err != nil {
 		h.logger.Errorf("[GetUserByAddress] Error fetching user data: %v", err)
-		http.Error(w, "User not found", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
@@ -184,7 +177,5 @@ func (h *Handler) GetUserByAddress(w http.ResponseWriter, r *http.Request) {
 	userEntry.TasksCompleted = int64(tasksCompleted)
 
 	h.logger.Infof("[GetUserByAddress] Successfully retrieved user data for %s", userAddress)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(userEntry)
+	c.JSON(http.StatusOK, userEntry)
 }
