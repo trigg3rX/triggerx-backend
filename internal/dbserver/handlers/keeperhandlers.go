@@ -412,7 +412,7 @@ func (h *Handler) sendEmailNotification(to, subject, body string) error {
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
 
-	d := gomail.NewDialer("smtp.zoho.in", 587, h.config.EmailFrom, h.config.EmailPassword)
+	d := gomail.NewDialer("smtp.zeptomail.in", 587, h.config.EmailFrom, h.config.EmailPassword)
 	if err := d.DialAndSend(m); err != nil {
 		h.logger.Errorf("[Notification] Failed to send email to %s: %v", to, err)
 		return err
