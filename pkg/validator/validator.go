@@ -1,4 +1,4 @@
-package utils
+package validator
 
 import (
 	"regexp"
@@ -31,7 +31,7 @@ func IsValidIPAddress(ipAddress string) bool {
 }
 
 func IsValidPort(port string) bool {
-	matched, _ := regexp.MatchString("^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$", port)
+	matched, _ := regexp.MatchString("^(102[4-9]|10[3-9][0-9]|1[1-9][0-9]{2}|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$", port)
 	return matched
 }
 
@@ -53,6 +53,18 @@ func IsValidRPCUrl(url string) bool {
 	}
 
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return false
+	}
+	urlWithoutProtocol := strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")
+	parts := strings.Split(urlWithoutProtocol, ":")
+	if len(parts) != 2 {
+		return false
+	}
+
+	if !IsValidIPAddress(parts[0]) {
+		return false
+	}
+	if !IsValidPort(parts[1]) {
 		return false
 	}
 

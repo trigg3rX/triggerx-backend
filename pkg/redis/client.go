@@ -95,6 +95,10 @@ func (c *Client) Eval(ctx context.Context, script string, keys []string, args ..
 	return c.client.Eval(ctx, script, keys, args...).Result()
 }
 
+func (c *Client) EvalScript(ctx context.Context, script string, keys []string, args []interface{}) (interface{}, error) {
+	return c.client.Eval(ctx, script, keys, args...).Result()
+}
+
 func (c *Client) Client() *redis.Client {
 	return c.client
 }
