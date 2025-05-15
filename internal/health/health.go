@@ -1,10 +1,14 @@
 package health
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -73,49 +77,95 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
+	h.logger.Infof("Keeper health check-in received: %+v", keeperHealth)
+
 	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" || keeperHealth.Version == "" {
-		h.logger.Debug("Obsolete version detected",
+		h.logger.Debug("Obsolete Version of Keeper",
 			"keeper", keeperHealth.KeeperAddress,
 			"version", keeperHealth.Version,
 		)
 		c.JSON(http.StatusPreconditionFailed, gin.H{
-			"error": "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.0",
+			"error": "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.2",
 		})
 		return
 	}
-
-	if keeperHealth.Version != "0.1.0" {
-		h.logger.Warn("Unsupported version",
+	if keeperHealth.Version == "0.1.0" || keeperHealth.Version == "0.1.1" {
+		h.logger.Debug("Older Version of Keeper",
 			"keeper", keeperHealth.KeeperAddress,
 			"version", keeperHealth.Version,
 		)
-		c.JSON(http.StatusPreconditionFailed, gin.H{
-			"error": "Unsupported Keeper version",
+		c.JSON(http.StatusOK, gin.H{
+			"message": "OLDER VERSION of Keeper, UPGRADE TO v0.1.2",
 		})
 		return
 	}
+	if keeperHealth.Version == "0.1.2" {
+		ok, _ := VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+		if !ok {
+			h.logger.Error("Invalid signature",
+				"keeper", keeperHealth.KeeperAddress,
+				"signature", keeperHealth.Signature,
+			)
+			c.JSON(http.StatusPreconditionFailed, gin.H{
+				"error": "Invalid signature",
+			})
+			return
+		} else {
+			h.logger.Info("Keeper check-in received",
+				"keeper", keeperHealth.KeeperAddress,
+				"version", keeperHealth.Version,
+				"ip", c.ClientIP(),
+			)
+			keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 
-	h.logger.Info("Keeper check-in received",
-		"keeper", keeperHealth.KeeperAddress,
-		"version", keeperHealth.Version,
-		"ip", c.ClientIP(),
-	)
+			if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
+				h.logger.Error("Failed to update keeper state",
+					"error", err,
+					"keeper", keeperHealth.KeeperAddress,
+				)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
+				return
+			}
 
-	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
+			c.JSON(http.StatusOK, gin.H{
+				"message": "Keeper health check-in received",
+				"active":  true,
+			})
+		}
+	}
+}
 
-	if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
-		h.logger.Error("Failed to update keeper state",
-			"error", err,
-			"keeper", keeperHealth.KeeperAddress,
-		)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
-		return
+func VerifySignature(message string, signatureHex string, expectedAddress string) (bool, error) {
+	signature, err := hexutil.Decode(signatureHex)
+	if err != nil {
+		return false, fmt.Errorf("invalid signature: %w", err)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Keeper health check-in received",
-		"active":  true,
-	})
+	if len(signature) != 65 {
+		return false, fmt.Errorf("invalid signature length")
+	}
+
+	if signature[64] >= 27 {
+		signature[64] -= 27
+	}
+
+	messageHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+
+	pubKeyRaw, err := crypto.Ecrecover(messageHash.Bytes(), signature)
+	if err != nil {
+		return false, fmt.Errorf("failed to recover public key: %w", err)
+	}
+
+	pubKey, err := crypto.UnmarshalPubkey(pubKeyRaw)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal public key: %w", err)
+	}
+
+	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+
+	checksumAddr := common.HexToAddress(expectedAddress)
+
+	return checksumAddr == recoveredAddr, nil
 }
 
 func (h *Handler) GetKeeperStatus(c *gin.Context) {

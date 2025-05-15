@@ -142,7 +142,7 @@ func (ksm *KeeperStateManager) UpdateKeeperHealth(health types.KeeperHealth) err
 	return nil
 }
 
-func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address, version, peerID string, isActive bool) error {
+func (ksm *KeeperStateManager) updateKeeperStatusInDatabase(address string, version string, peerID string, isActive bool) error {
 	payload := types.UpdateKeeperHealth{
 		KeeperAddress: address,
 		Active:        isActive,
