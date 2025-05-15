@@ -49,7 +49,7 @@ services:
     image: scylladb/scylla
     container_name: triggerx-scylla
     ports:
-      - "9042:9042"
+      - "9043:9042"
       - "7000:7000"
       - "7001:7001"
     volumes:
@@ -129,7 +129,7 @@ func NewConfig() *Config {
     return &Config{
         Hosts:       []string{
             "SERVER1_IP:9042",
-            "SERVER2_IP:9042"
+            "SERVER2_IP:9043"
         },
         Keyspace:    "triggerx",
         Timeout:     time.Second * 30,

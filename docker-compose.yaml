@@ -6,7 +6,7 @@ services:
       - "${DATABASE_DOCKER_PORT:-9042}:9042"
     volumes:
       - scylla_data_1:/var/lib/scylla
-    command: --smp 1 --memory 512M --overprovisioned 1 --seeds=scylla-node1 --cluster-name triggerx_cluster
+    command: --smp 1 --memory 512M --overprovisioned 1 --seeds=scylla-node2 --cluster-name triggerx_cluster
     logging:
       driver: "json-file"
     networks:
@@ -16,8 +16,8 @@ services:
     image: scylladb/scylla
     container_name: triggerx-scylla-2
     ports:
-      - "9043:9042"
-    volumes:
+      - "9043:9042"    
+    volumes:              
       - scylla_data_2:/var/lib/scylla
     command: --smp 1 --memory 512M --overprovisioned 1 --seeds=scylla-node1 --cluster-name triggerx_cluster
     depends_on:

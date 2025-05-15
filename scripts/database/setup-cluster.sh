@@ -49,7 +49,7 @@ done
 
 # Create keyspace with proper replication
 echo "Creating keyspace with NetworkTopologyStrategy..."
-docker exec -i triggerx-scylla-1 cqlsh -e "CREATE KEYSPACE IF NOT EXISTS triggerx WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 2};"
+docker exec -i triggerx-scylla-1 cqlsh -e "CREATE KEYSPACE IF NOT EXISTS triggerx WITH replication = {'class': 'NetworkTopologyStrategy', 'dc1': 2};"
 
 # Initialize the database schema
 echo "Initializing database schema..."
