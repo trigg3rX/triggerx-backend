@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+
 	// "github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -20,40 +20,35 @@ func main() {
 
 	config.Init()
 
-	// Initialize database config
-	dbConfig := &database.Config{
-		Hosts:       []string{"localhost"},
-		Timeout:     10 * time.Second,
-		Retries:     3,
-		ConnectWait: 5 * time.Second,
+	// Initialize database connections using our new configurations
+	// Connection to ScyllaDB node 1
+	scylla1Config := database.NewScylla1Config()
+	conn1, err := database.NewConnection(scylla1Config)
+	if err != nil || conn1 == nil {
+		logger.Fatalf("Failed to initialize connection to ScyllaDB node 1: %v", err)
 	}
+	defer conn1.Close()
 
-	// Initialize the existing database connection
-	conn, err := database.NewConnection(dbConfig)
-	if err != nil || conn == nil {
-		logger.Fatalf("Failed to initialize main database connection: %v", err)
+	// Connection to ScyllaDB node 2
+	scylla2Config := database.NewScylla2Config()
+	conn2, err := database.NewConnection(scylla2Config)
+	if err != nil || conn2 == nil {
+		logger.Fatalf("Failed to initialize connection to ScyllaDB node 2: %v", err)
 	}
-	defer conn.Close()
+	defer conn2.Close()
 
-	// Initialize a separate connection for registrar
-	registrarConn, err := database.NewConnection(dbConfig)
-	if err != nil || registrarConn == nil {
-		logger.Fatalf("Failed to initialize registrar database connection: %v", err)
-	}
-	defer registrarConn.Close()
-
-	// Ensure session is not nil before passing to registrar
-	mainSession := conn.Session()
-	registrarSession := registrarConn.Session()
-	if mainSession == nil || registrarSession == nil {
+	// Ensure sessions are not nil before proceeding
+	session1 := conn1.Session()
+	session2 := conn2.Session()
+	if session1 == nil || session2 == nil {
 		logger.Fatalf("Database sessions cannot be nil")
 	}
 
-	// Set both connections where needed
-	server := dbserver.NewServer(conn, logging.DatabaseProcess)
-	// registrar.SetDatabaseConnection(mainSession, registrarSession)
+	// Set up server with both connections
+	server := dbserver.NewServer(conn1, logging.DatabaseProcess) // Using conn1 as primary
+	// registrar.SetDatabaseConnection(session1, session2)
 
-	// Initialize and start HTTP server with database connection
+	// Initialize and start HTTP server
 	logger.Infof("Database Server initialized, starting on port %s...", config.DatabasePort)
 	if err := server.Start(config.DatabasePort); err != nil {
 		logger.Fatalf("Failed to start server: %v", err)
