@@ -119,9 +119,3 @@ func FetchAndLogOperatorDetails(operatorAddress common.Address, logger logging.L
 
 	return nil
 }
-
-func TestFetchOperatorDetails(operatorAddressHex string, logger logging.Logger) error {
-	operatorAddress := common.HexToAddress(operatorAddressHex)
-	logger.Infof("Manually triggering fetch of operator details for %s", operatorAddress.Hex())
-	return FetchAndLogOperatorDetails(operatorAddress, logger)
-}

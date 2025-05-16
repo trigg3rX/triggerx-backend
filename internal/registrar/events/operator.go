@@ -80,7 +80,7 @@ func (p *OperatorProcessor) ProcessOperatorRegisteredEvents(
 		}
 
 		// Schedule fetching operator details
-		go p.scheduleOperatorDetailsFetch(event.Operator)
+		FetchOperatorDetailsAfterDelay(event.Operator, 4*time.Minute, p.logger)
 	}
 	return nil
 }
@@ -134,16 +134,6 @@ func (p *OperatorProcessor) ProcessOperatorUnregisteredEvents(
 		}
 	}
 	return nil
-}
-
-func (p *OperatorProcessor) scheduleOperatorDetailsFetch(operator common.Address) {
-	time.Sleep(3 * time.Minute)
-	if err := FetchOperatorDetailsAfterDelay(operator, 3*time.Minute, p.logger); err != nil {
-		p.logger.Error("Failed to fetch operator details",
-			"error", err,
-			"operator", operator.Hex(),
-		)
-	}
 }
 
 // Event signatures

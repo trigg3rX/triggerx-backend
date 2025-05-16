@@ -49,6 +49,11 @@ func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash strin
 
 	var booster float32 = 1
 	var currentKeeperID int64
+
+	operatorAddress = strings.ToLower(operatorAddress)
+	dm.logger.Infof("Keeper address: %s", operatorAddress)
+	txHash = strings.ToLower(txHash)
+	dm.logger.Infof("Tx hash: %s", txHash)
 	if err := dm.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		operatorAddress).Scan(&currentKeeperID); err != nil {
@@ -75,26 +80,27 @@ func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash strin
 			return err
 		}
 
-		dm.logger.Infof("Created new keeper with ID: %d", currentKeeperID)
+		dm.logger.Infof("Created keeper with ID: %d", currentKeeperID)
+		return nil
+	} else {
+		if err := dm.db.Session().Query(`
+			UPDATE triggerx.keeper_data SET 
+				registered_tx = ?, status = ?
+			WHERE keeper_id = ?`,
+			txHash, true, currentKeeperID).Exec(); err != nil {
+			dm.logger.Errorf("Error updating keeper with ID %d: %v", currentKeeperID, err)
+			return err
+		}
+		dm.logger.Infof("Updated keeper with ID: %d", currentKeeperID)
 		return nil
 	}
-
-	if err := dm.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET 
-			registered_tx = ?, status = ?
-		WHERE keeper_id = ?`,
-		txHash, true, currentKeeperID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating keeper with ID %d: %v", currentKeeperID, err)
-		return err
-	}
-
-	dm.logger.Infof("Updated keeper with ID: %d", currentKeeperID)
-	return nil
 }
 
 // KeeperUnregistered marks a keeper as unregistered
 func (dm *DatabaseManager) KeeperUnregistered(operatorAddress string) error {
 	var currentKeeperID int64
+	operatorAddress = strings.ToLower(operatorAddress)
+	dm.logger.Infof("Unregistering keeper with address: %s", operatorAddress)
 	if err := dm.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		operatorAddress).Scan(&currentKeeperID); err != nil {
@@ -304,6 +310,7 @@ func (dm *DatabaseManager) DailyRewardsPoints() error {
 
 // UpdateOperatorDetails updates the details of an operator
 func (dm *DatabaseManager) UpdateOperatorDetails(operatorAddress string, operatorId string, votingPower string, rewardsReceiver string, strategies []string) error {
+	operatorAddress = strings.ToLower(operatorAddress)
 	dm.logger.Infof("Updating operator details for %s in database", operatorAddress)
 
 	var keeperId int64

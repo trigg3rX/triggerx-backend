@@ -9,7 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
+	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	dbpkg "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -62,9 +62,9 @@ func main() {
 	// Start services
 	registrarService.Start()
 
-	// Initialize and start rewards service
-	rewardsService := rewards.NewRewardsService(logger)
-	go rewardsService.StartDailyRewardsPoints()
+	// // Initialize and start rewards service
+	// rewardsService := rewards.NewRewardsService(logger)
+	// go rewardsService.StartDailyRewardsPoints()
 
 	logger.Info("All services started successfully")
 
