@@ -1,24 +1,24 @@
 package services
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
-	"crypto/tls"
-	"crypto/x509"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type TaskValidationRequest struct {
@@ -130,7 +130,7 @@ func ExecuteTask(c *gin.Context) {
 	logger.Info(">>> Don't mind if I do...")
 
 	// Create ethClient using config
-	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
+	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/wo09VZLCOQxI2kKXefDOCLLv3Zd6cfz1")
 	if err != nil {
 		logger.Errorf("Failed to connect to Ethereum client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Ethereum network"})

@@ -352,7 +352,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	// Setup real ethclient
-	client, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
+	client, err := ethclient.Dial("https://eth-holesky.g.alchemy.com/v2/wo09VZLCOQxI2kKXefDOCLLv3Zd6cfz1")
 	if err != nil {
 		t.Fatal(err)
 	}

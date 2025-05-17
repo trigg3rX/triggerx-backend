@@ -140,7 +140,7 @@ func ExecuteTask(c *gin.Context) {
 	}
 
 	// Create ethClient using config
-	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
+	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/wo09VZLCOQxI2kKXefDOCLLv3Zd6cfz1")
 	if err != nil {
 		logger.Errorf("Failed to connect to Ethereum client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Ethereum network"})
