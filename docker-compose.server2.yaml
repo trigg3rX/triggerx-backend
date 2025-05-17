@@ -1,0 +1,36 @@
+services:
+  scylla-node2:
+    image: scylladb/scylla
+    container_name: triggerx-scylla-2
+    ports:
+      - "9042:9042"  # Changed to standard port    
+    volumes:              
+      - scylla_data_2:/var/lib/scylla
+    command: --smp 1 --memory 512M --overprovisioned 1 --seeds=51.20.1.32 --cluster-name triggerx_cluster
+    networks:
+      - scylla-net
+
+  manager2:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    container_name: triggerx-manager-2
+    environment:
+      - NODE_ID=manager2
+      - MANAGER_RPC_PORT=6062
+      - MANAGER_HA_ENABLED=true
+      - REDIS_HOST=51.20.1.32
+      - REDIS_PORT=6379
+      - REDIS_ADDRESS=51.20.1.32:6379
+      - OTHER_MANAGER_ADDRESSES=51.20.1.32:6061
+    ports:
+      - "6062:6062"
+    volumes:
+      - ./.env:/app/.env
+    network_mode: "host"  # Use host networking for simplicity
+
+networks:
+  scylla-net:
+
+volumes:
+  scylla_data_2:

@@ -99,8 +99,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      manager1:
-        condition: service_healthy
+      # manager1:
+      #   condition: service_healthy
       scylla-node1:
         condition: service_started
       scylla-node2:
