@@ -1,9 +1,12 @@
 package logging
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,11 +16,13 @@ import (
 )
 
 type ZapLogger struct {
-	logger     *zap.Logger
-	useColors  bool
-	config     LoggerConfig
-	currentDay string
-	mu         sync.RWMutex
+	logger      *zap.Logger
+	useColors   bool
+	config      LoggerConfig
+	currentDay  string
+	currentFile string
+	fileSize    int64
+	mu          sync.RWMutex
 }
 
 var _ Logger = (*ZapLogger)(nil)
@@ -37,26 +42,63 @@ func NewZapLogger(config LoggerConfig) (Logger, error) {
 }
 
 func (z *ZapLogger) initLogger() error {
-	var zapConfig zap.Config
+	var cores []zapcore.Core
+	encoderConfig := z.getEncoderConfig()
 
+	// Get the current log file path and create necessary directories
 	logDir := filepath.Join(z.config.LogDir, LogsDir, string(z.config.ProcessName))
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 
-	logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", z.currentDay))
+	// Find or create the current log file
+	logFile, filePath, err := z.getCurrentLogFile(logDir)
+	if err != nil {
+		return err
+	}
+	z.currentFile = filePath
 
-	if z.config.Environment == Production {
-		zapConfig = zap.NewProductionConfig()
-		zapConfig.OutputPaths = []string{logPath}
-	} else {
-		zapConfig = zap.NewDevelopmentConfig()
-		zapConfig.OutputPaths = []string{"stdout", logPath}
+	// Get file info for size tracking
+	fileInfo, err := logFile.Stat()
+	if err != nil {
+		logFile.Close()
+		return fmt.Errorf("failed to get file info: %w", err)
+	}
+	z.fileSize = fileInfo.Size()
+
+	// Create file core with appropriate level
+	fileCore := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		zapcore.AddSync(logFile),
+		z.getMinLevel(z.config.MinFileLogLevel),
+	)
+	cores = append(cores, fileCore)
+
+	// Add stdout core in development or if explicitly configured
+	if z.config.Environment == Development {
+		stdoutCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			zapcore.AddSync(os.Stdout),
+			z.getMinLevel(z.config.MinStdoutLevel),
+		)
+		cores = append(cores, stdoutCore)
 	}
 
-	encoderConfig := zapcore.EncoderConfig{
+	// Create the logger
+	core := zapcore.NewTee(cores...)
+	z.logger = zap.New(
+		core,
+		zap.AddCaller(),
+		zap.AddCallerSkip(1), // Skip our wrapper methods
+		zap.Development(),    // Include full caller path
+	)
+	return nil
+}
+
+func (z *ZapLogger) getEncoderConfig() zapcore.EncoderConfig {
+	return zapcore.EncoderConfig{
 		TimeKey:       "ts",
-		LevelKey:      "",
+		LevelKey:      "level",
 		NameKey:       "logger",
 		CallerKey:     "caller",
 		FunctionKey:   zapcore.OmitKey,
@@ -64,37 +106,100 @@ func (z *ZapLogger) initLogger() error {
 		StacktraceKey: "stacktrace",
 		LineEnding:    zapcore.DefaultLineEnding,
 		EncodeLevel:   zapcore.LowercaseLevelEncoder,
-		EncodeTime: func(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
-			encoder.AppendString(t.UTC().Format(TimeFormat))
+		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.UTC().Format(TimeFormat))
 		},
 		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller: func(caller zapcore.EntryCaller, encoder zapcore.PrimitiveArrayEncoder) {
+		EncodeCaller: func(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
 			_, file := filepath.Split(caller.File)
-			encoder.AppendString(fmt.Sprintf("%s:%d", file, caller.Line))
+			enc.AppendString(fmt.Sprintf("%s:%d", file, caller.Line))
 		},
 	}
+}
 
-	zapConfig.EncoderConfig = encoderConfig
-
-	// Create a new logger
-	newLogger, err := zapConfig.Build(zap.AddCallerSkip(1))
+func (z *ZapLogger) getCurrentLogFile(logDir string) (*os.File, string, error) {
+	// Find the latest file number for today
+	pattern := filepath.Join(logDir, fmt.Sprintf("%s.*", z.currentDay))
+	matches, err := filepath.Glob(pattern)
 	if err != nil {
-		return fmt.Errorf("failed to build logger: %w", err)
+		return nil, "", fmt.Errorf("failed to glob log files: %w", err)
 	}
 
-	// If we have an existing logger, sync and close it first
-	if z.logger != nil {
-		// Sync but ignore stdout sync errors
-		if err := z.logger.Sync(); err != nil {
-			// Check if error is related to stdout
-			if !strings.Contains(err.Error(), "sync /dev/stdout") {
-				return fmt.Errorf("failed to sync logger: %w", err)
+	var maxNum int
+	for _, match := range matches {
+		base := filepath.Base(match)
+		parts := strings.Split(base, ".")
+		if len(parts) >= 3 { // date.number.log
+			if num, err := strconv.Atoi(parts[1]); err == nil && num > maxNum {
+				maxNum = num
 			}
 		}
 	}
 
-	// Set the new logger
-	z.logger = newLogger
+	// Create the new file path
+	fileName := fmt.Sprintf("%s.%d.log", z.currentDay, maxNum+1)
+	filePath := filepath.Join(logDir, fileName)
+
+	// Open the file in append mode
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	return file, filePath, nil
+}
+
+func (z *ZapLogger) getMinLevel(level Level) zapcore.Level {
+	switch level {
+	case DebugLevel:
+		return zapcore.DebugLevel
+	case InfoLevel:
+		return zapcore.InfoLevel
+	case WarnLevel:
+		return zapcore.WarnLevel
+	case ErrorLevel:
+		return zapcore.ErrorLevel
+	case FatalLevel:
+		return zapcore.FatalLevel
+	default:
+		return zapcore.InfoLevel
+	}
+}
+
+func (z *ZapLogger) compressLogFile(filePath string) error {
+	if !z.config.CompressOldFiles {
+		return nil
+	}
+
+	// Open the log file
+	logFile, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open log file for compression: %w", err)
+	}
+	defer logFile.Close()
+
+	// Create the gzip file
+	gzipPath := filePath + ".gz"
+	gzipFile, err := os.Create(gzipPath)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip file: %w", err)
+	}
+	defer gzipFile.Close()
+
+	// Create gzip writer
+	gzipWriter := gzip.NewWriter(gzipFile)
+	defer gzipWriter.Close()
+
+	// Copy the contents
+	if _, err := io.Copy(gzipWriter, logFile); err != nil {
+		return fmt.Errorf("failed to compress log file: %w", err)
+	}
+
+	// Remove the original file
+	if err := os.Remove(filePath); err != nil {
+		return fmt.Errorf("failed to remove original log file: %w", err)
+	}
+
 	return nil
 }
 
@@ -102,30 +207,48 @@ func (z *ZapLogger) checkAndRotateLog() error {
 	z.mu.Lock()
 	defer z.mu.Unlock()
 
-	currentDay := z.currentDay
-	if z.config.Environment == Production {
-		currentDay = time.Now().UTC().Format("2006-01-02")
+	currentDay := time.Now().UTC().Format("2006-01-02")
+	needsRotation := currentDay != z.currentDay
+
+	// Check file size
+	if !needsRotation {
+		if z.fileSize >= MaxFileSize {
+			needsRotation = true
+		}
 	}
 
-	if currentDay != z.currentDay {
-		// Close the current log file
+	if needsRotation {
+		// Close and compress the current log file
 		if z.logger != nil {
-			// Sync but ignore stdout sync errors
 			if err := z.logger.Sync(); err != nil {
-				// Check if error is related to stdout
 				if !strings.Contains(err.Error(), "sync /dev/stdout") {
 					return fmt.Errorf("failed to sync logger during rotation: %w", err)
 				}
 			}
 		}
 
-		// Update current day and create new log file
-		z.currentDay = currentDay
+		// Compress the old file if it's a different day
+		if currentDay != z.currentDay {
+			if err := z.compressLogFile(z.currentFile); err != nil {
+				// Log the error but continue with rotation
+				fmt.Printf("failed to compress log file: %v\n", err)
+			}
+			z.currentDay = currentDay
+		}
+
+		// Create new logger
 		if err := z.initLogger(); err != nil {
 			return fmt.Errorf("failed to rotate logger: %w", err)
 		}
 	}
+
 	return nil
+}
+
+func (z *ZapLogger) updateFileSize(n int64) {
+	z.mu.Lock()
+	z.fileSize += n
+	z.mu.Unlock()
 }
 
 func (z *ZapLogger) colorize(level, msg string) string {
@@ -149,12 +272,14 @@ func (z *ZapLogger) colorize(level, msg string) string {
 	}
 }
 
+// Implement the Logger interface methods
 func (z *ZapLogger) Debug(msg string, tags ...any) {
 	if err := z.checkAndRotateLog(); err != nil {
 		z.logger.Error("failed to rotate log", zap.Error(err))
 	}
 	coloredMsg := z.colorize("debug", msg)
 	z.logger.Sugar().Debugw(coloredMsg, tags...)
+	z.updateFileSize(int64(len(coloredMsg)))
 }
 
 func (z *ZapLogger) Info(msg string, tags ...any) {
@@ -163,6 +288,7 @@ func (z *ZapLogger) Info(msg string, tags ...any) {
 	}
 	coloredMsg := z.colorize("info", msg)
 	z.logger.Sugar().Infow(coloredMsg, tags...)
+	z.updateFileSize(int64(len(coloredMsg)))
 }
 
 func (z *ZapLogger) Warn(msg string, tags ...any) {
@@ -171,6 +297,7 @@ func (z *ZapLogger) Warn(msg string, tags ...any) {
 	}
 	coloredMsg := z.colorize("warn", msg)
 	z.logger.Sugar().Warnw(coloredMsg, tags...)
+	z.updateFileSize(int64(len(coloredMsg)))
 }
 
 func (z *ZapLogger) Error(msg string, tags ...any) {
@@ -179,6 +306,7 @@ func (z *ZapLogger) Error(msg string, tags ...any) {
 	}
 	coloredMsg := z.colorize("error", msg)
 	z.logger.Sugar().Errorw(coloredMsg, tags...)
+	z.updateFileSize(int64(len(coloredMsg)))
 }
 
 func (z *ZapLogger) Fatal(msg string, tags ...any) {
@@ -187,6 +315,7 @@ func (z *ZapLogger) Fatal(msg string, tags ...any) {
 	}
 	coloredMsg := z.colorize("fatal", msg)
 	z.logger.Sugar().Fatalw(coloredMsg, tags...)
+	// No need to update file size as the program will exit
 }
 
 func (z *ZapLogger) Debugf(template string, args ...interface{}) {
@@ -195,6 +324,7 @@ func (z *ZapLogger) Debugf(template string, args ...interface{}) {
 	}
 	coloredTemplate := z.colorize("debug", template)
 	z.logger.Sugar().Debugf(coloredTemplate, args...)
+	z.updateFileSize(int64(len(fmt.Sprintf(coloredTemplate, args...))))
 }
 
 func (z *ZapLogger) Infof(template string, args ...interface{}) {
@@ -203,6 +333,7 @@ func (z *ZapLogger) Infof(template string, args ...interface{}) {
 	}
 	coloredTemplate := z.colorize("info", template)
 	z.logger.Sugar().Infof(coloredTemplate, args...)
+	z.updateFileSize(int64(len(fmt.Sprintf(coloredTemplate, args...))))
 }
 
 func (z *ZapLogger) Warnf(template string, args ...interface{}) {
@@ -211,6 +342,7 @@ func (z *ZapLogger) Warnf(template string, args ...interface{}) {
 	}
 	coloredTemplate := z.colorize("warn", template)
 	z.logger.Sugar().Warnf(coloredTemplate, args...)
+	z.updateFileSize(int64(len(fmt.Sprintf(coloredTemplate, args...))))
 }
 
 func (z *ZapLogger) Errorf(template string, args ...interface{}) {
@@ -219,6 +351,7 @@ func (z *ZapLogger) Errorf(template string, args ...interface{}) {
 	}
 	coloredTemplate := z.colorize("error", template)
 	z.logger.Sugar().Errorf(coloredTemplate, args...)
+	z.updateFileSize(int64(len(fmt.Sprintf(coloredTemplate, args...))))
 }
 
 func (z *ZapLogger) Fatalf(template string, args ...interface{}) {
@@ -227,13 +360,16 @@ func (z *ZapLogger) Fatalf(template string, args ...interface{}) {
 	}
 	coloredTemplate := z.colorize("fatal", template)
 	z.logger.Sugar().Fatalf(coloredTemplate, args...)
+	// No need to update file size as the program will exit
 }
 
 func (z *ZapLogger) With(tags ...any) Logger {
 	return &ZapLogger{
-		logger:     z.logger.Sugar().With(tags...).Desugar(),
-		useColors:  z.useColors,
-		config:     z.config,
-		currentDay: z.currentDay,
+		logger:      z.logger.Sugar().With(tags...).Desugar(),
+		useColors:   z.useColors,
+		config:      z.config,
+		currentDay:  z.currentDay,
+		currentFile: z.currentFile,
+		fileSize:    z.fileSize,
 	}
 }

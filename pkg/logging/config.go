@@ -5,6 +5,7 @@ const (
 	LogsDir       = "logs"
 	LogFileFormat = "2006-01-02.log" // for daily files
 	TimeFormat    = "2006-01-02 15:04:05"
+	MaxFileSize   = 30 * 1024 * 1024 // 30MB in bytes
 )
 
 const (
@@ -23,6 +24,16 @@ const (
 	Production  LogLevel = "production"
 )
 
+type Level int
+
+const (
+	DebugLevel Level = iota
+	InfoLevel
+	WarnLevel
+	ErrorLevel
+	FatalLevel
+)
+
 type ProcessName string
 
 const (
@@ -34,17 +45,29 @@ const (
 )
 
 type LoggerConfig struct {
-	LogDir      string
-	ProcessName ProcessName
-	Environment LogLevel
-	UseColors   bool
+	LogDir           string
+	ProcessName      ProcessName
+	Environment      LogLevel
+	UseColors        bool
+	MinStdoutLevel   Level // Minimum level for stdout logging
+	MinFileLogLevel  Level // Minimum level for file logging
+	CompressOldFiles bool  // Whether to compress old log files
 }
 
 func NewDefaultConfig(processName ProcessName) LoggerConfig {
 	return LoggerConfig{
-		LogDir:      BaseDataDir,
-		ProcessName: processName,
-		Environment: Development,
-		UseColors:   true,
+		LogDir:           BaseDataDir,
+		ProcessName:      processName,
+		Environment:      Development,
+		UseColors:        true,
+		MinStdoutLevel:   DebugLevel, // Development defaults to all levels
+		MinFileLogLevel:  DebugLevel, // Always log all levels to file
+		CompressOldFiles: true,       // Default to compressing old files
 	}
+}
+
+// AdjustForProduction modifies the config for production environment
+func (c *LoggerConfig) AdjustForProduction() {
+	c.Environment = Production
+	c.MinStdoutLevel = InfoLevel // Only Info and above in production stdout
 }

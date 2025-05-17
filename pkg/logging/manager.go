@@ -1,6 +1,10 @@
 package logging
 
-import "sync"
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
 
 type LoggerManager struct {
 	serviceLogger Logger
@@ -25,9 +29,18 @@ func GetServiceLogger() Logger {
 }
 
 // Shutdown safely cleans up the logger
-func Shutdown() {
-	if zl, ok := loggerManager.serviceLogger.(*ZapLogger); ok && zl != nil {
-		// Ignore sync errors on shutdown as they're expected for stdout
-		_ = zl.logger.Sync()
+func Shutdown() error {
+	if loggerManager.serviceLogger == nil {
+		return nil
 	}
+
+	if zl, ok := loggerManager.serviceLogger.(*ZapLogger); ok {
+		if err := zl.logger.Sync(); err != nil {
+			// Ignore sync errors for stdout
+			if !strings.Contains(err.Error(), "sync /dev/stdout") {
+				return fmt.Errorf("failed to sync logger during shutdown: %w", err)
+			}
+		}
+	}
+	return nil
 }
