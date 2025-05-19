@@ -10,34 +10,33 @@ import (
 func StartDailyRewardsPoints() {
 	logger.Info("Starting daily rewards service...")
 
-	// Check if we already rewarded today
 	lastRewardsUpdate, err := time.Parse(time.RFC3339, config.LastRewardsUpdate)
 	if err != nil {
 		logger.Errorf("Failed to parse last rewards update: %v", err)
-		// Continue with default time if parsing fails
-		lastRewardsUpdate = time.Now().AddDate(0, 0, -1) // Default to yesterday
+		lastRewardsUpdate = time.Now().AddDate(0, 0, -1)
 	}
 
 	logger.Infof("Last rewards update: %v", lastRewardsUpdate)
 
-	// Check if we need to reward immediately upon service start
-	now := time.Now()
-	rewardTime := time.Date(now.Year(), now.Month(), now.Day(), 06, 30, 0, 0, time.UTC)
+	now := time.Now().UTC()
+	startDate := lastRewardsUpdate.AddDate(0, 0, 1).Truncate(24 * time.Hour)
+	today := now.Truncate(24 * time.Hour)
 
-	// If the scheduled time for today has already passed AND we haven't rewarded today yet
-	if now.After(rewardTime) && lastRewardsUpdate.Day() != now.Day() {
-		logger.Info("07:30 has already passed for today and rewards haven't been distributed yet, distributing rewards now...")
-		err := database.DailyRewardsPoints()
-		if err != nil {
-			logger.Errorf("Failed to distribute daily rewards: %v", err)
-		} else {
-			newTimestamp := time.Now().Format(time.RFC3339)
-			config.UpdateLastRewardsTimestamp(newTimestamp)
-			logger.Info("Daily rewards distributed successfully")
+	for d := startDate; !d.After(today); d = d.AddDate(0, 0, 1) {
+		rewardTime := time.Date(d.Year(), d.Month(), d.Day(), 6, 30, 0, 0, time.UTC)
+
+		if now.After(rewardTime) {
+			logger.Infof("Distributing missed rewards for %v", d.Format("2006-01-02"))
+			err := database.DailyRewardsPoints() // If possible, make this accept a date
+			if err != nil {
+				logger.Errorf("Failed to distribute rewards for %v: %v", d.Format("2006-01-02"), err)
+				continue
+			}
+			config.UpdateLastRewardsTimestamp(rewardTime.Format(time.RFC3339))
+			logger.Infof("Rewards distributed for %v", d.Format("2006-01-02"))
 		}
 	}
 
-	// Schedule the next reward distribution
 	go scheduleNextReward()
 }
 
