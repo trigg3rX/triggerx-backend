@@ -118,7 +118,6 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.GET("/keepers/all", handler.GetAllKeepers)
 	api.GET("/keepers/performers", handler.GetPerformers)
 	api.POST("/keepers/form", handler.CreateKeeperDataGoogleForm)
-	api.POST("/keepers/checkin", handler.KeeperHealthCheckIn)
 	api.GET("/keepers/:id", handler.GetKeeperData)
 	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
 	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
