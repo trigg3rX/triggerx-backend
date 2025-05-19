@@ -27,10 +27,12 @@ func main() {
 	}
 
 	logConfig := logging.LoggerConfig{
-		LogDir:      logging.BaseDataDir,
-		ProcessName: logging.DatabaseProcess,
-		Environment: getEnvironment(),
-		UseColors:   true,
+		LogDir:          logging.BaseDataDir,
+		ProcessName:     logging.DatabaseProcess,
+		Environment:     getEnvironment(),
+		UseColors:       true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
 	}
 
 	if err := logging.InitServiceLogger(logConfig); err != nil {
@@ -38,7 +40,11 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting database server...")
+	logger.Info("Starting database server...",
+		"mode", getEnvironment(),
+		"port", config.GetDatabaseRPCPort(),
+		"host", config.GetDatabaseHost(),
+	)
 
 	dbConfig := database.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
 
@@ -93,6 +99,13 @@ func getEnvironment() logging.LogLevel {
 	return logging.Production
 }
 
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
+}
+
 func setupHTTPServer(logger logging.Logger, dbServer *dbserver.Server) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
@@ -120,6 +133,11 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
+	}
+
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
 	wg.Wait()
