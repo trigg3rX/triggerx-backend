@@ -14,8 +14,8 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager/api"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/cache"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -35,10 +35,12 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:      logging.BaseDataDir,
-		ProcessName: logging.ManagerProcess,
-		Environment: getEnvironment(),
-		UseColors:   true,
+		LogDir:          logging.BaseDataDir,
+		ProcessName:     logging.ManagerProcess,
+		Environment:     getEnvironment(),
+		UseColors:       true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
 	}
 
 	if err := logging.InitServiceLogger(logConfig); err != nil {
@@ -46,7 +48,10 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting manager service...")
+	logger.Info("Starting manager service...",
+		"mode", getEnvironment(),
+		"port", config.GetManagerRPCPort(),
+	)
 
 	// Initialize server components
 	var wg sync.WaitGroup
@@ -127,6 +132,13 @@ func getEnvironment() logging.LogLevel {
 	return logging.Production
 }
 
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
+}
+
 func setupHTTPServer(logger logging.Logger, handlers *api.Handlers) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
@@ -160,6 +172,11 @@ func performGracefulShutdown(srv *http.Server, jobCache cache.Cache, wg *sync.Wa
 
 	if err := jobCache.Close(); err != nil {
 		logger.Error("Failed to close job cache", "error", err)
+	}
+
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
 	wg.Wait()
