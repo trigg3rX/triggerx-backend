@@ -65,20 +65,3 @@ type IPFSData struct {
 
 	ProofData ProofData `json:"proof_data"`
 }
-
-type KeeperHealth struct {
-	KeeperAddress    string    `json:"keeper_address"`
-	ConsensusAddress string    `json:"consensus_address"`
-	Version          string    `json:"version"`
-	Timestamp        time.Time `json:"timestamp"`
-	Signature        string    `json:"signature"`
-	PeerID           string    `json:"peer_id"`
-}
-
-type UpdateKeeperHealth struct {
-	KeeperAddress string    `json:"keeper_address"`
-	Active        bool      `json:"active"`
-	Timestamp     time.Time `json:"timestamp"`
-	Version       string    `json:"version"`
-	PeerID        string    `json:"peer_id"`
-}

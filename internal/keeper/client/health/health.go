@@ -11,7 +11,7 @@ import (
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/security"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/types"
 )
 
 // Client represents a Health service client
@@ -69,7 +69,7 @@ func (c *Client) CheckIn(ctx context.Context) error {
 	}
 
 	// Prepare health check payload
-	payload := types.KeeperHealth{
+	payload := types.KeeperHealthCheckIn{
 		KeeperAddress:    c.config.KeeperAddress,
 		ConsensusAddress: consensusAddress,
 		Version:          c.config.Version,
@@ -94,7 +94,7 @@ func (c *Client) CheckIn(ctx context.Context) error {
 }
 
 // sendHealthCheck sends the health check request to the health service
-func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth) error {
+func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealthCheckIn) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal health check payload: %w", err)

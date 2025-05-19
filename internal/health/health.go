@@ -11,26 +11,28 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gin-gonic/gin"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Handler encapsulates the dependencies for health handlers
 type Handler struct {
 	logger       logging.Logger
-	stateManager *KeeperStateManager
+	stateManager *keeper.StateManager
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger, stateManager *KeeperStateManager) *Handler {
+func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handler {
 	return &Handler{
-		logger:       logger,
+		logger:       logger.With("component", "health_handler"),
 		stateManager: stateManager,
 	}
 }
 
 // LoggerMiddleware creates a gin middleware for logging
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
+	middlewareLogger := logger.With("component", "http_middleware")
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -41,19 +43,37 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 		duration := time.Since(start)
 		status := c.Writer.Status()
 
-		logger.Info("HTTP Request",
-			"method", method,
-			"path", path,
-			"status", status,
-			"duration", duration,
-			"ip", c.ClientIP(),
-		)
+		if status >= 500 {
+			middlewareLogger.Error("HTTP Request",
+				"method", method,
+				"path", path,
+				"status", status,
+				"duration_ms", duration.Milliseconds(),
+				"ip", c.ClientIP(),
+			)
+		} else if status >= 400 {
+			middlewareLogger.Warn("HTTP Request",
+				"method", method,
+				"path", path,
+				"status", status,
+				"duration_ms", duration.Milliseconds(),
+				"ip", c.ClientIP(),
+			)
+		} else {
+			middlewareLogger.Info("HTTP Request",
+				"method", method,
+				"path", path,
+				"status", status,
+				"duration_ms", duration.Milliseconds(),
+				"ip", c.ClientIP(),
+			)
+		}
 	}
 }
 
 // RegisterRoutes registers all HTTP routes for the health service
 func RegisterRoutes(router *gin.Engine) {
-	handler := NewHandler(logging.GetServiceLogger(), GetKeeperStateManager())
+	handler := NewHandler(logging.GetServiceLogger(), keeper.GetStateManager())
 
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
@@ -70,17 +90,23 @@ func (h *Handler) handleRoot(c *gin.Context) {
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth types.KeeperHealth
+	var keeperHealth types.KeeperHealthCheckIn
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
-		h.logger.Error("Failed to bind JSON", "error", err)
+		h.logger.Error("Failed to parse keeper health check-in request",
+			"error", err,
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.logger.Infof("Keeper health check-in received: %+v", keeperHealth)
+	h.logger.Debug("Received keeper health check-in",
+		"keeper", keeperHealth.KeeperAddress,
+		"version", keeperHealth.Version,
+		"peer_id", keeperHealth.PeerID,
+	)
 
 	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" || keeperHealth.Version == "" {
-		h.logger.Debug("Obsolete Version of Keeper",
+		h.logger.Warn("Rejecting obsolete keeper version",
 			"keeper", keeperHealth.KeeperAddress,
 			"version", keeperHealth.Version,
 		)
@@ -89,8 +115,9 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		})
 		return
 	}
+
 	if keeperHealth.Version == "0.1.0" || keeperHealth.Version == "0.1.1" {
-		h.logger.Debug("Older Version of Keeper",
+		h.logger.Warn("Older keeper version detected",
 			"keeper", keeperHealth.KeeperAddress,
 			"version", keeperHealth.Version,
 		)
@@ -99,39 +126,47 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		})
 		return
 	}
+
 	if keeperHealth.Version == "0.1.2" {
-		ok, _ := VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+		ok, err := VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 		if !ok {
-			h.logger.Error("Invalid signature",
+			h.logger.Error("Invalid keeper signature",
 				"keeper", keeperHealth.KeeperAddress,
-				"signature", keeperHealth.Signature,
+				"error", err,
 			)
 			c.JSON(http.StatusPreconditionFailed, gin.H{
 				"error": "Invalid signature",
 			})
 			return
-		} else {
-			h.logger.Info("Keeper check-in received",
-				"keeper", keeperHealth.KeeperAddress,
-				"version", keeperHealth.Version,
-				"ip", c.ClientIP(),
-			)
-			keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
-
-			if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
-				h.logger.Error("Failed to update keeper state",
-					"error", err,
-					"keeper", keeperHealth.KeeperAddress,
-				)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"message": "Keeper health check-in received",
-				"active":  true,
-			})
 		}
+
+		h.logger.Debug("Valid keeper signature verified",
+			"keeper", keeperHealth.KeeperAddress,
+			"version", keeperHealth.Version,
+			"ip", c.ClientIP(),
+		)
+
+		keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
+		keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
+		
+		if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
+			h.logger.Error("Failed to update keeper state",
+				"error", err,
+				"keeper", keeperHealth.KeeperAddress,
+			)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
+			return
+		}
+
+		h.logger.Info("Successfully processed keeper health check-in",
+			"keeper", keeperHealth.KeeperAddress,
+			"version", keeperHealth.Version,
+		)
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Keeper health check-in received",
+			"active":  true,
+		})
 	}
 }
 

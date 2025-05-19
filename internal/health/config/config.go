@@ -14,6 +14,14 @@ import (
 type Config struct {
 	HealthRPCPort      string
 	DatabaseRPCAddress string
+
+	BotToken           string
+	EmailUser          string
+	EmailPassword      string
+
+	DatabaseHost       string
+	DatabaseHostPort   string
+
 	DevMode            bool
 }
 
@@ -29,6 +37,11 @@ func Init() error {
 		DevMode:            os.Getenv("DEV_MODE") == "true",
 		HealthRPCPort:      os.Getenv("HEALTH_RPC_PORT"),
 		DatabaseRPCAddress: os.Getenv("DATABASE_RPC_ADDRESS"),
+		BotToken:           os.Getenv("BOT_TOKEN"),
+		EmailUser:          os.Getenv("EMAIL_USER"),
+		EmailPassword:      os.Getenv("EMAIL_PASSWORD"),
+		DatabaseHost:       os.Getenv("DATABASE_HOST"),
+		DatabaseHostPort:   os.Getenv("DATABASE_HOST_PORT"),
 	}
 
 	if err := validateConfig(); err != nil {
@@ -62,6 +75,31 @@ func GetHealthRPCPort() string {
 // GetDatabaseRPCAddress returns the configured database RPC address
 func GetDatabaseRPCAddress() string {
 	return cfg.DatabaseRPCAddress
+}
+
+// GetDatabaseHost returns the configured database host
+func GetDatabaseHost() string {
+	return cfg.DatabaseHost
+}
+
+// GetDatabaseHostPort returns the configured database host port
+func GetDatabaseHostPort() string {
+	return cfg.DatabaseHostPort
+}
+
+// GetBotToken returns the configured bot token
+func GetBotToken() string {
+	return cfg.BotToken
+}
+
+// GetEmailUser returns the configured email user
+func GetEmailUser() string {
+	return cfg.EmailUser
+}
+
+// GetEmailPassword returns the configured email password
+func GetEmailPassword() string {
+	return cfg.EmailPassword
 }
 
 // IsDevMode returns whether the service is running in development mode

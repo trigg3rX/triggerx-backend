@@ -13,7 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health"
+	"github.com/trigg3rX/triggerx-backend/internal/health/client"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -27,10 +30,12 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:      logging.BaseDataDir,
-		ProcessName: logging.HealthProcess,
-		Environment: getEnvironment(),
-		UseColors:   true,
+		LogDir:          logging.BaseDataDir,
+		ProcessName:     logging.HealthProcess,
+		Environment:     getEnvironment(),
+		UseColors:       true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
 	}
 
 	if err := logging.InitServiceLogger(logConfig); err != nil {
@@ -45,9 +50,29 @@ func main() {
 	serverErrors := make(chan error, 3)
 	ready := make(chan struct{})
 
+	// Initialize database connection
+	dbConfig := &database.Config{
+		Hosts:    []string{config.GetDatabaseHost() + ":" + config.GetDatabaseHostPort()},
+		Keyspace: "triggerx",
+	}
+	dbConn, err := database.NewConnection(dbConfig)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize database connection: %v", err))
+	}
+
+	// Initialize database manager
+	client.InitDatabaseManager(logger, dbConn)
+	logger.Info("Database manager initialized")
+
 	// Initialize state manager
-	_ = health.InitializeStateManager(logger)
+	stateManager := keeper.InitializeStateManager(logger)
 	logger.Info("Keeper state manager initialized")
+
+	// Load verified keepers from database
+	if err := stateManager.LoadVerifiedKeepers(); err != nil {
+		logger.Debug("Failed to load verified keepers from database", "error", err)
+		// Continue anyway, as we can still operate with an empty state
+	}
 
 	// Setup HTTP server
 	srv := setupHTTPServer(logger)
@@ -86,6 +111,13 @@ func getEnvironment() logging.LogLevel {
 	return logging.Production
 }
 
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
+}
+
 func setupHTTPServer(logger logging.Logger) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
@@ -110,11 +142,22 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
+	// Update all keepers to inactive in database
+	stateManager := keeper.GetStateManager()
+	if err := stateManager.DumpState(); err != nil {
+		logger.Error("Failed to dump keeper state", "error", err)
+	}
+
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
+	}
+
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
 	wg.Wait()
