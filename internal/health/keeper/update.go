@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,11 @@ import (
 
 const (
 	maxRetries = 3
+)
+
+// Custom error types
+var (
+	ErrKeeperNotVerified = errors.New("keeper not verified")
 )
 
 // UpdateKeeperHealth updates the health status of a keeper
@@ -24,7 +30,7 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckI
 		sm.logger.Warn("Received health check-in from unverified keeper",
 			"keeper", address,
 		)
-		return fmt.Errorf("keeper not verified")
+		return ErrKeeperNotVerified
 	}
 
 	// Update the state with new health check-in data

@@ -1,6 +1,7 @@
 package health
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -148,8 +149,19 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 
 		keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 		keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
-		
+
 		if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
+			if errors.Is(err, keeper.ErrKeeperNotVerified) {
+				h.logger.Warn("Unverified keeper attempted health check-in",
+					"keeper", keeperHealth.KeeperAddress,
+				)
+				c.JSON(http.StatusForbidden, gin.H{
+					"error": "Keeper not verified",
+					"code":  "KEEPER_NOT_VERIFIED",
+				})
+				return
+			}
+
 			h.logger.Error("Failed to update keeper state",
 				"error", err,
 				"keeper", keeperHealth.KeeperAddress,
