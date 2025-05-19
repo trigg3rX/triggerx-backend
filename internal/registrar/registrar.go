@@ -124,6 +124,9 @@ func (s *RegistrarService) Stop() {
 func (s *RegistrarService) pollEvents() {
 	defer s.wg.Done()
 
+	s.logger.Info("Polling for new events...")
+	s.logger.Infof("Polling interval: %s", config.GetPollingInterval())
+
 	ticker := time.NewTicker(config.GetPollingInterval())
 	defer ticker.Stop()
 

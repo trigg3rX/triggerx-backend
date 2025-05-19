@@ -12,7 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// DatabaseManager handles database operations with proper logging
+// DatabaseManager handles database operations
 type DatabaseManager struct {
 	logger logging.Logger
 	db     *database.Connection
@@ -43,17 +43,15 @@ func GetInstance() *DatabaseManager {
 	return instance
 }
 
-// KeeperRegistered registers a new keeper or updates an existing one
+// KeeperRegistered registers a new keeper or updates an existing one (status = true)
 func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash string) error {
 	dm.logger.Infof("Updating keeper %s at database", operatorAddress)
 
 	var booster float32 = 1
 	var currentKeeperID int64
-
 	operatorAddress = strings.ToLower(operatorAddress)
-	dm.logger.Infof("Keeper address: %s", operatorAddress)
 	txHash = strings.ToLower(txHash)
-	dm.logger.Infof("Tx hash: %s", txHash)
+
 	if err := dm.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		operatorAddress).Scan(&currentKeeperID); err != nil {
@@ -80,7 +78,7 @@ func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash strin
 			return err
 		}
 
-		dm.logger.Infof("Created keeper with ID: %d", currentKeeperID)
+		dm.logger.Infof("Keeper registered: %d | %s", currentKeeperID, operatorAddress)
 		return nil
 	} else {
 		if err := dm.db.Session().Query(`
@@ -91,16 +89,16 @@ func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash strin
 			dm.logger.Errorf("Error updating keeper with ID %d: %v", currentKeeperID, err)
 			return err
 		}
-		dm.logger.Infof("Updated keeper with ID: %d", currentKeeperID)
+		dm.logger.Infof("Keeper registered: %d | %s", currentKeeperID, operatorAddress)
 		return nil
 	}
 }
 
-// KeeperUnregistered marks a keeper as unregistered
+// KeeperUnregistered marks a keeper as unregistered (status = false)
 func (dm *DatabaseManager) KeeperUnregistered(operatorAddress string) error {
 	var currentKeeperID int64
 	operatorAddress = strings.ToLower(operatorAddress)
-	dm.logger.Infof("Unregistering keeper with address: %s", operatorAddress)
+
 	if err := dm.db.Session().Query(`
 		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		operatorAddress).Scan(&currentKeeperID); err != nil {
@@ -117,7 +115,7 @@ func (dm *DatabaseManager) KeeperUnregistered(operatorAddress string) error {
 		return err
 	}
 
-	dm.logger.Infof("Successfully updated keeper %s status to unregistered", operatorAddress)
+	dm.logger.Infof("Keeper unregistered: %d | %s", currentKeeperID, operatorAddress)
 	return nil
 }
 
@@ -308,25 +306,61 @@ func (dm *DatabaseManager) DailyRewardsPoints() error {
 	return nil
 }
 
+const (
+	maxRetries = 3
+	retryDelay = 2 * time.Second
+)
+
+// retryWithBackoff executes the given function with exponential backoff retry logic
+func retryWithBackoff[T any](operation func() (T, error), logger logging.Logger) (T, error) {
+	var result T
+	var err error
+	delay := retryDelay
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		result, err = operation()
+		if err == nil {
+			return result, nil
+		}
+
+		if attempt < maxRetries {
+			logger.Warnf("Attempt %d failed: %v. Retrying in %v...", attempt, err, delay)
+			time.Sleep(delay)
+			delay *= 2 // Exponential backoff
+		}
+	}
+
+	return result, fmt.Errorf("failed after %d attempts: %v", maxRetries, err)
+}
+
 // UpdateOperatorDetails updates the details of an operator
 func (dm *DatabaseManager) UpdateOperatorDetails(operatorAddress string, operatorId string, votingPower string, rewardsReceiver string, strategies []string) error {
 	operatorAddress = strings.ToLower(operatorAddress)
 	dm.logger.Infof("Updating operator details for %s in database", operatorAddress)
 
-	var keeperId int64
-	if err := dm.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		operatorAddress).Scan(&keeperId); err != nil {
-		dm.logger.Errorf("Could not find keeper with address %s: %v", operatorAddress, err)
+	// Retry getting keeper ID
+	keeperId, err := retryWithBackoff(func() (int64, error) {
+		var id int64
+		err := dm.db.Session().Query(`
+			SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+			operatorAddress).Scan(&id)
+		return id, err
+	}, dm.logger)
+	if err != nil {
+		dm.logger.Errorf("Could not find keeper with address %s after retries: %v", operatorAddress, err)
 		return err
 	}
 
-	if err := dm.db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET operator_id = ?, rewards_address = ?, voting_power = ?, strategies = ?
-		WHERE keeper_id = ?`,
-		operatorId, rewardsReceiver, votingPower, strategies, keeperId).Exec(); err != nil {
-		dm.logger.Errorf("Failed to update operator_id for keeper ID %d: %v", keeperId, err)
+	// Retry updating operator details
+	_, err = retryWithBackoff(func() (interface{}, error) {
+		return nil, dm.db.Session().Query(`
+			UPDATE triggerx.keeper_data 
+			SET operator_id = ?, rewards_address = ?, voting_power = ?, strategies = ?
+			WHERE keeper_id = ?`,
+			operatorId, rewardsReceiver, votingPower, strategies, keeperId).Exec()
+	}, dm.logger)
+	if err != nil {
+		dm.logger.Errorf("Failed to update operator_id for keeper ID %d after retries: %v", keeperId, err)
 		return err
 	}
 

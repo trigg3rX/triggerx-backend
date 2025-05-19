@@ -3,18 +3,46 @@ package events
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/bindings/contractAttestationCenter"
 	"github.com/trigg3rX/triggerx-backend/pkg/bindings/contractAvsGovernance"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+const (
+	maxRetries = 3
+	retryDelay = 2 * time.Second
+)
+
+// retryWithBackoff executes the given function with exponential backoff retry logic
+func retryWithBackoff[T any](operation func() (T, error), logger logging.Logger) (T, error) {
+	var result T
+	var err error
+	delay := retryDelay
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		result, err = operation()
+		if err == nil {
+			return result, nil
+		}
+
+		if attempt < maxRetries {
+			logger.Warnf("Attempt %d failed: %v. Retrying in %v...", attempt, err, delay)
+			time.Sleep(delay)
+			delay *= 2 // Exponential backoff
+		}
+	}
+
+	return result, fmt.Errorf("failed after %d attempts: %v", maxRetries, err)
+}
 
 func FetchOperatorDetailsAfterDelay(operatorAddress common.Address, delay time.Duration, logger logging.Logger) error {
 	logger.Infof("Scheduling fetch of operator details for %s after %v delay", operatorAddress.Hex(), delay)
@@ -65,9 +93,12 @@ func FetchAndLogOperatorDetails(operatorAddress common.Address, logger logging.L
 	var votingPowerStr string
 	var operatorIdStr string
 
-	restakedStrategies, err := avsGovernance.GetOperatorRestakedStrategies(&bind.CallOpts{Context: ctx}, operatorAddress)
+	// Retry getting restaked strategies
+	restakedStrategies, err := retryWithBackoff(func() ([]common.Address, error) {
+		return avsGovernance.GetOperatorRestakedStrategies(&bind.CallOpts{Context: ctx}, operatorAddress)
+	}, logger)
 	if err != nil {
-		logger.Errorf("Failed to get operator restaked strategies: %v", err)
+		logger.Errorf("Failed to get operator restaked strategies after retries: %v", err)
 	} else {
 		restakedStrategiesArr = make([]string, len(restakedStrategies))
 		for i, strategy := range restakedStrategies {
@@ -76,25 +107,34 @@ func FetchAndLogOperatorDetails(operatorAddress common.Address, logger logging.L
 		logger.Infof("Operator %s restaked strategies: %v", operatorAddress.Hex(), restakedStrategiesArr)
 	}
 
-	rewardsReceiver, err := avsGovernance.GetRewardsReceiver(&bind.CallOpts{Context: ctx}, operatorAddress)
+	// Retry getting rewards receiver
+	rewardsReceiver, err := retryWithBackoff(func() (common.Address, error) {
+		return avsGovernance.GetRewardsReceiver(&bind.CallOpts{Context: ctx}, operatorAddress)
+	}, logger)
 	if err != nil {
-		logger.Errorf("Failed to get rewards receiver: %v", err)
+		logger.Errorf("Failed to get rewards receiver after retries: %v", err)
 	} else {
 		rewardsReceiverStr = rewardsReceiver.Hex()
 		logger.Infof("Operator %s rewards receiver: %s", operatorAddress.Hex(), rewardsReceiverStr)
 	}
 
-	l2VotingPower, err := attestationCenter.VotingPower(&bind.CallOpts{Context: ctx}, operatorAddress)
+	// Retry getting L2 voting power
+	l2VotingPower, err := retryWithBackoff(func() (*big.Int, error) {
+		return attestationCenter.VotingPower(&bind.CallOpts{Context: ctx}, operatorAddress)
+	}, logger)
 	if err != nil {
-		logger.Errorf("Failed to get L2 voting power: %v", err)
+		logger.Errorf("Failed to get L2 voting power after retries: %v", err)
 	} else {
 		votingPowerStr = l2VotingPower.String()
 		logger.Infof("Operator %s L2 voting power: %s", operatorAddress.Hex(), votingPowerStr)
 	}
 
-	operatorId, err := attestationCenter.OperatorsIdsByAddress(&bind.CallOpts{Context: ctx}, operatorAddress)
+	// Retry getting operator ID
+	operatorId, err := retryWithBackoff(func() (*big.Int, error) {
+		return attestationCenter.OperatorsIdsByAddress(&bind.CallOpts{Context: ctx}, operatorAddress)
+	}, logger)
 	if err != nil {
-		logger.Errorf("Failed to get operator ID: %v", err)
+		logger.Errorf("Failed to get operator ID after retries: %v", err)
 	} else {
 		operatorIdStr = operatorId.String()
 		logger.Infof("Operator %s ID: %s", operatorAddress.Hex(), operatorIdStr)

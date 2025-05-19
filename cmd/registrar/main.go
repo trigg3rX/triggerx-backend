@@ -7,10 +7,11 @@ import (
 	"syscall"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
+
 	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
-	dbpkg "github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -22,10 +23,12 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:      logging.BaseDataDir,
-		ProcessName: logging.RegistrarProcess,
-		Environment: getEnvironment(),
-		UseColors:   true,
+		LogDir:          logging.BaseDataDir,
+		ProcessName:     logging.RegistrarProcess,
+		Environment:     getEnvironment(),
+		UseColors:       true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
 	}
 
 	if err := logging.InitServiceLogger(logConfig); err != nil {
@@ -33,11 +36,15 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting registrar service...")
+	logger.Info("Starting registrar service...",
+		"mode", getEnvironment(),
+		"avs_governance", config.GetAvsGovernanceAddress(),
+		"attestation_center", config.GetAttestationCenterAddress(),
+	)
 
 	// Initialize database connection
-	dbConfig := dbpkg.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
-	dbConn, err := dbpkg.NewConnection(dbConfig)
+	dbConfig := database.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
+	dbConn, err := database.NewConnection(dbConfig)
 	if err != nil {
 		logger.Fatal("Failed to connect to database", "error", err)
 	}
@@ -46,12 +53,6 @@ func main() {
 	// Initialize database manager with logger
 	client.InitDatabaseManager(logger, dbConn)
 	logger.Info("Database manager initialized")
-
-	// Log contract addresses
-	logger.Info("Contract addresses initialized",
-		"avsGovernance", config.GetAvsGovernanceAddress(),
-		"attestationCenter", config.GetAttestationCenterAddress(),
-	)
 
 	// Initialize and start registrar service
 	registrarService, err := registrar.NewRegistrarService(logger)
@@ -73,10 +74,16 @@ func main() {
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	sig := <-shutdown
-	logger.Info("Received shutdown signal", "signal", sig.String())
+	logger.Infof("Received shutdown signal: %s", sig.String())
 
 	// Cleanup
 	registrarService.Stop()
+
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
+	}
+
 	logger.Info("Shutdown complete")
 }
 
@@ -85,4 +92,11 @@ func getEnvironment() logging.LogLevel {
 		return logging.Development
 	}
 	return logging.Production
+}
+
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
 }
