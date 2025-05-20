@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  loadbalancer:
+    build:
+      context: .
+      dockerfile: Dockerfile.loadbalancer
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+    depends_on:
+      - redis
+    networks:
+      - triggerx-network
+
+  manager1:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    ports:
+      - "6061:6061"
+    environment:
+      - MANAGER_HA_ENABLED=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - OTHER_MANAGER_ADDRESSES=manager2:6062
+      - MANAGER_RPC_PORT=6061
+      - NODE_ID=manager1
+    depends_on:
+      - redis
+    networks:
+      - triggerx-network
+
+  manager2:
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    ports:
+      - "6062:6062"
+    environment:
+      - MANAGER_HA_ENABLED=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - OTHER_MANAGER_ADDRESSES=manager1:6061
+      - MANAGER_RPC_PORT=6062
+      - NODE_ID=manager2
+    depends_on:
+      - redis
+    networks:
+      - triggerx-network
+
+  redis:
+    image: redis:alpine
+    container_name: triggerx-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - triggerx-network
+
+networks:
+  triggerx-network:
+    driver: bridge 

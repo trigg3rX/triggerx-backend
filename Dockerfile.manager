@@ -1,5 +1,5 @@
-# Use golang:1.23-alpine as the base image
-FROM golang:1.23-alpine AS builder
+# Use golang:1.22-alpine as the base image
+FROM golang:1.22-alpine AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -21,7 +21,7 @@ RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-manager ./cmd/manager
 
 # Use a minimal alpine image for the final stage
-FROM golang:1.23-alpine
+FROM golang:1.22-alpine
 
 # Install ca-certificates, curl, redis-cli, and bash
 RUN apk --no-cache add ca-certificates curl redis bash
@@ -42,6 +42,9 @@ RUN chmod +x /app/start-ha-manager.sh
 # Set environment variables
 ENV GIN_MODE=release
 ENV LOG_LEVEL=info
+
+# Expose the port
+EXPOSE 6061
 
 # Run the startup script with bash
 CMD ["/bin/bash", "/app/start-ha-manager.sh"] 

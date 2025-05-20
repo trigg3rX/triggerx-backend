@@ -44,6 +44,8 @@ type JobScheduler struct {
 
 	jobChainStatus map[int64]string
 	chainMutex     sync.RWMutex
+
+	activeWorkers map[int64]workers.Worker
 }
 
 // ConditionMonitor tracks external conditions for condition-based jobs
@@ -117,6 +119,7 @@ func NewJobScheduler(logger logging.Logger) (*JobScheduler, error) {
 		mu:             sync.RWMutex{},
 		cacheMutex:     sync.RWMutex{},
 		chainMutex:     sync.RWMutex{},
+		activeWorkers:  make(map[int64]workers.Worker),
 	}
 
 	cacheManager, err := NewCacheManager(scheduler)
@@ -371,4 +374,11 @@ func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value inte
 	}
 
 	return fmt.Errorf("invalid state cache format for job %d", jobID)
+}
+
+// GetActiveTasksCount returns the number of currently active tasks
+func (js *JobScheduler) GetActiveTasksCount() int {
+	js.mu.RLock()
+	defer js.mu.RUnlock()
+	return len(js.activeWorkers)
 }

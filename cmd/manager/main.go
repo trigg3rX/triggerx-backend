@@ -112,6 +112,9 @@ func main() {
 	// Add manager status endpoint
 	router.GET("/status", handleManagerStatus)
 
+	// Add metrics endpoint
+	router.GET("/metrics", manager.HandleMetrics)
+
 	// Create HTTP server
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.ManagerRPCPort),

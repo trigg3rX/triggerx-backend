@@ -5,9 +5,12 @@ import (
 	// "encoding/json"
 	// "fmt"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 
 	// "github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
@@ -189,3 +192,36 @@ func HandleJobStateUpdate(c *gin.Context) {
 // 	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
 // 	c.JSON(http.StatusOK, response)
 // }
+
+// HandleMetrics returns current metrics of the manager
+func HandleMetrics(c *gin.Context) {
+	// Get CPU usage
+	cpuPercent, err := cpu.Percent(time.Second, false)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get CPU metrics"})
+		return
+	}
+
+	// Get memory usage
+	memInfo, err := mem.VirtualMemory()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get memory metrics"})
+		return
+	}
+
+	// Get active tasks count
+	activeTasks := 0
+	if jobScheduler != nil {
+		activeTasks = jobScheduler.GetActiveTasksCount()
+	}
+
+	metrics := gin.H{
+		"cpu_usage":    cpuPercent[0],
+		"memory_usage": memInfo.UsedPercent,
+		"active_tasks": activeTasks,
+		"goroutines":   runtime.NumGoroutine(),
+		"timestamp":    time.Now().UTC(),
+	}
+
+	c.JSON(http.StatusOK, metrics)
+}
