@@ -235,7 +235,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			LastExecutedAt:         time.Time{},
 		}
 
-		success, err := h.SendDataToManager("/job/create", jobData)
+		success, err := h.SendDataToManager("/jobs/schedule", jobData)
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending job data to manager"})
