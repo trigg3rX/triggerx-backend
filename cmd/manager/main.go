@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/manager/api"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/cache"
+	"github.com/trigg3rX/triggerx-backend/internal/manager"
+	// "github.com/trigg3rX/triggerx-backend/internal/manager/cache"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
@@ -23,7 +23,6 @@ import (
 
 const (
 	shutdownTimeout = 30 * time.Second
-	cacheStatePath  = "/var/lib/triggerx/manager/cache.json"
 	defaultTimeout  = 10 * time.Second
 )
 
@@ -53,11 +52,6 @@ func main() {
 		"port", config.GetManagerRPCPort(),
 	)
 
-	// Initialize server components
-	var wg sync.WaitGroup
-	serverErrors := make(chan error, 3)
-	ready := make(chan struct{})
-
 	// Initialize database client
 	dbConfig := database.DatabaseClientConfig{
 		RPCAddress:  config.GetDatabaseRPCAddress(),
@@ -81,25 +75,22 @@ func main() {
 	}
 	defer aggregatorClient.Close()
 
-	// Initialize cache
-	jobCache, err := cache.NewMemoryCache(logger, cacheStatePath)
-	if err != nil {
-		logger.Fatal("Failed to initialize job cache:", err)
-	}
-
-	// Initialize scheduler
-	jobScheduler, err := scheduler.NewJobScheduler(logger, jobCache, dbClient, aggregatorClient)
+	// Initialize job scheduler
+	// jobCache := cache.NewCache()
+	// jobScheduler, err := scheduler.NewJobScheduler(logger, jobCache, dbClient, aggregatorClient)
+	jobScheduler, err := scheduler.NewJobScheduler(logger, dbClient, aggregatorClient)
 	if err != nil {
 		logger.Fatal("Failed to initialize job scheduler:", err)
 	}
 
-	// Initialize API handlers
-	handlers := api.NewHandlers(logger, jobScheduler, dbClient)
+	var wg sync.WaitGroup
+	serverErrors := make(chan error, 1)
+
+	ready := make(chan struct{})
 
 	// Setup HTTP server
-	srv := setupHTTPServer(logger, handlers)
+	srv := setupHTTPServer(logger, jobScheduler)
 
-	// Start server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -110,7 +101,7 @@ func main() {
 	}()
 
 	close(ready)
-	logger.Infof("Manager node is READY on port %s...", config.GetManagerRPCPort())
+	logger.Infof("Manager Server initialized, starting on port %s...", config.GetManagerRPCPort())
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
@@ -118,11 +109,11 @@ func main() {
 	select {
 	case err := <-serverErrors:
 		logger.Error("Server error received", "error", err)
-	case <-shutdown:
-		logger.Info("Received shutdown signal")
+	case sig := <-shutdown:
+		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(srv, jobCache, &wg, logger)
+	performGracefulShutdown(srv, &wg, logger)
 }
 
 func getEnvironment() logging.LogLevel {
@@ -139,17 +130,16 @@ func getLogLevel() logging.Level {
 	return logging.InfoLevel
 }
 
-func setupHTTPServer(logger logging.Logger, handlers *api.Handlers) *http.Server {
+func setupHTTPServer(logger logging.Logger, jobScheduler *scheduler.JobScheduler) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(api.LoggerMiddleware(logger))
+	router.Use(manager.LoggerMiddleware(logger))
 
-	// Register routes
-	api.RegisterRoutes(router, handlers)
+	manager.RegisterRoutes(router, jobScheduler)
 
 	return &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetManagerRPCPort()),
@@ -157,7 +147,7 @@ func setupHTTPServer(logger logging.Logger, handlers *api.Handlers) *http.Server
 	}
 }
 
-func performGracefulShutdown(srv *http.Server, jobCache cache.Cache, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -168,10 +158,6 @@ func performGracefulShutdown(srv *http.Server, jobCache cache.Cache, wg *sync.Wa
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
-	}
-
-	if err := jobCache.Close(); err != nil {
-		logger.Error("Failed to close job cache", "error", err)
 	}
 
 	// Ensure logger is properly shutdown

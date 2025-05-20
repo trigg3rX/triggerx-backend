@@ -8,12 +8,12 @@ import (
 	"io"
 	"net/http"
 	"sync"
-	"time"
+	// "time"
 
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 
-	"github.com/trigg3rX/triggerx-backend/internal/manager/cache"
+	// "github.com/trigg3rX/triggerx-backend/internal/manager/cache"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
@@ -29,11 +29,9 @@ type JobScheduler struct {
 	logger logging.Logger
 
 	cronScheduler *cron.Cron
-	eventWatchers map[int64]*EventWatcher
-	conditions    map[int64]*ConditionMonitor
 
-	cache    cache.Cache
-	balancer *LoadBalancer
+	// cache    cache.Cache
+	// balancer *LoadBalancer
 
 	workers      map[int64]workers.Worker
 	workerCtx    context.Context
@@ -46,52 +44,9 @@ type JobScheduler struct {
 	aggregatorClient *aggregator.AggregatorClient
 }
 
-type ConditionMonitor struct {
-	ctx           context.Context
-	jobID         string
-	scriptIPFSUrl string
-}
-
-func NewConditionMonitor(ctx context.Context, jobID string, scriptIPFSUrl string) *ConditionMonitor {
-	return &ConditionMonitor{
-		ctx:           ctx,
-		jobID:         jobID,
-		scriptIPFSUrl: scriptIPFSUrl,
-	}
-}
-
-func (c *ConditionMonitor) Start(callback func()) {
-}
-
-func (c *ConditionMonitor) Stop() {
-}
-
-type EventWatcher struct {
-	ctx             context.Context
-	jobID           string
-	chainID         string
-	contractAddress string
-	eventName       string
-}
-
-func NewEventWatcher(ctx context.Context, jobID string, chainID string, contractAddress string, eventName string) *EventWatcher {
-	return &EventWatcher{
-		ctx:             ctx,
-		jobID:           jobID,
-		chainID:         chainID,
-		contractAddress: contractAddress,
-		eventName:       eventName,
-	}
-}
-
-func (e *EventWatcher) Start() {
-}
-
-func (e *EventWatcher) Stop() {
-}
-
 // NewJobScheduler creates a new instance of JobScheduler
-func NewJobScheduler(logger logging.Logger, jobCache cache.Cache, dbClient *database.DatabaseClient, aggregatorClient *aggregator.AggregatorClient) (*JobScheduler, error) {
+// func NewJobScheduler(logger logging.Logger, jobCache cache.Cache, dbClient *database.DatabaseClient, aggregatorClient *aggregator.AggregatorClient) (*JobScheduler, error) {
+func NewJobScheduler(logger logging.Logger, dbClient *database.DatabaseClient, aggregatorClient *aggregator.AggregatorClient) (*JobScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	scheduler := &JobScheduler{
@@ -99,10 +54,8 @@ func NewJobScheduler(logger logging.Logger, jobCache cache.Cache, dbClient *data
 		cancel:           cancel,
 		logger:           logger,
 		cronScheduler:    cron.New(cron.WithSeconds()),
-		eventWatchers:    make(map[int64]*EventWatcher),
-		conditions:       make(map[int64]*ConditionMonitor),
-		cache:            jobCache,
-		balancer:         NewLoadBalancer(),
+		// cache:            jobCache,
+		// balancer:         NewLoadBalancer(),
 		workers:          make(map[int64]workers.Worker),
 		workerCtx:        ctx,
 		workerCancel:     cancel,
@@ -113,7 +66,7 @@ func NewJobScheduler(logger logging.Logger, jobCache cache.Cache, dbClient *data
 		aggregatorClient: aggregatorClient,
 	}
 
-	go scheduler.balancer.MonitorResources()
+	// go scheduler.balancer.MonitorResources()
 	scheduler.cronScheduler.Start()
 
 	return scheduler, nil
@@ -123,13 +76,14 @@ func (s *JobScheduler) canAcceptNewJob() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.balancer.CheckResourceAvailability()
+	// return s.balancer.CheckResourceAvailability()
+	return true
 }
 
 func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
-		s.balancer.AddJobToQueue(jobData.JobID, 1)
+		// s.balancer.AddJobToQueue(jobData.JobID, 1)
 		return nil
 	}
 
@@ -138,20 +92,20 @@ func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) erro
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
 
-	state := &cache.JobState{
-		Created:      jobData.CreatedAt,
-		LastExecuted: jobData.LastExecutedAt,
-		Status:       "running",
-		Type:         "time-based",
-		Metadata: map[string]interface{}{
-			"timeframe": jobData.TimeFrame,
-			"interval":  jobData.TimeInterval,
-		},
-	}
+	// state := &cache.JobState{
+	// 	Created:      jobData.CreatedAt,
+	// 	LastExecuted: jobData.LastExecutedAt,
+	// 	Status:       "running",
+	// 	Type:         "time-based",
+	// 	Metadata: map[string]interface{}{
+	// 		"timeframe": jobData.TimeFrame,
+	// 		"interval":  jobData.TimeInterval,
+	// 	},
+	// }
 
-	if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
-		s.logger.Errorf("Failed to cache job state: %v", err)
-	}
+	// if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
+	// 	s.logger.Errorf("Failed to cache job state: %v", err)
+	// }
 
 	go worker.Start(s.workerCtx)
 
@@ -162,7 +116,7 @@ func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) erro
 func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
-		s.balancer.AddJobToQueue(jobData.JobID, 1)
+		// s.balancer.AddJobToQueue(jobData.JobID, 1)
 		return nil
 	}
 
@@ -171,20 +125,20 @@ func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) err
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
 
-	state := &cache.JobState{
-		Created:      jobData.CreatedAt,
-		LastExecuted: jobData.LastExecutedAt,
-		Status:       "running",
-		Type:         "event-based",
-		Metadata: map[string]interface{}{
-			"chain_id":  jobData.TriggerChainID,
-			"recurring": jobData.Recurring,
-		},
-	}
+	// state := &cache.JobState{
+	// 	Created:      jobData.CreatedAt,
+	// 	LastExecuted: jobData.LastExecutedAt,
+	// 	Status:       "running",
+	// 	Type:         "event-based",
+	// 	Metadata: map[string]interface{}{
+	// 		"chain_id":  jobData.TriggerChainID,
+	// 		"recurring": jobData.Recurring,
+	// 	},
+	// }
 
-	if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
-		s.logger.Errorf("Failed to cache job state: %v", err)
-	}
+	// if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
+	// 	s.logger.Errorf("Failed to cache job state: %v", err)
+	// }
 
 	go worker.Start(s.workerCtx)
 
@@ -195,7 +149,7 @@ func (s *JobScheduler) StartEventBasedJob(jobData types.HandleCreateJobData) err
 func (s *JobScheduler) StartConditionBasedJob(jobData types.HandleCreateJobData) error {
 	if !s.canAcceptNewJob() {
 		s.logger.Warnf("System resources exceeded, queueing job %d", jobData.JobID)
-		s.balancer.AddJobToQueue(jobData.JobID, 1)
+		// s.balancer.AddJobToQueue(jobData.JobID, 1)
 		return nil
 	}
 
@@ -204,20 +158,20 @@ func (s *JobScheduler) StartConditionBasedJob(jobData types.HandleCreateJobData)
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
 
-	state := &cache.JobState{
-		Created:      jobData.CreatedAt,
-		LastExecuted: jobData.LastExecutedAt,
-		Status:       "running",
-		Type:         "condition-based",
-		Metadata: map[string]interface{}{
-			"script_url": jobData.ScriptIPFSUrl,
-			"condition":  jobData.TargetFunction,
-		},
-	}
+	// state := &cache.JobState{
+	// 	Created:      jobData.CreatedAt,
+	// 	LastExecuted: jobData.LastExecutedAt,
+	// 	Status:       "running",
+	// 	Type:         "condition-based",
+	// 	Metadata: map[string]interface{}{
+	// 		"script_url": jobData.ScriptIPFSUrl,
+	// 		"condition":  jobData.TargetFunction,
+	// 	},
+	// }
 
-	if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
-		s.logger.Errorf("Failed to cache job state: %v", err)
-	}
+	// if err := s.cache.Set(s.ctx, jobData.JobID, state); err != nil {
+	// 	s.logger.Errorf("Failed to cache job state: %v", err)
+	// }
 
 	go worker.Start(s.workerCtx)
 
@@ -289,19 +243,19 @@ func (s *JobScheduler) GetWorker(jobID int64) workers.Worker {
 	return worker
 }
 
-func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Time) error {
-	if err := s.cache.Update(s.ctx, jobID, "last_executed", timestamp); err != nil {
-		return fmt.Errorf("failed to update job last executed time: %w", err)
-	}
-	return nil
-}
+// func (s *JobScheduler) UpdateJobLastExecutedTime(jobID int64, timestamp time.Time) error {
+// 	if err := s.cache.Update(s.ctx, jobID, "last_executed", timestamp); err != nil {
+// 		return fmt.Errorf("failed to update job last executed time: %w", err)
+// 	}
+// 	return nil
+// }
 
-func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value interface{}) error {
-	if err := s.cache.Update(s.ctx, jobID, field, value); err != nil {
-		return fmt.Errorf("failed to update job state cache: %w", err)
-	}
-	return nil
-}
+// func (s *JobScheduler) UpdateJobStateCache(jobID int64, field string, value interface{}) error {
+// 	if err := s.cache.Update(s.ctx, jobID, field, value); err != nil {
+// 		return fmt.Errorf("failed to update job state cache: %w", err)
+// 	}
+// 	return nil
+// }
 
 // RemoveJob removes a job from the scheduler and cache
 func (s *JobScheduler) RemoveJob(jobID int64) {
@@ -312,9 +266,9 @@ func (s *JobScheduler) RemoveJob(jobID int64) {
 	}
 	s.mu.Unlock()
 
-	if err := s.cache.Delete(s.ctx, jobID); err != nil {
-		s.logger.Errorf("failed to remove job from cache: %v", err)
-	}
+	// if err := s.cache.Delete(s.ctx, jobID); err != nil {
+	// 	s.logger.Errorf("failed to remove job from cache: %v", err)
+	// }
 }
 
 func (s *JobScheduler) GetDatabaseClient() *database.DatabaseClient {

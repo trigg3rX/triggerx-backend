@@ -2,7 +2,13 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+// Common errors
+var (
+	ErrNotFound = errors.New("job not found in cache")
 )
 
 // Common job status values
