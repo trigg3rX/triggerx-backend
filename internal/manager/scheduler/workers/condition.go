@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -174,7 +175,7 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 	if resp.StatusCode != http.StatusOK {
 		errMsg := fmt.Sprintf("API returned status %d", resp.StatusCode)
 		w.scheduler.Logger().Errorf(errMsg)
-		return false, fmt.Errorf(errMsg)
+		return false, errors.New(errMsg)
 	}
 
 	scriptContent, err := io.ReadAll(resp.Body)
@@ -225,7 +226,7 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 	if err := cmd.Run(); err != nil {
 		compileError := fmt.Sprintf("Compilation failed: %v\nStderr: %s", err, stderr.String())
 		w.scheduler.Logger().Errorf(compileError)
-		return false, fmt.Errorf(compileError)
+		return false, errors.New(compileError)
 	}
 
 	w.scheduler.Logger().Infof("Successfully compiled condition script to: %s", outputBinary)
@@ -238,7 +239,7 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			execError := fmt.Sprintf("Script execution failed: %v\nStderr: %s", err, exitErr.Stderr)
 			w.scheduler.Logger().Errorf(execError)
-			return false, fmt.Errorf(execError)
+			return false, errors.New(execError)
 		}
 		w.scheduler.Logger().Errorf("Failed to run script: %v", err)
 		return false, fmt.Errorf("failed to run script: %v", err)
@@ -266,7 +267,7 @@ func (w *ConditionBasedWorker) checkCondition() (bool, error) {
 		}
 		errMsg := fmt.Sprintf("Unable to determine condition from output: %s", output)
 		w.scheduler.Logger().Errorf(errMsg)
-		return false, fmt.Errorf(errMsg)
+		return false, errors.New(errMsg)
 	}
 }
 
