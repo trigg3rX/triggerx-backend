@@ -218,7 +218,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	}
 	defer ethClient.Close()
 
-	jobValidator := validation.NewTaskValidator(h.logger)
+	jobValidator := validation.NewTaskValidator(h.logger, ethClient)
 
 	// Validate job based on task definition ID
 	isValid := false
@@ -226,9 +226,9 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 
 	switch taskRequest.TaskDefinitionID {
 	case 1, 2: // Time-based jobs
-		isValid, validationErr = jobValidator.ValidateTimeBasedJob(&ipfsData.JobData)
+		isValid, validationErr = jobValidator.ValidateTimeBasedTask(&ipfsData.JobData)
 	case 3, 4: // Event-based jobs
-		isValid, validationErr = jobValidator.ValidateEventBasedJob(&ipfsData.JobData)
+		isValid, validationErr = jobValidator.ValidateEventBasedTask(&ipfsData.JobData, &ipfsData)
 	case 5, 6: // Condition-based jobs
 		// For condition-based jobs, make sure we have the ScriptTriggerFunction
 		if ipfsData.JobData.ScriptTriggerFunction == "" {
@@ -246,7 +246,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 		}
 
 		h.logger.Infof("Validating condition-based job with script: %s", ipfsData.JobData.ScriptTriggerFunction)
-		isValid, validationErr = jobValidator.ValidateConditionBasedJob(&ipfsData.JobData)
+		isValid, validationErr = jobValidator.ValidateConditionBasedTask(&ipfsData.JobData, &ipfsData)
 	default:
 		validationErr = fmt.Errorf("unsupported task definition ID: %d", taskRequest.TaskDefinitionID)
 	}
