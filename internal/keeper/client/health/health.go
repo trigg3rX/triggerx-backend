@@ -4,15 +4,28 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/security"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+// Custom error types
+var (
+	ErrKeeperNotVerified = errors.New("keeper not verified")
+)
+
+// ErrorResponse represents the error response from the health service
+type ErrorResponse struct {
+	Error string `json:"error"`
+	Code  string `json:"code"`
+}
 
 // Client represents a Health service client
 type Client struct {
@@ -78,7 +91,7 @@ func (c *Client) CheckIn(ctx context.Context) error {
 		PeerID:           c.config.PeerID,
 	}
 
-	c.logger.Infof("Payload: %+v", payload)
+	// c.logger.Infof("Payload: %+v", payload)
 
 	// Send health check request
 	err = c.sendHealthCheck(ctx, payload)
@@ -86,9 +99,9 @@ func (c *Client) CheckIn(ctx context.Context) error {
 		return fmt.Errorf("health check failed: %w", err)
 	}
 
-	c.logger.Info("Successfully completed health check-in",
-		"keeperAddress", c.config.KeeperAddress,
-		"timestamp", payload.Timestamp)
+	// c.logger.Info("Successfully completed health check-in",
+	// 	"keeperAddress", c.config.KeeperAddress,
+	// 	"timestamp", payload.Timestamp)
 
 	return nil
 }
@@ -116,6 +129,13 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		var errResp ErrorResponse
+		if err := json.Unmarshal(body, &errResp); err == nil {
+			if errResp.Code == "KEEPER_NOT_VERIFIED" {
+				return ErrKeeperNotVerified
+			}
+		}
 		return fmt.Errorf("health service returned non-OK status: %d", resp.StatusCode)
 	}
 
