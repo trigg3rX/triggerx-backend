@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
@@ -32,6 +33,7 @@ type DatabaseClient struct {
 	httpClient *http.Client
 	config     DatabaseClientConfig
 	lastIndex  int
+	mu         sync.Mutex // Add mutex for thread safety
 }
 
 // NewDatabaseClient creates a new instance of DatabaseClient
@@ -46,10 +48,18 @@ func NewDatabaseClient(logger logging.Logger, cfg DatabaseClientConfig) (*Databa
 		cfg.HTTPTimeout = 10 * time.Second
 	}
 
+	// Create a transport with connection pooling
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
 	return &DatabaseClient{
 		logger: logger,
 		httpClient: &http.Client{
-			Timeout: cfg.HTTPTimeout,
+			Timeout:   cfg.HTTPTimeout,
+			Transport: transport,
 		},
 		config:    cfg,
 		lastIndex: 0,
@@ -121,6 +131,9 @@ func (c *DatabaseClient) GetPerformer() (types.GetPerformerData, error) {
 }
 
 func (c *DatabaseClient) selectNextPerformer(performers []types.GetPerformerData) types.GetPerformerData {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	nextIndex := 0
 	if config.GetFoundNextPerformer() {
 		nextIndex = (c.lastIndex + 1) % len(performers)
