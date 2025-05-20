@@ -65,3 +65,28 @@ type IPFSData struct {
 
 	ProofData ProofData `json:"proof_data"`
 }
+
+type ProofResponse struct {
+	ProofHash string `json:"proofHash"`
+	CID       string `json:"cid"`
+}
+
+type TaskValidationRequest struct {
+	ProofOfTask      string `json:"proofOfTask"`
+	Data             string `json:"data"`
+	TaskDefinitionID uint16 `json:"taskDefinitionId"`
+	Performer        string `json:"performer"`
+}
+
+
+type ValidationResult struct {
+	IsValid bool   `json:"isValid"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
+}
+
+type ValidationResponse struct {
+	Data    bool   `json:"data"`
+	Error   bool   `json:"error"`
+	Message string `json:"message,omitempty"`
+}

@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -29,9 +31,8 @@ type Config struct {
 // Dependencies holds the server dependencies
 type Dependencies struct {
 	Logger    logging.Logger
-	Executor  handlers.TaskExecutor
-	Validator handlers.TaskValidator
-	HealthSvc handlers.HealthService
+	Executor  execution.TaskExecutor
+	Validator validation.TaskValidator
 }
 
 // NewServer creates a new API server
@@ -96,7 +97,6 @@ func (s *Server) setupMiddleware() {
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
 	taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
-	healthHandler := handlers.NewHealthHandler(deps.Logger, deps.HealthSvc)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
 
 	// Task routes
@@ -104,6 +104,5 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	s.router.POST("/task/validate", taskHandler.ValidateTask)
 
 	// Health and metrics routes
-	s.router.GET("/health", healthHandler.Check)
 	s.router.GET("/metrics", metricsHandler.Metrics)
 }

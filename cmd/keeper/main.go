@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,11 +13,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 
-	// "github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
-	// "github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
@@ -66,9 +69,9 @@ func main() {
 	}
 	defer healthClient.Close()
 
-	// Initialize core services
-	// executor := execution.NewExecutor(logger, aggregatorClient)
-	// validator := validation.NewValidator(logger)
+	// Initialize task executor and validator
+	executor := execution.NewTaskExecutor(logger)
+	validator := validation.NewTaskValidator(logger)
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -79,18 +82,19 @@ func main() {
 	}
 
 	deps := api.Dependencies{
-		Logger: logger,
-		// Executor:  executor,
-		// Validator: validator,
-		HealthSvc: healthClient,
+		Logger:    logger,
+		Executor:  executor,
+		Validator: validator,
 	}
 
 	server := api.NewServer(serverCfg, deps)
 
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Start health check routine
-	healthCheckCtx, healthCheckCancel := context.WithCancel(context.Background())
-	defer healthCheckCancel()
-	go startHealthCheckRoutine(healthCheckCtx, healthClient, logger)
+	go startHealthCheckRoutine(ctx, healthClient, logger, server)
 
 	// Start server in a goroutine
 	go func() {
@@ -106,16 +110,8 @@ func main() {
 	// Block until signal is received
 	<-shutdown
 
-	// Create shutdown context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Shutdown server gracefully
-	if err := server.Stop(ctx); err != nil {
-		logger.Error("Server forced to shutdown", "error", err)
-	}
-
-	logger.Info("Server shutdown complete")
+	// Perform graceful shutdown
+	performGracefulShutdown(ctx, server, logger)
 }
 
 func getEnvironment() logging.LogLevel {
@@ -126,12 +122,17 @@ func getEnvironment() logging.LogLevel {
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
-func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, logger logging.Logger) {
+func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, logger logging.Logger, server *api.Server) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	// Initial check-in
 	if err := healthClient.CheckIn(ctx); err != nil {
+		if errors.Is(err, health.ErrKeeperNotVerified) {
+			logger.Error("Keeper is not verified. Shutting down...", "error", err)
+			performGracefulShutdown(ctx, server, logger)
+			return
+		}
 		logger.Error("Failed initial health check-in", "error", err)
 	}
 
@@ -146,4 +147,25 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, l
 			return
 		}
 	}
+}
+
+func performGracefulShutdown(ctx context.Context, server *api.Server, logger logging.Logger) {
+	logger.Info("Initiating graceful shutdown...")
+
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	defer cancel()
+
+	// Shutdown server gracefully
+	if err := server.Stop(shutdownCtx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
+	}
+
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
+	}
+
+	logger.Info("Shutdown complete")
+	os.Exit(0)
 }
