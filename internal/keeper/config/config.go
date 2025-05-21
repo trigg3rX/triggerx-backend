@@ -8,6 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/validator"
 )
 
@@ -15,10 +18,12 @@ type Config struct {
 	EthRPCUrl     string
 	BaseRPCUrl    string
 	AlchemyAPIKey string
+	EtherscanAPIKey string
 
 	PrivateKeyConsensus  string
 	PrivateKeyController string
 	KeeperAddress        string
+	ConsensusAddress     string
 
 	PublicIPV4Address string
 	PeerID            string
@@ -59,8 +64,10 @@ func Init() error {
 		EthRPCUrl:             os.Getenv("ETH_RPC_URL"),
 		BaseRPCUrl:            os.Getenv("BASE_RPC_URL"),
 		AlchemyAPIKey:        os.Getenv("ALCHEMY_API_KEY"),
+		EtherscanAPIKey:      os.Getenv("ETHERSCAN_API_KEY"),
 		PrivateKeyConsensus:   os.Getenv("PRIVATE_KEY"),
 		KeeperAddress:         os.Getenv("OPERATOR_ADDRESS"),
+		ConsensusAddress:      crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(os.Getenv("PRIVATE_KEY"))).PublicKey).Hex(),
 		PublicIPV4Address:     os.Getenv("PUBLIC_IPV4_ADDRESS"),
 		PeerID:                os.Getenv("PEER_ID"),
 		OperatorRPCPort:       os.Getenv("OPERATOR_RPC_PORT"),
@@ -107,6 +114,9 @@ func validateConfig(cfg Config) error {
 	if validator.IsEmpty(cfg.AlchemyAPIKey) {
 		return fmt.Errorf("invalid alchemy api key: %s", cfg.AlchemyAPIKey)
 	}
+	if validator.IsEmpty(cfg.EtherscanAPIKey) {
+		return fmt.Errorf("invalid etherscan api key: %s", cfg.EtherscanAPIKey)
+	}
 	if !validator.IsValidPort(cfg.OperatorRPCPort) {
 		return fmt.Errorf("invalid operator rpc port: %s", cfg.OperatorRPCPort)
 	}
@@ -118,6 +128,9 @@ func validateConfig(cfg Config) error {
 	}
 	if !validator.IsValidAddress(cfg.KeeperAddress) {
 		return fmt.Errorf("invalid keeper address: %s", cfg.KeeperAddress)
+	}
+	if !validator.IsValidAddress(cfg.ConsensusAddress) {
+		return fmt.Errorf("invalid consensus address: %s", cfg.ConsensusAddress)
 	}
 	if !validator.IsValidPeerID(cfg.PeerID) {
 		return fmt.Errorf("invalid peer id: %s", cfg.PeerID)
@@ -179,6 +192,10 @@ func GetAlchemyAPIKey() string {
 	return cfg.AlchemyAPIKey
 }
 
+func GetEtherscanAPIKey() string {
+	return cfg.EtherscanAPIKey
+}
+
 func GetPrivateKeyConsensus() string {
 	return cfg.PrivateKeyConsensus
 }
@@ -189,6 +206,10 @@ func GetPrivateKeyController() string {
 
 func GetKeeperAddress() string {
 	return cfg.KeeperAddress
+}
+
+func GetConsensusAddress() string {
+	return cfg.ConsensusAddress
 }
 
 func GetPublicIPV4Address() string {

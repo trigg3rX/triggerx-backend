@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
@@ -38,7 +39,9 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting keeper node...")
+	logger.Info("Starting keeper node ...")
+	logger.Info("Keeper address: ", "address", config.GetKeeperAddress())
+	logger.Info("Consensus address: ", "address", config.GetConsensusAddress())
 
 	// Initialize clients
 	aggregatorCfg := aggregator.Config{
@@ -69,9 +72,15 @@ func main() {
 	}
 	defer healthClient.Close()
 
+	ethClient, err := ethclient.Dial(config.GetAggregatorRPCAddress())
+	if err != nil {
+		logger.Fatal("Failed to initialize Ethereum client", "error", err)
+	}
+	defer ethClient.Close()
+
 	// Initialize task executor and validator
-	executor := execution.NewTaskExecutor(logger)
-	validator := validation.NewTaskValidator(logger)
+	executor := execution.NewTaskExecutor(ethClient, config.GetEtherscanAPIKey(), logger)
+	validator := validation.NewTaskValidator(logger, ethClient)
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -83,8 +92,8 @@ func main() {
 
 	deps := api.Dependencies{
 		Logger:    logger,
-		Executor:  executor,
-		Validator: validator,
+		Executor:  *executor,
+		Validator: *validator,
 	}
 
 	server := api.NewServer(serverCfg, deps)

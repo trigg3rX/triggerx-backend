@@ -93,8 +93,9 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 	}
 	// h.logger.Infof("performerData: %v\n", performerData)
 
-	if config.GetKeeperAddress() == performerData.KeeperAddress {
-		c.JSON(http.StatusOK, gin.H{"message": "Keeper is performing the task"})
+	if config.GetKeeperAddress() != performerData.KeeperAddress {
+		h.logger.Infof("I am not the performer: %s", performerData.KeeperAddress)
+		c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
 		return
 	} else {
 		var jobData types.HandleCreateJobData
