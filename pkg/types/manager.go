@@ -10,6 +10,7 @@ type HandleCreateJobData struct {
 	Security               int       `json:"security"`
 	LinkJobID              int64     `json:"link_job_id"`
 	ChainStatus            int       `json:"chain_status"`
+	JobTitle               string    `json:"job_title"`
 	TimeFrame              int64     `json:"time_frame"`
 	Recurring              bool      `json:"recurring"`
 	TimeInterval           int64     `json:"time_interval"`
