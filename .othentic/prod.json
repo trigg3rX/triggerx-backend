@@ -1,18 +1,21 @@
 {
-    "L1": {
-      "L1MessageHandler": "0x5ccC521362aed06F749a13e339c672c2D2D90b7b",
-      "L1AvsTreasury": "0x7AA4F71bB5253A934188F803FC002c2EBaFC5C27",
-      "AvsGovernance": "0xE52De62Bf743493d3c4E1ac8db40f342FEb11fEa",
-      "ERC20": "0x94373a4919B3240D86eA41593D5eBa789FEF3848"
-    },
-    "L2": {
-      "OBLS": "0xA43DA9647541eb1EF15958a4e90067282F0C5896",
-      "L2MessageHandler": "0x12dBb81f3349819645870ffDb8DdCDFB8ac2921c",
-      "AttestationCenter": "0x8256F235Ed6445fb9f8177a847183A8C8CD97cF1",
-      "L2AvsTreasury": "0xa6d8B1c911E70043C30F15E7AbB26118AcFf3886",
-      "ERC20": "0x94373a4919B3240D86eA41593D5eBa789FEF3848",
-      "l2Rewards": false,
-      "InternalTaskHandler": "0x3A32a58fe8471ae3477955e86490eF763F32E4A9"
-    },
-    "timestamp": "2025-03-19T08:58:26.732Z"
-  }
+  "L1": {
+    "L1MessageHandler": "0x743f9bd7BF8B232378731cfD51a3FF7218A65A40",
+    "L1AvsTreasury": "0xFD705fE43a14CDF699ac1eCca33dBad69C1ec525",
+    "AvsGovernance": "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0",
+    "RewardsToken": "0x94373a4919B3240D86eA41593D5eBa789FEF3848"
+  },
+  "L2s": [
+    {
+      "chainId": 84532,
+      "OBLS": "0x68853222A6Fc1DAE25Dd58FB184dc4470C98F73C",
+      "L2MessageHandler": "0x6269F64fC25e0cF103Ff22Ac5B032337bbB4D812",
+      "AttestationCenter": "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD",
+      "L2AvsTreasury": "0x495Abc1C9a29772179D917D2bD672fc01F9d43C1",
+      "RewardsToken": "0x94373a4919B3240D86eA41593D5eBa789FEF3848",
+      "l2Rewards": true,
+      "InternalTaskHandler": "0xBa06631abc81A1343b9Ed1f667d9b884530B8CDD"
+    }
+  ],
+  "timestamp": "2025-05-08T12:04:46.393Z"
+}
