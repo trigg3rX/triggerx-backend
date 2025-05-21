@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -77,14 +76,12 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	triggerData.LastExecuted = time.Now().UTC()
 	triggerData.ConditionParams = make(map[string]interface{})
 
-	// Calculate end time if timeframe is specified
 	var endTime time.Time
 	if w.jobData.TimeFrame > 0 {
 		endTime = time.Now().UTC().Add(time.Duration(w.jobData.TimeFrame) * time.Second)
 	}
 
 	go func() {
-		// Use a flag to prevent multiple Stop() calls
 		var stopped bool
 		defer func() {
 			if !stopped {
@@ -105,7 +102,6 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 					return
 				}
 
-				// Try to reconnect if we're in recurring mode and haven't failed
 				if w.jobData.Recurring {
 					w.reconnectSubscription(ctx, query, logs)
 					if w.status == "failed" {
@@ -116,7 +112,6 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 				}
 
 			case log := <-logs:
-				// Check if we've exceeded the timeframe
 				if w.jobData.TimeFrame > 0 && time.Now().UTC().After(endTime) {
 					w.scheduler.Logger().Infof("Timeframe reached for job %d, stopping worker", w.jobID)
 					return
@@ -135,12 +130,10 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 					continue
 				}
 
-				// If it's not recurring, exit after first execution
 				if !w.jobData.Recurring {
 					return
 				}
 
-				// Update last execution time
 				triggerData.LastExecuted = time.Now().UTC()
 				w.scheduler.Logger().Infof("Job %d executed. Continuing to listen for events due to recurring flag", w.jobID)
 			}
@@ -148,23 +141,19 @@ func (w *EventBasedWorker) Start(ctx context.Context) {
 	}()
 }
 
-// Add a helper method to reconnect subscription after errors
 func (w *EventBasedWorker) reconnectSubscription(ctx context.Context, query ethereum.FilterQuery, logs chan gethtypes.Log) {
 	w.scheduler.Logger().Infof("Attempting to reconnect subscription for job %d", w.jobID)
 
-	// Unsubscribe from existing subscription
 	if w.subscription != nil {
 		w.subscription.Unsubscribe()
 		w.subscription = nil
 	}
 
-	// Close existing client
 	if w.client != nil {
 		w.client.Close()
 		w.client = nil
 	}
 
-	// Create new client
 	wsURL := w.getAlchemyWSURL()
 	client, err := ethclient.Dial(wsURL)
 	if err != nil {
@@ -174,7 +163,6 @@ func (w *EventBasedWorker) reconnectSubscription(ctx context.Context, query ethe
 	}
 	w.client = client
 
-	// Create new subscription
 	sub, err := client.SubscribeFilterLogs(ctx, query, logs)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to resubscribe to events for job %d: %v", w.jobID, err)
@@ -231,7 +219,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 		TaskPerformerID:  0,
 	}
 
-	performerData, err := services.GetPerformer()
+	performerData, err := w.scheduler.GetDatabaseClient().GetPerformer()
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
@@ -239,7 +227,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 
 	taskData.TaskPerformerID = performerData.KeeperID
 
-	taskID, status, err := services.CreateTaskData(taskData)
+	taskID, status, err := w.scheduler.GetDatabaseClient().CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
@@ -251,7 +239,7 @@ func (w *EventBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigg
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
 	}
 
-	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData)
+	status, err = w.scheduler.GetAggregatorClient().SendTaskToPerformer(w.jobData, triggerData, performerData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
 		return err
@@ -295,9 +283,7 @@ func (w *EventBasedWorker) handleError(err error) {
 	}
 }
 
-// Add UpdateLastExecutedTime method to allow updating the last execution timestamp
 func (w *EventBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
-	// Update the jobData with the new timestamp
 	if w.jobData != nil {
 		w.jobData.LastExecutedAt = timestamp
 		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)

@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint,
     keeper_name text,
     keeper_address text,
+    consensus_address text,
     registered_tx text,
     operator_id text,
     
@@ -112,6 +113,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     no_exctask int,
     chat_id bigint,
     email_id text,
+    last_checked_in timestamp,
     PRIMARY KEY (keeper_id)
 );
 

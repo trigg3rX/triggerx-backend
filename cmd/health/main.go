@@ -13,57 +13,79 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health"
+	"github.com/trigg3rX/triggerx-backend/internal/health/client"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var logger logging.Logger
+const shutdownTimeout = 30 * time.Second
 
 func main() {
-	if err := logging.InitLogger(logging.Development, logging.HealthProcess); err != nil {
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
+	}
+
+	// Initialize logger
+	logConfig := logging.LoggerConfig{
+		LogDir:          logging.BaseDataDir,
+		ProcessName:     logging.HealthProcess,
+		Environment:     getEnvironment(),
+		UseColors:       true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
+	}
+
+	if err := logging.InitServiceLogger(logConfig); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger = logging.GetLogger(logging.Development, logging.HealthProcess)
-	logger.Info("Starting health node...")
+	logger := logging.GetServiceLogger()
 
-	config.Init()
+	logger.Info("Starting health service...")
 
+	// Initialize server components
 	var wg sync.WaitGroup
-
-	// Channel to collect setup errors
 	serverErrors := make(chan error, 3)
 	ready := make(chan struct{})
 
-	wg.Add(1)
-
-	// Initialize the keeper state manager
-	_ = health.GetKeeperStateManager()
-	logger.Info("Keeper state manager initialized")
-
-	// Setup Gin router
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
-	router.POST("/health", health.HandleCheckInEvent)
-	router.GET("/status", health.GetKeeperStatus)
-	router.GET("/operators", health.GetDetailedKeeperStatus)
-
-	// Add a simple health check endpoint
-	router.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"service":   "TriggerX Health Service",
-			"status":    "running",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		})
-	})
-
-	// Create HTTP server
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.HealthRPCPort),
-		Handler: router,
+	// Initialize database connection
+	dbConfig := &database.Config{
+		Hosts:    []string{config.GetDatabaseHost() + ":" + config.GetDatabaseHostPort()},
+		Keyspace: "triggerx",
+	}
+	dbConn, err := database.NewConnection(dbConfig)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize database connection: %v", err))
 	}
 
-	// Start server in goroutine
+	// Initialize Telegram bot
+	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, dbConn)
+	if err != nil {
+		logger.Errorf("Failed to initialize Telegram bot: %v", err)
+	}
+
+	// Initialize database manager
+	client.InitDatabaseManager(logger, dbConn, telegramBot)
+	logger.Info("Database manager initialized")
+
+	// Initialize state manager
+	stateManager := keeper.InitializeStateManager(logger)
+	logger.Info("Keeper state manager initialized")
+
+	// Load verified keepers from database
+	if err := stateManager.LoadVerifiedKeepers(); err != nil {
+		logger.Debug("Failed to load verified keepers from database", "error", err)
+		// Continue anyway, as we can still operate with an empty state
+	}
+
+	// Setup HTTP server
+	srv := setupHTTPServer(logger)
+
+	// Start server
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		logger.Info("Starting HTTP server...")
@@ -72,38 +94,79 @@ func main() {
 		}
 	}()
 
-	// Signal server is ready
 	close(ready)
-	logger.Infof("Health node is READY on port %s...", config.HealthRPCPort)
+	logger.Infof("Health service is ready on port %s", config.GetHealthRPCPort())
 
-	// Handle shutdown signals
+	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	// Wait for shutdown signal
 	select {
 	case err := <-serverErrors:
 		logger.Error("Server error received", "error", err)
-	case <-shutdown:
-		logger.Info("Received shutdown signal")
+	case sig := <-shutdown:
+		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	// Begin graceful shutdown
+	performGracefulShutdown(srv, &wg, logger)
+}
+
+func getEnvironment() logging.LogLevel {
+	if config.IsDevMode() {
+		return logging.Development
+	}
+	return logging.Production
+}
+
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
+}
+
+func setupHTTPServer(logger logging.Logger) *http.Server {
+	if !config.IsDevMode() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(health.LoggerMiddleware(logger))
+
+	// Register routes
+	health.RegisterRoutes(router)
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),
+		Handler: router,
+	}
+}
+
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
-	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
 
-	// Shutdown HTTP server
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	// Update all keepers to inactive in database
+	stateManager := keeper.GetStateManager()
+	if err := stateManager.DumpState(); err != nil {
+		logger.Error("Failed to dump keeper state", "error", err)
+	}
+
+	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
 	}
 
-	// Wait for all goroutines to finish
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
+	}
+
 	wg.Wait()
 	logger.Info("Shutdown complete")
 }

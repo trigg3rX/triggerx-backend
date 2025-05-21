@@ -4,11 +4,10 @@ x-othentic-cli: &othentic-cli
   build:
     context: .
     dockerfile: ./Dockerfile
-    
+
 services:
   aggregator:
-    ##profiles: ["othentic"]
-    container_name: triggerx-aggregator
+    container_name: aggregator
     <<: *othentic-cli
     env_file:
       - .env
@@ -22,16 +21,15 @@ services:
       "--p2p.datadir", "/peerstore/aggregator",
       "--p2p.discovery-interval", "${AGGREGATOR_P2P_DISCOVERY_INTERVAL}",
       "--internal-tasks",
-      "--sync-interval", "${AGGREGATOR_SYNC_INTERVAL}",
       "--metrics",
       "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
-      "--delay", "${AGGREGATOR_DELAY}",
       "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
     ]
     environment:
       - PRIVATE_KEY=${PRIVATE_KEY_AGGREGATOR}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
+      - INTERNAL_TASKS=${INTERNAL_TASKS}
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
       - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
@@ -41,9 +39,7 @@ services:
       - AGGREGATOR_RPC_PORT=${AGGREGATOR_RPC_PORT}
       - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
       - AGGREGATOR_P2P_DISCOVERY_INTERVAL=${AGGREGATOR_P2P_DISCOVERY_INTERVAL}
-      - AGGREGATOR_SYNC_INTERVAL=${AGGREGATOR_SYNC_INTERVAL}
       - AGGREGATOR_METRICS_PORT=${AGGREGATOR_METRICS_PORT}
-      - AGGREGATOR_DELAY=${AGGREGATOR_DELAY}
     volumes:
       - ./data/peerstore/aggregator:/peeerstore/aggregator
       - ./data/logs/aggregator:/logs/aggregator
@@ -53,18 +49,16 @@ services:
     networks:
       p2p:
         ipv4_address: 172.28.0.69
-    restart: unless-stopped
 
   nexus:
-    ##profiles: ["othentic"]
-    container_name: triggerx-nexus
+    container_name: nexus
     <<: *othentic-cli
     env_file:
       - .env
     command: [
       "node",
       "attester",
-      "/ip4/172.28.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "/ip4/172.28.0.69/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}",
       "--avs-webapi", "http://host.docker.internal",
       "--avs-webapi-port", "${NEXUS_RPC_PORT}",
       "--l1-chain", "holesky",
@@ -83,6 +77,7 @@ services:
       - OPERATOR_ADDRESS=${NEXUS_ADDRESS}
       - LOG_DIR=/logs/nexus
       - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
+      - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
       - PEER_ID=${PEER_ID}
       - NEXUS_P2P_PORT=${NEXUS_P2P_PORT}
       - NEXUS_RPC_PORT=${NEXUS_RPC_PORT}
@@ -94,7 +89,6 @@ services:
     networks:
       p2p:
         ipv4_address: 172.28.0.70
-    restart: unless-stopped
     depends_on:
       aggregator:
         condition: service_started

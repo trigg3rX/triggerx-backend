@@ -1,191 +1,286 @@
 package manager
 
 import (
-	// "bytes"
-	// "encoding/json"
-	// "fmt"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	// "github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-var (
-	logger = logging.GetLogger(logging.Development, logging.ManagerProcess)
+// Handler encapsulates the dependencies for health handlers
+type Handler struct {
+	logger       logging.Logger
 	jobScheduler *scheduler.JobScheduler
-)
+}
 
-func JobSchedulerInit() {
-	var err error
-	jobScheduler, err = scheduler.NewJobScheduler(logger)
-	if err != nil {
-		logger.Fatalf("Failed to initialize job scheduler: %v", err)
+// NewHandler creates a new instance of Handler
+func NewHandler(logger logging.Logger, jobScheduler *scheduler.JobScheduler) *Handler {
+	return &Handler{
+		logger:       logger.With("component", "health_handler"),
+		jobScheduler: jobScheduler,
 	}
 }
 
-func HandleCreateJobEvent(c *gin.Context) {
-	if c.Request.Method != http.MethodPost {
-		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Invalid method"})
-		return
-	}
+// LoggerMiddleware creates a gin middleware for logging
+func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
+	middlewareLogger := logger.With("component", "http_middleware")
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		method := c.Request.Method
 
-	var jobData types.HandleCreateJobData
-	if err := c.BindJSON(&jobData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		c.Next()
+
+		duration := time.Since(start)
+		status := c.Writer.Status()
+
+		if status >= 500 {
+			middlewareLogger.Error("HTTP Request",
+				"method", method,
+				"path", path,
+				"status", status,
+				"duration_ms", duration.Milliseconds(),
+				"ip", c.ClientIP(),
+			)
+		} else if status >= 400 {
+			middlewareLogger.Warn("HTTP Request",
+				"method", method,
+				"path", path,
+				"status", status,
+				"duration_ms", duration.Milliseconds(),
+				"ip", c.ClientIP(),
+			)
+		} else {
+			middlewareLogger.Info("HTTP Request",
+				"method", method,
+				"path", path,
+				"status", status,
+				"duration_ms", duration.Milliseconds(),
+				"ip", c.ClientIP(),
+			)
+		}
+	}
+}
+
+// RegisterRoutes registers all HTTP routes for the health service
+func RegisterRoutes(router *gin.Engine, jobScheduler *scheduler.JobScheduler) {
+	logger := logging.GetServiceLogger()
+	handler := NewHandler(logger, jobScheduler)
+
+	router.GET("/", handler.handleRoot)
+	router.POST("/jobs/schedule", handler.ScheduleJob)
+	router.POST("/jobs/:id/pause", handler.PauseJob)
+	router.POST("/jobs/:id/resume", handler.ResumeJob)
+	router.POST("/jobs/:id/cancel", handler.CancelJob)
+	router.POST("/p2p/message", handler.HandleP2PMessage)
+	router.POST("/task/validate", handler.ValidateTask)
+}
+
+func (h *Handler) handleRoot(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"service":   "TriggerX Manager Service",
+		"status":    "running",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) ScheduleJob(c *gin.Context) {
+	var job types.HandleCreateJobData
+	if err := c.ShouldBindJSON(&job); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	var err error
-	switch jobData.TaskDefinitionID {
-	case 1, 2: // Time-based jobs
-		err = jobScheduler.StartTimeBasedJob(jobData)
-	case 3, 4: // Event-based jobs
-		err = jobScheduler.StartEventBasedJob(jobData)
-	case 5, 6: // Condition-based jobs
-		err = jobScheduler.StartConditionBasedJob(jobData)
+	switch {
+	case job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2:
+		err = h.jobScheduler.StartTimeBasedJob(job)
+	case job.TaskDefinitionID == 3 || job.TaskDefinitionID == 4:
+		err = h.jobScheduler.StartEventBasedJob(job)
+	case job.TaskDefinitionID == 5 || job.TaskDefinitionID == 6:
+		err = h.jobScheduler.StartConditionBasedJob(job)
 	default:
-		logger.Warnf("Unknown task definition ID: %d for job: %d",
-			jobData.TaskDefinitionID, jobData.JobID)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
 		return
 	}
 
 	if err != nil {
-		logger.Errorf("Failed to schedule job %d: %v", jobData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to schedule job"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	logger.Infof("Successfully scheduled job with ID: %d", jobData.JobID)
 	c.JSON(http.StatusOK, gin.H{"message": "Job scheduled successfully"})
 }
 
-func HandleUpdateJobEvent(c *gin.Context) {
-	var updateJobData types.HandleUpdateJobData
-	if err := c.BindJSON(&updateJobData); err != nil {
-		logger.Error("Failed to parse update job data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
-	}
+func (h *Handler) PauseJob(c *gin.Context) {
+	// jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	// if err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+	// 	return
+	// }
 
-	// TODO: Implement job update logic using scheduler
-	logger.Infof("Job update requested for ID: %d", updateJobData.JobID)
-	c.JSON(http.StatusOK, gin.H{"message": "Job update request received"})
+	// if err := h.jobScheduler.PauseJob(jobID); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	c.JSON(http.StatusOK, gin.H{"message": "Job paused successfully"})
 }
 
-func HandlePauseJobEvent(c *gin.Context) {
-	var pauseJobData types.HandlePauseJobData
-	if err := c.BindJSON(&pauseJobData); err != nil {
-		logger.Error("Failed to parse pause job data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
-	}
+func (h *Handler) ResumeJob(c *gin.Context) {
+	// jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	// if err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+	// 	return
+	// }
 
-	// TODO: Implement job pause logic using scheduler
-	logger.Infof("Job pause requested for ID: %d", pauseJobData.JobID)
-	c.JSON(http.StatusOK, gin.H{"message": "Job pause request received"})
+	// if err := h.jobScheduler.ResumeJob(jobID); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	c.JSON(http.StatusOK, gin.H{"message": "Job resumed successfully"})
 }
 
-func HandleResumeJobEvent(c *gin.Context) {
-	var resumeJobData types.HandleResumeJobData
-	if err := c.BindJSON(&resumeJobData); err != nil {
-		logger.Error("Failed to parse resume job data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
-	}
+func (h *Handler) CancelJob(c *gin.Context) {
+	// jobID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	// if err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+	// 	return
+	// }
 
-	// TODO: Implement job resume logic using scheduler
-	logger.Infof("Job resume requested for ID: %d", resumeJobData.JobID)
-	c.JSON(http.StatusOK, gin.H{"message": "Job resume request received"})
+	// if err := h.jobScheduler.CancelJob(jobID); err != nil {
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	c.JSON(http.StatusOK, gin.H{"message": "Job cancelled successfully"})
 }
 
-// HandleJobStateUpdate handles requests to update a job's state in the scheduler
-func HandleJobStateUpdate(c *gin.Context) {
-	var updateData struct {
-		JobID     int64     `json:"job_id"`
-		Timestamp time.Time `json:"timestamp"`
-	}
+func (h *Handler) HandleP2PMessage(c *gin.Context) {
+	h.logger.Info("Executing task")
 
-	if err := c.BindJSON(&updateData); err != nil {
-		logger.Error("Failed to parse job state update data", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+	if c.Request.Method != http.MethodPost {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{
+			"error": "Invalid method",
+		})
 		return
 	}
 
-	logger.Infof("Updating state for job ID: %d with timestamp: %v", updateData.JobID, updateData.Timestamp)
-
-	// Retrieve the worker for this job
-	worker := jobScheduler.GetWorker(updateData.JobID)
-	if worker == nil {
-		logger.Warnf("No active worker found for job ID: %d", updateData.JobID)
-		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found or not active"})
+	var requestBody struct {
+		Data string `json:"data"`
+	}
+	if err := c.BindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
 
-	// Update the job's last executed timestamp in the worker
-	if err := jobScheduler.UpdateJobLastExecutedTime(updateData.JobID, updateData.Timestamp); err != nil {
-		logger.Errorf("Failed to update job %d last executed time: %v", updateData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update job state"})
+	// Decode hex data
+	hexData := requestBody.Data
+	if len(hexData) > 2 && hexData[:2] == "0x" {
+		hexData = hexData[2:]
+	}
+
+	decodedData, err := hex.DecodeString(hexData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid hex data"})
 		return
 	}
 
-	// Update the job's state in the cache
-	if err := jobScheduler.UpdateJobStateCache(updateData.JobID, "last_executed", updateData.Timestamp); err != nil {
-		logger.Warnf("Failed to update job %d state cache: %v", updateData.JobID, err)
-		// Continue even if cache update fails
+	decodedDataString := string(decodedData)
+
+	var requestData map[string]interface{}
+	if err := json.Unmarshal([]byte(decodedDataString), &requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to parse JSON data",
+		})
+		return
 	}
 
-	logger.Infof("Successfully updated state for job ID: %d", updateData.JobID)
-	c.JSON(http.StatusOK, gin.H{"message": "Job state updated successfully"})
+	jobDataRaw := requestData["jobData"]
+	triggerDataRaw := requestData["triggerData"]
+	performerDataRaw := requestData["performerData"]
+
+	// Convert to proper types
+	var jobData types.HandleCreateJobData
+	jobDataBytes, err := json.Marshal(jobDataRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job data format"})
+		return
+	}
+	if err := json.Unmarshal(jobDataBytes, &jobData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse job data"})
+		return
+	}
+	h.logger.Infof("jobData: %v\n", jobData)
+
+	var triggerData types.TriggerData
+	triggerDataBytes, err := json.Marshal(triggerDataRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})
+		return
+	}
+	if err := json.Unmarshal(triggerDataBytes, &triggerData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
+		return
+	}
+	h.logger.Infof("triggerData: %v\n", triggerData)
+
+	var performerData types.GetPerformerData
+	performerDataBytes, err := json.Marshal(performerDataRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid performer data format"})
+		return
+	}
+	if err := json.Unmarshal(performerDataBytes, &performerData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse performer data"})
+		return
+	}
+	h.logger.Infof("performerData: %v\n", performerData)
+
+	// // Execute task
+	// actionData, err := h.executor.Execute(jobData)
+	// if err != nil {
+	// 	h.logger.Error("Failed to execute task", "error", err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
+	// 	return
+	// }
+
+	// // Set task ID from trigger data
+	// actionData.TaskID = triggerData.TaskID
+
+	// // Convert result to bytes
+	// resultBytes, err := json.Marshal(actionData)
+	// if err != nil {
+	// 	h.logger.Error("Failed to marshal result", "error", err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process result"})
+	// 	return
+	// }
+
+	resultBytes := []byte("test")
+
+	c.Data(http.StatusOK, "application/octet-stream", resultBytes)
 }
 
-// func HandleKeeperConnectEvent(c *gin.Context) {
-// 	var keeperData types.UpdateKeeperConnectionData
-// 	if err := c.BindJSON(&keeperData); err != nil {
-// 		logger.Error("Failed to parse keeper data", "error", err)
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-// 		return
-// 	}
+func (h *Handler) ValidateTask(c *gin.Context) {
+		// var request types.TaskValidationRequest
+	// if err := c.BindJSON(&request); err != nil {
+	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+	// 	return
+	// }
 
-// 	url := fmt.Sprintf("%s/api/keepers/connection", config.DatabaseIPAddress)
+	// // Validate task
+	// isValid, err := h.validator.ValidateTask(&request)
+	// if err != nil {
+	// 	h.logger.Error("Task validation failed", "error", err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Validation failed"})
+	// 	return
+	// }
 
-// 	jsonData, err := json.Marshal(keeperData)
-// 	if err != nil {
-// 		logger.Error("Failed to marshal keeper data", "error", err)
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to marshal keeper data"})
-// 		return
-// 	}
-
-// 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-// 	if err != nil {
-// 		logger.Error("Failed to create HTTP request", "error", err)
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create HTTP request"})
-// 		return
-// 	}
-
-// 	req.Header.Set("Content-Type", "application/json")
-
-// 	client := &http.Client{}
-// 	resp, err := client.Do(req)
-// 	if err != nil {
-// 		logger.Error("Failed to send request", "error", err)
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to send request"})
-// 		return
-// 	}
-// 	defer resp.Body.Close()
-
-// 	var response types.UpdateKeeperConnectionDataResponse
-// 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-// 		logger.Error("Failed to decode response", "error", err)
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode response"})
-// 		return
-// 	}
-
-// 	logger.Infof("Keeper connected: %s", keeperData.KeeperAddress)
-// 	c.JSON(http.StatusOK, response)
-// }
+	c.JSON(http.StatusOK, gin.H{
+		"isValid": true,
+	})
+}

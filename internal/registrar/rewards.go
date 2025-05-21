@@ -72,3 +72,4 @@ func scheduleNextReward() {
 		time.Sleep(time.Minute)
 	}
 }
+

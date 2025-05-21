@@ -3,21 +3,22 @@ package handlers
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gin-gonic/gin"
+
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 )
 
 type ClaimFundRequest struct {
 	WalletAddress string `json:"wallet_address"`
-	Network       string `json:"network"` // "op_sepolia" or "base_sepolia"
+	Network       string `json:"network"`
 }
 
 type ClaimFundResponse struct {
@@ -26,139 +27,114 @@ type ClaimFundResponse struct {
 	TransactionHash string `json:"transaction_hash,omitempty"`
 }
 
-const (
-	OP_SEPOLIA_RPC   = "https://sepolia.optimism.io"
-	BASE_SEPOLIA_RPC = "https://sepolia.base.org"
-	FUND_AMOUNT      = 0.03 // ETH
-)
-
-func (h *Handler) ClaimFund(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ClaimFund(c *gin.Context) {
 	var req ClaimFundRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// Validate wallet address
 	if !common.IsHexAddress(req.WalletAddress) {
-		http.Error(w, "Invalid wallet address", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid wallet address"})
 		return
 	}
 
-	// Select RPC URL based on network
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
-		rpcURL = OP_SEPOLIA_RPC
+		rpcURL = fmt.Sprintf("https://optimism-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "base_sepolia":
-		rpcURL = BASE_SEPOLIA_RPC
+		rpcURL = fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	default:
-		http.Error(w, "Invalid network specified", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid network specified"})
 		return
 	}
 
-	// Connect to the network
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		h.logger.Errorf("Failed to connect to network: %v", err)
-		http.Error(w, "Failed to connect to network", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to network"})
 		return
 	}
 
-	// Check recipient's balance
 	address := common.HexToAddress(req.WalletAddress)
 	balance, err := client.BalanceAt(context.Background(), address, nil)
 	if err != nil {
 		h.logger.Errorf("Failed to get balance: %v", err)
-		http.Error(w, "Failed to get balance", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get balance"})
 		return
 	}
 
-	// Convert 0.005 ETH to Wei
-	threshold := new(big.Float).Mul(big.NewFloat(FUND_AMOUNT), big.NewFloat(1e18))
-	thresholdWei, _ := threshold.Int(nil)
+	thresholdWei, ok := new(big.Int).SetString(config.GetFaucetFundAmount(), 10)
+	if !ok {
+		h.logger.Error("Failed to parse threshold amount")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
 
 	if balance.Cmp(thresholdWei) >= 0 {
-		json.NewEncoder(w).Encode(ClaimFundResponse{
-			Success: false,
-			Message: "Account already has sufficient funds",
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Wallet balance is above the threshold",
 		})
 		return
 	}
 
-	// Get the private key for the funding wallet
-	privateKey, err := crypto.HexToECDSA(os.Getenv("FUNDER_PRIVATE_KEY"))
+	privateKey, err := crypto.HexToECDSA(config.GetFaucetPrivateKey())
 	if err != nil {
-		h.logger.Errorf("Failed to load private key: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		h.logger.Errorf("Failed to parse private key: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	// Create and send the transaction
-	tx, err := h.sendFunds(client, privateKey, address)
-	if err != nil {
-		h.logger.Errorf("Failed to send funds: %v", err)
-		http.Error(w, "Failed to send funds", http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(w).Encode(ClaimFundResponse{
-		Success:         true,
-		Message:         "Funds sent successfully",
-		TransactionHash: tx.Hash().Hex(),
-	})
-}
-
-func (h *Handler) sendFunds(client *ethclient.Client, privateKey *ecdsa.PrivateKey, to common.Address) (*types.Transaction, error) {
-	ctx := context.Background()
-
-	// Get the funding wallet address
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		return nil, fmt.Errorf("error casting public key to ECDSA")
-	}
-	from := crypto.PubkeyToAddress(*publicKeyECDSA)
-
-	// Get nonce
-	nonce, err := client.PendingNonceAt(ctx, from)
-	if err != nil {
-		return nil, err
+		h.logger.Error("Failed to cast public key to ECDSA")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
 	}
 
-	// Get gas price
-	gasPrice, err := client.SuggestGasPrice(ctx)
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		return nil, err
+		h.logger.Errorf("Failed to get nonce: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get nonce"})
+		return
 	}
 
-	// Create transaction data
-	value := new(big.Int)
-	fundAmountWei := new(big.Float).Mul(big.NewFloat(FUND_AMOUNT), big.NewFloat(1e18))
-	value, _ = fundAmountWei.Int(value) // Convert to Wei
-
-	// Estimate gas limit
-	gasLimit := uint64(21000) // Standard ETH transfer gas limit
-
-	// Create transaction
-	tx := types.NewTransaction(nonce, to, value, gasLimit, gasPrice, nil)
-
-	// Sign transaction
-	chainID, err := client.NetworkID(ctx)
+	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
-		return nil, err
+		h.logger.Errorf("Failed to get gas price: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gas price"})
+		return
+	}
+
+	tx := types.NewTransaction(nonce, address, thresholdWei, 21000, gasPrice, nil)
+	chainID, err := client.NetworkID(context.Background())
+	if err != nil {
+		h.logger.Errorf("Failed to get chain ID: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chain ID"})
+		return
 	}
 
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
-		return nil, err
+		h.logger.Errorf("Failed to sign transaction: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign transaction"})
+		return
 	}
 
-	// Send transaction
-	err = client.SendTransaction(ctx, signedTx)
+	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
-		return nil, err
+		h.logger.Errorf("Failed to send transaction: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send transaction"})
+		return
 	}
 
-	return signedTx, nil
+	c.JSON(http.StatusOK, ClaimFundResponse{
+		Success:         true,
+		Message:         "Funds sent successfully",
+		TransactionHash: signedTx.Hash().Hex(),
+	})
 }

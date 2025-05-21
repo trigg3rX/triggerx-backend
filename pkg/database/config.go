@@ -1,32 +1,20 @@
 package database
 
 import (
-    "fmt"
-    "os"
-    "time"
-
-    "github.com/joho/godotenv"
+	"time"
 )
 
 type Config struct {
-    Hosts       []string
-    Keyspace    string
-    Timeout     time.Duration
-    Retries     int
-    ConnectWait time.Duration
+	Hosts       []string
+	Keyspace    string
+	Timeout     time.Duration
+	Retries     int
+	ConnectWait time.Duration
 }
 
-func NewConfig() *Config {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("Error loading .env file", "error", err)
-	}
-
-	dbHost := os.Getenv("DATABASE_DOCKER_IP_ADDRESS")
-	dbPort := os.Getenv("DATABASE_DOCKER_PORT")
-
+func NewConfig(DatabaseHost string, DatabaseHostPort string) *Config {
 	return &Config{
-		Hosts:       []string{dbHost + ":" + dbPort},
+		Hosts:       []string{DatabaseHost + ":" + DatabaseHostPort},
 		Keyspace:    "triggerx",
 		Timeout:     time.Second * 30,
 		Retries:     5,
@@ -35,11 +23,11 @@ func NewConfig() *Config {
 }
 
 func (c *Config) WithHosts(hosts []string) *Config {
-    c.Hosts = hosts
-    return c
+	c.Hosts = hosts
+	return c
 }
 
 func (c *Config) WithKeyspace(keyspace string) *Config {
-    c.Keyspace = keyspace
-    return c
+	c.Keyspace = keyspace
+	return c
 }
