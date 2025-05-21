@@ -21,7 +21,6 @@ services:
       "--p2p.datadir", "/peerstore/aggregator",
       "--p2p.discovery-interval", "${AGGREGATOR_P2P_DISCOVERY_INTERVAL}",
       "--internal-tasks",
-      "--sync-interval", "${AGGREGATOR_SYNC_INTERVAL}",
       "--metrics",
       "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
       "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
@@ -30,6 +29,7 @@ services:
       - PRIVATE_KEY=${PRIVATE_KEY_AGGREGATOR}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
+      - INTERNAL_TASKS=${INTERNAL_TASKS}
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
       - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
@@ -39,7 +39,6 @@ services:
       - AGGREGATOR_RPC_PORT=${AGGREGATOR_RPC_PORT}
       - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
       - AGGREGATOR_P2P_DISCOVERY_INTERVAL=${AGGREGATOR_P2P_DISCOVERY_INTERVAL}
-      - AGGREGATOR_SYNC_INTERVAL=${AGGREGATOR_SYNC_INTERVAL}
       - AGGREGATOR_METRICS_PORT=${AGGREGATOR_METRICS_PORT}
     volumes:
       - ./data/peerstore/aggregator:/peeerstore/aggregator
