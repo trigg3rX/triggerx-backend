@@ -1,74 +1,66 @@
 package handlers
 
 import (
-	"encoding/json"
 	"math"
 	"math/big"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
-	"github.com/gorilla/mux"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Create a new Job, and send it to the Manager
-// If User doesn't exist, create a new user, or update the existing user
-func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateJobData(c *gin.Context) {
 	var tempJobs []types.CreateJobData
-	if err := json.NewDecoder(r.Body).Decode(&tempJobs); err != nil {
+	if err := c.ShouldBindJSON(&tempJobs); err != nil {
 		h.logger.Errorf("[CreateJobData] Error decoding request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if len(tempJobs) == 0 {
 		h.logger.Error("[CreateJobData] No jobs provided in request")
-		http.Error(w, "No jobs provided", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No jobs provided"})
 		return
 	}
 
-	// Collect all IPFS URLs and check if any job needs dynamic fee calculation
 	var ipfsURLs []string
 	needsDynamicFee := false
 	for i, job := range tempJobs {
-		if job.ArgType == 1 { // Dynamic ArgType
+		if job.ArgType == 2 {
 			needsDynamicFee = true
 			if job.ScriptIPFSUrl == "" {
 				h.logger.Errorf("[CreateJobData] Missing IPFS URL for job %d", i)
-				http.Error(w, "Missing IPFS URL", http.StatusBadRequest)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Missing IPFS URL"})
 				return
 			}
 			ipfsURLs = append(ipfsURLs, job.ScriptIPFSUrl)
 		}
 	}
 
-	var feePerJob float64 = 0.01 // Default fee per execution
+	var feePerJob float64 = 0.01
 
-	// Only calculate dynamic fees if needed
 	if needsDynamicFee {
-		// Calculate fees for jobs that need dynamic fee calculation
 		var totalFee float64
 		var err error
 		totalFee, err = h.CalculateTaskFees(strings.Join(ipfsURLs, ","))
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error calculating fees: %v", err)
-			http.Error(w, "Error calculating fees", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error calculating fees"})
 			return
 		}
 
-		// The totalFee returned is the sum of all fees for dynamic jobs
 		feePerJob = totalFee / float64(len(ipfsURLs))
 	}
 
-	// Calculate cost prediction for each job
 	for i := range tempJobs {
 		timeframeInSeconds := float64(tempJobs[i].TimeFrame)
 		intervalInSeconds := float64(tempJobs[i].TimeInterval)
 		executionCount := math.Ceil(timeframeInSeconds / intervalInSeconds)
 
-		if tempJobs[i].ArgType == 1 {
+		if tempJobs[i].ArgType == 2 {
 			tempJobs[i].JobCostPrediction = executionCount * feePerJob
 		} else {
 			tempJobs[i].JobCostPrediction = executionCount * 0.01
@@ -80,7 +72,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
 		SELECT MAX(job_id) FROM triggerx.job_data`).Scan(&lastJobID); err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting max job ID: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -89,16 +81,15 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 	var existingTokenBalance *big.Int = big.NewInt(0)
 	var existingJobIDs []int64 = []int64{}
 	var newJobIDs []int64
-	var err error
-	err = h.db.Session().Query(`
+	err := h.db.Session().Query(`
 		SELECT user_id, account_balance, token_balance, job_ids
 		FROM triggerx.user_data 
 		WHERE user_address = ? ALLOW FILTERING`,
-		tempJobs[0].UserAddress).Scan(&existingUserID, &existingAccountBalance, &existingTokenBalance, &existingJobIDs)
+		strings.ToLower(tempJobs[0].UserAddress)).Scan(&existingUserID, &existingAccountBalance, &existingTokenBalance, &existingJobIDs)
 
 	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error checking user existence for address %s: %v", tempJobs[0].UserAddress, err)
-		http.Error(w, "Error checking user existence: "+err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking user existence: " + err.Error()})
 		return
 	}
 
@@ -109,7 +100,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			SELECT MAX(user_id) FROM triggerx.user_data
 		`).Scan(&maxUserID); err != nil && err != gocql.ErrNotFound {
 			h.logger.Errorf("[CreateJobData] Error getting max user ID: %v", err)
-			http.Error(w, "Error getting max userID: "+err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting max userID: " + err.Error()})
 			return
 		}
 
@@ -120,12 +111,12 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.user_data (
 				user_id, user_address, created_at, 
-				job_ids, account_balance, token_balance,  last_updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			existingUserID, tempJobs[0].UserAddress, time.Now().UTC(),
-			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now().UTC()).Exec(); err != nil {
+				job_ids, account_balance, token_balance, last_updated_at, user_points
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			existingUserID, strings.ToLower(tempJobs[0].UserAddress), time.Now().UTC(),
+			[]int64{}, existingAccountBalance, existingTokenBalance, time.Now().UTC(), 0.0).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
-			http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating user data: " + err.Error()})
 			return
 		}
 		h.logger.Infof("[CreateJobData] Created new user with userID %d", existingUserID)
@@ -140,7 +131,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			existingAccountBalance, existingTokenBalance,
 			time.Now().UTC(), existingUserID).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error updating user data for userID %d: %v", existingUserID, err)
-			http.Error(w, "Error updating user data: "+err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user data: " + err.Error()})
 			return
 		}
 		h.logger.Infof("[CreateJobData] Updated user data for userID %d", existingUserID)
@@ -175,20 +166,46 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 				job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-				target_contract_address, target_function, arg_type, arguments, script_target_function, 
-				status, job_cost_prediction, created_at, last_executed_at, task_ids
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
+				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
-			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}).Exec(); err != nil {
+			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
+			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, tempJobs[i].Custom).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
-			http.Error(w, "Error inserting job data: "+err.Error(), http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting job data: " + err.Error()})
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Successfully created jobID %d", currentJobID)
+		pointsToAdd := 10.0
+		if tempJobs[i].Custom {
+			pointsToAdd = 20.0
+		}
+
+		var currentPoints float64
+		if err := h.db.Session().Query(`
+			SELECT user_points FROM triggerx.user_data 
+			WHERE user_id = ?`,
+			existingUserID).Scan(&currentPoints); err != nil && err != gocql.ErrNotFound {
+			h.logger.Errorf("[CreateJobData] Error getting current points for userID %d: %v", existingUserID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting current points: " + err.Error()})
+			return
+		}
+
+		newPoints := currentPoints + pointsToAdd
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.user_data 
+			SET user_points = ?, last_updated_at = ?
+			WHERE user_id = ?`,
+			newPoints, time.Now().UTC(), existingUserID).Exec(); err != nil {
+			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user points: " + err.Error()})
+			return
+		}
+
+		h.logger.Infof("[CreateJobData] Successfully created jobID %d and added %.2f points to user", currentJobID, pointsToAdd)
 
 		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
 		jobData := types.HandleCreateJobData{
@@ -210,6 +227,7 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			TargetChainID:          tempJobs[i].TargetChainID,
 			TargetContractAddress:  tempJobs[i].TargetContractAddress,
 			TargetFunction:         tempJobs[i].TargetFunction,
+			ABI:                    tempJobs[i].ABI,
 			ArgType:                tempJobs[i].ArgType,
 			Arguments:              tempJobs[i].Arguments,
 			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
@@ -217,16 +235,16 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 			LastExecutedAt:         time.Time{},
 		}
 
-		success, err := h.SendDataToManager("/job/create", jobData)
+		success, err := h.SendDataToManager("/jobs/schedule", jobData)
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
-			http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending job data to manager"})
 			return
 		}
 
 		if !success {
 			h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
-			http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send job data to manager"})
 			return
 		}
 
@@ -245,32 +263,24 @@ func (h *Handler) CreateJobData(w http.ResponseWriter, r *http.Request) {
 		WHERE user_id = ?`,
 		existingJobIDs, time.Now().UTC(), existingUserID).Exec(); err != nil {
 		h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
-		http.Error(w, "Error creating user data: "+err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating user data: " + err.Error()})
 		return
 	}
 	h.logger.Infof("[CreateJobData] Updated user data for userID %d", existingUserID)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
 
 	response := map[string]interface{}{
 		"message": "Database Updated Successfully",
 		"Data":    createdJobs,
 	}
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.Errorf("[CreateJobData] Error encoding response: %v", err)
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		return
-	}
+	c.JSON(http.StatusCreated, response)
 }
 
-// Update a Job, and send it to the Manager
-func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateJobData(c *gin.Context) {
 	var tempData types.UpdateJobData
-	if err := json.NewDecoder(r.Body).Decode(&tempData); err != nil {
+	if err := c.ShouldBindJSON(&tempData); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error decoding request for jobID %s: %v", tempData.JobID, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -280,30 +290,29 @@ func (h *Handler) UpdateJobData(w http.ResponseWriter, r *http.Request) {
 		WHERE job_id = ?`,
 		tempData.TimeFrame, tempData.Recurring, tempData.JobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error updating jobID %s: %v", tempData.JobID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	success, err := h.SendDataToManager("/job/update", tempData)
 	if err != nil {
 		h.logger.Errorf("[UpdateJobData] Error sending job data to manager for jobID %d: %v", tempData.JobID, err)
-		http.Error(w, "Error sending job data to manager", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending job data to manager"})
 		return
 	}
 
 	if !success {
 		h.logger.Errorf("[UpdateJobData] Failed to send job data to manager for jobID %d", tempData.JobID)
-		http.Error(w, "Failed to send job data to manager", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send job data to manager"})
 		return
 	}
 
 	h.logger.Infof("[UpdateJobData] Successfully updated and published event for jobID %s", tempData.JobID)
-	w.WriteHeader(http.StatusOK)
+	c.Status(http.StatusOK)
 }
 
-func (h *Handler) UpdateJobLastExecutedAt(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	jobID := vars["id"]
+func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
+	jobID := c.Param("id")
 	h.logger.Infof("[UpdateJobLastExecutedAt] Updating last executed at for jobID %s", jobID)
 
 	if err := h.db.Session().Query(`
@@ -312,17 +321,16 @@ func (h *Handler) UpdateJobLastExecutedAt(w http.ResponseWriter, r *http.Request
 		WHERE job_id = ?`,
 		time.Now().UTC(), jobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating last executed at for jobID %s: %v", jobID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[UpdateJobLastExecutedAt] Successfully updated last executed at for jobID %s", jobID)
-	w.WriteHeader(http.StatusOK)
+	c.Status(http.StatusOK)
 }
 
-func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	jobID := vars["id"]
+func (h *Handler) GetJobData(c *gin.Context) {
+	jobID := c.Param("id")
 	h.logger.Infof("[GetJobData] Fetching data for jobID %s", jobID)
 
 	var jobData types.JobData
@@ -330,27 +338,26 @@ func (h *Handler) GetJobData(w http.ResponseWriter, r *http.Request) {
         SELECT job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
                time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
                trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-               target_contract_address, target_function, arg_type, arguments, script_target_function, 
+               target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
                status, job_cost_prediction, created_at, last_executed_at, task_ids
         FROM triggerx.job_data 
         WHERE job_id = ?`, jobID).Scan(
 		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.UserID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID, &jobData.ChainStatus,
 		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID, &jobData.TriggerContractAddress,
 		&jobData.TriggerEvent, &jobData.ScriptIPFSUrl, &jobData.ScriptTriggerFunction, &jobData.TargetChainID,
-		&jobData.TargetContractAddress, &jobData.TargetFunction, &jobData.ArgType, &jobData.Arguments, &jobData.ScriptTargetFunction,
+		&jobData.TargetContractAddress, &jobData.TargetFunction, &jobData.ABI, &jobData.ArgType, &jobData.Arguments, &jobData.ScriptTargetFunction,
 		&jobData.Status, &jobData.JobCostPrediction, &jobData.CreatedAt, &jobData.LastExecutedAt, &jobData.TaskIDs); err != nil {
 		h.logger.Errorf("[GetJobData] Error retrieving jobID %s: %v", jobID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[GetJobData] Successfully retrieved jobID %s", jobID)
-	json.NewEncoder(w).Encode(jobData)
+	c.JSON(http.StatusOK, jobData)
 }
 
-func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userAddress := vars["user_address"]
+func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
+	userAddress := strings.ToLower(c.Param("user_address"))
 	h.logger.Infof("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
@@ -363,26 +370,17 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 
 	var userJobs []JobSummary
 
-	// First, get the user_id from the user_address
 	var userID int64
 	if err := h.db.Session().Query(`
 		SELECT user_id 
 		FROM triggerx.user_data 
 		WHERE user_address = ? ALLOW FILTERING
 	`, userAddress).Scan(&userID); err != nil {
-		// Instead of returning a 404, return a 200 with a message
 		h.logger.Infof("[GetJobsByUserAddress] User address %s not found", userAddress)
-		w.Header().Set("Content-Type", "application/json")
-		response := map[string]interface{}{
+		c.JSON(http.StatusOK, gin.H{
 			"message": "User address not registered",
-			"jobs":    userJobs, // Return an empty list of jobs
-		}
-		w.WriteHeader(http.StatusOK) // Set status to 200
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			h.logger.Errorf("[GetJobsByUserAddress] Error encoding response for user_address %s: %v", userAddress, err)
-			http.Error(w, "Error encoding response", http.StatusInternalServerError)
-			return
-		}
+			"jobs":    userJobs,
+		})
 		return
 	}
 
@@ -401,24 +399,17 @@ func (h *Handler) GetJobsByUserAddress(w http.ResponseWriter, r *http.Request) {
 
 	if err := iter.Close(); err != nil {
 		h.logger.Errorf("[GetJobsByUserAddress] Error retrieving jobs for user_address %s: %v", userAddress, err)
-		http.Error(w, "Error retrieving jobs: "+err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving jobs: " + err.Error()})
 		return
 	}
 
 	h.logger.Infof("[GetJobsByUserAddress] Retrieved %d jobs for user_address %s", len(userJobs), userAddress)
 
-	w.Header().Set("Content-Type", "application/json")
-
-	if err := json.NewEncoder(w).Encode(userJobs); err != nil {
-		h.logger.Errorf("[GetJobsByUserAddress] Error encoding response for user_address %s: %v", userAddress, err)
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		return
-	}
+	c.JSON(http.StatusOK, userJobs)
 }
 
-func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	jobID := vars["id"]
+func (h *Handler) DeleteJobData(c *gin.Context) {
+	jobID := c.Param("id")
 	h.logger.Infof("[DeleteJobData] Deleting jobID %s", jobID)
 
 	if err := h.db.Session().Query(`
@@ -427,10 +418,10 @@ func (h *Handler) DeleteJobData(w http.ResponseWriter, r *http.Request) {
         WHERE job_id = ?`,
 		true, jobID).Exec(); err != nil {
 		h.logger.Errorf("[DeleteJobData] Error deleting jobID %s: %v", jobID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	h.logger.Infof("[DeleteJobData] Successfully deleted jobID %s", jobID)
-	w.WriteHeader(http.StatusOK)
+	c.Status(http.StatusOK)
 }

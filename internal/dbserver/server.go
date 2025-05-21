@@ -2,14 +2,11 @@ package dbserver
 
 import (
 	"fmt"
-	"net/http"
-	"os"
 
-	"github.com/gorilla/mux"
-	"github.com/rs/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/telegram"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
@@ -17,48 +14,48 @@ import (
 )
 
 type Server struct {
-	router             *mux.Router
+	router             *gin.Engine
 	db                 *database.Connection
-	cors               *cors.Cors
 	logger             logging.Logger
 	metricsServer      *metrics.MetricsServer
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
-	telegramBot        *telegram.Bot
 }
 
 func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
-	router := mux.NewRouter()
+	if !config.IsDevMode() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
-	logger := logging.GetLogger(logging.Development, processName)
+	router := gin.New()
+	router.Use(gin.Recovery())
 
-	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{"*",
-			"https://app.triggerx.network",
-			"https://www.triggerx.network",
-			"http://localhost:3000",
-			"http://localhost:3001",
-			"https://data.triggerx.network",
-		},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "Accept", "Content-Length", "Accept-Encoding", "Origin", "X-Requested-With", "X-CSRF-Token", "X-Auth-Token", "X-Api-Key"},
-		AllowCredentials: false,
-		Debug:            true,
+	logger := logging.GetServiceLogger()
+
+	// Configure CORS
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
 	})
 
-	// Initialize metrics server
 	metricsServer := metrics.NewMetricsServer(db, logger)
 
-	// Initialize Redis client
 	redisClient, err := redis.NewClient(logger)
 	if err != nil {
 		logger.Errorf("Failed to initialize Redis client: %v", err)
-		// Continue without Redis if unavailable, but this will affect rate limiting
 	}
 
-	// Initialize rate limiter with our Redis client
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
@@ -67,112 +64,83 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		}
 	}
 
-	// Initialize Telegram bot
-	bot, err := telegram.NewBot(os.Getenv("BOT_TOKEN"), logger, db)
-	if err != nil {
-		logger.Errorf("Failed to initialize Telegram bot: %v", err)
-	}
-
 	s := &Server{
 		router:        router,
 		db:            db,
-		cors:          corsHandler,
 		logger:        logger,
 		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
-		telegramBot:   bot,
 		notificationConfig: handlers.NotificationConfig{
-			EmailFrom:     os.Getenv("EMAIL_USER"),
-			EmailPassword: os.Getenv("EMAIL_PASS"),
-			BotToken:      os.Getenv("BOT_TOKEN"),
+			EmailFrom:     config.GetEmailUser(),
+			EmailPassword: config.GetEmailPassword(),
+			BotToken:      config.GetBotToken(),
 		},
 	}
 
-	// Initialize API key middleware
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
-	s.routes()
 	return s
 }
 
-func (s *Server) routes() {
+func (s *Server) RegisterRoutes(router *gin.Engine) {
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig)
 
-	api := s.router.PathPrefix("/api").Subrouter()
+	api := router.Group("/api")
 
-	// Public routes (no API key required)
-	// You can add routes here that don't need authentication
+	// Public routes
+	api.GET("/users/:id", handler.GetUserData)
+	api.GET("/wallet/points/:wallet_address", handler.GetWalletPoints)
 
-	// Protected routes (API key required)
-	protected := api.PathPrefix("").Subrouter()
-	protected.Use(s.apiKeyAuth.Middleware)
+	protected := api.Group("")
+	protected.Use(s.apiKeyAuth.GinMiddleware())
 
-	// User routes
-	api.HandleFunc("/users/{id}", handler.GetUserData).Methods("GET")
-	api.HandleFunc("/wallet/points/{wallet_address}", handler.GetWalletPoints).Methods("GET")
+	api.POST("/jobs", handler.CreateJobData)
+	api.GET("/jobs/:id", handler.GetJobData)
+	api.PUT("/jobs/:id", handler.UpdateJobData)
+	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
+	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
 
-	// Job routes
-	api.HandleFunc("/jobs", handler.CreateJobData).Methods("POST")
-	api.HandleFunc("/jobs/{id}", handler.GetJobData).Methods("GET")
-	api.HandleFunc("/jobs/{id}", handler.UpdateJobData).Methods("PUT")
-	api.HandleFunc("/jobs/{id}/lastexecuted", handler.UpdateJobLastExecutedAt).Methods("PUT")
-	api.HandleFunc("/jobs/user/{user_address}", handler.GetJobsByUserAddress).Methods("GET")
-	api.HandleFunc("/jobs/delete/{id}", handler.DeleteJobData).Methods("PUT")
+	api.POST("/tasks", handler.CreateTaskData)
+	api.GET("/tasks/:id", handler.GetTaskData)
+	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
 
-	// // Task routes
-	api.HandleFunc("/tasks", handler.CreateTaskData).Methods("POST")
-	api.HandleFunc("/tasks/{id}", handler.GetTaskData).Methods("GET")
-	api.HandleFunc("/tasks/{id}/fee", handler.UpdateTaskFee).Methods("PUT")
-	
-	// // Keeper routes
-	api.HandleFunc("/keepers/all", handler.GetAllKeepers).Methods("GET")
-	api.HandleFunc("/keepers/performers", handler.GetPerformers).Methods("GET")
-	// api.HandleFunc("/keepers", handler.CreateKeeperData).Methods("POST")
-	api.HandleFunc("/keepers/form", handler.CreateKeeperDataGoogleForm).Methods("POST")
-	api.HandleFunc("/keepers/checkin", handler.KeeperHealthCheckIn).Methods("POST")
-	api.HandleFunc("/keepers/{id}", handler.GetKeeperData).Methods("GET")
-	api.HandleFunc("/keepers/{id}/increment-tasks", handler.IncrementKeeperTaskCount).Methods("POST")
-	api.HandleFunc("/keepers/{id}/task-count", handler.GetKeeperTaskCount).Methods("GET")
-	api.HandleFunc("/keepers/{id}/add-points", handler.AddTaskFeeToKeeperPoints).Methods("POST")
-	api.HandleFunc("/keepers/{id}/points", handler.GetKeeperPoints).Methods("GET")
+	api.GET("/keepers/all", handler.GetAllKeepers)
+	api.GET("/keepers/performers", handler.GetPerformers)
+	api.POST("/keepers/form", handler.CreateKeeperDataGoogleForm)
+	api.GET("/keepers/:id", handler.GetKeeperData)
+	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
+	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
+	api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
+	api.GET("/keepers/:id/points", handler.GetKeeperPoints)
 
-	api.HandleFunc("/leaderboard/keepers", handler.GetKeeperLeaderboard).Methods("GET")
-	api.HandleFunc("/leaderboard/user", handler.GetUserLeaderboard).Methods("GET")
+	api.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
+	api.GET("/leaderboard/users", handler.GetUserLeaderboard)
+	api.GET("/leaderboard/users/search", handler.GetUserByAddress)
+	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
-	// Fees routes
-	api.HandleFunc("/fees", handler.GetTaskFees).Methods("GET")
+	api.GET("/fees", handler.GetTaskFees)
 
-	// New route for updating chat ID
-	api.HandleFunc("/keepers/update-chat-id", handler.UpdateKeeperChatID).Methods("POST")
+	api.POST("/keepers/update-chat-id", handler.UpdateKeeperChatID)
+	api.GET("/keepers/com-info/:id", handler.GetKeeperCommunicationInfo)
+	api.POST("/claim-fund", handler.ClaimFund)
 
-	// New route for getting chat ID and keeper name
-	api.HandleFunc("/keepers/com-info/{id}", handler.GetKeeperCommunicationInfo).Methods("GET")
-
-	// API key management routes (these should be admin-only and properly secured)
-	admin := api.PathPrefix("/admin").Subrouter()
-	// Add authentication for admin routes here
-	admin.HandleFunc("/api-keys", handler.CreateApiKey).Methods("POST")
-	admin.HandleFunc("/api-keys/{key}", handler.UpdateApiKey).Methods("PUT")
-	admin.HandleFunc("/api-keys/{key}", handler.DeleteApiKey).Methods("DELETE")
+	// Admin routes
+	admin := protected.Group("/admin")
+	admin.POST("/api-keys", handler.CreateApiKey)
+	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
+	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
 }
 
 func (s *Server) Start(port string) error {
 	s.logger.Infof("Starting server on port %s", port)
 
-	// Start the metrics server
 	s.metricsServer.Start()
 
-	// Defer closing Redis client when server stops
 	if s.redisClient != nil {
 		defer s.redisClient.Close()
 	}
 
-	// Start the Telegram bot in a goroutine
-	if s.telegramBot != nil {
-		go s.telegramBot.Start()
-	}
-
-	handler := s.cors.Handler(s.router)
-	return http.ListenAndServe(fmt.Sprintf(":%s", port), handler)
+	return s.router.Run(fmt.Sprintf(":%s", port))
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # TIME BASED JOB
-curl -X POST http://192.168.1.57:9002/api/jobs \
+curl -X POST http://192.168.1.17:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
@@ -34,7 +34,7 @@ curl -X POST http://192.168.1.57:9002/api/jobs \
 
 # CONDITION BASED JOB, NEVER SATISFIED
 
-# curl -X POST http://192.168.1.57:9002/api/jobs \
+# curl -X POST http://192.168.1.17:9002/api/jobs \
 #   -H "Content-Type: application/json" \
 #   -d "[
 #     {
@@ -64,7 +64,7 @@ curl -X POST http://192.168.1.57:9002/api/jobs \
 
 # CONDITION BASED JOB, SATISFIED, AA ENABLED
 
-curl -X POST http://192.168.1.57:9002/api/jobs \
+curl -X POST http://192.168.1.17:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
@@ -85,8 +85,9 @@ curl -X POST http://192.168.1.57:9002/api/jobs \
       \"target_chain_id\": \"11155420\",
       \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
       \"target_function\": \"increment\",
+      \"abi\": \"[{\\\"inputs\\\":[],\\\"name\\\":\\\"increment\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
       \"arg_type\": 1,
-      \"arguments\": [\"19\"],
+      \"arguments\": [\"19\",\"5\"],
       \"script_target_function\": \"checker\",
       \"job_cost_prediction\": 253
     }

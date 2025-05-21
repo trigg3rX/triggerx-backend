@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     account_balance varint,
     token_balance varint,
     last_updated_at timestamp,
+    user_points double,
     PRIMARY KEY (user_id)
 );
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     security int,
     link_job_id bigint,
     chain_status int,
+    custom boolean,
      
     time_frame bigint,
     recurring boolean,
@@ -49,6 +51,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     target_chain_id text,
     target_contract_address text,
     target_function text,
+    abi text,
     arg_type int,
     arguments list<text>,
     script_target_function text,
@@ -92,12 +95,13 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint,
     keeper_name text,
     keeper_address text,
+    consensus_address text,
     registered_tx text,
     operator_id text,
     
     rewards_address text,
     rewards_booster float,
-    voting_power bigint,
+    voting_power text,
     keeper_points double,
     connection_address text,
     peer_id text,
@@ -109,6 +113,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     no_exctask int,
     chat_id bigint,
     email_id text,
+    last_checked_in timestamp,
     PRIMARY KEY (keeper_id)
 );
 

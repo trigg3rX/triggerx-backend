@@ -2,7 +2,6 @@ package types
 
 import "time"
 
-// Passed By Manager, Received By Keeper, before Executing Action
 type TriggerData struct {
 	TaskID    int64     `json:"task_id"`
 	Timestamp time.Time `json:"timestamp"`
@@ -15,7 +14,6 @@ type TriggerData struct {
 	ConditionParams map[string]interface{} `json:"condition_params"`
 }
 
-// Created By Keeper, details about the Action
 type ActionData struct {
 	TaskID       int64     `json:"task_id"`
 	Timestamp    time.Time `json:"timestamp"`
@@ -24,7 +22,6 @@ type ActionData struct {
 	Status       bool      `json:"status"`
 	IPFSDataCID  string    `json:"ipfs_data_cid"`
 
-	// Resource usage metrics
 	MemoryUsage   uint64  `json:"memory_usage"`
 	CPUPercentage float64 `json:"cpu_percentage"`
 	NetworkRx     uint64  `json:"network_rx"`
@@ -33,7 +30,6 @@ type ActionData struct {
 	BlockWrite    uint64  `json:"block_write"`
 	BandwidthRate float64 `json:"bandwidth_rate"`
 
-	// Fee calculation fields
 	TotalFee          float64       `json:"total_fee"`
 	StaticComplexity  float64       `json:"static_complexity"`
 	DynamicComplexity float64       `json:"dynamic_complexity"`
@@ -41,7 +37,6 @@ type ActionData struct {
 	ExecutionTime     time.Duration `json:"execution_time"`
 }
 
-// Created By Keeper, details passed to Aggregator, submitted on chain upon successful consensus
 type PerformerData struct {
 	ProofOfTask        string `json:"proof_of_task"`
 	TaskDefinitionID   string `json:"task_definition_id"`
@@ -71,19 +66,27 @@ type IPFSData struct {
 	ProofData ProofData `json:"proof_data"`
 }
 
-// KeeperHealth represents the health status of a keeper
-type KeeperHealth struct {
-	KeeperAddress string    `json:"keeper_address"`
-	Version           string    `json:"version"`
-	Timestamp         time.Time `json:"timestamp"`
-	Signature         string    `json:"signature"`
-	PeerID            string    `json:"peer_id"`
+type ProofResponse struct {
+	ProofHash string `json:"proofHash"`
+	CID       string `json:"cid"`
 }
 
-type UpdateKeeperHealth struct {
-	KeeperAddress string    `json:"keeper_address"`
-	Active        bool      `json:"active"`
-	Timestamp     time.Time `json:"timestamp"`
-	Version       string    `json:"version"`
-	PeerID        string    `json:"peer_id"`
+type TaskValidationRequest struct {
+	ProofOfTask      string `json:"proofOfTask"`
+	Data             string `json:"data"`
+	TaskDefinitionID uint16 `json:"taskDefinitionId"`
+	Performer        string `json:"performer"`
+}
+
+
+type ValidationResult struct {
+	IsValid bool   `json:"isValid"`
+	Message string `json:"message"`
+	Error   string `json:"error,omitempty"`
+}
+
+type ValidationResponse struct {
+	Data    bool   `json:"data"`
+	Error   bool   `json:"error"`
+	Message string `json:"message,omitempty"`
 }

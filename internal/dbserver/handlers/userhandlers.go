@@ -1,18 +1,16 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
+	"strings"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
-	
-	vars := mux.Vars(r)
-	userID := vars["id"]
+func (h *Handler) GetUserData(c *gin.Context) {
+	userID := c.Param("id")
 	h.logger.Infof("[GetUserData] Retrieving user with ID: %s", userID)
 
 	var userData types.UserData
@@ -20,10 +18,10 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Session().Query(`
         SELECT user_id, user_address, job_ids, account_balance
         FROM triggerx.user_data 
-        WHERE user_id = ?`, userID).Scan(
+        WHERE user_id = ? ALLOW FILTERING`, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.AccountBalance); err != nil {
 		h.logger.Errorf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -36,36 +34,33 @@ func (h *Handler) GetUserData(w http.ResponseWriter, r *http.Request) {
 		AccountBalance: userData.AccountBalance,
 	}
 
-	json.NewEncoder(w).Encode(response)
+	c.JSON(http.StatusOK, response)
 }
 
-func (h *Handler) GetWalletPoints(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	walletAddress := vars["wallet_address"]
+func (h *Handler) GetWalletPoints(c *gin.Context) {
+	walletAddress := strings.ToLower(c.Param("wallet_address"))
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
 	var userPoints int
 	var keeperPoints int
 
-	// Query user_data table
 	if err := h.db.Session().Query(`
         SELECT account_balance
         FROM triggerx.user_data 
-        WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {}
+        WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {
+	}
 
-	// Query keeper_data table
 	if err := h.db.Session().Query(`
         SELECT keeper_points
         FROM triggerx.keeper_data 
-        WHERE keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {}
+        WHERE keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {
+	}
 
 	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)
 
 	totalPoints := userPoints + keeperPoints
 
-	response := map[string]int{
+	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,
-	}
-
-	json.NewEncoder(w).Encode(response)
+	})
 }

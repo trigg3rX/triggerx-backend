@@ -46,7 +46,7 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 
 		return string(body), nil
 	}
-	
+
 	ipfsGateway := "https://" + gateway + "/ipfs/" + cid
 	resp, err := http.Get(ipfsGateway)
 	if err != nil {

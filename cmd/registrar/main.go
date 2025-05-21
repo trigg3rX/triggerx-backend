@@ -2,61 +2,101 @@ package main
 
 import (
 	"fmt"
-	"time"
-
-	"github.com/ethereum/go-ethereum/common"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/database"
-	dbpkg "github.com/trigg3rX/triggerx-backend/pkg/database"
+
+	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var logger logging.Logger
-
 func main() {
-	if err := logging.InitLogger(logging.Development, logging.RegistrarProcess); err != nil {
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
+	}
+
+	// Initialize logger
+	logConfig := logging.LoggerConfig{
+		LogDir:          logging.BaseDataDir,
+		ProcessName:     logging.RegistrarProcess,
+		Environment:     getEnvironment(),
+		UseColors:       true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
+	}
+
+	if err := logging.InitServiceLogger(logConfig); err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger = logging.GetLogger(logging.Development, logging.RegistrarProcess)
-	logger.Info("Starting registrar service ...")
+	logger := logging.GetServiceLogger()
 
-	config.Init()
-	registrar.InitABI()
+	logger.Info("Starting registrar service...",
+		"mode", getEnvironment(),
+		"avs_governance", config.GetAvsGovernanceAddress(),
+		"attestation_center", config.GetAttestationCenterAddress(),
+	)
 
 	// Initialize database connection
-	dbConfig := &dbpkg.Config{
-		Hosts:       []string{config.DatabaseDockerIPAddress + ":" + config.DatabaseDockerPort},
-		Timeout:     time.Second * 30,
-		Retries:     3,
-		ConnectWait: time.Second * 20,
-	}
-	dbConn, err := dbpkg.NewConnection(dbConfig)
+	dbConfig := database.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
+	dbConn, err := database.NewConnection(dbConfig)
 	if err != nil {
-		logger.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatal("Failed to connect to database", "error", err)
 	}
 	defer dbConn.Close()
 
-	// Set the database connection in the database package
-	database.SetDatabaseConnection(dbConn)
-	logger.Info("Database connection initialized")
+	// Initialize database manager with logger
+	client.InitDatabaseManager(logger, dbConn)
+	logger.Info("Database manager initialized")
 
-	avsGovernanceAddress := common.HexToAddress(config.AvsGovernanceAddress)
-	attestationCenterAddress := common.HexToAddress(config.AttestationCenterAddress)
+	// Initialize and start registrar service
+	registrarService, err := registrar.NewRegistrarService(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize registrar service", "error", err)
+	}
 
-	logger.Info(fmt.Sprintf("AVS Governance     [L1]: %s", config.AvsGovernanceAddress))
-	logger.Info(fmt.Sprintf("Attestation Center [L2]: %s", config.AttestationCenterAddress))
+	// Start services
+	registrarService.Start()
 
-	go func() {
-		registrar.StartEventPolling(avsGovernanceAddress, attestationCenterAddress)
-	}()
+	// // Initialize and start rewards service
+	// rewardsService := rewards.NewRewardsService(logger)
+	// go rewardsService.StartDailyRewardsPoints()
 
-	go func() {
-		registrar.StartDailyRewardsPoints()
-	}()
+	logger.Info("All services started successfully")
 
-	logger.Info("Registrar service is running.")
+	// Handle graceful shutdown
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	select {}
+	sig := <-shutdown
+	logger.Infof("Received shutdown signal: %s", sig.String())
+
+	// Cleanup
+	registrarService.Stop()
+
+	// Ensure logger is properly shutdown
+	if err := logging.Shutdown(); err != nil {
+		fmt.Printf("Error shutting down logger: %v\n", err)
+	}
+
+	logger.Info("Shutdown complete")
+}
+
+func getEnvironment() logging.LogLevel {
+	if config.IsDevMode() {
+		return logging.Development
+	}
+	return logging.Production
+}
+
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
 }

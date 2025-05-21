@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// ConditionResult represents the result of condition evaluation
 type ConditionResult struct {
 	Satisfied bool
 	Timestamp time.Time
@@ -16,9 +15,7 @@ type ConditionResult struct {
 	Price     float64
 }
 
-// condition evaluates user-defined conditions and returns the result
 func condition() ConditionResult {
-	// Fetch Ethereum price from CoinGecko API
 	url := "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -61,10 +58,8 @@ func condition() ConditionResult {
 		}
 	}
 
-	// Check if the price is greater than 0
 	satisfied := ethPrice > 0
 
-	// Return the condition result
 	return ConditionResult{
 		Satisfied: satisfied,
 		Timestamp: time.Now(),
@@ -74,10 +69,8 @@ func condition() ConditionResult {
 }
 
 func main() {
-	// Call the condition function
 	result := condition()
 
-	// Print the results
 	fmt.Println("Condition satisfied:", result.Satisfied)
 	fmt.Println("Timestamp:", result.Timestamp.Format(time.RFC3339))
 	fmt.Println("Response:", result.Response)
@@ -86,10 +79,8 @@ func main() {
 		fmt.Println("Response:", result.Response)
 	}
 
-	// Take action based on condition result
 	if result.Satisfied {
 		fmt.Println("Ethereum price is greater than 0")
-		// Add your actions here
 	} else {
 		fmt.Println("Ethereum price is 0 or could not be fetched")
 	}

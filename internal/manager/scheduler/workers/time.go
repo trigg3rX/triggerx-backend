@@ -8,11 +8,8 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/services"
 )
 
-// Worker interface defines the core functionality required for all job workers.
-// Each worker type (time, event, condition) must implement these methods.
 type Worker interface {
 	Start(ctx context.Context)
 	Stop()
@@ -22,8 +19,6 @@ type Worker interface {
 	GetRetries() int
 }
 
-// BaseWorker provides common functionality shared across all worker types
-// including status tracking, error handling, and retry logic.
 type BaseWorker struct {
 	status       string
 	error        string
@@ -31,8 +26,6 @@ type BaseWorker struct {
 	maxRetries   int
 }
 
-// TimeBasedWorker handles jobs that need to be executed at specific intervals
-// or timestamps using cron scheduling.
 type TimeBasedWorker struct {
 	jobID     int64
 	scheduler JobScheduler
@@ -58,8 +51,6 @@ func NewTimeBasedWorker(jobData types.HandleCreateJobData, schedule string, sche
 	}
 }
 
-// Start initiates the time-based job execution. It handles both one-time delayed execution
-// and recurring cron-based schedules. Monitors job duration and handles graceful shutdown.
 func (w *TimeBasedWorker) Start(ctx context.Context) {
 	if w.status == "completed" || w.status == "failed" {
 		return
@@ -71,15 +62,6 @@ func (w *TimeBasedWorker) Start(ctx context.Context) {
 	triggerData.ConditionParams = make(map[string]interface{})
 
 	w.status = "running"
-
-	// time.AfterFunc(1*time.Second, func() {
-	// 	triggerData.Timestamp = time.Now().UTC()
-	// 	triggerData.LastExecuted = time.Now().UTC()
-
-	// 	if err := w.executeTask(w.jobData, &triggerData); err != nil {
-	// 		w.handleError(err)
-	// 	}
-	// })
 
 	w.cron.AddFunc(w.schedule, func() {
 		if w.jobData.TimeFrame > 0 && time.Since(w.startTime) > time.Duration(w.jobData.TimeFrame)*time.Second {
@@ -126,8 +108,6 @@ func (w *TimeBasedWorker) GetJobID() int64 {
 	return w.jobID
 }
 
-// executeTask handles the core job execution logic for time-based jobs.
-// Creates task data, assigns it to a performer, and initiates task execution.
 func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, triggerData *types.TriggerData) error {
 	w.scheduler.Logger().Infof("Executing time-based job: %d", w.jobID)
 
@@ -137,7 +117,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 		TaskPerformerID:  0,
 	}
 
-	performerData, err := services.GetPerformer()
+	performerData, err := w.scheduler.GetDatabaseClient().GetPerformer()
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
@@ -147,7 +127,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 
 	w.scheduler.Logger().Infof("Task data: %d | %d | %d", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformerID)
 
-	taskID, status, err := services.CreateTaskData(taskData)
+	taskID, status, err := w.scheduler.GetDatabaseClient().CreateTaskData(taskData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Failed to create task data for job %d: %v", w.jobID, err)
 		return err
@@ -161,7 +141,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 
 	w.scheduler.Logger().Infof("Task ID %d created for job %v", taskID, w.jobID)
 
-	status, err = services.SendTaskToPerformer(jobData, triggerData, performerData)
+	status, err = w.scheduler.GetAggregatorClient().SendTaskToPerformer(jobData, triggerData, performerData)
 	if err != nil {
 		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
 		return err
@@ -169,10 +149,8 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 
 	w.scheduler.Logger().Infof("Task sent for job %d to performer", w.jobID)
 
-	// After successful execution, handle linked job
 	if err := w.handleLinkedJob(w.scheduler, jobData); err != nil {
 		w.scheduler.Logger().Errorf("Failed to execute linked job for job %d: %v", w.jobID, err)
-		// Don't return error here as the main job was successful
 	}
 
 	if !status {
@@ -194,10 +172,9 @@ func (w *TimeBasedWorker) GetRetries() int {
 	return w.currentRetry
 }
 
-// Add this helper function to the BaseWorker struct
 func (w *BaseWorker) handleLinkedJob(scheduler JobScheduler, jobData *types.HandleCreateJobData) error {
 	if jobData.LinkJobID <= 0 {
-		return nil // No linked job to execute
+		return nil
 	}
 
 	scheduler.UpdateJobChainStatus(jobData.JobID, "completed")
@@ -208,7 +185,6 @@ func (w *BaseWorker) handleLinkedJob(scheduler JobScheduler, jobData *types.Hand
 		return fmt.Errorf("failed to fetch linked job %d details: %v", jobData.LinkJobID, err)
 	}
 
-	// Start the linked job based on its type
 	switch {
 	case linkedJob.TaskDefinitionID == 1 || linkedJob.TaskDefinitionID == 2:
 		return scheduler.StartTimeBasedJob(*linkedJob)
@@ -221,9 +197,7 @@ func (w *BaseWorker) handleLinkedJob(scheduler JobScheduler, jobData *types.Hand
 	}
 }
 
-// Add this method to TimeBasedWorker to allow updating the last execution timestamp
 func (w *TimeBasedWorker) UpdateLastExecutedTime(timestamp time.Time) {
-	// Update the jobData with the new timestamp
 	if w.jobData != nil {
 		w.jobData.LastExecutedAt = timestamp
 		w.scheduler.Logger().Infof("Updated LastExecutedAt for job %d to %v", w.jobID, timestamp)
