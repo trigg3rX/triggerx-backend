@@ -30,17 +30,21 @@ func (s *RewardsService) StartDailyRewardsPoints() {
 	s.logger.Infof("Last rewards update: %v", lastRewardsUpdate)
 
 	now := time.Now()
-	rewardTime := time.Date(now.Year(), now.Month(), now.Day(), 06, 30, 0, 0, time.UTC)
+	startDate := lastRewardsUpdate.AddDate(0, 0, 1).Truncate(24 * time.Hour)
+	today := now.Truncate(24 * time.Hour)
 
-	if now.After(rewardTime) && lastRewardsUpdate.Day() != now.Day() {
-		s.logger.Info("06:30 has already passed for today and rewards haven't been distributed yet, distributing rewards now...")
-		err := client.DailyRewardsPoints()
-		if err != nil {
-			s.logger.Errorf("Failed to distribute daily rewards: %v", err)
-		} else {
-			newTimestamp := time.Now().Format(time.RFC3339)
-			s.updateLastRewardsTimestamp(newTimestamp)
-			s.logger.Info("Daily rewards distributed successfully")
+	for d := startDate; !d.After(today); d = d.AddDate(0, 0, 1) {
+		rewardTime := time.Date(d.Year(), d.Month(), d.Day(), 6, 30, 0, 0, time.UTC)
+
+		if now.After(rewardTime) {
+			s.logger.Infof("Distributing missed rewards for %v", d.Format("2006-01-02"))
+			err := client.DailyRewardsPoints()
+			if err != nil {
+				s.logger.Errorf("Failed to distribute rewards for %v: %v", d.Format("2006-01-02"), err)
+				continue
+			}
+			s.updateLastRewardsTimestamp(rewardTime.Format(time.RFC3339))
+			s.logger.Infof("Rewards distributed for %v", d.Format("2006-01-02"))
 		}
 	}
 
