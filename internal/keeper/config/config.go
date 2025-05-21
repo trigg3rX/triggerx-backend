@@ -114,9 +114,9 @@ func validateConfig(cfg Config) error {
 	if validator.IsEmpty(cfg.AlchemyAPIKey) {
 		return fmt.Errorf("invalid alchemy api key: %s", cfg.AlchemyAPIKey)
 	}
-	if validator.IsEmpty(cfg.EtherscanAPIKey) {
-		return fmt.Errorf("invalid etherscan api key: %s", cfg.EtherscanAPIKey)
-	}
+	// if validator.IsEmpty(cfg.EtherscanAPIKey) {
+	// 	return fmt.Errorf("invalid etherscan api key: %s", cfg.EtherscanAPIKey)
+	// }
 	if !validator.IsValidPort(cfg.OperatorRPCPort) {
 		return fmt.Errorf("invalid operator rpc port: %s", cfg.OperatorRPCPort)
 	}
@@ -160,10 +160,10 @@ func validateConfig(cfg Config) error {
 		cfg.L2Chain = "84532"
 	}
 	if !validator.IsValidAddress(cfg.AVSGovernanceAddress) {
-		cfg.AVSGovernanceAddress = "0x0C77B6273F4852200b17193837960b2f253518FC"
+		cfg.AVSGovernanceAddress = "0x12f45551f11df20b3ecbdf329138bdc65cc58ec0"
 	}
 	if !validator.IsValidAddress(cfg.AttestationCenterAddress) {
-		cfg.AttestationCenterAddress = "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"
+		cfg.AttestationCenterAddress = "0x9725fb95b5ec36c062a49ca2712b3b1ff66f04ed"
 	}
 	if !validator.IsValidPeerID(cfg.OthenticBootstrapID) {
 		cfg.OthenticBootstrapID = "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"
@@ -171,12 +171,12 @@ func validateConfig(cfg Config) error {
 	if validator.IsEmpty(cfg.IpfsHost) {
 		cfg.IpfsHost = "aquamarine-urgent-limpet-846.mypinata.cloud"
 	}
-	if validator.IsEmpty(cfg.PinataApiKey) {
-		cfg.PinataApiKey = "9f5922013fb9e2dfbc13"
-	}
-	if validator.IsEmpty(cfg.PinataSecretApiKey) {
-		cfg.PinataSecretApiKey = "190e9f1c959861bce0aed5a0e6c74a45a225658f7fa4fdc70f3fe136b76587fb"
-	}
+	// if validator.IsEmpty(cfg.PinataApiKey) {
+	// 	cfg.PinataApiKey = "9f5922013fb9e2dfbc13"
+	// }
+	// if validator.IsEmpty(cfg.PinataSecretApiKey) {
+	// 	cfg.PinataSecretApiKey = "190e9f1c959861bce0aed5a0e6c74a45a225658f7fa4fdc70f3fe136b76587fb"
+	// }
 	return nil
 }
 
