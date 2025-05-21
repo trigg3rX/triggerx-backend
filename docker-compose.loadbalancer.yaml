@@ -30,6 +30,8 @@ services:
       - OTHER_MANAGER_ADDRESSES=manager2:6062
       - MANAGER_RPC_PORT=6061
       - NODE_ID=manager1
+    volumes:
+      - ./.env:/app/.env:ro
     depends_on:
       - redis
     networks:
@@ -49,6 +51,8 @@ services:
       - OTHER_MANAGER_ADDRESSES=manager1:6061
       - MANAGER_RPC_PORT=6062
       - NODE_ID=manager2
+    volumes:
+      - ./.env:/app/.env:ro
     depends_on:
       - redis
     networks:

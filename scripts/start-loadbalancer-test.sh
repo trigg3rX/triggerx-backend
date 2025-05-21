@@ -9,6 +9,10 @@ NC='\033[0m' # No Color
 # Docker compose file
 COMPOSE_FILE="docker-compose.loadbalancer.yaml"
 
+# Local manager configuration
+MANAGER1_PORT="6061"
+MANAGER2_PORT="6062"
+
 log_success() {
   echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
@@ -65,7 +69,7 @@ start_managers() {
   
   # Wait for manager1 to be ready
   log_info "Waiting for manager1 to be ready..."
-  while ! curl -s http://localhost:6061/health > /dev/null; do
+  while ! curl -s http://localhost:${MANAGER1_PORT}/health > /dev/null; do
     echo -n "."
     sleep 1
   done
@@ -78,7 +82,7 @@ start_managers() {
   
   # Wait for manager2 to be ready
   log_info "Waiting for manager2 to be ready..."
-  while ! curl -s http://localhost:6062/health > /dev/null; do
+  while ! curl -s http://localhost:${MANAGER2_PORT}/health > /dev/null; do
     echo -n "."
     sleep 1
   done
@@ -91,22 +95,34 @@ register_managers() {
   log_info "Registering managers with load balancer..."
   
   # Register manager1
-  curl -X POST http://localhost:8080/register \
+  log_info "Registering manager1..."
+  response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/register \
     -H "Content-Type: application/json" \
-    -d '{
-      "id": "manager1",
-      "address": "manager1:6061",
-      "max_tasks": 100
-    }'
+    -d "{
+      \"id\": \"manager1\",
+      \"address\": \"manager1:${MANAGER1_PORT}\",
+      \"max_tasks\": 100
+    }")
+  
+  http_code=$(echo "$response" | tail -n1)
+  if [ "$http_code" -ne 200 ]; then
+    log_error "Failed to register manager1. Response: $response"
+  fi
   
   # Register manager2
-  curl -X POST http://localhost:8080/register \
+  log_info "Registering manager2..."
+  response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/register \
     -H "Content-Type: application/json" \
-    -d '{
-      "id": "manager2",
-      "address": "manager2:6062",
-      "max_tasks": 100
-    }'
+    -d "{
+      \"id\": \"manager2\",
+      \"address\": \"manager2:${MANAGER2_PORT}\",
+      \"max_tasks\": 100
+    }")
+  
+  http_code=$(echo "$response" | tail -n1)
+  if [ "$http_code" -ne 200 ]; then
+    log_error "Failed to register manager2. Response: $response"
+  fi
   
   log_success "Managers registered with load balancer"
 }
@@ -116,16 +132,21 @@ test_loadbalancer() {
   log_info "Testing load balancer..."
   
   # Send a test job request
-  curl -X POST http://localhost:8080/job/create \
+  response=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/job/create \
     -H "Content-Type: application/json" \
     -d '{
       "job_id": 1,
       "task_definition_id": 1,
       "time_interval": 60,
       "time_frame": "1h"
-    }'
+    }')
   
-  log_success "Test job request sent"
+  http_code=$(echo "$response" | tail -n1)
+  if [ "$http_code" -ne 200 ]; then
+    log_error "Failed to create test job. Response: $response"
+  fi
+  
+  log_success "Test job request sent successfully"
 }
 
 # Main function
@@ -147,8 +168,8 @@ main() {
   
   log_success "Setup complete! You can now test the load balancer."
   log_info "Load Balancer: http://localhost:8080"
-  log_info "Manager 1: http://localhost:6061"
-  log_info "Manager 2: http://localhost:6062"
+  log_info "Manager 1: http://localhost:${MANAGER1_PORT}"
+  log_info "Manager 2: http://localhost:${MANAGER2_PORT}"
   
   # Keep script running until interrupted
   while true; do
@@ -156,8 +177,8 @@ main() {
     
     # Check if all services are still running
     if ! curl -s http://localhost:8080/health > /dev/null || \
-       ! curl -s http://localhost:6061/health > /dev/null || \
-       ! curl -s http://localhost:6062/health > /dev/null; then
+       ! curl -s http://localhost:${MANAGER1_PORT}/health > /dev/null || \
+       ! curl -s http://localhost:${MANAGER2_PORT}/health > /dev/null; then
       log_error "One or more services have stopped. Please check the logs."
     fi
   done
