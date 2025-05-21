@@ -16,6 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -60,8 +61,14 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize database connection: %v", err))
 	}
 
+	// Initialize Telegram bot
+	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, dbConn)
+	if err != nil {
+		logger.Errorf("Failed to initialize Telegram bot: %v", err)
+	}
+
 	// Initialize database manager
-	client.InitDatabaseManager(logger, dbConn)
+	client.InitDatabaseManager(logger, dbConn, telegramBot)
 	logger.Info("Database manager initialized")
 
 	// Initialize state manager

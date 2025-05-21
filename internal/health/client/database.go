@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-gomail/gomail"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -21,17 +22,21 @@ import (
 type DatabaseManager struct {
 	logger logging.Logger
 	db     *database.Connection
+	telegramBot *telegram.Bot
 }
 
 var instance *DatabaseManager
 
 // InitDatabaseManager initializes the database manager with a logger
-func InitDatabaseManager(logger logging.Logger, connection *database.Connection) {
+func InitDatabaseManager(logger logging.Logger, connection *database.Connection, telegramBot *telegram.Bot) {
 	if logger == nil {
 		panic("logger cannot be nil")
 	}
 	if connection == nil {
 		panic("database connection cannot be nil")
+	}
+	if telegramBot == nil {
+		logger.Warn("Telegram bot is nil, notifications will not be sent")
 	}
 
 	// Create a new logger with component field and proper level
@@ -40,6 +45,7 @@ func InitDatabaseManager(logger logging.Logger, connection *database.Connection)
 	instance = &DatabaseManager{
 		logger: dbLogger,
 		db:     connection,
+		telegramBot: telegramBot,
 	}
 }
 
@@ -166,7 +172,7 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 
 		if chatID != 0 {
 			telegramMsg := fmt.Sprintf("Keeper %s is down for more than 10 minutes. Please check and start it.", keeperName)
-			if err := dm.sendTelegramNotification(chatID, telegramMsg); err != nil {
+			if err := dm.telegramBot.SendMessage(chatID, telegramMsg); err != nil {
 				dm.logger.Error("Failed to send Telegram notification",
 					"error", err,
 					"keeper", keeperName,
