@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     link_job_id bigint,
     chain_status int,
     custom boolean,
-     
+    job_title text,
     time_frame bigint,
     recurring boolean,
 

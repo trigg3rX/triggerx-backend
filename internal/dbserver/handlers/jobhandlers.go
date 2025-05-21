@@ -167,13 +167,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
 				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
 				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
-				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom, job_title
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
 			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
 			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
 			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, tempJobs[i].Custom).Exec(); err != nil {
+			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, tempJobs[i].Custom, tempJobs[i].JobTitle).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting job data: " + err.Error()})
 			return
@@ -216,6 +216,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			Security:               tempJobs[i].Security,
 			LinkJobID:              linkJobID,
 			ChainStatus:            chainStatus,
+			JobTitle:               tempJobs[i].JobTitle,
 			TimeFrame:              tempJobs[i].TimeFrame,
 			Recurring:              tempJobs[i].Recurring,
 			TimeInterval:           tempJobs[i].TimeInterval,
@@ -339,14 +340,14 @@ func (h *Handler) GetJobData(c *gin.Context) {
                time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
                trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
                target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
-               status, job_cost_prediction, created_at, last_executed_at, task_ids
+               status, job_cost_prediction, created_at, last_executed_at, task_ids, custom, job_title
         FROM triggerx.job_data 
         WHERE job_id = ?`, jobID).Scan(
 		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.UserID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID, &jobData.ChainStatus,
 		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID, &jobData.TriggerContractAddress,
 		&jobData.TriggerEvent, &jobData.ScriptIPFSUrl, &jobData.ScriptTriggerFunction, &jobData.TargetChainID,
 		&jobData.TargetContractAddress, &jobData.TargetFunction, &jobData.ABI, &jobData.ArgType, &jobData.Arguments, &jobData.ScriptTargetFunction,
-		&jobData.Status, &jobData.JobCostPrediction, &jobData.CreatedAt, &jobData.LastExecutedAt, &jobData.TaskIDs); err != nil {
+		&jobData.Status, &jobData.JobCostPrediction, &jobData.CreatedAt, &jobData.LastExecutedAt, &jobData.TaskIDs, &jobData.Custom, &jobData.JobTitle); err != nil {
 		h.logger.Errorf("[GetJobData] Error retrieving jobID %s: %v", jobID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -361,11 +362,36 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	h.logger.Infof("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
 
 	type JobSummary struct {
-		JobID       int64 `json:"job_id"`
-		JobType     int   `json:"job_type"`
-		Status      bool  `json:"status"`
-		ChainStatus int   `json:"chain_status"`
-		LinkJobID   int64 `json:"link_job_id"`
+		JobID                  int64     `json:"job_id"`
+		TaskDefinitionID       int       `json:"task_definition_id"`
+		UserID                 int64     `json:"user_id"`
+		Priority               int       `json:"priority"`
+		Security               int       `json:"security"`
+		LinkJobID              int64     `json:"link_job_id"`
+		ChainStatus            int       `json:"chain_status"`
+		Custom                 bool      `json:"custom"`
+		JobTitle               string    `json:"job_title"`
+		TimeFrame              int64     `json:"time_frame"`
+		Recurring              bool      `json:"recurring"`
+		TimeInterval           int64     `json:"time_interval"`
+		TriggerChainID         string    `json:"trigger_chain_id"`
+		TriggerContractAddress string    `json:"trigger_contract_address"`
+		TriggerEvent           string    `json:"trigger_event"`
+		ScriptIPFSUrl          string    `json:"script_ipfs_url"`
+		ScriptTriggerFunction  string    `json:"script_trigger_function"`
+		TargetChainID          string    `json:"target_chain_id"`
+		TargetContractAddress  string    `json:"target_contract_address"`
+		TargetFunction         string    `json:"target_function"`
+		ArgType                int       `json:"arg_type"`
+		Arguments              []string  `json:"arguments"`
+		ScriptTargetFunction   string    `json:"script_target_function"`
+		ABI                    string    `json:"abi"`
+		Status                 bool      `json:"status"`
+		JobCostPrediction      float64   `json:"job_cost_prediction"`
+		CreatedAt              time.Time `json:"created_at"`
+		LastExecutedAt         time.Time `json:"last_executed_at"`
+		TaskIDs                []int64   `json:"task_ids"`
+		FeeUsed                float64   `json:"fee_used"`
 	}
 
 	var userJobs []JobSummary
@@ -387,13 +413,42 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	h.logger.Infof("[GetJobsByUserAddress] Found user_id %d for user_address %s", userID, userAddress)
 
 	iter := h.db.Session().Query(`
-        SELECT job_id, task_definition_id, status, chain_status, link_job_id
+        SELECT job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
+               custom, job_title, time_frame, recurring, time_interval, trigger_chain_id, 
+               trigger_contract_address, trigger_event, script_ipfs_url, script_trigger_function,
+               target_chain_id, target_contract_address, target_function, arg_type, arguments,
+               script_target_function, abi, status, job_cost_prediction, created_at, last_executed_at,
+               task_ids
         FROM triggerx.job_data 
         WHERE user_id = ? ALLOW FILTERING
     `, userID).Iter()
 
 	var job JobSummary
-	for iter.Scan(&job.JobID, &job.JobType, &job.Status, &job.ChainStatus, &job.LinkJobID) {
+	for iter.Scan(
+		&job.JobID, &job.TaskDefinitionID, &job.UserID, &job.Priority, &job.Security, &job.LinkJobID, &job.ChainStatus,
+		&job.Custom, &job.JobTitle, &job.TimeFrame, &job.Recurring, &job.TimeInterval, &job.TriggerChainID,
+		&job.TriggerContractAddress, &job.TriggerEvent, &job.ScriptIPFSUrl, &job.ScriptTriggerFunction,
+		&job.TargetChainID, &job.TargetContractAddress, &job.TargetFunction, &job.ArgType, &job.Arguments,
+		&job.ScriptTargetFunction, &job.ABI, &job.Status, &job.JobCostPrediction, &job.CreatedAt, &job.LastExecutedAt,
+		&job.TaskIDs) {
+
+		// Calculate total fees from tasks
+		var totalFee float64
+		if len(job.TaskIDs) > 0 {
+			// Create a batch query to get all task fees at once
+			query := "SELECT task_fee FROM triggerx.task_data WHERE task_id IN ?"
+			iter := h.db.Session().Query(query, job.TaskIDs).Iter()
+
+			var taskFee float64
+			for iter.Scan(&taskFee) {
+				totalFee += taskFee
+			}
+			if err := iter.Close(); err != nil {
+				h.logger.Errorf("[GetJobsByUserAddress] Error calculating fees for job %d: %v", job.JobID, err)
+			}
+		}
+		job.FeeUsed = totalFee
+
 		userJobs = append(userJobs, job)
 	}
 

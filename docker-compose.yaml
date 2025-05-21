@@ -1,7 +1,7 @@
 services:
   scylla:
     image: scylladb/scylla
-    container_name: scylla
+    container_name: triggerx-scylla
     ports:
       - "${DATABASE_DOCKER_PORT}:9042"
     volumes:

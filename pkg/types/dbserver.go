@@ -12,6 +12,7 @@ type CreateJobData struct {
 	Priority               int      `json:"priority"`
 	Security               int      `json:"security"`
 	Custom                 bool     `json:"custom"`
+	JobTitle               string   `json:"job_title"`
 	TimeFrame              int64    `json:"time_frame"`
 	Recurring              bool     `json:"recurring"`
 	TimeInterval           int64    `json:"time_interval"`
