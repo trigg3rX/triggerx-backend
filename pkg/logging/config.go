@@ -42,6 +42,7 @@ const (
 	KeeperProcess    ProcessName = "keeper"
 	RegistrarProcess ProcessName = "registrar"
 	HealthProcess    ProcessName = "health"
+	RedisProcess     ProcessName = "redis"
 )
 
 type LoggerConfig struct {
