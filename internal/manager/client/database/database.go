@@ -165,36 +165,83 @@ func (c *DatabaseClient) GetJobDetails(jobID int64) (types.HandleCreateJobData, 
 		return types.HandleCreateJobData{}, fmt.Errorf("%w: status code %d", ErrInvalidResponse, resp.StatusCode)
 	}
 
+	// First get the basic job data
 	var jobData types.JobData
 	if err := json.NewDecoder(resp.Body).Decode(&jobData); err != nil {
 		c.logger.Error("Failed to decode job details", "jobID", jobID, "error", err)
 		return types.HandleCreateJobData{}, fmt.Errorf("%w: failed to decode response: %v", ErrInvalidResponse, err)
 	}
 
+	// Create base handleCreateJobData with common fields
 	handleCreateJobData := types.HandleCreateJobData{
-		JobID:                  jobData.JobID,
-		TaskDefinitionID:       jobData.TaskDefinitionID,
-		UserID:                 jobData.UserID,
-		Priority:               jobData.Priority,
-		Security:               jobData.Security,
-		LinkJobID:              jobData.LinkJobID,
-		ChainStatus:            jobData.ChainStatus,
-		TimeFrame:              jobData.TimeFrame,
-		Recurring:              jobData.Recurring,
-		TimeInterval:           jobData.TimeInterval,
-		TriggerChainID:         jobData.TriggerChainID,
-		TriggerContractAddress: jobData.TriggerContractAddress,
-		TriggerEvent:           jobData.TriggerEvent,
-		ScriptIPFSUrl:          jobData.ScriptIPFSUrl,
-		ScriptTriggerFunction:  jobData.ScriptTriggerFunction,
-		TargetChainID:          jobData.TargetChainID,
-		TargetContractAddress:  jobData.TargetContractAddress,
-		TargetFunction:         jobData.TargetFunction,
-		ArgType:                jobData.ArgType,
-		Arguments:              jobData.Arguments,
-		ScriptTargetFunction:   jobData.ScriptTargetFunction,
-		CreatedAt:              jobData.CreatedAt,
-		LastExecutedAt:         jobData.LastExecutedAt,
+		JobID:             jobData.JobID,
+		TaskDefinitionID:  jobData.TaskDefinitionID,
+		UserID:            jobData.UserID,
+		LinkJobID:         jobData.LinkJobID,
+		ChainStatus:       jobData.ChainStatus,
+		JobTitle:          jobData.JobTitle,
+		Custom:            jobData.Custom,
+		TimeFrame:         jobData.TimeFrame,
+		Recurring:         jobData.Recurring,
+		Status:            jobData.Status,
+		JobCostPrediction: jobData.JobCostPrediction,
+	}
+
+	// Based on task_definition_id, decode the specific job type data
+	switch {
+	case jobData.TaskDefinitionID == 1 || jobData.TaskDefinitionID == 2:
+		// Time-based job
+		var timeJobData types.TimeJobData
+		if err := json.NewDecoder(resp.Body).Decode(&timeJobData); err != nil {
+			c.logger.Error("Failed to decode time job details", "jobID", jobID, "error", err)
+			return types.HandleCreateJobData{}, fmt.Errorf("%w: failed to decode time job response: %v", ErrInvalidResponse, err)
+		}
+		handleCreateJobData.TimeInterval = timeJobData.TimeInterval
+		handleCreateJobData.TargetChainID = timeJobData.TargetChainID
+		handleCreateJobData.TargetContractAddress = timeJobData.TargetContractAddress
+		handleCreateJobData.TargetFunction = timeJobData.TargetFunction
+		handleCreateJobData.ABI = timeJobData.ABI
+		handleCreateJobData.ArgType = timeJobData.ArgType
+		handleCreateJobData.Arguments = timeJobData.Arguments
+		handleCreateJobData.ScriptIPFSUrl = timeJobData.DynamicArgumentsScriptIPFSUrl
+
+	case jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4:
+		// Event-based job
+		var eventJobData types.EventJobData
+		if err := json.NewDecoder(resp.Body).Decode(&eventJobData); err != nil {
+			c.logger.Error("Failed to decode event job details", "jobID", jobID, "error", err)
+			return types.HandleCreateJobData{}, fmt.Errorf("%w: failed to decode event job response: %v", ErrInvalidResponse, err)
+		}
+		handleCreateJobData.TriggerChainID = eventJobData.TriggerChainID
+		handleCreateJobData.TriggerContractAddress = eventJobData.TriggerContractAddress
+		handleCreateJobData.TriggerEvent = eventJobData.TriggerEvent
+		handleCreateJobData.TargetChainID = eventJobData.TargetChainID
+		handleCreateJobData.TargetContractAddress = eventJobData.TargetContractAddress
+		handleCreateJobData.TargetFunction = eventJobData.TargetFunction
+		handleCreateJobData.ABI = eventJobData.ABI
+		handleCreateJobData.ArgType = eventJobData.ArgType
+		handleCreateJobData.Arguments = eventJobData.Arguments
+		handleCreateJobData.ScriptIPFSUrl = eventJobData.DynamicArgumentsScriptIPFSUrl
+
+	case jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6:
+		// Condition-based job
+		var conditionJobData types.ConditionJobData
+		if err := json.NewDecoder(resp.Body).Decode(&conditionJobData); err != nil {
+			c.logger.Error("Failed to decode condition job details", "jobID", jobID, "error", err)
+			return types.HandleCreateJobData{}, fmt.Errorf("%w: failed to decode condition job response: %v", ErrInvalidResponse, err)
+		}
+		handleCreateJobData.ConditionType = conditionJobData.ConditionType
+		handleCreateJobData.UpperLimit = conditionJobData.UpperLimit
+		handleCreateJobData.LowerLimit = conditionJobData.LowerLimit
+		handleCreateJobData.ValueSourceType = conditionJobData.ValueSourceType
+		handleCreateJobData.ValueSourceUrl = conditionJobData.ValueSourceUrl
+		handleCreateJobData.TargetChainID = conditionJobData.TargetChainID
+		handleCreateJobData.TargetContractAddress = conditionJobData.TargetContractAddress
+		handleCreateJobData.TargetFunction = conditionJobData.TargetFunction
+		handleCreateJobData.ABI = conditionJobData.ABI
+		handleCreateJobData.ArgType = conditionJobData.ArgType
+		handleCreateJobData.Arguments = conditionJobData.Arguments
+		handleCreateJobData.ScriptIPFSUrl = conditionJobData.DynamicArgumentsScriptIPFSUrl
 	}
 
 	c.logger.Debug("Successfully retrieved job details", "jobID", jobID)

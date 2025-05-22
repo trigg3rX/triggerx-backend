@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # TIME BASED JOB
-curl -X POST http://192.168.1.17:9002/api/jobs \
+curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
@@ -64,14 +64,15 @@ curl -X POST http://192.168.1.17:9002/api/jobs \
 
 # CONDITION BASED JOB, SATISFIED, AA ENABLED
 
-curl -X POST http://192.168.1.17:9002/api/jobs \
+# 192.168.1.17
+curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
       \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E\",
       \"stake_amount\": 101,
       \"token_amount\": 111,
-      \"task_definition_id\": 1,
+      \"task_definition_id\": 5,
       \"priority\": 1,
       \"security\": 1,
       \"time_frame\": 300,

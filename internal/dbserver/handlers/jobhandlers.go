@@ -161,21 +161,81 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			linkJobID = createdJobs.JobIDs[i+1]
 		}
 
+		// Insert into main job_data table
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.job_data (
-				job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
-				time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
-				trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-				target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
-				status, job_cost_prediction, created_at, last_executed_at, task_ids, custom, job_title
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			currentJobID, tempJobs[i].TaskDefinitionID, existingUserID, tempJobs[i].Priority, tempJobs[i].Security, linkJobID, chainStatus,
-			tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval, tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress,
-			tempJobs[i].TriggerEvent, tempJobs[i].ScriptIPFSUrl, tempJobs[i].ScriptTriggerFunction, tempJobs[i].TargetChainID,
-			tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction, tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptTargetFunction,
-			false, tempJobs[i].JobCostPrediction, time.Now().UTC(), nil, []int64{}, tempJobs[i].Custom, tempJobs[i].JobTitle).Exec(); err != nil {
+				job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
+				custom, time_frame, recurring, status, job_cost_prediction, task_ids
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			currentJobID, tempJobs[i].JobTitle, tempJobs[i].TaskDefinitionID, existingUserID, linkJobID, chainStatus,
+			tempJobs[i].Custom, tempJobs[i].TimeFrame, tempJobs[i].Recurring, false, tempJobs[i].JobCostPrediction, []int64{}).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting job data: " + err.Error()})
+			return
+		}
+
+		// Insert into appropriate job type table based on task_definition_id
+		switch {
+		case tempJobs[i].TaskDefinitionID == 1 || tempJobs[i].TaskDefinitionID == 2:
+			// Time-based job
+			if err := h.db.Session().Query(`
+				INSERT INTO triggerx.time_job_data (
+					job_id, time_frame, recurring, time_interval,
+					target_chain_id, target_contract_address, target_function,
+					abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				currentJobID, tempJobs[i].TimeFrame, tempJobs[i].Recurring, tempJobs[i].TimeInterval,
+				tempJobs[i].TargetChainID, tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction,
+				tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptIPFSUrl).Exec(); err != nil {
+				h.logger.Errorf("[CreateJobData] Error inserting time job data for jobID %d: %v", currentJobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting time job data: " + err.Error()})
+				return
+			}
+			h.logger.Infof("[CreateJobData] Successfully created time-based job %d with interval %d seconds",
+				currentJobID, tempJobs[i].TimeInterval)
+		case tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4:
+			// Event-based job
+			if err := h.db.Session().Query(`
+				INSERT INTO triggerx.event_job_data (
+					job_id, time_frame, recurring,
+					trigger_chain_id, trigger_contract_address, trigger_event,
+					target_chain_id, target_contract_address, target_function,
+					abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				currentJobID, tempJobs[i].TimeFrame, tempJobs[i].Recurring,
+				tempJobs[i].TriggerChainID, tempJobs[i].TriggerContractAddress, tempJobs[i].TriggerEvent,
+				tempJobs[i].TargetChainID, tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction,
+				tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptIPFSUrl).Exec(); err != nil {
+				h.logger.Errorf("[CreateJobData] Error inserting event job data for jobID %d: %v", currentJobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting event job data: " + err.Error()})
+				return
+			}
+			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
+				currentJobID, tempJobs[i].TriggerEvent, tempJobs[i].TriggerContractAddress)
+		case tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6:
+			// Condition-based job
+			if err := h.db.Session().Query(`
+				INSERT INTO triggerx.condition_job_data (
+					job_id, time_frame, recurring,
+					condition_type, upper_limit, lower_limit,
+					value_source_type, value_source_url,
+					target_chain_id, target_contract_address, target_function,
+					abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				currentJobID, tempJobs[i].TimeFrame, tempJobs[i].Recurring,
+				tempJobs[i].ConditionType, tempJobs[i].UpperLimit, tempJobs[i].LowerLimit,
+				tempJobs[i].ValueSourceType, tempJobs[i].ValueSourceUrl,
+				tempJobs[i].TargetChainID, tempJobs[i].TargetContractAddress, tempJobs[i].TargetFunction,
+				tempJobs[i].ABI, tempJobs[i].ArgType, tempJobs[i].Arguments, tempJobs[i].ScriptIPFSUrl).Exec(); err != nil {
+				h.logger.Errorf("[CreateJobData] Error inserting condition job data for jobID %d: %v", currentJobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting condition job data: " + err.Error()})
+				return
+			}
+			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
+				currentJobID, tempJobs[i].ConditionType, tempJobs[i].LowerLimit, tempJobs[i].UpperLimit)
+		default:
+			h.logger.Errorf("[CreateJobData] Invalid task definition ID %d for job %d", tempJobs[i].TaskDefinitionID, i)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
 			return
 		}
 
@@ -205,278 +265,354 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Successfully created jobID %d and added %.2f points to user", currentJobID, pointsToAdd)
-
-		h.logger.Infof("[CreateJobData] Sending Job data to Manager for jobID %d", currentJobID)
-		jobData := types.HandleCreateJobData{
-			JobID:                  currentJobID,
-			TaskDefinitionID:       tempJobs[i].TaskDefinitionID,
-			UserID:                 existingUserID,
-			Priority:               tempJobs[i].Priority,
-			Security:               tempJobs[i].Security,
-			LinkJobID:              linkJobID,
-			ChainStatus:            chainStatus,
-			JobTitle:               tempJobs[i].JobTitle,
-			TimeFrame:              tempJobs[i].TimeFrame,
-			Recurring:              tempJobs[i].Recurring,
-			TimeInterval:           tempJobs[i].TimeInterval,
-			TriggerChainID:         tempJobs[i].TriggerChainID,
-			TriggerContractAddress: tempJobs[i].TriggerContractAddress,
-			TriggerEvent:           tempJobs[i].TriggerEvent,
-			ScriptIPFSUrl:          tempJobs[i].ScriptIPFSUrl,
-			ScriptTriggerFunction:  tempJobs[i].ScriptTriggerFunction,
-			TargetChainID:          tempJobs[i].TargetChainID,
-			TargetContractAddress:  tempJobs[i].TargetContractAddress,
-			TargetFunction:         tempJobs[i].TargetFunction,
-			ABI:                    tempJobs[i].ABI,
-			ArgType:                tempJobs[i].ArgType,
-			Arguments:              tempJobs[i].Arguments,
-			ScriptTargetFunction:   tempJobs[i].ScriptTargetFunction,
-			CreatedAt:              time.Now().UTC(),
-			LastExecutedAt:         time.Time{},
-		}
-
-		success, err := h.SendDataToManager("/jobs/schedule", jobData)
-		if err != nil {
-			h.logger.Errorf("[CreateJobData] Error sending job data to manager for jobID %d: %v", currentJobID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending job data to manager"})
-			return
-		}
-
-		if !success {
-			h.logger.Errorf("[CreateJobData] Failed to send job data to manager for jobID %d", currentJobID)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send job data to manager"})
-			return
-		}
-
-		h.logger.Infof("[CreateJobData] Successfully sent job data to manager for jobID %d", currentJobID)
-
 		createdJobs.JobIDs[i] = currentJobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
 		createdJobs.TimeFrames[i] = tempJobs[i].TimeFrame
 	}
 
-	existingJobIDs = append(existingJobIDs, newJobIDs...)
-
+	// Update user's job_ids
+	allJobIDs := append(existingJobIDs, newJobIDs...)
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.user_data 
 		SET job_ids = ?, last_updated_at = ?
 		WHERE user_id = ?`,
-		existingJobIDs, time.Now().UTC(), existingUserID).Exec(); err != nil {
-		h.logger.Errorf("[CreateJobData] Error creating user data for userID %d: %v", existingUserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating user data: " + err.Error()})
+		allJobIDs, time.Now().UTC(), existingUserID).Exec(); err != nil {
+		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user job IDs: " + err.Error()})
 		return
 	}
-	h.logger.Infof("[CreateJobData] Updated user data for userID %d", existingUserID)
+	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUserID, len(allJobIDs))
 
-	response := map[string]interface{}{
-		"message": "Database Updated Successfully",
-		"Data":    createdJobs,
-	}
-
-	c.JSON(http.StatusCreated, response)
+	c.JSON(http.StatusOK, createdJobs)
+	h.logger.Infof("[CreateJobData] Successfully completed job creation for user %d with %d new jobs",
+		existingUserID, len(tempJobs))
 }
 
 func (h *Handler) UpdateJobData(c *gin.Context) {
-	var tempData types.UpdateJobData
-	if err := c.ShouldBindJSON(&tempData); err != nil {
-		h.logger.Errorf("[UpdateJobData] Error decoding request for jobID %s: %v", tempData.JobID, err)
+	var updateData types.UpdateJobData
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		h.logger.Errorf("[UpdateJobData] Error decoding request body: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Update the main job_data table
 	if err := h.db.Session().Query(`
-		UPDATE triggerx.job_data 	
+		UPDATE triggerx.job_data 
 		SET time_frame = ?, recurring = ?
 		WHERE job_id = ?`,
-		tempData.TimeFrame, tempData.Recurring, tempData.JobID).Exec(); err != nil {
-		h.logger.Errorf("[UpdateJobData] Error updating jobID %s: %v", tempData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateJobData] Error updating job data for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
 		return
 	}
 
-	success, err := h.SendDataToManager("/job/update", tempData)
-	if err != nil {
-		h.logger.Errorf("[UpdateJobData] Error sending job data to manager for jobID %d: %v", tempData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending job data to manager"})
+	// Update time job data if it exists
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.time_job_data 
+		SET time_frame = ?, recurring = ?
+		WHERE job_id = ?`,
+		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[UpdateJobData] Error updating time job data for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job data: " + err.Error()})
 		return
 	}
 
-	if !success {
-		h.logger.Errorf("[UpdateJobData] Failed to send job data to manager for jobID %d", tempData.JobID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send job data to manager"})
+	// Update event job data if it exists
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.event_job_data 
+		SET time_frame = ?, recurring = ?
+		WHERE job_id = ?`,
+		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[UpdateJobData] Error updating event job data for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job data: " + err.Error()})
 		return
 	}
 
-	h.logger.Infof("[UpdateJobData] Successfully updated and published event for jobID %s", tempData.JobID)
-	c.Status(http.StatusOK)
+	// Update condition job data if it exists
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.condition_job_data 
+		SET time_frame = ?, recurring = ?
+		WHERE job_id = ?`,
+		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[UpdateJobData] Error updating condition job data for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job data: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Job updated successfully"})
 }
 
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
-	jobID := c.Param("id")
-	h.logger.Infof("[UpdateJobLastExecutedAt] Updating last executed at for jobID %s", jobID)
+	jobID := c.Param("job_id")
+	if jobID == "" {
+		h.logger.Error("[UpdateJobLastExecutedAt] No job ID provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
+		return
+	}
 
+	// Update the main job_data table
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.job_data 
 		SET last_executed_at = ?
 		WHERE job_id = ?`,
 		time.Now().UTC(), jobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating last executed at for jobID %s: %v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating last executed at: " + err.Error()})
 		return
 	}
 
-	h.logger.Infof("[UpdateJobLastExecutedAt] Successfully updated last executed at for jobID %s", jobID)
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, gin.H{"message": "Last executed at updated successfully"})
 }
 
 func (h *Handler) GetJobData(c *gin.Context) {
-	jobID := c.Param("id")
-	h.logger.Infof("[GetJobData] Fetching data for jobID %s", jobID)
+	jobID := c.Param("job_id")
+	if jobID == "" {
+		h.logger.Error("[GetJobData] No job ID provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
+		return
+	}
 
 	var jobData types.JobData
 	if err := h.db.Session().Query(`
-        SELECT job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
-               time_frame, recurring, time_interval, trigger_chain_id, trigger_contract_address, 
-               trigger_event, script_ipfs_url, script_trigger_function, target_chain_id, 
-               target_contract_address, target_function, abi, arg_type, arguments, script_target_function, 
-               status, job_cost_prediction, created_at, last_executed_at, task_ids, custom, job_title
-        FROM triggerx.job_data 
-        WHERE job_id = ?`, jobID).Scan(
-		&jobData.JobID, &jobData.TaskDefinitionID, &jobData.UserID, &jobData.Priority, &jobData.Security, &jobData.LinkJobID, &jobData.ChainStatus,
-		&jobData.TimeFrame, &jobData.Recurring, &jobData.TimeInterval, &jobData.TriggerChainID, &jobData.TriggerContractAddress,
-		&jobData.TriggerEvent, &jobData.ScriptIPFSUrl, &jobData.ScriptTriggerFunction, &jobData.TargetChainID,
-		&jobData.TargetContractAddress, &jobData.TargetFunction, &jobData.ABI, &jobData.ArgType, &jobData.Arguments, &jobData.ScriptTargetFunction,
-		&jobData.Status, &jobData.JobCostPrediction, &jobData.CreatedAt, &jobData.LastExecutedAt, &jobData.TaskIDs, &jobData.Custom, &jobData.JobTitle); err != nil {
-		h.logger.Errorf("[GetJobData] Error retrieving jobID %s: %v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
+			custom, time_frame, recurring, status, job_cost_prediction, task_ids
+		FROM triggerx.job_data 
+		WHERE job_id = ?`,
+		jobID).Scan(&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
+		&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
+		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.TaskIDs); err != nil {
+		h.logger.Errorf("[GetJobData] Error getting job data for jobID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting job data: " + err.Error()})
 		return
 	}
 
-	h.logger.Infof("[GetJobData] Successfully retrieved jobID %s", jobID)
-	c.JSON(http.StatusOK, jobData)
+	// Check task_definition_id to determine job type
+	switch {
+	case jobData.TaskDefinitionID == 1 || jobData.TaskDefinitionID == 2:
+		// Time-based job
+		var timeJobData types.TimeJobData
+		if err := h.db.Session().Query(`
+			SELECT job_id, time_frame, recurring, time_interval,
+				target_chain_id, target_contract_address, target_function,
+				abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+			FROM triggerx.time_job_data 
+			WHERE job_id = ?`,
+			jobID).Scan(&timeJobData.JobID, &timeJobData.TimeFrame, &timeJobData.Recurring, &timeJobData.TimeInterval,
+			&timeJobData.TargetChainID, &timeJobData.TargetContractAddress, &timeJobData.TargetFunction,
+			&timeJobData.ABI, &timeJobData.ArgType, &timeJobData.Arguments, &timeJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
+			h.logger.Errorf("[GetJobData] Error getting time job data for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting time job data: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, timeJobData)
+		return
+
+	case jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4:
+		// Event-based job
+		var eventJobData types.EventJobData
+		if err := h.db.Session().Query(`
+			SELECT job_id, time_frame, recurring,
+				trigger_chain_id, trigger_contract_address, trigger_event,
+				target_chain_id, target_contract_address, target_function,
+				abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+			FROM triggerx.event_job_data 
+			WHERE job_id = ?`,
+			jobID).Scan(&eventJobData.JobID, &eventJobData.TimeFrame, &eventJobData.Recurring,
+			&eventJobData.TriggerChainID, &eventJobData.TriggerContractAddress, &eventJobData.TriggerEvent,
+			&eventJobData.TargetChainID, &eventJobData.TargetContractAddress, &eventJobData.TargetFunction,
+			&eventJobData.ABI, &eventJobData.ArgType, &eventJobData.Arguments, &eventJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
+			h.logger.Errorf("[GetJobData] Error getting event job data for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting event job data: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, eventJobData)
+		return
+
+	case jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6:
+		// Condition-based job
+		var conditionJobData types.ConditionJobData
+		if err := h.db.Session().Query(`
+			SELECT job_id, time_frame, recurring,
+				condition_type, upper_limit, lower_limit,
+				value_source_type, value_source_url,
+				target_chain_id, target_contract_address, target_function,
+				abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+			FROM triggerx.condition_job_data 
+			WHERE job_id = ?`,
+			jobID).Scan(&conditionJobData.JobID, &conditionJobData.TimeFrame, &conditionJobData.Recurring,
+			&conditionJobData.ConditionType, &conditionJobData.UpperLimit, &conditionJobData.LowerLimit,
+			&conditionJobData.ValueSourceType, &conditionJobData.ValueSourceUrl,
+			&conditionJobData.TargetChainID, &conditionJobData.TargetContractAddress, &conditionJobData.TargetFunction,
+			&conditionJobData.ABI, &conditionJobData.ArgType, &conditionJobData.Arguments, &conditionJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
+			h.logger.Errorf("[GetJobData] Error getting condition job data for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting condition job data: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, conditionJobData)
+		return
+
+	default:
+		// Return basic job data if task_definition_id is not recognized
+		c.JSON(http.StatusOK, jobData)
+		return
+	}
 }
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
-	userAddress := strings.ToLower(c.Param("user_address"))
-	h.logger.Infof("[GetJobsByUserAddress] Fetching jobs for user_address %s", userAddress)
-
-	type JobSummary struct {
-		JobID                  int64     `json:"job_id"`
-		TaskDefinitionID       int       `json:"task_definition_id"`
-		UserID                 int64     `json:"user_id"`
-		Priority               int       `json:"priority"`
-		Security               int       `json:"security"`
-		LinkJobID              int64     `json:"link_job_id"`
-		ChainStatus            int       `json:"chain_status"`
-		Custom                 bool      `json:"custom"`
-		JobTitle               string    `json:"job_title"`
-		TimeFrame              int64     `json:"time_frame"`
-		Recurring              bool      `json:"recurring"`
-		TimeInterval           int64     `json:"time_interval"`
-		TriggerChainID         string    `json:"trigger_chain_id"`
-		TriggerContractAddress string    `json:"trigger_contract_address"`
-		TriggerEvent           string    `json:"trigger_event"`
-		ScriptIPFSUrl          string    `json:"script_ipfs_url"`
-		ScriptTriggerFunction  string    `json:"script_trigger_function"`
-		TargetChainID          string    `json:"target_chain_id"`
-		TargetContractAddress  string    `json:"target_contract_address"`
-		TargetFunction         string    `json:"target_function"`
-		ArgType                int       `json:"arg_type"`
-		Arguments              []string  `json:"arguments"`
-		ScriptTargetFunction   string    `json:"script_target_function"`
-		ABI                    string    `json:"abi"`
-		Status                 bool      `json:"status"`
-		JobCostPrediction      float64   `json:"job_cost_prediction"`
-		CreatedAt              time.Time `json:"created_at"`
-		LastExecutedAt         time.Time `json:"last_executed_at"`
-		TaskIDs                []int64   `json:"task_ids"`
-		FeeUsed                float64   `json:"fee_used"`
+	userAddress := c.Param("user_address")
+	if userAddress == "" {
+		h.logger.Error("[GetJobsByUserAddress] No user address provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No user address provided"})
+		return
 	}
-
-	var userJobs []JobSummary
 
 	var userID int64
+	var jobIDs []int64
 	if err := h.db.Session().Query(`
-		SELECT user_id 
+		SELECT user_id, job_ids
 		FROM triggerx.user_data 
-		WHERE user_address = ? ALLOW FILTERING
-	`, userAddress).Scan(&userID); err != nil {
-		h.logger.Infof("[GetJobsByUserAddress] User address %s not found", userAddress)
-		c.JSON(http.StatusOK, gin.H{
-			"message": "User address not registered",
-			"jobs":    userJobs,
-		})
+		WHERE user_address = ? ALLOW FILTERING`,
+		strings.ToLower(userAddress)).Scan(&userID, &jobIDs); err != nil {
+		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user data: " + err.Error()})
 		return
 	}
 
-	h.logger.Infof("[GetJobsByUserAddress] Found user_id %d for user_address %s", userID, userAddress)
+	if len(jobIDs) == 0 {
+		c.JSON(http.StatusOK, []interface{}{})
+		return
+	}
 
-	iter := h.db.Session().Query(`
-        SELECT job_id, task_definition_id, user_id, priority, security, link_job_id, chain_status,
-               custom, job_title, time_frame, recurring, time_interval, trigger_chain_id, 
-               trigger_contract_address, trigger_event, script_ipfs_url, script_trigger_function,
-               target_chain_id, target_contract_address, target_function, arg_type, arguments,
-               script_target_function, abi, status, job_cost_prediction, created_at, last_executed_at,
-               task_ids
-        FROM triggerx.job_data 
-        WHERE user_id = ? ALLOW FILTERING
-    `, userID).Iter()
-
-	var job JobSummary
-	for iter.Scan(
-		&job.JobID, &job.TaskDefinitionID, &job.UserID, &job.Priority, &job.Security, &job.LinkJobID, &job.ChainStatus,
-		&job.Custom, &job.JobTitle, &job.TimeFrame, &job.Recurring, &job.TimeInterval, &job.TriggerChainID,
-		&job.TriggerContractAddress, &job.TriggerEvent, &job.ScriptIPFSUrl, &job.ScriptTriggerFunction,
-		&job.TargetChainID, &job.TargetContractAddress, &job.TargetFunction, &job.ArgType, &job.Arguments,
-		&job.ScriptTargetFunction, &job.ABI, &job.Status, &job.JobCostPrediction, &job.CreatedAt, &job.LastExecutedAt,
-		&job.TaskIDs) {
-
-		// Calculate total fees from tasks
-		var totalFee float64
-		if len(job.TaskIDs) > 0 {
-			// Create a batch query to get all task fees at once
-			query := "SELECT task_fee FROM triggerx.task_data WHERE task_id IN ?"
-			iter := h.db.Session().Query(query, job.TaskIDs).Iter()
-
-			var taskFee float64
-			for iter.Scan(&taskFee) {
-				totalFee += taskFee
-			}
-			if err := iter.Close(); err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error calculating fees for job %d: %v", job.JobID, err)
-			}
+	var jobs []interface{}
+	for _, jobID := range jobIDs {
+		// Get basic job data
+		var jobData types.JobData
+		if err := h.db.Session().Query(`
+			SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
+				custom, time_frame, recurring, status, job_cost_prediction, task_ids
+			FROM triggerx.job_data 
+			WHERE job_id = ?`,
+			jobID).Scan(&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
+			&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
+			&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.TaskIDs); err != nil {
+			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %d: %v", jobID, err)
+			continue
 		}
-		job.FeeUsed = totalFee
 
-		userJobs = append(userJobs, job)
+		// Check task_definition_id to determine job type
+		switch {
+		case jobData.TaskDefinitionID == 1 || jobData.TaskDefinitionID == 2:
+			// Time-based job
+			var timeJobData types.TimeJobData
+			if err := h.db.Session().Query(`
+				SELECT job_id, time_frame, recurring, time_interval,
+					target_chain_id, target_contract_address, target_function,
+					abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+				FROM triggerx.time_job_data 
+				WHERE job_id = ?`,
+				jobID).Scan(&timeJobData.JobID, &timeJobData.TimeFrame, &timeJobData.Recurring, &timeJobData.TimeInterval,
+				&timeJobData.TargetChainID, &timeJobData.TargetContractAddress, &timeJobData.TargetFunction,
+				&timeJobData.ABI, &timeJobData.ArgType, &timeJobData.Arguments, &timeJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
+				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %d: %v", jobID, err)
+				continue
+			}
+			jobs = append(jobs, timeJobData)
+
+		case jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4:
+			// Event-based job
+			var eventJobData types.EventJobData
+			if err := h.db.Session().Query(`
+				SELECT job_id, time_frame, recurring,
+					trigger_chain_id, trigger_contract_address, trigger_event,
+					target_chain_id, target_contract_address, target_function,
+					abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+				FROM triggerx.event_job_data 
+				WHERE job_id = ?`,
+				jobID).Scan(&eventJobData.JobID, &eventJobData.TimeFrame, &eventJobData.Recurring,
+				&eventJobData.TriggerChainID, &eventJobData.TriggerContractAddress, &eventJobData.TriggerEvent,
+				&eventJobData.TargetChainID, &eventJobData.TargetContractAddress, &eventJobData.TargetFunction,
+				&eventJobData.ABI, &eventJobData.ArgType, &eventJobData.Arguments, &eventJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
+				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %d: %v", jobID, err)
+				continue
+			}
+			jobs = append(jobs, eventJobData)
+
+		case jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6:
+			// Condition-based job
+			var conditionJobData types.ConditionJobData
+			if err := h.db.Session().Query(`
+				SELECT job_id, time_frame, recurring,
+					condition_type, upper_limit, lower_limit,
+					value_source_type, value_source_url,
+					target_chain_id, target_contract_address, target_function,
+					abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
+				FROM triggerx.condition_job_data 
+				WHERE job_id = ?`,
+				jobID).Scan(&conditionJobData.JobID, &conditionJobData.TimeFrame, &conditionJobData.Recurring,
+				&conditionJobData.ConditionType, &conditionJobData.UpperLimit, &conditionJobData.LowerLimit,
+				&conditionJobData.ValueSourceType, &conditionJobData.ValueSourceUrl,
+				&conditionJobData.TargetChainID, &conditionJobData.TargetContractAddress, &conditionJobData.TargetFunction,
+				&conditionJobData.ABI, &conditionJobData.ArgType, &conditionJobData.Arguments, &conditionJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
+				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %d: %v", jobID, err)
+				continue
+			}
+			jobs = append(jobs, conditionJobData)
+
+		default:
+			// Add basic job data if task_definition_id is not recognized
+			jobs = append(jobs, jobData)
+		}
 	}
 
-	if err := iter.Close(); err != nil {
-		h.logger.Errorf("[GetJobsByUserAddress] Error retrieving jobs for user_address %s: %v", userAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving jobs: " + err.Error()})
-		return
-	}
-
-	h.logger.Infof("[GetJobsByUserAddress] Retrieved %d jobs for user_address %s", len(userJobs), userAddress)
-
-	c.JSON(http.StatusOK, userJobs)
+	c.JSON(http.StatusOK, jobs)
 }
 
 func (h *Handler) DeleteJobData(c *gin.Context) {
-	jobID := c.Param("id")
-	h.logger.Infof("[DeleteJobData] Deleting jobID %s", jobID)
-
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.job_data 
-        SET status = ?
-        WHERE job_id = ?`,
-		true, jobID).Exec(); err != nil {
-		h.logger.Errorf("[DeleteJobData] Error deleting jobID %s: %v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	jobID := c.Param("job_id")
+	if jobID == "" {
+		h.logger.Error("[DeleteJobData] No job ID provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
 		return
 	}
 
-	h.logger.Infof("[DeleteJobData] Successfully deleted jobID %s", jobID)
-	c.Status(http.StatusOK)
+	// Delete from all possible job type tables
+	if err := h.db.Session().Query(`
+		DELETE FROM triggerx.time_job_data 
+		WHERE job_id = ?`,
+		jobID).Exec(); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[DeleteJobData] Error deleting time job data for jobID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error deleting time job data: " + err.Error()})
+		return
+	}
+
+	if err := h.db.Session().Query(`
+		DELETE FROM triggerx.event_job_data 
+		WHERE job_id = ?`,
+		jobID).Exec(); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[DeleteJobData] Error deleting event job data for jobID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error deleting event job data: " + err.Error()})
+		return
+	}
+
+	if err := h.db.Session().Query(`
+		DELETE FROM triggerx.condition_job_data 
+		WHERE job_id = ?`,
+		jobID).Exec(); err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[DeleteJobData] Error deleting condition job data for jobID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error deleting condition job data: " + err.Error()})
+		return
+	}
+
+	// Finally delete from the main job_data table
+	if err := h.db.Session().Query(`
+		DELETE FROM triggerx.job_data 
+		WHERE job_id = ?`,
+		jobID).Exec(); err != nil {
+		h.logger.Errorf("[DeleteJobData] Error deleting job data for jobID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error deleting job data: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})
 }

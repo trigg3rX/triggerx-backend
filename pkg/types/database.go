@@ -17,35 +17,18 @@ type UserData struct {
 }
 
 type JobData struct {
-	JobID                  int64     `json:"job_id"`
-	TaskDefinitionID       int       `json:"task_definition_id"`
-	UserID                 int64     `json:"user_id"`
-	Priority               int       `json:"priority"`
-	Security               int       `json:"security"`
-	LinkJobID              int64     `json:"link_job_id"`
-	ChainStatus            int       `json:"chain_status"`
-	Custom                 bool      `json:"custom"`
-	JobTitle               string    `json:"job_title"`
-	TimeFrame              int64     `json:"time_frame"`
-	Recurring              bool      `json:"recurring"`
-	TimeInterval           int64     `json:"time_interval"`
-	TriggerChainID         string    `json:"trigger_chain_id"`
-	TriggerContractAddress string    `json:"trigger_contract_address"`
-	TriggerEvent           string    `json:"trigger_event"`
-	ScriptIPFSUrl          string    `json:"script_ipfs_url"`
-	ScriptTriggerFunction  string    `json:"script_trigger_function"`
-	TargetChainID          string    `json:"target_chain_id"`
-	TargetContractAddress  string    `json:"target_contract_address"`
-	TargetFunction         string    `json:"target_function"`
-	ArgType                int       `json:"arg_type"`
-	Arguments              []string  `json:"arguments"`
-	ScriptTargetFunction   string    `json:"script_target_function"`
-	ABI                    string    `json:"abi"`
-	Status                 bool      `json:"status"`
-	JobCostPrediction      float64   `json:"job_cost_prediction"`
-	CreatedAt              time.Time `json:"created_at"`
-	LastExecutedAt         time.Time `json:"last_executed_at"`
-	TaskIDs                []int64   `json:"task_ids"`
+	JobID             int64   `json:"job_id"`
+	JobTitle          string  `json:"job_title"`
+	TaskDefinitionID  int     `json:"task_definition_id"`
+	UserID            int64   `json:"user_id"`
+	LinkJobID         int64   `json:"link_job_id"`
+	ChainStatus       int     `json:"chain_status"`
+	Custom            bool    `json:"custom"`
+	TimeFrame         int64   `json:"time_frame"`
+	Recurring         bool    `json:"recurring"`
+	Status            bool    `json:"status"`
+	JobCostPrediction float64 `json:"job_cost_prediction"`
+	TaskIDs           []int64 `json:"task_ids"`
 }
 
 type TaskData struct {
@@ -97,4 +80,52 @@ type ApiKey struct {
 	RateLimit int       `json:"rateLimit"`
 	LastUsed  time.Time `json:"lastUsed"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type TimeJobData struct {
+	JobID                         int64    `json:"job_id"`
+	TimeFrame                     int64    `json:"time_frame"`
+	Recurring                     bool     `json:"recurring"`
+	TimeInterval                  int64    `json:"time_interval"`
+	TargetChainID                 string   `json:"target_chain_id"`
+	TargetContractAddress         string   `json:"target_contract_address"`
+	TargetFunction                string   `json:"target_function"`
+	ABI                           string   `json:"abi"`
+	ArgType                       int      `json:"arg_type"`
+	Arguments                     []string `json:"arguments"`
+	DynamicArgumentsScriptIPFSUrl string   `json:"dynamic_arguments_script_ipfs_url"`
+}
+
+type EventJobData struct {
+	JobID                         int64    `json:"job_id"`
+	TimeFrame                     int64    `json:"time_frame"`
+	Recurring                     bool     `json:"recurring"`
+	TriggerChainID                string   `json:"trigger_chain_id"`
+	TriggerContractAddress        string   `json:"trigger_contract_address"`
+	TriggerEvent                  string   `json:"trigger_event"`
+	TargetChainID                 string   `json:"target_chain_id"`
+	TargetContractAddress         string   `json:"target_contract_address"`
+	TargetFunction                string   `json:"target_function"`
+	ABI                           string   `json:"abi"`
+	ArgType                       int      `json:"arg_type"`
+	Arguments                     []string `json:"arguments"`
+	DynamicArgumentsScriptIPFSUrl string   `json:"dynamic_arguments_script_ipfs_url"`
+}
+
+type ConditionJobData struct {
+	JobID                         int64    `json:"job_id"`
+	TimeFrame                     int64    `json:"time_frame"`
+	Recurring                     bool     `json:"recurring"`
+	ConditionType                 string   `json:"condition_type"`
+	UpperLimit                    float64  `json:"upper_limit"`
+	LowerLimit                    float64  `json:"lower_limit"`
+	ValueSourceType               string   `json:"value_source_type"`
+	ValueSourceUrl                string   `json:"value_source_url"`
+	TargetChainID                 string   `json:"target_chain_id"`
+	TargetContractAddress         string   `json:"target_contract_address"`
+	TargetFunction                string   `json:"target_function"`
+	ABI                           string   `json:"abi"`
+	ArgType                       int      `json:"arg_type"`
+	Arguments                     []string `json:"arguments"`
+	DynamicArgumentsScriptIPFSUrl string   `json:"dynamic_arguments_script_ipfs_url"`
 }
