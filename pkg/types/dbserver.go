@@ -29,6 +29,12 @@ type CreateJobData struct {
 	Arguments              []string `json:"arguments"`
 	ScriptTargetFunction   string   `json:"script_target_function"`
 	JobCostPrediction      float64  `json:"job_cost_prediction"`
+	// Condition job specific fields
+	ConditionType   string  `json:"condition_type"`
+	UpperLimit      float64 `json:"upper_limit"`
+	LowerLimit      float64 `json:"lower_limit"`
+	ValueSourceType string  `json:"value_source_type"`
+	ValueSourceUrl  string  `json:"value_source_url"`
 }
 
 type CreateJobResponse struct {
