@@ -43,6 +43,7 @@ const (
 	RegistrarProcess ProcessName = "registrar"
 	HealthProcess    ProcessName = "health"
 	RedisProcess     ProcessName = "redis"
+	SchedulerProcess ProcessName = "scheduler"
 )
 
 type LoggerConfig struct {
