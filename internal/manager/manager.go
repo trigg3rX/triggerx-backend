@@ -266,7 +266,7 @@ func (h *Handler) HandleP2PMessage(c *gin.Context) {
 }
 
 func (h *Handler) ValidateTask(c *gin.Context) {
-		// var request types.TaskValidationRequest
+	// var request types.TaskValidationRequest
 	// if err := c.BindJSON(&request); err != nil {
 	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 	// 	return
