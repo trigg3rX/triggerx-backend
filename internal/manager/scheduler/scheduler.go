@@ -8,14 +8,13 @@ import (
 	"io"
 	"net/http"
 	"sync"
-	// "time"
 
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 
 	// "github.com/trigg3rX/triggerx-backend/internal/manager/cache"
-	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/internal/manager/client/database"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/manager/scheduler/workers"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -50,10 +49,10 @@ func NewJobScheduler(logger logging.Logger, dbClient *database.DatabaseClient, a
 	ctx, cancel := context.WithCancel(context.Background())
 
 	scheduler := &JobScheduler{
-		ctx:              ctx,
-		cancel:           cancel,
-		logger:           logger,
-		cronScheduler:    cron.New(cron.WithSeconds()),
+		ctx:           ctx,
+		cancel:        cancel,
+		logger:        logger,
+		cronScheduler: cron.New(cron.WithSeconds()),
 		// cache:            jobCache,
 		// balancer:         NewLoadBalancer(),
 		workers:          make(map[int64]workers.Worker),
@@ -91,9 +90,6 @@ func (s *JobScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) erro
 	worker := workers.NewTimeBasedWorker(jobData, fmt.Sprintf("@every %ds", jobData.TimeInterval), s)
 	s.workers[jobData.JobID] = worker
 	s.mu.Unlock()
-
-	// state := &cache.JobState{
-	// 	Created:      jobData.CreatedAt,
 	// 	LastExecuted: jobData.LastExecutedAt,
 	// 	Status:       "running",
 	// 	Type:         "time-based",

@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	JobsReadyStream = "jobs:ready"
-	JobsRetryStream = "jobs:retry"
-	StreamMaxLen    = 10000 // Retain only last 10,000 jobs
-	StreamTTL       = 24 * time.Hour
+	JobsReadyTimeStream  = "jobs:ready:time"
+	JobsRetryTimeStream  = "jobs:retry:time"
+	JobsReadyEventStream = "jobs:ready:event"
+	JobsRetryEventStream = "jobs:retry:event"
+	StreamMaxLen         = 10000 // Retain only last 10,000 jobs
+	StreamTTL            = 24 * time.Hour
 )
 
 func AddJobToStream(stream string, job interface{}) error {
