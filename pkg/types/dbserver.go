@@ -4,37 +4,72 @@ import (
 	"math/big"
 )
 
+const (
+	// Time-based job task definitions
+	TaskDefTimeBasedStart = 1
+	TaskDefTimeBasedEnd   = 2
+
+	// Event-based job task definitions
+	TaskDefEventBasedStart = 3
+	TaskDefEventBasedEnd   = 4
+
+	// Condition-based job task definitions
+	TaskDefConditionBasedStart = 5
+	TaskDefConditionBasedEnd   = 6
+)
+
+type JobType string
+
+const (
+	JobTypeTime      JobType = "time"
+	JobTypeEvent     JobType = "event"
+	JobTypeCondition JobType = "condition"
+)
+
 type CreateJobData struct {
-	UserAddress            string   `json:"user_address"`
-	StakeAmount            *big.Int `json:"stake_amount"`
-	TokenAmount            *big.Int `json:"token_amount"`
-	TaskDefinitionID       int      `json:"task_definition_id"`
-	Priority               int      `json:"priority"`
-	Security               int      `json:"security"`
-	Custom                 bool     `json:"custom"`
-	JobTitle               string   `json:"job_title"`
-	TimeFrame              int64    `json:"time_frame"`
-	Recurring              bool     `json:"recurring"`
-	TimeInterval           int64    `json:"time_interval"`
-	TriggerChainID         string   `json:"trigger_chain_id"`
-	TriggerContractAddress string   `json:"trigger_contract_address"`
-	TriggerEvent           string   `json:"trigger_event"`
-	ScriptIPFSUrl          string   `json:"script_ipfs_url"`
-	ScriptTriggerFunction  string   `json:"script_trigger_function"`
-	TargetChainID          string   `json:"target_chain_id"`
-	TargetContractAddress  string   `json:"target_contract_address"`
-	TargetFunction         string   `json:"target_function"`
-	ABI                    string   `json:"abi"`
-	ArgType                int      `json:"arg_type"`
-	Arguments              []string `json:"arguments"`
-	ScriptTargetFunction   string   `json:"script_target_function"`
-	JobCostPrediction      float64  `json:"job_cost_prediction"`
+	// Common fields for all job types
+	UserAddress       string   `json:"user_address" validate:"required,ethereum_address"`
+	StakeAmount       *big.Int `json:"stake_amount" validate:"required"`
+	TokenAmount       *big.Int `json:"token_amount" validate:"required"`
+	TaskDefinitionID  int      `json:"task_definition_id" validate:"required,min=1,max=6"`
+	Priority          int      `json:"priority" validate:"required,min=1,max=10"`
+	Security          int      `json:"security" validate:"required,min=1,max=10"`
+	Custom            bool     `json:"custom"`
+	JobTitle          string   `json:"job_title" validate:"required,min=3,max=100"`
+	TimeFrame         int64    `json:"time_frame" validate:"required,min=1"`
+	Recurring         bool     `json:"recurring"`
+	JobCostPrediction float64  `json:"job_cost_prediction" validate:"required,min=0"`
+
+	// Job type specific fields
+	JobType JobType `json:"job_type" validate:"required,oneof=time event condition"`
+
+	// Time job specific fields
+	TimeInterval int64 `json:"time_interval,omitempty" validate:"omitempty,min=1"`
+
+	// Event job specific fields
+	TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
+	TriggerContractAddress string `json:"trigger_contract_address,omitempty" validate:"omitempty,ethereum_address"`
+	TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
+
 	// Condition job specific fields
-	ConditionType   string  `json:"condition_type"`
-	UpperLimit      float64 `json:"upper_limit"`
-	LowerLimit      float64 `json:"lower_limit"`
-	ValueSourceType string  `json:"value_source_type"`
-	ValueSourceUrl  string  `json:"value_source_url"`
+	ConditionType   string  `json:"condition_type,omitempty" validate:"omitempty,oneof=price volume"`
+	UpperLimit      float64 `json:"upper_limit,omitempty" validate:"omitempty,gt=0"`
+	LowerLimit      float64 `json:"lower_limit,omitempty" validate:"omitempty,gt=0"`
+	ValueSourceType string  `json:"value_source_type,omitempty" validate:"omitempty,oneof=api websocket"`
+	ValueSourceUrl  string  `json:"value_source_url,omitempty" validate:"omitempty,url"`
+
+	// Target fields (common for all job types)
+	TargetChainID         string   `json:"target_chain_id" validate:"required,chain_id"`
+	TargetContractAddress string   `json:"target_contract_address" validate:"required,ethereum_address"`
+	TargetFunction        string   `json:"target_function" validate:"required"`
+	ABI                   string   `json:"abi" validate:"required"`
+	ArgType               int      `json:"arg_type" validate:"required"`
+	Arguments             []string `json:"arguments" validate:"required"`
+
+	// Script fields (optional)
+	ScriptIPFSUrl         string `json:"script_ipfs_url,omitempty" validate:"omitempty,ipfs_url"`
+	ScriptTriggerFunction string `json:"script_trigger_function,omitempty" validate:"omitempty"`
+	ScriptTargetFunction  string `json:"script_target_function,omitempty" validate:"omitempty"`
 }
 
 type CreateJobResponse struct {
@@ -53,9 +88,9 @@ type UpdateJobData struct {
 }
 
 type CreateTaskData struct {
-	JobID            int64 `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
-	TaskPerformerID  int64 `json:"task_performer_id"`
+	JobID            int64 `json:"job_id" validate:"required"`
+	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
+	TaskPerformerID  int64 `json:"task_performer_id" validate:"required"`
 }
 
 type CreateTaskResponse struct {
@@ -79,10 +114,10 @@ type CreateKeeperData struct {
 }
 
 type GoogleFormCreateKeeperData struct {
-	KeeperAddress  string `json:"keeper_address"`
-	RewardsAddress string `json:"rewards_address"`
-	KeeperName     string `json:"keeper_name"`
-	EmailID        string `json:"email_id"`
+	KeeperAddress  string `json:"keeper_address" validate:"required,ethereum_address"`
+	RewardsAddress string `json:"rewards_address" validate:"required,ethereum_address"`
+	KeeperName     string `json:"keeper_name" validate:"required,min=3,max=50"`
+	EmailID        string `json:"email_id" validate:"required,email"`
 }
 
 type UpdateKeeperConnectionDataResponse struct {
@@ -119,8 +154,8 @@ type KeeperStatusUpdate struct {
 }
 
 type CreateApiKeyRequest struct {
-	Owner     string `json:"owner"`
-	RateLimit int    `json:"rateLimit"`
+	Owner     string `json:"owner" validate:"required,min=3,max=50"`
+	RateLimit int    `json:"rateLimit" validate:"required,min=1,max=1000"`
 }
 
 type DailyRewardsPoints struct {

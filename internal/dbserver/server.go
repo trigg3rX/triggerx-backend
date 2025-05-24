@@ -20,6 +20,7 @@ type Server struct {
 	metricsServer      *metrics.MetricsServer
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
+	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
 }
@@ -71,6 +72,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
+		validator:     middleware.NewValidator(logger),
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),
@@ -95,20 +97,21 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
-	api.POST("/jobs", handler.CreateJobData)
+	// Apply validation middleware to routes that need it
+	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.GET("/jobs/:id", handler.GetJobData)
 	api.PUT("/jobs/:id", handler.UpdateJobData)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
 
-	api.POST("/tasks", handler.CreateTaskData)
+	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
 	api.GET("/tasks/:id", handler.GetTaskData)
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
 
 	api.GET("/keepers/all", handler.GetAllKeepers)
 	api.GET("/keepers/performers", handler.GetPerformers)
-	api.POST("/keepers/form", handler.CreateKeeperDataGoogleForm)
+	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
 	api.GET("/keepers/:id", handler.GetKeeperData)
 	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
 	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
@@ -128,7 +131,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	// Admin routes
 	admin := protected.Group("/admin")
-	admin.POST("/api-keys", handler.CreateApiKey)
+	admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
 	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
 	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
 }
