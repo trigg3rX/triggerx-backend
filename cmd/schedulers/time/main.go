@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/scheduler/config"
-	"github.com/trigg3rX/triggerx-backend/internal/scheduler/scheduler"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
