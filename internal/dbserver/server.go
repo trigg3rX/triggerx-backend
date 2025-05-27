@@ -2,6 +2,8 @@ package dbserver
 
 import (
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
@@ -42,13 +44,25 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
 		c.Next()
 	})
+
+	// Add retry middleware with custom configuration
+	retryConfig := &middleware.RetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    time.Second,
+		MaxDelay:        10 * time.Second,
+		BackoffFactor:   2.0,
+		JitterFactor:    0.1,
+		LogRetryAttempt: true,
+		RetryStatusCodes: []int{
+			http.StatusInternalServerError,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout,
+		},
+	}
+	router.Use(middleware.RetryMiddleware(retryConfig))
 
 	metricsServer := metrics.NewMetricsServer(db, logger)
 
@@ -83,6 +97,10 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
 	return s
+}
+
+func (s *Server) GetRouter() *gin.Engine {
+	return s.router
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {

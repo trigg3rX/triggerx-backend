@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	// "github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
@@ -65,7 +65,12 @@ func main() {
 
 	dbServer := dbserver.NewServer(conn, logging.DatabaseProcess)
 
-	srv := setupHTTPServer(logger, dbServer)
+	dbServer.RegisterRoutes(dbServer.GetRouter())
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%s", config.GetDatabaseRPCPort()),
+		Handler: dbServer.GetRouter(),
+	}
 
 	wg.Add(1)
 	go func() {
@@ -104,22 +109,6 @@ func getLogLevel() logging.Level {
 		return logging.DebugLevel
 	}
 	return logging.InfoLevel
-}
-
-func setupHTTPServer(logger logging.Logger, dbServer *dbserver.Server) *http.Server {
-	if !config.IsDevMode() {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	router := gin.New()
-	router.Use(gin.Recovery())
-
-	dbServer.RegisterRoutes(router)
-
-	return &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetDatabaseRPCPort()),
-		Handler: router,
-	}
 }
 
 func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
