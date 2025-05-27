@@ -49,6 +49,7 @@ func main() {
 	// Ping Redis
 	if err := redisx.Ping(); err != nil {
 		logger.Errorf("Redis is not reachable: %v", err)
+		fmt.Fprintf(os.Stderr, "Redis is not reachable: %v\n", err)
 		os.Exit(1)
 	}
 	logger.Info("Redis ping successful.")
@@ -68,7 +69,7 @@ func main() {
 		"type":      "test",
 		"timestamp": time.Now().Unix(),
 	}
-	if err := redisx.AddJobToStream(redisx.JobsReadyStream, testJob); err != nil {
+	if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, testJob); err != nil {
 		logger.Errorf("Failed to add test job to stream: %v", err)
 	} else {
 		logger.Info("Test job added to jobs:ready stream.")

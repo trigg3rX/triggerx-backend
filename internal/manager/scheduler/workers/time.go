@@ -7,6 +7,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -122,10 +123,7 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 		w.scheduler.Logger().Errorf("Failed to get performer data for job %d: %v", w.jobID, err)
 		return err
 	}
-
 	taskData.TaskPerformerID = performerData.KeeperID
-
-	w.scheduler.Logger().Infof("Task data: %d | %d | %d", taskData.JobID, taskData.TaskDefinitionID, taskData.TaskPerformerID)
 
 	taskID, status, err := w.scheduler.GetDatabaseClient().CreateTaskData(taskData)
 	if err != nil {
@@ -139,22 +137,25 @@ func (w *TimeBasedWorker) executeTask(jobData *types.HandleCreateJobData, trigge
 		return fmt.Errorf("failed to create task data for job %d", w.jobID)
 	}
 
-	w.scheduler.Logger().Infof("Task ID %d created for job %v", taskID, w.jobID)
+	// Push to Redis stream for time-based jobs
+	jobStreamData := map[string]interface{}{
+		"jobData":     jobData,
+		"triggerData": triggerData,
+		"taskData":    taskData,
+		"type":        "time",
+	}
 
-	status, err = w.scheduler.GetAggregatorClient().SendTaskToPerformer(jobData, triggerData, performerData)
-	if err != nil {
-		w.scheduler.Logger().Errorf("Error sending task to performer: %v", err)
+	if err := redis.AddJobToStream(redis.JobsReadyTimeStream, jobStreamData); err != nil {
+		w.scheduler.Logger().Errorf("Failed to add job to Redis stream: %v", err)
 		return err
 	}
 
-	w.scheduler.Logger().Infof("Task sent for job %d to performer", w.jobID)
+	w.scheduler.Logger().Infof("Task for job %d pushed to Redis stream", w.jobID)
+
+	// Do not send to performer directly here; handled by consumer
 
 	if err := w.handleLinkedJob(w.scheduler, jobData); err != nil {
 		w.scheduler.Logger().Errorf("Failed to execute linked job for job %d: %v", w.jobID, err)
-	}
-
-	if !status {
-		return fmt.Errorf("failed to send task to performer for job %d", w.jobID)
 	}
 
 	return nil

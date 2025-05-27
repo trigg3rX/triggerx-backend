@@ -26,13 +26,14 @@ type HandleCreateJobData struct {
 	ArgType                int      `json:"arg_type"`
 	Arguments              []string `json:"arguments"`
 	// Condition job specific fields
-	ConditionType   string    `json:"condition_type"`
-	UpperLimit      float64   `json:"upper_limit"`
-	LowerLimit      float64   `json:"lower_limit"`
-	ValueSourceType string    `json:"value_source_type"`
-	ValueSourceUrl  string    `json:"value_source_url"`
-	CreatedAt       time.Time `json:"created_at"`
-	LastExecutedAt  time.Time `json:"last_executed_at"`
+	ConditionType         string    `json:"condition_type"`
+	UpperLimit            float64   `json:"upper_limit"`
+	LowerLimit            float64   `json:"lower_limit"`
+	ValueSourceType       string    `json:"value_source_type"`
+	ValueSourceUrl        string    `json:"value_source_url"`
+	CreatedAt             time.Time `json:"created_at"`
+	LastExecutedAt        time.Time `json:"last_executed_at"`
+	ScriptTriggerFunction string    `json:"script_trigger_function"`
 }
 
 type HandleUpdateJobData struct {
