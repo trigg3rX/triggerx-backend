@@ -180,7 +180,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				created_at, updated_at, last_executed_at, timezone
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].JobTitle, tempJobs[i].TaskDefinitionID, existingUserID, linkJobID, chainStatus,
-			tempJobs[i].Custom, tempJobs[i].TimeFrame, tempJobs[i].Recurring, false, tempJobs[i].JobCostPrediction, []int64{},
+			tempJobs[i].Custom, tempJobs[i].TimeFrame, tempJobs[i].Recurring, "pending", tempJobs[i].JobCostPrediction, []int64{},
 			tempJobs[i].CreatedAt, tempJobs[i].UpdatedAt, tempJobs[i].LastExecutedAt, tempJobs[i].Timezone).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting job data: " + err.Error()})
@@ -381,6 +381,41 @@ func (h *Handler) UpdateJobData(c *gin.Context) {
 	})
 }
 
+func (h *Handler) UpdateJobStatus(c *gin.Context) {
+	jobID := c.Param("job_id")
+	status := c.Param("status")
+
+	// Validate status
+	validStatuses := map[string]bool{
+		"pending":  true,
+		"in-queue": true,
+		"running":  true,
+	}
+
+	if !validStatuses[status] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status. Must be one of: pending, in-queue, running"})
+		return
+	}
+
+	// Update the job status
+	if err := h.db.Session().Query(`
+		UPDATE triggerx.job_data 
+		SET status = ?, updated_at = ?
+		WHERE job_id = ?`,
+		status, time.Now().UTC(), jobID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateJobStatus] Error updating job status: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Job status updated successfully",
+		"job_id":     jobID,
+		"status":     status,
+		"updated_at": time.Now().UTC(),
+	})
+}
+ 
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 	var updateData struct {
 		JobID          int64     `json:"job_id" binding:"required"`

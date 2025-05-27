@@ -27,6 +27,14 @@ const (
 	JobTypeCondition JobType = "condition"
 )
 
+type JobStatus string
+
+const (
+	JobStatusPending JobStatus = "pending"
+	JobStatusInQueue JobStatus = "in-queue"
+	JobStatusRunning JobStatus = "running"
+)
+
 type CreateJobData struct {
 	// Common fields for all job types
 	UserAddress       string    `json:"user_address" validate:"required,ethereum_address"`
