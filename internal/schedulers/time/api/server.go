@@ -69,10 +69,12 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
 	statusHandler := handlers.NewStatusHandler(deps.Logger)
+	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
 	schedulerHandler := handlers.NewSchedulerHandler(deps.Logger, deps.Scheduler)
 
 	// Health and monitoring endpoints
 	s.router.GET("/status", statusHandler.Status)
+	s.router.GET("/metrics", metricsHandler.Metrics)
 
 	// Scheduler management endpoints
 	api := s.router.Group("/api/v1")
