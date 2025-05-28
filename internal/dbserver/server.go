@@ -100,6 +100,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
 	api.POST("/jobs", handler.CreateJobData)
+	api.GET("/jobs/time", handler.GetTimeBasedJobs)
 	api.GET("/jobs/:id", handler.GetJobData)
 	api.PUT("/jobs/:id", handler.UpdateJobData)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
