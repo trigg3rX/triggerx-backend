@@ -6,12 +6,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -40,47 +39,69 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting scheduler service...")
+	logger.Info("Starting time-based scheduler service...")
 
-	// Initialize server components
-	var wg sync.WaitGroup
-	serverErrors := make(chan error, 3)
-	ready := make(chan struct{})
-
-	// Initialize scheduler
-	timeBasedScheduler, err := scheduler.NewTimeBasedScheduler(logger)
+	// Initialize database client
+	dbClientCfg := client.Config{
+		DBServerURL:    config.GetDBServerURL(),
+		RequestTimeout: 10 * time.Second,
+		MaxRetries:     3,
+		RetryDelay:     2 * time.Second,
+	}
+	dbClient, err := client.NewDBServerClient(logger, dbClientCfg)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize scheduler: %v", err))
+		logger.Fatal("Failed to initialize database client", "error", err)
+	}
+	defer dbClient.Close()
+
+	// Perform initial health check
+	logger.Info("Performing initial health check...")
+	if err := dbClient.HealthCheck(); err != nil {
+		logger.Warn("Database server health check failed", "error", err)
+		logger.Info("Continuing startup - will retry connections during operation")
+	} else {
+		logger.Info("Database server health check passed")
 	}
 
-	// Setup HTTP server
-	srv := setupHTTPServer(logger, timeBasedScheduler)
+	// Initialize scheduler
+	managerID := fmt.Sprintf("scheduler-%d", time.Now().Unix())
+	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, dbClient)
+	if err != nil {
+		logger.Fatal("Failed to initialize time-based scheduler", "error", err)
+	}
 
-	// Start server
-	wg.Add(1)
+	// Setup HTTP server with scheduler integration
+	srv := api.NewServer(api.Config{
+		Port: config.GetSchedulerRPCPort(),
+	}, api.Dependencies{
+		Logger:    logger,
+		Scheduler: timeScheduler,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start scheduler in background
 	go func() {
-		defer wg.Done()
+		logger.Info("Starting time-based scheduler...")
+		timeScheduler.Start(ctx)
+	}()
+
+	// Start HTTP server
+	go func() {
 		logger.Info("Starting HTTP server...")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
+		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTP server error", "error", err)
 		}
 	}()
 
-	close(ready)
-	logger.Infof("Scheduler service is ready on port %s", config.GetSchedulerRPCPort())
-
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	select {
-	case err := <-serverErrors:
-		logger.Error("Server error received", "error", err)
-	case sig := <-shutdown:
-		logger.Info("Received shutdown signal", "signal", sig.String())
-	}
+	<-shutdown
 
-	performGracefulShutdown(srv, &wg, logger)
+	performGracefulShutdown(ctx, cancel, srv, timeScheduler, logger)
 }
 
 func getEnvironment() logging.LogLevel {
@@ -97,34 +118,22 @@ func getLogLevel() logging.Level {
 	return logging.InfoLevel
 }
 
-func setupHTTPServer(logger logging.Logger, scheduler *scheduler.TimeBasedScheduler) *http.Server {
-	if !config.IsDevMode() {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	router := gin.New()
-	router.Use(gin.Recovery())
-
-	// Register routes
-	scheduler.RegisterRoutes(router)
-
-	return &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetSchedulerRPCPort()),
-		Handler: router,
-	}
-}
-
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
+	// Cancel context to stop scheduler
+	cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", "error", err)
-		if err := srv.Close(); err != nil {
-			logger.Error("Forced HTTP server close error", "error", err)
-		}
+	// Create shutdown context with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	// Stop scheduler gracefully
+	timeScheduler.Stop()
+
+	// Shutdown server gracefully
+	if err := srv.Stop(shutdownCtx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
 	}
 
 	// Ensure logger is properly shutdown
@@ -132,6 +141,6 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
-	wg.Wait()
 	logger.Info("Shutdown complete")
+	os.Exit(0)
 }
