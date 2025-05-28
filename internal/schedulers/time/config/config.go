@@ -1,68 +1,61 @@
 package config
 
 import (
-	"os"
-	"strconv"
+	"fmt"
 
 	"github.com/joho/godotenv"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
-var (
+type Config struct {
 	devMode          bool
 	databaseHost     string
 	databaseHostPort string
 	schedulerRPCPort string
-)
+	dbServerURL      string
+}
+
+var cfg Config
 
 // Init initializes the configuration
 func Init() error {
 	if err := godotenv.Load(); err != nil {
-		return err
+		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
-	devMode = getEnvBool("DEV_MODE", false)
-	databaseHost = getEnv("DATABASE_HOST", "localhost")
-	databaseHostPort = getEnv("DATABASE_HOST_PORT", "9042")
-	schedulerRPCPort = getEnv("SCHEDULER_RPC_PORT", "9005")
+	cfg = Config{
+		devMode:          env.GetEnvBool("DEV_MODE", false),
+		databaseHost:     env.GetEnv("DATABASE_HOST", "localhost"),
+		databaseHostPort: env.GetEnv("DATABASE_HOST_PORT", "9042"),
+		schedulerRPCPort: env.GetEnv("SCHEDULER_RPC_PORT", "9004"),
+		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+	}
 
 	return nil
 }
 
 // IsDevMode returns whether the service is running in development mode
 func IsDevMode() bool {
-	return devMode
+	return cfg.devMode
 }
 
 // GetDatabaseHost returns the database host
 func GetDatabaseHost() string {
-	return databaseHost
+	return cfg.databaseHost
 }
 
 // GetDatabaseHostPort returns the database host port
 func GetDatabaseHostPort() string {
-	return databaseHostPort
+	return cfg.databaseHostPort
 }
 
 // GetSchedulerRPCPort returns the scheduler RPC port
 func GetSchedulerRPCPort() string {
-	return schedulerRPCPort
+	return cfg.schedulerRPCPort
 }
 
-// Helper functions
-func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	if value, exists := os.LookupEnv(key); exists {
-		boolValue, err := strconv.ParseBool(value)
-		if err != nil {
-			return defaultValue
-		}
-		return boolValue
-	}
-	return defaultValue
+// GetDBServerURL returns the database server URL
+func GetDBServerURL() string {
+	return cfg.dbServerURL
 }
