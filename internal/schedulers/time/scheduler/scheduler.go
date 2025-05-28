@@ -2,178 +2,226 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"strconv"
-	"sync"
+	"sort"
+	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/robfig/cron/v3"
-
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Worker interface defines the methods that all workers must implement
-type Worker interface {
-	Start(ctx context.Context)
-	Stop()
-	GetJobData() types.HandleCreateJobData
-}
+const (
+	pollInterval    = 30 * time.Second // Poll every 30 seconds
+	executionWindow = 5 * time.Minute  // Look ahead 5 minutes
+	workerPoolSize  = 10               // Number of concurrent workers
+	batchSize       = 50               // Process jobs in batches
+)
 
 type TimeBasedScheduler struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	mu     sync.RWMutex
-	logger logging.Logger
-
-	cronScheduler *cron.Cron
-	workers       map[int64]Worker
-	workerCtx     context.Context
-	workerCancel  context.CancelFunc
+	ctx        context.Context
+	cancel     context.CancelFunc
+	logger     logging.Logger
+	workerPool chan struct{}
+	activeJobs map[int64]*types.TimeJobData
+	jobQueue   chan *types.TimeJobData
+	dbClient   *client.DBServerClient
+	managerID  string
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
-func NewTimeBasedScheduler(logger logging.Logger) (*TimeBasedScheduler, error) {
+func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *client.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	scheduler := &TimeBasedScheduler{
-		ctx:           ctx,
-		cancel:        cancel,
-		logger:        logger,
-		cronScheduler: cron.New(cron.WithSeconds()),
-		workers:       make(map[int64]Worker),
-		workerCtx:     ctx,
-		workerCancel:  cancel,
+		ctx:        ctx,
+		cancel:     cancel,
+		logger:     logger,
+		workerPool: make(chan struct{}, workerPoolSize),
+		activeJobs: make(map[int64]*types.TimeJobData),
+		jobQueue:   make(chan *types.TimeJobData, 100),
+		dbClient:   dbClient,
+		managerID:  managerID,
 	}
 
-	scheduler.cronScheduler.Start()
+	// Start the worker pool
+	for i := 0; i < workerPoolSize; i++ {
+		go scheduler.worker()
+	}
+
 	return scheduler, nil
 }
 
-// RegisterRoutes registers the HTTP routes for the scheduler
-func (s *TimeBasedScheduler) RegisterRoutes(router *gin.Engine) {
-	api := router.Group("/api/v1")
-	{
-		api.POST("/jobs", s.handleCreateJob)
-		api.DELETE("/jobs/:id", s.handleDeleteJob)
-		api.GET("/jobs/:id", s.handleGetJob)
-		api.GET("/jobs", s.handleListJobs)
+// Start begins the scheduler's main polling and execution loop
+func (s *TimeBasedScheduler) Start(ctx context.Context) {
+	s.logger.Info("Starting time-based scheduler", "manager_id", s.managerID)
 
-		// api.GET("/jobs/status/:id", s.handleGetJobStatus)
-		// api.GET("/jobs/metrics", s.handleGetJobMetrics)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Info("Scheduler context cancelled, stopping")
+			return
+		case <-s.ctx.Done():
+			s.logger.Info("Scheduler stopped")
+			return
+		case <-ticker.C:
+			s.pollAndScheduleJobs()
+		}
 	}
 }
 
-// handleCreateJob handles the creation of a new time-based job
-func (s *TimeBasedScheduler) handleCreateJob(c *gin.Context) {
-	var jobData types.HandleCreateJobData
-	if err := c.ShouldBindJSON(&jobData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := s.StartTimeBasedJob(jobData); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Job created successfully"})
-}
-
-// handleDeleteJob handles the deletion of a job
-func (s *TimeBasedScheduler) handleDeleteJob(c *gin.Context) {
-	jobID := c.Param("id")
-	if jobID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Job ID is required"})
-		return
-	}
-
-	id, err := strconv.ParseInt(jobID, 10, 64)
+// pollAndScheduleJobs fetches jobs from database and schedules them for execution
+func (s *TimeBasedScheduler) pollAndScheduleJobs() {
+	jobs, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
 		return
 	}
 
-	s.RemoveJob(id)
-	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})
+	if len(jobs) == 0 {
+		s.logger.Debug("No jobs found for execution")
+		return
+	}
+
+	// Sort jobs by execution time (earliest first)
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].NextExecutionTimestamp.Before(jobs[j].NextExecutionTimestamp)
+	})
+
+	// Process jobs in batches
+	now := time.Now()
+	executionWindow := now.Add(executionWindow)
+
+	for i := 0; i < len(jobs); i += batchSize {
+		end := i + batchSize
+		if end > len(jobs) {
+			end = len(jobs)
+		}
+
+		batch := jobs[i:end]
+		s.processBatch(batch, now, executionWindow)
+	}
 }
 
-// handleGetJob handles getting a specific job
-func (s *TimeBasedScheduler) handleGetJob(c *gin.Context) {
-	jobID := c.Param("id")
-	if jobID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Job ID is required"})
-		return
+// processBatch processes a batch of jobs
+func (s *TimeBasedScheduler) processBatch(jobs []types.TimeJobData, now, executionWindow time.Time) {
+	for _, job := range jobs {
+		// Check if job is due for execution (within execution window)
+		if job.NextExecutionTimestamp.After(executionWindow) {
+			continue // Job is not due yet
+		}
+
+		if job.NextExecutionTimestamp.Before(now.Add(-1 * time.Minute)) {
+			s.logger.Warnf("Job %d is overdue by %v", job.JobID, now.Sub(job.NextExecutionTimestamp))
+		}
+
+		// Add job to execution queue
+		select {
+		case s.jobQueue <- &job:
+			s.logger.Debugf("Queued job %d for execution", job.JobID)
+		default:
+			s.logger.Warnf("Job queue is full, skipping job %d", job.JobID)
+		}
+	}
+}
+
+// worker processes jobs from the job queue
+func (s *TimeBasedScheduler) worker() {
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case job := <-s.jobQueue:
+			s.workerPool <- struct{}{} // Acquire worker slot
+			s.executeJob(job)
+			<-s.workerPool // Release worker slot
+		}
+	}
+}
+
+// executeJob executes a single job and updates its next execution time
+func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
+	s.logger.Infof("Executing time-based job %d (type: %s)", job.JobID, job.ScheduleType)
+
+	// Update job status to running
+	if err := s.dbClient.UpdateJobStatus(job.JobID, true); err != nil {
+		s.logger.Errorf("Failed to update job %d status to running: %v", job.JobID, err)
 	}
 
-	id, err := strconv.ParseInt(jobID, 10, 64)
+	// TODO: Implement actual job execution logic here
+	// This would involve:
+	// 1. Calling the target function/webhook
+	// 2. Handling the response
+	// 3. Managing retries on failure
+
+	// Calculate next execution time
+	nextExecution, err := parser.CalculateNextExecutionTime(
+		job.ScheduleType,
+		job.TimeInterval,
+		job.CronExpression,
+		job.SpecificSchedule,
+		job.Timezone,
+	)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+		s.logger.Errorf("Failed to calculate next execution time for job %d: %v", job.JobID, err)
 		return
 	}
 
-	worker := s.GetWorker(id)
-	if worker == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
+	// Update next execution time in database
+	if err := s.dbClient.UpdateJobNextExecution(job.JobID, nextExecution); err != nil {
+		s.logger.Errorf("Failed to update next execution time for job %d: %v", job.JobID, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, worker.GetJobData())
-}
-
-// handleListJobs handles listing all jobs
-func (s *TimeBasedScheduler) handleListJobs(c *gin.Context) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	jobs := make([]types.HandleCreateJobData, 0, len(s.workers))
-	for _, w := range s.workers {
-		jobs = append(jobs, w.GetJobData())
-	}
-
-	c.JSON(http.StatusOK, jobs)
-}
-
-func (s *TimeBasedScheduler) StartTimeBasedJob(jobData types.HandleCreateJobData) error {
-	s.mu.Lock()
-	worker := NewTimeBasedWorker(jobData, fmt.Sprintf("@every %ds", jobData.TimeInterval), s)
-	s.workers[jobData.JobID] = worker
-	s.mu.Unlock()
-
-	go worker.Start(s.workerCtx)
-
-	s.logger.Infof("Started time-based job %d", jobData.JobID)
-	return nil
-}
-
-func (s *TimeBasedScheduler) RemoveJob(jobID int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if worker, exists := s.workers[jobID]; exists {
-		worker.Stop()
-		delete(s.workers, jobID)
-		s.logger.Infof("Removed job %d", jobID)
+	// Update job status to completed
+	if err := s.dbClient.UpdateJobStatus(job.JobID, false); err != nil {
+		s.logger.Errorf("Failed to update job %d status to completed: %v", job.JobID, err)
 	}
 }
 
-func (s *TimeBasedScheduler) GetWorker(jobID int64) Worker {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// simulateJobExecution simulates job execution (replace with actual implementation)
+func (s *TimeBasedScheduler) simulateJobExecution(job *types.TimeJobData) bool {
+	// TODO: Replace this with actual job execution logic
+	// For now, simulate execution with a small delay
+	time.Sleep(100 * time.Millisecond)
 
-	worker, exists := s.workers[jobID]
-	if !exists {
-		return nil
+	// Simulate 95% success rate
+	return time.Now().UnixNano()%100 < 95
+}
+
+// Stop gracefully stops the scheduler
+func (s *TimeBasedScheduler) Stop() {
+	s.logger.Info("Stopping time-based scheduler")
+	s.cancel()
+
+	// Close job queue
+	close(s.jobQueue)
+
+	// Wait for workers to finish (with timeout)
+	timeout := time.After(30 * time.Second)
+	for len(s.workerPool) < workerPoolSize {
+		select {
+		case <-timeout:
+			s.logger.Warn("Timeout waiting for workers to finish")
+			return
+		case <-time.After(100 * time.Millisecond):
+			// Continue waiting
+		}
 	}
 
-	return worker
+	s.logger.Info("Time-based scheduler stopped")
 }
 
-func (s *TimeBasedScheduler) Logger() logging.Logger {
-	return s.logger
-}
-
-func (s *TimeBasedScheduler) GetCronScheduler() *cron.Cron {
-	return s.cronScheduler
+// GetStats returns current scheduler statistics
+func (s *TimeBasedScheduler) GetStats() map[string]interface{} {
+	return map[string]interface{}{
+		"manager_id":   s.managerID,
+		"active_jobs":  len(s.activeJobs),
+		"queue_length": len(s.jobQueue),
+		"worker_pool":  len(s.workerPool),
+		"max_workers":  workerPoolSize,
+	}
 }
