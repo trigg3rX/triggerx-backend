@@ -1,0 +1,32 @@
+{"level":"info","ts":"2025-05-28 12:02:56","caller":"cache.go:30","msg":"[Cache] Using RedisCache as backend."}
+{"level":"info","ts":"2025-05-28 12:02:56","caller":"redis_cache.go:51","msg":"[RedisCache] Deleted key: timejob:processing:12345 (1.24ms)"}
+{"level":"warn","ts":"2025-05-28 12:02:56","caller":"redis_cache.go:20","msg":"[RedisCache] Cache miss for key: timejob:processing:12345 (1.25ms)"}
+{"level":"info","ts":"2025-05-28 12:02:56","caller":"redis_cache.go:38","msg":"[RedisCache] Set key: timejob:processing:12345 (ttl: 2s, 1.60ms)"}
+{"level":"info","ts":"2025-05-28 12:02:56","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:12345 (0.87ms)"}
+{"level":"warn","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:20","msg":"[RedisCache] Cache miss for key: timejob:processing:12345 (1.22ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:51","msg":"[RedisCache] Deleted key: timejob:processing:12345 (0.70ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:51","msg":"[RedisCache] Deleted key: timejob:processing:54321 (1.25ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:38","msg":"[RedisCache] Set key: timejob:processing:54321 (ttl: 2s, 0.88ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.97ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.94ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.08ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.73ms)"}
+{"level":"info","ts":"2025-05-28 12:02:59","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.64ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.15ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.17ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.77ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.28ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.07ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.02ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.21ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.21ms)"}
+{"level":"info","ts":"2025-05-28 12:03:00","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.19ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.17ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.83ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.25ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.15ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (0.73ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:54321 (1.06ms)"}
+{"level":"warn","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:20","msg":"[RedisCache] Cache miss for key: timejob:processing:54321 (0.78ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:38","msg":"[RedisCache] Set key: timejob:processing:67890 (ttl: 5s, 1.03ms)"}
+{"level":"info","ts":"2025-05-28 12:03:01","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:67890 (0.72ms)"}

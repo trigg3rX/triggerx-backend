@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/cache"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
@@ -61,6 +62,11 @@ func main() {
 		logger.Info("Continuing startup - will retry connections during operation")
 	} else {
 		logger.Info("Database server health check passed")
+	}
+
+	// Initialize cache
+	if err := cache.Init(); err != nil {
+		logger.Warnf("Cache initialization failed: %v", err)
 	}
 
 	// Initialize scheduler

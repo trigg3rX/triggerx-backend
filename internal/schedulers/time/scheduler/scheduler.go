@@ -3,12 +3,15 @@ package scheduler
 import (
 	"context"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+
+	// "github.com/trigg3rX/triggerx-backend/pkg/parser"
+	"github.com/trigg3rX/triggerx-backend/internal/cache"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -128,6 +131,17 @@ func (s *TimeBasedScheduler) processBatch(jobs []types.TimeJobData, now, executi
 			s.logger.Warnf("Job %d is overdue by %v", job.JobID, now.Sub(job.NextExecutionTimestamp))
 		}
 
+		// --- Redis cache check ---
+		c, _ := cache.GetCache()
+		jobKey := "timejob:processing:" + strconv.FormatInt(job.JobID, 10)
+		_, err := c.Get(jobKey)
+		if err == nil {
+			s.logger.Debugf("Job %d is already being processed (cache hit), skipping", job.JobID)
+			continue
+		}
+		_ = c.Set(jobKey, "1", 5*time.Minute)
+		// --- End cache check ---
+
 		// Add job to execution queue
 		select {
 		case s.jobQueue <- &job:
@@ -156,7 +170,7 @@ func (s *TimeBasedScheduler) worker() {
 
 // executeJob executes a single job and updates its next execution time
 func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
-	startTime := time.Now()
+	// startTime := time.Now()
 	s.logger.Infof("Executing time-based job %d (type: %s)", job.JobID, job.ScheduleType)
 
 	// Update job status to running
@@ -171,55 +185,59 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 	// 3. Managing retries on failure
 
 	// Simulate job execution for now
-	executionSuccess := s.simulateJobExecution(job)
+	// executionSuccess := s.simulateJobExecution(job)
 
 	// Calculate next execution time
-	nextExecution, err := parser.CalculateNextExecutionTime(
-		job.ScheduleType,
-		job.TimeInterval,
-		job.CronExpression,
-		job.SpecificSchedule,
-		job.Timezone,
-	)
-	if err != nil {
-		s.logger.Errorf("Failed to calculate next execution time for job %d: %v", job.JobID, err)
-		metrics.JobsFailed.Inc()
-		return
-	}
+	// nextExecution, err := parser.CalculateNextExecutionTime(
+	// 	job.ScheduleType,
+	// 	job.TimeInterval,
+	// 	job.CronExpression,
+	// 	job.SpecificSchedule,
+	// 	job.Timezone,
+	// )
+	// if err != nil {
+	// 	s.logger.Errorf("Failed to calculate next execution time for job %d: %v", job.JobID, err)
+	// 	metrics.JobsFailed.Inc()
+	// 	return
+	// }
 
-	// Update next execution time in database
-	if err := s.dbClient.UpdateJobNextExecution(job.JobID, nextExecution); err != nil {
-		s.logger.Errorf("Failed to update next execution time for job %d: %v", job.JobID, err)
-		metrics.JobsFailed.Inc()
-		return
-	}
+	// // Update next execution time in database
+	// if err := s.dbClient.UpdateJobNextExecution(job.JobID, nextExecution); err != nil {
+	// 	s.logger.Errorf("Failed to update next execution time for job %d: %v", job.JobID, err)
+	// 	metrics.JobsFailed.Inc()
+	// 	return
+	// }
 
 	// Update job status to completed
 	if err := s.dbClient.UpdateJobStatus(job.JobID, false); err != nil {
 		s.logger.Errorf("Failed to update job %d status to completed: %v", job.JobID, err)
 	}
 
-	duration := time.Since(startTime)
+	c, _ := cache.GetCache()
+	jobKey := "timejob:processing:" + strconv.FormatInt(job.JobID, 10)
+	_ = c.Delete(jobKey)
 
-	if executionSuccess {
-		metrics.JobsCompleted.Inc()
-		s.logger.Infof("Completed job %d in %v, next execution at %v",
-			job.JobID, duration, nextExecution)
-	} else {
-		metrics.JobsFailed.Inc()
-		s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
-	}
+	// duration := time.Since(startTime)
+
+	// if executionSuccess {
+	// 	metrics.JobsCompleted.Inc()
+	// 	s.logger.Infof("Completed job %d in %v, next execution at %v",
+	// 		job.JobID, duration, nextExecution)
+	// } else {
+	// 	metrics.JobsFailed.Inc()
+	// 	s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
+	// }
 }
 
 // simulateJobExecution simulates job execution (replace with actual implementation)
-func (s *TimeBasedScheduler) simulateJobExecution(job *types.TimeJobData) bool {
-	// TODO: Replace this with actual job execution logic
-	// For now, simulate execution with a small delay
-	time.Sleep(100 * time.Millisecond)
+// func (s *TimeBasedScheduler) simulateJobExecution(job *types.TimeJobData) bool {
+// 	// TODO: Replace this with actual job execution logic
+// 	// For now, simulate execution with a small delay
+// 	time.Sleep(100 * time.Millisecond)
 
-	// Simulate 95% success rate
-	return time.Now().UnixNano()%100 < 95
-}
+// 	// Simulate 95% success rate
+// 	return time.Now().UnixNano()%100 < 95
+// }
 
 // Stop gracefully stops the scheduler
 func (s *TimeBasedScheduler) Stop() {
