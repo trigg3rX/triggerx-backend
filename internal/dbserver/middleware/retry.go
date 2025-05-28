@@ -38,6 +38,9 @@ func DefaultRetryConfig() *RetryConfig {
 			http.StatusBadGateway,
 			http.StatusServiceUnavailable,
 			http.StatusGatewayTimeout,
+			http.StatusTooManyRequests, // Add rate limit status code
+			http.StatusRequestTimeout,
+			http.StatusConflict, // Add conflict status code
 		},
 	}
 }
@@ -66,31 +69,50 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 		}
 
 		// Create a response recorder
+		origWriter := c.Writer
 		w := &responseWriter{
-			ResponseWriter: c.Writer,
+			ResponseWriter: origWriter,
 			body:           &bytes.Buffer{},
 		}
 		c.Writer = w
 
-		// Remove the initial handler call and status check
 		var lastErr error
 		attempts := 0
+		var finalStatus int
+		var finalBody []byte
 		_, err := retry.Retry(func() (interface{}, error) {
 			attempts++
-			// Reset the response writer for each attempt
 			w.body.Reset()
 			w.statusCode = 0
 
-			// Restore the request body for each attempt
-			if bodyBytes != nil {
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			// Create a new request for each retry attempt
+			newReq, err := http.NewRequest(c.Request.Method, c.Request.URL.String(), bytes.NewBuffer(bodyBytes))
+			if err != nil {
+				return nil, fmt.Errorf("failed to create new request: %v", err)
 			}
 
-			// Process the request
-			c.Handler()(c)
+			// Copy headers from original request
+			for key, values := range c.Request.Header {
+				for _, value := range values {
+					newReq.Header.Add(key, value)
+				}
+			}
 
-			// Check if we should retry based on status code
-			statusCode := w.statusCode
+			// Create a new response writer for this attempt
+			newWriter := &responseWriter{
+				ResponseWriter: origWriter,
+				body:           &bytes.Buffer{},
+			}
+
+			// Create a new context for this attempt
+			newCtx := c.Copy()
+			newCtx.Request = newReq
+			newCtx.Writer = newWriter
+
+			// Process the request with the new context
+			c.Handler()(newCtx)
+
+			statusCode := newWriter.statusCode
 			retryable := false
 			for _, retryCode := range config.RetryStatusCodes {
 				if statusCode == retryCode {
@@ -100,11 +122,19 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 			}
 
 			if !retryable {
-				// Success, do not retry
+				finalStatus = newWriter.statusCode
+				finalBody = newWriter.body.Bytes()
 				return nil, nil
 			}
 
+			if config.LogRetryAttempt {
+				logger.Warnf("Retry attempt %d for %s %s with status code %d",
+					attempts, c.Request.Method, c.Request.URL.Path, statusCode)
+			}
+
 			lastErr = fmt.Errorf("received retryable status code: %d", statusCode)
+			finalStatus = newWriter.statusCode
+			finalBody = newWriter.body.Bytes()
 			return nil, lastErr
 		}, &retry.Config{
 			MaxRetries:      config.MaxRetries,
@@ -115,12 +145,17 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 			LogRetryAttempt: config.LogRetryAttempt,
 		}, logger)
 
+		// Write the final response to the original writer
+		origWriter.WriteHeader(finalStatus)
+		origWriter.Write(finalBody)
+
 		if err != nil {
-			// If all retries failed, return the last error
-			c.JSON(w.statusCode, gin.H{
+			// If all retries failed, return the last error as JSON
+			c.JSON(finalStatus, gin.H{
 				"error": fmt.Sprintf("Request failed after %d attempts: %v", attempts, lastErr),
 			})
 			c.Abort()
+			return
 		}
 	}
 }
@@ -133,11 +168,11 @@ type responseWriter struct {
 }
 
 func (w *responseWriter) Write(b []byte) (int, error) {
-	w.body.Write(b)
-	return w.ResponseWriter.Write(b)
+	// Only write to the buffer, not to the original writer
+	return w.body.Write(b)
 }
 
 func (w *responseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
-	w.ResponseWriter.WriteHeader(statusCode)
+	// Don't write to the original writer yet
 }

@@ -60,17 +60,22 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 			http.StatusBadGateway,
 			http.StatusServiceUnavailable,
 			http.StatusGatewayTimeout,
+			http.StatusTooManyRequests,
+			http.StatusRequestTimeout,
+			http.StatusConflict,
 		},
 	}
-	router.Use(middleware.RetryMiddleware(retryConfig))
 
+	// Initialize metrics server
 	metricsServer := metrics.NewMetricsServer(db, logger)
 
+	// Initialize Redis client
 	redisClient, err := redis.NewClient(logger)
 	if err != nil {
 		logger.Errorf("Failed to initialize Redis client: %v", err)
 	}
 
+	// Initialize rate limiter
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
@@ -95,6 +100,10 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
+
+	// Apply middleware in the correct order
+	router.Use(middleware.RetryMiddleware(retryConfig)) // Retry middleware first
+	// Rate limiting is handled through the API key auth middleware
 
 	return s
 }

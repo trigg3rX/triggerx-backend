@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 type NotificationConfig struct {
@@ -42,62 +42,44 @@ func (h *Handler) SendDataToManager(route string, data interface{}) (bool, error
 		return false, fmt.Errorf("error marshaling data: %v", err)
 	}
 
-	// Create a client with aggressive timeouts and connection pooling
-	client := &http.Client{
-		Timeout: 3 * time.Second, // Reduced timeout
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 100,
-			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
-			DialContext: (&net.Dialer{
-				Timeout:   2 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   2 * time.Second,
-			ResponseHeaderTimeout: 2 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+	// Create a retry client with custom config
+	retryConfig := &retry.HTTPRetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    200 * time.Millisecond,
+		MaxDelay:        2 * time.Second,
+		BackoffFactor:   2.0,
+		LogRetryAttempt: true,
+		RetryStatusCodes: []int{
+			http.StatusInternalServerError,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout,
 		},
+		Timeout:             3 * time.Second,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     30 * time.Second,
 	}
 
-	// Retry logic with shorter backoff
-	maxRetries := 3
-	backoff := 200 * time.Millisecond
+	client := retry.NewHTTPClient(retryConfig, h.logger)
 
-	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
-		if err != nil {
-			return false, fmt.Errorf("error creating request: %v", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Close = true // Ensure connection is closed after request
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return false, fmt.Errorf("error creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Close = true // Ensure connection is closed after request
 
-		resp, err := client.Do(req)
-		if err != nil {
-			if i == maxRetries-1 {
-				return false, fmt.Errorf("error sending data to manager after %d retries: %v", maxRetries, err)
-			}
-			h.logger.Warnf("Attempt %d failed, retrying in %v: %v", i+1, backoff, err)
-			time.Sleep(backoff)
-			backoff *= 2 // Exponential backoff
-			continue
-		}
+	resp, err := client.DoWithRetry(req)
+	if err != nil {
+		return false, fmt.Errorf("error sending data to manager: %v", err)
+	}
+	defer resp.Body.Close()
 
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			if i == maxRetries-1 {
-				return false, fmt.Errorf("manager service error (status=%d): %s", resp.StatusCode, string(body))
-			}
-			h.logger.Warnf("Attempt %d failed with status %d, retrying in %v", i+1, resp.StatusCode, backoff)
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
-		}
-
-		return true, nil
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("manager service error (status=%d): %s", resp.StatusCode, string(body))
 	}
 
-	return false, fmt.Errorf("failed to send data to manager after %d retries", maxRetries)
+	return true, nil
 }
