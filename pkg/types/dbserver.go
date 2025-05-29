@@ -2,6 +2,7 @@ package types
 
 import (
 	"math/big"
+	"time"
 )
 
 const (
@@ -28,17 +29,21 @@ const (
 
 type CreateJobData struct {
 	// Common fields for all job types
-	UserAddress       string   `json:"user_address" validate:"required,ethereum_address"`
-	StakeAmount       *big.Int `json:"stake_amount" validate:"required"`
-	TokenAmount       *big.Int `json:"token_amount" validate:"required"`
-	TaskDefinitionID  int      `json:"task_definition_id" validate:"required,min=1,max=6"`
-	Priority          int      `json:"priority" validate:"required,min=1,max=10"`
-	Security          int      `json:"security" validate:"required,min=1,max=10"`
-	Custom            bool     `json:"custom"`
-	JobTitle          string   `json:"job_title" validate:"required,min=3,max=100"`
-	TimeFrame         int64    `json:"time_frame" validate:"required,min=1"`
-	Recurring         bool     `json:"recurring"`
-	JobCostPrediction float64  `json:"job_cost_prediction" validate:"required,min=0"`
+	UserAddress       string    `json:"user_address" validate:"required,ethereum_address"`
+	StakeAmount       *big.Int  `json:"stake_amount" validate:"required"`
+	TokenAmount       *big.Int  `json:"token_amount" validate:"required"`
+	TaskDefinitionID  int       `json:"task_definition_id" validate:"required,min=1,max=6"`
+	Priority          int       `json:"priority" validate:"required,min=1,max=10"`
+	Security          int       `json:"security" validate:"required,min=1,max=10"`
+	Custom            bool      `json:"custom"`
+	JobTitle          string    `json:"job_title" validate:"required,min=3,max=100"`
+	TimeFrame         int64     `json:"time_frame" validate:"required,min=1"`
+	Recurring         bool      `json:"recurring"`
+	JobCostPrediction float64   `json:"job_cost_prediction" validate:"required,min=0"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	LastExecutedAt    time.Time `json:"last_executed_at"`
+	Timezone          string    `json:"timezone" validate:"required,timezone"`
 
 	// Job type specific fields
 	JobType JobType `json:"job_type" validate:"required,oneof=time event condition"`
@@ -82,9 +87,11 @@ type CreateJobResponse struct {
 }
 
 type UpdateJobData struct {
-	JobID     int64 `json:"job_id"`
-	Recurring bool  `json:"recurring"`
-	TimeFrame int64 `json:"time_frame"`
+	JobID          int64     `json:"job_id"`
+	Recurring      bool      `json:"recurring"`
+	TimeFrame      int64     `json:"time_frame"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	LastExecutedAt time.Time `json:"last_executed_at"`
 }
 
 type CreateTaskData struct {

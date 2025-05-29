@@ -36,7 +36,7 @@ func NewValidator(logger logging.Logger) *Validator {
 func (v *Validator) GinMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get the request body
-		var jobData types.CreateJobData
+		var jobDataArray []types.CreateJobData
 
 		// Read the request body first
 		body, err := io.ReadAll(c.Request.Body)
@@ -57,7 +57,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 		// Try to bind the JSON
-		if err := c.ShouldBindJSON(&jobData); err != nil {
+		if err := c.ShouldBindJSON(&jobDataArray); err != nil {
 			v.logger.Errorf("Error binding JSON: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Invalid JSON payload",
@@ -71,19 +71,21 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		var validationErrors []string
 		switch c.Request.URL.Path {
 		case "/api/jobs":
-			if err := v.validateCreateJob(c, jobData); err != nil {
-				validationErrors = append(validationErrors, err.Error())
+			for i, jobData := range jobDataArray {
+				if err := v.validateCreateJob(c, jobData); err != nil {
+					validationErrors = append(validationErrors, fmt.Sprintf("Job %d: %v", i+1, err))
+				}
 			}
 		case "/api/tasks":
-			if err := v.validateCreateTask(c, jobData); err != nil {
+			if err := v.validateCreateTask(c, jobDataArray); err != nil {
 				validationErrors = append(validationErrors, err.Error())
 			}
 		case "/api/keepers/form":
-			if err := v.validateCreateKeeperForm(c, jobData); err != nil {
+			if err := v.validateCreateKeeperForm(c, jobDataArray); err != nil {
 				validationErrors = append(validationErrors, err.Error())
 			}
 		case "/api/admin/api-keys":
-			if err := v.validateCreateApiKey(c, jobData); err != nil {
+			if err := v.validateCreateApiKey(c, jobDataArray); err != nil {
 				validationErrors = append(validationErrors, err.Error())
 			}
 		}

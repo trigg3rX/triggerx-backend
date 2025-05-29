@@ -26,6 +26,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		return
 	}
 
+	// Set timestamps and timezone for all jobs
+	now := time.Now().UTC()
+	for i := range tempJobs {
+		tempJobs[i].CreatedAt = now
+		tempJobs[i].UpdatedAt = now
+		tempJobs[i].LastExecutedAt = time.Time{} // Zero time for new jobs
+		if tempJobs[i].Timezone == "" {
+			tempJobs[i].Timezone = "UTC" // Default to UTC if not specified
+		}
+	}
+
 	var ipfsURLs []string
 	needsDynamicFee := false
 	for i, job := range tempJobs {
@@ -165,10 +176,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		if err := h.db.Session().Query(`
 			INSERT INTO triggerx.job_data (
 				job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
-				custom, time_frame, recurring, status, job_cost_prediction, task_ids
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				custom, time_frame, recurring, status, job_cost_prediction, task_ids,
+				created_at, updated_at, last_executed_at, timezone
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			currentJobID, tempJobs[i].JobTitle, tempJobs[i].TaskDefinitionID, existingUserID, linkJobID, chainStatus,
-			tempJobs[i].Custom, tempJobs[i].TimeFrame, tempJobs[i].Recurring, false, tempJobs[i].JobCostPrediction, []int64{}).Exec(); err != nil {
+			tempJobs[i].Custom, tempJobs[i].TimeFrame, tempJobs[i].Recurring, false, tempJobs[i].JobCostPrediction, []int64{},
+			tempJobs[i].CreatedAt, tempJobs[i].UpdatedAt, tempJobs[i].LastExecutedAt, tempJobs[i].Timezone).Exec(); err != nil {
 			h.logger.Errorf("[CreateJobData] Error inserting job data for jobID %d: %v", currentJobID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting job data: " + err.Error()})
 			return
@@ -296,73 +309,159 @@ func (h *Handler) UpdateJobData(c *gin.Context) {
 		return
 	}
 
-	// Update the main job_data table
+	// Set update timestamp
+	updateData.UpdatedAt = time.Now().UTC()
+
+	// Get job type first
+	var taskDefinitionID int
+	if err := h.db.Session().Query(`
+		SELECT task_definition_id FROM triggerx.job_data 
+		WHERE job_id = ?`,
+		updateData.JobID).Scan(&taskDefinitionID); err != nil {
+		h.logger.Errorf("[UpdateJobData] Error getting task definition ID for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting job type: " + err.Error()})
+		return
+	}
+
+	// Update main job_data table with just updated_at
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.job_data 
-		SET time_frame = ?, recurring = ?
+		SET updated_at = ?
 		WHERE job_id = ?`,
-		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil {
+		updateData.UpdatedAt, updateData.JobID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error updating job data for jobID %d: %v", updateData.JobID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
 		return
 	}
 
-	// Update time job data if it exists
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.time_job_data 
-		SET time_frame = ?, recurring = ?
-		WHERE job_id = ?`,
-		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil && err != gocql.ErrNotFound {
-		h.logger.Errorf("[UpdateJobData] Error updating time job data for jobID %d: %v", updateData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job data: " + err.Error()})
-		return
+	// Update specific job type table
+	switch {
+	case taskDefinitionID == 1 || taskDefinitionID == 2:
+		// Time-based job
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.time_job_data 
+			SET time_frame = ?, recurring = ?, updated_at = ?
+			WHERE job_id = ?`,
+			updateData.TimeFrame, updateData.Recurring, updateData.UpdatedAt,
+			updateData.JobID).Exec(); err != nil {
+			h.logger.Errorf("[UpdateJobData] Error updating time job data for jobID %d: %v", updateData.JobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job data: " + err.Error()})
+			return
+		}
+	case taskDefinitionID == 3 || taskDefinitionID == 4:
+		// Event-based job
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.event_job_data 
+			SET time_frame = ?, recurring = ?, updated_at = ?
+			WHERE job_id = ?`,
+			updateData.TimeFrame, updateData.Recurring, updateData.UpdatedAt,
+			updateData.JobID).Exec(); err != nil {
+			h.logger.Errorf("[UpdateJobData] Error updating event job data for jobID %d: %v", updateData.JobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job data: " + err.Error()})
+			return
+		}
+	case taskDefinitionID == 5 || taskDefinitionID == 6:
+		// Condition-based job
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.condition_job_data 
+			SET time_frame = ?, recurring = ?, updated_at = ?
+			WHERE job_id = ?`,
+			updateData.TimeFrame, updateData.Recurring, updateData.UpdatedAt,
+			updateData.JobID).Exec(); err != nil {
+			h.logger.Errorf("[UpdateJobData] Error updating condition job data for jobID %d: %v", updateData.JobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job data: " + err.Error()})
+			return
+		}
 	}
 
-	// Update event job data if it exists
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.event_job_data 
-		SET time_frame = ?, recurring = ?
-		WHERE job_id = ?`,
-		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil && err != gocql.ErrNotFound {
-		h.logger.Errorf("[UpdateJobData] Error updating event job data for jobID %d: %v", updateData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job data: " + err.Error()})
-		return
-	}
-
-	// Update condition job data if it exists
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.condition_job_data 
-		SET time_frame = ?, recurring = ?
-		WHERE job_id = ?`,
-		updateData.TimeFrame, updateData.Recurring, updateData.JobID).Exec(); err != nil && err != gocql.ErrNotFound {
-		h.logger.Errorf("[UpdateJobData] Error updating condition job data for jobID %d: %v", updateData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job data: " + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Job updated successfully"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Job updated successfully",
+		"job_id":     updateData.JobID,
+		"updated_at": updateData.UpdatedAt,
+	})
 }
 
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
-	jobID := c.Param("job_id")
-	if jobID == "" {
-		h.logger.Error("[UpdateJobLastExecutedAt] No job ID provided")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
+	var updateData struct {
+		JobID          int64     `json:"job_id" binding:"required"`
+		LastExecutedAt time.Time `json:"last_executed_at" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		h.logger.Errorf("[UpdateJobLastExecutedAt] Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Update the main job_data table
+	// Ensure timestamp is in UTC
+	updateData.LastExecutedAt = updateData.LastExecutedAt.UTC()
+	now := time.Now().UTC()
+
+	// Get job type first
+	var taskDefinitionID int
+	if err := h.db.Session().Query(`
+		SELECT task_definition_id FROM triggerx.job_data 
+		WHERE job_id = ?`,
+		updateData.JobID).Scan(&taskDefinitionID); err != nil {
+		h.logger.Errorf("[UpdateJobLastExecutedAt] Error getting task definition ID for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting job type: " + err.Error()})
+		return
+	}
+
+	// Update main job_data table
 	if err := h.db.Session().Query(`
 		UPDATE triggerx.job_data 
-		SET last_executed_at = ?
+		SET last_executed_at = ?, updated_at = ?
 		WHERE job_id = ?`,
-		time.Now().UTC(), jobID).Exec(); err != nil {
-		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating last executed at for jobID %s: %v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating last executed at: " + err.Error()})
+		updateData.LastExecutedAt, now, updateData.JobID).Exec(); err != nil {
+		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating job data for jobID %d: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Last executed at updated successfully"})
+	// Update specific job type table
+	switch {
+	case taskDefinitionID == 1 || taskDefinitionID == 2:
+		// Time-based job
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.time_job_data 
+			SET last_executed_at = ?, updated_at = ?
+			WHERE job_id = ?`,
+			updateData.LastExecutedAt, now, updateData.JobID).Exec(); err != nil {
+			h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating time job data for jobID %d: %v", updateData.JobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job data: " + err.Error()})
+			return
+		}
+	case taskDefinitionID == 3 || taskDefinitionID == 4:
+		// Event-based job
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.event_job_data 
+			SET last_executed_at = ?, updated_at = ?
+			WHERE job_id = ?`,
+			updateData.LastExecutedAt, now, updateData.JobID).Exec(); err != nil {
+			h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating event job data for jobID %d: %v", updateData.JobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job data: " + err.Error()})
+			return
+		}
+	case taskDefinitionID == 5 || taskDefinitionID == 6:
+		// Condition-based job
+		if err := h.db.Session().Query(`
+			UPDATE triggerx.condition_job_data 
+			SET last_executed_at = ?, updated_at = ?
+			WHERE job_id = ?`,
+			updateData.LastExecutedAt, now, updateData.JobID).Exec(); err != nil {
+			h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating condition job data for jobID %d: %v", updateData.JobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job data: " + err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":          "Last executed time updated successfully",
+		"job_id":           updateData.JobID,
+		"last_executed_at": updateData.LastExecutedAt,
+		"updated_at":       now,
+	})
 }
 
 func (h *Handler) GetJobData(c *gin.Context) {
