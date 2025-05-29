@@ -27,7 +27,7 @@ func main() {
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
 		LogDir:          logging.BaseDataDir,
-		ProcessName:     logging.SchedulerProcess,
+		ProcessName:     logging.TimeSchedulerProcess,
 		Environment:     getEnvironment(),
 		UseColors:       true,
 		MinStdoutLevel:  getLogLevel(),
