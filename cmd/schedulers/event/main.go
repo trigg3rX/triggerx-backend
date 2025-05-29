@@ -39,7 +39,7 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting time-based scheduler service...")
+	logger.Info("Starting event-based scheduler service...")
 
 	// Initialize database client
 	dbClientCfg := client.Config{
@@ -63,11 +63,11 @@ func main() {
 		logger.Info("Database server health check passed")
 	}
 
-	// Initialize scheduler
-	managerID := fmt.Sprintf("scheduler-%d", time.Now().Unix())
+	// Initialize event-based scheduler
+	managerID := fmt.Sprintf("event-scheduler-%d", time.Now().Unix())
 	eventScheduler, err := scheduler.NewEventBasedScheduler(managerID, logger, dbClient)
 	if err != nil {
-		logger.Fatal("Failed to initialize time-based scheduler", "error", err)
+		logger.Fatal("Failed to initialize event-based scheduler", "error", err)
 	}
 
 	// Setup HTTP server with scheduler integration
@@ -83,17 +83,23 @@ func main() {
 
 	// Start scheduler in background
 	go func() {
-		logger.Info("Starting event-based scheduler...")
+		logger.Info("Starting event-based scheduler worker management...")
 		eventScheduler.Start(ctx)
 	}()
 
 	// Start HTTP server
 	go func() {
-		logger.Info("Starting HTTP server...")
+		logger.Info("Starting HTTP server for job scheduling API...", "port", config.GetSchedulerRPCPort())
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Error("HTTP server error", "error", err)
 		}
 	}()
+
+	logger.Info("Event-based scheduler service ready",
+		"manager_id", managerID,
+		"api_port", config.GetSchedulerRPCPort(),
+		"supported_chains", []string{"OP Sepolia (11155420)", "Base Sepolia (84532)", "Ethereum Sepolia (11155111)"},
+	)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -101,7 +107,7 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(ctx, cancel, srv, eventScheduler, logger)
+	performGracefulShutdown(cancel, srv, eventScheduler, logger)
 }
 
 func getEnvironment() logging.LogLevel {
@@ -118,7 +124,7 @@ func getLogLevel() logging.Level {
 	return logging.InfoLevel
 }
 
-func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.EventBasedScheduler, logger logging.Logger) {
+func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, eventScheduler *scheduler.EventBasedScheduler, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Cancel context to stop scheduler
@@ -128,8 +134,8 @@ func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
-	// Stop scheduler gracefully
-	timeScheduler.Stop()
+	// Stop scheduler gracefully (this will stop all job workers)
+	eventScheduler.Stop()
 
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {
@@ -141,6 +147,6 @@ func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv
 		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
-	logger.Info("Shutdown complete")
+	logger.Info("Event-based scheduler shutdown complete")
 	os.Exit(0)
 }
