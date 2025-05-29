@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -415,7 +416,7 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 		"updated_at": time.Now().UTC(),
 	})
 }
- 
+
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 	var updateData struct {
 		JobID          int64     `json:"job_id" binding:"required"`
@@ -500,10 +501,19 @@ func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 }
 
 func (h *Handler) GetJobData(c *gin.Context) {
-	jobID := c.Param("job_id")
+	// Get job ID from URL parameter
+	jobID := c.Param("id") // Changed from "job_id" to "id" to match the route parameter
 	if jobID == "" {
 		h.logger.Error("[GetJobData] No job ID provided")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
+		return
+	}
+
+	// Convert job ID to int64
+	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
+	if err != nil {
+		h.logger.Errorf("[GetJobData] Invalid job ID format: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID format"})
 		return
 	}
 
@@ -513,10 +523,15 @@ func (h *Handler) GetJobData(c *gin.Context) {
 			custom, time_frame, recurring, status, job_cost_prediction, task_ids
 		FROM triggerx.job_data 
 		WHERE job_id = ?`,
-		jobID).Scan(&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
+		jobIDInt).Scan(&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
 		&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
 		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.TaskIDs); err != nil {
-		h.logger.Errorf("[GetJobData] Error getting job data for jobID %s: %v", jobID, err)
+		if err == gocql.ErrNotFound {
+			h.logger.Errorf("[GetJobData] Job not found for jobID %d", jobIDInt)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
+			return
+		}
+		h.logger.Errorf("[GetJobData] Error getting job data for jobID %d: %v", jobIDInt, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting job data: " + err.Error()})
 		return
 	}
@@ -532,13 +547,14 @@ func (h *Handler) GetJobData(c *gin.Context) {
 				abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
 			FROM triggerx.time_job_data 
 			WHERE job_id = ?`,
-			jobID).Scan(&timeJobData.JobID, &timeJobData.TimeFrame, &timeJobData.Recurring, &timeJobData.TimeInterval,
+			jobIDInt).Scan(&timeJobData.JobID, &timeJobData.TimeFrame, &timeJobData.Recurring, &timeJobData.TimeInterval,
 			&timeJobData.TargetChainID, &timeJobData.TargetContractAddress, &timeJobData.TargetFunction,
 			&timeJobData.ABI, &timeJobData.ArgType, &timeJobData.Arguments, &timeJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
-			h.logger.Errorf("[GetJobData] Error getting time job data for jobID %s: %v", jobID, err)
+			h.logger.Errorf("[GetJobData] Error getting time job data for jobID %d: %v", jobIDInt, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting time job data: " + err.Error()})
 			return
 		}
+		h.logger.Infof("[GetJobData] Successfully retrieved time-based job data for jobID %d", jobIDInt)
 		c.JSON(http.StatusOK, timeJobData)
 		return
 
@@ -552,14 +568,15 @@ func (h *Handler) GetJobData(c *gin.Context) {
 				abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
 			FROM triggerx.event_job_data 
 			WHERE job_id = ?`,
-			jobID).Scan(&eventJobData.JobID, &eventJobData.TimeFrame, &eventJobData.Recurring,
+			jobIDInt).Scan(&eventJobData.JobID, &eventJobData.TimeFrame, &eventJobData.Recurring,
 			&eventJobData.TriggerChainID, &eventJobData.TriggerContractAddress, &eventJobData.TriggerEvent,
 			&eventJobData.TargetChainID, &eventJobData.TargetContractAddress, &eventJobData.TargetFunction,
 			&eventJobData.ABI, &eventJobData.ArgType, &eventJobData.Arguments, &eventJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
-			h.logger.Errorf("[GetJobData] Error getting event job data for jobID %s: %v", jobID, err)
+			h.logger.Errorf("[GetJobData] Error getting event job data for jobID %d: %v", jobIDInt, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting event job data: " + err.Error()})
 			return
 		}
+		h.logger.Infof("[GetJobData] Successfully retrieved event-based job data for jobID %d", jobIDInt)
 		c.JSON(http.StatusOK, eventJobData)
 		return
 
@@ -574,20 +591,22 @@ func (h *Handler) GetJobData(c *gin.Context) {
 				abi, arg_type, arguments, dynamic_arguments_script_ipfs_url
 			FROM triggerx.condition_job_data 
 			WHERE job_id = ?`,
-			jobID).Scan(&conditionJobData.JobID, &conditionJobData.TimeFrame, &conditionJobData.Recurring,
+			jobIDInt).Scan(&conditionJobData.JobID, &conditionJobData.TimeFrame, &conditionJobData.Recurring,
 			&conditionJobData.ConditionType, &conditionJobData.UpperLimit, &conditionJobData.LowerLimit,
 			&conditionJobData.ValueSourceType, &conditionJobData.ValueSourceUrl,
 			&conditionJobData.TargetChainID, &conditionJobData.TargetContractAddress, &conditionJobData.TargetFunction,
 			&conditionJobData.ABI, &conditionJobData.ArgType, &conditionJobData.Arguments, &conditionJobData.DynamicArgumentsScriptIPFSUrl); err != nil {
-			h.logger.Errorf("[GetJobData] Error getting condition job data for jobID %s: %v", jobID, err)
+			h.logger.Errorf("[GetJobData] Error getting condition job data for jobID %d: %v", jobIDInt, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting condition job data: " + err.Error()})
 			return
 		}
+		h.logger.Infof("[GetJobData] Successfully retrieved condition-based job data for jobID %d", jobIDInt)
 		c.JSON(http.StatusOK, conditionJobData)
 		return
 
 	default:
 		// Return basic job data if task_definition_id is not recognized
+		h.logger.Infof("[GetJobData] Successfully retrieved basic job data for jobID %d (unknown task definition ID: %d)", jobIDInt, jobData.TaskDefinitionID)
 		c.JSON(http.StatusOK, jobData)
 		return
 	}

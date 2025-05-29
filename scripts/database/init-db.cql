@@ -171,28 +171,50 @@ CREATE TABLE IF NOT EXISTS apikeys (
     PRIMARY KEY (key)
 );
 
+-- Drop existing indexes if they exist
+DROP INDEX IF EXISTS triggerx.job_data_status_idx;
+DROP INDEX IF EXISTS triggerx.job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.job_data_timezone_idx;
+
+DROP INDEX IF EXISTS triggerx.time_job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_timezone_idx;
+
+DROP INDEX IF EXISTS triggerx.event_job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.event_job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.event_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.event_job_data_timezone_idx;
+
+DROP INDEX IF EXISTS triggerx.condition_job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.condition_job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.condition_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.condition_job_data_timezone_idx;
+
 -- Create indexes for job_data table
-CREATE INDEX ON triggerx.job_data (status);
-CREATE INDEX ON triggerx.job_data (created_at);
-CREATE INDEX ON triggerx.job_data (updated_at);
-CREATE INDEX ON triggerx.job_data (last_executed_at);
-CREATE INDEX ON triggerx.job_data (timezone);
+CREATE INDEX IF NOT EXISTS job_data_status_idx ON triggerx.job_data (status);
+CREATE INDEX IF NOT EXISTS job_data_created_at_idx ON triggerx.job_data (created_at);
+CREATE INDEX IF NOT EXISTS job_data_updated_at_idx ON triggerx.job_data (updated_at);
+CREATE INDEX IF NOT EXISTS job_data_last_executed_at_idx ON triggerx.job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS job_data_timezone_idx ON triggerx.job_data (timezone);
 
 -- Create indexes for time_job_data table
-CREATE INDEX ON triggerx.time_job_data (created_at);
-CREATE INDEX ON triggerx.time_job_data (updated_at);
-CREATE INDEX ON triggerx.time_job_data (last_executed_at);
-CREATE INDEX ON triggerx.time_job_data (timezone);
+CREATE INDEX IF NOT EXISTS time_job_data_created_at_idx ON triggerx.time_job_data (created_at);
+CREATE INDEX IF NOT EXISTS time_job_data_updated_at_idx ON triggerx.time_job_data (updated_at);
+CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS time_job_data_timezone_idx ON triggerx.time_job_data (timezone);
 
 -- Create indexes for event_job_data table
-CREATE INDEX ON triggerx.event_job_data (created_at);
-CREATE INDEX ON triggerx.event_job_data (updated_at);
-CREATE INDEX ON triggerx.event_job_data (last_executed_at);
-CREATE INDEX ON triggerx.event_job_data (timezone);
+CREATE INDEX IF NOT EXISTS event_job_data_created_at_idx ON triggerx.event_job_data (created_at);
+CREATE INDEX IF NOT EXISTS event_job_data_updated_at_idx ON triggerx.event_job_data (updated_at);
+CREATE INDEX IF NOT EXISTS event_job_data_last_executed_at_idx ON triggerx.event_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS event_job_data_timezone_idx ON triggerx.event_job_data (timezone);
 
 -- Create indexes for condition_job_data table
-CREATE INDEX ON triggerx.condition_job_data (created_at);
-CREATE INDEX ON triggerx.condition_job_data (updated_at);
-CREATE INDEX ON triggerx.condition_job_data (last_executed_at);
-CREATE INDEX ON triggerx.condition_job_data (timezone);
+CREATE INDEX IF NOT EXISTS condition_job_data_created_at_idx ON triggerx.condition_job_data (created_at);
+CREATE INDEX IF NOT EXISTS condition_job_data_updated_at_idx ON triggerx.condition_job_data (updated_at);
+CREATE INDEX IF NOT EXISTS condition_job_data_last_executed_at_idx ON triggerx.condition_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS condition_job_data_timezone_idx ON triggerx.condition_job_data (timezone);
 
