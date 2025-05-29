@@ -42,7 +42,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 
 		c.Next()
 	})
@@ -173,4 +173,8 @@ func (s *Server) Start(port string) error {
 	}
 
 	return s.router.Run(fmt.Sprintf(":%s", port))
+}
+
+func (s *Server) GetRouter() *gin.Engine {
+	return s.router
 }
