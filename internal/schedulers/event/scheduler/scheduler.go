@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sync"
@@ -13,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
+	"github.com/trigg3rX/triggerx-backend/internal/cache"
+	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/metrics"
@@ -21,10 +24,14 @@ import (
 )
 
 const (
-	blockConfirmations = 3                // Wait for 3 block confirmations
-	pollInterval       = 10 * time.Second // Poll every 10 seconds for new blocks
-	workerTimeout      = 30 * time.Second // Timeout for worker operations
-	maxRetries         = 3                // Max retries for failed operations
+	blockConfirmations   = 3                // Wait for 3 block confirmations
+	pollInterval         = 10 * time.Second // Poll every 10 seconds for new blocks
+	workerTimeout        = 30 * time.Second // Timeout for worker operations
+	maxRetries           = 3                // Max retries for failed operations
+	performerLockTTL     = 15 * time.Minute // Lock duration for job execution
+	blockCacheTTL        = 2 * time.Minute  // Cache TTL for block data
+	eventCacheTTL        = 10 * time.Minute // Cache TTL for event data
+	duplicateEventWindow = 30 * time.Second // Window to prevent duplicate event processing
 )
 
 // EventBasedScheduler manages individual job workers
@@ -37,6 +44,7 @@ type EventBasedScheduler struct {
 	chainClients map[string]*ethclient.Client // chainID -> client
 	clientsMutex sync.RWMutex
 	dbClient     *client.DBServerClient
+	cache        cache.Cache
 	metrics      *metrics.Collector
 	managerID    string
 	maxWorkers   int
@@ -48,6 +56,7 @@ type JobWorker struct {
 	client       *ethclient.Client
 	logger       logging.Logger
 	dbClient     *client.DBServerClient
+	cache        cache.Cache
 	ctx          context.Context
 	cancel       context.CancelFunc
 	eventSig     common.Hash
@@ -55,6 +64,7 @@ type JobWorker struct {
 	lastBlock    uint64
 	isRunning    bool
 	mutex        sync.RWMutex
+	managerID    string
 }
 
 // JobScheduleRequest represents the request to schedule a new job
@@ -80,6 +90,23 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 
 	maxWorkers := config.GetMaxWorkers()
 
+	// Initialize cache
+	if err := cache.Init(); err != nil {
+		logger.Warnf("Failed to initialize cache: %v", err)
+	}
+
+	cacheInstance, err := cache.GetCache()
+	if err != nil {
+		logger.Warnf("Cache not available, running without cache: %v", err)
+	}
+
+	// Test Redis connection
+	if err := redisx.Ping(); err != nil {
+		logger.Warnf("Redis not available, job streaming disabled: %v", err)
+	} else {
+		logger.Info("Redis connection established, event streaming enabled")
+	}
+
 	scheduler := &EventBasedScheduler{
 		ctx:          ctx,
 		cancel:       cancel,
@@ -87,6 +114,7 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 		workers:      make(map[int64]*JobWorker),
 		chainClients: make(map[string]*ethclient.Client),
 		dbClient:     dbClient,
+		cache:        cacheInstance,
 		metrics:      metrics.NewCollector(),
 		managerID:    managerID,
 		maxWorkers:   maxWorkers,
@@ -101,7 +129,11 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 	// Start metrics collection
 	scheduler.metrics.Start()
 
-	scheduler.logger.Info("Event-based scheduler initialized", "max_workers", maxWorkers)
+	scheduler.logger.Info("Event-based scheduler initialized",
+		"max_workers", maxWorkers,
+		"manager_id", managerID,
+		"cache_available", cacheInstance != nil,
+	)
 
 	return scheduler, nil
 }
@@ -177,6 +209,21 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 	metrics.JobsScheduled.Inc()
 	metrics.JobsRunning.Inc()
 
+	// Add job scheduling event to Redis stream
+	jobContext := map[string]interface{}{
+		"job_id":           jobData.JobID,
+		"trigger_chain_id": jobData.TriggerChainID,
+		"contract_address": jobData.TriggerContractAddress,
+		"trigger_event":    jobData.TriggerEvent,
+		"manager_id":       s.managerID,
+		"scheduled_at":     time.Now().Unix(),
+		"status":           "scheduled",
+	}
+
+	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
+		s.logger.Warnf("Failed to add job scheduling event to Redis stream: %v", err)
+	}
+
 	s.logger.Info("Job scheduled successfully",
 		"job_id", jobData.JobID,
 		"trigger_chain", jobData.TriggerChainID,
@@ -203,8 +250,8 @@ func (s *EventBasedScheduler) createJobWorker(jobData *schedulerTypes.EventJobDa
 	// Calculate event signature
 	eventSig := crypto.Keccak256Hash([]byte(jobData.TriggerEvent))
 
-	// Get current block number
-	currentBlock, err := client.BlockNumber(context.Background())
+	// Get current block number (with caching)
+	currentBlock, err := s.getCachedOrFetchBlockNumber(client, jobData.TriggerChainID)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to get current block number: %w", err)
@@ -215,15 +262,44 @@ func (s *EventBasedScheduler) createJobWorker(jobData *schedulerTypes.EventJobDa
 		client:       client,
 		logger:       s.logger,
 		dbClient:     s.dbClient,
+		cache:        s.cache,
 		ctx:          ctx,
 		cancel:       cancel,
 		eventSig:     eventSig,
 		contractAddr: contractAddr,
 		lastBlock:    currentBlock,
 		isRunning:    false,
+		managerID:    s.managerID,
 	}
 
 	return worker, nil
+}
+
+// getCachedOrFetchBlockNumber gets block number from cache or fetches from chain
+func (s *EventBasedScheduler) getCachedOrFetchBlockNumber(client *ethclient.Client, chainID string) (uint64, error) {
+	cacheKey := fmt.Sprintf("block_number_%s", chainID)
+
+	if s.cache != nil {
+		if cached, err := s.cache.Get(cacheKey); err == nil {
+			var blockNum uint64
+			if _, err := fmt.Sscanf(cached, "%d", &blockNum); err == nil {
+				return blockNum, nil
+			}
+		}
+	}
+
+	// Fetch from chain
+	currentBlock, err := client.BlockNumber(context.Background())
+	if err != nil {
+		return 0, err
+	}
+
+	// Cache the result
+	if s.cache != nil {
+		s.cache.Set(cacheKey, fmt.Sprintf("%d", currentBlock), blockCacheTTL)
+	}
+
+	return currentBlock, nil
 }
 
 // UnscheduleJob stops and removes a job worker
@@ -245,6 +321,18 @@ func (s *EventBasedScheduler) UnscheduleJob(jobID int64) error {
 	// Update metrics
 	metrics.JobsRunning.Dec()
 
+	// Add job unscheduling event to Redis stream
+	jobContext := map[string]interface{}{
+		"job_id":         jobID,
+		"manager_id":     s.managerID,
+		"unscheduled_at": time.Now().Unix(),
+		"status":         "unscheduled",
+	}
+
+	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
+		s.logger.Warnf("Failed to add job unscheduling event to Redis stream: %v", err)
+	}
+
 	s.logger.Info("Job unscheduled successfully", "job_id", jobID)
 	return nil
 }
@@ -254,6 +342,23 @@ func (w *JobWorker) start() {
 	w.mutex.Lock()
 	w.isRunning = true
 	w.mutex.Unlock()
+
+	// Try to acquire performer lock
+	lockKey := fmt.Sprintf("event_job_%d_%s", w.job.JobID, w.job.TriggerChainID)
+	if w.cache != nil {
+		acquired, err := w.cache.AcquirePerformerLock(lockKey, performerLockTTL)
+		if err != nil {
+			w.logger.Warnf("Failed to acquire performer lock for job %d: %v", w.job.JobID, err)
+		} else if !acquired {
+			w.logger.Warnf("Job %d is already being monitored by another worker, stopping", w.job.JobID)
+			return
+		}
+		defer func() {
+			if err := w.cache.ReleasePerformerLock(lockKey); err != nil {
+				w.logger.Warnf("Failed to release performer lock for job %d: %v", w.job.JobID, err)
+			}
+		}()
+	}
 
 	w.logger.Info("Starting job worker",
 		"job_id", w.job.JobID,
@@ -272,6 +377,7 @@ func (w *JobWorker) start() {
 		case <-ticker.C:
 			if err := w.checkForEvents(); err != nil {
 				w.logger.Error("Error checking for events", "job_id", w.job.JobID, "error", err)
+				metrics.JobsFailed.Inc()
 			}
 		}
 	}
@@ -294,6 +400,16 @@ func (w *JobWorker) checkForEvents() error {
 	// Check if there are new blocks to process
 	if safeBlock <= w.lastBlock {
 		return nil // No new blocks to process
+	}
+
+	// Check cache for recent events in this block range to avoid reprocessing
+	blockRangeKey := fmt.Sprintf("events_%d_%d_%d", w.job.JobID, w.lastBlock+1, safeBlock)
+	if w.cache != nil {
+		if _, err := w.cache.Get(blockRangeKey); err == nil {
+			w.logger.Debug("Block range already processed", "job_id", w.job.JobID, "from", w.lastBlock+1, "to", safeBlock)
+			w.lastBlock = safeBlock
+			return nil
+		}
 	}
 
 	// Query logs for events
@@ -319,8 +435,23 @@ func (w *JobWorker) checkForEvents() error {
 				"block", log.BlockNumber,
 				"error", err,
 			)
+			metrics.JobsFailed.Inc()
 		} else {
 			metrics.EventsProcessed.Inc()
+		}
+	}
+
+	// Cache that this block range has been processed
+	if w.cache != nil {
+		processedData := map[string]interface{}{
+			"job_id":       w.job.JobID,
+			"from_block":   w.lastBlock + 1,
+			"to_block":     safeBlock,
+			"events_found": len(logs),
+			"processed_at": time.Now().Unix(),
+		}
+		if jsonData, err := json.Marshal(processedData); err == nil {
+			w.cache.Set(blockRangeKey, string(jsonData), eventCacheTTL)
 		}
 	}
 
@@ -329,7 +460,7 @@ func (w *JobWorker) checkForEvents() error {
 
 	w.logger.Debug("Processed blocks",
 		"job_id", w.job.JobID,
-		"from_block", w.lastBlock+1,
+		"from_block", w.lastBlock+1-uint64(len(logs)),
 		"to_block", safeBlock,
 		"events_found", len(logs),
 	)
@@ -339,6 +470,8 @@ func (w *JobWorker) checkForEvents() error {
 
 // processEvent processes a single event and triggers the action
 func (w *JobWorker) processEvent(log types.Log) error {
+	startTime := time.Now()
+
 	w.logger.Info("Event detected",
 		"job_id", w.job.JobID,
 		"tx_hash", log.TxHash.Hex(),
@@ -346,19 +479,78 @@ func (w *JobWorker) processEvent(log types.Log) error {
 		"log_index", log.Index,
 	)
 
-	// TODO: Implement action execution logic
+	// Check for duplicate event processing
+	eventKey := fmt.Sprintf("event_%s_%d", log.TxHash.Hex(), log.Index)
+	if w.cache != nil {
+		if _, err := w.cache.Get(eventKey); err == nil {
+			w.logger.Debug("Event already processed, skipping", "tx_hash", log.TxHash.Hex())
+			return nil
+		}
+		// Mark event as processed
+		w.cache.Set(eventKey, time.Now().Format(time.RFC3339), duplicateEventWindow)
+	}
+
+	// Create event context for Redis streaming
+	eventContext := map[string]interface{}{
+		"job_id":       w.job.JobID,
+		"manager_id":   w.managerID,
+		"chain_id":     w.job.TriggerChainID,
+		"contract":     w.job.TriggerContractAddress,
+		"event":        w.job.TriggerEvent,
+		"tx_hash":      log.TxHash.Hex(),
+		"block_number": log.BlockNumber,
+		"log_index":    log.Index,
+		"detected_at":  startTime.Unix(),
+	}
+
+	// Add event detection to Redis stream
+	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
+		w.logger.Warnf("Failed to add event detection to Redis stream: %v", err)
+	}
+
+	// Execute the action
+	executionSuccess := w.performActionExecution(log)
+
+	duration := time.Since(startTime)
+
+	// Update event context with completion info
+	eventContext["duration_ms"] = duration.Milliseconds()
+	eventContext["completed_at"] = time.Now().Unix()
+
+	if executionSuccess {
+		eventContext["status"] = "completed"
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
+			w.logger.Warnf("Failed to add event completion to Redis stream: %v", err)
+		}
+		w.logger.Info("Event processed successfully",
+			"job_id", w.job.JobID,
+			"tx_hash", log.TxHash.Hex(),
+			"duration", duration,
+		)
+	} else {
+		eventContext["status"] = "failed"
+		if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, eventContext); err != nil {
+			w.logger.Warnf("Failed to add event failure to Redis stream: %v", err)
+		}
+		w.logger.Error("Event processing failed",
+			"job_id", w.job.JobID,
+			"tx_hash", log.TxHash.Hex(),
+			"duration", duration,
+		)
+	}
+
+	return nil
+}
+
+// performActionExecution handles the actual action execution logic
+func (w *JobWorker) performActionExecution(log types.Log) bool {
+	// TODO: Implement actual action execution logic
 	// This should:
 	// 1. Parse event data if needed
 	// 2. Send task to manager/keeper for execution
 	// 3. Handle response and update job status
 
-	// For now, simulate action execution
-	return w.simulateActionExecution(log)
-}
-
-// simulateActionExecution simulates the action execution (replace with actual implementation)
-func (w *JobWorker) simulateActionExecution(log types.Log) error {
-	// TODO: Replace with actual action execution logic
+	// Simulate action execution for now
 	w.logger.Info("Simulating action execution",
 		"job_id", w.job.JobID,
 		"target_chain", w.job.TargetChainID,
@@ -369,7 +561,8 @@ func (w *JobWorker) simulateActionExecution(log types.Log) error {
 	// Simulate processing time
 	time.Sleep(100 * time.Millisecond)
 
-	return nil
+	// Simulate 95% success rate
+	return time.Now().UnixNano()%100 < 95
 }
 
 // stop gracefully stops the job worker
@@ -450,6 +643,7 @@ func (s *EventBasedScheduler) GetStats() map[string]interface{} {
 		"max_workers":      s.maxWorkers,
 		"connected_chains": len(s.chainClients),
 		"supported_chains": []string{"11155420", "84532", "11155111"}, // OP Sepolia, Base Sepolia, Ethereum Sepolia
+		"cache_available":  s.cache != nil,
 	}
 }
 
@@ -470,5 +664,6 @@ func (s *EventBasedScheduler) GetJobWorkerStats(jobID int64) (map[string]interfa
 		"contract_address": worker.job.TriggerContractAddress,
 		"trigger_event":    worker.job.TriggerEvent,
 		"last_block":       worker.lastBlock,
+		"manager_id":       worker.managerID,
 	}, nil
 }
