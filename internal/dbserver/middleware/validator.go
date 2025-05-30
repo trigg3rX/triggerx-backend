@@ -120,12 +120,12 @@ func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobDat
 			return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
 		}
 		// Time jobs don't need trigger or condition fields
-		if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
-			return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
-		if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
-			return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
+		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
+		// 	return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
+		// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
+		// 	return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
 
 	case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
 		// Event-based job validation
@@ -133,12 +133,12 @@ func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobDat
 			return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
 		}
 		// Event jobs don't need time interval or condition fields
-		if jobData.TimeInterval != 0 {
-			return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
-		if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
-			return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
+		// if jobData.TimeInterval != 0 {
+		// 	return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
+		// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
+		// 	return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
 
 	case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
 		// Condition-based job validation
@@ -149,12 +149,12 @@ func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobDat
 			return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
 		}
 		// Condition jobs don't need time interval or trigger fields
-		if jobData.TimeInterval != 0 {
-			return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
-		if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
-			return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
+		// if jobData.TimeInterval != 0 {
+		// 	return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
+		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
+		// 	return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
 
 	default:
 		return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)

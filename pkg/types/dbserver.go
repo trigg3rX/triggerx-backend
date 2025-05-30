@@ -41,8 +41,6 @@ type CreateJobData struct {
 	StakeAmount       *big.Int  `json:"stake_amount" validate:"required"`
 	TokenAmount       *big.Int  `json:"token_amount" validate:"required"`
 	TaskDefinitionID  int       `json:"task_definition_id" validate:"required,min=1,max=6"`
-	Priority          int       `json:"priority" validate:"required,min=1,max=10"`
-	Security          int       `json:"security" validate:"required,min=1,max=10"`
 	Custom            bool      `json:"custom"`
 	JobTitle          string    `json:"job_title" validate:"required,min=3,max=100"`
 	TimeFrame         int64     `json:"time_frame" validate:"required,min=1"`
@@ -51,18 +49,23 @@ type CreateJobData struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
-	Timezone          string    `json:"timezone" validate:"required,timezone"`
+	// Timezone          string    `json:"timezone" validate:"required,timezone"`
+	Timezone          string    `json:"timezone"`
 
 	// Job type specific fields
-	JobType JobType `json:"job_type" validate:"required,oneof=time event condition"`
+	// JobType JobType `json:"job_type" validate:"required,oneof=time event condition"`
+	JobType JobType `json:"job_type"`
 
 	// Time job specific fields
 	TimeInterval int64 `json:"time_interval,omitempty" validate:"omitempty,min=1"`
 
 	// Event job specific fields
-	TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
-	TriggerContractAddress string `json:"trigger_contract_address,omitempty" validate:"omitempty,ethereum_address"`
-	TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
+	// TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
+	// TriggerContractAddress string `json:"trigger_contract_address,omitempty" validate:"omitempty,ethereum_address"`
+	// TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
+	TriggerChainID         string `json:"trigger_chain_id,omitempty"`
+	TriggerContractAddress string `json:"trigger_contract_address,omitempty"`
+	TriggerEvent           string `json:"trigger_event,omitempty"`
 
 	// Condition job specific fields
 	ConditionType   string  `json:"condition_type,omitempty" validate:"omitempty,oneof=price volume"`
@@ -76,8 +79,10 @@ type CreateJobData struct {
 	TargetContractAddress string   `json:"target_contract_address" validate:"required,ethereum_address"`
 	TargetFunction        string   `json:"target_function" validate:"required"`
 	ABI                   string   `json:"abi" validate:"required"`
-	ArgType               int      `json:"arg_type" validate:"required"`
-	Arguments             []string `json:"arguments" validate:"required"`
+	// ArgType               int      `json:"arg_type" validate:"required"`
+	// Arguments             []string `json:"arguments" validate:"required"`
+	ArgType               int      `json:"arg_type"`
+	Arguments             []string `json:"arguments"`
 
 	// Script fields (optional)
 	ScriptIPFSUrl         string `json:"script_ipfs_url,omitempty" validate:"omitempty,ipfs_url"`
