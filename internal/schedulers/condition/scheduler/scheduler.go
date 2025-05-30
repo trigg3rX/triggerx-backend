@@ -219,7 +219,7 @@ func (w *ConditionWorker) start() {
 func (w *ConditionWorker) checkCondition() error {
 	// Track condition check
 	metrics.ConditionsChecked.Inc()
-
+  
 	// Fetch current value from source
 	currentValue, err := w.fetchValue()
 	if err != nil {
@@ -430,7 +430,6 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	// Update metrics
 	metrics.JobsRunning.Dec()
-
 	s.logger.Info("Condition job unscheduled successfully", "job_id", jobID)
 	return nil
 }
