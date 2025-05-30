@@ -25,15 +25,23 @@ db-backup:  ##backup data
 start-othentic: ## Start the Othentic Node
 	./scripts/services/start-othentic.sh
 
-start-manager: ## Start the task manager
-	./scripts/services/start-manager.sh
-
 start-registrar: ## Start the Registrar
 	./scripts/services/start-registrar.sh
 
 start-health: ## Start the Health Check
 	./scripts/services/start-health.sh
 
+start-redis: ## Start the Redis
+	./scripts/services/start-redis.sh
+
+start-time-scheduler: ## Start the Time Scheduler
+	./scripts/services/start-time-scheduler.sh
+
+start-event-schedulers: ## Start the Event Schedulers
+	./scripts/services/start-event-schedulers.sh
+
+start-condition-scheduler: ## Start the Condition Scheduler
+	./scripts/services/start-condition-scheduler.sh
 
 ############################ KEEPER NODE ####################################
 
