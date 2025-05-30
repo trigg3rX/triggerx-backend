@@ -154,6 +154,10 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *schedulerTypes.ConditionJ
 	// Start worker
 	go worker.start()
 
+	// Update metrics
+	metrics.JobsScheduled.Inc()
+	metrics.JobsRunning.Inc()
+
 	s.logger.Info("Condition job scheduled successfully",
 		"job_id", jobData.JobID,
 		"condition_type", jobData.ConditionType,
@@ -213,6 +217,9 @@ func (w *ConditionWorker) start() {
 
 // checkCondition fetches the current value and checks if condition is satisfied
 func (w *ConditionWorker) checkCondition() error {
+	// Track condition check
+	metrics.ConditionsChecked.Inc()
+  
 	// Fetch current value from source
 	currentValue, err := w.fetchValue()
 	if err != nil {
@@ -230,6 +237,7 @@ func (w *ConditionWorker) checkCondition() error {
 
 	if satisfied {
 		w.conditionMet++
+		metrics.ConditionsSatisfied.Inc()
 		w.logger.Info("Condition satisfied",
 			"job_id", w.job.JobID,
 			"current_value", currentValue,
@@ -275,18 +283,23 @@ func (w *ConditionWorker) fetchValue() (float64, error) {
 
 // fetchFromAPI fetches value from an HTTP API endpoint
 func (w *ConditionWorker) fetchFromAPI() (float64, error) {
+	metrics.ValueSourceRequests.Inc()
+
 	resp, err := w.httpClient.Get(w.job.ValueSourceUrl)
 	if err != nil {
+		metrics.ValueSourceErrors.Inc()
 		return 0, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.ValueSourceErrors.Inc()
 		return 0, fmt.Errorf("HTTP request failed with status: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		metrics.ValueSourceErrors.Inc()
 		return 0, fmt.Errorf("failed to read response body: %w", err)
 	}
 
@@ -328,6 +341,7 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		}
 	}
 
+	metrics.ValueSourceErrors.Inc()
 	return 0, fmt.Errorf("could not extract numeric value from response: %s", string(body))
 }
 
@@ -414,6 +428,8 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 	// Remove from workers map
 	delete(s.workers, jobID)
 
+	// Update metrics
+	metrics.JobsRunning.Dec()
 	s.logger.Info("Condition job unscheduled successfully", "job_id", jobID)
 	return nil
 }

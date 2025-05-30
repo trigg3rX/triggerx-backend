@@ -162,6 +162,10 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 	// Start worker
 	go worker.start()
 
+	// Update metrics
+	metrics.JobsScheduled.Inc()
+	metrics.JobsRunning.Inc()
+
 	s.logger.Info("Job scheduled successfully",
 		"job_id", jobData.JobID,
 		"trigger_chain", jobData.TriggerChainID,
@@ -224,6 +228,9 @@ func (s *EventBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	// Remove from workers map
 	delete(s.workers, jobID)
+
+	// Update metrics
+	metrics.JobsRunning.Dec()
 
 	s.logger.Info("Job unscheduled successfully", "job_id", jobID)
 	return nil
@@ -291,6 +298,7 @@ func (w *JobWorker) checkForEvents() error {
 
 	// Process each event
 	for _, log := range logs {
+		metrics.EventsDetected.Inc()
 		if err := w.processEvent(log); err != nil {
 			w.logger.Error("Failed to process event",
 				"job_id", w.job.JobID,
@@ -298,6 +306,8 @@ func (w *JobWorker) checkForEvents() error {
 				"block", log.BlockNumber,
 				"error", err,
 			)
+		} else {
+			metrics.EventsProcessed.Inc()
 		}
 	}
 

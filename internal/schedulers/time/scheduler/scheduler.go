@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -26,6 +27,7 @@ type TimeBasedScheduler struct {
 	activeJobs map[int64]*types.TimeJobData
 	jobQueue   chan *types.TimeJobData
 	dbClient   *client.DBServerClient
+	metrics    *metrics.Collector
 	managerID  string
 }
 
@@ -41,8 +43,12 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		activeJobs: make(map[int64]*types.TimeJobData),
 		jobQueue:   make(chan *types.TimeJobData, 100),
 		dbClient:   dbClient,
+		metrics:    metrics.NewCollector(),
 		managerID:  managerID,
 	}
+
+	// Start metrics collection
+	scheduler.metrics.Start()
 
 	// Start the worker pool
 	for i := 0; i < workerPoolSize; i++ {
@@ -78,6 +84,7 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 	jobs, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
+		metrics.JobsFailed.Inc()
 		return
 	}
 
@@ -85,6 +92,9 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 		s.logger.Debug("No jobs found for execution")
 		return
 	}
+
+	s.logger.Infof("Found %d jobs to process", len(jobs))
+	metrics.JobsScheduled.Set(float64(len(jobs)))
 
 	// Sort jobs by execution time (earliest first)
 	sort.Slice(jobs, func(i, j int) bool {
@@ -121,9 +131,11 @@ func (s *TimeBasedScheduler) processBatch(jobs []types.TimeJobData, now, executi
 		// Add job to execution queue
 		select {
 		case s.jobQueue <- &job:
+			metrics.JobsRunning.Inc()
 			s.logger.Debugf("Queued job %d for execution", job.JobID)
 		default:
 			s.logger.Warnf("Job queue is full, skipping job %d", job.JobID)
+			metrics.JobsFailed.Inc()
 		}
 	}
 }
@@ -144,6 +156,7 @@ func (s *TimeBasedScheduler) worker() {
 
 // executeJob executes a single job and updates its next execution time
 func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
+	startTime := time.Now()
 	s.logger.Infof("Executing time-based job %d (type: %s)", job.JobID, job.ScheduleType)
 
 	// Update job status to running
@@ -157,6 +170,9 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 	// 2. Handling the response
 	// 3. Managing retries on failure
 
+	// Simulate job execution for now
+	executionSuccess := s.simulateJobExecution(job)
+
 	// Calculate next execution time
 	nextExecution, err := parser.CalculateNextExecutionTime(
 		job.ScheduleType,
@@ -167,18 +183,31 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 	)
 	if err != nil {
 		s.logger.Errorf("Failed to calculate next execution time for job %d: %v", job.JobID, err)
+		metrics.JobsFailed.Inc()
 		return
 	}
 
 	// Update next execution time in database
 	if err := s.dbClient.UpdateJobNextExecution(job.JobID, nextExecution); err != nil {
 		s.logger.Errorf("Failed to update next execution time for job %d: %v", job.JobID, err)
+		metrics.JobsFailed.Inc()
 		return
 	}
 
 	// Update job status to completed
 	if err := s.dbClient.UpdateJobStatus(job.JobID, false); err != nil {
 		s.logger.Errorf("Failed to update job %d status to completed: %v", job.JobID, err)
+	}
+
+	duration := time.Since(startTime)
+
+	if executionSuccess {
+		metrics.JobsCompleted.Inc()
+		s.logger.Infof("Completed job %d in %v, next execution at %v",
+			job.JobID, duration, nextExecution)
+	} else {
+		metrics.JobsFailed.Inc()
+		s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
 	}
 }
 

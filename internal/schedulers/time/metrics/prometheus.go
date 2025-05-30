@@ -13,15 +13,15 @@ var (
 	// UptimeSeconds tracks the service uptime in seconds
 	UptimeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
+		Subsystem: "time_scheduler",
 		Name:      "uptime_seconds",
-		Help:      "The uptime of the condition scheduler service in seconds",
+		Help:      "The uptime of the time scheduler service in seconds",
 	})
 
 	// JobsScheduled tracks the total number of jobs scheduled
 	JobsScheduled = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
+		Subsystem: "time_scheduler",
 		Name:      "jobs_scheduled",
 		Help:      "Total number of jobs scheduled",
 	})
@@ -29,7 +29,7 @@ var (
 	// JobsRunning tracks the number of jobs currently running
 	JobsRunning = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
+		Subsystem: "time_scheduler",
 		Name:      "jobs_running",
 		Help:      "Total number of jobs currently running",
 	})
@@ -37,7 +37,7 @@ var (
 	// JobsCompleted tracks the total number of jobs completed
 	JobsCompleted = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
+		Subsystem: "time_scheduler",
 		Name:      "jobs_completed",
 		Help:      "Total number of jobs completed",
 	})
@@ -45,41 +45,9 @@ var (
 	// JobsFailed tracks the total number of jobs failed
 	JobsFailed = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
+		Subsystem: "time_scheduler",
 		Name:      "jobs_failed",
 		Help:      "Total number of jobs failed",
-	})
-
-	// ConditionsChecked tracks the total number of condition checks performed
-	ConditionsChecked = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
-		Name:      "conditions_checked_total",
-		Help:      "Total number of condition checks performed",
-	})
-
-	// ConditionsSatisfied tracks the total number of conditions satisfied
-	ConditionsSatisfied = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
-		Name:      "conditions_satisfied_total",
-		Help:      "Total number of conditions satisfied",
-	})
-
-	// ValueSourceRequests tracks the total number of value source API requests
-	ValueSourceRequests = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
-		Name:      "value_source_requests_total",
-		Help:      "Total number of value source API requests made",
-	})
-
-	// ValueSourceErrors tracks the total number of value source request errors
-	ValueSourceErrors = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "condition_scheduler",
-		Name:      "value_source_errors_total",
-		Help:      "Total number of value source request errors",
 	})
 )
 
