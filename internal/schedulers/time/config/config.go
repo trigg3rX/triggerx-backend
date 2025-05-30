@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/joho/godotenv"
 
@@ -14,6 +15,7 @@ type Config struct {
 	databaseHostPort string
 	schedulerRPCPort string
 	dbServerURL      string
+	maxWorkers       int
 }
 
 var cfg Config
@@ -24,12 +26,19 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
+	maxWorkersStr := env.GetEnv("MAX_WORKERS", "10")
+	maxWorkers, err := strconv.Atoi(maxWorkersStr)
+	if err != nil {
+		maxWorkers = 10 // fallback to default
+	}
+
 	cfg = Config{
 		devMode:          env.GetEnvBool("DEV_MODE", false),
 		databaseHost:     env.GetEnv("DATABASE_HOST", "localhost"),
 		databaseHostPort: env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		schedulerRPCPort: env.GetEnv("SCHEDULER_RPC_PORT", "9004"),
 		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		maxWorkers:       maxWorkers,
 	}
 
 	return nil
@@ -58,4 +67,9 @@ func GetSchedulerRPCPort() string {
 // GetDBServerURL returns the database server URL
 func GetDBServerURL() string {
 	return cfg.dbServerURL
+}
+
+// GetMaxWorkers returns the maximum number of workers
+func GetMaxWorkers() int {
+	return cfg.maxWorkers
 }

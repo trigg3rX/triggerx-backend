@@ -39,6 +39,7 @@ type EventBasedScheduler struct {
 	dbClient     *client.DBServerClient
 	metrics      *metrics.Collector
 	managerID    string
+	maxWorkers   int
 }
 
 // JobWorker represents an individual worker watching a specific job
@@ -77,6 +78,8 @@ type JobScheduleRequest struct {
 func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *client.DBServerClient) (*EventBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	maxWorkers := config.GetMaxWorkers()
+
 	scheduler := &EventBasedScheduler{
 		ctx:          ctx,
 		cancel:       cancel,
@@ -86,6 +89,7 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 		dbClient:     dbClient,
 		metrics:      metrics.NewCollector(),
 		managerID:    managerID,
+		maxWorkers:   maxWorkers,
 	}
 
 	// Initialize chain clients
@@ -96,6 +100,8 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 
 	// Start metrics collection
 	scheduler.metrics.Start()
+
+	scheduler.logger.Info("Event-based scheduler initialized", "max_workers", maxWorkers)
 
 	return scheduler, nil
 }
@@ -141,6 +147,11 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
 	}
 
+	// Check if we've reached the maximum number of workers
+	if len(s.workers) >= s.maxWorkers {
+		return fmt.Errorf("maximum number of workers (%d) reached, cannot schedule job %d", s.maxWorkers, jobData.JobID)
+	}
+
 	// Get chain client
 	s.clientsMutex.RLock()
 	client, exists := s.chainClients[jobData.TriggerChainID]
@@ -171,6 +182,8 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 		"trigger_chain", jobData.TriggerChainID,
 		"contract", jobData.TriggerContractAddress,
 		"event", jobData.TriggerEvent,
+		"active_workers", len(s.workers),
+		"max_workers", s.maxWorkers,
 	)
 
 	return nil
@@ -434,6 +447,7 @@ func (s *EventBasedScheduler) GetStats() map[string]interface{} {
 		"manager_id":       s.managerID,
 		"total_workers":    len(s.workers),
 		"running_workers":  runningWorkers,
+		"max_workers":      s.maxWorkers,
 		"connected_chains": len(s.chainClients),
 		"supported_chains": []string{"11155420", "84532", "11155111"}, // OP Sepolia, Base Sepolia, Ethereum Sepolia
 	}
