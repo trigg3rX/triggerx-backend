@@ -3,7 +3,7 @@ services:
     image: scylladb/scylla
     container_name: triggerx-scylla
     ports:
-      - "${DATABASE_DOCKER_PORT}:9042"
+      - "${DATABASE_HOST_PORT}:9042"
     volumes:
       - scylla_data:/var/lib/scylla
     logging:
