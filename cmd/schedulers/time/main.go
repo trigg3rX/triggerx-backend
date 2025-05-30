@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/cache"
+	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
@@ -44,6 +46,57 @@ func main() {
 	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting time-based scheduler service...")
+
+	// Initialize Redis connection
+	logger.Info("Initializing Redis connection...")
+	if err := redisx.Ping(); err != nil {
+		logger.Warnf("Redis connection failed: %v", err)
+		logger.Info("Scheduler will continue without Redis job streaming")
+	} else {
+		logger.Info("Redis connection established successfully")
+
+		// Add initial test job to verify Redis streams are working
+		testJob := map[string]interface{}{
+			"type":         "scheduler_startup",
+			"scheduler_id": fmt.Sprintf("time-scheduler-%d", time.Now().Unix()),
+			"timestamp":    time.Now().Unix(),
+			"message":      "Time scheduler service started",
+		}
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, testJob); err != nil {
+			logger.Warnf("Failed to add startup test job to Redis stream: %v", err)
+		} else {
+			logger.Info("Startup event added to Redis job stream")
+		}
+	}
+
+	// Initialize cache
+	logger.Info("Initializing cache system...")
+	if err := cache.Init(); err != nil {
+		logger.Warnf("Cache initialization failed: %v", err)
+		logger.Info("Scheduler will continue without caching features")
+	} else {
+		cacheInstance, err := cache.GetCache()
+		if err != nil {
+			logger.Warnf("Failed to get cache instance: %v", err)
+		} else {
+			logger.Info("Cache system initialized successfully")
+
+			// Test cache functionality
+			testKey := "scheduler_startup_test"
+			testValue := fmt.Sprintf("startup_%d", time.Now().Unix())
+			if err := cacheInstance.Set(testKey, testValue, 1*time.Minute); err != nil {
+				logger.Warnf("Cache test write failed: %v", err)
+			} else {
+				if retrieved, err := cacheInstance.Get(testKey); err == nil && retrieved == testValue {
+					logger.Info("Cache functionality verified")
+				} else {
+					logger.Warnf("Cache test read failed: %v", err)
+				}
+				// Clean up test key
+				cacheInstance.Delete(testKey)
+			}
+		}
+	}
 
 	// Initialize database client
 	dbClientCfg := client.Config{
@@ -98,6 +151,12 @@ func main() {
 			logger.Error("HTTP server error", "error", err)
 		}
 	}()
+
+	// Log startup completion
+	logger.Info("Time-based scheduler service startup completed",
+		"manager_id", managerID,
+		"port", config.GetSchedulerRPCPort(),
+	)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
