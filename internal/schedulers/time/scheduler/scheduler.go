@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
@@ -15,7 +16,6 @@ import (
 const (
 	pollInterval    = 30 * time.Second // Poll every 30 seconds
 	executionWindow = 5 * time.Minute  // Look ahead 5 minutes
-	workerPoolSize  = 10               // Number of concurrent workers
 	batchSize       = 50               // Process jobs in batches
 )
 
@@ -29,31 +29,37 @@ type TimeBasedScheduler struct {
 	dbClient   *client.DBServerClient
 	metrics    *metrics.Collector
 	managerID  string
+	maxWorkers int
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
 func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *client.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	maxWorkers := config.GetMaxWorkers()
+
 	scheduler := &TimeBasedScheduler{
 		ctx:        ctx,
 		cancel:     cancel,
 		logger:     logger,
-		workerPool: make(chan struct{}, workerPoolSize),
+		workerPool: make(chan struct{}, maxWorkers),
 		activeJobs: make(map[int64]*types.TimeJobData),
 		jobQueue:   make(chan *types.TimeJobData, 100),
 		dbClient:   dbClient,
 		metrics:    metrics.NewCollector(),
 		managerID:  managerID,
+		maxWorkers: maxWorkers,
 	}
 
 	// Start metrics collection
 	scheduler.metrics.Start()
 
 	// Start the worker pool
-	for i := 0; i < workerPoolSize; i++ {
+	for i := 0; i < maxWorkers; i++ {
 		go scheduler.worker()
 	}
+
+	scheduler.logger.Info("Time-based scheduler initialized", "max_workers", maxWorkers)
 
 	return scheduler, nil
 }
@@ -231,7 +237,7 @@ func (s *TimeBasedScheduler) Stop() {
 
 	// Wait for workers to finish (with timeout)
 	timeout := time.After(30 * time.Second)
-	for len(s.workerPool) < workerPoolSize {
+	for len(s.workerPool) < s.maxWorkers {
 		select {
 		case <-timeout:
 			s.logger.Warn("Timeout waiting for workers to finish")
@@ -251,6 +257,6 @@ func (s *TimeBasedScheduler) GetStats() map[string]interface{} {
 		"active_jobs":  len(s.activeJobs),
 		"queue_length": len(s.jobQueue),
 		"worker_pool":  len(s.workerPool),
-		"max_workers":  workerPoolSize,
+		"max_workers":  s.maxWorkers,
 	}
 }

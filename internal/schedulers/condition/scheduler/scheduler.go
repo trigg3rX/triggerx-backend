@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	schedulerTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -52,6 +53,7 @@ type ConditionBasedScheduler struct {
 	metrics      *metrics.Collector
 	managerID    string
 	httpClient   *http.Client
+	maxWorkers   int
 }
 
 // ConditionWorker represents an individual worker monitoring a specific condition
@@ -103,6 +105,8 @@ type ValueResponse struct {
 func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClient *client.DBServerClient) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	maxWorkers := config.GetMaxWorkers()
+
 	scheduler := &ConditionBasedScheduler{
 		ctx:       ctx,
 		cancel:    cancel,
@@ -114,10 +118,13 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		httpClient: &http.Client{
 			Timeout: requestTimeout,
 		},
+		maxWorkers: maxWorkers,
 	}
 
 	// Start metrics collection
 	scheduler.metrics.Start()
+
+	scheduler.logger.Info("Condition-based scheduler initialized", "max_workers", maxWorkers)
 
 	return scheduler, nil
 }
@@ -130,6 +137,11 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *schedulerTypes.ConditionJ
 	// Check if job is already scheduled
 	if _, exists := s.workers[jobData.JobID]; exists {
 		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
+	}
+
+	// Check if we've reached the maximum number of workers
+	if len(s.workers) >= s.maxWorkers {
+		return fmt.Errorf("maximum number of workers (%d) reached, cannot schedule job %d", s.maxWorkers, jobData.JobID)
 	}
 
 	// Validate condition type
@@ -164,6 +176,8 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *schedulerTypes.ConditionJ
 		"value_source", jobData.ValueSourceUrl,
 		"upper_limit", jobData.UpperLimit,
 		"lower_limit", jobData.LowerLimit,
+		"active_workers", len(s.workers),
+		"max_workers", s.maxWorkers,
 	)
 
 	return nil
@@ -219,7 +233,7 @@ func (w *ConditionWorker) start() {
 func (w *ConditionWorker) checkCondition() error {
 	// Track condition check
 	metrics.ConditionsChecked.Inc()
-  
+
 	// Fetch current value from source
 	currentValue, err := w.fetchValue()
 	if err != nil {
@@ -497,6 +511,7 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 		"manager_id":        s.managerID,
 		"total_workers":     len(s.workers),
 		"running_workers":   runningWorkers,
+		"max_workers":       s.maxWorkers,
 		"supported_sources": []string{"api", "oracle", "static"},
 		"supported_conditions": []string{
 			"greater_than", "less_than", "between",

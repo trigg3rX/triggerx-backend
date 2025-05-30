@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/joho/godotenv"
 
@@ -14,6 +15,7 @@ type Config struct {
 	databaseHostPort string
 	schedulerRPCPort string
 	dbServerURL      string
+	maxWorkers       int
 	// Chain RPC URLs
 	opSepoliaRPC   string
 	baseSepoliaRPC string
@@ -28,12 +30,19 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
+	maxWorkersStr := env.GetEnv("MAX_WORKERS", "100")
+	maxWorkers, err := strconv.Atoi(maxWorkersStr)
+	if err != nil {
+		maxWorkers = 100 // fallback to default
+	}
+
 	cfg = Config{
 		devMode:          env.GetEnv("DEV_MODE", "false") == "true",
 		databaseHost:     env.GetEnv("DATABASE_HOST", "localhost"),
 		databaseHostPort: env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		schedulerRPCPort: env.GetEnv("SCHEDULER_RPC_PORT", "9004"),
 		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		maxWorkers:       maxWorkers,
 		// Chain RPC URLs with default values
 		opSepoliaRPC:   env.GetEnv("OP_SEPOLIA_RPC_URL", "https://sepolia.optimism.io"),
 		baseSepoliaRPC: env.GetEnv("BASE_SEPOLIA_RPC_URL", "https://sepolia.base.org"),
@@ -90,4 +99,9 @@ func GetBaseSepoliaRPC() string {
 // GetEthSepoliaRPC returns the Ethereum Sepolia RPC URL
 func GetEthSepoliaRPC() string {
 	return cfg.ethSepoliaRPC
+}
+
+// GetMaxWorkers returns the maximum number of concurrent workers allowed
+func GetMaxWorkers() int {
+	return cfg.maxWorkers
 }
