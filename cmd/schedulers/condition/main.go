@@ -12,6 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -23,6 +24,9 @@ func main() {
 	if err := config.Init(); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
+
+	// Start metrics collection
+	metrics.StartMetricsCollection()
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
