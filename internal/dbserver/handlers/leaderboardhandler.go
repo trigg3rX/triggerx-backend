@@ -11,7 +11,7 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 
 	query := `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
               FROM triggerx.keeper_data 
-              WHERE status = true AND verified = true ALLOW FILTERING`
+              WHERE registered = true AND whitelisted = true ALLOW FILTERING`
 	iter := h.db.Session().Query(query).Iter()
 
 	var keeperLeaderboard []types.KeeperLeaderboardEntry
@@ -110,12 +110,12 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	if keeperAddress != "" {
 		query = `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
                 FROM triggerx.keeper_data 
-                WHERE status = true AND keeper_address = ? ALLOW FILTERING`
+                WHERE registered = true AND keeper_address = ? ALLOW FILTERING`
 		args = append(args, keeperAddress)
 	} else {
 		query = `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
                 FROM triggerx.keeper_data 
-                WHERE status = true AND keeper_name = ? ALLOW FILTERING`
+                WHERE registered = true AND keeper_name = ? ALLOW FILTERING`
 		args = append(args, keeperName)
 	}
 
