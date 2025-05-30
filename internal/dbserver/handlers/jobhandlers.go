@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"net/http"
@@ -297,9 +298,92 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	}
 	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUserID, len(allJobIDs))
 
+	// Notify appropriate schedulers about new jobs
+	h.notifySchedulersForJobs(tempJobs, newJobIDs)
+
 	c.JSON(http.StatusOK, createdJobs)
 	h.logger.Infof("[CreateJobData] Successfully completed job creation for user %d with %d new jobs",
 		existingUserID, len(tempJobs))
+}
+
+// notifySchedulersForJobs sends notifications to the appropriate schedulers based on job types
+func (h *Handler) notifySchedulersForJobs(tempJobs []types.CreateJobData, jobIDs []int64) {
+	for i, job := range tempJobs {
+		jobID := jobIDs[len(jobIDs)-1-i] // jobIDs are in reverse order
+
+		switch {
+		case job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2:
+			// Time-based jobs - no notification needed, time scheduler polls the database
+			h.logger.Infof("[NotifySchedulers] Time-based job %d created, no notification needed (polling-based)", jobID)
+
+		case job.TaskDefinitionID == 3 || job.TaskDefinitionID == 4:
+			// Event-based jobs - notify event scheduler
+			h.notifyEventScheduler(jobID, job)
+
+		case job.TaskDefinitionID == 5 || job.TaskDefinitionID == 6:
+			// Condition-based jobs - notify condition scheduler
+			h.notifyConditionScheduler(jobID, job)
+
+		default:
+			h.logger.Warnf("[NotifySchedulers] Unknown task definition ID %d for job %d", job.TaskDefinitionID, jobID)
+		}
+	}
+}
+
+// notifyEventScheduler sends a notification to the event scheduler
+func (h *Handler) notifyEventScheduler(jobID int64, job types.CreateJobData) {
+	// Create event job data for scheduler
+	eventJobData := map[string]interface{}{
+		"job_id":                            jobID,
+		"time_frame":                        job.TimeFrame,
+		"recurring":                         job.Recurring,
+		"trigger_chain_id":                  job.TriggerChainID,
+		"trigger_contract_address":          job.TriggerContractAddress,
+		"trigger_event":                     job.TriggerEvent,
+		"target_chain_id":                   job.TargetChainID,
+		"target_contract_address":           job.TargetContractAddress,
+		"target_function":                   job.TargetFunction,
+		"abi":                               job.ABI,
+		"arg_type":                          job.ArgType,
+		"arguments":                         job.Arguments,
+		"dynamic_arguments_script_ipfs_url": job.ScriptIPFSUrl,
+	}
+
+	success, err := h.SendDataToEventScheduler("/api/v1/job/schedule", eventJobData)
+	if err != nil {
+		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", jobID, err)
+	} else if success {
+		h.logger.Infof("[NotifyEventScheduler] Successfully notified event scheduler for job %d", jobID)
+	}
+}
+
+// notifyConditionScheduler sends a notification to the condition scheduler
+func (h *Handler) notifyConditionScheduler(jobID int64, job types.CreateJobData) {
+	// Create condition job data for scheduler
+	conditionJobData := map[string]interface{}{
+		"job_id":                            jobID,
+		"time_frame":                        job.TimeFrame,
+		"recurring":                         job.Recurring,
+		"condition_type":                    job.ConditionType,
+		"upper_limit":                       job.UpperLimit,
+		"lower_limit":                       job.LowerLimit,
+		"value_source_type":                 job.ValueSourceType,
+		"value_source_url":                  job.ValueSourceUrl,
+		"target_chain_id":                   job.TargetChainID,
+		"target_contract_address":           job.TargetContractAddress,
+		"target_function":                   job.TargetFunction,
+		"abi":                               job.ABI,
+		"arg_type":                          job.ArgType,
+		"arguments":                         job.Arguments,
+		"dynamic_arguments_script_ipfs_url": job.ScriptIPFSUrl,
+	}
+
+	success, err := h.SendDataToConditionScheduler("/api/v1/job/schedule", conditionJobData)
+	if err != nil {
+		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", jobID, err)
+	} else if success {
+		h.logger.Infof("[NotifyConditionScheduler] Successfully notified condition scheduler for job %d", jobID)
+	}
 }
 
 func (h *Handler) UpdateJobData(c *gin.Context) {
@@ -729,6 +813,27 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		return
 	}
 
+	// Get job data to determine which scheduler to notify
+	var jobData types.JobData
+	err := h.db.Session().Query(`
+		SELECT job_id, task_definition_id
+		FROM triggerx.job_data 
+		WHERE job_id = ?`,
+		jobID).Scan(&jobData.JobID, &jobData.TaskDefinitionID)
+
+	if err != nil && err != gocql.ErrNotFound {
+		h.logger.Errorf("[DeleteJobData] Error getting job data for jobID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting job data: " + err.Error()})
+		return
+	}
+
+	var taskDefinitionID int
+	if err == gocql.ErrNotFound {
+		h.logger.Warnf("[DeleteJobData] Job %s not found, proceeding with deletion", jobID)
+	} else {
+		taskDefinitionID = jobData.TaskDefinitionID
+	}
+
 	// Delete from all possible job type tables
 	if err := h.db.Session().Query(`
 		DELETE FROM triggerx.time_job_data 
@@ -767,5 +872,40 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		return
 	}
 
+	// Notify appropriate scheduler about job deletion
+	h.notifySchedulerForJobDeletion(jobID, taskDefinitionID)
+
 	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})
+}
+
+// notifySchedulerForJobDeletion notifies the appropriate scheduler about job deletion
+func (h *Handler) notifySchedulerForJobDeletion(jobIDStr string, taskDefinitionID int) {
+	switch {
+	case taskDefinitionID == 1 || taskDefinitionID == 2:
+		// Time-based jobs - no notification needed, time scheduler polls the database
+		h.logger.Infof("[NotifySchedulerDeletion] Time-based job %s deleted, no notification needed (polling-based)", jobIDStr)
+
+	case taskDefinitionID == 3 || taskDefinitionID == 4:
+		// Event-based jobs - notify event scheduler
+		success, err := h.SendDeleteToEventScheduler(fmt.Sprintf("/api/v1/job/%s", jobIDStr))
+		if err != nil {
+			h.logger.Errorf("[NotifySchedulerDeletion] Failed to notify event scheduler about job %s deletion: %v", jobIDStr, err)
+		} else if success {
+			h.logger.Infof("[NotifySchedulerDeletion] Successfully notified event scheduler about job %s deletion", jobIDStr)
+		}
+
+	case taskDefinitionID == 5 || taskDefinitionID == 6:
+		// Condition-based jobs - notify condition scheduler
+		success, err := h.SendDeleteToConditionScheduler(fmt.Sprintf("/api/v1/job/%s", jobIDStr))
+		if err != nil {
+			h.logger.Errorf("[NotifySchedulerDeletion] Failed to notify condition scheduler about job %s deletion: %v", jobIDStr, err)
+		} else if success {
+			h.logger.Infof("[NotifySchedulerDeletion] Successfully notified condition scheduler about job %s deletion", jobIDStr)
+		}
+
+	default:
+		if taskDefinitionID != 0 { // Only warn if we actually found a task definition ID
+			h.logger.Warnf("[NotifySchedulerDeletion] Unknown task definition ID %d for deleted job %s", taskDefinitionID, jobIDStr)
+		}
+	}
 }

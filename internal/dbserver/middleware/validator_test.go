@@ -15,7 +15,7 @@ import (
 
 func init() {
 	// Initialize logger for all tests
-	config := logging.NewDefaultConfig(logging.ManagerProcess)
+	config := logging.NewDefaultConfig(logging.DatabaseProcess)
 	config.UseColors = false // Disable colors in tests
 	err := logging.InitServiceLogger(config)
 	if err != nil {

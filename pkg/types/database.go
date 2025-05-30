@@ -83,17 +83,22 @@ type ApiKey struct {
 }
 
 type TimeJobData struct {
-	JobID                         int64    `json:"job_id"`
-	TimeFrame                     int64    `json:"time_frame"`
-	Recurring                     bool     `json:"recurring"`
-	TimeInterval                  int64    `json:"time_interval"`
-	TargetChainID                 string   `json:"target_chain_id"`
-	TargetContractAddress         string   `json:"target_contract_address"`
-	TargetFunction                string   `json:"target_function"`
-	ABI                           string   `json:"abi"`
-	ArgType                       int      `json:"arg_type"`
-	Arguments                     []string `json:"arguments"`
-	DynamicArgumentsScriptIPFSUrl string   `json:"dynamic_arguments_script_ipfs_url"`
+	JobID                         int64     `json:"job_id"`
+	TimeFrame                     int64     `json:"time_frame"`
+	Recurring                     bool      `json:"recurring"`
+	ScheduleType                  string    `json:"schedule_type"`
+	TimeInterval                  int64     `json:"time_interval"`
+	CronExpression                string    `json:"cron_expression"`
+	SpecificSchedule              string    `json:"specific_schedule"`
+	Timezone                      string    `json:"timezone"`
+	NextExecutionTimestamp        time.Time `json:"next_execution_timestamp"`
+	TargetChainID                 string    `json:"target_chain_id"`
+	TargetContractAddress         string    `json:"target_contract_address"`
+	TargetFunction                string    `json:"target_function"`
+	ABI                           string    `json:"abi"`
+	ArgType                       int       `json:"arg_type"`
+	Arguments                     []string  `json:"arguments"`
+	DynamicArgumentsScriptIPFSUrl string    `json:"dynamic_arguments_script_ipfs_url"`
 }
 
 type EventJobData struct {
