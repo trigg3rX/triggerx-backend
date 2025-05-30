@@ -108,10 +108,6 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	return s
 }
 
-func (s *Server) GetRouter() *gin.Engine {
-	return s.router
-}
-
 func (s *Server) RegisterRoutes(router *gin.Engine) {
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig)
 
