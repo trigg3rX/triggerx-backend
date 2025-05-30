@@ -1,0 +1,21 @@
+{
+  "user_address": "0x1234567890123456789012345678901234567890",
+  "stake_amount": 1000000000000000000,
+  "token_amount": 1000000000000000000,
+  "task_definition_id": 1,
+  "priority": 5,
+  "security": 5,
+  "custom": false,
+  "job_title": "Test Time Job",
+  "time_frame": 3600,
+  "recurring": true,
+  "time_interval": 1800,
+  "job_cost_prediction": 0.1,
+  "target_chain_id": "1",
+  "target_contract_address": "0x1234567890123456789012345678901234567890",
+  "target_function": "execute",
+  "abi": "[{\"inputs\":[],\"name\":\"execute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+  "arg_type": 1,
+  "arguments": [],
+  "job_type": "time"
+}

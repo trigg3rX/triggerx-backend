@@ -85,7 +85,7 @@ func (m *MetricsServer) collectMetrics() {
 
 func (m *MetricsServer) updateKeeperMetrics() {
 	iter := m.db.Session().Query(`
-		SELECT keeper_id, keeper_address, no_exctask, keeper_points 
+		SELECT keeper_id, keeper_address, no_executed_tasks, keeper_points 
 		FROM triggerx.keeper_data
 	`).Iter()
 
@@ -138,7 +138,7 @@ func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Re
 	var points float64
 
 	err := m.db.Session().Query(`
-		SELECT keeper_id, no_exctask, keeper_points 
+		SELECT keeper_id, no_executed_tasks, keeper_points 
 		FROM triggerx.keeper_data
 		WHERE keeper_address = ? ALLOW FILTERING
 	`, keeperAddress).Scan(&keeperID, &taskCount, &points)

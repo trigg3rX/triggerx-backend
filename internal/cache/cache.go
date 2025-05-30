@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type Cache interface {
@@ -27,10 +26,10 @@ func Init() error {
 	once.Do(func() {
 		err = redis.Ping()
 		if err == nil {
-			logging.GetServiceLogger().Infof("[Cache] Using RedisCache as backend.")
 			cacheInstance = &RedisCache{}
 		} else {
-			logging.GetServiceLogger().Warnf("[Cache] Redis unavailable, falling back to FileCache: %v", err)
+			// Fallback to a FileCache only if it implements the Cache interface
+			// Otherwise, set cacheInstance to nil
 			var fileCache Cache = nil
 			if fc, ok := interface{}(&FileCache{}).(Cache); ok {
 				fileCache = fc
@@ -38,15 +37,12 @@ func Init() error {
 			cacheInstance = fileCache
 		}
 	})
-	if err != nil {
-		logging.GetServiceLogger().Errorf("[Cache] Cache initialization error: %v", err)
-	}
 	return err
+
 }
 
 func GetCache() (Cache, error) {
 	if cacheInstance == nil {
-		logging.GetServiceLogger().Errorf("[Cache] Cache not initialized!")
 		return nil, errors.New("cache not initialized")
 	}
 	return cacheInstance, nil

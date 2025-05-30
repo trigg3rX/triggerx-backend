@@ -26,7 +26,7 @@ type JobData struct {
 	Custom            bool    `json:"custom"`
 	TimeFrame         int64   `json:"time_frame"`
 	Recurring         bool    `json:"recurring"`
-	Status            bool    `json:"status"`
+	Status            string    `json:"status"`
 	JobCostPrediction float64 `json:"job_cost_prediction"`
 	TaskIDs           []int64 `json:"task_ids"`
 }
@@ -68,7 +68,7 @@ type KeeperData struct {
 	Status            bool     `json:"status"`
 	Online            bool     `json:"online"`
 	Version           string   `json:"version"`
-	NoExcTask         int      `json:"no_exctask"`
+	NoExcTask         int      `json:"no_executed_tasks"`
 	ChatID            int64    `json:"chat_id"`
 	EmailID           string   `json:"email_id"`
 }

@@ -5,7 +5,7 @@ import (
 )
 
 type Connection struct {
-	session *gocql.Session
+	session Sessioner
 	config  *Config
 }
 
@@ -29,7 +29,7 @@ func NewConnection(config *Config) (*Connection, error) {
 	return conn, nil
 }
 
-func (c *Connection) Session() *gocql.Session {
+func (c *Connection) Session() Sessioner {
 	return c.session
 }
 
