@@ -101,7 +101,7 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 	if err := h.db.Session().Query(`
         SELECT keeper_id, keeper_name, keeper_address, registered_tx, operator_id,
 			rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
-			strategies, verified, status, online, version, no_exctask, chat_id, email_id
+			strategies, verified, status, online, version, no_executed_tasks, chat_id, email_id
 		FROM triggerx.keeper_data 
         WHERE keeper_id = ?`, keeperID).Scan(
 		&keeperData.KeeperID, &keeperData.KeeperName, &keeperData.KeeperAddress,
@@ -158,7 +158,7 @@ func (h *Handler) GetAllKeepers(c *gin.Context) {
 	iter := h.db.Session().Query(`
 		SELECT keeper_id, keeper_name, keeper_address, registered_tx, operator_id,
 		       rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
-		       strategies, verified, status, online, version, no_exctask, chat_id, email_id
+		       strategies, verified, status, online, version, no_executed_tasks, chat_id, email_id
 		FROM triggerx.keeper_data`).Iter()
 
 	var keeper types.KeeperData
@@ -197,7 +197,7 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 
 	var currentCount int
 	if err := h.db.Session().Query(`
-		SELECT no_exctask FROM triggerx.keeper_data WHERE keeper_id = ?`,
+		SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&currentCount); err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving current task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -207,7 +207,7 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 	newCount := currentCount + 1
 
 	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET no_exctask = ? WHERE keeper_id = ?`,
+		UPDATE triggerx.keeper_data SET no_executed_tasks = ? WHERE keeper_id = ?`,
 		newCount, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error updating task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -215,7 +215,7 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 	}
 
 	h.logger.Infof("[IncrementKeeperTaskCount] Successfully incremented task count to %d for keeper ID: %s", newCount, keeperID)
-	c.JSON(http.StatusOK, gin.H{"no_exctask": newCount})
+	c.JSON(http.StatusOK, gin.H{"no_executed_tasks": newCount})
 }
 
 func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
@@ -224,7 +224,7 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 
 	var taskCount int
 	if err := h.db.Session().Query(`
-		SELECT no_exctask FROM triggerx.keeper_data WHERE keeper_id = ?`,
+		SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`,
 		keeperID).Scan(&taskCount); err != nil {
 		h.logger.Errorf("[GetKeeperTaskCount] Error retrieving task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -232,7 +232,7 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 	}
 
 	h.logger.Infof("[GetKeeperTaskCount] Successfully retrieved task count %d for keeper ID: %s", taskCount, keeperID)
-	c.JSON(http.StatusOK, gin.H{"no_exctask": taskCount})
+	c.JSON(http.StatusOK, gin.H{"no_executed_tasks": taskCount})
 }
 
 func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {

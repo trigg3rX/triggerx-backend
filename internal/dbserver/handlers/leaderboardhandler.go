@@ -9,7 +9,7 @@ import (
 func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	h.logger.Info("[GetKeeperLeaderboard] Fetching keeper leaderboard data")
 
-	query := `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
+	query := `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
               FROM triggerx.keeper_data 
               WHERE status = true AND verified = true ALLOW FILTERING`
 	iter := h.db.Session().Query(query).Iter()
@@ -108,12 +108,12 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	var args []interface{}
 
 	if keeperAddress != "" {
-		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
+		query = `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
                 FROM triggerx.keeper_data 
                 WHERE status = true AND keeper_address = ? ALLOW FILTERING`
 		args = append(args, keeperAddress)
 	} else {
-		query = `SELECT keeper_id, keeper_address, keeper_name, no_exctask, keeper_points 
+		query = `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
                 FROM triggerx.keeper_data 
                 WHERE status = true AND keeper_name = ? ALLOW FILTERING`
 		args = append(args, keeperName)

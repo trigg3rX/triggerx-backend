@@ -68,7 +68,7 @@ type KeeperData struct {
 	Status            bool     `json:"status"`
 	Online            bool     `json:"online"`
 	Version           string   `json:"version"`
-	NoExcTask         int      `json:"no_exctask"`
+	NoExcTask         int      `json:"no_executed_tasks"`
 	ChatID            int64    `json:"chat_id"`
 	EmailID           string   `json:"email_id"`
 }
