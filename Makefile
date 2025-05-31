@@ -50,3 +50,9 @@ build-keeper: ## Build the Keeper
 
 start-keeper: ## Start the Keeper
 	./scripts/services/start-keeper.sh
+
+############################ GITHUB ACTIONS ####################################
+
+format-go: ## Format the Go code
+	@which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
+	golangci-lint run --fix
