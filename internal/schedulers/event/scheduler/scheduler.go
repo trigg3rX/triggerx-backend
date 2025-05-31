@@ -296,7 +296,10 @@ func (s *EventBasedScheduler) getCachedOrFetchBlockNumber(client *ethclient.Clie
 
 	// Cache the result
 	if s.cache != nil {
-		s.cache.Set(cacheKey, fmt.Sprintf("%d", currentBlock), blockCacheTTL)
+		err := s.cache.Set(cacheKey, fmt.Sprintf("%d", currentBlock), blockCacheTTL)
+		if err != nil {
+			s.logger.Errorf("Error caching block number: %v", err)
+		}
 	}
 
 	return currentBlock, nil
@@ -451,7 +454,9 @@ func (w *JobWorker) checkForEvents() error {
 			"processed_at": time.Now().Unix(),
 		}
 		if jsonData, err := json.Marshal(processedData); err == nil {
-			w.cache.Set(blockRangeKey, string(jsonData), eventCacheTTL)
+			if err := w.cache.Set(blockRangeKey, string(jsonData), eventCacheTTL); err != nil {
+				w.logger.Errorf("Failed to set block range cache: %v", err)
+			}
 		}
 	}
 
@@ -487,7 +492,9 @@ func (w *JobWorker) processEvent(log types.Log) error {
 			return nil
 		}
 		// Mark event as processed
-		w.cache.Set(eventKey, time.Now().Format(time.RFC3339), duplicateEventWindow)
+		if err := w.cache.Set(eventKey, time.Now().Format(time.RFC3339), duplicateEventWindow); err != nil {
+			w.logger.Errorf("Failed to set event cache: %v", err)
+		}
 	}
 
 	// Create event context for Redis streaming

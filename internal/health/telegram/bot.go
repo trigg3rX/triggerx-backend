@@ -47,7 +47,10 @@ func (b *Bot) Start() {
 
 			if update.Message.IsCommand() && update.Message.Command() == "start" {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Enter Your Operator address (Keeper address)")
-				b.api.Send(msg)
+				_, err := b.api.Send(msg)
+				if err != nil {
+					b.logger.Errorf("Failed to send message: %v", err)
+				}
 				continue
 			}
 
@@ -58,15 +61,24 @@ func (b *Bot) Start() {
 			if err != nil {
 				b.logger.Errorf("Failed to update keeper chat ID: %v", err)
 				msg := tgbotapi.NewMessage(chatID, "Failed to register your keeper name. Please try again.")
-				b.api.Send(msg)
+				_, err = b.api.Send(msg)
+				if err != nil {
+					b.logger.Errorf("Failed to send message: %v", err)
+				}
 				continue
 			}
 
 			msg := tgbotapi.NewMessage(chatID, "Thanks! You will get the latest notifications")
-			b.api.Send(msg)
+			_, err = b.api.Send(msg)
+			if err != nil {
+				b.logger.Errorf("Failed to send message: %v", err)
+			}
 
 			testMsg := tgbotapi.NewMessage(chatID, "This is a test message to confirm your chat ID works!")
-			b.api.Send(testMsg)
+			_, err = b.api.Send(testMsg)
+			if err != nil {
+				b.logger.Errorf("Failed to send message: %v", err)
+			}
 		}
 	}()
 
