@@ -3,6 +3,7 @@ package execution
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
 	"strconv"
@@ -57,6 +58,12 @@ func (ac *ArgumentConverter) convertToInteger(value interface{}, targetType abi.
 			case float64:
 				return uint32(v), nil
 			case int:
+				if v < 0 {
+					return 0, fmt.Errorf("cannot convert negative value %d to uint32", v)
+				}
+				if v > math.MaxUint32 {
+					return 0, fmt.Errorf("value %d exceeds maximum uint32 value", v)
+				}
 				return uint32(v), nil
 			}
 		}

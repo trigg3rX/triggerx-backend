@@ -254,7 +254,9 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 		failureContext["status"] = "failed"
 		failureContext["error"] = err.Error()
 		failureContext["completed_at"] = time.Now().Unix()
-		redisx.AddJobToStream(redisx.JobsRetryTimeStream, failureContext)
+		if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, failureContext); err != nil {
+			s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+		}
 		return
 	}
 
@@ -287,15 +289,18 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 		metrics.JobsCompleted.Inc()
 		s.logger.Infof("Completed job %d in %v, next execution at %v",
 			job.JobID, duration, nextExecution)
-
 		completionContext["status"] = "completed"
-		redisx.AddJobToStream(redisx.JobsReadyTimeStream, completionContext)
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, completionContext); err != nil {
+			s.logger.Errorf("Failed to add job completion event to Redis stream: %v", err)
+		}
 	} else {
 		metrics.JobsFailed.Inc()
 		s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
 
 		completionContext["status"] = "failed"
-		redisx.AddJobToStream(redisx.JobsRetryTimeStream, completionContext)
+		if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, completionContext); err != nil {
+			s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+		}
 	}
 }
 
@@ -310,7 +315,9 @@ func (s *TimeBasedScheduler) performJobExecution(job *types.TimeJobData) bool {
 		}
 
 		// Mark as recently executed
-		s.cache.Set(recentKey, time.Now().Format(time.RFC3339), duplicateJobWindow)
+		if err := s.cache.Set(recentKey, time.Now().Format(time.RFC3339), duplicateJobWindow); err != nil {
+			s.logger.Errorf("Failed to set recent execution cache: %v", err)
+		}
 	}
 
 	// TODO: Replace this with actual job execution logic
@@ -352,30 +359,30 @@ func (s *TimeBasedScheduler) cacheJobData(job *types.TimeJobData, nextExecution 
 }
 
 // getCachedJobData retrieves job data from cache
-func (s *TimeBasedScheduler) getCachedJobData(jobID int64) (*types.TimeJobData, error) {
-	if s.cache == nil {
-		return nil, fmt.Errorf("cache not available")
-	}
+// func (s *TimeBasedScheduler) getCachedJobData(jobID int64) (*types.TimeJobData, error) {
+// 	if s.cache == nil {
+// 		return nil, fmt.Errorf("cache not available")
+// 	}
 
-	cacheKey := fmt.Sprintf("job_data_%d", jobID)
-	cachedData, err := s.cache.Get(cacheKey)
-	if err != nil {
-		return nil, err
-	}
+// 	cacheKey := fmt.Sprintf("job_data_%d", jobID)
+// 	cachedData, err := s.cache.Get(cacheKey)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	var jobData map[string]interface{}
-	if err := json.Unmarshal([]byte(cachedData), &jobData); err != nil {
-		return nil, err
-	}
+// 	var jobData map[string]interface{}
+// 	if err := json.Unmarshal([]byte(cachedData), &jobData); err != nil {
+// 		return nil, err
+// 	}
 
-	// This is a simplified example - you'd need to properly reconstruct the job
-	job := &types.TimeJobData{
-		JobID: jobID,
-		// Add other fields as needed from the cached data
-	}
+// 	// This is a simplified example - you'd need to properly reconstruct the job
+// 	job := &types.TimeJobData{
+// 		JobID: jobID,
+// 		// Add other fields as needed from the cached data
+// 	}
 
-	return job, nil
-}
+// 	return job, nil
+// }
 
 // Stop gracefully stops the scheduler
 func (s *TimeBasedScheduler) Stop() {

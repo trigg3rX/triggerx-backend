@@ -79,7 +79,9 @@ func TestLogRotationAndShutdown(t *testing.T) {
 	}
 
 	// Test shutdown
-	Shutdown()
+	if err := Shutdown(); err != nil {
+		t.Fatalf("Failed to shutdown logger: %v", err)
+	}
 
 	// Verify all log files exist and have content
 	expectedFiles := []string{

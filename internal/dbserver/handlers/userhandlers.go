@@ -48,12 +48,14 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
         SELECT account_balance
         FROM triggerx.user_data 
         WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {
+		userPoints = 0
 	}
 
 	if err := h.db.Session().Query(`
         SELECT keeper_points
         FROM triggerx.keeper_data 
         WHERE keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {
+		keeperPoints = 0
 	}
 
 	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)

@@ -93,7 +93,9 @@ func main() {
 					logger.Warnf("Cache test read failed: %v", err)
 				}
 				// Clean up test key
-				cacheInstance.Delete(testKey)
+				if err := cacheInstance.Delete(testKey); err != nil {
+					logger.Warnf("Failed to delete test key: %v", err)
+				}
 			}
 		}
 	}

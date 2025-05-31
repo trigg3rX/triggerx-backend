@@ -23,9 +23,18 @@ func NewValidator(logger logging.Logger) *Validator {
 	v := validator.New()
 
 	// Register custom validations
-	v.RegisterValidation("ethereum_address", validateEthereumAddress)
-	v.RegisterValidation("ipfs_url", validateIPFSURL)
-	v.RegisterValidation("chain_id", validateChainID)
+	err := v.RegisterValidation("ethereum_address", validateEthereumAddress)
+	if err != nil {
+		logger.Errorf("Error registering validation: %v", err)
+	}
+	err = v.RegisterValidation("ipfs_url", validateIPFSURL)
+	if err != nil {
+		logger.Errorf("Error registering validation: %v", err)
+	}
+	err = v.RegisterValidation("chain_id", validateChainID)
+	if err != nil {
+		logger.Errorf("Error registering validation: %v", err)
+	}
 
 	return &Validator{
 		validate: v,

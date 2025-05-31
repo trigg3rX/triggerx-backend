@@ -24,7 +24,10 @@ const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
-	config.Init()
+	err := config.Init()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize configuration: %v", err))
+	}
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{

@@ -145,9 +145,22 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 			LogRetryAttempt: config.LogRetryAttempt,
 		}, logger)
 
+		if err != nil {
+			logger.Errorf("Error retrying request: %v", err)
+			if finalStatus == 0 {
+				finalStatus = http.StatusInternalServerError
+				finalBody = []byte("Internal server error during retry operation")
+			}
+		}
+
 		// Write the final response to the original writer
 		origWriter.WriteHeader(finalStatus)
-		origWriter.Write(finalBody)
+		status, err := origWriter.Write(finalBody)
+		if err != nil {
+			logger.Errorf("Error writing final response: %v", err)
+		} else {
+			logger.Infof("Wrote %d bytes to response", status)
+		}
 
 		if err != nil {
 			// If all retries failed, return the last error as JSON

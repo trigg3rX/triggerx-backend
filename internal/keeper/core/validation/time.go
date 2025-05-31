@@ -38,6 +38,8 @@ func (v *TaskValidator) ValidateTimeBasedTask(job *types.HandleCreateJobData) (b
 	if job.LastExecutedAt.IsZero() {
 		// For first execution, check if it's within the timeframe from creation
 		if job.TimeFrame > 0 {
+			v.logger.Infof("Job %d is within its timeframe (created: %s, timeframe: %d seconds)",
+				job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame)
 			// Add tolerance to timeframe check
 			// endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second).Add(timeTolerance)
 			// if now.After(endTime) {

@@ -1,8 +1,9 @@
 package retry
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -30,6 +31,18 @@ func DefaultConfig() *Config {
 	}
 }
 
+// secureFloat64 returns a secure random float64 in [0.0,1.0)
+func secureFloat64() float64 {
+	var buf [8]byte
+	_, err := rand.Read(buf[:])
+	if err != nil {
+		// In a retry context, falling back to a default value is better than panicking
+		return 0.5
+	}
+	// Convert to uint64 and divide by max uint64 to get [0,1)
+	return float64(binary.BigEndian.Uint64(buf[:])) / float64(^uint64(0))
+}
+
 // Retry executes the given operation with exponential backoff and retry logic
 func Retry[T any](operation func() (T, error), config *Config, logger logging.Logger) (T, error) {
 	var result T
@@ -53,7 +66,7 @@ func Retry[T any](operation func() (T, error), config *Config, logger logging.Lo
 			// Add jitter to prevent thundering herd
 			if config.JitterFactor > 0 {
 				jitter := time.Duration(float64(delay) * config.JitterFactor)
-				delay += time.Duration(float64(jitter) * (0.5 - rand.Float64()))
+				delay += time.Duration(float64(jitter) * (0.5 - secureFloat64()))
 			}
 
 			// Ensure delay doesn't exceed max delay

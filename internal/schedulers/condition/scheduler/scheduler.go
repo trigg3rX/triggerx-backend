@@ -312,7 +312,9 @@ func (w *ConditionWorker) checkCondition() error {
 			return nil
 		}
 		// Mark this check time to prevent duplicates
-		w.cache.Set(checkKey, time.Now().Format(time.RFC3339), duplicateConditionWindow)
+		if err := w.cache.Set(checkKey, time.Now().Format(time.RFC3339), duplicateConditionWindow); err != nil {
+			w.logger.Errorf("Failed to set condition check cache: %v", err)
+		}
 	}
 
 	// Fetch current value from source (with caching)
@@ -340,7 +342,9 @@ func (w *ConditionWorker) checkCondition() error {
 	if err != nil {
 		conditionContext["status"] = "evaluation_error"
 		conditionContext["error"] = err.Error()
-		redisx.AddJobToStream(redisx.JobsRetryEventStream, conditionContext)
+		if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, conditionContext); err != nil {
+			w.logger.Warnf("Failed to add condition evaluation error to Redis stream: %v", err)
+		}
 		return fmt.Errorf("failed to evaluate condition: %w", err)
 	}
 
@@ -432,7 +436,9 @@ func (w *ConditionWorker) fetchValueWithCache() (float64, error) {
 	// Cache the value
 	if w.cache != nil {
 		cacheKey := fmt.Sprintf("value_%d_%s", w.job.JobID, w.job.ValueSourceUrl)
-		w.cache.Set(cacheKey, fmt.Sprintf("%f", currentValue), valueCacheTTL)
+		if err := w.cache.Set(cacheKey, fmt.Sprintf("%f", currentValue), valueCacheTTL); err != nil {
+			w.logger.Errorf("Failed to set value cache: %v", err)
+		}
 	}
 
 	return currentValue, nil
@@ -455,7 +461,9 @@ func (w *ConditionWorker) cacheConditionState(value float64, satisfied bool) {
 
 	if jsonData, err := json.Marshal(stateData); err == nil {
 		cacheKey := fmt.Sprintf("condition_state_%d", w.job.JobID)
-		w.cache.Set(cacheKey, string(jsonData), conditionStateCacheTTL)
+		if err := w.cache.Set(cacheKey, string(jsonData), conditionStateCacheTTL); err != nil {
+			w.logger.Errorf("Failed to set condition state cache: %v", err)
+		}
 	}
 }
 

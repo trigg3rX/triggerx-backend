@@ -245,7 +245,12 @@ func ParseTaskSubmitted(log ethtypes.Log) (*TaskSubmittedEvent, error) {
 	}
 
 	operator := common.BytesToAddress(log.Topics[1].Bytes())
-	taskDefinitionId := uint16(new(big.Int).SetBytes(log.Topics[2].Bytes()).Uint64())
+	bigIntValue := new(big.Int).SetBytes(log.Topics[2].Bytes())
+	uint64Value := bigIntValue.Uint64()
+	if uint64Value > uint64(^uint16(0)) {
+		return nil, fmt.Errorf("taskDefinitionId value %d exceeds uint16 maximum", uint64Value)
+	}
+	taskDefinitionId := uint16(uint64Value)
 
 	var unpacked struct {
 		TaskNumber   uint32
@@ -282,7 +287,12 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 	}
 
 	operator := common.BytesToAddress(log.Topics[1].Bytes())
-	taskDefinitionId := uint16(new(big.Int).SetBytes(log.Topics[2].Bytes()).Uint64())
+	bigIntValue := new(big.Int).SetBytes(log.Topics[2].Bytes())
+	uint64Value := bigIntValue.Uint64()
+	if uint64Value > uint64(^uint16(0)) {
+		return nil, fmt.Errorf("taskDefinitionId value %d exceeds uint16 maximum", uint64Value)
+	}
+	taskDefinitionId := uint16(uint64Value)
 
 	var unpacked struct {
 		TaskNumber   uint32
