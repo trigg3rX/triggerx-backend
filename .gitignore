@@ -2,9 +2,6 @@
 .env
 othentic/.env
 
-# go
-go.sum
-
 # release
 release/*
 
