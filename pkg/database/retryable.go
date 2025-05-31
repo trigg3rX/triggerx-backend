@@ -38,13 +38,13 @@ func isRetryableError(err error) bool {
 
 	// Check for common retryable errors
 	switch err.(type) {
-	case gocql.RequestError:
-		return true
 	case gocql.RequestErrWriteTimeout:
 		return true
 	case gocql.RequestErrReadTimeout:
 		return true
 	case gocql.RequestErrUnavailable:
+		return true
+	case gocql.RequestError:
 		return true
 	}
 
