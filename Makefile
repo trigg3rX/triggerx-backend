@@ -53,6 +53,30 @@ start-keeper: ## Start the Keeper
 
 ############################ GITHUB ACTIONS ####################################
 
+install-tools-for-github-actions: ## Install the tools for GitHub Actions
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/psampaz/go-mod-outdated@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
+	sudo curl -L -o /usr/local/bin/nancy https://github.com/sonatype-nexus-community/nancy/releases/download/v1.0.48/nancy-v1.0.48-linux-amd64
+	sudo chmod +x /usr/local/bin/nancy
+
 format-go: ## Format the Go code
 	@which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
 	golangci-lint run --fix
+
+dependency-update: ## Update the Go dependencies
+	@which go-mod-outdated > /dev/null 2>&1 || (echo "Error: go-mod-outdated is not installed. Please install it first." && exit 1)
+	go list -u -m -json all | go-mod-outdated -update -direct
+
+build-go: ## Build the Go code
+	go build -v ./...
+	go mod tidy
+	git diff --exit-code go.mod go.sum
+
+security-scan-go: ## Scan the Go code for security vulnerabilities
+	@which gosec > /dev/null 2>&1 || (echo "Error: gosec is not installed. Please install it first." && exit 1)
+	gosec ./...
+
+security-scan-nancy: ## Scan the Go code for security vulnerabilities
+	@which nancy > /dev/null 2>&1 || (echo "Error: nancy is not installed. Please install it first." && exit 1)
+	go list -json -m all | nancy sleuth
