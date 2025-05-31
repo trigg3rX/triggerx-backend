@@ -1,0 +1,23 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+  schedule:
+    - cron: '0 12 * * 5'  # Run every Friday at 12:00 PM
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: ./...
+
+      - name: Run nancy for dependency scanning
+        uses: sonatype-nexus-community/nancy-github-action@main

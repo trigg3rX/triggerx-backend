@@ -1,0 +1,31 @@
+name: Go Dependencies
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 1'  # Run every Monday
+  workflow_dispatch:  # Allow manual triggers
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.2'
+
+      - name: Check for updates
+        run: go list -u -m -json all | go-mod-outdated -update -direct
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: 'chore(deps): update Go dependencies'
+          branch: update-go-dependencies
+          commit-message: 'chore(deps): update Go dependencies'
