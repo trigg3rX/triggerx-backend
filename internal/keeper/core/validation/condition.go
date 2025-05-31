@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,7 +57,7 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	}
 
 	// Create a temporary file for the script
-	tempFile, err := ioutil.TempFile("", "condition-*.go")
+	tempFile, err := os.CreateTemp("", "condition-*.go")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary file: %v", err)
 	}
@@ -72,7 +71,7 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	}
 
 	// Create a temp directory for the script's build output
-	tempDir, err := ioutil.TempDir("", "condition-build")
+	tempDir, err := os.MkdirTemp("", "condition-build")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary build directory: %v", err)
 	}
