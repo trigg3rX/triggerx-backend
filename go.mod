@@ -3,7 +3,7 @@ module github.com/trigg3rX/triggerx-backend
 go 1.24.2
 
 require (
-	github.com/docker/docker v25.0.6+incompatible
+	github.com/docker/docker v28.2.2+incompatible
 	github.com/ethereum/go-ethereum v1.15.11
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-gomail/gomail v0.0.0-20160411212932-81ebce5c23df
@@ -33,6 +33,8 @@ require (
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/consensys/bavard v0.1.27 // indirect
 	github.com/consensys/gnark-crypto v0.16.0 // indirect
+	github.com/containerd/errdefs v1.0.0 // indirect
+	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.3.0 // indirect
 	github.com/crate-crypto/go-ipa v0.0.0-20240724233137-53bbb0ceb27a // indirect
@@ -67,6 +69,8 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
