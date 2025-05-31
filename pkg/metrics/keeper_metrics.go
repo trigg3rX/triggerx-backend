@@ -2,41 +2,41 @@ package metrics
 
 import (
 	"net/http"
-	"strconv"
+	// "strconv"
 	"strings"
-	"time"
+	// "time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	// "github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-var (
-	keeperPoints = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "triggerx_keeper_points",
-			Help: "The total points accumulated by each keeper",
-		},
-		[]string{"keeper_id", "keeper_address"},
-	)
+// var (
+// 	keeperPoints = promauto.NewGaugeVec(
+// 		prometheus.GaugeOpts{
+// 			Name: "triggerx_keeper_points",
+// 			Help: "The total points accumulated by each keeper",
+// 		},
+// 		[]string{"keeper_id", "keeper_address"},
+// 	)
 
-	keeperTaskCount = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "triggerx_keeper_task_count",
-			Help: "The number of tasks executed by each keeper",
-		},
-		[]string{"keeper_id", "keeper_address"},
-	)
+// 	keeperTaskCount = promauto.NewGaugeVec(
+// 		prometheus.GaugeOpts{
+// 			Name: "triggerx_keeper_task_count",
+// 			Help: "The number of tasks executed by each keeper",
+// 		},
+// 		[]string{"keeper_id", "keeper_address"},
+// 	)
 
-	totalKeepers = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "triggerx_total_keepers",
-			Help: "The total number of keepers in the system",
-		},
-	)
-)
+// 	totalKeepers = promauto.NewGauge(
+// 		prometheus.GaugeOpts{
+// 			Name: "triggerx_total_keepers",
+// 			Help: "The total number of keepers in the system",
+// 		},
+// 	)
+// )
 
 type MetricsServer struct {
 	db     *database.Connection
@@ -69,54 +69,54 @@ func (m *MetricsServer) Stop() {
 	m.done <- true
 }
 
-func (m *MetricsServer) collectMetrics() {
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
+// func (m *MetricsServer) collectMetrics() {
+// 	ticker := time.NewTicker(15 * time.Second)
+// 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			m.updateKeeperMetrics()
-		case <-m.done:
-			return
-		}
-	}
-}
+// 	for {
+// 		select {
+// 		case <-ticker.C:
+// 			m.updateKeeperMetrics()
+// 		case <-m.done:
+// 			return
+// 		}
+// 	}
+// }
 
-func (m *MetricsServer) updateKeeperMetrics() {
-	iter := m.db.Session().Query(`
-		SELECT keeper_id, keeper_address, no_executed_tasks, keeper_points 
-		FROM triggerx.keeper_data
-	`).Iter()
+// func (m *MetricsServer) updateKeeperMetrics() {
+// 	iter := m.db.Session().Query(`
+// 		SELECT keeper_id, keeper_address, no_executed_tasks, keeper_points 
+// 		FROM triggerx.keeper_data
+// 	`).Iter()
 
-	var (
-		keeperID      int64
-		keeperAddress string
-		taskCount     int
-		points        float64
-	)
+// 	var (
+// 		keeperID      int64
+// 		keeperAddress string
+// 		taskCount     int
+// 		points        float64
+// 	)
 
-	keeperCount := 0
+// 	keeperCount := 0
 
-	keeperPoints.Reset()
-	keeperTaskCount.Reset()
+// 	keeperPoints.Reset()
+// 	keeperTaskCount.Reset()
 
-	for iter.Scan(&keeperID, &keeperAddress, &taskCount, &points) {
-		keeperIDStr := strconv.FormatInt(keeperID, 10)
+// 	for iter.Scan(&keeperID, &keeperAddress, &taskCount, &points) {
+// 		keeperIDStr := strconv.FormatInt(keeperID, 10)
 
-		keeperPoints.WithLabelValues(keeperIDStr, keeperAddress).Set(float64(points))
+// 		keeperPoints.WithLabelValues(keeperIDStr, keeperAddress).Set(float64(points))
 
-		keeperTaskCount.WithLabelValues(keeperIDStr, keeperAddress).Set(float64(taskCount))
+// 		keeperTaskCount.WithLabelValues(keeperIDStr, keeperAddress).Set(float64(taskCount))
 
-		keeperCount++
-	}
+// 		keeperCount++
+// 	}
 
-	totalKeepers.Set(float64(keeperCount))
+// 	totalKeepers.Set(float64(keeperCount))
 
-	if err := iter.Close(); err != nil {
-		m.logger.Errorf("Error fetching keeper metrics: %v", err)
-	}
-}
+// 	if err := iter.Close(); err != nil {
+// 		m.logger.Errorf("Error fetching keeper metrics: %v", err)
+// 	}
+// }
 
 func (m *MetricsServer) filteredMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	keeperAddress := r.URL.Query().Get("address")

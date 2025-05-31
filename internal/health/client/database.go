@@ -2,10 +2,10 @@ package client
 
 import (
 	"bytes"
-	"encoding/json"
+	// "encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
+	// "net/http"
 	"strings"
 	"time"
 
@@ -219,29 +219,29 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 	}
 }
 
-func (dm *DatabaseManager) sendTelegramNotification(chatID int64, message string) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", config.GetBotToken())
-	payload := map[string]interface{}{
-		"chat_id": chatID,
-		"text":    message,
-	}
+// func (dm *DatabaseManager) sendTelegramNotification(chatID int64, message string) error {
+// 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", config.GetBotToken())
+// 	payload := map[string]interface{}{
+// 		"chat_id": chatID,
+// 		"text":    message,
+// 	}
 
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		dm.logger.Errorf("[Notification] Failed to marshal Telegram payload: %v", err)
-		return err
-	}
+// 	jsonData, err := json.Marshal(payload)
+// 	if err != nil {
+// 		dm.logger.Errorf("[Notification] Failed to marshal Telegram payload: %v", err)
+// 		return err
+// 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		dm.logger.Errorf("[Notification] Failed to send Telegram message: %v", err)
-		return err
-	}
-	defer resp.Body.Close()
+// 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+// 	if err != nil {
+// 		dm.logger.Errorf("[Notification] Failed to send Telegram message: %v", err)
+// 		return err
+// 	}
+// 	defer resp.Body.Close()
 
-	dm.logger.Infof("[Notification] Telegram message sent successfully to chat ID: %d (Status: %d)", chatID, resp.StatusCode)
-	return nil
-}
+// 	dm.logger.Infof("[Notification] Telegram message sent successfully to chat ID: %d (Status: %d)", chatID, resp.StatusCode)
+// 	return nil
+// }
 
 func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error {
 	m := gomail.NewMessage()
