@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -27,8 +28,7 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	}
 
 	var maxTaskID int64
-	if err := h.db.Session().Query(`
-		SELECT MAX(task_id) FROM triggerx.task_data`).Scan(&maxTaskID); err != nil {
+	if err := h.db.Session().Query(queries.SelectMaxTaskIDQuery).Scan(&maxTaskID); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error getting max task ID: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -37,11 +37,7 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 
 	h.logger.Infof("[CreateTaskData] Creating task with ID: %d", taskResponse.TaskID)
 
-	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.task_data (
-            task_id, job_id, task_definition_id, created_at,
-            task_performer_id, is_approved
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
+	if err := h.db.Session().Query(queries.InsertTaskDataQuery,
 		taskResponse.TaskID, taskData.JobID, taskData.TaskDefinitionID,
 		time.Now().UTC(), taskData.TaskPerformerID, false).Exec(); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error inserting task with ID %d: %v", taskResponse.TaskID, err)
@@ -63,14 +59,7 @@ func (h *Handler) GetTaskData(c *gin.Context) {
 	h.logger.Infof("[GetTaskData] Fetching task with ID: %s", taskID)
 
 	var taskData ttypes.TaskData
-	if err := h.db.Session().Query(`
-        SELECT task_id, job_id, task_definition_id, created_at,
-               task_fee, execution_timestamp, execution_tx_hash, task_performer_id, 
-			   proof_of_task, action_data_cid, task_attester_ids,
-			   is_approved, tp_signature, ta_signature, task_submission_tx_hash,
-			   is_successful
-        FROM triggerx.task_data
-        WHERE task_id = ?`, taskID).Scan(
+	if err := h.db.Session().Query(queries.SelectTaskDataByIDQuery, taskID).Scan(
 		&taskData.TaskID, &taskData.JobID, &taskData.TaskDefinitionID, &taskData.CreatedAt,
 		&taskData.TaskFee, &taskData.ExecutionTimestamp, &taskData.ExecutionTxHash, &taskData.TaskPerformerID,
 		&taskData.ProofOfTask, &taskData.ActionDataCID, &taskData.TaskAttesterIDs,
@@ -173,10 +162,7 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.task_data
-		SET task_fee = ?
-		WHERE task_id = ?`, taskFee.Fee, taskID).Exec(); err != nil {
+	if err := h.db.Session().Query(queries.UpdateTaskFeeQuery, taskFee.Fee, taskID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

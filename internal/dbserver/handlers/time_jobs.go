@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	// "github.com/gocql/gocql"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -24,13 +25,7 @@ func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
 
 	var jobs []types.TimeJobData
 
-	iter := h.db.Session().Query(`
-		SELECT job_id, time_frame, recurring, schedule_type, time_interval, 
-		       cron_expression, specific_schedule, timezone, next_execution_timestamp,
-		       target_chain_id, target_contract_address, target_function,
-		       abi, arg_type, arguments, dynamic_arguments_script_ipfs_url 
-		FROM triggerx.time_job_data 
-		WHERE next_execution_timestamp <= ? ALLOW FILTERING`,
+	iter := h.db.Session().Query(queries.SelectTimeBasedJobsQuery,
 		time.Now().Add(time.Duration(pollInterval)*time.Second)).Iter()
 
 	var job types.TimeJobData

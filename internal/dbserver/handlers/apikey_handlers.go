@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -41,10 +42,8 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 	h.logger.Infof("[CreateApiKey] Checking for existing API key for owner: %s", req.Owner)
 
 	var existingKey types.ApiKey
-	checkQuery := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
-				  FROM triggerx.apikeys WHERE owner = ? ALLOW FILTERING`
 
-	err := h.db.Session().Query(checkQuery, req.Owner).Scan(
+	err := h.db.Session().Query(queries.CheckApiKeyQuery, req.Owner).Scan(
 		&existingKey.Key,
 		&existingKey.Owner,
 		&existingKey.IsActive,
@@ -72,10 +71,7 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	insertQuery := `INSERT INTO triggerx.apikeys (key, owner, isActive, rateLimit, lastUsed, createdAt) 
-					VALUES (?, ?, ?, ?, ?, ?)`
-
-	if err := h.db.Session().Query(insertQuery,
+	if err := h.db.Session().Query(queries.InsertApiKeyQuery,
 		apiKey.Key,
 		apiKey.Owner,
 		apiKey.IsActive,
@@ -106,10 +102,8 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 	}
 
 	var apiKey types.ApiKey
-	query := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
-	          FROM triggerx.apikeys WHERE key = ?`
 
-	if err := h.db.Session().Query(query, keyID).Scan(
+	if err := h.db.Session().Query(queries.SelectApiKeyQuery, keyID).Scan(
 		&apiKey.Key,
 		&apiKey.Owner,
 		&apiKey.IsActive,
@@ -130,8 +124,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 		apiKey.RateLimit = *req.RateLimit
 	}
 
-	updateQuery := `UPDATE triggerx.apikeys SET isActive = ?, rateLimit = ? WHERE key = ?`
-	if err := h.db.Session().Query(updateQuery,
+	if err := h.db.Session().Query(queries.UpdateApiKeyQuery,
 		apiKey.IsActive,
 		apiKey.RateLimit,
 		apiKey.Key,
@@ -147,8 +140,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 func (h *Handler) DeleteApiKey(c *gin.Context) {
 	keyID := c.Param("key")
 
-	query := `UPDATE apikeys SET isActive = ? WHERE key = ?`
-	if err := h.db.Session().Query(query, false, keyID).Exec(); err != nil {
+	if err := h.db.Session().Query(queries.DeleteApiKeyQuery, false, keyID).Exec(); err != nil {
 		h.logger.Errorf("Failed to delete API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return

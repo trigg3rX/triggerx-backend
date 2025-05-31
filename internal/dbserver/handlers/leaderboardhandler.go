@@ -1,18 +1,18 @@
 package handlers
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	h.logger.Info("[GetKeeperLeaderboard] Fetching keeper leaderboard data")
 
-	query := `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
-              FROM triggerx.keeper_data 
-              WHERE registered = true AND whitelisted = true ALLOW FILTERING`
-	iter := h.db.Session().Query(query).Iter()
+	iter := h.db.Session().Query(queries.SelectKeeperLeaderboardQuery).Iter()
 
 	var keeperLeaderboard []types.KeeperLeaderboardEntry
 	var keeperEntry types.KeeperLeaderboardEntry
@@ -40,10 +40,7 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
-	query := `SELECT user_id, user_address, user_points 
-              FROM triggerx.user_data`
-
-	iter := h.db.Session().Query(query).Iter()
+	iter := h.db.Session().Query(queries.SelectUserLeaderboardQuery).Iter()
 
 	var userLeaderboard []types.UserLeaderboardEntry
 	var userEntry types.UserLeaderboardEntry
@@ -53,17 +50,15 @@ func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 		&userEntry.UserAddress,
 		&userEntry.UserPoints,
 	) {
-		jobCountQuery := `SELECT COUNT(*) FROM triggerx.job_data WHERE user_id = ? ALLOW FILTERING`
 		var totalJobs int
-		if err := h.db.Session().Query(jobCountQuery, userEntry.UserID).Scan(&totalJobs); err != nil {
+		if err := h.db.Session().Query(queries.SelectUserJobCountQuery, userEntry.UserID).Scan(&totalJobs); err != nil {
 			h.logger.Errorf("[GetUserLeaderboard] Error counting jobs for user %s: %v", userEntry.UserID, err)
 			totalJobs = 0
 		}
 		userEntry.TotalJobs = int64(totalJobs)
 
-		jobIDsQuery := `SELECT job_ids FROM triggerx.user_data WHERE user_id = ?`
 		var jobIDs []int64
-		if err := h.db.Session().Query(jobIDsQuery, userEntry.UserID).Scan(&jobIDs); err != nil {
+		if err := h.db.Session().Query(queries.SelectUserJobIDsByIDQuery, userEntry.UserID).Scan(&jobIDs); err != nil {
 			h.logger.Errorf("[GetUserLeaderboard] Error getting job IDs for user %d: %v", userEntry.UserID, err)
 			jobIDs = []int64{}
 		}
@@ -71,8 +66,7 @@ func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 		var tasksCompleted int64
 		for _, jobID := range jobIDs {
 			var taskCount int
-			taskCountQuery := `SELECT COUNT(*) FROM triggerx.task_data WHERE job_id = ? ALLOW FILTERING`
-			if err := h.db.Session().Query(taskCountQuery, jobID).Scan(&taskCount); err != nil {
+			if err := h.db.Session().Query(queries.SelectTaskCountByJobIDQuery, jobID).Scan(&taskCount); err != nil {
 				h.logger.Errorf("[GetUserLeaderboard] Error counting tasks for job %d: %v", jobID, err)
 				continue
 			}
@@ -108,14 +102,10 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	var args []interface{}
 
 	if keeperAddress != "" {
-		query = `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
-                FROM triggerx.keeper_data 
-                WHERE registered = true AND keeper_address = ? ALLOW FILTERING`
+		query = queries.SelectKeeperByAddressQuery
 		args = append(args, keeperAddress)
 	} else {
-		query = `SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, keeper_points 
-                FROM triggerx.keeper_data 
-                WHERE registered = true AND keeper_name = ? ALLOW FILTERING`
+		query = queries.SelectKeeperByNameQuery
 		args = append(args, keeperName)
 	}
 
@@ -145,12 +135,8 @@ func (h *Handler) GetUserByAddress(c *gin.Context) {
 		return
 	}
 
-	query := `SELECT user_id, user_address, user_points 
-              FROM triggerx.user_data 
-              WHERE user_address = ? ALLOW FILTERING`
-
 	var userEntry types.UserLeaderboardEntry
-	if err := h.db.Session().Query(query, userAddress).Scan(
+	if err := h.db.Session().Query(queries.SelectUserByAddressQuery, userAddress).Scan(
 		&userEntry.UserID,
 		&userEntry.UserAddress,
 		&userEntry.UserPoints,
@@ -160,17 +146,15 @@ func (h *Handler) GetUserByAddress(c *gin.Context) {
 		return
 	}
 
-	jobCountQuery := `SELECT COUNT(*) FROM triggerx.job_data WHERE user_address = ? ALLOW FILTERING`
 	var totalJobs int
-	if err := h.db.Session().Query(jobCountQuery, userAddress).Scan(&totalJobs); err != nil {
+	if err := h.db.Session().Query(queries.SelectUserJobCountByAddressQuery, userAddress).Scan(&totalJobs); err != nil {
 		h.logger.Errorf("[GetUserByAddress] Error counting jobs for user %s: %v", userAddress, err)
 		totalJobs = 0
 	}
 	userEntry.TotalJobs = int64(totalJobs)
 
-	tasksCountQuery := `SELECT COUNT(*) FROM triggerx.task_data WHERE user_address = ? AND execution_timestamp IS NOT NULL ALLOW FILTERING`
 	var tasksCompleted int
-	if err := h.db.Session().Query(tasksCountQuery, userAddress).Scan(&tasksCompleted); err != nil {
+	if err := h.db.Session().Query(queries.SelectUserTaskCountByAddressQuery, userAddress).Scan(&tasksCompleted); err != nil {
 		h.logger.Errorf("[GetUserByAddress] Error counting tasks for user %s: %v", userAddress, err)
 		tasksCompleted = 0
 	}

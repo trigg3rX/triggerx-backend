@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -21,17 +22,13 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 	keeperData.KeeperAddress = strings.ToLower(keeperData.KeeperAddress)
 
 	var existingKeeperID int64
-	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+	if err := h.db.Session().Query(queries.SelectKeeperIDByAddressQuery,
 		keeperData.KeeperAddress).Scan(&existingKeeperID); err == nil {
 		h.logger.Infof(" Keeper already exists with ID: %d", existingKeeperID)
 	}
 
 	if existingKeeperID != 0 {
-		if err := h.db.Session().Query(`
-			UPDATE triggerx.keeper_data SET 
-			keeper_name = ?, keeper_address = ?, rewards_address = ?, email_id = ?
-			WHERE keeper_id = ?`,
+		if err := h.db.Session().Query(queries.UpdateKeeperDataQuery,
 			keeperData.KeeperName, keeperData.KeeperAddress, keeperData.RewardsAddress,
 			keeperData.EmailID, existingKeeperID).Exec(); err != nil {
 			h.logger.Errorf(" Error updating keeper with ID %d: %v", existingKeeperID, err)
@@ -40,8 +37,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 		}
 	} else {
 		var maxKeeperID int64
-		if err := h.db.Session().Query(`
-			SELECT MAX(keeper_id) FROM triggerx.keeper_data`).Scan(&maxKeeperID); err != nil {
+		if err := h.db.Session().Query(queries.SelectMaxKeeperIDQuery).Scan(&maxKeeperID); err != nil {
 			h.logger.Errorf(" Error getting max keeper ID : %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -51,11 +47,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 		var rewards float64 = 0.0
 
 		h.logger.Infof(" Creating keeper with ID: %d", currentKeeperID)
-		if err := h.db.Session().Query(`
-			INSERT INTO triggerx.keeper_data (
-				keeper_id, keeper_name, keeper_address, rewards_booster,
-				rewards_address, keeper_points, verified, email_id
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		if err := h.db.Session().Query(queries.InsertKeeperDataQuery,
 			currentKeeperID, keeperData.KeeperName, keeperData.KeeperAddress, booster,
 			keeperData.RewardsAddress, rewards, true, keeperData.EmailID).Exec(); err != nil {
 			h.logger.Errorf(" Error creating keeper with ID %d: %v", currentKeeperID, err)
@@ -98,12 +90,7 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 	h.logger.Infof("[GetKeeperData] Retrieving keeper with ID: %s", keeperID)
 
 	var keeperData types.KeeperData
-	if err := h.db.Session().Query(`
-        SELECT keeper_id, keeper_name, keeper_address, registered_tx, operator_id,
-			rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
-			strategies, verified, status, online, version, no_executed_tasks, chat_id, email_id
-		FROM triggerx.keeper_data 
-        WHERE keeper_id = ?`, keeperID).Scan(
+	if err := h.db.Session().Query(queries.SelectKeeperDataByIDQuery, keeperID).Scan(
 		&keeperData.KeeperID, &keeperData.KeeperName, &keeperData.KeeperAddress,
 		&keeperData.RegisteredTx, &keeperData.OperatorID,
 		&keeperData.RewardsAddress, &keeperData.RewardsBooster, &keeperData.VotingPower,
@@ -122,10 +109,7 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 
 func (h *Handler) GetPerformers(c *gin.Context) {
 	var performers []types.GetPerformerData
-	iter := h.db.Session().Query(`SELECT keeper_id, keeper_address 
-			FROM triggerx.keeper_data 
-			WHERE keeper_id = 2
-			ALLOW FILTERING`).Iter()
+	iter := h.db.Session().Query(queries.SelectPerformersQuery).Iter()
 
 	var performer types.GetPerformerData
 	for iter.Scan(
@@ -155,11 +139,7 @@ func (h *Handler) GetAllKeepers(c *gin.Context) {
 	h.logger.Infof("[GetAllKeepers] Retrieving all keepers")
 	var keepers []types.KeeperData
 
-	iter := h.db.Session().Query(`
-		SELECT keeper_id, keeper_name, keeper_address, registered_tx, operator_id,
-		       rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
-		       strategies, verified, status, online, version, no_executed_tasks, chat_id, email_id
-		FROM triggerx.keeper_data`).Iter()
+	iter := h.db.Session().Query(queries.SelectAllKeepersQuery).Iter()
 
 	var keeper types.KeeperData
 	var tmpStrategies []string
@@ -196,8 +176,7 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 	h.logger.Infof("[IncrementKeeperTaskCount] Incrementing task count for keeper with ID: %s", keeperID)
 
 	var currentCount int
-	if err := h.db.Session().Query(`
-		SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.SelectKeeperTaskCountQuery,
 		keeperID).Scan(&currentCount); err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving current task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -206,8 +185,7 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 
 	newCount := currentCount + 1
 
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET no_executed_tasks = ? WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.UpdateKeeperTaskCountQuery,
 		newCount, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error updating task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -223,8 +201,7 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 	h.logger.Infof("[GetKeeperTaskCount] Retrieving task count for keeper with ID: %s", keeperID)
 
 	var taskCount int
-	if err := h.db.Session().Query(`
-		SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.SelectKeeperTaskCountQuery,
 		keeperID).Scan(&taskCount); err != nil {
 		h.logger.Errorf("[GetKeeperTaskCount] Error retrieving task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -252,8 +229,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 	h.logger.Infof("[AddTaskFeeToKeeperPoints] Processing task fee for task ID %d to keeper with ID: %s", taskID, keeperID)
 
 	var taskFee int64
-	if err := h.db.Session().Query(`
-		SELECT task_fee FROM triggerx.task_data WHERE task_id = ?`,
+	if err := h.db.Session().Query(queries.SelectTaskFeeQuery,
 		taskID).Scan(&taskFee); err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving task fee for task ID %d: %v", taskID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -261,8 +237,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 	}
 
 	var currentPoints int64
-	if err := h.db.Session().Query(`
-		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.SelectKeeperPointsQuery,
 		keeperID).Scan(&currentPoints); err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving current points: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -271,8 +246,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 
 	newPoints := currentPoints + taskFee
 
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET keeper_points = ? WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.UpdateKeeperPointsQuery,
 		newPoints, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error updating keeper points: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -293,8 +267,7 @@ func (h *Handler) GetKeeperPoints(c *gin.Context) {
 	h.logger.Infof("[GetKeeperPoints] Retrieving points for keeper with ID: %s", keeperID)
 
 	var points int64
-	if err := h.db.Session().Query(`
-		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.SelectKeeperPointsQuery,
 		keeperID).Scan(&points); err != nil {
 		h.logger.Errorf("[GetKeeperPoints] Error retrieving keeper points: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -320,9 +293,7 @@ func (h *Handler) UpdateKeeperChatID(c *gin.Context) {
 	h.logger.Infof("[UpdateKeeperChatID] Finding keeper ID for keeper: %s", requestData.KeeperName)
 
 	var keeperID string
-	if err := h.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data 
-		WHERE keeper_name = ?  ALLOW FILTERING`, requestData.KeeperName).Consistency(gocql.One).Scan(&keeperID); err != nil {
+	if err := h.db.Session().Query(queries.SelectKeeperIDByNameQuery, requestData.KeeperName).Consistency(gocql.One).Scan(&keeperID); err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error finding keeper ID for keeper %s: %v", requestData.KeeperName, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -330,10 +301,7 @@ func (h *Handler) UpdateKeeperChatID(c *gin.Context) {
 
 	h.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %s", keeperID)
 
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET chat_id = ? 
-		WHERE keeper_id = ?`,
+	if err := h.db.Session().Query(queries.UpdateKeeperChatIDQuery,
 		requestData.ChatID, keeperID).Exec(); err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper ID %s: %v", keeperID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -354,10 +322,7 @@ func (h *Handler) GetKeeperCommunicationInfo(c *gin.Context) {
 		EmailID    string `json:"email_id"`
 	}
 
-	if err := h.db.Session().Query(`
-        SELECT chat_id, keeper_name, email_id 
-        FROM triggerx.keeper_data 
-        WHERE keeper_id = ? ALLOW FILTERING`, keeperID).Scan(&keeperData.ChatID, &keeperData.KeeperName, &keeperData.EmailID); err != nil {
+	if err := h.db.Session().Query(queries.SelectKeeperCommunicationInfoQuery, keeperID).Scan(&keeperData.ChatID, &keeperData.KeeperName, &keeperData.EmailID); err != nil {
 		h.logger.Errorf("[GetKeeperChatInfo] Error retrieving chat ID, keeper name, and email for ID %s: %v", keeperID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -15,10 +16,7 @@ func (h *Handler) GetUserData(c *gin.Context) {
 
 	var userData types.UserData
 
-	if err := h.db.Session().Query(`
-        SELECT user_id, user_address, job_ids, account_balance
-        FROM triggerx.user_data 
-        WHERE user_id = ? ALLOW FILTERING`, userID).Scan(
+	if err := h.db.Session().Query(queries.SelectUserDataByIDQuery, userID).Scan(
 		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.AccountBalance); err != nil {
 		h.logger.Errorf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -44,17 +42,11 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	var userPoints int
 	var keeperPoints int
 
-	if err := h.db.Session().Query(`
-        SELECT account_balance
-        FROM triggerx.user_data 
-        WHERE user_address = ? ALLOW FILTERING`, walletAddress).Scan(&userPoints); err != nil {
+	if err := h.db.Session().Query(queries.SelectUserPointsByAddressQuery, walletAddress).Scan(&userPoints); err != nil {
 		userPoints = 0
 	}
 
-	if err := h.db.Session().Query(`
-        SELECT keeper_points
-        FROM triggerx.keeper_data 
-        WHERE keeper_address = ? ALLOW FILTERING`, walletAddress).Scan(&keeperPoints); err != nil {
+	if err := h.db.Session().Query(queries.SelectKeeperPointsByAddressQuery, walletAddress).Scan(&keeperPoints); err != nil {
 		keeperPoints = 0
 	}
 
