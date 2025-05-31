@@ -9,7 +9,7 @@ import (
 
 // StatusHandler handles status endpoint requests
 type StatusHandler struct {
-	logger    logging.Logger
+	logger logging.Logger
 }
 
 // NewStatusHandler creates a new status handler

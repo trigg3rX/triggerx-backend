@@ -12,7 +12,7 @@ type HandleCreateJobData struct {
 	Custom                 bool     `json:"custom"`
 	TimeFrame              int64    `json:"time_frame"`
 	Recurring              bool     `json:"recurring"`
-	Status                 string     `json:"status"`
+	Status                 string   `json:"status"`
 	JobCostPrediction      float64  `json:"job_cost_prediction"`
 	TimeInterval           int64    `json:"time_interval"`
 	TriggerChainID         string   `json:"trigger_chain_id"`

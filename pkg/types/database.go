@@ -26,7 +26,7 @@ type JobData struct {
 	Custom            bool    `json:"custom"`
 	TimeFrame         int64   `json:"time_frame"`
 	Recurring         bool    `json:"recurring"`
-	Status            string    `json:"status"`
+	Status            string  `json:"status"`
 	JobCostPrediction float64 `json:"job_cost_prediction"`
 	TaskIDs           []int64 `json:"task_ids"`
 }

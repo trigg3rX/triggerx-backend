@@ -247,7 +247,3 @@ func createJSONBody(t *testing.T, data interface{}) *bytes.Buffer {
 	assert.NoError(t, err)
 	return bytes.NewBuffer(jsonData)
 }
-
-
-
-

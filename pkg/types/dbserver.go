@@ -50,7 +50,7 @@ type CreateJobData struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	// Timezone          string    `json:"timezone" validate:"required,timezone"`
-	Timezone          string    `json:"timezone"`
+	Timezone string `json:"timezone"`
 
 	// Job type specific fields
 	// JobType JobType `json:"job_type" validate:"required,oneof=time event condition"`
@@ -75,14 +75,14 @@ type CreateJobData struct {
 	ValueSourceUrl  string  `json:"value_source_url,omitempty" validate:"omitempty,url"`
 
 	// Target fields (common for all job types)
-	TargetChainID         string   `json:"target_chain_id" validate:"required,chain_id"`
-	TargetContractAddress string   `json:"target_contract_address" validate:"required,ethereum_address"`
-	TargetFunction        string   `json:"target_function" validate:"required"`
-	ABI                   string   `json:"abi" validate:"required"`
+	TargetChainID         string `json:"target_chain_id" validate:"required,chain_id"`
+	TargetContractAddress string `json:"target_contract_address" validate:"required,ethereum_address"`
+	TargetFunction        string `json:"target_function" validate:"required"`
+	ABI                   string `json:"abi" validate:"required"`
 	// ArgType               int      `json:"arg_type" validate:"required"`
 	// Arguments             []string `json:"arguments" validate:"required"`
-	ArgType               int      `json:"arg_type"`
-	Arguments             []string `json:"arguments"`
+	ArgType   int      `json:"arg_type"`
+	Arguments []string `json:"arguments"`
 
 	// Script fields (optional)
 	ScriptIPFSUrl         string `json:"script_ipfs_url,omitempty" validate:"omitempty,ipfs_url"`

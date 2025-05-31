@@ -14,7 +14,7 @@ type TaskExecutor struct {
 	ethClient       *ethclient.Client
 	etherscanAPIKey string
 	argConverter    *ArgumentConverter
-	logger logging.Logger
+	logger          logging.Logger
 }
 
 // NewTaskExecutor creates a new instance of TaskExecutor

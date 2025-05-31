@@ -20,8 +20,8 @@ import (
 
 // DatabaseManager handles database operations
 type DatabaseManager struct {
-	logger logging.Logger
-	db     *database.Connection
+	logger      logging.Logger
+	db          *database.Connection
 	telegramBot *telegram.Bot
 }
 
@@ -43,8 +43,8 @@ func InitDatabaseManager(logger logging.Logger, connection *database.Connection,
 	dbLogger := logger.With("component", "database")
 
 	instance = &DatabaseManager{
-		logger: dbLogger,
-		db:     connection,
+		logger:      dbLogger,
+		db:          connection,
 		telegramBot: telegramBot,
 	}
 }

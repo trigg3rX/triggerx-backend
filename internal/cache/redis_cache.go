@@ -29,17 +29,17 @@ func (r *RedisCache) Delete(key string) error {
 }
 
 func (r *RedisCache) AcquirePerformerLock(performerID string, ttl time.Duration) (bool, error) {
-    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-    defer cancel()
-    key := "performer:busy:" + performerID
-    // NX = only set if not exists, EX = expire after ttl
-    res, err := redisclient.GetClient().SetNX(ctx, key, "1", ttl).Result()
-    return res, err
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	key := "performer:busy:" + performerID
+	// NX = only set if not exists, EX = expire after ttl
+	res, err := redisclient.GetClient().SetNX(ctx, key, "1", ttl).Result()
+	return res, err
 }
 
 func (r *RedisCache) ReleasePerformerLock(performerID string) error {
-    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-    defer cancel()
-    key := "performer:busy:" + performerID
-    return redisclient.GetClient().Del(ctx, key).Err()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	key := "performer:busy:" + performerID
+	return redisclient.GetClient().Del(ctx, key).Err()
 }

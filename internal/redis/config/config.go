@@ -5,8 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"os"
-
-
 )
 
 type Config struct {
@@ -14,13 +12,14 @@ type Config struct {
 }
 
 var cfg Config
+
 func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
 	cfg = Config{
-		DevMode:              os.Getenv("DEV_MODE") == "true",
+		DevMode: os.Getenv("DEV_MODE") == "true",
 	}
 
 	if !cfg.DevMode {

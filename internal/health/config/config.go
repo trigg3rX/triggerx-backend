@@ -15,14 +15,14 @@ type Config struct {
 	HealthRPCPort      string
 	DatabaseRPCAddress string
 
-	BotToken           string
-	EmailUser          string
-	EmailPassword      string
+	BotToken      string
+	EmailUser     string
+	EmailPassword string
 
-	DatabaseHost       string
-	DatabaseHostPort   string
+	DatabaseHost     string
+	DatabaseHostPort string
 
-	DevMode            bool
+	DevMode bool
 }
 
 var cfg Config
