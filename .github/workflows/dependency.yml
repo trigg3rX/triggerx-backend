@@ -1,6 +1,10 @@
-name: dependencies
+name: Go Dependencies
 
 on:
+  push:
+    branches:
+      - dev
+  pull_request:
   schedule:
     - cron: '0 0 * * 1'  # Run every Monday
   workflow_dispatch:  # Allow manual triggers
