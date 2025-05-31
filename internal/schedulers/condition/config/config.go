@@ -36,7 +36,7 @@ func Init() error {
 		devMode:          env.GetEnv("DEV_MODE", "false") == "true",
 		databaseHost:     env.GetEnv("DATABASE_HOST", "localhost"),
 		databaseHostPort: env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		schedulerRPCPort: env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9005"), // Different port from event scheduler
+		schedulerRPCPort: env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"), // Different port from event scheduler
 		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
 		maxWorkers:       maxWorkers,
 	}
