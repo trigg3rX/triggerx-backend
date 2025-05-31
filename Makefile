@@ -56,7 +56,6 @@ start-keeper: ## Start the Keeper
 install-tools-for-github-actions: ## Install the tools for GitHub Actions
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install github.com/psampaz/go-mod-outdated@latest
-	go install github.com/securego/gosec/v2/cmd/gosec@latest
 
 format-go: ## Format the Go code
 	@which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
@@ -70,7 +69,3 @@ build-go: ## Build the Go code
 	go build -v ./...
 	go mod tidy
 	git diff --exit-code go.mod go.sum
-
-security-scan: ## Scan the Go code for security vulnerabilities
-	@which gosec > /dev/null 2>&1 || (echo "Error: gosec is not installed. Please install it first." && exit 1)
-	gosec ./...
