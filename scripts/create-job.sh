@@ -1,94 +1,94 @@
 #!/bin/bash
 
 # TIME BASED JOB
-curl -X POST http://192.168.1.17:9002/api/jobs \
+echo "Creating Time-based Job..."
+curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
-      \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E\",
-      \"stake_amount\": 101,
-      \"token_amount\": 111,
+      \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9D\",
+      \"stake_amount\": 1000000000000000000,
+      \"token_amount\": 1000000000000000000,
       \"task_definition_id\": 1,
-      \"priority\": 1,
-      \"security\": 1,
-      \"time_frame\": 259200,
+      \"priority\": 5,
+      \"security\": 5,
+      \"custom\": false,
+      \"job_title\": \"Test Time Job\",
+      \"time_frame\": 3600,
       \"recurring\": true,
-      \"time_interval\": 120,
-      \"trigger_chain_id\": \"11155420\",
-      \"trigger_contract_address\": \"0xf9f40AA5436304EC1d9e84fc85256aE80086E3a1\",
-      \"trigger_event\": \"PriceUpdated(uint256 price, uint256 timestamp)\",
-      \"script_ipfs_url\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreicimunflmfgplxovjaghko5moubvzacoedhu3bqbcs37ox2ypzgbe\",
-      \"script_trigger_function\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreihbtjghsjl3cpavwyvdqazeto2y5blmg5szdi3djozgbr5odoso5a\",
-      \"target_chain_id\": \"11155420\",
-      \"target_contract_address\": \"0xf9f40AA5436304EC1d9e84fc85256aE80086E3a1\",
-      \"target_function\": \"updatePrice\",
+      \"time_interval\": 1800,
+      \"job_cost_prediction\": 0.1,
+      \"target_chain_id\": \"1\",
+      \"target_contract_address\": \"0x1234567890123456789012345678901234567890\",
+      \"target_function\": \"execute\",
+      \"abi\": \"[{\\\"inputs\\\":[],\\\"name\\\":\\\"execute\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
       \"arg_type\": 1,
-      \"arguments\": [\"19\"],
-      \"script_target_function\": \"checker\",
-      \"job_cost_prediction\": 253
+      \"arguments\": [],
+      \"job_type\": \"time\",
+      \"timezone\": \"UTC\"
     }
   ]"
 
+echo -e "\nCreating Event-based Job..."
 # EVENT BASED JOB
+curl -X POST http://localhost:9002/api/jobs \
+  -H "Content-Type: application/json" \
+  -d "[
+    {
+      \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9F\",
+      \"stake_amount\": 1000000000000000000,
+      \"token_amount\": 1000000000000000000,
+      \"task_definition_id\": 3,
+      \"priority\": 5,
+      \"security\": 5,
+      \"custom\": false,
+      \"job_title\": \"Test Event Job\",
+      \"time_frame\": 3600,
+      \"recurring\": false,
+      \"trigger_chain_id\": \"1\",
+      \"trigger_contract_address\": \"0x1234567890123456789012345678901234567890\",
+      \"trigger_event\": \"PriceUpdated(uint256 price, uint256 timestamp)\",
+      \"target_chain_id\": \"1\",
+      \"target_contract_address\": \"0x1234567890123456789012345678901234567890\",
+      \"target_function\": \"updatePrice\",
+      \"abi\": \"[{\\\"inputs\\\":[{\\\"name\\\":\\\"price\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"name\\\":\\\"timestamp\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"PriceUpdated\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
+      \"arg_type\": 1,
+      \"arguments\": [\"1000000000000000000\"],
+      \"job_type\": \"event\",
+      \"timezone\": \"UTC\",
+      \"job_cost_prediction\": 0.1
+    }
+  ]"
 
-
-# CONDITION BASED JOB, NEVER SATISFIED
-
-# curl -X POST http://192.168.1.17:9002/api/jobs \
-#   -H "Content-Type: application/json" \
-#   -d "[
-#     {
-#       \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E\",
-#       \"stake_amount\": 101,
-#       \"token_amount\": 111,
-#       \"task_definition_id\": 5,
-#       \"priority\": 1,
-#       \"security\": 1,
-#       \"time_frame\": 70,
-#       \"recurring\": true,
-#       \"time_interval\": 30,
-#       \"trigger_chain_id\": \"11155420\",
-#       \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-#       \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
-#       \"script_ipfs_url\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreiekuwtrifkzqswkyjj7urie23vmv2fl43p3dzbu53yye3xmdam7p4\",
-#       \"script_trigger_function\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreihbtjghsjl3cpavwyvdqazeto2y5blmg5szdi3djozgbr5odoso5a\",
-#       \"target_chain_id\": \"11155420\",
-#       \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-#       \"target_function\": \"increment\",
-#       \"arg_type\": 1,
-#       \"arguments\": [\"19\"],
-#       \"script_target_function\": \"checker\",
-#       \"job_cost_prediction\": 253
-#     }
-#   ]"
-
-# CONDITION BASED JOB, SATISFIED, AA ENABLED
-
-curl -X POST http://192.168.1.17:9002/api/jobs \
+echo -e "\nCreating Condition-based Job..."
+# CONDITION BASED JOB
+curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
       \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9E\",
-      \"stake_amount\": 101,
-      \"token_amount\": 111,
-      \"task_definition_id\": 1,
-      \"priority\": 1,
-      \"security\": 1,
-      \"time_frame\": 300,
+      \"stake_amount\": 1000000000000000000,
+      \"token_amount\": 1000000000000000000,
+      \"task_definition_id\": 5,
+      \"priority\": 5,
+      \"security\": 5,
+      \"custom\": false,
+      \"job_title\": \"Test Condition Job\",
+      \"time_frame\": 3600,
       \"recurring\": false,
-      \"time_interval\": 60,
-      \"trigger_chain_id\": \"11155420\",
-      \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-      \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
-      \"script_ipfs_url\": \"https://aquamarine-urgent-limpet-846.mypinata.cloud/ipfs/bafkreicimunflmfgplxovjaghko5moubvzacoedhu3bqbcs37ox2ypzgbe\",
-      \"script_trigger_function\": \"https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la\",
-      \"target_chain_id\": \"11155420\",
-      \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-      \"target_function\": \"increment\",
-      \"abi\": \"[{\\\"inputs\\\":[],\\\"name\\\":\\\"increment\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
+      \"condition_type\": \"price\",
+      \"upper_limit\": 1000000000000000000,
+      \"lower_limit\": 500000000000000000,
+      \"value_source_type\": \"api\",
+      \"value_source_url\": \"https://api.example.com/price\",
+      \"target_chain_id\": \"1\",
+      \"target_contract_address\": \"0x1234567890123456789012345678901234567890\",
+      \"target_function\": \"execute\",
+      \"abi\": \"[{\\\"inputs\\\":[],\\\"name\\\":\\\"execute\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
       \"arg_type\": 1,
-      \"arguments\": [\"19\",\"5\"],
-      \"script_target_function\": \"checker\",
-      \"job_cost_prediction\": 253
+      \"arguments\": [],
+      \"job_type\": \"condition\",
+      \"timezone\": \"UTC\",
+      \"job_cost_prediction\": 0.1
     }
   ]"

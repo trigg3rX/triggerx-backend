@@ -15,9 +15,9 @@ import (
 )
 
 type Config struct {
-	EthRPCUrl     string
-	BaseRPCUrl    string
-	AlchemyAPIKey string
+	EthRPCUrl       string
+	BaseRPCUrl      string
+	AlchemyAPIKey   string
 	EtherscanAPIKey string
 
 	PrivateKeyConsensus  string
@@ -60,31 +60,31 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		DevMode:               os.Getenv("DEV_MODE") == "true",
-		EthRPCUrl:             os.Getenv("ETH_RPC_URL"),
-		BaseRPCUrl:            os.Getenv("BASE_RPC_URL"),
-		AlchemyAPIKey:        os.Getenv("ALCHEMY_API_KEY"),
-		EtherscanAPIKey:      os.Getenv("ETHERSCAN_API_KEY"),
-		PrivateKeyConsensus:   os.Getenv("PRIVATE_KEY"),
-		KeeperAddress:         os.Getenv("OPERATOR_ADDRESS"),
-		ConsensusAddress:      crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(os.Getenv("PRIVATE_KEY"))).PublicKey).Hex(),
-		PublicIPV4Address:     os.Getenv("PUBLIC_IPV4_ADDRESS"),
-		PeerID:                os.Getenv("PEER_ID"),
-		OperatorRPCPort:       os.Getenv("OPERATOR_RPC_PORT"),
-		KeeperRPCPort:         os.Getenv("KEEPER_RPC_PORT"),
-		KeeperP2PPort:         os.Getenv("KEEPER_P2P_PORT"),
-		KeeperMetricsPort:     os.Getenv("KEEPER_METRICS_PORT"),
-		GrafanaPort:           os.Getenv("GRAFANA_PORT"),
-		PinataApiKey:          os.Getenv("PINATA_API_KEY"),
-		PinataSecretApiKey:    os.Getenv("PINATA_SECRET_API_KEY"),
-		IpfsHost:              os.Getenv("IPFS_HOST"),
-		AggregatorRPCAddress:  os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS"),
-		HealthRPCAddress:      os.Getenv("HEALTH_RPC_ADDRESS"),
-		L1Chain:               os.Getenv("L1_CHAIN"),
-		L2Chain:               os.Getenv("L2_CHAIN"),
-		AVSGovernanceAddress:  os.Getenv("AVS_GOVERNANCE_ADDRESS"),
+		DevMode:                  os.Getenv("DEV_MODE") == "true",
+		EthRPCUrl:                os.Getenv("ETH_RPC_URL"),
+		BaseRPCUrl:               os.Getenv("BASE_RPC_URL"),
+		AlchemyAPIKey:            os.Getenv("ALCHEMY_API_KEY"),
+		EtherscanAPIKey:          os.Getenv("ETHERSCAN_API_KEY"),
+		PrivateKeyConsensus:      os.Getenv("PRIVATE_KEY"),
+		KeeperAddress:            os.Getenv("OPERATOR_ADDRESS"),
+		ConsensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(os.Getenv("PRIVATE_KEY"))).PublicKey).Hex(),
+		PublicIPV4Address:        os.Getenv("PUBLIC_IPV4_ADDRESS"),
+		PeerID:                   os.Getenv("PEER_ID"),
+		OperatorRPCPort:          os.Getenv("OPERATOR_RPC_PORT"),
+		KeeperRPCPort:            os.Getenv("KEEPER_RPC_PORT"),
+		KeeperP2PPort:            os.Getenv("KEEPER_P2P_PORT"),
+		KeeperMetricsPort:        os.Getenv("KEEPER_METRICS_PORT"),
+		GrafanaPort:              os.Getenv("GRAFANA_PORT"),
+		PinataApiKey:             os.Getenv("PINATA_API_KEY"),
+		PinataSecretApiKey:       os.Getenv("PINATA_SECRET_API_KEY"),
+		IpfsHost:                 os.Getenv("IPFS_HOST"),
+		AggregatorRPCAddress:     os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS"),
+		HealthRPCAddress:         os.Getenv("HEALTH_RPC_ADDRESS"),
+		L1Chain:                  os.Getenv("L1_CHAIN"),
+		L2Chain:                  os.Getenv("L2_CHAIN"),
+		AVSGovernanceAddress:     os.Getenv("AVS_GOVERNANCE_ADDRESS"),
 		AttestationCenterAddress: os.Getenv("ATTESTATION_CENTER_ADDRESS"),
-		OthenticBootstrapID:     os.Getenv("OTHENTIC_BOOTSTRAP_ID"),
+		OthenticBootstrapID:      os.Getenv("OTHENTIC_BOOTSTRAP_ID"),
 	}
 
 	if err := validateConfig(cfg); err != nil {

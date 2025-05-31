@@ -3,8 +3,8 @@ package rewards
 import (
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 

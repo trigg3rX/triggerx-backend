@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"github.com/gin-gonic/gin"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -125,7 +125,9 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 				h.logger.Errorf("Error creating container: %v", err)
 				return
 			}
-			defer cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{Force: true})
+			if err := cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil {
+				h.logger.Errorf("Error removing container: %v", err)
+			}
 
 			stats, err := resources.MonitorResources(ctx, cli, containerID)
 			if err != nil {

@@ -20,12 +20,32 @@ jobs:
         with:
           go-version: '1.24.2'
 
+      - name: Install go-mod-outdated
+        run: go install github.com/psampaz/go-mod-outdated@latest
+
       - name: Check for updates
-        run: go list -u -m -json all | go-mod-outdated -update -direct
+        id: check_updates
+        run: |
+          # Save the output to a file
+          go list -u -m -json all | go-mod-outdated -update -direct > outdated.txt
+          
+          # Check if there are any updates
+          if [ -s outdated.txt ]; then
+            echo "updates_available=true" >> $GITHUB_OUTPUT
+            # Run go get to update dependencies
+            go get -u ./...
+            go mod tidy
+          else
+            echo "updates_available=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_available == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           title: 'chore(deps): update Go dependencies'
           branch: update-go-dependencies
           commit-message: 'chore(deps): update Go dependencies'
+          body: |
+            Automated dependency updates.
+            Please review the changes before merging.

@@ -12,4 +12,3 @@ type KeeperHealthCheckIn struct {
 	Signature        string    `json:"signature" validate:"required"`
 	PeerID           string    `json:"peer_id" validate:"required"`
 }
-

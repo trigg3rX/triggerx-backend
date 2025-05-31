@@ -1,27 +1,29 @@
+# env files
 .env
 othentic/.env
 
-go.sum
-
+# release
 release/*
 
-.cursor
+# cursor
+.cursor 
 
+# othentic
 othentic/.keystore/*
 othentic/data/peerstore/*
-othentic/data/logs/*/*.json
-othentic/data/logs/*/*.log
-othentic/data/logs/*/*.log.gz
+!othentic/data/peerstore/.gitkeep
+othentic/data/logs/*
+!othentic/data/logs/.gitkeep
 
-
+# data
 data/cache/*
+!data/cache/.gitkeep
 data/logs/*/*.log
 !data/logs/*/.gitkeep
 
-cosign.key
-cosign.pub
+# Signing keys
+*.key
+*.pub
 
-references
-
-data/peer_registry/
+# peerstore
 peerstore/

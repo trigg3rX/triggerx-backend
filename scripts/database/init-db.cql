@@ -30,37 +30,87 @@ CREATE TABLE IF NOT EXISTS user_data (
 -- Create Job_data table    
 CREATE TABLE IF NOT EXISTS job_data (
     job_id bigint,
+    job_title text,
     task_definition_id int,
     user_id bigint,
-    priority int,
-    security int,
     link_job_id bigint,
     chain_status int,
     custom boolean,
-     
     time_frame bigint,
     recurring boolean,
+    status text,  -- 'pending', 'in-queue', 'running'
+    job_cost_prediction double,
+    task_ids set<bigint>,
+    created_at timestamp,
+    updated_at timestamp,
+    last_executed_at timestamp,
+    timezone text,
+    PRIMARY KEY (job_id)
+);
 
+-- Create Time_Job_data table
+CREATE TABLE IF NOT EXISTS time_job_data (
+    job_id bigint,
+    time_frame bigint,
+    recurring boolean,
     time_interval bigint,
-    trigger_chain_id text,
-    trigger_contract_address text,
-    trigger_event text,
-    script_ipfs_url text,
-    script_trigger_function text,
-    
     target_chain_id text,
     target_contract_address text,
     target_function text,
     abi text,
     arg_type int,
     arguments list<text>,
-    script_target_function text,
-    
-    status boolean,
-    job_cost_prediction double,
+    dynamic_arguments_script_ipfs_url text,
     created_at timestamp,
+    updated_at timestamp,
     last_executed_at timestamp,
-    task_ids set<bigint>,
+    timezone text,
+    PRIMARY KEY (job_id)
+);
+
+-- Create Event_Job_data table
+CREATE TABLE IF NOT EXISTS event_job_data (
+    job_id bigint,
+    time_frame bigint,
+    recurring boolean,
+    trigger_chain_id text,
+    trigger_contract_address text,
+    trigger_event text,
+    target_chain_id text,
+    target_contract_address text,
+    target_function text,
+    abi text,
+    arg_type int,
+    arguments list<text>,
+    dynamic_arguments_script_ipfs_url text,
+    created_at timestamp,
+    updated_at timestamp,
+    last_executed_at timestamp,
+    timezone text,
+    PRIMARY KEY (job_id)
+);
+
+-- Create Condition_Job_data table
+CREATE TABLE IF NOT EXISTS condition_job_data (
+    job_id bigint,
+    time_frame bigint,
+    recurring boolean,
+    condition_type text,
+    upper_limit double,
+    lower_limit double,
+    value_source_type text,
+    value_source_url text,
+    target_chain_id text,
+    target_contract_address text,
+    target_function text,
+    abi text,
+    arg_type int,
+    arguments list<text>,
+    dynamic_arguments_script_ipfs_url text,
+    created_at timestamp,
+    updated_at timestamp,
+    last_executed_at timestamp,
+    timezone text,
     PRIMARY KEY (job_id)
 );
 
@@ -70,22 +120,15 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_number int,
     job_id bigint,
     task_definition_id int,
-    created_at timestamp,
-    task_fee double,
-    
+    task_opx_cost double,
     execution_timestamp timestamp,
     execution_tx_hash text,
     task_performer_id bigint,
-    
-    proof_of_task text,
-    action_data_cid text,
     task_attester_ids list<bigint>,
-    
-    is_approved boolean,
+    proof_of_task text,
     tp_signature blob,
     ta_signature blob,
     task_submission_tx_hash text,
-    
     is_successful boolean,
     PRIMARY KEY (task_id)
 );
@@ -98,7 +141,6 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     consensus_address text,
     registered_tx text,
     operator_id text,
-    
     rewards_address text,
     rewards_booster float,
     voting_power text,
@@ -106,11 +148,12 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     connection_address text,
     peer_id text,
     strategies list<text>,
-    verified boolean,
-    status boolean,
+    whitelisted boolean,
+    registered boolean,
     online boolean,
     version text,
-    no_exctask int,
+    no_executed_tasks bigint,
+    no_attested_tasks bigint,
     chat_id bigint,
     email_id text,
     last_checked_in timestamp,
@@ -127,4 +170,51 @@ CREATE TABLE IF NOT EXISTS apikeys (
     createdAt timestamp,
     PRIMARY KEY (key)
 );
+
+-- Drop existing indexes if they exist
+DROP INDEX IF EXISTS triggerx.job_data_status_idx;
+DROP INDEX IF EXISTS triggerx.job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.job_data_timezone_idx;
+
+DROP INDEX IF EXISTS triggerx.time_job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_timezone_idx;
+
+DROP INDEX IF EXISTS triggerx.event_job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.event_job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.event_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.event_job_data_timezone_idx;
+
+DROP INDEX IF EXISTS triggerx.condition_job_data_created_at_idx;
+DROP INDEX IF EXISTS triggerx.condition_job_data_updated_at_idx;
+DROP INDEX IF EXISTS triggerx.condition_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.condition_job_data_timezone_idx;
+
+-- Create indexes for job_data table
+CREATE INDEX IF NOT EXISTS job_data_status_idx ON triggerx.job_data (status);
+CREATE INDEX IF NOT EXISTS job_data_created_at_idx ON triggerx.job_data (created_at);
+CREATE INDEX IF NOT EXISTS job_data_updated_at_idx ON triggerx.job_data (updated_at);
+CREATE INDEX IF NOT EXISTS job_data_last_executed_at_idx ON triggerx.job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS job_data_timezone_idx ON triggerx.job_data (timezone);
+
+-- Create indexes for time_job_data table
+CREATE INDEX IF NOT EXISTS time_job_data_created_at_idx ON triggerx.time_job_data (created_at);
+CREATE INDEX IF NOT EXISTS time_job_data_updated_at_idx ON triggerx.time_job_data (updated_at);
+CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS time_job_data_timezone_idx ON triggerx.time_job_data (timezone);
+
+-- Create indexes for event_job_data table
+CREATE INDEX IF NOT EXISTS event_job_data_created_at_idx ON triggerx.event_job_data (created_at);
+CREATE INDEX IF NOT EXISTS event_job_data_updated_at_idx ON triggerx.event_job_data (updated_at);
+CREATE INDEX IF NOT EXISTS event_job_data_last_executed_at_idx ON triggerx.event_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS event_job_data_timezone_idx ON triggerx.event_job_data (timezone);
+
+-- Create indexes for condition_job_data table
+CREATE INDEX IF NOT EXISTS condition_job_data_created_at_idx ON triggerx.condition_job_data (created_at);
+CREATE INDEX IF NOT EXISTS condition_job_data_updated_at_idx ON triggerx.condition_job_data (updated_at);
+CREATE INDEX IF NOT EXISTS condition_job_data_last_executed_at_idx ON triggerx.condition_job_data (last_executed_at);
+CREATE INDEX IF NOT EXISTS condition_job_data_timezone_idx ON triggerx.condition_job_data (timezone);
 
