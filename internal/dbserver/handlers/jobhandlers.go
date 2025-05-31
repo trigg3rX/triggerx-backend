@@ -703,6 +703,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No user address provided"})
 		return
 	}
+	userAddress = strings.ToLower(userAddress)
 
 	var userID int64
 	var jobIDs []int64
@@ -717,11 +718,11 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	}
 
 	if len(jobIDs) == 0 {
-		c.JSON(http.StatusOK, []interface{}{})
+		c.JSON(http.StatusOK, []types.JobResponse{})
 		return
 	}
 
-	var jobs []interface{}
+	var jobs []types.JobResponse
 	for _, jobID := range jobIDs {
 		// Get basic job data
 		var jobData types.JobData
@@ -736,6 +737,8 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %d: %v", jobID, err)
 			continue
 		}
+
+		jobResponse := types.JobResponse{JobData: jobData}
 
 		// Check task_definition_id to determine job type
 		switch {
@@ -754,7 +757,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %d: %v", jobID, err)
 				continue
 			}
-			jobs = append(jobs, timeJobData)
+			jobResponse.TimeJobData = &timeJobData
 
 		case jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4:
 			// Event-based job
@@ -773,7 +776,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %d: %v", jobID, err)
 				continue
 			}
-			jobs = append(jobs, eventJobData)
+			jobResponse.EventJobData = &eventJobData
 
 		case jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6:
 			// Condition-based job
@@ -794,12 +797,13 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %d: %v", jobID, err)
 				continue
 			}
-			jobs = append(jobs, conditionJobData)
+			jobResponse.ConditionJobData = &conditionJobData
 
 		default:
-			// Add basic job data if task_definition_id is not recognized
-			jobs = append(jobs, jobData)
+			// No specific job data if task_definition_id is not recognized
 		}
+
+		jobs = append(jobs, jobResponse)
 	}
 
 	c.JSON(http.StatusOK, jobs)
