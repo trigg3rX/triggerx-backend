@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	dockertypes "github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	dockertypes "github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -66,7 +66,11 @@ func (e *TaskExecutor) executeActionWithStaticArgs(job *types.HandleCreateJobDat
 			e.logger.Errorf("Failed to create container for condition script: %v", err)
 			return executionResult, fmt.Errorf("failed to create container: %v", err)
 		}
-		defer cli.ContainerRemove(context.Background(), containerID, dockertypes.ContainerRemoveOptions{Force: true})
+		defer func() {
+			if err := cli.ContainerRemove(context.Background(), containerID, dockertypes.RemoveOptions{Force: true}); err != nil {
+				e.logger.Errorf("Failed to remove container for condition script: %v", err)
+			}
+		}()
 
 		// Monitor resources and get script output
 		stats, err := resources.MonitorResources(context.Background(), cli, containerID)

@@ -13,55 +13,54 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 )
 
-func pullDockerImage(ctx context.Context, cli *client.Client, image string) error {
-	fmt.Printf("Pulling Docker image %s...\n", image)
-	reader, err := cli.ImagePull(ctx, image, types.ImagePullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %v", err)
-	}
-	defer reader.Close()
+// func pullDockerImage(ctx context.Context, cli *client.Client, image string) error {
+// 	fmt.Printf("Pulling Docker image %s...\n", image)
+// 	reader, err := cli.ImagePull(ctx, image, types.ImagePullOptions{})
+// 	if err != nil {
+// 		return fmt.Errorf("failed to pull image: %v", err)
+// 	}
+// 	defer reader.Close()
 
-	d := json.NewDecoder(reader)
-	type Event struct {
-		Status         string `json:"status"`
-		Error          string `json:"error,omitempty"`
-		Progress       string `json:"progress,omitempty"`
-		ProgressDetail struct {
-			Current int `json:"current"`
-			Total   int `json:"total"`
-		} `json:"progressDetail"`
-	}
+// 	d := json.NewDecoder(reader)
+// 	type Event struct {
+// 		Status         string `json:"status"`
+// 		Error          string `json:"error,omitempty"`
+// 		Progress       string `json:"progress,omitempty"`
+// 		ProgressDetail struct {
+// 			Current int `json:"current"`
+// 			Total   int `json:"total"`
+// 		} `json:"progressDetail"`
+// 	}
 
-	for {
-		var event Event
-		if err := d.Decode(&event); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("failed to decode pull status: %v", err)
-		}
+// 	for {
+// 		var event Event
+// 		if err := d.Decode(&event); err != nil {
+// 			if err == io.EOF {
+// 				break
+// 			}
+// 			return fmt.Errorf("failed to decode pull status: %v", err)
+// 		}
 
-		if event.Error != "" {
-			return fmt.Errorf("error pulling image: %s", event.Error)
-		}
+// 		if event.Error != "" {
+// 			return fmt.Errorf("error pulling image: %s", event.Error)
+// 		}
 
-		if event.Status != "" {
-			if event.Progress != "" {
-				fmt.Printf("\r%s: %s", event.Status, event.Progress)
-			} else {
-				fmt.Println(event.Status)
-			}
-		}
-	}
+// 		if event.Status != "" {
+// 			if event.Progress != "" {
+// 				fmt.Printf("\r%s: %s", event.Status, event.Progress)
+// 			} else {
+// 				fmt.Println(event.Status)
+// 			}
+// 		}
+// 	}
 
-	fmt.Println("\nImage pull complete.")
-	return nil
-}
+// 	fmt.Println("\nImage pull complete.")
+// 	return nil
+// }
 
 type ResourceStats struct {
 	MemoryUsage       uint64  `json:"memory_usage"`
@@ -163,7 +162,7 @@ echo "END_EXECUTION"
 		return "", fmt.Errorf("failed to create container: %v", err)
 	}
 
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return "", fmt.Errorf("failed to start container: %v", err)
 	}
 
@@ -226,7 +225,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	}
 
 	containerStartTime := time.Now().UTC()
-	err = cli.ContainerStart(ctx, containerID, types.ContainerStartOptions{})
+	err = cli.ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start container: %v", err)
 	}
@@ -234,7 +233,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	ctx, cancel := context.WithTimeout(ctx, 600*time.Second)
 	defer cancel()
 
-	logReader, err := cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{
+	logReader, err := cli.ContainerLogs(ctx, containerID, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
@@ -246,7 +245,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 
 	errChan := make(chan error, 1)
 	doneChan := make(chan bool)
-	var lastStats types.StatsJSON
+	var lastStats container.StatsResponse
 
 	go func() {
 		statsReader, err := cli.ContainerStats(ctx, containerID, true)
@@ -262,7 +261,7 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 			case <-doneChan:
 				return
 			default:
-				var statsJSON types.StatsJSON
+				var statsJSON container.StatsResponse
 				if err := decoder.Decode(&statsJSON); err != nil {
 					if err != io.EOF {
 						errChan <- fmt.Errorf("failed to decode stats: %v", err)
