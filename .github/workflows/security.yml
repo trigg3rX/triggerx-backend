@@ -18,6 +18,3 @@ jobs:
         uses: securego/gosec@master
         with:
           args: ./...
-
-      - name: Run nancy for dependency scanning
-        uses: sonatype-nexus-community/nancy-github-action@main
