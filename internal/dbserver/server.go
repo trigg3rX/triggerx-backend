@@ -114,8 +114,8 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api")
 
 	// Public routes
-	api.GET("/users/:id", handler.GetUserData)
-	api.GET("/wallet/points/:wallet_address", handler.GetWalletPoints)
+	api.GET("/users/:address", handler.GetUserDataByAddress)
+	api.GET("/wallet/points/:address", handler.GetWalletPoints)
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
@@ -123,19 +123,21 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	// Apply validation middleware to routes that need it
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.GET("/jobs/time", handler.GetTimeBasedJobs)
-	api.GET("/jobs/:id", handler.GetJobData)
-	api.PUT("/jobs/:id", handler.UpdateJobData)
+	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
+	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
-	api.GET("/tasks/:id", handler.GetTaskData)
+	api.GET("/tasks/:id", handler.GetTaskDataByID)
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
+	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
+	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
+	api.GET("/tasks/job/:id", handler.GetTasksByJobID)
 
-	api.GET("/keepers/all", handler.GetAllKeepers)
+	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.GET("/keepers/performers", handler.GetPerformers)
-	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
 	api.GET("/keepers/:id", handler.GetKeeperData)
 	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
 	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
@@ -144,7 +146,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	api.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
 	api.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	api.GET("/leaderboard/users/search", handler.GetUserByAddress)
+	api.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
 	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)

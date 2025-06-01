@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
@@ -22,28 +22,55 @@ type NotificationConfig struct {
 }
 
 type Handler struct {
-	db     *database.Connection
-	logger logging.Logger
-	config NotificationConfig
+	db            *database.Connection
+	logger        logging.Logger
+	config        NotificationConfig
+	jobRepository repository.JobRepository
+	timeJobRepository repository.TimeJobRepository
+	eventJobRepository repository.EventJobRepository
+	conditionJobRepository repository.ConditionJobRepository
+	taskRepository repository.TaskRepository
+	userRepository repository.UserRepository
+	keeperRepository repository.KeeperRepository
+	apiKeysRepository repository.ApiKeysRepository
 }
 
 func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig) *Handler {
 	return &Handler{
-		db:     db,
-		logger: logger,
-		config: config,
+		db:            db,
+		logger:        logger,
+		config:        config,
+		jobRepository: repository.NewJobRepository(db),
+		timeJobRepository: repository.NewTimeJobRepository(db),
+		eventJobRepository: repository.NewEventJobRepository(db),
+		conditionJobRepository: repository.NewConditionJobRepository(db),
+		taskRepository: repository.NewTaskRepository(db),
+		userRepository: repository.NewUserRepository(db),
+		keeperRepository: repository.NewKeeperRepository(db),
+		apiKeysRepository: repository.NewApiKeysRepository(db),
 	}
 }
 
-func (h *Handler) SendDataToManager(route string, data interface{}) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.GetManagerRPCAddress(), route)
+// SendDataToEventScheduler sends data to the event scheduler
+func (h *Handler) SendDataToEventScheduler(route string, data interface{}) (bool, error) {
+	apiURL := fmt.Sprintf("%s%s", config.GetEventSchedulerRPCUrl(), route)
+	return h.sendDataToScheduler(apiURL, data, "event scheduler")
+}
 
+// SendDataToConditionScheduler sends data to the condition scheduler
+func (h *Handler) SendDataToConditionScheduler(route string, data interface{}) (bool, error) {
+	apiURL := fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCUrl(), route)
+	return h.sendDataToScheduler(apiURL, data, "condition scheduler")
+}
+
+// sendDataToScheduler is a generic function to send data to any scheduler
+func (h *Handler) sendDataToScheduler(apiURL string, data interface{}, schedulerName string) (bool, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return false, fmt.Errorf("error marshaling data: %v", err)
 	}
 
-	// Create a retry client with custom config
+	// Create a client with aggressive timeouts and connection pooling
 	retryConfig := &retry.HTTPRetryConfig{
 		MaxRetries:      3,
 		InitialDelay:    200 * time.Millisecond,
@@ -69,172 +96,75 @@ func (h *Handler) SendDataToManager(route string, data interface{}) (bool, error
 		return false, fmt.Errorf("error creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Close = true // Ensure connection is closed after request
+	req.Close = true
 
 	resp, err := client.DoWithRetry(req)
 	if err != nil {
-		return false, fmt.Errorf("error sending data to manager: %v", err)
+		return false, fmt.Errorf("error sending data to %s: %v", schedulerName, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return false, fmt.Errorf("manager service error (status=%d): %s", resp.StatusCode, string(body))
+		return false, fmt.Errorf("%s service error (status=%d): %s", schedulerName, resp.StatusCode, string(body))
 	}
 
+	h.logger.Infof("Successfully sent data to %s", schedulerName)
 	return true, nil
 }
 
-// SendDataToEventScheduler sends data to the event scheduler
-func (h *Handler) SendDataToEventScheduler(route string, data interface{}) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.GetEventSchedulerRPCAddress(), route)
-	return h.sendDataToScheduler(apiURL, data, "event scheduler")
+// SendPauseToEventScheduler sends a DELETE request to the event scheduler
+func (h *Handler) SendPauseToEventScheduler(route string) (bool, error) {
+	apiURL := fmt.Sprintf("%s%s", config.GetEventSchedulerRPCUrl(), route)
+	return h.sendPauseToScheduler(apiURL, "event scheduler")
 }
 
-// SendDataToConditionScheduler sends data to the condition scheduler
-func (h *Handler) SendDataToConditionScheduler(route string, data interface{}) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCAddress(), route)
-	return h.sendDataToScheduler(apiURL, data, "condition scheduler")
+// SendPauseToConditionScheduler sends a DELETE request to the condition scheduler
+func (h *Handler) SendPauseToConditionScheduler(route string) (bool, error) {
+	apiURL := fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCUrl(), route)
+	return h.sendPauseToScheduler(apiURL, "condition scheduler")
 }
 
-// sendDataToScheduler is a generic function to send data to any scheduler
-func (h *Handler) sendDataToScheduler(apiURL string, data interface{}, schedulerName string) (bool, error) {
-	jsonData, err := json.Marshal(data)
+// sendPauseToScheduler sends a DELETE request to any scheduler
+func (h *Handler) sendPauseToScheduler(apiURL string, schedulerName string) (bool, error) {
+	// Create a client with aggressive timeouts and connection pooling
+	retryConfig := &retry.HTTPRetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    200 * time.Millisecond,
+		MaxDelay:        2 * time.Second,
+		BackoffFactor:   2.0,
+		LogRetryAttempt: true,
+		RetryStatusCodes: []int{
+			http.StatusInternalServerError,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout,
+		},
+		Timeout:             3 * time.Second,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     30 * time.Second,
+	}
+
+	client := retry.NewHTTPClient(retryConfig, h.logger)
+
+	req, err := http.NewRequest("POST", apiURL, nil)
 	if err != nil {
-		return false, fmt.Errorf("error marshaling data: %v", err)
+		return false, fmt.Errorf("error creating request: %v", err)
+	}
+	req.Close = true
+
+	resp, err := client.DoWithRetry(req)
+	if err != nil {
+		return false, fmt.Errorf("error sending DELETE to %s: %v", schedulerName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("%s service error (status=%d): %s", schedulerName, resp.StatusCode, string(body))
 	}
 
-	// Create a client with aggressive timeouts and connection pooling
-	client := &http.Client{
-		Timeout: 3 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 100,
-			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
-			DialContext: (&net.Dialer{
-				Timeout:   2 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   2 * time.Second,
-			ResponseHeaderTimeout: 2 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
-	}
-
-	// Retry logic with shorter backoff
-	maxRetries := 3
-	backoff := 200 * time.Millisecond
-
-	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
-		if err != nil {
-			return false, fmt.Errorf("error creating request: %v", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Close = true
-
-		resp, err := client.Do(req)
-		if err != nil {
-			if i == maxRetries-1 {
-				return false, fmt.Errorf("error sending data to %s after %d retries: %v", schedulerName, maxRetries, err)
-			}
-			h.logger.Warnf("%s attempt %d failed, retrying in %v: %v", schedulerName, i+1, backoff, err)
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
-		}
-
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			if i == maxRetries-1 {
-				return false, fmt.Errorf("%s service error (status=%d): %s", schedulerName, resp.StatusCode, string(body))
-			}
-			h.logger.Warnf("%s attempt %d failed with status %d, retrying in %v", schedulerName, i+1, resp.StatusCode, backoff)
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
-		}
-
-		h.logger.Infof("Successfully sent data to %s", schedulerName)
-		return true, nil
-	}
-
-	return false, fmt.Errorf("failed to send data to %s after %d retries", schedulerName, maxRetries)
-}
-
-// SendDeleteToEventScheduler sends a DELETE request to the event scheduler
-func (h *Handler) SendDeleteToEventScheduler(route string) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.GetEventSchedulerRPCAddress(), route)
-	return h.sendDeleteToScheduler(apiURL, "event scheduler")
-}
-
-// SendDeleteToConditionScheduler sends a DELETE request to the condition scheduler
-func (h *Handler) SendDeleteToConditionScheduler(route string) (bool, error) {
-	apiURL := fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCAddress(), route)
-	return h.sendDeleteToScheduler(apiURL, "condition scheduler")
-}
-
-// sendDeleteToScheduler sends a DELETE request to any scheduler
-func (h *Handler) sendDeleteToScheduler(apiURL string, schedulerName string) (bool, error) {
-	// Create a client with aggressive timeouts and connection pooling
-	client := &http.Client{
-		Timeout: 3 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 100,
-			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
-			DialContext: (&net.Dialer{
-				Timeout:   2 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   2 * time.Second,
-			ResponseHeaderTimeout: 2 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-		},
-	}
-
-	// Retry logic with shorter backoff
-	maxRetries := 3
-	backoff := 200 * time.Millisecond
-
-	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequest("DELETE", apiURL, nil)
-		if err != nil {
-			return false, fmt.Errorf("error creating DELETE request: %v", err)
-		}
-		req.Close = true
-
-		resp, err := client.Do(req)
-		if err != nil {
-			if i == maxRetries-1 {
-				return false, fmt.Errorf("error sending DELETE to %s after %d retries: %v", schedulerName, maxRetries, err)
-			}
-			h.logger.Warnf("%s DELETE attempt %d failed, retrying in %v: %v", schedulerName, i+1, backoff, err)
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
-		}
-
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			if i == maxRetries-1 {
-				return false, fmt.Errorf("%s DELETE service error (status=%d): %s", schedulerName, resp.StatusCode, string(body))
-			}
-			h.logger.Warnf("%s DELETE attempt %d failed with status %d, retrying in %v", schedulerName, i+1, resp.StatusCode, backoff)
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
-		}
-
-		h.logger.Infof("Successfully sent DELETE to %s", schedulerName)
-		return true, nil
-	}
-
-	return false, fmt.Errorf("failed to send DELETE to %s after %d retries", schedulerName, maxRetries)
+	h.logger.Infof("Successfully sent DELETE to %s", schedulerName)
+	return true, nil
 }

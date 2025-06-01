@@ -43,10 +43,10 @@ func main() {
 	logger.Info("Starting database server...",
 		"mode", getEnvironment(),
 		"port", config.GetDatabaseRPCPort(),
-		"host", config.GetDatabaseHost(),
+		"host", config.GetDatabaseHostAddress(),
 	)
 
-	dbConfig := database.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
+	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
 
 	conn, err := database.NewConnection(dbConfig)
 	if err != nil || conn == nil {
