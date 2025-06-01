@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"bytes"
-	"fmt"
+	// "fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 type Validator struct {
@@ -77,36 +77,36 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		}
 
 		// Validate based on the endpoint
-		var validationErrors []string
-		switch c.Request.URL.Path {
-		case "/api/jobs":
-			for i, jobData := range jobDataArray {
-				if err := v.validateCreateJob(c, jobData); err != nil {
-					validationErrors = append(validationErrors, fmt.Sprintf("Job %d: %v", i+1, err))
-				}
-			}
-		case "/api/tasks":
-			if err := v.validateCreateTask(c, jobDataArray); err != nil {
-				validationErrors = append(validationErrors, err.Error())
-			}
-		case "/api/keepers/form":
-			if err := v.validateCreateKeeperForm(c, jobDataArray); err != nil {
-				validationErrors = append(validationErrors, err.Error())
-			}
-		case "/api/admin/api-keys":
-			if err := v.validateCreateApiKey(c, jobDataArray); err != nil {
-				validationErrors = append(validationErrors, err.Error())
-			}
-		}
+		// var validationErrors []string
+		// switch c.Request.URL.Path {
+		// case "/api/jobs":
+		// 	for i, jobData := range jobDataArray {
+		// 		if err := v.validateCreateJob(c, jobData); err != nil {
+		// 			validationErrors = append(validationErrors, fmt.Sprintf("Job %d: %v", i+1, err))
+		// 		}
+		// 	}
+		// case "/api/tasks":
+		// 	if err := v.validateCreateTask(c, jobDataArray); err != nil {
+		// 		validationErrors = append(validationErrors, err.Error())
+		// 	}
+		// case "/api/keepers/form":
+		// 	if err := v.validateCreateKeeperForm(c, jobDataArray); err != nil {
+		// 		validationErrors = append(validationErrors, err.Error())
+		// 	}
+		// case "/api/admin/api-keys":
+		// 	if err := v.validateCreateApiKey(c, jobDataArray); err != nil {
+		// 		validationErrors = append(validationErrors, err.Error())
+		// 	}
+		// }
 
-		if len(validationErrors) > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Validation failed",
-				"details": validationErrors,
-			})
-			c.Abort()
-			return
-		}
+		// if len(validationErrors) > 0 {
+		// 	c.JSON(http.StatusBadRequest, gin.H{
+		// 		"error":   "Validation failed",
+		// 		"details": validationErrors,
+		// 	})
+		// 	c.Abort()
+		// 	return
+		// }
 
 		// Restore the body for subsequent handlers
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
@@ -115,19 +115,19 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 	}
 }
 
-func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobData) error {
-	// First validate the common fields
-	if err := v.validate.Struct(jobData); err != nil {
-		return err
-	}
+// func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobData) error {
+// 	// First validate the common fields
+// 	if err := v.validate.Struct(jobData); err != nil {
+// 		return err
+// 	}
 
 	// Determine job type based on TaskDefinitionID
-	switch {
-	case jobData.TaskDefinitionID >= types.TaskDefTimeBasedStart && jobData.TaskDefinitionID <= types.TaskDefTimeBasedEnd:
+	// switch {
+	// case jobData.TaskDefinitionID >= types.TaskDefTimeBasedStart && jobData.TaskDefinitionID <= types.TaskDefTimeBasedEnd:
 		// Time-based job validation
-		if jobData.TimeInterval <= 0 {
-			return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
+		// if jobData.TimeInterval <= 0 {
+		// 	return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+		// }
 		// Time jobs don't need trigger or condition fields
 		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
 		// 	return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
@@ -136,11 +136,11 @@ func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobDat
 		// 	return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
 		// }
 
-	case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
-		// Event-based job validation
-		if jobData.TriggerChainID == "" || jobData.TriggerContractAddress == "" || jobData.TriggerEvent == "" {
-			return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
+	// case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
+	// 	// Event-based job validation
+	// 	if jobData.TriggerChainID == "" || jobData.TriggerContractAddress == "" || jobData.TriggerEvent == "" {
+	// 		return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+	// 	}
 		// Event jobs don't need time interval or condition fields
 		// if jobData.TimeInterval != 0 {
 		// 	return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
@@ -149,14 +149,14 @@ func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobDat
 		// 	return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
 		// }
 
-	case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
-		// Condition-based job validation
-		if jobData.ConditionType == "" || jobData.UpperLimit == 0 || jobData.LowerLimit == 0 {
-			return fmt.Errorf("condition fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
-		if jobData.ValueSourceType == "" || jobData.ValueSourceUrl == "" {
-			return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		}
+	// case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
+	// 	// Condition-based job validation
+	// 	if jobData.ConditionType == "" || jobData.UpperLimit == 0 || jobData.LowerLimit == 0 {
+	// 		return fmt.Errorf("condition fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+	// 	}
+	// 	if jobData.ValueSourceType == "" || jobData.ValueSourceUrl == "" {
+	// 		return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+	// 	}
 		// Condition jobs don't need time interval or trigger fields
 		// if jobData.TimeInterval != 0 {
 		// 	return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
@@ -165,29 +165,20 @@ func (v *Validator) validateCreateJob(c *gin.Context, jobData types.CreateJobDat
 		// 	return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
 		// }
 
-	default:
-		return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)
-	}
+	// default:
+	// 	return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)
+	// }
 
-	return nil
-}
+// 	return nil
+// }
 
 func (v *Validator) validateCreateTask(c *gin.Context, body interface{}) error {
-	var taskData types.CreateTaskData
+	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		return err
 	}
 
 	return v.validate.Struct(taskData)
-}
-
-func (v *Validator) validateCreateKeeperForm(c *gin.Context, body interface{}) error {
-	var keeperData types.GoogleFormCreateKeeperData
-	if err := c.ShouldBindJSON(&keeperData); err != nil {
-		return err
-	}
-
-	return v.validate.Struct(keeperData)
 }
 
 func (v *Validator) validateCreateApiKey(c *gin.Context, body interface{}) error {
