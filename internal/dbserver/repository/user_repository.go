@@ -100,7 +100,10 @@ func (r *userRepository) GetUserDataByAddress(address string) (int64, types.User
 		return -1, types.UserData{}, err
 	}
 	var userData types.UserData
-	err = r.db.Session().Query(queries.GetUserDataByIDQuery, userID).Scan(&userData.UserID, &userData.UserAddress, &userData.EtherBalance, &userData.TokenBalance, &userData.UserPoints, &userData.TotalJobs, &userData.TotalTasks, &userData.CreatedAt, &userData.LastUpdatedAt)
+	err = r.db.Session().Query(queries.GetUserDataByIDQuery, userID).Scan(
+			&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.TotalJobs, &userData.TotalTasks,
+			&userData.EtherBalance, &userData.TokenBalance, &userData.UserPoints, 
+			&userData.CreatedAt, &userData.LastUpdatedAt)
 	if err != nil {
 		return -1, types.UserData{}, err
 	}

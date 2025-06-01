@@ -29,10 +29,11 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.TimeFrame, timeJob.Recurring, timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
-		timeJob.SpecificSchedule, timeJob.NextExecutionTimestamp, timeJob.TargetChainID,
-		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType, timeJob.Arguments,
-		timeJob.DynamicArgumentsScriptUrl).Exec()
+		timeJob.JobID, timeJob.TimeFrame, timeJob.Recurring, timeJob.NextExecutionTimestamp, 
+		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
+		timeJob.SpecificSchedule, timeJob.TargetChainID,
+		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType, 
+		timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl, false, true).Exec()
 
 	if err != nil {
 		return err

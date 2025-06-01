@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
@@ -36,7 +37,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		return
 	}
 
-	if existingUserID == -1 {		
+	h.logger.Infof("[CreateJobData] existingUserID: %d", existingUserID)
+
+	if err == gocql.ErrNotFound {		
 		var newUser types.CreateUserDataRequest
 		newUser.UserAddress = strings.ToLower(tempJobs[0].UserAddress)
 		newUser.EtherBalance = tempJobs[0].EtherBalance

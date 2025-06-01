@@ -29,7 +29,7 @@ func (r *eventJobRepository) CreateEventJob(eventJob *types.EventJobData) error 
 	err := r.db.Session().Query(queries.CreateEventJobDataQuery,
 		eventJob.JobID, eventJob.TimeFrame, eventJob.Recurring, eventJob.TriggerChainID, eventJob.TriggerContractAddress, eventJob.TriggerEvent,
 		eventJob.TargetChainID, eventJob.TargetContractAddress, eventJob.TargetFunction, eventJob.ABI, eventJob.ArgType, eventJob.Arguments,
-		eventJob.DynamicArgumentsScriptUrl).Exec()
+		eventJob.DynamicArgumentsScriptUrl, false, true).Exec()
 
 	if err != nil {
 		return err
