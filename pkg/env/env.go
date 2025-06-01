@@ -27,3 +27,14 @@ func GetEnvBool(key string, defaultValue bool) bool {
 	fmt.Printf("Environment variable %s not found, using default value: %t\n", key, defaultValue)
 	return defaultValue
 }
+
+func GetEnvInt(key string, defaultValue int) int {
+	if value, exists := os.LookupEnv(key); exists {
+		intValue, err := strconv.Atoi(value)
+		if err != nil {
+			return defaultValue
+		}
+		return intValue
+	}
+	return defaultValue
+}
