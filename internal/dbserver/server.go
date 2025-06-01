@@ -9,10 +9,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/redis"
 )
 
 type Server struct {
@@ -69,19 +69,32 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	// Initialize metrics server
 	metricsServer := metrics.NewMetricsServer(db, logger)
 
-	// Initialize Redis client
-	redisClient, err := redis.NewClient(logger)
-	if err != nil {
-		logger.Errorf("Failed to initialize Redis client: %v", err)
+	// Initialize Redis client with enhanced features
+	var redisClient *redis.Client
+	if redis.IsAvailable() {
+		client, err := redis.NewClient(logger)
+		if err != nil {
+			logger.Errorf("Failed to initialize Redis client: %v", err)
+		} else {
+			redisClient = client
+			logger.Infof("Redis client initialized successfully (%s)", redis.GetRedisInfo()["type"])
+		}
+	} else {
+		logger.Warn("Redis is not configured - rate limiting and caching features will be disabled")
 	}
 
 	// Initialize rate limiter
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
+		var err error
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
 		if err != nil {
 			logger.Errorf("Failed to initialize rate limiter: %v", err)
+		} else {
+			logger.Info("Rate limiter initialized successfully")
 		}
+	} else {
+		logger.Warn("Rate limiter disabled - Redis client not available")
 	}
 
 	s := &Server{
