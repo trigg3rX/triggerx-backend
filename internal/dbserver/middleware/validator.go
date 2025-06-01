@@ -172,23 +172,23 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 // 	return nil
 // }
 
-func (v *Validator) validateCreateTask(c *gin.Context, body interface{}) error {
-	var taskData types.CreateTaskDataRequest
-	if err := c.ShouldBindJSON(&taskData); err != nil {
-		return err
-	}
+// func (v *Validator) validateCreateTask(c *gin.Context, body interface{}) error {
+// 	var taskData types.CreateTaskDataRequest
+// 	if err := c.ShouldBindJSON(&taskData); err != nil {
+// 		return err
+// 	}
 
-	return v.validate.Struct(taskData)
-}
+// 	return v.validate.Struct(taskData)
+// }
 
-func (v *Validator) validateCreateApiKey(c *gin.Context, body interface{}) error {
-	var apiKeyData types.CreateApiKeyRequest
-	if err := c.ShouldBindJSON(&apiKeyData); err != nil {
-		return err
-	}
+// func (v *Validator) validateCreateApiKey(c *gin.Context, body interface{}) error {
+// 	var apiKeyData types.CreateApiKeyRequest
+// 	if err := c.ShouldBindJSON(&apiKeyData); err != nil {
+// 		return err
+// 	}
 
-	return v.validate.Struct(apiKeyData)
-}
+// 	return v.validate.Struct(apiKeyData)
+// }
 
 // Custom validation functions
 func validateEthereumAddress(fl validator.FieldLevel) bool {

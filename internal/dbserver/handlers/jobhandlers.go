@@ -431,12 +431,27 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 
 	switch taskDefinitionID {
 	case 1, 2:
-		h.timeJobRepository.UpdateTimeJobStatus(jobIDInt, false)
+		err = h.timeJobRepository.UpdateTimeJobStatus(jobIDInt, false)
+		if err != nil {
+			h.logger.Errorf("[DeleteJobData] Error updating time job status for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job status: " + err.Error()})
+			return
+		}
 	case 3, 4:
-		h.eventJobRepository.UpdateEventJobStatus(jobIDInt, false)
+		err = h.eventJobRepository.UpdateEventJobStatus(jobIDInt, false)
+		if err != nil {
+			h.logger.Errorf("[DeleteJobData] Error updating event job status for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job status: " + err.Error()})
+			return
+		}
 		h.notifySchedulerForJobDeletion(jobID, taskDefinitionID)
 	case 5, 6:
-		h.conditionJobRepository.UpdateConditionJobStatus(jobIDInt, false)
+		err = h.conditionJobRepository.UpdateConditionJobStatus(jobIDInt, false)
+		if err != nil {
+			h.logger.Errorf("[DeleteJobData] Error updating condition job status for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job status: " + err.Error()})
+			return
+		}
 		h.notifySchedulerForJobDeletion(jobID, taskDefinitionID)
 	}
 
