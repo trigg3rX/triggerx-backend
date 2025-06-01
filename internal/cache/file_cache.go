@@ -90,3 +90,28 @@ func (f *FileCache) Delete(key string) error {
 	delete(m, key)
 	return f.save(m)
 }
+
+// AcquirePerformerLock attempts to acquire a lock for a performer using file-based storage
+func (f *FileCache) AcquirePerformerLock(performerID string, ttl time.Duration) (bool, error) {
+	key := "performer:busy:" + performerID
+
+	// Check if lock already exists and is not expired
+	existingValue, err := f.Get(key)
+	if err == nil && existingValue != "" {
+		return false, nil // Lock already exists
+	}
+
+	// Set the lock with TTL
+	err = f.Set(key, "1", ttl)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// ReleasePerformerLock releases a performer lock by deleting the key
+func (f *FileCache) ReleasePerformerLock(performerID string) error {
+	key := "performer:busy:" + performerID
+	return f.Delete(key)
+}

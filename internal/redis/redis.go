@@ -194,6 +194,11 @@ func (c *Client) Set(ctx context.Context, key string, value interface{}, expirat
 	return c.client.Set(ctx, key, value, expiration).Err()
 }
 
+// SetNX sets key to hold string value if key does not exist (atomic operation)
+func (c *Client) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+	return c.client.SetNX(ctx, key, value, expiration).Result()
+}
+
 func (c *Client) Del(ctx context.Context, keys ...string) error {
 	return c.client.Del(ctx, keys...).Err()
 }
