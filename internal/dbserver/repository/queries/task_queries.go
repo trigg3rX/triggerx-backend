@@ -46,4 +46,9 @@ const (
 			   task_attester_ids, is_successful
 		FROM triggerx.task_data
 		WHERE job_id = ? ALLOW FILTERING`
+
+	GetTaskFeeQuery = `
+		SELECT task_opx_cost
+		FROM triggerx.task_data
+		WHERE task_id = ?`
 )

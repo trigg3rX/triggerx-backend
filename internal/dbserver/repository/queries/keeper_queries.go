@@ -44,6 +44,11 @@ const (
 			UPDATE triggerx.keeper_data 
 			SET online = false, last_checked_in = ? 
 			WHERE keeper_id = ?`
+
+	UpdateKeeperTaskCountQuery = `
+			UPDATE triggerx.keeper_data 
+			SET no_executed_tasks = ? 
+			WHERE keeper_id = ?`
 )
 
 
@@ -81,6 +86,11 @@ const (
 			SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
 			FROM triggerx.keeper_data 
 			WHERE registered = true AND keeper_address = ? ALLOW FILTERING`
+
+	GetKeeperLeaderboardByNameQuery = `
+			SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
+			FROM triggerx.keeper_data 
+			WHERE registered = true AND keeper_name = ? ALLOW FILTERING`
 
 	GetKeeperAsPerformersQuery = `
 			SELECT keeper_id, keeper_address 
