@@ -5,20 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gocql/gocql"
 	"github.com/google/uuid"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
-
-type ApiKeyResponse struct {
-	Key       string    `json:"key"`
-	Owner     string    `json:"owner"`
-	IsActive  bool      `json:"isActive"`
-	RateLimit int       `json:"rateLimit"`
-	LastUsed  time.Time `json:"lastUsed"`
-	CreatedAt time.Time `json:"createdAt"`
-}
 
 func (h *Handler) CreateApiKey(c *gin.Context) {
 	var req types.CreateApiKeyRequest
@@ -41,28 +30,20 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 
 	h.logger.Infof("[CreateApiKey] Checking for existing API key for owner: %s", req.Owner)
 
-	var existingKey types.ApiKey
-
-	err := h.db.Session().Query(queries.CheckApiKeyQuery, req.Owner).Scan(
-		&existingKey.Key,
-		&existingKey.Owner,
-		&existingKey.IsActive,
-		&existingKey.RateLimit,
-		&existingKey.LastUsed,
-		&existingKey.CreatedAt,
-	)
-
-	if err == nil {
-		h.logger.Warnf("[CreateApiKey] API key already exists for owner %s", req.Owner)
-		c.JSON(http.StatusConflict, gin.H{"error": "API key already exists for this owner"})
-		return
-	} else if err != gocql.ErrNotFound {
+	existingKey, err := h.apiKeysRepository.GetApiKeyDataByOwner(req.Owner)
+	if err != nil {
 		h.logger.Errorf("[CreateApiKey] Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	apiKey := types.ApiKey{
+	if existingKey != nil {
+		h.logger.Warnf("[CreateApiKey] API key already exists for owner %s", req.Owner)
+		c.JSON(http.StatusConflict, gin.H{"error": "API key already exists for this owner"})
+		return
+	}
+
+	apiKey := types.ApiKeyData{
 		Key:       uuid.New().String(),
 		Owner:     req.Owner,
 		IsActive:  true,
@@ -71,14 +52,7 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if err := h.db.Session().Query(queries.InsertApiKeyQuery,
-		apiKey.Key,
-		apiKey.Owner,
-		apiKey.IsActive,
-		apiKey.RateLimit,
-		apiKey.LastUsed,
-		apiKey.CreatedAt,
-	).Exec(); err != nil {
+	if err := h.apiKeysRepository.CreateApiKey(&apiKey); err != nil {
 		h.logger.Errorf("[CreateApiKey] Failed to insert API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create API key"})
 		return
@@ -91,26 +65,15 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 func (h *Handler) UpdateApiKey(c *gin.Context) {
 	keyID := c.Param("key")
 
-	var req struct {
-		IsActive  *bool `json:"isActive,omitempty"`
-		RateLimit *int  `json:"rateLimit,omitempty"`
-	}
+	var req types.UpdateApiKeyRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	var apiKey types.ApiKey
-
-	if err := h.db.Session().Query(queries.SelectApiKeyQuery, keyID).Scan(
-		&apiKey.Key,
-		&apiKey.Owner,
-		&apiKey.IsActive,
-		&apiKey.RateLimit,
-		&apiKey.LastUsed,
-		&apiKey.CreatedAt,
-	); err != nil {
+	apiKey, err := h.apiKeysRepository.GetApiKeyDataByKey(keyID)
+	if err != nil {
 		h.logger.Errorf("API key not found: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "API key not found"})
 		return
@@ -124,11 +87,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 		apiKey.RateLimit = *req.RateLimit
 	}
 
-	if err := h.db.Session().Query(queries.UpdateApiKeyQuery,
-		apiKey.IsActive,
-		apiKey.RateLimit,
-		apiKey.Key,
-	).Exec(); err != nil {
+	if err := h.apiKeysRepository.UpdateApiKey(&req); err != nil {
 		h.logger.Errorf("Failed to update API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update API key"})
 		return
@@ -140,7 +99,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 func (h *Handler) DeleteApiKey(c *gin.Context) {
 	keyID := c.Param("key")
 
-	if err := h.db.Session().Query(queries.DeleteApiKeyQuery, false, keyID).Exec(); err != nil {
+	if err := h.apiKeysRepository.UpdateApiKeyStatus(&types.UpdateApiKeyStatusRequest{Key: keyID, IsActive: false}); err != nil {
 		h.logger.Errorf("Failed to delete API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return

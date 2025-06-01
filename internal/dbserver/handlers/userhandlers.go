@@ -5,50 +5,46 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/queries"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) GetUserData(c *gin.Context) {
-	userID := c.Param("id")
-	h.logger.Infof("[GetUserData] Retrieving user with ID: %s", userID)
+func (h *Handler) GetUserDataByAddress(c *gin.Context) {
+	userAddress := strings.ToLower(c.Param("address"))
+	if userAddress == "" {
+		h.logger.Errorf("[GetUserDataByAddress] Invalid user address: %v", userAddress)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
-	var userData types.UserData
+	h.logger.Infof("[GetUserDataByAddress] Retrieving user with address: %s", userAddress)
 
-	if err := h.db.Session().Query(queries.SelectUserDataByIDQuery, userID).Scan(
-		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.AccountBalance); err != nil {
-		h.logger.Errorf("[GetUserData] Error retrieving user with ID %s: %v", userID, err)
+	userID, userData, err := h.userRepository.GetUserDataByAddress(userAddress)
+	if err != nil {
+		h.logger.Errorf("[GetUserData] Error retrieving user with ID %d: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.logger.Infof("[GetUserData] Successfully retrieved user with ID: %s", userID)
+	h.logger.Infof("[GetUserData] Successfully retrieved user with ID: %d", userID)
 
-	response := types.UserData{
-		UserID:         userData.UserID,
-		UserAddress:    userData.UserAddress,
-		JobIDs:         userData.JobIDs,
-		AccountBalance: userData.AccountBalance,
-	}
-
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, userData)
 }
 
 func (h *Handler) GetWalletPoints(c *gin.Context) {
-	walletAddress := strings.ToLower(c.Param("wallet_address"))
+	walletAddress := strings.ToLower(c.Param("address"))
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
-	var userPoints int
-	var keeperPoints int
+	var userPoints float64
+	var keeperPoints float64
 
-	if err := h.db.Session().Query(queries.SelectUserPointsByAddressQuery, walletAddress).Scan(&userPoints); err != nil {
+	userPoints, err := h.userRepository.GetUserPointsByAddress(walletAddress)
+	if err != nil {
 		userPoints = 0
 	}
 
-	if err := h.db.Session().Query(queries.SelectKeeperPointsByAddressQuery, walletAddress).Scan(&keeperPoints); err != nil {
-		keeperPoints = 0
-	}
+	// keeperPoints, err := h.userRepository.GetKeeperPointsByAddress(walletAddress)
+	// if err != nil {
+	// 	keeperPoints = 0
+	// }
 
 	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)
 
