@@ -8,80 +8,115 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
-	ttypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
-	var taskData ttypes.CreateTaskData
-	var taskResponse ttypes.CreateTaskResponse
+	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	var maxTaskID int64
-	if err := h.db.Session().Query(`
-		SELECT MAX(task_id) FROM triggerx.task_data`).Scan(&maxTaskID); err != nil {
-		h.logger.Errorf("[CreateTaskData] Error getting max task ID: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	taskResponse.TaskID = maxTaskID + 1
-
-	h.logger.Infof("[CreateTaskData] Creating task with ID: %d", taskResponse.TaskID)
-
-	if err := h.db.Session().Query(`
-        INSERT INTO triggerx.task_data (
-            task_id, job_id, task_definition_id, created_at,
-            task_performer_id, is_approved
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-		taskResponse.TaskID, taskData.JobID, taskData.TaskDefinitionID,
-		time.Now().UTC(), taskData.TaskPerformerID, false).Exec(); err != nil {
-		h.logger.Errorf("[CreateTaskData] Error inserting task with ID %d: %v", taskResponse.TaskID, err)
+	taskID, err := h.taskRepository.CreateTaskDataInDB(&taskData)
+	if err != nil {
+		h.logger.Errorf("[CreateTaskData] Error creating task: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	taskResponse.JobID = taskData.JobID
-	taskResponse.TaskDefinitionID = taskData.TaskDefinitionID
-	taskResponse.TaskPerformerID = taskData.TaskPerformerID
-	taskResponse.IsApproved = true
-
-	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskResponse.TaskID)
-	c.JSON(http.StatusCreated, taskResponse)
+	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskID)
+	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
 }
 
-func (h *Handler) GetTaskData(c *gin.Context) {
+func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	taskID := c.Param("id")
-	h.logger.Infof("[GetTaskData] Fetching task with ID: %s", taskID)
+	h.logger.Infof("[UpdateTaskExecutionData] Updating task execution data for task with ID: %s", taskID)
 
-	var taskData ttypes.TaskData
-	if err := h.db.Session().Query(`
-        SELECT task_id, job_id, task_definition_id, created_at,
-               task_fee, execution_timestamp, execution_tx_hash, task_performer_id, 
-			   proof_of_task, action_data_cid, task_attester_ids,
-			   is_approved, tp_signature, ta_signature, task_submission_tx_hash,
-			   is_successful
-        FROM triggerx.task_data
-        WHERE task_id = ?`, taskID).Scan(
-		&taskData.TaskID, &taskData.JobID, &taskData.TaskDefinitionID, &taskData.CreatedAt,
-		&taskData.TaskFee, &taskData.ExecutionTimestamp, &taskData.ExecutionTxHash, &taskData.TaskPerformerID,
-		&taskData.ProofOfTask, &taskData.ActionDataCID, &taskData.TaskAttesterIDs,
-		&taskData.IsApproved, &taskData.TpSignature, &taskData.TaSignature,
-		&taskData.TaskSubmissionTxHash, &taskData.IsSuccessful); err != nil {
-		h.logger.Errorf("[GetTaskData] Error retrieving task with ID %s: %v", taskID, err)
+	var taskData types.UpdateTaskExecutionDataRequest
+	if err := c.ShouldBindJSON(&taskData); err != nil {
+		h.logger.Errorf("[UpdateTaskExecutionData] Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.taskRepository.UpdateTaskExecutionDataInDB(&taskData); err != nil {
+		h.logger.Errorf("[UpdateTaskExecutionData] Error updating task execution data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.logger.Infof("[GetTaskData] Successfully retrieved task with ID: %s", taskID)
+	h.logger.Infof("[UpdateTaskExecutionData] Successfully updated task execution data for task with ID: %s", taskID)
+	c.JSON(http.StatusOK, gin.H{"message": "Task execution data updated successfully"})
+}
+
+func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
+	taskID := c.Param("id")
+	h.logger.Infof("[UpdateTaskAttestationData] Updating task attestation data for task with ID: %s", taskID)
+
+	var taskData types.UpdateTaskAttestationDataRequest
+	if err := c.ShouldBindJSON(&taskData); err != nil {
+		h.logger.Errorf("[UpdateTaskAttestationData] Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.taskRepository.UpdateTaskAttestationDataInDB(&taskData); err != nil {
+		h.logger.Errorf("[UpdateTaskAttestationData] Error updating task attestation data: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Infof("[UpdateTaskAttestationData] Successfully updated task attestation data for task with ID: %s", taskID)
+	c.JSON(http.StatusOK, gin.H{"message": "Task attestation data updated successfully"})
+}
+
+func (h *Handler) GetTaskDataByID(c *gin.Context) {
+	taskID := c.Param("id")
+	h.logger.Infof("[GetTaskDataByID] Fetching task with ID: %s", taskID)
+
+	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
+	if err != nil {
+		h.logger.Errorf("[GetTaskDataByID] Error parsing task ID: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+	taskData, err := h.taskRepository.GetTaskDataByID(taskIDInt)
+	if err != nil {
+		h.logger.Errorf("[GetTaskDataByID] Error retrieving task with ID %s: %v", taskID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Infof("[GetTaskDataByID] Successfully retrieved task with ID: %s", taskID)
+	c.JSON(http.StatusOK, taskData)
+}
+
+func (h *Handler) GetTasksByJobID(c *gin.Context) {
+	jobID := c.Param("id")
+	h.logger.Infof("[GetTasksByJobID] Fetching tasks for job with ID: %s", jobID)
+
+	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
+	if err != nil {
+		h.logger.Errorf("[GetTasksByJobID] Error parsing job ID: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+		return
+	}
+	taskData, err := h.taskRepository.GetTasksByJobID(jobIDInt)
+	if err != nil {
+		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for job with ID %s: %v", jobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Infof("[GetTasksByJobID] Successfully retrieved tasks for job with ID: %s", jobID)
 	c.JSON(http.StatusOK, taskData)
 }
 
@@ -173,10 +208,13 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Session().Query(`
-		UPDATE triggerx.task_data
-		SET task_fee = ?
-		WHERE task_id = ?`, taskFee.Fee, taskID).Exec(); err != nil {
+	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
+	if err != nil {
+		h.logger.Errorf("[UpdateTaskFee] Error parsing task ID: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+	if err := h.taskRepository.UpdateTaskFee(taskIDInt, taskFee.Fee); err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

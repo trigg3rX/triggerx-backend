@@ -134,3 +134,11 @@ type ConditionJobData struct {
 	Arguments                     []string `json:"arguments"`
 	DynamicArgumentsScriptIPFSUrl string   `json:"dynamic_arguments_script_ipfs_url"`
 }
+
+// JobResponse is a unified type for different job types to be sent to the frontend
+type JobResponse struct {
+	JobData          JobData           `json:"job_data"`
+	TimeJobData      *TimeJobData      `json:"time_job_data,omitempty"`
+	EventJobData     *EventJobData     `json:"event_job_data,omitempty"`
+	ConditionJobData *ConditionJobData `json:"condition_job_data,omitempty"`
+}
