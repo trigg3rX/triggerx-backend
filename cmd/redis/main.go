@@ -14,6 +14,11 @@ import (
 )
 
 func main() {
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
+	}
+
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
 		LogDir:          logging.BaseDataDir,
@@ -25,11 +30,13 @@ func main() {
 	}
 
 	if err := logging.InitServiceLogger(logConfig); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		os.Exit(1)
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	logger := logging.GetServiceLogger()
-	logger.Info("Starting Redis service main...")
+
+	logger.Info("Starting Redis service main...",
+		"mode", getEnvironment(),
+	)
 	defer func() {
 		logger.Info("Shutting down Redis service main...")
 		if err := logging.Shutdown(); err != nil {
@@ -85,6 +92,7 @@ func getEnvironment() logging.LogLevel {
 	}
 	return logging.Production
 }
+
 func getLogLevel() logging.Level {
 	if config.IsDevMode() {
 		return logging.DebugLevel
