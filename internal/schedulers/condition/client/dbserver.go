@@ -44,7 +44,7 @@ func NewDBServerClient(logger logging.Logger, config Config) (*DBServerClient, e
 
 // HealthCheck performs a health check against the database server
 func (c *DBServerClient) HealthCheck() error {
-	url := fmt.Sprintf("%s/status", c.baseURL)
+	url := fmt.Sprintf("%s/api/health", c.baseURL)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
