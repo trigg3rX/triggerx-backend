@@ -126,6 +126,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	api := router.Group("/api")
 
+	// Health check route - no authentication required
+	api.GET("/health", handler.HealthCheck)
+
 	// Public routes
 	api.GET("/users/:address", handler.GetUserDataByAddress)
 	api.GET("/wallet/points/:address", handler.GetWalletPoints)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -22,32 +23,32 @@ type NotificationConfig struct {
 }
 
 type Handler struct {
-	db            *database.Connection
-	logger        logging.Logger
-	config        NotificationConfig
-	jobRepository repository.JobRepository
-	timeJobRepository repository.TimeJobRepository
-	eventJobRepository repository.EventJobRepository
+	db                     *database.Connection
+	logger                 logging.Logger
+	config                 NotificationConfig
+	jobRepository          repository.JobRepository
+	timeJobRepository      repository.TimeJobRepository
+	eventJobRepository     repository.EventJobRepository
 	conditionJobRepository repository.ConditionJobRepository
-	taskRepository repository.TaskRepository
-	userRepository repository.UserRepository
-	keeperRepository repository.KeeperRepository
-	apiKeysRepository repository.ApiKeysRepository
+	taskRepository         repository.TaskRepository
+	userRepository         repository.UserRepository
+	keeperRepository       repository.KeeperRepository
+	apiKeysRepository      repository.ApiKeysRepository
 }
 
 func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig) *Handler {
 	return &Handler{
-		db:            db,
-		logger:        logger,
-		config:        config,
-		jobRepository: repository.NewJobRepository(db),
-		timeJobRepository: repository.NewTimeJobRepository(db),
-		eventJobRepository: repository.NewEventJobRepository(db),
+		db:                     db,
+		logger:                 logger,
+		config:                 config,
+		jobRepository:          repository.NewJobRepository(db),
+		timeJobRepository:      repository.NewTimeJobRepository(db),
+		eventJobRepository:     repository.NewEventJobRepository(db),
 		conditionJobRepository: repository.NewConditionJobRepository(db),
-		taskRepository: repository.NewTaskRepository(db),
-		userRepository: repository.NewUserRepository(db),
-		keeperRepository: repository.NewKeeperRepository(db),
-		apiKeysRepository: repository.NewApiKeysRepository(db),
+		taskRepository:         repository.NewTaskRepository(db),
+		userRepository:         repository.NewUserRepository(db),
+		keeperRepository:       repository.NewKeeperRepository(db),
+		apiKeysRepository:      repository.NewApiKeysRepository(db),
 	}
 }
 
@@ -167,4 +168,52 @@ func (h *Handler) sendPauseToScheduler(apiURL string, schedulerName string) (boo
 
 	h.logger.Infof("Successfully sent DELETE to %s", schedulerName)
 	return true, nil
+}
+
+// HealthCheck provides a health check endpoint for the database server
+func (h *Handler) HealthCheck(c *gin.Context) {
+	startTime := time.Now()
+
+	// Check database connection by executing a simple query
+	dbStatus := "healthy"
+	dbError := ""
+
+	// Use a simple system query to test the connection
+	query := h.db.Session().Query("SELECT now() FROM system.local")
+	var timestamp time.Time
+	if err := query.Scan(&timestamp); err != nil {
+		dbStatus = "unhealthy"
+		dbError = err.Error()
+		h.logger.Errorf("Database health check failed: %v", err)
+	}
+
+	// Prepare response
+	response := gin.H{
+		"status":    "ok",
+		"timestamp": startTime.Unix(),
+		"service":   "dbserver",
+		"version":   "1.0.0",
+		"uptime":    time.Since(startTime).String(),
+		"database": gin.H{
+			"status": dbStatus,
+			"error":  dbError,
+		},
+		"checks": gin.H{
+			"database_connection": dbStatus == "healthy",
+		},
+	}
+
+	// Set appropriate HTTP status
+	httpStatus := http.StatusOK
+	if dbStatus != "healthy" {
+		httpStatus = http.StatusServiceUnavailable
+		response["status"] = "degraded"
+	}
+
+	// Log health check
+	duration := time.Since(startTime)
+	h.logger.Infof("Health check completed: status=%s, db_status=%s, duration=%v",
+		response["status"], dbStatus, duration)
+
+	c.JSON(httpStatus, response)
 }
