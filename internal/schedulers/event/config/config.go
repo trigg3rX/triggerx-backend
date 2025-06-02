@@ -17,9 +17,7 @@ type Config struct {
 	dbServerURL      string
 	maxWorkers       int
 	// Chain RPC URLs
-	opSepoliaRPC   string
-	baseSepoliaRPC string
-	ethSepoliaRPC  string
+	alchemyAPIKey string
 }
 
 var cfg Config
@@ -44,9 +42,7 @@ func Init() error {
 		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
 		maxWorkers:       maxWorkers,
 		// Chain RPC URLs with default values
-		opSepoliaRPC:   env.GetEnv("OP_SEPOLIA_RPC_URL", "https://sepolia.optimism.io"),
-		baseSepoliaRPC: env.GetEnv("BASE_SEPOLIA_RPC_URL", "https://sepolia.base.org"),
-		ethSepoliaRPC:  env.GetEnv("ETH_SEPOLIA_RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com"),
+		alchemyAPIKey: env.GetEnv("ALCHEMY_API_KEY", ""),
 	}
 
 	return nil
@@ -80,25 +76,10 @@ func GetDBServerURL() string {
 // GetChainRPCUrls returns a map of chain IDs to RPC URLs
 func GetChainRPCUrls() map[string]string {
 	return map[string]string{
-		"11155420": cfg.opSepoliaRPC,   // OP Sepolia
-		"84532":    cfg.baseSepoliaRPC, // Base Sepolia
-		"11155111": cfg.ethSepoliaRPC,  // Ethereum Sepolia
+		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),   // OP Sepolia
+		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
+		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
 	}
-}
-
-// GetOPSepoliaRPC returns the OP Sepolia RPC URL
-func GetOPSepoliaRPC() string {
-	return cfg.opSepoliaRPC
-}
-
-// GetBaseSepoliaRPC returns the Base Sepolia RPC URL
-func GetBaseSepoliaRPC() string {
-	return cfg.baseSepoliaRPC
-}
-
-// GetEthSepoliaRPC returns the Ethereum Sepolia RPC URL
-func GetEthSepoliaRPC() string {
-	return cfg.ethSepoliaRPC
 }
 
 // GetMaxWorkers returns the maximum number of concurrent workers allowed

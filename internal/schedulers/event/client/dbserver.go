@@ -175,7 +175,7 @@ func (c *DBServerClient) doRequest(method, url string, payload interface{}, resu
 
 // HealthCheck checks if the database server is healthy
 func (c *DBServerClient) HealthCheck() error {
-	url := fmt.Sprintf("%s/health", c.baseURL)
+	url := fmt.Sprintf("%s/api/health", c.baseURL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
