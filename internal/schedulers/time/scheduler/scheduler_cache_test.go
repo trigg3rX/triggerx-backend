@@ -23,7 +23,12 @@ func TestJobCacheDeduplication(t *testing.T) {
 	if err := logging.InitServiceLogger(logConfig); err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer logging.Shutdown()
+	defer func() {
+		err := logging.Shutdown()
+		if err != nil {
+			t.Fatalf("Failed to shutdown logger: %v", err)
+		}
+	}()
 
 	// Initialize cache
 	err := cache.Init()
@@ -84,7 +89,12 @@ func TestCacheTTLAccuracy(t *testing.T) {
 	if err := logging.InitServiceLogger(logConfig); err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer logging.Shutdown()
+	defer func() {
+		err := logging.Shutdown()
+		if err != nil {
+			t.Fatalf("Failed to shutdown logger: %v", err)
+		}
+	}()
 
 	// Initialize cache
 	err := cache.Init()
@@ -143,7 +153,12 @@ func TestCacheReadAndSendTime(t *testing.T) {
 	if err := logging.InitServiceLogger(logConfig); err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer logging.Shutdown()
+	defer func() {
+		err := logging.Shutdown()
+		if err != nil {
+			t.Fatalf("Failed to shutdown logger: %v", err)
+		}
+	}()
 
 	// Initialize cache
 	err := cache.Init()
@@ -197,7 +212,12 @@ func TestCacheReadTimeFor100Jobs(t *testing.T) {
 	if err := logging.InitServiceLogger(logConfig); err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer logging.Shutdown()
+	defer func() {
+		err := logging.Shutdown()
+		if err != nil {
+			t.Fatalf("Failed to shutdown logger: %v", err)
+		}
+	}()
 
 	// Initialize cache
 	err := cache.Init()

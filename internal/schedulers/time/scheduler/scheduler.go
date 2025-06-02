@@ -15,8 +15,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
-	// "github.com/trigg3rX/triggerx-backend/pkg/parser"
-	"github.com/trigg3rX/triggerx-backend/internal/cache"
+	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
