@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Helper functions
@@ -35,6 +36,17 @@ func GetEnvInt(key string, defaultValue int) int {
 			return defaultValue
 		}
 		return intValue
+	}
+	return defaultValue
+}
+
+func GetEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value, exists := os.LookupEnv(key); exists {
+		duration, err := time.ParseDuration(value)
+		if err != nil {
+			return defaultValue
+		}
+		return duration
 	}
 	return defaultValue
 }
