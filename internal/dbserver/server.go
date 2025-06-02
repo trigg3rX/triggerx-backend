@@ -9,10 +9,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/redis"
 )
 
 type Server struct {
@@ -69,19 +69,32 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	// Initialize metrics server
 	metricsServer := metrics.NewMetricsServer(db, logger)
 
-	// Initialize Redis client
-	redisClient, err := redis.NewClient(logger)
-	if err != nil {
-		logger.Errorf("Failed to initialize Redis client: %v", err)
+	// Initialize Redis client with enhanced features
+	var redisClient *redis.Client
+	if redis.IsAvailable() {
+		client, err := redis.NewClient(logger)
+		if err != nil {
+			logger.Errorf("Failed to initialize Redis client: %v", err)
+		} else {
+			redisClient = client
+			logger.Infof("Redis client initialized successfully (%s)", redis.GetRedisInfo()["type"])
+		}
+	} else {
+		logger.Warn("Redis is not configured - rate limiting and caching features will be disabled")
 	}
 
 	// Initialize rate limiter
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
+		var err error
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
 		if err != nil {
 			logger.Errorf("Failed to initialize rate limiter: %v", err)
+		} else {
+			logger.Info("Rate limiter initialized successfully")
 		}
+	} else {
+		logger.Warn("Rate limiter disabled - Redis client not available")
 	}
 
 	s := &Server{
@@ -113,9 +126,12 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	api := router.Group("/api")
 
+	// Health check route - no authentication required
+	api.GET("/health", handler.HealthCheck)
+
 	// Public routes
-	api.GET("/users/:id", handler.GetUserData)
-	api.GET("/wallet/points/:wallet_address", handler.GetWalletPoints)
+	api.GET("/users/:address", handler.GetUserDataByAddress)
+	api.GET("/wallet/points/:address", handler.GetWalletPoints)
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
@@ -123,19 +139,21 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	// Apply validation middleware to routes that need it
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.GET("/jobs/time", handler.GetTimeBasedJobs)
-	api.GET("/jobs/:id", handler.GetJobData)
-	api.PUT("/jobs/:id", handler.UpdateJobData)
+	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
+	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
-	api.GET("/tasks/:id", handler.GetTaskData)
+	api.GET("/tasks/:id", handler.GetTaskDataByID)
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
+	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
+	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
+	api.GET("/tasks/job/:id", handler.GetTasksByJobID)
 
-	api.GET("/keepers/all", handler.GetAllKeepers)
+	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.GET("/keepers/performers", handler.GetPerformers)
-	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
 	api.GET("/keepers/:id", handler.GetKeeperData)
 	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
 	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
@@ -144,7 +162,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	api.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
 	api.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	api.GET("/leaderboard/users/search", handler.GetUserByAddress)
+	api.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
 	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)

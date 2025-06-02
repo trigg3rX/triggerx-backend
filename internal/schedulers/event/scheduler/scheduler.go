@@ -90,21 +90,20 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 
 	maxWorkers := config.GetMaxWorkers()
 
-	// Initialize cache
-	if err := cache.Init(); err != nil {
+	// Initialize cache with enhanced Redis support
+	if err := cache.InitWithLogger(logger); err != nil {
 		logger.Warnf("Failed to initialize cache: %v", err)
 	}
 
 	cacheInstance, err := cache.GetCache()
 	if err != nil {
 		logger.Warnf("Cache not available, running without cache: %v", err)
-	}
-
-	// Test Redis connection
-	if err := redisx.Ping(); err != nil {
-		logger.Warnf("Redis not available, job streaming disabled: %v", err)
+		cacheInstance = nil
 	} else {
-		logger.Info("Redis connection established, event streaming enabled")
+		// Log cache type and Redis availability
+		cacheInfo := cache.GetCacheInfo()
+		logger.Infof("Cache initialized: type=%s, redis_available=%v",
+			cacheInfo["type"], cacheInfo["redis_available"])
 	}
 
 	scheduler := &EventBasedScheduler{
@@ -129,10 +128,31 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 	// Start metrics collection
 	scheduler.metrics.Start()
 
+	// Add scheduler startup event to Redis stream (Redis is already initialized in main.go)
+	if redisx.IsAvailable() {
+		startupEvent := map[string]interface{}{
+			"event_type":       "scheduler_startup",
+			"manager_id":       managerID,
+			"max_workers":      maxWorkers,
+			"cache_available":  cacheInstance != nil,
+			"redis_available":  redisx.IsAvailable(),
+			"supported_chains": len(scheduler.chainClients),
+			"started_at":       time.Now().Unix(),
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, startupEvent); err != nil {
+			logger.Warnf("Failed to add scheduler startup event to Redis stream: %v", err)
+		} else {
+			logger.Info("Scheduler startup event added to Redis stream")
+		}
+	}
+
 	scheduler.logger.Info("Event-based scheduler initialized",
 		"max_workers", maxWorkers,
 		"manager_id", managerID,
 		"cache_available", cacheInstance != nil,
+		"redis_available", redisx.IsAvailable(),
+		"connected_chains", len(scheduler.chainClients),
 	)
 
 	return scheduler, nil
@@ -174,13 +194,51 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
+	startTime := time.Now()
+
 	// Check if job is already scheduled
 	if _, exists := s.workers[jobData.JobID]; exists {
+		// Add job scheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":       "job_schedule_failed",
+				"job_id":           jobData.JobID,
+				"manager_id":       s.managerID,
+				"error":            "job already scheduled",
+				"trigger_chain_id": jobData.TriggerChainID,
+				"contract_address": jobData.TriggerContractAddress,
+				"trigger_event":    jobData.TriggerEvent,
+				"failed_at":        startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryEventStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
 	}
 
 	// Check if we've reached the maximum number of workers
 	if len(s.workers) >= s.maxWorkers {
+		// Add job scheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":       "job_schedule_failed",
+				"job_id":           jobData.JobID,
+				"manager_id":       s.managerID,
+				"error":            fmt.Sprintf("maximum workers (%d) reached", s.maxWorkers),
+				"current_workers":  len(s.workers),
+				"max_workers":      s.maxWorkers,
+				"trigger_chain_id": jobData.TriggerChainID,
+				"contract_address": jobData.TriggerContractAddress,
+				"trigger_event":    jobData.TriggerEvent,
+				"failed_at":        startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryEventStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("maximum number of workers (%d) reached, cannot schedule job %d", s.maxWorkers, jobData.JobID)
 	}
 
@@ -190,12 +248,45 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 	s.clientsMutex.RUnlock()
 
 	if !exists {
+		// Add job scheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":       "job_schedule_failed",
+				"job_id":           jobData.JobID,
+				"manager_id":       s.managerID,
+				"error":            fmt.Sprintf("unsupported chain ID: %s", jobData.TriggerChainID),
+				"trigger_chain_id": jobData.TriggerChainID,
+				"contract_address": jobData.TriggerContractAddress,
+				"trigger_event":    jobData.TriggerEvent,
+				"failed_at":        startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryEventStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("unsupported chain ID: %s", jobData.TriggerChainID)
 	}
 
 	// Create job worker
 	worker, err := s.createJobWorker(jobData, client)
 	if err != nil {
+		// Add job scheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":       "job_schedule_failed",
+				"job_id":           jobData.JobID,
+				"manager_id":       s.managerID,
+				"error":            fmt.Sprintf("failed to create worker: %v", err),
+				"trigger_chain_id": jobData.TriggerChainID,
+				"contract_address": jobData.TriggerContractAddress,
+				"trigger_event":    jobData.TriggerEvent,
+				"failed_at":        startTime.Unix(),
+			}
+			if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, failureEvent); err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("failed to create job worker: %w", err)
 	}
 
@@ -209,19 +300,32 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 	metrics.JobsScheduled.Inc()
 	metrics.JobsRunning.Inc()
 
-	// Add job scheduling event to Redis stream
-	jobContext := map[string]interface{}{
-		"job_id":           jobData.JobID,
-		"trigger_chain_id": jobData.TriggerChainID,
-		"contract_address": jobData.TriggerContractAddress,
-		"trigger_event":    jobData.TriggerEvent,
-		"manager_id":       s.managerID,
-		"scheduled_at":     time.Now().Unix(),
-		"status":           "scheduled",
-	}
+	duration := time.Since(startTime)
 
-	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
-		s.logger.Warnf("Failed to add job scheduling event to Redis stream: %v", err)
+	// Add comprehensive job scheduling success event to Redis stream
+	if redisx.IsAvailable() {
+		jobContext := map[string]interface{}{
+			"event_type":               "job_scheduled",
+			"job_id":                   jobData.JobID,
+			"manager_id":               s.managerID,
+			"trigger_chain_id":         jobData.TriggerChainID,
+			"trigger_contract_address": jobData.TriggerContractAddress,
+			"trigger_event":            jobData.TriggerEvent,
+			"target_chain_id":          jobData.TargetChainID,
+			"target_contract_address":  jobData.TargetContractAddress,
+			"target_function":          jobData.TargetFunction,
+			"recurring":                jobData.Recurring,
+			"active_workers":           len(s.workers),
+			"max_workers":              s.maxWorkers,
+			"cache_available":          s.cache != nil,
+			"scheduled_at":             startTime.Unix(),
+			"duration_ms":              duration.Milliseconds(),
+			"status":                   "scheduled",
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
+			s.logger.Warnf("Failed to add job scheduling event to Redis stream: %v", err)
+		}
 	}
 
 	s.logger.Info("Job scheduled successfully",
@@ -229,8 +333,12 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *schedulerTypes.EventJobData) 
 		"trigger_chain", jobData.TriggerChainID,
 		"contract", jobData.TriggerContractAddress,
 		"event", jobData.TriggerEvent,
+		"target_chain", jobData.TargetChainID,
+		"target_contract", jobData.TargetContractAddress,
+		"target_function", jobData.TargetFunction,
 		"active_workers", len(s.workers),
 		"max_workers", s.maxWorkers,
+		"duration", duration,
 	)
 
 	return nil
@@ -310,9 +418,37 @@ func (s *EventBasedScheduler) UnscheduleJob(jobID int64) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
+	startTime := time.Now()
+
 	worker, exists := s.workers[jobID]
 	if !exists {
+		// Add job unscheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type": "job_unschedule_failed",
+				"job_id":     jobID,
+				"manager_id": s.managerID,
+				"error":      "job not found",
+				"failed_at":  startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryEventStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job unscheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("job %d is not scheduled", jobID)
+	}
+
+	// Capture job details before stopping
+	jobDetails := map[string]interface{}{
+		"trigger_chain_id":         worker.job.TriggerChainID,
+		"trigger_contract_address": worker.job.TriggerContractAddress,
+		"trigger_event":            worker.job.TriggerEvent,
+		"target_chain_id":          worker.job.TargetChainID,
+		"target_contract_address":  worker.job.TargetContractAddress,
+		"target_function":          worker.job.TargetFunction,
+		"last_processed_block":     worker.lastBlock,
+		"was_running":              worker.IsRunning(),
 	}
 
 	// Stop worker
@@ -324,49 +460,146 @@ func (s *EventBasedScheduler) UnscheduleJob(jobID int64) error {
 	// Update metrics
 	metrics.JobsRunning.Dec()
 
-	// Add job unscheduling event to Redis stream
-	jobContext := map[string]interface{}{
-		"job_id":         jobID,
-		"manager_id":     s.managerID,
-		"unscheduled_at": time.Now().Unix(),
-		"status":         "unscheduled",
+	duration := time.Since(startTime)
+
+	// Add comprehensive job unscheduling success event to Redis stream
+	if redisx.IsAvailable() {
+		jobContext := map[string]interface{}{
+			"event_type":               "job_unscheduled",
+			"job_id":                   jobID,
+			"manager_id":               s.managerID,
+			"trigger_chain_id":         jobDetails["trigger_chain_id"],
+			"trigger_contract_address": jobDetails["trigger_contract_address"],
+			"trigger_event":            jobDetails["trigger_event"],
+			"target_chain_id":          jobDetails["target_chain_id"],
+			"target_contract_address":  jobDetails["target_contract_address"],
+			"target_function":          jobDetails["target_function"],
+			"last_processed_block":     jobDetails["last_processed_block"],
+			"was_running":              jobDetails["was_running"],
+			"remaining_workers":        len(s.workers),
+			"max_workers":              s.maxWorkers,
+			"unscheduled_at":           startTime.Unix(),
+			"duration_ms":              duration.Milliseconds(),
+			"status":                   "unscheduled",
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
+			s.logger.Warnf("Failed to add job unscheduling event to Redis stream: %v", err)
+		}
 	}
 
-	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
-		s.logger.Warnf("Failed to add job unscheduling event to Redis stream: %v", err)
-	}
+	s.logger.Info("Job unscheduled successfully",
+		"job_id", jobID,
+		"trigger_chain", jobDetails["trigger_chain_id"],
+		"contract", jobDetails["trigger_contract_address"],
+		"event", jobDetails["trigger_event"],
+		"was_running", jobDetails["was_running"],
+		"remaining_workers", len(s.workers),
+		"duration", duration,
+	)
 
-	s.logger.Info("Job unscheduled successfully", "job_id", jobID)
 	return nil
 }
 
 // start begins the job worker's event monitoring loop
 func (w *JobWorker) start() {
+	startTime := time.Now()
+
 	w.mutex.Lock()
 	w.isRunning = true
 	w.mutex.Unlock()
 
 	// Try to acquire performer lock
 	lockKey := fmt.Sprintf("event_job_%d_%s", w.job.JobID, w.job.TriggerChainID)
+	lockAcquired := false
+
 	if w.cache != nil {
 		acquired, err := w.cache.AcquirePerformerLock(lockKey, performerLockTTL)
 		if err != nil {
 			w.logger.Warnf("Failed to acquire performer lock for job %d: %v", w.job.JobID, err)
+
+			// Add lock failure event to Redis stream
+			if redisx.IsAvailable() {
+				lockFailureEvent := map[string]interface{}{
+					"event_type":       "worker_lock_failed",
+					"job_id":           w.job.JobID,
+					"manager_id":       w.managerID,
+					"lock_key":         lockKey,
+					"error":            err.Error(),
+					"trigger_chain_id": w.job.TriggerChainID,
+					"contract_address": w.job.TriggerContractAddress,
+					"trigger_event":    w.job.TriggerEvent,
+					"failed_at":        startTime.Unix(),
+				}
+				err := redisx.AddJobToStream(redisx.JobsRetryEventStream, lockFailureEvent)
+				if err != nil {
+					w.logger.Warnf("Failed to add worker lock failure event to Redis stream: %v", err)
+				}
+			}
 		} else if !acquired {
 			w.logger.Warnf("Job %d is already being monitored by another worker, stopping", w.job.JobID)
+
+			// Add lock conflict event to Redis stream
+			if redisx.IsAvailable() {
+				lockConflictEvent := map[string]interface{}{
+					"event_type":       "worker_lock_conflict",
+					"job_id":           w.job.JobID,
+					"manager_id":       w.managerID,
+					"lock_key":         lockKey,
+					"trigger_chain_id": w.job.TriggerChainID,
+					"contract_address": w.job.TriggerContractAddress,
+					"trigger_event":    w.job.TriggerEvent,
+					"conflict_at":      startTime.Unix(),
+				}
+				err := redisx.AddJobToStream(redisx.JobsRetryEventStream, lockConflictEvent)
+				if err != nil {
+					w.logger.Warnf("Failed to add worker lock conflict event to Redis stream: %v", err)
+				}
+			}
 			return
+		} else {
+			lockAcquired = true
 		}
+
 		defer func() {
-			if err := w.cache.ReleasePerformerLock(lockKey); err != nil {
-				w.logger.Warnf("Failed to release performer lock for job %d: %v", w.job.JobID, err)
+			if lockAcquired {
+				if err := w.cache.ReleasePerformerLock(lockKey); err != nil {
+					w.logger.Warnf("Failed to release performer lock for job %d: %v", w.job.JobID, err)
+				}
 			}
 		}()
+	}
+
+	// Add worker start event to Redis stream
+	if redisx.IsAvailable() {
+		workerStartEvent := map[string]interface{}{
+			"event_type":               "worker_started",
+			"job_id":                   w.job.JobID,
+			"manager_id":               w.managerID,
+			"trigger_chain_id":         w.job.TriggerChainID,
+			"trigger_contract_address": w.job.TriggerContractAddress,
+			"trigger_event":            w.job.TriggerEvent,
+			"target_chain_id":          w.job.TargetChainID,
+			"target_contract_address":  w.job.TargetContractAddress,
+			"target_function":          w.job.TargetFunction,
+			"starting_block":           w.lastBlock,
+			"lock_acquired":            lockAcquired,
+			"cache_available":          w.cache != nil,
+			"started_at":               startTime.Unix(),
+			"poll_interval_seconds":    pollInterval.Seconds(),
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, workerStartEvent); err != nil {
+			w.logger.Warnf("Failed to add worker start event to Redis stream: %v", err)
+		}
 	}
 
 	w.logger.Info("Starting job worker",
 		"job_id", w.job.JobID,
 		"contract", w.job.TriggerContractAddress,
 		"event", w.job.TriggerEvent,
+		"starting_block", w.lastBlock,
+		"lock_acquired", lockAcquired,
 	)
 
 	ticker := time.NewTicker(pollInterval)
@@ -375,12 +608,57 @@ func (w *JobWorker) start() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			w.logger.Info("Job worker stopped", "job_id", w.job.JobID)
+			stopTime := time.Now()
+			duration := stopTime.Sub(startTime)
+
+			// Add worker stop event to Redis stream
+			if redisx.IsAvailable() {
+				workerStopEvent := map[string]interface{}{
+					"event_type":       "worker_stopped",
+					"job_id":           w.job.JobID,
+					"manager_id":       w.managerID,
+					"trigger_chain_id": w.job.TriggerChainID,
+					"contract_address": w.job.TriggerContractAddress,
+					"trigger_event":    w.job.TriggerEvent,
+					"final_block":      w.lastBlock,
+					"runtime_seconds":  duration.Seconds(),
+					"stopped_at":       stopTime.Unix(),
+					"graceful_stop":    true,
+				}
+
+				if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, workerStopEvent); err != nil {
+					w.logger.Warnf("Failed to add worker stop event to Redis stream: %v", err)
+				}
+			}
+
+			w.logger.Info("Job worker stopped",
+				"job_id", w.job.JobID,
+				"runtime", duration,
+				"final_block", w.lastBlock,
+			)
 			return
 		case <-ticker.C:
 			if err := w.checkForEvents(); err != nil {
 				w.logger.Error("Error checking for events", "job_id", w.job.JobID, "error", err)
 				metrics.JobsFailed.Inc()
+
+				// Add error event to Redis stream
+				if redisx.IsAvailable() {
+					errorEvent := map[string]interface{}{
+						"event_type":       "worker_error",
+						"job_id":           w.job.JobID,
+						"manager_id":       w.managerID,
+						"error":            err.Error(),
+						"trigger_chain_id": w.job.TriggerChainID,
+						"contract_address": w.job.TriggerContractAddress,
+						"trigger_event":    w.job.TriggerEvent,
+						"current_block":    w.lastBlock,
+						"error_at":         time.Now().Unix(),
+					}
+					if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, errorEvent); err != nil {
+						w.logger.Warnf("Failed to add worker error event to Redis stream: %v", err)
+					}
+				}
 			}
 		}
 	}
@@ -487,32 +765,65 @@ func (w *JobWorker) processEvent(log types.Log) error {
 	// Check for duplicate event processing
 	eventKey := fmt.Sprintf("event_%s_%d", log.TxHash.Hex(), log.Index)
 	if w.cache != nil {
-		if _, err := w.cache.Get(eventKey); err == nil {
-			w.logger.Debug("Event already processed, skipping", "tx_hash", log.TxHash.Hex())
+		if cachedValue, err := w.cache.Get(eventKey); err == nil {
+			w.logger.Debug("Event already processed, skipping",
+				"tx_hash", log.TxHash.Hex(),
+				"cached_at", cachedValue,
+			)
+
+			// Add duplicate event detection to Redis stream
+			if redisx.IsAvailable() {
+				duplicateEvent := map[string]interface{}{
+					"event_type":   "event_duplicate_detected",
+					"job_id":       w.job.JobID,
+					"manager_id":   w.managerID,
+					"chain_id":     w.job.TriggerChainID,
+					"contract":     w.job.TriggerContractAddress,
+					"event":        w.job.TriggerEvent,
+					"tx_hash":      log.TxHash.Hex(),
+					"block_number": log.BlockNumber,
+					"log_index":    log.Index,
+					"cached_at":    cachedValue,
+					"detected_at":  startTime.Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, duplicateEvent); err != nil {
+					w.logger.Warnf("Failed to add event duplicate detection to Redis stream: %v", err)
+				}
+			}
 			return nil
 		}
+
 		// Mark event as processed
 		if err := w.cache.Set(eventKey, time.Now().Format(time.RFC3339), duplicateEventWindow); err != nil {
 			w.logger.Errorf("Failed to set event cache: %v", err)
 		}
 	}
 
-	// Create event context for Redis streaming
+	// Create comprehensive event context for Redis streaming
 	eventContext := map[string]interface{}{
-		"job_id":       w.job.JobID,
-		"manager_id":   w.managerID,
-		"chain_id":     w.job.TriggerChainID,
-		"contract":     w.job.TriggerContractAddress,
-		"event":        w.job.TriggerEvent,
-		"tx_hash":      log.TxHash.Hex(),
-		"block_number": log.BlockNumber,
-		"log_index":    log.Index,
-		"detected_at":  startTime.Unix(),
+		"event_type":               "event_detected",
+		"job_id":                   w.job.JobID,
+		"manager_id":               w.managerID,
+		"trigger_chain_id":         w.job.TriggerChainID,
+		"trigger_contract_address": w.job.TriggerContractAddress,
+		"trigger_event":            w.job.TriggerEvent,
+		"target_chain_id":          w.job.TargetChainID,
+		"target_contract_address":  w.job.TargetContractAddress,
+		"target_function":          w.job.TargetFunction,
+		"tx_hash":                  log.TxHash.Hex(),
+		"block_number":             log.BlockNumber,
+		"log_index":                log.Index,
+		"gas_used":                 log.BlockHash.Hex(), // Block hash for reference
+		"cache_available":          w.cache != nil,
+		"detected_at":              startTime.Unix(),
+		"status":                   "processing",
 	}
 
 	// Add event detection to Redis stream
-	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
-		w.logger.Warnf("Failed to add event detection to Redis stream: %v", err)
+	if redisx.IsAvailable() {
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
+			w.logger.Warnf("Failed to add event detection to Redis stream: %v", err)
+		}
 	}
 
 	// Execute the action
@@ -525,23 +836,40 @@ func (w *JobWorker) processEvent(log types.Log) error {
 	eventContext["completed_at"] = time.Now().Unix()
 
 	if executionSuccess {
+		eventContext["event_type"] = "event_completed"
 		eventContext["status"] = "completed"
-		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
-			w.logger.Warnf("Failed to add event completion to Redis stream: %v", err)
+
+		if redisx.IsAvailable() {
+			if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
+				w.logger.Warnf("Failed to add event completion to Redis stream: %v", err)
+			}
 		}
+
 		w.logger.Info("Event processed successfully",
 			"job_id", w.job.JobID,
 			"tx_hash", log.TxHash.Hex(),
+			"block", log.BlockNumber,
+			"target_chain", w.job.TargetChainID,
+			"target_function", w.job.TargetFunction,
 			"duration", duration,
 		)
 	} else {
+		eventContext["event_type"] = "event_failed"
 		eventContext["status"] = "failed"
-		if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, eventContext); err != nil {
-			w.logger.Warnf("Failed to add event failure to Redis stream: %v", err)
+		eventContext["error"] = "action execution failed"
+
+		if redisx.IsAvailable() {
+			if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, eventContext); err != nil {
+				w.logger.Warnf("Failed to add event failure to Redis stream: %v", err)
+			}
 		}
+
 		w.logger.Error("Event processing failed",
 			"job_id", w.job.JobID,
 			"tx_hash", log.TxHash.Hex(),
+			"block", log.BlockNumber,
+			"target_chain", w.job.TargetChainID,
+			"target_function", w.job.TargetFunction,
 			"duration", duration,
 		)
 	}
@@ -603,7 +931,36 @@ func (s *EventBasedScheduler) Start(ctx context.Context) {
 
 // Stop gracefully stops all job workers
 func (s *EventBasedScheduler) Stop() {
+	startTime := time.Now()
+
 	s.logger.Info("Stopping event-based scheduler")
+
+	// Capture statistics before shutdown
+	s.workersMutex.RLock()
+	totalWorkers := len(s.workers)
+	runningWorkers := 0
+	workerDetails := make([]map[string]interface{}, 0, totalWorkers)
+
+	for jobID, worker := range s.workers {
+		isRunning := worker.IsRunning()
+		if isRunning {
+			runningWorkers++
+		}
+
+		workerDetails = append(workerDetails, map[string]interface{}{
+			"job_id":           jobID,
+			"is_running":       isRunning,
+			"trigger_chain_id": worker.job.TriggerChainID,
+			"contract_address": worker.job.TriggerContractAddress,
+			"trigger_event":    worker.job.TriggerEvent,
+			"last_block":       worker.lastBlock,
+		})
+	}
+	s.workersMutex.RUnlock()
+
+	s.clientsMutex.RLock()
+	connectedChains := len(s.chainClients)
+	s.clientsMutex.RUnlock()
 
 	s.cancel()
 
@@ -625,7 +982,36 @@ func (s *EventBasedScheduler) Stop() {
 	s.chainClients = make(map[string]*ethclient.Client)
 	s.clientsMutex.Unlock()
 
-	s.logger.Info("Event-based scheduler stopped")
+	duration := time.Since(startTime)
+
+	// Add comprehensive scheduler shutdown event to Redis stream
+	if redisx.IsAvailable() {
+		shutdownEvent := map[string]interface{}{
+			"event_type":        "scheduler_shutdown",
+			"manager_id":        s.managerID,
+			"total_workers":     totalWorkers,
+			"running_workers":   runningWorkers,
+			"connected_chains":  connectedChains,
+			"cache_available":   s.cache != nil,
+			"worker_details":    workerDetails,
+			"shutdown_at":       startTime.Unix(),
+			"duration_ms":       duration.Milliseconds(),
+			"graceful_shutdown": true,
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, shutdownEvent); err != nil {
+			s.logger.Warnf("Failed to add scheduler shutdown event to Redis stream: %v", err)
+		} else {
+			s.logger.Info("Scheduler shutdown event added to Redis stream")
+		}
+	}
+
+	s.logger.Info("Event-based scheduler stopped",
+		"total_workers_stopped", totalWorkers,
+		"running_workers_stopped", runningWorkers,
+		"chains_disconnected", connectedChains,
+		"duration", duration,
+	)
 }
 
 // GetStats returns current scheduler statistics

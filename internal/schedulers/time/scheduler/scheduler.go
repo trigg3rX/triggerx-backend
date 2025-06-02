@@ -13,6 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -46,21 +47,20 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 
 	maxWorkers := config.GetMaxWorkers()
 
-	// Initialize cache
-	if err := cache.Init(); err != nil {
+	// Initialize cache with enhanced Redis support
+	if err := cache.InitWithLogger(logger); err != nil {
 		logger.Warnf("Failed to initialize cache: %v", err)
 	}
 
 	cacheInstance, err := cache.GetCache()
 	if err != nil {
 		logger.Warnf("Cache not available, running without cache: %v", err)
-	}
-
-	// Test Redis connection
-	if err := redisx.Ping(); err != nil {
-		logger.Warnf("Redis not available, job streaming disabled: %v", err)
+		cacheInstance = nil
 	} else {
-		logger.Info("Redis connection established, job streaming enabled")
+		// Log cache type and Redis availability
+		cacheInfo := cache.GetCacheInfo()
+		logger.Infof("Cache initialized: type=%s, redis_available=%v",
+			cacheInfo["type"], cacheInfo["redis_available"])
 	}
 
 	scheduler := &TimeBasedScheduler{
@@ -85,10 +85,31 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		go scheduler.worker()
 	}
 
+	// Add scheduler startup event to Redis stream (Redis is already initialized in main.go)
+	if redisx.IsAvailable() {
+		startupEvent := map[string]interface{}{
+			"event_type":      "scheduler_startup",
+			"manager_id":      managerID,
+			"max_workers":     maxWorkers,
+			"cache_available": cacheInstance != nil,
+			"redis_available": redisx.IsAvailable(),
+			"poll_interval":   pollInterval.String(),
+			"started_at":      time.Now().Unix(),
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, startupEvent); err != nil {
+			logger.Warnf("Failed to add scheduler startup event to Redis stream: %v", err)
+		} else {
+			logger.Info("Scheduler startup event added to Redis stream")
+		}
+	}
+
 	scheduler.logger.Info("Time-based scheduler initialized",
 		"max_workers", maxWorkers,
 		"manager_id", managerID,
 		"cache_available", cacheInstance != nil,
+		"redis_available", redisx.IsAvailable(),
+		"poll_interval", pollInterval,
 	)
 
 	return scheduler, nil
@@ -117,10 +138,25 @@ func (s *TimeBasedScheduler) Start(ctx context.Context) {
 
 // pollAndScheduleJobs fetches jobs from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleJobs() {
+	pollStart := time.Now()
+
 	jobs, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
 		metrics.JobsFailed.Inc()
+
+		// Add database fetch failure event to Redis stream
+		if redisx.IsAvailable() {
+			fetchFailureEvent := map[string]interface{}{
+				"event_type": "jobs_fetch_failed",
+				"manager_id": s.managerID,
+				"error":      err.Error(),
+				"failed_at":  pollStart.Unix(),
+			}
+			if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, fetchFailureEvent); err != nil {
+				s.logger.Errorf("Failed to add job fetch failure event to Redis stream: %v", err)
+			}
+		}
 		return
 	}
 
@@ -140,6 +176,22 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 	// Process jobs in batches
 	now := time.Now()
 	executionWindow := now.Add(executionWindow)
+
+	// Add polling event to Redis stream
+	if redisx.IsAvailable() {
+		pollingEvent := map[string]interface{}{
+			"event_type":       "jobs_poll_completed",
+			"manager_id":       s.managerID,
+			"jobs_found":       len(jobs),
+			"execution_window": executionWindow.Unix(),
+			"poll_duration_ms": time.Since(pollStart).Milliseconds(),
+			"polled_at":        pollStart.Unix(),
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, pollingEvent); err != nil {
+			s.logger.Warnf("Failed to add polling event to Redis stream: %v", err)
+		}
+	}
 
 	for i := 0; i < len(jobs); i += batchSize {
 		end := i + batchSize
@@ -164,6 +216,19 @@ func (s *TimeBasedScheduler) processBatch(jobs []types.TimeJobData, now, executi
 			s.logger.Warnf("Job %d is overdue by %v", job.JobID, now.Sub(job.NextExecutionTimestamp))
 		}
 
+		// Check cache to prevent duplicate processing
+		if s.cache != nil {
+			jobKey := fmt.Sprintf("timejob:processing:%d", job.JobID)
+			if _, err := s.cache.Get(jobKey); err == nil {
+				s.logger.Debugf("Job %d is already being processed (cache hit), skipping", job.JobID)
+				continue
+			}
+			// Mark job as being processed
+			if err := s.cache.Set(jobKey, "1", 5*time.Minute); err != nil {
+				s.logger.Warnf("Failed to set processing cache for job %d: %v", job.JobID, err)
+			}
+		}
+
 		// Add job to execution queue
 		select {
 		case s.jobQueue <- &job:
@@ -172,6 +237,21 @@ func (s *TimeBasedScheduler) processBatch(jobs []types.TimeJobData, now, executi
 		default:
 			s.logger.Warnf("Job queue is full, skipping job %d", job.JobID)
 			metrics.JobsFailed.Inc()
+
+			// Add queue full event to Redis stream
+			if redisx.IsAvailable() {
+				queueFullEvent := map[string]interface{}{
+					"event_type":   "job_queue_full",
+					"job_id":       job.JobID,
+					"manager_id":   s.managerID,
+					"queue_length": len(s.jobQueue),
+					"max_queue":    cap(s.jobQueue),
+					"failed_at":    time.Now().Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, queueFullEvent); err != nil {
+					s.logger.Errorf("Failed to add job queue full event to Redis stream: %v", err)
+				}
+			}
 		}
 	}
 }
@@ -203,8 +283,37 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 		acquired, err := s.cache.AcquirePerformerLock(jobKey, performerLockTTL)
 		if err != nil {
 			s.logger.Warnf("Failed to acquire performer lock for job %d: %v", job.JobID, err)
+
+			// Add lock failure event to Redis stream
+			if redisx.IsAvailable() {
+				lockFailureEvent := map[string]interface{}{
+					"event_type":    "job_lock_failed",
+					"job_id":        job.JobID,
+					"manager_id":    s.managerID,
+					"schedule_type": job.ScheduleType,
+					"error":         err.Error(),
+					"failed_at":     startTime.Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, lockFailureEvent); err != nil {
+					s.logger.Errorf("Failed to add job lock failure event to Redis stream: %v", err)
+				}
+			}
 		} else if !acquired {
 			s.logger.Warnf("Job %d is already being executed by another instance, skipping", job.JobID)
+
+			// Add lock conflict event to Redis stream
+			if redisx.IsAvailable() {
+				lockConflictEvent := map[string]interface{}{
+					"event_type":    "job_lock_conflict",
+					"job_id":        job.JobID,
+					"manager_id":    s.managerID,
+					"schedule_type": job.ScheduleType,
+					"conflict_at":   startTime.Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, lockConflictEvent); err != nil {
+					s.logger.Errorf("Failed to add job lock conflict event to Redis stream: %v", err)
+				}
+			}
 			return
 		}
 		lockAcquired = true
@@ -220,18 +329,29 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 		s.logger.Errorf("Failed to update job %d status to running: %v", job.JobID, err)
 	}
 
-	// Create job execution context for Redis streaming
+	// Create comprehensive job execution context for Redis streaming
 	jobContext := map[string]interface{}{
-		"job_id":        job.JobID,
-		"schedule_type": job.ScheduleType,
-		"manager_id":    s.managerID,
-		"started_at":    startTime.Unix(),
-		"lock_acquired": lockAcquired,
+		"event_type":               "job_started",
+		"job_id":                   job.JobID,
+		"schedule_type":            job.ScheduleType,
+		"time_interval":            job.TimeInterval,
+		"cron_expression":          job.CronExpression,
+		"specific_schedule":        job.SpecificSchedule,
+		"timezone":                 job.Timezone,
+		"manager_id":               s.managerID,
+		"lock_acquired":            lockAcquired,
+		"cache_available":          s.cache != nil,
+		"scheduled_execution_time": job.NextExecutionTimestamp.Unix(),
+		"actual_start_time":        startTime.Unix(),
+		"delay_seconds":            startTime.Sub(job.NextExecutionTimestamp).Seconds(),
+		"status":                   "processing",
 	}
 
 	// Add job start event to Redis stream
-	if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, jobContext); err != nil {
-		s.logger.Warnf("Failed to add job start event to Redis stream: %v", err)
+	if redisx.IsAvailable() {
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, jobContext); err != nil {
+			s.logger.Warnf("Failed to add job start event to Redis stream: %v", err)
+		}
 	}
 
 	// Execute the actual job
@@ -251,11 +371,17 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 
 		// Add failure event to Redis stream
 		failureContext := jobContext
+		failureContext["event_type"] = "job_failed"
 		failureContext["status"] = "failed"
 		failureContext["error"] = err.Error()
+		failureContext["error_type"] = "next_execution_calculation"
 		failureContext["completed_at"] = time.Now().Unix()
-		if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, failureContext); err != nil {
-			s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+		failureContext["duration_ms"] = time.Since(startTime).Milliseconds()
+
+		if redisx.IsAvailable() {
+			if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, failureContext); err != nil {
+				s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+			}
 		}
 		return
 	}
@@ -264,6 +390,22 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 	if err := s.dbClient.UpdateJobNextExecution(job.JobID, nextExecution); err != nil {
 		s.logger.Errorf("Failed to update next execution time for job %d: %v", job.JobID, err)
 		metrics.JobsFailed.Inc()
+
+		// Add database update failure event to Redis stream
+		if redisx.IsAvailable() {
+			dbFailureContext := jobContext
+			dbFailureContext["event_type"] = "job_db_update_failed"
+			dbFailureContext["status"] = "failed"
+			dbFailureContext["error"] = err.Error()
+			dbFailureContext["error_type"] = "database_update"
+			dbFailureContext["next_execution"] = nextExecution.Unix()
+			dbFailureContext["completed_at"] = time.Now().Unix()
+			dbFailureContext["duration_ms"] = time.Since(startTime).Milliseconds()
+
+			if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, dbFailureContext); err != nil {
+				s.logger.Errorf("Failed to add job database update failure event to Redis stream: %v", err)
+			}
+		}
 		return
 	}
 
@@ -284,22 +426,34 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 	completionContext["duration_ms"] = duration.Milliseconds()
 	completionContext["next_execution"] = nextExecution.Unix()
 	completionContext["completed_at"] = time.Now().Unix()
+	completionContext["execution_success"] = executionSuccess
 
 	if executionSuccess {
 		metrics.JobsCompleted.Inc()
 		s.logger.Infof("Completed job %d in %v, next execution at %v",
 			job.JobID, duration, nextExecution)
+
+		completionContext["event_type"] = "job_completed"
 		completionContext["status"] = "completed"
-		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, completionContext); err != nil {
-			s.logger.Errorf("Failed to add job completion event to Redis stream: %v", err)
+
+		if redisx.IsAvailable() {
+			if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, completionContext); err != nil {
+				s.logger.Errorf("Failed to add job completion event to Redis stream: %v", err)
+			}
 		}
 	} else {
 		metrics.JobsFailed.Inc()
 		s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
 
+		completionContext["event_type"] = "job_failed"
 		completionContext["status"] = "failed"
-		if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, completionContext); err != nil {
-			s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+		completionContext["error"] = "job execution failed"
+		completionContext["error_type"] = "execution_failure"
+
+		if redisx.IsAvailable() {
+			if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, completionContext); err != nil {
+				s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+			}
 		}
 	}
 }
@@ -386,7 +540,35 @@ func (s *TimeBasedScheduler) cacheJobData(job *types.TimeJobData, nextExecution 
 
 // Stop gracefully stops the scheduler
 func (s *TimeBasedScheduler) Stop() {
+	startTime := time.Now()
 	s.logger.Info("Stopping time-based scheduler")
+
+	// Capture statistics before shutdown
+	activeJobsCount := len(s.activeJobs)
+	queueLength := len(s.jobQueue)
+	workersInUse := len(s.workerPool)
+
+	// Add scheduler shutdown event to Redis stream
+	if redisx.IsAvailable() {
+		shutdownEvent := map[string]interface{}{
+			"event_type":      "scheduler_shutdown",
+			"manager_id":      s.managerID,
+			"active_jobs":     activeJobsCount,
+			"queue_length":    queueLength,
+			"workers_in_use":  workersInUse,
+			"max_workers":     s.maxWorkers,
+			"cache_available": s.cache != nil,
+			"shutdown_at":     startTime.Unix(),
+			"graceful":        true,
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, shutdownEvent); err != nil {
+			s.logger.Warnf("Failed to add scheduler shutdown event to Redis stream: %v", err)
+		} else {
+			s.logger.Info("Scheduler shutdown event added to Redis stream")
+		}
+	}
+
 	s.cancel()
 
 	// Close job queue
@@ -398,13 +580,49 @@ func (s *TimeBasedScheduler) Stop() {
 		select {
 		case <-timeout:
 			s.logger.Warn("Timeout waiting for workers to finish")
+
+			// Add timeout event to Redis stream
+			if redisx.IsAvailable() {
+				timeoutEvent := map[string]interface{}{
+					"event_type":        "scheduler_shutdown_timeout",
+					"manager_id":        s.managerID,
+					"remaining_workers": s.maxWorkers - len(s.workerPool),
+					"timeout_seconds":   30,
+					"timeout_at":        time.Now().Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, timeoutEvent); err != nil {
+					s.logger.Warnf("Failed to add scheduler shutdown timeout event to Redis stream: %v", err)
+				}
+			}
 			return
 		case <-time.After(100 * time.Millisecond):
 			// Continue waiting
 		}
 	}
 
-	s.logger.Info("Time-based scheduler stopped")
+	duration := time.Since(startTime)
+
+	// Add final shutdown completion event to Redis stream
+	if redisx.IsAvailable() {
+		completionEvent := map[string]interface{}{
+			"event_type":      "scheduler_shutdown_complete",
+			"manager_id":      s.managerID,
+			"duration_ms":     duration.Milliseconds(),
+			"completed_at":    time.Now().Unix(),
+			"workers_stopped": s.maxWorkers,
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, completionEvent); err != nil {
+			s.logger.Warnf("Failed to add shutdown completion event to Redis stream: %v", err)
+		}
+	}
+
+	s.logger.Info("Time-based scheduler stopped",
+		"duration", duration,
+		"active_jobs_stopped", activeJobsCount,
+		"queue_length", queueLength,
+		"workers_stopped", s.maxWorkers,
+	)
 }
 
 // GetStats returns current scheduler statistics

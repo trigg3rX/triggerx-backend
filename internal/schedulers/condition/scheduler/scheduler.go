@@ -116,21 +116,20 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 
 	maxWorkers := config.GetMaxWorkers()
 
-	// Initialize cache
-	if err := cache.Init(); err != nil {
+	// Initialize cache with enhanced Redis support
+	if err := cache.InitWithLogger(logger); err != nil {
 		logger.Warnf("Failed to initialize cache: %v", err)
 	}
 
 	cacheInstance, err := cache.GetCache()
 	if err != nil {
 		logger.Warnf("Cache not available, running without cache: %v", err)
-	}
-
-	// Test Redis connection
-	if err := redisx.Ping(); err != nil {
-		logger.Warnf("Redis not available, condition streaming disabled: %v", err)
+		cacheInstance = nil
 	} else {
-		logger.Info("Redis connection established, condition streaming enabled")
+		// Log cache type and Redis availability
+		cacheInfo := cache.GetCacheInfo()
+		logger.Infof("Cache initialized: type=%s, redis_available=%v",
+			cacheInfo["type"], cacheInfo["redis_available"])
 	}
 
 	scheduler := &ConditionBasedScheduler{
@@ -151,10 +150,33 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 	// Start metrics collection
 	scheduler.metrics.Start()
 
+	// Add scheduler startup event to Redis stream (Redis is already initialized in main.go)
+	if redisx.IsAvailable() {
+		startupEvent := map[string]interface{}{
+			"event_type":      "scheduler_startup",
+			"manager_id":      managerID,
+			"max_workers":     maxWorkers,
+			"cache_available": cacheInstance != nil,
+			"redis_available": redisx.IsAvailable(),
+			"poll_interval":   pollInterval.String(),
+			"request_timeout": requestTimeout.String(),
+			"started_at":      time.Now().Unix(),
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, startupEvent); err != nil {
+			logger.Warnf("Failed to add scheduler startup event to Redis stream: %v", err)
+		} else {
+			logger.Info("Scheduler startup event added to Redis stream")
+		}
+	}
+
 	scheduler.logger.Info("Condition-based scheduler initialized",
 		"max_workers", maxWorkers,
 		"manager_id", managerID,
 		"cache_available", cacheInstance != nil,
+		"redis_available", redisx.IsAvailable(),
+		"poll_interval", pollInterval,
+		"request_timeout", requestTimeout,
 	)
 
 	return scheduler, nil
@@ -165,29 +187,116 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *schedulerTypes.ConditionJ
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
+	startTime := time.Now()
+
 	// Check if job is already scheduled
 	if _, exists := s.workers[jobData.JobID]; exists {
+		// Add job scheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":        "job_schedule_failed",
+				"job_id":            jobData.JobID,
+				"manager_id":        s.managerID,
+				"error":             "job already scheduled",
+				"condition_type":    jobData.ConditionType,
+				"value_source_type": jobData.ValueSourceType,
+				"value_source_url":  jobData.ValueSourceUrl,
+				"failed_at":         startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
 	}
 
 	// Check if we've reached the maximum number of workers
 	if len(s.workers) >= s.maxWorkers {
+		// Add job scheduling failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":        "job_schedule_failed",
+				"job_id":            jobData.JobID,
+				"manager_id":        s.managerID,
+				"error":             fmt.Sprintf("maximum workers (%d) reached", s.maxWorkers),
+				"current_workers":   len(s.workers),
+				"max_workers":       s.maxWorkers,
+				"condition_type":    jobData.ConditionType,
+				"value_source_type": jobData.ValueSourceType,
+				"value_source_url":  jobData.ValueSourceUrl,
+				"failed_at":         startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("maximum number of workers (%d) reached, cannot schedule job %d", s.maxWorkers, jobData.JobID)
 	}
 
 	// Validate condition type
 	if !isValidConditionType(jobData.ConditionType) {
+		// Add validation failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":        "job_schedule_failed",
+				"job_id":            jobData.JobID,
+				"manager_id":        s.managerID,
+				"error":             fmt.Sprintf("unsupported condition type: %s", jobData.ConditionType),
+				"condition_type":    jobData.ConditionType,
+				"value_source_type": jobData.ValueSourceType,
+				"value_source_url":  jobData.ValueSourceUrl,
+				"failed_at":         startTime.Unix(),
+			}
+			err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, failureEvent)
+			if err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("unsupported condition type: %s", jobData.ConditionType)
 	}
 
 	// Validate value source type
 	if !isValidSourceType(jobData.ValueSourceType) {
+		// Add validation failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":        "job_schedule_failed",
+				"job_id":            jobData.JobID,
+				"manager_id":        s.managerID,
+				"error":             fmt.Sprintf("unsupported value source type: %s", jobData.ValueSourceType),
+				"condition_type":    jobData.ConditionType,
+				"value_source_type": jobData.ValueSourceType,
+				"value_source_url":  jobData.ValueSourceUrl,
+				"failed_at":         startTime.Unix(),
+			}
+			if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, failureEvent); err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("unsupported value source type: %s", jobData.ValueSourceType)
 	}
 
 	// Create condition worker
 	worker, err := s.createConditionWorker(jobData)
 	if err != nil {
+		// Add worker creation failure event to Redis stream
+		if redisx.IsAvailable() {
+			failureEvent := map[string]interface{}{
+				"event_type":        "job_schedule_failed",
+				"job_id":            jobData.JobID,
+				"manager_id":        s.managerID,
+				"error":             fmt.Sprintf("failed to create worker: %v", err),
+				"condition_type":    jobData.ConditionType,
+				"value_source_type": jobData.ValueSourceType,
+				"value_source_url":  jobData.ValueSourceUrl,
+				"failed_at":         startTime.Unix(),
+			}
+			if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, failureEvent); err != nil {
+				s.logger.Warnf("Failed to add job scheduling failure event to Redis stream: %v", err)
+			}
+		}
 		return fmt.Errorf("failed to create condition worker: %w", err)
 	}
 
@@ -201,21 +310,34 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *schedulerTypes.ConditionJ
 	metrics.JobsScheduled.Inc()
 	metrics.JobsRunning.Inc()
 
-	// Add job scheduling event to Redis stream
-	jobContext := map[string]interface{}{
-		"job_id":            jobData.JobID,
-		"condition_type":    jobData.ConditionType,
-		"upper_limit":       jobData.UpperLimit,
-		"lower_limit":       jobData.LowerLimit,
-		"value_source_type": jobData.ValueSourceType,
-		"value_source_url":  jobData.ValueSourceUrl,
-		"manager_id":        s.managerID,
-		"scheduled_at":      time.Now().Unix(),
-		"status":            "scheduled",
-	}
+	duration := time.Since(startTime)
 
-	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
-		s.logger.Warnf("Failed to add condition job scheduling event to Redis stream: %v", err)
+	// Add comprehensive job scheduling success event to Redis stream
+	if redisx.IsAvailable() {
+		jobContext := map[string]interface{}{
+			"event_type":              "job_scheduled",
+			"job_id":                  jobData.JobID,
+			"manager_id":              s.managerID,
+			"condition_type":          jobData.ConditionType,
+			"upper_limit":             jobData.UpperLimit,
+			"lower_limit":             jobData.LowerLimit,
+			"value_source_type":       jobData.ValueSourceType,
+			"value_source_url":        jobData.ValueSourceUrl,
+			"target_chain_id":         jobData.TargetChainID,
+			"target_contract_address": jobData.TargetContractAddress,
+			"target_function":         jobData.TargetFunction,
+			"recurring":               jobData.Recurring,
+			"active_workers":          len(s.workers),
+			"max_workers":             s.maxWorkers,
+			"cache_available":         s.cache != nil,
+			"scheduled_at":            startTime.Unix(),
+			"duration_ms":             duration.Milliseconds(),
+			"status":                  "scheduled",
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, jobContext); err != nil {
+			s.logger.Warnf("Failed to add condition job scheduling event to Redis stream: %v", err)
+		}
 	}
 
 	s.logger.Info("Condition job scheduled successfully",
@@ -224,8 +346,12 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *schedulerTypes.ConditionJ
 		"value_source", jobData.ValueSourceUrl,
 		"upper_limit", jobData.UpperLimit,
 		"lower_limit", jobData.LowerLimit,
+		"target_chain", jobData.TargetChainID,
+		"target_contract", jobData.TargetContractAddress,
+		"target_function", jobData.TargetFunction,
 		"active_workers", len(s.workers),
 		"max_workers", s.maxWorkers,
+		"duration", duration,
 	)
 
 	return nil
@@ -253,31 +379,103 @@ func (s *ConditionBasedScheduler) createConditionWorker(jobData *schedulerTypes.
 
 // start begins the condition worker's monitoring loop
 func (w *ConditionWorker) start() {
+	startTime := time.Now()
+
 	w.mutex.Lock()
 	w.isRunning = true
 	w.mutex.Unlock()
 
 	// Try to acquire performer lock
 	lockKey := fmt.Sprintf("condition_job_%d", w.job.JobID)
+	lockAcquired := false
+
 	if w.cache != nil {
 		acquired, err := w.cache.AcquirePerformerLock(lockKey, performerLockTTL)
 		if err != nil {
 			w.logger.Warnf("Failed to acquire performer lock for condition job %d: %v", w.job.JobID, err)
+
+			// Add lock failure event to Redis stream
+			if redisx.IsAvailable() {
+				lockFailureEvent := map[string]interface{}{
+					"event_type":        "worker_lock_failed",
+					"job_id":            w.job.JobID,
+					"manager_id":        w.managerID,
+					"lock_key":          lockKey,
+					"error":             err.Error(),
+					"condition_type":    w.job.ConditionType,
+					"value_source_type": w.job.ValueSourceType,
+					"value_source_url":  w.job.ValueSourceUrl,
+					"failed_at":         startTime.Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, lockFailureEvent); err != nil {
+					w.logger.Warnf("Failed to add worker lock failure event to Redis stream: %v", err)
+				}
+			}
 		} else if !acquired {
 			w.logger.Warnf("Condition job %d is already being monitored by another worker, stopping", w.job.JobID)
+
+			// Add lock conflict event to Redis stream
+			if redisx.IsAvailable() {
+				lockConflictEvent := map[string]interface{}{
+					"event_type":        "worker_lock_conflict",
+					"job_id":            w.job.JobID,
+					"manager_id":        w.managerID,
+					"lock_key":          lockKey,
+					"condition_type":    w.job.ConditionType,
+					"value_source_type": w.job.ValueSourceType,
+					"value_source_url":  w.job.ValueSourceUrl,
+					"conflict_at":       startTime.Unix(),
+				}
+				if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, lockConflictEvent); err != nil {
+					w.logger.Warnf("Failed to add worker lock conflict event to Redis stream: %v", err)
+				}
+			}
 			return
+		} else {
+			lockAcquired = true
 		}
+
 		defer func() {
-			if err := w.cache.ReleasePerformerLock(lockKey); err != nil {
-				w.logger.Warnf("Failed to release performer lock for condition job %d: %v", w.job.JobID, err)
+			if lockAcquired {
+				if err := w.cache.ReleasePerformerLock(lockKey); err != nil {
+					w.logger.Warnf("Failed to release performer lock for condition job %d: %v", w.job.JobID, err)
+				}
 			}
 		}()
+	}
+
+	// Add worker start event to Redis stream
+	if redisx.IsAvailable() {
+		workerStartEvent := map[string]interface{}{
+			"event_type":              "worker_started",
+			"job_id":                  w.job.JobID,
+			"manager_id":              w.managerID,
+			"condition_type":          w.job.ConditionType,
+			"upper_limit":             w.job.UpperLimit,
+			"lower_limit":             w.job.LowerLimit,
+			"value_source_type":       w.job.ValueSourceType,
+			"value_source_url":        w.job.ValueSourceUrl,
+			"target_chain_id":         w.job.TargetChainID,
+			"target_contract_address": w.job.TargetContractAddress,
+			"target_function":         w.job.TargetFunction,
+			"lock_acquired":           lockAcquired,
+			"cache_available":         w.cache != nil,
+			"started_at":              startTime.Unix(),
+			"poll_interval_seconds":   pollInterval.Seconds(),
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, workerStartEvent); err != nil {
+			w.logger.Warnf("Failed to add worker start event to Redis stream: %v", err)
+		}
 	}
 
 	w.logger.Info("Starting condition worker",
 		"job_id", w.job.JobID,
 		"condition_type", w.job.ConditionType,
 		"value_source", w.job.ValueSourceUrl,
+		"upper_limit", w.job.UpperLimit,
+		"lower_limit", w.job.LowerLimit,
+		"lock_acquired", lockAcquired,
 	)
 
 	ticker := time.NewTicker(pollInterval)
@@ -286,12 +484,59 @@ func (w *ConditionWorker) start() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			w.logger.Info("Condition worker stopped", "job_id", w.job.JobID)
+			stopTime := time.Now()
+			duration := stopTime.Sub(startTime)
+
+			// Add worker stop event to Redis stream
+			if redisx.IsAvailable() {
+				workerStopEvent := map[string]interface{}{
+					"event_type":        "worker_stopped",
+					"job_id":            w.job.JobID,
+					"manager_id":        w.managerID,
+					"condition_type":    w.job.ConditionType,
+					"value_source_type": w.job.ValueSourceType,
+					"value_source_url":  w.job.ValueSourceUrl,
+					"last_value":        w.lastValue,
+					"condition_met":     w.conditionMet,
+					"runtime_seconds":   duration.Seconds(),
+					"stopped_at":        stopTime.Unix(),
+					"graceful_stop":     true,
+				}
+
+				if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, workerStopEvent); err != nil {
+					w.logger.Warnf("Failed to add worker stop event to Redis stream: %v", err)
+				}
+			}
+
+			w.logger.Info("Condition worker stopped",
+				"job_id", w.job.JobID,
+				"runtime", duration,
+				"last_value", w.lastValue,
+				"condition_met_count", w.conditionMet,
+			)
 			return
 		case <-ticker.C:
 			if err := w.checkCondition(); err != nil {
 				w.logger.Error("Error checking condition", "job_id", w.job.JobID, "error", err)
 				metrics.JobsFailed.Inc()
+
+				// Add error event to Redis stream
+				if redisx.IsAvailable() {
+					errorEvent := map[string]interface{}{
+						"event_type":        "worker_error",
+						"job_id":            w.job.JobID,
+						"manager_id":        w.managerID,
+						"error":             err.Error(),
+						"condition_type":    w.job.ConditionType,
+						"value_source_type": w.job.ValueSourceType,
+						"value_source_url":  w.job.ValueSourceUrl,
+						"last_value":        w.lastValue,
+						"error_at":          time.Now().Unix(),
+					}
+					if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, errorEvent); err != nil {
+						w.logger.Warnf("Failed to add worker error event to Redis stream: %v", err)
+					}
+				}
 			}
 		}
 	}
@@ -342,7 +587,7 @@ func (w *ConditionWorker) checkCondition() error {
 	if err != nil {
 		conditionContext["status"] = "evaluation_error"
 		conditionContext["error"] = err.Error()
-		if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, conditionContext); err != nil {
+		if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, conditionContext); err != nil {
 			w.logger.Warnf("Failed to add condition evaluation error to Redis stream: %v", err)
 		}
 		return fmt.Errorf("failed to evaluate condition: %w", err)
@@ -365,7 +610,7 @@ func (w *ConditionWorker) checkCondition() error {
 		)
 
 		// Add satisfied condition to Redis stream
-		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, conditionContext); err != nil {
+		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, conditionContext); err != nil {
 			w.logger.Warnf("Failed to add condition satisfied event to Redis stream: %v", err)
 		}
 
@@ -378,12 +623,12 @@ func (w *ConditionWorker) checkCondition() error {
 
 		if executionSuccess {
 			conditionContext["action_status"] = "completed"
-			if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, conditionContext); err != nil {
+			if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, conditionContext); err != nil {
 				w.logger.Warnf("Failed to add condition action completion to Redis stream: %v", err)
 			}
 		} else {
 			conditionContext["action_status"] = "failed"
-			if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, conditionContext); err != nil {
+			if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, conditionContext); err != nil {
 				w.logger.Warnf("Failed to add condition action failure to Redis stream: %v", err)
 			}
 		}
@@ -399,7 +644,7 @@ func (w *ConditionWorker) checkCondition() error {
 
 		// Periodically log condition checks for monitoring
 		if time.Now().Unix()%60 == 0 { // Every minute
-			if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, conditionContext); err != nil {
+			if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, conditionContext); err != nil {
 				w.logger.Warnf("Failed to add condition check status to Redis stream: %v", err)
 			}
 		}
@@ -523,7 +768,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 		"status":         "unscheduled",
 	}
 
-	if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, jobContext); err != nil {
+	if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, jobContext); err != nil {
 		s.logger.Warnf("Failed to add condition job unscheduling event to Redis stream: %v", err)
 	}
 
@@ -562,7 +807,52 @@ func (s *ConditionBasedScheduler) Start(ctx context.Context) {
 
 // Stop gracefully stops all condition workers
 func (s *ConditionBasedScheduler) Stop() {
+	startTime := time.Now()
 	s.logger.Info("Stopping condition-based scheduler")
+
+	// Capture statistics before shutdown
+	s.workersMutex.RLock()
+	totalWorkers := len(s.workers)
+	runningWorkers := 0
+	workerDetails := make([]map[string]interface{}, 0, totalWorkers)
+
+	for jobID, worker := range s.workers {
+		isRunning := worker.IsRunning()
+		if isRunning {
+			runningWorkers++
+		}
+
+		workerDetails = append(workerDetails, map[string]interface{}{
+			"job_id":            jobID,
+			"is_running":        isRunning,
+			"condition_type":    worker.job.ConditionType,
+			"value_source_type": worker.job.ValueSourceType,
+			"value_source_url":  worker.job.ValueSourceUrl,
+			"last_value":        worker.lastValue,
+			"condition_met":     worker.conditionMet,
+		})
+	}
+	s.workersMutex.RUnlock()
+
+	// Add comprehensive scheduler shutdown event to Redis stream
+	if redisx.IsAvailable() {
+		shutdownEvent := map[string]interface{}{
+			"event_type":        "scheduler_shutdown",
+			"manager_id":        s.managerID,
+			"total_workers":     totalWorkers,
+			"running_workers":   runningWorkers,
+			"cache_available":   s.cache != nil,
+			"worker_details":    workerDetails,
+			"shutdown_at":       startTime.Unix(),
+			"graceful_shutdown": true,
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, shutdownEvent); err != nil {
+			s.logger.Warnf("Failed to add scheduler shutdown event to Redis stream: %v", err)
+		} else {
+			s.logger.Info("Scheduler shutdown event added to Redis stream")
+		}
+	}
 
 	s.cancel()
 
@@ -575,7 +865,28 @@ func (s *ConditionBasedScheduler) Stop() {
 	s.workers = make(map[int64]*ConditionWorker)
 	s.workersMutex.Unlock()
 
-	s.logger.Info("Condition-based scheduler stopped")
+	duration := time.Since(startTime)
+
+	// Add final shutdown completion event to Redis stream
+	if redisx.IsAvailable() {
+		completionEvent := map[string]interface{}{
+			"event_type":      "scheduler_shutdown_complete",
+			"manager_id":      s.managerID,
+			"duration_ms":     duration.Milliseconds(),
+			"completed_at":    time.Now().Unix(),
+			"workers_stopped": totalWorkers,
+		}
+
+		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, completionEvent); err != nil {
+			s.logger.Warnf("Failed to add shutdown completion event to Redis stream: %v", err)
+		}
+	}
+
+	s.logger.Info("Condition-based scheduler stopped",
+		"duration", duration,
+		"total_workers_stopped", totalWorkers,
+		"running_workers_stopped", runningWorkers,
+	)
 }
 
 // GetStats returns current scheduler statistics
