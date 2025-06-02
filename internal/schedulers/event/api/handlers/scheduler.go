@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler"
+	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -25,7 +26,7 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.EventBasedS
 
 // ScheduleJob schedules a new event-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
-	var req scheduler.JobScheduleRequest
+	var req schedulerTypes.JobScheduleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
