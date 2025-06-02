@@ -122,6 +122,11 @@ func main() {
 		logger.Info("Database server health check passed")
 	}
 
+	// Initialize cache
+	if err := cache.Init(); err != nil {
+		logger.Warnf("Cache initialization failed: %v", err)
+	}
+
 	// Initialize scheduler
 	managerID := fmt.Sprintf("scheduler-%d", time.Now().Unix())
 	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, dbClient)
