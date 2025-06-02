@@ -13,7 +13,7 @@ import (
 
 func TestJobCacheDeduplication(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		LogDir:          "",
+		LogDir:          "data/logs",
 		ProcessName:     "test",
 		Environment:     logging.Development,
 		UseColors:       false,
@@ -79,7 +79,7 @@ func TestJobCacheDeduplication(t *testing.T) {
 
 func TestCacheTTLAccuracy(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		LogDir:          "",
+		LogDir:          "data/logs",
 		ProcessName:     "test",
 		Environment:     logging.Development,
 		UseColors:       false,
@@ -143,7 +143,7 @@ func TestCacheTTLAccuracy(t *testing.T) {
 
 func TestCacheReadAndSendTime(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		LogDir:          "",
+		LogDir:          "data/logs",
 		ProcessName:     "test",
 		Environment:     logging.Development,
 		UseColors:       false,
@@ -202,7 +202,7 @@ func TestCacheReadAndSendTime(t *testing.T) {
 
 func TestCacheReadTimeFor100Jobs(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		LogDir:          "",
+		LogDir:          "data/logs",
 		ProcessName:     "test",
 		Environment:     logging.Development,
 		UseColors:       false,
