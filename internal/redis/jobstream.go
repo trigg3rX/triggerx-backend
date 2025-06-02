@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	JobsReadyTimeStream  = "jobs:ready:time"
-	JobsRetryTimeStream  = "jobs:retry:time"
-	JobsReadyEventStream = "jobs:ready:event"
-	JobsRetryEventStream = "jobs:retry:event"
+	JobsReadyTimeStream      = "jobs:ready:time"
+	JobsRetryTimeStream      = "jobs:retry:time"
+	JobsReadyEventStream     = "jobs:ready:event"
+	JobsRetryEventStream     = "jobs:retry:event"
+	JobsReadyConditionStream = "jobs:ready:condition"
+	JobsRetryConditionStream = "jobs:retry:condition"
 )
 
 // AddJobToStream adds a job to the specified Redis stream (legacy function for backward compatibility)
@@ -152,10 +154,12 @@ func GetStreamInfo() map[string]interface{} {
 		"max_length": config.GetStreamMaxLen(),
 		"ttl":        config.GetStreamTTL().String(),
 		"streams": map[string]string{
-			"jobs_ready_time":  JobsReadyTimeStream,
-			"jobs_retry_time":  JobsRetryTimeStream,
-			"jobs_ready_event": JobsReadyEventStream,
-			"jobs_retry_event": JobsRetryEventStream,
+			"jobs_ready_time":      JobsReadyTimeStream,
+			"jobs_retry_time":      JobsRetryTimeStream,
+			"jobs_ready_event":     JobsReadyEventStream,
+			"jobs_retry_event":     JobsRetryEventStream,
+			"jobs_ready_condition": JobsReadyConditionStream,
+			"jobs_retry_condition": JobsRetryConditionStream,
 		},
 	}
 }

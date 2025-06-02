@@ -1,7 +1,0 @@
-{"level":"info","ts":"2025-05-28 08:56:19","caller":"cache.go:30","msg":"[Cache] Using RedisCache as backend."}
-{"level":"info","ts":"2025-05-28 08:56:19","caller":"redis_cache.go:51","msg":"[RedisCache] Deleted key: timejob:processing:12345 (1.10ms)"}
-{"level":"warn","ts":"2025-05-28 08:56:19","caller":"redis_cache.go:20","msg":"[RedisCache] Cache miss for key: timejob:processing:12345 (0.82ms)"}
-{"level":"info","ts":"2025-05-28 08:56:19","caller":"redis_cache.go:38","msg":"[RedisCache] Set key: timejob:processing:12345 (ttl: 2s, 1.15ms)"}
-{"level":"info","ts":"2025-05-28 08:56:19","caller":"redis_cache.go:26","msg":"[RedisCache] Cache hit for key: timejob:processing:12345 (0.76ms)"}
-{"level":"warn","ts":"2025-05-28 08:56:22","caller":"redis_cache.go:20","msg":"[RedisCache] Cache miss for key: timejob:processing:12345 (1.12ms)"}
-{"level":"info","ts":"2025-05-28 08:56:22","caller":"redis_cache.go:51","msg":"[RedisCache] Deleted key: timejob:processing:12345 (1.09ms)"}
