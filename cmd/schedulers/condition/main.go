@@ -213,7 +213,7 @@ func main() {
 		serviceStatus["cache_info"] = cache.GetCacheInfo()
 	}
 
-	logger.Info("Condition-based scheduler service ready", serviceStatus)
+	logger.Info("Condition-based scheduler service ready", "status", serviceStatus)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
