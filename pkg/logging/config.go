@@ -37,13 +37,14 @@ const (
 type ProcessName string
 
 const (
-	ManagerProcess   ProcessName = "manager"
-	DatabaseProcess  ProcessName = "database"
-	KeeperProcess    ProcessName = "keeper"
-	RegistrarProcess ProcessName = "registrar"
-	HealthProcess    ProcessName = "health"
-	RedisProcess     ProcessName = "redis"
-	SchedulerProcess ProcessName = "scheduler"
+	DatabaseProcess           ProcessName = "database"
+	KeeperProcess             ProcessName = "keeper"
+	RegistrarProcess          ProcessName = "registrar"
+	HealthProcess             ProcessName = "health"
+	RedisProcess              ProcessName = "redis"
+	TimeSchedulerProcess      ProcessName = "time-scheduler"
+	EventSchedulerProcess     ProcessName = "event-scheduler"
+	ConditionSchedulerProcess ProcessName = "condition-scheduler"
 )
 
 type LoggerConfig struct {

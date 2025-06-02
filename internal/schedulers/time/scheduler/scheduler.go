@@ -2,11 +2,16 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/cache"
+	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
@@ -16,10 +21,12 @@ import (
 )
 
 const (
-	pollInterval    = 30 * time.Second // Poll every 30 seconds
-	executionWindow = 5 * time.Minute  // Look ahead 5 minutes
-	workerPoolSize  = 10               // Number of concurrent workers
-	batchSize       = 50               // Process jobs in batches
+	pollInterval       = 30 * time.Second // Poll every 30 seconds
+	executionWindow    = 5 * time.Minute  // Look ahead 5 minutes
+	batchSize          = 50               // Process jobs in batches
+	performerLockTTL   = 10 * time.Minute // Lock duration for job execution
+	jobCacheTTL        = 5 * time.Minute  // Cache TTL for job data
+	duplicateJobWindow = 1 * time.Minute  // Window to prevent duplicate job execution
 )
 
 type TimeBasedScheduler struct {
@@ -30,33 +37,62 @@ type TimeBasedScheduler struct {
 	activeJobs map[int64]*types.TimeJobData
 	jobQueue   chan *types.TimeJobData
 	dbClient   *client.DBServerClient
+	cache      cache.Cache
 	metrics    *metrics.Collector
 	managerID  string
+	maxWorkers int
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
 func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *client.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	maxWorkers := config.GetMaxWorkers()
+
+	// Initialize cache
+	if err := cache.Init(); err != nil {
+		logger.Warnf("Failed to initialize cache: %v", err)
+	}
+
+	cacheInstance, err := cache.GetCache()
+	if err != nil {
+		logger.Warnf("Cache not available, running without cache: %v", err)
+	}
+
+	// Test Redis connection
+	if err := redisx.Ping(); err != nil {
+		logger.Warnf("Redis not available, job streaming disabled: %v", err)
+	} else {
+		logger.Info("Redis connection established, job streaming enabled")
+	}
+
 	scheduler := &TimeBasedScheduler{
 		ctx:        ctx,
 		cancel:     cancel,
 		logger:     logger,
-		workerPool: make(chan struct{}, workerPoolSize),
+		workerPool: make(chan struct{}, maxWorkers),
 		activeJobs: make(map[int64]*types.TimeJobData),
 		jobQueue:   make(chan *types.TimeJobData, 100),
 		dbClient:   dbClient,
+		cache:      cacheInstance,
 		metrics:    metrics.NewCollector(),
 		managerID:  managerID,
+		maxWorkers: maxWorkers,
 	}
 
 	// Start metrics collection
 	scheduler.metrics.Start()
 
 	// Start the worker pool
-	for i := 0; i < workerPoolSize; i++ {
+	for i := 0; i < maxWorkers; i++ {
 		go scheduler.worker()
 	}
+
+	scheduler.logger.Info("Time-based scheduler initialized",
+		"max_workers", maxWorkers,
+		"manager_id", managerID,
+		"cache_available", cacheInstance != nil,
+	)
 
 	return scheduler, nil
 }
@@ -170,36 +206,73 @@ func (s *TimeBasedScheduler) worker() {
 
 // executeJob executes a single job and updates its next execution time
 func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
-	// startTime := time.Now()
+	startTime := time.Now()
+	jobKey := fmt.Sprintf("job_%d", job.JobID)
+
 	s.logger.Infof("Executing time-based job %d (type: %s)", job.JobID, job.ScheduleType)
+
+	// Try to acquire performer lock to prevent duplicate execution
+	lockAcquired := false
+	if s.cache != nil {
+		acquired, err := s.cache.AcquirePerformerLock(jobKey, performerLockTTL)
+		if err != nil {
+			s.logger.Warnf("Failed to acquire performer lock for job %d: %v", job.JobID, err)
+		} else if !acquired {
+			s.logger.Warnf("Job %d is already being executed by another instance, skipping", job.JobID)
+			return
+		}
+		lockAcquired = true
+		defer func() {
+			if err := s.cache.ReleasePerformerLock(jobKey); err != nil {
+				s.logger.Warnf("Failed to release performer lock for job %d: %v", job.JobID, err)
+			}
+		}()
+	}
 
 	// Update job status to running
 	if err := s.dbClient.UpdateJobStatus(job.JobID, true); err != nil {
 		s.logger.Errorf("Failed to update job %d status to running: %v", job.JobID, err)
 	}
 
-	// TODO: Implement actual job execution logic here
-	// This would involve:
-	// 1. Calling the target function/webhook
-	// 2. Handling the response
-	// 3. Managing retries on failure
+	// Create job execution context for Redis streaming
+	jobContext := map[string]interface{}{
+		"job_id":        job.JobID,
+		"schedule_type": job.ScheduleType,
+		"manager_id":    s.managerID,
+		"started_at":    startTime.Unix(),
+		"lock_acquired": lockAcquired,
+	}
 
-	// Simulate job execution for now
-	// executionSuccess := s.simulateJobExecution(job)
+	// Add job start event to Redis stream
+	if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, jobContext); err != nil {
+		s.logger.Warnf("Failed to add job start event to Redis stream: %v", err)
+	}
+
+	// Execute the actual job
+	executionSuccess := s.performJobExecution(job)
 
 	// Calculate next execution time
-	// nextExecution, err := parser.CalculateNextExecutionTime(
-	// 	job.ScheduleType,
-	// 	job.TimeInterval,
-	// 	job.CronExpression,
-	// 	job.SpecificSchedule,
-	// 	job.Timezone,
-	// )
-	// if err != nil {
-	// 	s.logger.Errorf("Failed to calculate next execution time for job %d: %v", job.JobID, err)
-	// 	metrics.JobsFailed.Inc()
-	// 	return
-	// }
+	nextExecution, err := parser.CalculateNextExecutionTime(
+		job.ScheduleType,
+		job.TimeInterval,
+		job.CronExpression,
+		job.SpecificSchedule,
+		job.Timezone,
+	)
+	if err != nil {
+		s.logger.Errorf("Failed to calculate next execution time for job %d: %v", job.JobID, err)
+		metrics.JobsFailed.Inc()
+
+		// Add failure event to Redis stream
+		failureContext := jobContext
+		failureContext["status"] = "failed"
+		failureContext["error"] = err.Error()
+		failureContext["completed_at"] = time.Now().Unix()
+		if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, failureContext); err != nil {
+			s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+		}
+		return
+	}
 
 	// // Update next execution time in database
 	// if err := s.dbClient.UpdateJobNextExecution(job.JobID, nextExecution); err != nil {
@@ -213,30 +286,116 @@ func (s *TimeBasedScheduler) executeJob(job *types.TimeJobData) {
 		s.logger.Errorf("Failed to update job %d status to completed: %v", job.JobID, err)
 	}
 
-	c, _ := cache.GetCache()
-	jobKey := "timejob:processing:" + strconv.FormatInt(job.JobID, 10)
-	_ = c.Delete(jobKey)
+	// Cache the updated job data
+	if s.cache != nil {
+		s.cacheJobData(job, nextExecution)
+	}
 
-	// duration := time.Since(startTime)
+	duration := time.Since(startTime)
 
-	// if executionSuccess {
-	// 	metrics.JobsCompleted.Inc()
-	// 	s.logger.Infof("Completed job %d in %v, next execution at %v",
-	// 		job.JobID, duration, nextExecution)
-	// } else {
-	// 	metrics.JobsFailed.Inc()
-	// 	s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
-	// }
+	// Create completion context for Redis streaming
+	completionContext := jobContext
+	completionContext["duration_ms"] = duration.Milliseconds()
+	completionContext["next_execution"] = nextExecution.Unix()
+	completionContext["completed_at"] = time.Now().Unix()
+
+	if executionSuccess {
+		metrics.JobsCompleted.Inc()
+		s.logger.Infof("Completed job %d in %v, next execution at %v",
+			job.JobID, duration, nextExecution)
+		completionContext["status"] = "completed"
+		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, completionContext); err != nil {
+			s.logger.Errorf("Failed to add job completion event to Redis stream: %v", err)
+		}
+	} else {
+		metrics.JobsFailed.Inc()
+		s.logger.Errorf("Failed to execute job %d after %v", job.JobID, duration)
+
+		completionContext["status"] = "failed"
+		if err := redisx.AddJobToStream(redisx.JobsRetryTimeStream, completionContext); err != nil {
+			s.logger.Errorf("Failed to add job failure event to Redis stream: %v", err)
+		}
+	}
 }
 
-// simulateJobExecution simulates job execution (replace with actual implementation)
-// func (s *TimeBasedScheduler) simulateJobExecution(job *types.TimeJobData) bool {
-// 	// TODO: Replace this with actual job execution logic
-// 	// For now, simulate execution with a small delay
-// 	time.Sleep(100 * time.Millisecond)
+// performJobExecution handles the actual job execution logic
+func (s *TimeBasedScheduler) performJobExecution(job *types.TimeJobData) bool {
+	// Check cache for recent execution to prevent duplicates
+	if s.cache != nil {
+		recentKey := fmt.Sprintf("recent_execution_%d", job.JobID)
+		if _, err := s.cache.Get(recentKey); err == nil {
+			s.logger.Warnf("Job %d was recently executed, skipping duplicate", job.JobID)
+			return true
+		}
 
-// 	// Simulate 95% success rate
-// 	return time.Now().UnixNano()%100 < 95
+		// Mark as recently executed
+		if err := s.cache.Set(recentKey, time.Now().Format(time.RFC3339), duplicateJobWindow); err != nil {
+			s.logger.Errorf("Failed to set recent execution cache: %v", err)
+		}
+	}
+
+	// TODO: Replace this with actual job execution logic
+	// This would involve:
+	// 1. Calling the target function/webhook
+	// 2. Handling the response
+	// 3. Managing retries on failure
+
+	// Simulate job execution for now
+	time.Sleep(100 * time.Millisecond)
+
+	// Simulate 95% success rate
+	return time.Now().UnixNano()%100 < 95
+}
+
+// cacheJobData caches job data for faster access
+func (s *TimeBasedScheduler) cacheJobData(job *types.TimeJobData, nextExecution time.Time) {
+	if s.cache == nil {
+		return
+	}
+
+	jobData := map[string]interface{}{
+		"job_id":         job.JobID,
+		"schedule_type":  job.ScheduleType,
+		"next_execution": nextExecution.Unix(),
+		"cached_at":      time.Now().Unix(),
+	}
+
+	jsonData, err := json.Marshal(jobData)
+	if err != nil {
+		s.logger.Warnf("Failed to marshal job data for caching: %v", err)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("job_data_%d", job.JobID)
+	if err := s.cache.Set(cacheKey, string(jsonData), jobCacheTTL); err != nil {
+		s.logger.Warnf("Failed to cache job data: %v", err)
+	}
+}
+
+// getCachedJobData retrieves job data from cache
+// func (s *TimeBasedScheduler) getCachedJobData(jobID int64) (*types.TimeJobData, error) {
+// 	if s.cache == nil {
+// 		return nil, fmt.Errorf("cache not available")
+// 	}
+
+// 	cacheKey := fmt.Sprintf("job_data_%d", jobID)
+// 	cachedData, err := s.cache.Get(cacheKey)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	var jobData map[string]interface{}
+// 	if err := json.Unmarshal([]byte(cachedData), &jobData); err != nil {
+// 		return nil, err
+// 	}
+
+// 	// This is a simplified example - you'd need to properly reconstruct the job
+// 	job := &types.TimeJobData{
+// 		JobID: jobID,
+// 		// Add other fields as needed from the cached data
+// 	}
+
+// 	return job, nil
 // }
 
 // Stop gracefully stops the scheduler
@@ -249,7 +408,7 @@ func (s *TimeBasedScheduler) Stop() {
 
 	// Wait for workers to finish (with timeout)
 	timeout := time.After(30 * time.Second)
-	for len(s.workerPool) < workerPoolSize {
+	for len(s.workerPool) < s.maxWorkers {
 		select {
 		case <-timeout:
 			s.logger.Warn("Timeout waiting for workers to finish")
@@ -269,6 +428,6 @@ func (s *TimeBasedScheduler) GetStats() map[string]interface{} {
 		"active_jobs":  len(s.activeJobs),
 		"queue_length": len(s.jobQueue),
 		"worker_pool":  len(s.workerPool),
-		"max_workers":  workerPoolSize,
+		"max_workers":  s.maxWorkers,
 	}
 }

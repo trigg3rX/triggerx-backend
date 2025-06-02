@@ -14,6 +14,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	redisConfig "github.com/trigg3rX/triggerx-backend/internal/redis/config"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -24,6 +25,11 @@ const shutdownTimeout = 30 * time.Second
 func main() {
 	if err := config.Init(); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
+	}
+
+	// Initialize Redis config
+	if err := redisConfig.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize Redis config: %v", err))
 	}
 
 	logConfig := logging.LoggerConfig{
@@ -43,10 +49,10 @@ func main() {
 	logger.Info("Starting database server...",
 		"mode", getEnvironment(),
 		"port", config.GetDatabaseRPCPort(),
-		"host", config.GetDatabaseHost(),
+		"host", config.GetDatabaseHostAddress(),
 	)
 
-	dbConfig := database.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
+	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
 
 	conn, err := database.NewConnection(dbConfig)
 	if err != nil || conn == nil {

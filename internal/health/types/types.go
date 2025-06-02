@@ -23,5 +23,5 @@ type KeeperInfo struct {
 	Version          string    `json:"version"`
 	PeerID           string    `json:"peer_id"`
 	IsActive         bool      `json:"is_active"`
-	LastCheckedIn   time.Time `json:"last_checked_in"`
+	LastCheckedIn    time.Time `json:"last_checked_in"`
 }

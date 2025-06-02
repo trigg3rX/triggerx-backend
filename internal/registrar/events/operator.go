@@ -80,7 +80,12 @@ func (p *OperatorProcessor) ProcessOperatorRegisteredEvents(
 		}
 
 		// Schedule fetching operator details
-		FetchOperatorDetailsAfterDelay(event.Operator, 4*time.Minute, p.logger)
+		if err := FetchOperatorDetailsAfterDelay(event.Operator, 4*time.Minute, p.logger); err != nil {
+			p.logger.Error("Failed to fetch operator details after delay",
+				"error", err,
+				"operator", event.Operator.Hex(),
+			)
+		}
 	}
 	return nil
 }

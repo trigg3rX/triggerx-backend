@@ -6,7 +6,7 @@ import (
 	"fmt"
 	// "io/ioutil"
 	// "net/http"
-	"reflect"
+	// "reflect"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -195,39 +195,39 @@ func (e *TaskExecutor) getContractMethodAndABI(methodName string, job *jobtypes.
 	return &parsed, &method, nil
 }
 
-func (e *TaskExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
-	// Handle different output scenarios
-	if len(method.Outputs) == 0 {
-		e.logger.Infof("Method %s has no outputs to decode", method.Name)
-		return nil, nil
-	}
+// func (e *TaskExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
+// 	// Handle different output scenarios
+// 	if len(method.Outputs) == 0 {
+// 		e.logger.Infof("Method %s has no outputs to decode", method.Name)
+// 		return nil, nil
+// 	}
 
-	// Single output case
-	if len(method.Outputs) == 1 {
-		outputType := method.Outputs[0]
-		result := reflect.New(outputType.Type.GetType()).Elem()
+// 	// Single output case
+// 	if len(method.Outputs) == 1 {
+// 		outputType := method.Outputs[0]
+// 		result := reflect.New(outputType.Type.GetType()).Elem()
 
-		err := contractABI.UnpackIntoInterface(result.Addr().Interface(), method.Name, output)
-		if err != nil {
-			e.logger.Warnf("Error unpacking single output: %v", err)
-			return nil, err
-		}
+// 		err := contractABI.UnpackIntoInterface(result.Addr().Interface(), method.Name, output)
+// 		if err != nil {
+// 			e.logger.Warnf("Error unpacking single output: %v", err)
+// 			return nil, err
+// 		}
 
-		e.logger.Infof("Decoded single output: %v", result.Interface())
-		return result.Interface(), nil
-	}
+// 		e.logger.Infof("Decoded single output: %v", result.Interface())
+// 		return result.Interface(), nil
+// 	}
 
-	// Multiple outputs case
-	results := make([]interface{}, len(method.Outputs))
-	err := contractABI.UnpackIntoInterface(&results, method.Name, output)
-	if err != nil {
-		e.logger.Warnf("Error unpacking multiple outputs: %v", err)
-		return nil, err
-	}
+// 	// Multiple outputs case
+// 	results := make([]interface{}, len(method.Outputs))
+// 	err := contractABI.UnpackIntoInterface(&results, method.Name, output)
+// 	if err != nil {
+// 		e.logger.Warnf("Error unpacking multiple outputs: %v", err)
+// 		return nil, err
+// 	}
 
-	e.logger.Infof("Decoded multiple outputs: %+v", results)
-	return results, nil
-}
+// 	e.logger.Infof("Decoded multiple outputs: %+v", results)
+// 	return results, nil
+// }
 
 // func (e *JobExecutor) fetchContractABI(contractAddress string) ([]byte, error) {
 // 	if e.etherscanAPIKey == "" {

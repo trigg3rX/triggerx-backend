@@ -78,7 +78,6 @@ type TaskValidationRequest struct {
 	Performer        string `json:"performer"`
 }
 
-
 type ValidationResult struct {
 	IsValid bool   `json:"isValid"`
 	Message string `json:"message"`

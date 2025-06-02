@@ -2,15 +2,17 @@ package dbserver
 
 import (
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/redis"
 )
 
 type Server struct {
@@ -20,6 +22,7 @@ type Server struct {
 	metricsServer      *metrics.MetricsServer
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
+	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
 }
@@ -41,31 +44,57 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 
-		// if c.Request.Method == "OPTIONS" {
-		// 	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		// 	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		// 	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
-		// 	c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
-		// 	// c.AbortWithStatus(204)
-		// 	return
-		// }
-
 		c.Next()
 	})
 
-	metricsServer := metrics.NewMetricsServer(db, logger)
-
-	redisClient, err := redis.NewClient(logger)
-	if err != nil {
-		logger.Errorf("Failed to initialize Redis client: %v", err)
+	// Add retry middleware with custom configuration
+	retryConfig := &middleware.RetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    time.Second,
+		MaxDelay:        10 * time.Second,
+		BackoffFactor:   2.0,
+		JitterFactor:    0.1,
+		LogRetryAttempt: true,
+		RetryStatusCodes: []int{
+			http.StatusInternalServerError,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout,
+			http.StatusTooManyRequests,
+			http.StatusRequestTimeout,
+			http.StatusConflict,
+		},
 	}
 
+	// Initialize metrics server
+	metricsServer := metrics.NewMetricsServer(db, logger)
+
+	// Initialize Redis client with enhanced features
+	var redisClient *redis.Client
+	if redis.IsAvailable() {
+		client, err := redis.NewClient(logger)
+		if err != nil {
+			logger.Errorf("Failed to initialize Redis client: %v", err)
+		} else {
+			redisClient = client
+			logger.Infof("Redis client initialized successfully (%s)", redis.GetRedisInfo()["type"])
+		}
+	} else {
+		logger.Warn("Redis is not configured - rate limiting and caching features will be disabled")
+	}
+
+	// Initialize rate limiter
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
+		var err error
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
 		if err != nil {
 			logger.Errorf("Failed to initialize rate limiter: %v", err)
+		} else {
+			logger.Info("Rate limiter initialized successfully")
 		}
+	} else {
+		logger.Warn("Rate limiter disabled - Redis client not available")
 	}
 
 	s := &Server{
@@ -75,6 +104,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
+		validator:     middleware.NewValidator(logger),
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),
@@ -83,6 +113,10 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
+
+	// Apply middleware in the correct order
+	router.Use(middleware.RetryMiddleware(retryConfig)) // Retry middleware first
+	// Rate limiting is handled through the API key auth middleware
 
 	return s
 }
@@ -93,27 +127,30 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api")
 
 	// Public routes
-	api.GET("/users/:id", handler.GetUserData)
-	api.GET("/wallet/points/:wallet_address", handler.GetWalletPoints)
+	api.GET("/users/:address", handler.GetUserDataByAddress)
+	api.GET("/wallet/points/:address", handler.GetWalletPoints)
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
-	api.POST("/jobs", handler.CreateJobData)
+	// Apply validation middleware to routes that need it
+	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.GET("/jobs/time", handler.GetTimeBasedJobs)
-	api.GET("/jobs/:id", handler.GetJobData)
-	api.PUT("/jobs/:id", handler.UpdateJobData)
+	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
+	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
 
-	api.POST("/tasks", handler.CreateTaskData)
-	api.GET("/tasks/:id", handler.GetTaskData)
+	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
+	api.GET("/tasks/:id", handler.GetTaskDataByID)
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
+	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
+	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
+	api.GET("/tasks/job/:id", handler.GetTasksByJobID)
 
-	api.GET("/keepers/all", handler.GetAllKeepers)
+	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.GET("/keepers/performers", handler.GetPerformers)
-	api.POST("/keepers/form", handler.CreateKeeperDataGoogleForm)
 	api.GET("/keepers/:id", handler.GetKeeperData)
 	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
 	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
@@ -122,7 +159,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	api.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
 	api.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	api.GET("/leaderboard/users/search", handler.GetUserByAddress)
+	api.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
 	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)
@@ -133,7 +170,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	// Admin routes
 	admin := protected.Group("/admin")
-	admin.POST("/api-keys", handler.CreateApiKey)
+	admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
 	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
 	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
 }

@@ -1,0 +1,26 @@
+name: Golang Lint
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+  merge_group:
+
+jobs:
+  Lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install go 1.24.2
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.2"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout 3m

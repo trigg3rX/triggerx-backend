@@ -9,11 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"io/ioutil"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/ipfs"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ValidateConditionBasedJob validates a condition-based job by executing the condition script
@@ -58,7 +57,7 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	}
 
 	// Create a temporary file for the script
-	tempFile, err := ioutil.TempFile("", "condition-*.go")
+	tempFile, err := os.CreateTemp("", "condition-*.go")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary file: %v", err)
 	}
@@ -72,7 +71,7 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	}
 
 	// Create a temp directory for the script's build output
-	tempDir, err := ioutil.TempDir("", "condition-build")
+	tempDir, err := os.MkdirTemp("", "condition-build")
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary build directory: %v", err)
 	}

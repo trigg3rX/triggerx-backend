@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/ipfs"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -109,7 +109,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 			return
 		}
 		h.logger.Infof("jobData: %v\n", jobData)
-	
+
 		var triggerData types.TriggerData
 		triggerDataBytes, err := json.Marshal(triggerDataRaw)
 		if err != nil {
@@ -121,7 +121,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 			return
 		}
 		h.logger.Infof("triggerData: %v\n", triggerData)
-	
+
 		// Execute task
 		actionData, err := h.executor.Execute(&jobData)
 		if err != nil {
@@ -129,10 +129,10 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
 			return
 		}
-	
+
 		// Set task ID from trigger data
 		actionData.TaskID = triggerData.TaskID
-	
+
 		// Convert result to bytes
 		resultBytes, err = json.Marshal(actionData)
 		if err != nil {

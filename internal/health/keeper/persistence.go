@@ -84,7 +84,7 @@ func (sm *StateManager) retryWithBackoff(operation func() error, maxRetries int)
 		}
 
 		// Calculate backoff duration (exponential backoff with jitter)
-		backoff := time.Duration(1<<uint(i)) * time.Second
+		backoff := time.Duration(i) * time.Second
 		sm.logger.Warn("Database operation failed, retrying...",
 			"error", err,
 			"attempt", i+1,

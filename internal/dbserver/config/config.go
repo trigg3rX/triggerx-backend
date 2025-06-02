@@ -2,34 +2,37 @@ package config
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/validator"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
 type Config struct {
-	ManagerRPCAddress string
-	DatabaseRPCPort   string
+	timeSchedulerRPCUrl      string
+	eventSchedulerRPCUrl     string
+	conditionSchedulerRPCUrl string
 
-	DatabaseHost     string
-	DatabaseHostPort string
+	databaseRPCPort          string
 
-	EmailUser     string
-	EmailPassword string
-	BotToken      string
+	databaseHostAddress   	string
+	databaseHostPort 		string
 
-	AlchemyAPIKey string
+	emailUser     			string
+	emailPassword 			string
+	botToken     			string
 
-	FaucetPrivateKey string
-	FaucetFundAmount string
+	alchemyAPIKey 			string
 
-	UpstashRedisUrl       string
-	UpstashRedisRestToken string
+	faucetPrivateKey 		string
+	faucetFundAmount 		string
 
-	DevMode bool
+	upstashRedisUrl       	string
+	upstashRedisRestToken 	string
+
+	devMode bool
 }
 
 var cfg Config
@@ -40,26 +43,28 @@ func Init() error {
 	}
 
 	cfg = Config{
-		DevMode:               os.Getenv("DEV_MODE") == "true",
-		ManagerRPCAddress:     os.Getenv("MANAGER_RPC_ADDRESS"),
-		DatabaseRPCPort:       os.Getenv("DATABASE_RPC_PORT"),
-		DatabaseHost:          os.Getenv("DATABASE_HOST"),
-		DatabaseHostPort:      os.Getenv("DATABASE_HOST_PORT"),
-		EmailUser:             os.Getenv("EMAIL_USER"),
-		EmailPassword:         os.Getenv("EMAIL_PASSWORD"),
-		BotToken:              os.Getenv("BOT_TOKEN"),
-		AlchemyAPIKey:         os.Getenv("ALCHEMY_API_KEY"),
-		FaucetPrivateKey:      os.Getenv("FAUCET_PRIVATE_KEY"),
-		FaucetFundAmount:      os.Getenv("FAUCET_FUND_AMOUNT"),
-		UpstashRedisUrl:       os.Getenv("UPSTASH_REDIS_URL"),
-		UpstashRedisRestToken: os.Getenv("UPSTASH_REDIS_REST_TOKEN"),
+		timeSchedulerRPCUrl:      env.GetEnv("TIME_SCHEDULER_RPC_URL", "http://localhost:9004"),
+		eventSchedulerRPCUrl:     env.GetEnv("EVENT_SCHEDULER_RPC_URL", "http://localhost:9004"),
+		conditionSchedulerRPCUrl: env.GetEnv("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9005"),
+		databaseRPCPort:          env.GetEnv("DATABASE_RPC_PORT", "9002"),
+		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
+		emailUser:                env.GetEnv("EMAIL_USER", ""),
+		emailPassword:            env.GetEnv("EMAIL_PASS", ""),
+		botToken:                 env.GetEnv("BOT_TOKEN", ""),
+		alchemyAPIKey:            env.GetEnv("ALCHEMY_API_KEY", ""),
+		faucetPrivateKey:         env.GetEnv("FAUCET_PRIVATE_KEY", ""),
+		faucetFundAmount:         env.GetEnv("FAUCET_FUND_AMOUNT", "30000000000000000"),
+		upstashRedisUrl:          env.GetEnv("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:    env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
+		devMode:                  env.GetEnvBool("DEV_MODE", false),
 	}
 
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 
-	if !cfg.DevMode {
+	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -67,96 +72,110 @@ func Init() error {
 }
 
 func validateConfig(cfg Config) error {
-	if !validator.IsValidRPCAddress(cfg.ManagerRPCAddress) {
-		return fmt.Errorf("invalid manager rpc address: %s", cfg.ManagerRPCAddress)
+	if !validator.IsValidRPCUrl(cfg.timeSchedulerRPCUrl) {
+		return fmt.Errorf("invalid time scheduler rpc address: %s", cfg.timeSchedulerRPCUrl)
 	}
-	if !validator.IsValidPort(cfg.DatabaseRPCPort) {
-		return fmt.Errorf("invalid database rpc port: %s", cfg.DatabaseRPCPort)
+	if !validator.IsValidRPCUrl(cfg.eventSchedulerRPCUrl) {
+		return fmt.Errorf("invalid event scheduler rpc address: %s", cfg.eventSchedulerRPCUrl)
 	}
-	if !validator.IsValidIPAddress(cfg.DatabaseHost) {
-		return fmt.Errorf("invalid database host: %s", cfg.DatabaseHost)
+	if !validator.IsValidRPCUrl(cfg.conditionSchedulerRPCUrl) {
+		return fmt.Errorf("invalid condition scheduler rpc address: %s", cfg.conditionSchedulerRPCUrl)
 	}
-	if !validator.IsValidPort(cfg.DatabaseHostPort) {
-		return fmt.Errorf("invalid database host port: %s", cfg.DatabaseHostPort)
+	if !validator.IsValidPort(cfg.databaseRPCPort) {
+		return fmt.Errorf("invalid database rpc port: %s", cfg.databaseRPCPort)
 	}
-	if validator.IsValidEmail(cfg.EmailUser) {
-		return fmt.Errorf("invalid email user: %s", cfg.EmailUser)
+	if !validator.IsValidIPAddress(cfg.databaseHostAddress) {
+		return fmt.Errorf("invalid database host: %s", cfg.databaseHostAddress)
 	}
-	if !cfg.DevMode {
-		if validator.IsEmpty(cfg.EmailPassword) {
-			return fmt.Errorf("invalid email password: %s", cfg.EmailPassword)
+	if !validator.IsValidPort(cfg.databaseHostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
+	}
+	if validator.IsEmpty(cfg.alchemyAPIKey) {
+		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
+	}
+	if !validator.IsValidPrivateKey(cfg.faucetPrivateKey) {
+		return fmt.Errorf("invalid faucet private key: %s", cfg.faucetPrivateKey)
+	}
+	if validator.IsEmpty(cfg.faucetFundAmount) {
+		return fmt.Errorf("invalid faucet fund amount: %s", cfg.faucetFundAmount)
+	}
+	if validator.IsEmpty(cfg.upstashRedisUrl) {
+		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	}
+	if validator.IsEmpty(cfg.upstashRedisRestToken) {
+		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
+	}
+	if !cfg.devMode {
+		if validator.IsValidEmail(cfg.emailUser) {
+			return fmt.Errorf("invalid email user: %s", cfg.emailUser)
 		}
-		if validator.IsEmpty(cfg.BotToken) {
-			return fmt.Errorf("invalid bot token: %s", cfg.BotToken)
+		if validator.IsEmpty(cfg.emailPassword) {
+			return fmt.Errorf("invalid email password: %s", cfg.emailPassword)
 		}
-		if validator.IsEmpty(cfg.AlchemyAPIKey) {
-			return fmt.Errorf("invalid alchemy api key: %s", cfg.AlchemyAPIKey)
+		if validator.IsEmpty(cfg.botToken) {
+			return fmt.Errorf("invalid bot token: %s", cfg.botToken)
 		}
-	}
-	if !validator.IsValidPrivateKey(cfg.FaucetPrivateKey) {
-		return fmt.Errorf("invalid faucet private key: %s", cfg.FaucetPrivateKey)
-	}
-	if validator.IsEmpty(cfg.FaucetFundAmount) {
-		return fmt.Errorf("invalid faucet fund amount: %s", cfg.FaucetFundAmount)
-	}
-	if validator.IsEmpty(cfg.UpstashRedisUrl) {
-		return fmt.Errorf("invalid upstash redis url: %s", cfg.UpstashRedisUrl)
-	}
-	if validator.IsEmpty(cfg.UpstashRedisRestToken) {
-		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.UpstashRedisRestToken)
 	}
 
 	return nil
 }
 
-func GetManagerRPCAddress() string {
-	return cfg.ManagerRPCAddress
+func GetTimeSchedulerRPCUrl() string {
+	return cfg.timeSchedulerRPCUrl
+}
+
+func GetEventSchedulerRPCUrl() string {
+	return cfg.eventSchedulerRPCUrl
+}
+
+func GetConditionSchedulerRPCUrl() string {
+	return cfg.conditionSchedulerRPCUrl
 }
 
 func GetDatabaseRPCPort() string {
-	return cfg.DatabaseRPCPort
+	return cfg.databaseRPCPort
 }
 
-func GetDatabaseHost() string {
-	return cfg.DatabaseHost
+func GetDatabaseHostAddress() string {
+	return cfg.databaseHostAddress
 }
 
 func GetDatabaseHostPort() string {
-	return cfg.DatabaseHostPort
+	return cfg.databaseHostPort
 }
 
 func GetEmailUser() string {
-	return cfg.EmailUser
+	return cfg.emailUser
 }
 
 func GetEmailPassword() string {
-	return cfg.EmailPassword
+	return cfg.emailPassword
 }
 
 func GetBotToken() string {
-	return cfg.BotToken
+	return cfg.botToken
 }
 
 func GetAlchemyAPIKey() string {
-	return cfg.AlchemyAPIKey
+	return cfg.alchemyAPIKey
 }
 
 func GetFaucetPrivateKey() string {
-	return cfg.FaucetPrivateKey
+	return cfg.faucetPrivateKey
 }
 
 func GetFaucetFundAmount() string {
-	return cfg.FaucetFundAmount
+	return cfg.faucetFundAmount
 }
 
 func GetUpstashRedisUrl() string {
-	return cfg.UpstashRedisUrl
+	return cfg.upstashRedisUrl
 }
 
 func GetUpstashRedisRestToken() string {
-	return cfg.UpstashRedisRestToken
+	return cfg.upstashRedisRestToken
 }
 
 func IsDevMode() bool {
-	return cfg.DevMode
+	return cfg.devMode
 }
