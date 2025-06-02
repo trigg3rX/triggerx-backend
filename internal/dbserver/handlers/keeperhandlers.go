@@ -10,14 +10,17 @@ import (
 )
 
 func (h *Handler) CreateKeeperData(c *gin.Context) {
-	var keeperData types.CreateKeeperData
-	if err := c.ShouldBindJSON(&keeperData); err != nil {
-		h.logger.Errorf("Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	var req types.CreateKeeperData
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error decoding request body"})
+		return
+	}
+	if req.KeeperAddress == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper address"})
 		return
 	}
 
-	existingKeeperID, err := h.keeperRepository.CheckKeeperExists(keeperData.KeeperAddress)
+	existingKeeperID, err := h.keeperRepository.CheckKeeperExists(req.KeeperAddress)
 	if err != nil {
 		h.logger.Errorf("Error checking if keeper exists: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -29,8 +32,8 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Keeper already exists"})
 		return
 	}
-	
-	currentKeeperID, err := h.keeperRepository.CreateKeeper(keeperData)
+
+	currentKeeperID, err := h.keeperRepository.CreateKeeper(req)
 	if err != nil {
 		h.logger.Errorf("Error creating keeper: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -53,13 +56,13 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	// 	See you there!
 	// 	<br><br>
 	// 	– Team TriggerX
-	// `, keeperData.KeeperName)
+	// `, req.KeeperName)
 
-	// if err := h.sendEmailNotification(keeperData.EmailID, subject, emailBody); err != nil {
-	// 	h.logger.Errorf(" Error sending welcome email to keeper %s: %v", keeperData.KeeperName, err)
+	// if err := h.sendEmailNotification(req.EmailID, subject, emailBody); err != nil {
+	// 	h.logger.Errorf(" Error sending welcome email to keeper %s: %v", req.KeeperName, err)
 	// 	// Note: We don't return here as the keeper creation was successful
 	// } else {
-	// 	h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
+	// 	h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", req.KeeperName, req.EmailID)
 	// }
 
 	h.logger.Infof(" Successfully created keeper with ID: %d", currentKeeperID)
@@ -90,7 +93,7 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperData] Error parsing keeper ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper ID format"})
 		return
 	}
 
@@ -112,13 +115,13 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error parsing keeper ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper ID format"})
 		return
 	}
 
 	newCount, err := h.keeperRepository.IncrementKeeperTaskCount(keeperIDInt)
 	if err != nil {
-		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving current task count: %v", err)
+		h.logger.Errorf("[IncrementKeeperTaskCount] Error incrementing task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -154,7 +157,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error parsing keeper ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper ID format"})
 		return
 	}
 
@@ -184,7 +187,6 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 
 	h.logger.Infof("[AddTaskFeeToKeeperPoints] Successfully added task fee %d from task ID %d to keeper ID: %s, new points: %d",
 		taskFee, taskID, keeperID, newPoints)
@@ -221,13 +223,18 @@ func (h *Handler) UpdateKeeperChatID(c *gin.Context) {
 	var requestData types.UpdateKeeperChatIDRequest
 	if err := c.ShouldBindJSON(&requestData); err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error decoding request body"})
+		return
+	}
+
+	if requestData.KeeperAddress == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper address"})
 		return
 	}
 
 	err := h.keeperRepository.UpdateKeeperChatID(requestData.KeeperAddress, requestData.ChatID)
 	if err != nil {
-		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper: %s", requestData.KeeperAddress)
+		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper %s: %v", requestData.KeeperAddress, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -243,7 +250,7 @@ func (h *Handler) GetKeeperCommunicationInfo(c *gin.Context) {
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperChatInfo] Error parsing keeper ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid keeper ID format"})
 		return
 	}
 

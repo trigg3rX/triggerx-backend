@@ -6,33 +6,39 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/trigg3rX/triggerx-backend/pkg/resources"
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
-	var taskData types.CreateTaskDataRequest
-	if err := c.ShouldBindJSON(&taskData); err != nil {
-		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	var req types.CreateTaskDataRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Invalid request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	taskID, err := h.taskRepository.CreateTaskDataInDB(&taskData)
+	// Validation: required fields must not be zero
+	if req.JobID == 0 || req.TaskDefinitionID == 0 || req.TaskPerformerID == 0 {
+		h.logger.Error("Missing required fields in request body")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	taskID, err := h.taskRepository.CreateTaskDataInDB(&req)
 	if err != nil {
-		h.logger.Errorf("[CreateTaskData] Error creating task: %v", err)
+		h.logger.Error("Error creating task data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskID)
 	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
 }
 
@@ -43,7 +49,14 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	var taskData types.UpdateTaskExecutionDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskExecutionData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Validate required fields
+	if taskData.TaskID == 0 || taskData.ExecutionTimestamp.IsZero() || taskData.ExecutionTxHash == "" {
+		h.logger.Errorf("[UpdateTaskExecutionData] Missing required fields")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
 		return
 	}
 
@@ -64,7 +77,14 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	var taskData types.UpdateTaskAttestationDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskAttestationData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Validate required fields
+	if taskData.TaskID == 0 || taskData.TaskNumber == 0 || len(taskData.TaskAttesterIDs) == 0 || len(taskData.TpSignature) == 0 || len(taskData.TaSignature) == 0 || taskData.TaskSubmissionTxHash == "" {
+		h.logger.Errorf("[UpdateTaskAttestationData] Missing required fields")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
 		return
 	}
 
