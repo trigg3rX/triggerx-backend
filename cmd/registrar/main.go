@@ -43,7 +43,7 @@ func main() {
 	)
 
 	// Initialize database connection
-	dbConfig := database.NewConfig(config.GetDatabaseHost(), config.GetDatabaseHostPort())
+	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
 	dbConn, err := database.NewConnection(dbConfig)
 	if err != nil {
 		logger.Fatal("Failed to connect to database", "error", err)

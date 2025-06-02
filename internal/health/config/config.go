@@ -2,107 +2,85 @@ package config
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/validator"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
-// Config holds all configuration for the health service
 type Config struct {
-	HealthRPCPort      string
-	DatabaseRPCAddress string
+	devMode bool
 
-	BotToken      string
-	EmailUser     string
-	EmailPassword string
+	// Port at which health service will be running
+	healthRPCPort string
 
-	DatabaseHost     string
-	DatabaseHostPort string
+	// Bot token for Telegram notifications
+	botToken string
+	// Email user for notifications
+	emailUser     string
+	emailPassword string
 
-	DevMode bool
+	// ScyllaDB Host and Port
+	databaseHostAddress string
+	databaseHostPort    string
 }
 
 var cfg Config
 
-// Init initializes the configuration for the health service
 func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-
 	cfg = Config{
-		DevMode:            os.Getenv("DEV_MODE") == "true",
-		HealthRPCPort:      os.Getenv("HEALTH_RPC_PORT"),
-		DatabaseRPCAddress: os.Getenv("DATABASE_RPC_ADDRESS"),
-		BotToken:           os.Getenv("BOT_TOKEN"),
-		EmailUser:          os.Getenv("EMAIL_USER"),
-		EmailPassword:      os.Getenv("EMAIL_PASSWORD"),
-		DatabaseHost:       os.Getenv("DATABASE_HOST"),
-		DatabaseHostPort:   os.Getenv("DATABASE_HOST_PORT"),
+		devMode:             env.GetEnvBool("DEV_MODE", false),
+		healthRPCPort:       env.GetEnv("HEALTH_RPC_PORT", "9003"),
+		botToken:            env.GetEnv("BOT_TOKEN", ""),
+		emailUser:           env.GetEnv("EMAIL_USER", ""),
+		emailPassword:       env.GetEnv("EMAIL_PASSWORD", ""),
+		databaseHostAddress: env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
 	}
-
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
-
-	if !cfg.DevMode {
+	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
 	return nil
 }
 
 func validateConfig() error {
-	if !validator.IsValidPort(cfg.HealthRPCPort) {
-		return fmt.Errorf("invalid Health RPC Port: %s", cfg.HealthRPCPort)
+	if !env.IsValidPort(cfg.healthRPCPort) {
+		return fmt.Errorf("invalid Health RPC Port: %s", cfg.healthRPCPort)
 	}
-
-	if !validator.IsValidRPCAddress(cfg.DatabaseRPCAddress) {
-		return fmt.Errorf("invalid Database RPC Address: %s", cfg.DatabaseRPCAddress)
-	}
-
 	return nil
 }
 
-// GetHealthRPCPort returns the configured health RPC port
 func GetHealthRPCPort() string {
-	return cfg.HealthRPCPort
+	return cfg.healthRPCPort
 }
 
-// GetDatabaseRPCAddress returns the configured database RPC address
-func GetDatabaseRPCAddress() string {
-	return cfg.DatabaseRPCAddress
+func GetDatabaseHostAddress() string {
+	return cfg.databaseHostAddress
 }
 
-// GetDatabaseHost returns the configured database host
-func GetDatabaseHost() string {
-	return cfg.DatabaseHost
-}
-
-// GetDatabaseHostPort returns the configured database host port
 func GetDatabaseHostPort() string {
-	return cfg.DatabaseHostPort
+	return cfg.databaseHostPort
 }
 
-// GetBotToken returns the configured bot token
 func GetBotToken() string {
-	return cfg.BotToken
+	return cfg.botToken
 }
 
-// GetEmailUser returns the configured email user
 func GetEmailUser() string {
-	return cfg.EmailUser
+	return cfg.emailUser
 }
 
-// GetEmailPassword returns the configured email password
 func GetEmailPassword() string {
-	return cfg.EmailPassword
+	return cfg.emailPassword
 }
 
-// IsDevMode returns whether the service is running in development mode
 func IsDevMode() bool {
-	return cfg.DevMode
+	return cfg.devMode
 }

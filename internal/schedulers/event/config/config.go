@@ -2,87 +2,120 @@ package config
 
 import (
 	"fmt"
-	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
 type Config struct {
-	devMode          bool
+	devMode bool
+
+	// ScyllaDB Host and Port
 	databaseHost     string
 	databaseHostPort string
+
+	// Scheduler RPC Port
 	schedulerRPCPort string
-	dbServerURL      string
-	maxWorkers       int
-	// Chain RPC URLs
+
+	// Database RPC URL
+	dbServerURL string
+
+	// Maximum number of workers
+	maxWorkers int
+
+	// API Keys for Alchemy
 	alchemyAPIKey string
+
+	// Scheduler Private Key and Address
+	schedulerPrivateKey string
+	schedulerAddress    string
+
+	// Aggregator RPC URL for forwarding tasks to keeper
+	aggregatorRPCURL string
 }
 
 var cfg Config
 
-// Init initializes the configuration
 func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-
-	maxWorkersStr := env.GetEnv("MAX_WORKERS", "100")
-	maxWorkers, err := strconv.Atoi(maxWorkersStr)
-	if err != nil {
-		maxWorkers = 100 // fallback to default
-	}
-
 	cfg = Config{
-		devMode:          env.GetEnv("DEV_MODE", "false") == "true",
-		databaseHost:     env.GetEnv("DATABASE_HOST", "localhost"),
-		databaseHostPort: env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		schedulerRPCPort: env.GetEnv("SCHEDULER_RPC_PORT", "9005"),
-		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
-		maxWorkers:       maxWorkers,
-		// Chain RPC URLs with default values
-		alchemyAPIKey: env.GetEnv("ALCHEMY_API_KEY", ""),
+		devMode:             env.GetEnvBool("DEV_MODE", false),
+		databaseHost:        env.GetEnv("DATABASE_HOST", "localhost"),
+		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
+		schedulerRPCPort:    env.GetEnv("SCHEDULER_RPC_PORT", "9005"),
+		dbServerURL:         env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		maxWorkers:          env.GetEnvInt("MAX_WORKERS", 100),
+		alchemyAPIKey:       env.GetEnv("ALCHEMY_API_KEY", ""),
+		schedulerPrivateKey: env.GetEnv("SCHEDULER_PRIVATE_KEY", ""),
+		schedulerAddress:    env.GetEnv("SCHEDULER_ADDRESS", ""),
+		aggregatorRPCURL:    env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 	}
-
+	if err := validateConfig(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	if !cfg.devMode {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	return nil
 }
 
-// IsDevMode returns whether the service is running in development mode
+func validateConfig() error {
+	if env.IsEmpty(cfg.alchemyAPIKey) {
+		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
+	}
+	if !env.IsValidPrivateKey(cfg.schedulerPrivateKey) {
+		return fmt.Errorf("invalid scheduler private key: %s", cfg.schedulerPrivateKey)
+	}
+	if !env.IsValidEthAddress(cfg.schedulerAddress) {
+		return fmt.Errorf("invalid scheduler address: %s", cfg.schedulerAddress)
+	}
+	return nil
+}
+
 func IsDevMode() bool {
 	return cfg.devMode
 }
 
-// GetDatabaseHost returns the database host
 func GetDatabaseHost() string {
 	return cfg.databaseHost
 }
 
-// GetDatabaseHostPort returns the database host port
 func GetDatabaseHostPort() string {
 	return cfg.databaseHostPort
 }
 
-// GetSchedulerRPCPort returns the scheduler RPC port
 func GetSchedulerRPCPort() string {
 	return cfg.schedulerRPCPort
 }
 
-// GetDBServerURL returns the database server URL
 func GetDBServerURL() string {
 	return cfg.dbServerURL
 }
 
-// GetChainRPCUrls returns a map of chain IDs to RPC URLs
 func GetChainRPCUrls() map[string]string {
 	return map[string]string{
-		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),   // OP Sepolia
-		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
-		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
+		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
+		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
+		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
 	}
 }
 
-// GetMaxWorkers returns the maximum number of concurrent workers allowed
 func GetMaxWorkers() int {
 	return cfg.maxWorkers
+}
+
+func GetSchedulerPrivateKey() string {
+	return cfg.schedulerPrivateKey
+}
+
+func GetSchedulerAddress() string {
+	return cfg.schedulerAddress
+}
+
+func GetAggregatorRPCURL() string {
+	return cfg.aggregatorRPCURL
 }

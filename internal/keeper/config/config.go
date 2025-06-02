@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -11,46 +10,56 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/validator"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
 type Config struct {
-	EthRPCUrl       string
-	BaseRPCUrl      string
-	AlchemyAPIKey   string
-	EtherscanAPIKey string
+	devMode bool
 
-	PrivateKeyConsensus  string
-	PrivateKeyController string
-	KeeperAddress        string
-	ConsensusAddress     string
+	// RPC URLs for Ethereum and Base
+	ethRPCUrl  string
+	baseRPCUrl string
 
-	PublicIPV4Address string
-	PeerID            string
+	// API Keys for Alchemy and Etherscan
+	alchemyAPIKey   string
+	etherscanAPIKey string
 
-	OperatorRPCPort string
+	// Controller Key and Keeper Address
+	privateKeyController string
+	keeperAddress        string
 
-	DevMode bool
+	// Consensus Key and Address
+	privateKeyConsensus string
+	consensusAddress    string
 
-	KeeperRPCPort     string
-	KeeperP2PPort     string
-	KeeperMetricsPort string
-	GrafanaPort       string
+	// Public IP Address and Peer ID
+	publicIPV4Address string
+	peerID            string
 
-	PinataApiKey       string
-	PinataSecretApiKey string
-	IpfsHost           string
+	// Ports for Keeper API server, P2P connections, metrics and Grafana
+	keeperRPCPort     string
+	keeperP2PPort     string
+	keeperMetricsPort string
+	grafanaPort       string
 
-	AggregatorRPCAddress string
-	HealthRPCAddress     string
+	// IPFS configuration
+	pinataApiKey       string
+	pinataSecretApiKey string
+	ipfsHost           string
 
-	L1Chain string
-	L2Chain string
+	// Backend Service URLs
+	aggregatorRPCUrl string
+	healthRPCUrl     string
 
-	AVSGovernanceAddress     string
-	AttestationCenterAddress string
+	l1Chain string
+	l2Chain string
 
-	OthenticBootstrapID string
+	// AVS Contract Address
+	avsGovernanceAddress     string
+	attestationCenterAddress string
+
+	// Othentic Bootstrap ID
+	othenticBootstrapID string
 }
 
 var cfg Config
@@ -60,200 +69,147 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		DevMode:                  os.Getenv("DEV_MODE") == "true",
-		EthRPCUrl:                os.Getenv("ETH_RPC_URL"),
-		BaseRPCUrl:               os.Getenv("BASE_RPC_URL"),
-		AlchemyAPIKey:            os.Getenv("ALCHEMY_API_KEY"),
-		EtherscanAPIKey:          os.Getenv("ETHERSCAN_API_KEY"),
-		PrivateKeyConsensus:      os.Getenv("PRIVATE_KEY"),
-		KeeperAddress:            os.Getenv("OPERATOR_ADDRESS"),
-		ConsensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(os.Getenv("PRIVATE_KEY"))).PublicKey).Hex(),
-		PublicIPV4Address:        os.Getenv("PUBLIC_IPV4_ADDRESS"),
-		PeerID:                   os.Getenv("PEER_ID"),
-		OperatorRPCPort:          os.Getenv("OPERATOR_RPC_PORT"),
-		KeeperRPCPort:            os.Getenv("KEEPER_RPC_PORT"),
-		KeeperP2PPort:            os.Getenv("KEEPER_P2P_PORT"),
-		KeeperMetricsPort:        os.Getenv("KEEPER_METRICS_PORT"),
-		GrafanaPort:              os.Getenv("GRAFANA_PORT"),
-		PinataApiKey:             os.Getenv("PINATA_API_KEY"),
-		PinataSecretApiKey:       os.Getenv("PINATA_SECRET_API_KEY"),
-		IpfsHost:                 os.Getenv("IPFS_HOST"),
-		AggregatorRPCAddress:     os.Getenv("OTHENTIC_CLIENT_RPC_ADDRESS"),
-		HealthRPCAddress:         os.Getenv("HEALTH_RPC_ADDRESS"),
-		L1Chain:                  os.Getenv("L1_CHAIN"),
-		L2Chain:                  os.Getenv("L2_CHAIN"),
-		AVSGovernanceAddress:     os.Getenv("AVS_GOVERNANCE_ADDRESS"),
-		AttestationCenterAddress: os.Getenv("ATTESTATION_CENTER_ADDRESS"),
-		OthenticBootstrapID:      os.Getenv("OTHENTIC_BOOTSTRAP_ID"),
+		devMode:                  env.GetEnvBool("DEV_MODE", false),
+		ethRPCUrl:                env.GetEnv("ETH_RPC_URL", ""),
+		baseRPCUrl:               env.GetEnv("BASE_RPC_URL", ""),
+		alchemyAPIKey:            env.GetEnv("ALCHEMY_API_KEY", ""),
+		etherscanAPIKey:          env.GetEnv("ETHERSCAN_API_KEY", ""),
+		privateKeyConsensus:      env.GetEnv("PRIVATE_KEY", ""),
+		keeperAddress:            env.GetEnv("OPERATOR_ADDRESS", ""),
+		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnv("PRIVATE_KEY", ""))).PublicKey).Hex(),
+		publicIPV4Address:        env.GetEnv("PUBLIC_IPV4_ADDRESS", ""),
+		peerID:                   env.GetEnv("PEER_ID", ""),
+		keeperRPCPort:            env.GetEnv("KEEPER_RPC_PORT", "9011"),
+		keeperP2PPort:            env.GetEnv("KEEPER_P2P_PORT", "9012"),
+		keeperMetricsPort:        env.GetEnv("KEEPER_METRICS_PORT", "9013"),
+		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
+		pinataApiKey:             env.GetEnv("PINATA_API_KEY", ""),
+		pinataSecretApiKey:       env.GetEnv("PINATA_SECRET_API_KEY", ""),
+		ipfsHost:                 env.GetEnv("IPFS_HOST", ""),
+		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
+		healthRPCUrl:             env.GetEnv("HEALTH_RPC_ADDRESS", "http://localhost:9003"),
+		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
+		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
+		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
+		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"),
+		othenticBootstrapID:      env.GetEnv("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
-
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
-
-	if !cfg.DevMode {
+	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
 	isRegistered := checkKeeperRegistration()
 	if !isRegistered {
 		log.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
 		log.Fatal("Keeper address is not registered on L2")
 	}
-
 	return nil
 }
 
 func validateConfig(cfg Config) error {
-	if validator.IsEmpty(cfg.EthRPCUrl) {
-		return fmt.Errorf("invalid eth rpc url: %s", cfg.EthRPCUrl)
+	if env.IsEmpty(cfg.ethRPCUrl) {
+		return fmt.Errorf("invalid eth rpc url: %s", cfg.ethRPCUrl)
 	}
-	if validator.IsEmpty(cfg.BaseRPCUrl) {
-		return fmt.Errorf("invalid base rpc url: %s", cfg.BaseRPCUrl)
+	if env.IsEmpty(cfg.baseRPCUrl) {
+		return fmt.Errorf("invalid base rpc url: %s", cfg.baseRPCUrl)
 	}
-	if validator.IsEmpty(cfg.AlchemyAPIKey) {
-		return fmt.Errorf("invalid alchemy api key: %s", cfg.AlchemyAPIKey)
+	if env.IsEmpty(cfg.alchemyAPIKey) {
+		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
 	}
-	// if validator.IsEmpty(cfg.EtherscanAPIKey) {
+	// if env.IsEmpty(cfg.EtherscanAPIKey) {
 	// 	return fmt.Errorf("invalid etherscan api key: %s", cfg.EtherscanAPIKey)
 	// }
-	if !validator.IsValidPort(cfg.OperatorRPCPort) {
-		return fmt.Errorf("invalid operator rpc port: %s", cfg.OperatorRPCPort)
+	if !env.IsValidIPAddress(cfg.publicIPV4Address) {
+		return fmt.Errorf("invalid public ipv4 address: %s", cfg.publicIPV4Address)
 	}
-	if !validator.IsValidIPAddress(cfg.PublicIPV4Address) {
-		return fmt.Errorf("invalid public ipv4 address: %s", cfg.PublicIPV4Address)
+	if !env.IsValidPrivateKey(cfg.privateKeyConsensus) {
+		return fmt.Errorf("invalid private key consensus: %s", cfg.privateKeyConsensus)
 	}
-	if !validator.IsValidPrivateKey(cfg.PrivateKeyConsensus) {
-		return fmt.Errorf("invalid private key consensus: %s", cfg.PrivateKeyConsensus)
+	if !env.IsValidEthAddress(cfg.keeperAddress) {
+		return fmt.Errorf("invalid keeper address: %s", cfg.keeperAddress)
 	}
-	if !validator.IsValidAddress(cfg.KeeperAddress) {
-		return fmt.Errorf("invalid keeper address: %s", cfg.KeeperAddress)
+	if !env.IsValidPeerID(cfg.peerID) {
+		return fmt.Errorf("invalid peer id: %s", cfg.peerID)
 	}
-	if !validator.IsValidAddress(cfg.ConsensusAddress) {
-		return fmt.Errorf("invalid consensus address: %s", cfg.ConsensusAddress)
-	}
-	if !validator.IsValidPeerID(cfg.PeerID) {
-		return fmt.Errorf("invalid peer id: %s", cfg.PeerID)
-	}
-	if !validator.IsValidPort(cfg.KeeperRPCPort) {
-		cfg.KeeperRPCPort = "9005"
-	}
-	if !validator.IsValidPort(cfg.KeeperP2PPort) {
-		cfg.KeeperP2PPort = "9006"
-	}
-	if !validator.IsValidPort(cfg.KeeperMetricsPort) {
-		cfg.KeeperMetricsPort = "9009"
-	}
-	if !validator.IsValidPort(cfg.GrafanaPort) {
-		cfg.GrafanaPort = "3000"
-	}
-	if !validator.IsValidRPCAddress(cfg.AggregatorRPCAddress) {
-		cfg.AggregatorRPCAddress = "http://127.0.0.1:9001"
-	}
-	if !validator.IsValidRPCAddress(cfg.HealthRPCAddress) {
-		cfg.HealthRPCAddress = "http://127.0.0.1:9004"
-	}
-	if validator.IsEmpty(cfg.L1Chain) {
-		cfg.L1Chain = "17000"
-	}
-	if validator.IsEmpty(cfg.L2Chain) {
-		cfg.L2Chain = "84532"
-	}
-	if !validator.IsValidAddress(cfg.AVSGovernanceAddress) {
-		cfg.AVSGovernanceAddress = "0x12f45551f11df20b3ecbdf329138bdc65cc58ec0"
-	}
-	if !validator.IsValidAddress(cfg.AttestationCenterAddress) {
-		cfg.AttestationCenterAddress = "0x9725fb95b5ec36c062a49ca2712b3b1ff66f04ed"
-	}
-	if !validator.IsValidPeerID(cfg.OthenticBootstrapID) {
-		cfg.OthenticBootstrapID = "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"
-	}
-	if validator.IsEmpty(cfg.IpfsHost) {
-		cfg.IpfsHost = "aquamarine-urgent-limpet-846.mypinata.cloud"
-	}
-	// if validator.IsEmpty(cfg.PinataApiKey) {
-	// 	cfg.PinataApiKey = "9f5922013fb9e2dfbc13"
-	// }
-	// if validator.IsEmpty(cfg.PinataSecretApiKey) {
-	// 	cfg.PinataSecretApiKey = "190e9f1c959861bce0aed5a0e6c74a45a225658f7fa4fdc70f3fe136b76587fb"
-	// }
 	return nil
 }
 
 func GetEthRPCUrl() string {
-	return cfg.EthRPCUrl
+	return cfg.ethRPCUrl
 }
 
 func GetBaseRPCUrl() string {
-	return cfg.BaseRPCUrl
+	return cfg.baseRPCUrl
 }
 
 func GetAlchemyAPIKey() string {
-	return cfg.AlchemyAPIKey
+	return cfg.alchemyAPIKey
 }
 
 func GetEtherscanAPIKey() string {
-	return cfg.EtherscanAPIKey
+	return cfg.etherscanAPIKey
 }
 
 func GetPrivateKeyConsensus() string {
-	return cfg.PrivateKeyConsensus
+	return cfg.privateKeyConsensus
 }
 
 func GetPrivateKeyController() string {
-	return cfg.PrivateKeyController
+	return cfg.privateKeyController
 }
 
 func GetKeeperAddress() string {
-	return cfg.KeeperAddress
+	return cfg.keeperAddress
 }
 
 func GetConsensusAddress() string {
-	return cfg.ConsensusAddress
+	return cfg.consensusAddress
 }
 
 func GetPublicIPV4Address() string {
-	return cfg.PublicIPV4Address
+	return cfg.publicIPV4Address
 }
 
 func GetPeerID() string {
-	return cfg.PeerID
+	return cfg.peerID
 }
 
 func GetOperatorRPCPort() string {
-	return cfg.OperatorRPCPort
+	return cfg.keeperRPCPort
 }
 
 func IsDevMode() bool {
-	return cfg.DevMode
+	return cfg.devMode
 }
 
 func GetKeeperRPCPort() string {
-	return cfg.KeeperRPCPort
+	return cfg.keeperRPCPort
 }
 
-func GetAggregatorRPCAddress() string {
-	return cfg.AggregatorRPCAddress
+func GetAggregatorRPCUrl() string {
+	return cfg.aggregatorRPCUrl
 }
 
-func GetHealthRPCAddress() string {
-	return cfg.HealthRPCAddress
+func GetHealthRPCUrl() string {
+	return cfg.healthRPCUrl
 }
 
 func GetAvsGovernanceAddress() string {
-	return cfg.AVSGovernanceAddress
+	return cfg.avsGovernanceAddress
 }
 
 func GetAttestationCenterAddress() string {
-	return cfg.AttestationCenterAddress
+	return cfg.attestationCenterAddress
 }
 
 func GetIpfsHost() string {
-	return cfg.IpfsHost
+	return cfg.ipfsHost
 }
 
 func GetPinataApiKey() string {
-	return cfg.PinataApiKey
+	return cfg.pinataApiKey
 }
 
 func GetVersion() string {
