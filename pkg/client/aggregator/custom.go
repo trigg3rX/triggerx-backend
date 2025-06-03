@@ -9,41 +9,47 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// CustomTaskData represents the data for a custom task
+type CustomTaskData struct {
+	JobData       *types.HandleCreateJobData `json:"jobData"`
+	TriggerData   *types.TriggerData         `json:"triggerData"`
+	PerformerData types.GetPerformerData     `json:"performerData"`
+}
+
 // SendTaskToPerformer sends a task to the specified performer through the aggregator
-func (c *AggregatorClient) SendTaskToPerformer(jobData *types.HandleCreateJobData, triggerData *types.TriggerData, performerData types.GetPerformerData) (bool, error) {
+func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, jobData *types.HandleCreateJobData, triggerData *types.TriggerData, performerData types.GetPerformerData) (bool, error) {
 	c.logger.Debug("Sending task to performer",
 		"performerID", performerData.KeeperID,
 		"jobID", jobData.JobID)
 
 	// Pack task data
-	data := map[string]interface{}{
-		"jobData":       jobData,
-		"triggerData":   triggerData,
-		"performerData": performerData,
+	taskData := &CustomTaskData{
+		JobData:       jobData,
+		TriggerData:   triggerData,
+		PerformerData: performerData,
 	}
 
-	jsonData, err := json.Marshal(data)
+	jsonData, err := json.Marshal(taskData)
 	if err != nil {
 		c.logger.Error("Failed to marshal task data", "error", err)
 		return false, fmt.Errorf("%w: %v", ErrMarshalFailed, err)
 	}
 
-	// Prepare ABI arguments
-	arguments := abi.Arguments{
+	// Prepare ABI arguments for additional encoding if needed
+	abiArguments := abi.Arguments{
 		{Type: abi.Type{T: abi.StringTy}},
 		{Type: abi.Type{T: abi.BytesTy}},
 		{Type: abi.Type{T: abi.AddressTy}},
 		{Type: abi.Type{T: abi.UintTy}},
 	}
 
-	performerAddress := c.getPerformerAddress()
+	performerAddress := performerData.KeeperAddress
 
-	dataPacked, err := arguments.Pack(
+	abiPackedData, err := abiArguments.Pack(
 		"proofOfTask",
 		jsonData,
 		common.HexToAddress(performerAddress),
@@ -54,7 +60,7 @@ func (c *AggregatorClient) SendTaskToPerformer(jobData *types.HandleCreateJobDat
 		return false, fmt.Errorf("%w: failed to encode data: %v", ErrMarshalFailed, err)
 	}
 
-	signature, err := c.signMessage(dataPacked)
+	signature, err := c.signMessage(abiPackedData)
 	if err != nil {
 		c.logger.Error("Failed to sign task data", "error", err)
 		return false, err
@@ -62,31 +68,26 @@ func (c *AggregatorClient) SendTaskToPerformer(jobData *types.HandleCreateJobDat
 
 	c.logger.Debug("Task data signed successfully", "signature", signature)
 
-	// Connect to RPC
-	client, err := rpc.Dial(c.config.AggregatorRPCAddress)
-	if err != nil {
-		c.logger.Error("Failed to connect to RPC", "error", err)
-		return false, fmt.Errorf("%w: failed to dial: %v", ErrRPCFailed, err)
+	// Prepare parameters using the same structure as task.go
+	params := struct {
+		ProofOfTask      string `json:"proofOfTask"`
+		Data             string `json:"data"`
+		TaskDefinitionID int    `json:"taskDefinitionId"`
+		PerformerAddress string `json:"performerAddress"`
+		Signature        string `json:"signature"`
+	}{
+		ProofOfTask:      "proofOfTask",
+		Data:             "0x" + hex.EncodeToString(jsonData),
+		TaskDefinitionID: 0,
+		PerformerAddress: performerAddress,
+		Signature:        signature,
 	}
-	defer client.Close()
-
-	// Prepare and send RPC request
-	params := taskParams{
-		proofOfTask:      "proofOfTask",
-		data:             "0x" + hex.EncodeToString(jsonData),
-		taskDefinitionID: 0,
-		performerAddress: performerAddress,
-		signature:        signature,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.config.RequestTimeout)
-	defer cancel()
 
 	var result interface{}
-	err = client.CallContext(ctx, &result, "sendCustomMessage", params.data, params.taskDefinitionID)
+	err = c.executeWithRetry(ctx, "sendCustomMessage", &result, params)
 	if err != nil {
-		c.logger.Error("RPC request failed", "error", err)
-		return false, fmt.Errorf("%w: %v", ErrRPCFailed, err)
+		c.logger.Error("Failed to send custom task", "error", err)
+		return false, fmt.Errorf("failed to send custom task: %w", err)
 	}
 
 	c.logger.Info("Task sent successfully",
