@@ -126,7 +126,11 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	if err != nil {
 		return fmt.Errorf("failed to send health check request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Warn("failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

@@ -159,7 +159,11 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to create Docker client: %v", err)
 	}
-	defer cli.Close()
+	defer func() {
+		if err := cli.Close(); err != nil {
+			h.logger.Errorf("Error closing Docker client: %v", err)
+		}
+	}()
 
 	for _, ipfsURL := range urlList {
 		ipfsURL = strings.TrimSpace(ipfsURL)
@@ -173,7 +177,11 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 				h.logger.Errorf("Error downloading IPFS file: %v", err)
 				return
 			}
-			defer os.RemoveAll(filepath.Dir(codePath))
+			defer func() {
+				if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+					h.logger.Errorf("Error removing temporary directory: %v", err)
+				}
+			}()
 
 			containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
 			if err != nil {

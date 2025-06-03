@@ -50,14 +50,14 @@ func isRetryableError(err error) bool {
 
 	// Check error message for other retryable conditions
 	errMsg := err.Error()
-	switch {
-	case errMsg == "no connections available":
+	switch errMsg {
+	case "no connections available":
 		return true
-	case errMsg == "connection refused":
+	case "connection refused":
 		return true
-	case errMsg == "connection reset by peer":
+	case "connection reset by peer":
 		return true
-	case errMsg == "i/o timeout":
+	case "i/o timeout":
 		return true
 	}
 
