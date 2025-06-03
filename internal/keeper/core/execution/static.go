@@ -49,7 +49,11 @@ func (e *TaskExecutor) executeActionWithStaticArgs(job *types.HandleCreateJobDat
 	if err != nil {
 		return executionResult, fmt.Errorf("failed to create Docker client: %v", err)
 	}
-	defer cli.Close()
+	defer func() {
+		if err := cli.Close(); err != nil {
+			e.logger.Errorf("Failed to close Docker client: %v", err)
+		}
+	}()
 
 	if job.TaskDefinitionID == 5 && job.ScriptTriggerFunction != "" {
 		// Download and execute the condition script
@@ -58,7 +62,11 @@ func (e *TaskExecutor) executeActionWithStaticArgs(job *types.HandleCreateJobDat
 			e.logger.Errorf("Failed to download condition script: %v", err)
 			return executionResult, fmt.Errorf("failed to download condition script: %v", err)
 		}
-		defer os.RemoveAll(filepath.Dir(codePath))
+		defer func() {
+			if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+				e.logger.Errorf("Failed to remove temporary script directory: %v", err)
+			}
+		}()
 
 		// Create and execute container for condition script
 		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)

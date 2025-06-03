@@ -31,7 +31,11 @@ func (f *FileCache) load() (map[string]fileCacheEntry, error) {
 		}
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 	dec := json.NewDecoder(file)
 	if err := dec.Decode(&m); err != nil {
 		return nil, err
@@ -46,7 +50,11 @@ func (f *FileCache) save(m map[string]fileCacheEntry) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 	enc := json.NewEncoder(file)
 	return enc.Encode(m)
 }

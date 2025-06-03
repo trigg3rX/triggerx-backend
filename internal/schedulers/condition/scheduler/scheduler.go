@@ -988,7 +988,9 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		metrics.ValueSourceErrors.Inc()
 		return 0, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		metrics.ValueSourceErrors.Inc()

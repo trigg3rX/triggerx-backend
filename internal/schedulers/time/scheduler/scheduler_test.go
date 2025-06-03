@@ -428,9 +428,9 @@ func (s *TimeBasedScheduler) testExecuteJob(job *types.TimeJobData, mockDB *fake
 	}
 
 	// Cache the updated job data
-	if s.cache != nil {
-		// cacheJobData implementation would go here
-	}
+	// if s.cache != nil {
+	// 	// cacheJobData implementation would go here
+	// }
 
 	duration := time.Since(startTime)
 	s.logger.Infof("Completed job %d in %v, next execution at %v",

@@ -103,7 +103,11 @@ func (h *Handler) sendDataToScheduler(apiURL string, data interface{}, scheduler
 	if err != nil {
 		return false, fmt.Errorf("error sending data to %s: %v", schedulerName, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			h.logger.Warnf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -159,7 +163,11 @@ func (h *Handler) sendPauseToScheduler(apiURL string, schedulerName string) (boo
 	if err != nil {
 		return false, fmt.Errorf("error sending DELETE to %s: %v", schedulerName, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			h.logger.Warnf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

@@ -105,7 +105,11 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 			if err != nil {
 				return nil, fmt.Errorf("error reading request body: %v", err)
 			}
-			req.Body.Close()
+			defer func() {
+				if err := req.Body.Close(); err != nil {
+					c.logger.Warnf("Failed to close request body: %v", err)
+				}
+			}()
 			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			reqClone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
@@ -139,7 +143,11 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 
 		// Read and close the response body
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Warnf("Failed to close response body: %v", err)
+			}
+		}()
 		lastResp = resp
 		lastErr = fmt.Errorf("received retryable status code: %d, body: %s", resp.StatusCode, string(body))
 

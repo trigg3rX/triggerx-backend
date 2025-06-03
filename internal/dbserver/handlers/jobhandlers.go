@@ -39,13 +39,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	h.logger.Infof("[CreateJobData] existingUserID: %d", existingUserID)
 
-	if err == gocql.ErrNotFound {		
+	if err == gocql.ErrNotFound {
 		var newUser types.CreateUserDataRequest
 		newUser.UserAddress = strings.ToLower(tempJobs[0].UserAddress)
 		newUser.EtherBalance = tempJobs[0].EtherBalance
 		newUser.TokenBalance = tempJobs[0].TokenBalance
 		newUser.UserPoints = 0.0
-		
+
 		existingUser, err = h.userRepository.CreateNewUser(&newUser)
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
@@ -99,27 +99,27 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		createdJobs.JobIDs[i] = jobID
 
-		switch {
-		case tempJobs[i].TaskDefinitionID == 1 || tempJobs[i].TaskDefinitionID == 2:
+		switch tempJobs[i].TaskDefinitionID {
+		case 1, 2:
 			// Time-based job
 			timeJobData := types.TimeJobData{
-				JobID: jobID,
-				TimeFrame: tempJobs[i].TimeFrame,
-				Recurring: tempJobs[i].Recurring,
-				TimeInterval: tempJobs[i].TimeInterval,
-				ScheduleType: tempJobs[i].ScheduleType,
-				CronExpression: tempJobs[i].CronExpression,
-				SpecificSchedule: tempJobs[i].SpecificSchedule,
-				NextExecutionTimestamp: time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second),
-				TargetChainID: tempJobs[i].TargetChainID,
-				TargetContractAddress: tempJobs[i].TargetContractAddress,
-				TargetFunction: tempJobs[i].TargetFunction,
-				ABI: tempJobs[i].ABI,
-				ArgType: tempJobs[i].ArgType,
-				Arguments: tempJobs[i].Arguments,
+				JobID:                     jobID,
+				TimeFrame:                 tempJobs[i].TimeFrame,
+				Recurring:                 tempJobs[i].Recurring,
+				TimeInterval:              tempJobs[i].TimeInterval,
+				ScheduleType:              tempJobs[i].ScheduleType,
+				CronExpression:            tempJobs[i].CronExpression,
+				SpecificSchedule:          tempJobs[i].SpecificSchedule,
+				NextExecutionTimestamp:    time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second),
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
-				IsCompleted: false,
-				IsActive: true,
+				IsCompleted:               false,
+				IsActive:                  true,
 			}
 
 			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
@@ -129,25 +129,25 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 			h.logger.Infof("[CreateJobData] Successfully created time-based job %d with interval %d seconds",
 				jobID, timeJobData.TimeInterval)
-		
-		case tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4:
+
+		case 3, 4:
 			// Event-based job
 			eventJobData := types.EventJobData{
-				JobID: jobID,
-				TimeFrame: tempJobs[i].TimeFrame,
-				Recurring: tempJobs[i].Recurring,
-				TriggerChainID: tempJobs[i].TriggerChainID,
-				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
-				TriggerEvent: tempJobs[i].TriggerEvent,
-				TargetChainID: tempJobs[i].TargetChainID,
-				TargetContractAddress: tempJobs[i].TargetContractAddress,
-				TargetFunction: tempJobs[i].TargetFunction,
-				ABI: tempJobs[i].ABI,
-				ArgType: tempJobs[i].ArgType,
-				Arguments: tempJobs[i].Arguments,
+				JobID:                     jobID,
+				TimeFrame:                 tempJobs[i].TimeFrame,
+				Recurring:                 tempJobs[i].Recurring,
+				TriggerChainID:            tempJobs[i].TriggerChainID,
+				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
+				TriggerEvent:              tempJobs[i].TriggerEvent,
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
-				IsCompleted: false,
-				IsActive: true,
+				IsCompleted:               false,
+				IsActive:                  true,
 			}
 
 			if err := h.eventJobRepository.CreateEventJob(&eventJobData); err != nil {
@@ -158,27 +158,27 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			h.notifyEventScheduler(jobID, eventJobData)
 			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
 				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
-		
-		case tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6:
+
+		case 5, 6:
 			// Condition-based job
 			conditionJobData := types.ConditionJobData{
-				JobID: jobID,
-				TimeFrame: tempJobs[i].TimeFrame,
-				Recurring: tempJobs[i].Recurring,
-				ConditionType: tempJobs[i].ConditionType,
-				UpperLimit: tempJobs[i].UpperLimit,
-				LowerLimit: tempJobs[i].LowerLimit,
-				ValueSourceType: tempJobs[i].ValueSourceType,
-				ValueSourceUrl: tempJobs[i].ValueSourceUrl,
-				TargetChainID: tempJobs[i].TargetChainID,
-				TargetContractAddress: tempJobs[i].TargetContractAddress,
-				TargetFunction: tempJobs[i].TargetFunction,
-				ABI: tempJobs[i].ABI,
-				ArgType: tempJobs[i].ArgType,
-				Arguments: tempJobs[i].Arguments,
+				JobID:                     jobID,
+				TimeFrame:                 tempJobs[i].TimeFrame,
+				Recurring:                 tempJobs[i].Recurring,
+				ConditionType:             tempJobs[i].ConditionType,
+				UpperLimit:                tempJobs[i].UpperLimit,
+				LowerLimit:                tempJobs[i].LowerLimit,
+				ValueSourceType:           tempJobs[i].ValueSourceType,
+				ValueSourceUrl:            tempJobs[i].ValueSourceUrl,
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
-				IsCompleted: false,
-				IsActive: true,
+				IsCompleted:               false,
+				IsActive:                  true,
 			}
 
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
@@ -362,8 +362,8 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		jobResponse := types.JobResponse{JobData: *jobData}
 
 		// Check task_definition_id to determine job type
-		switch {
-		case jobData.TaskDefinitionID == 1 || jobData.TaskDefinitionID == 2:
+		switch jobData.TaskDefinitionID {
+		case 1, 2:
 			// Time-based job
 			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
 			if err != nil {
@@ -372,7 +372,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			}
 			jobResponse.TimeJobData = &timeJobData
 
-		case jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4:
+		case 3, 4:
 			// Event-based job
 			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
 			if err != nil {
@@ -381,7 +381,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			}
 			jobResponse.EventJobData = &eventJobData
 
-		case jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6:
+		case 5, 6:
 			// Condition-based job
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
 			if err != nil {
@@ -460,12 +460,12 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 
 // notifySchedulerForJobDeletion notifies the appropriate scheduler about job deletion
 func (h *Handler) notifySchedulerForJobDeletion(jobIDStr string, taskDefinitionID int) {
-	switch {
-	case taskDefinitionID == 1 || taskDefinitionID == 2:
+	switch taskDefinitionID {
+	case 1, 2:
 		// Time-based jobs - no notification needed, time scheduler polls the database
 		h.logger.Infof("[NotifySchedulerDeletion] Time-based job %s deleted, no notification needed (polling-based)", jobIDStr)
 
-	case taskDefinitionID == 3 || taskDefinitionID == 4:
+	case 3, 4:
 		// Event-based jobs - notify event scheduler
 		success, err := h.SendPauseToEventScheduler(fmt.Sprintf("/api/v1/job/%s", jobIDStr))
 		if err != nil {
@@ -474,7 +474,7 @@ func (h *Handler) notifySchedulerForJobDeletion(jobIDStr string, taskDefinitionI
 			h.logger.Infof("[NotifySchedulerDeletion] Successfully notified event scheduler about job %s deletion", jobIDStr)
 		}
 
-	case taskDefinitionID == 5 || taskDefinitionID == 6:
+	case 5, 6:
 		// Condition-based jobs - notify condition scheduler
 		success, err := h.SendPauseToConditionScheduler(fmt.Sprintf("/api/v1/job/%s", jobIDStr))
 		if err != nil {
