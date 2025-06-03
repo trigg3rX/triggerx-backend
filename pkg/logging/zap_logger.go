@@ -61,7 +61,9 @@ func (z *ZapLogger) initLogger() error {
 	// Get file info for size tracking
 	fileInfo, err := logFile.Stat()
 	if err != nil {
-		logFile.Close()
+		if err := logFile.Close(); err != nil {
+			return fmt.Errorf("failed to close log file: %w", err)
+		}
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
 	z.fileSize = fileInfo.Size()
@@ -176,7 +178,11 @@ func (z *ZapLogger) compressLogFile(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open log file for compression: %w", err)
 	}
-	defer logFile.Close()
+	defer func() {
+		if err := logFile.Close(); err != nil {
+			fmt.Printf("failed to close log file: %v\n", err)
+		}
+	}()
 
 	// Create the gzip file
 	gzipPath := filePath + ".gz"
@@ -184,11 +190,19 @@ func (z *ZapLogger) compressLogFile(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create gzip file: %w", err)
 	}
-	defer gzipFile.Close()
+	defer func() {
+		if err := gzipFile.Close(); err != nil {
+			fmt.Printf("failed to close gzip file: %v\n", err)
+		}
+	}()
 
 	// Create gzip writer
 	gzipWriter := gzip.NewWriter(gzipFile)
-	defer gzipWriter.Close()
+	defer func() {
+		if err := gzipWriter.Close(); err != nil {
+			fmt.Printf("failed to close gzip writer: %v\n", err)
+		}
+	}()
 
 	// Copy the contents
 	if _, err := io.Copy(gzipWriter, logFile); err != nil {

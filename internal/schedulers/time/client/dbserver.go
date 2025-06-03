@@ -164,7 +164,9 @@ func (c *DBServerClient) doRequest(method, url string, payload interface{}, resu
 	if err != nil {
 		return fmt.Errorf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
@@ -221,7 +223,9 @@ func (c *DBServerClient) HealthCheck() error {
 	if err != nil {
 		return fmt.Errorf("health check request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check failed: status code %d", resp.StatusCode)

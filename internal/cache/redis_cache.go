@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redis "github.com/redis/go-redis/v9"
 	redisclient "github.com/trigg3rX/triggerx-backend/internal/redis"
 )
 

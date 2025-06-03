@@ -61,7 +61,11 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		if err := os.Remove(tempFile.Name()); err != nil {
+			v.logger.Warnf("Failed to remove temporary file %s: %v", tempFile.Name(), err)
+		}
+	}()
 
 	if _, err := tempFile.Write([]byte(scriptContent)); err != nil {
 		return false, fmt.Errorf("failed to write script to file: %v", err)
@@ -75,7 +79,11 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	if err != nil {
 		return false, fmt.Errorf("failed to create temporary build directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			v.logger.Warnf("Failed to remove temporary directory %s: %v", tempDir, err)
+		}
+	}()
 
 	// Compile the script
 	v.logger.Infof("Compiling condition script for job %d", job.JobID)

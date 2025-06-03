@@ -42,7 +42,11 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(job *types.HandleCreateJobDa
 	if err != nil {
 		return executionResult, fmt.Errorf("failed to create Docker client: %v", err)
 	}
-	defer cli.Close()
+	defer func() {
+		if err := cli.Close(); err != nil {
+			e.logger.Errorf("Failed to close Docker client: %v", err)
+		}
+	}()
 
 	// Step 1: Check if we need to evaluate a condition from the script
 	if job.TaskDefinitionID == 6 && job.ScriptTriggerFunction != "" {
@@ -52,8 +56,11 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(job *types.HandleCreateJobDa
 			e.logger.Errorf("Failed to download condition script: %v", err)
 			return executionResult, fmt.Errorf("failed to download condition script: %v", err)
 		}
-		defer os.RemoveAll(filepath.Dir(codePath))
-
+		defer func() {
+			if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+				e.logger.Errorf("Failed to remove code directory: %v", err)
+			}
+		}()
 		// Create and execute container for condition script
 		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
 		if err != nil {
@@ -108,7 +115,11 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(job *types.HandleCreateJobDa
 		if err != nil {
 			return executionResult, fmt.Errorf("failed to download script: %v", err)
 		}
-		defer os.RemoveAll(filepath.Dir(codePath))
+		defer func() {
+			if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+				e.logger.Errorf("Failed to remove code directory: %v", err)
+			}
+		}()
 
 		// Create and execute container for script
 		containerID, err := resources.CreateDockerContainer(context.Background(), cli, codePath)
