@@ -78,9 +78,6 @@ func validateConfig() error {
 	if env.IsEmpty(cfg.upstashToken) {
 		return fmt.Errorf("invalid upstash token: %s", cfg.upstashToken)
 	}
-	if env.IsEmpty(cfg.localPassword) {
-		return fmt.Errorf("invalid local password: %s", cfg.localPassword)
-	}
 	return nil
 }
 
