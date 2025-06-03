@@ -20,7 +20,7 @@ type UserRepository interface {
 	GetUserDataByAddress(address string) (int64, types.UserData, error)
 	GetUserPointsByID(id int64) (float64, error)
 	GetUserPointsByAddress(address string) (float64, error)
-	GetUserJobIDsByAddress(address string) ([]int64, error)
+	GetUserJobIDsByAddress(address string) (int64, []int64, error)
 	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
 	GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error)
 }
@@ -131,16 +131,17 @@ func (r *userRepository) GetUserPointsByAddress(address string) (float64, error)
 	return userPoints, nil
 }
 
-func (r *userRepository) GetUserJobIDsByAddress(address string) ([]int64, error) {
+func (r *userRepository) GetUserJobIDsByAddress(address string) (int64, []int64, error) {
+	var userID int64
 	var jobIDs []int64
-	err := r.db.Session().Query(queries.GetUserJobIDsByAddressQuery, address).Scan(&jobIDs)
+	err := r.db.Session().Query(queries.GetUserJobIDsByAddressQuery, address).Scan(&userID, &jobIDs)
 	if err == gocql.ErrNotFound {
-		return nil, errors.New("user address not found")
+		return -1, nil, errors.New("user address not found")
 	}
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
-	return jobIDs, nil
+	return userID, jobIDs, nil
 }
 
 func (r *userRepository) GetUserLeaderboard() ([]types.UserLeaderboardEntry, error) {
