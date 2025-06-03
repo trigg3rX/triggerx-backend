@@ -13,10 +13,6 @@ import (
 type Config struct {
 	devMode bool
 
-	// ScyllaDB Host and Port for Job Polling
-	databaseHostAddress string
-	databaseHostPort    string
-
 	// Scheduler RPC Port
 	schedulerRPCPort string
 
@@ -43,9 +39,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:             env.GetEnvBool("DEV_MODE", false),
-		databaseHostAddress: env.GetEnv("DATABASE_HOST", "localhost"),
-		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		schedulerRPCPort:    env.GetEnv("SCHEDULER_RPC_PORT", "9004"),
+		schedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
 		dbServerURL:         env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
 		schedulerPrivateKey: env.GetEnv("SCHEDULER_PRIVATE_KEY", ""),
 		schedulerAddress:    env.GetEnv("SCHEDULER_ADDRESS", ""),
@@ -74,14 +68,6 @@ func validateConfig() error {
 
 func IsDevMode() bool {
 	return cfg.devMode
-}
-
-func GetDatabaseHostAddress() string {
-	return cfg.databaseHostAddress
-}
-
-func GetDatabaseHostPort() string {
-	return cfg.databaseHostPort
 }
 
 func GetSchedulerRPCPort() string {

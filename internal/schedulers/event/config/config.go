@@ -12,10 +12,6 @@ import (
 type Config struct {
 	devMode bool
 
-	// ScyllaDB Host and Port
-	databaseHost     string
-	databaseHostPort string
-
 	// Scheduler RPC Port
 	schedulerRPCPort string
 
@@ -44,9 +40,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:             env.GetEnvBool("DEV_MODE", false),
-		databaseHost:        env.GetEnv("DATABASE_HOST", "localhost"),
-		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		schedulerRPCPort:    env.GetEnv("SCHEDULER_RPC_PORT", "9005"),
+		schedulerRPCPort:    env.GetEnv("EVENT_SCHEDULER_RPC_PORT", "9005"),
 		dbServerURL:         env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
 		maxWorkers:          env.GetEnvInt("MAX_WORKERS", 100),
 		alchemyAPIKey:       env.GetEnv("ALCHEMY_API_KEY", ""),
@@ -78,14 +72,6 @@ func validateConfig() error {
 
 func IsDevMode() bool {
 	return cfg.devMode
-}
-
-func GetDatabaseHost() string {
-	return cfg.databaseHost
-}
-
-func GetDatabaseHostPort() string {
-	return cfg.databaseHostPort
 }
 
 func GetSchedulerRPCPort() string {
