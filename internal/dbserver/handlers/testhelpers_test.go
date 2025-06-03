@@ -1,6 +1,8 @@
 package handlers
 
-import "github.com/trigg3rX/triggerx-backend/pkg/logging"
+import (
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+)
 
 type MockLogger struct{}
 
