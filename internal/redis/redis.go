@@ -8,44 +8,37 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Client represents a Redis client with logging capabilities
 type Client struct {
-	client *redis.Client
-	logger logging.Logger
+	redisClient *redis.Client
+	aggClient   *aggregator.AggregatorClient
+	logger      logging.Logger
 }
 
 var (
-	// Legacy singleton client for backward compatibility
-	legacyClient *redis.Client
-	once         sync.Once
-
-	// New structured client instance
-	globalClient *Client
-	clientOnce   sync.Once
+	redisClient *redis.Client
+	aggClient   *aggregator.AggregatorClient
+	once        sync.Once
 )
 
-// GetClient returns a singleton Redis client (legacy function for backward compatibility)
-func GetClient() *redis.Client {
+// GetRedisClient returns a singleton Redis client
+func GetRedisClient() *redis.Client {
 	once.Do(func() {
-		if !config.IsRedisAvailable() {
-			legacyClient = nil
-			return
-		}
-
-		legacyClient = redis.NewClient(&redis.Options{
+		redisClient = redis.NewClient(&redis.Options{
 			Addr:     config.GetRedisAddr(),
 			Password: config.GetRedisPassword(),
 			DB:       config.GetRedisDB(),
 		})
 	})
-	return legacyClient
+	return redisClient
 }
 
 // NewClient creates a new Redis client instance with enhanced features
-func NewClient(logger logging.Logger) (*Client, error) {
+func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if !config.IsRedisAvailable() {
 		return nil, fmt.Errorf("redis is not configured. Please set UPSTASH_REDIS_URL or enable local Redis with REDIS_LOCAL_ENABLED=true")
 	}
@@ -55,10 +48,26 @@ func NewClient(logger logging.Logger) (*Client, error) {
 		return nil, err
 	}
 
+	aggClient, err := aggregator.NewAggregatorClient(
+		logger,
+		aggregator.AggregatorClientConfig{
+			AggregatorRPCUrl: config.GetAggregatorRPCURL(),
+			SenderPrivateKey: config.GetDispatcherPrivateKey(),
+			SenderAddress:    config.GetDispatcherAddress(),
+			RetryAttempts:    3,
+			RetryDelay:       1 * time.Second,
+			RequestTimeout:   10 * time.Second,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	client := redis.NewClient(opt)
 
 	redisClient := &Client{
-		client: client,
+		redisClient: client,
+		aggClient: aggClient,
 		logger: logger,
 	}
 
@@ -68,19 +77,6 @@ func NewClient(logger logging.Logger) (*Client, error) {
 
 	logger.Infof("Connected to Redis (%s)", config.GetRedisType())
 	return redisClient, nil
-}
-
-// GetGlobalClient returns a singleton Redis client with enhanced features
-func GetGlobalClient(logger logging.Logger) *Client {
-	clientOnce.Do(func() {
-		client, err := NewClient(logger)
-		if err != nil {
-			logger.Errorf("Failed to initialize global Redis client: %v", err)
-			return
-		}
-		globalClient = client
-	})
-	return globalClient
 }
 
 // parseRedisConfigFromSettings determines Redis configuration from config settings
@@ -133,7 +129,7 @@ func (c *Client) CheckConnection() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := c.client.Ping(ctx).Result()
+	_, err := c.redisClient.Ping(ctx).Result()
 	if err != nil {
 		c.logger.Errorf("Failed to connect to Redis (%s): %v", config.GetRedisType(), err)
 		return fmt.Errorf("failed to connect to Redis: %w", err)
@@ -143,23 +139,11 @@ func (c *Client) CheckConnection() error {
 	return nil
 }
 
-// Ping checks if Redis is reachable (legacy function for backward compatibility)
-func Ping() error {
-	client := GetClient()
-	if client == nil {
-		return fmt.Errorf("redis is not configured")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	return client.Ping(ctx).Err()
-}
-
 // Ping checks if Redis is reachable (instance method)
 func (c *Client) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return c.client.Ping(ctx).Err()
+	return c.redisClient.Ping(ctx).Err()
 }
 
 // IsAvailable checks if Redis is configured and available
@@ -181,7 +165,7 @@ func GetRedisInfo() map[string]interface{} {
 
 // Enhanced Redis operations with context support
 func (c *Client) Get(ctx context.Context, key string) (string, error) {
-	val, err := c.client.Get(ctx, key).Result()
+	val, err := c.redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return "", nil
 	} else if err != nil {
@@ -191,59 +175,59 @@ func (c *Client) Get(ctx context.Context, key string) (string, error) {
 }
 
 func (c *Client) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	return c.client.Set(ctx, key, value, expiration).Err()
+	return c.redisClient.Set(ctx, key, value, expiration).Err()
 }
 
 // SetNX sets key to hold string value if key does not exist (atomic operation)
 func (c *Client) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
-	return c.client.SetNX(ctx, key, value, expiration).Result()
+	return c.redisClient.SetNX(ctx, key, value, expiration).Result()
 }
 
 func (c *Client) Del(ctx context.Context, keys ...string) error {
-	return c.client.Del(ctx, keys...).Err()
+	return c.redisClient.Del(ctx, keys...).Err()
 }
 
 func (c *Client) Incr(ctx context.Context, key string) (int64, error) {
-	return c.client.Incr(ctx, key).Result()
+	return c.redisClient.Incr(ctx, key).Result()
 }
 
 func (c *Client) Expire(ctx context.Context, key string, expiration time.Duration) error {
-	return c.client.Expire(ctx, key, expiration).Err()
+	return c.redisClient.Expire(ctx, key, expiration).Err()
 }
 
 func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
-	return c.client.TTL(ctx, key).Result()
+	return c.redisClient.TTL(ctx, key).Result()
 }
 
 func (c *Client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
-	return c.client.Eval(ctx, script, keys, args...).Result()
+	return c.redisClient.Eval(ctx, script, keys, args...).Result()
 }
 
 func (c *Client) EvalScript(ctx context.Context, script string, keys []string, args []interface{}) (interface{}, error) {
-	return c.client.Eval(ctx, script, keys, args...).Result()
+	return c.redisClient.Eval(ctx, script, keys, args...).Result()
 }
 
 // Info returns Redis server information
 func (c *Client) Info(ctx context.Context, section string) (string, error) {
-	return c.client.Info(ctx, section).Result()
+	return c.redisClient.Info(ctx, section).Result()
 }
 
 // XAdd adds an entry to a Redis stream
 func (c *Client) XAdd(ctx context.Context, args *redis.XAddArgs) (string, error) {
-	return c.client.XAdd(ctx, args).Result()
+	return c.redisClient.XAdd(ctx, args).Result()
 }
 
 // XLen returns the length of a Redis stream
 func (c *Client) XLen(ctx context.Context, stream string) (int64, error) {
-	return c.client.XLen(ctx, stream).Result()
+	return c.redisClient.XLen(ctx, stream).Result()
 }
 
 // Client returns the underlying Redis client
 func (c *Client) Client() *redis.Client {
-	return c.client
+	return c.redisClient
 }
 
 // Close closes the Redis connection
 func (c *Client) Close() error {
-	return c.client.Close()
+	return c.redisClient.Close()
 }

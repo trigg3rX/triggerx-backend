@@ -54,7 +54,7 @@ func main() {
 	}()
 
 	// Ping Redis
-	if err := redisx.Ping(); err != nil {
+	if err := redisx.GetRedisClient().Ping(context.Background()).Err(); err != nil {
 		logger.Errorf("Redis is not reachable: %v", err)
 		fmt.Fprintf(os.Stderr, "Redis is not reachable: %v\n", err)
 		os.Exit(1)
@@ -64,7 +64,7 @@ func main() {
 	// Log Redis persistence config
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	info, err := redisx.GetClient().Info(ctx, "persistence").Result()
+	info, err := redisx.GetRedisClient().Info(ctx, "persistence").Result()
 	if err != nil {
 		logger.Warnf("Failed to fetch Redis persistence info: %v", err)
 	} else {

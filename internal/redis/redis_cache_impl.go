@@ -1,23 +1,24 @@
-package cache
+package redis
 
 import (
 	"context"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	redisclient "github.com/trigg3rX/triggerx-backend/internal/redis"
 )
 
+// RedisCache implements the Cache interface using Redis as the backend
 type RedisCache struct {
-	client *redisclient.Client
+	client *Client
 }
 
+// Get retrieves a value from Redis cache
 func (r *RedisCache) Get(key string) (string, error) {
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		val, err := redisclient.GetClient().Get(ctx, key).Result()
+		val, err := GetRedisClient().Get(ctx, key).Result()
 		if err == redis.Nil {
 			return "", nil
 		}
@@ -29,12 +30,13 @@ func (r *RedisCache) Get(key string) (string, error) {
 	return r.client.Get(ctx, key)
 }
 
+// Set stores a value in Redis cache with TTL
 func (r *RedisCache) Set(key string, value string, ttl time.Duration) error {
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return redisclient.GetClient().Set(ctx, key, value, ttl).Err()
+		return GetRedisClient().Set(ctx, key, value, ttl).Err()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -42,12 +44,13 @@ func (r *RedisCache) Set(key string, value string, ttl time.Duration) error {
 	return r.client.Set(ctx, key, value, ttl)
 }
 
+// Delete removes a key from Redis cache
 func (r *RedisCache) Delete(key string) error {
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return redisclient.GetClient().Del(ctx, key).Err()
+		return GetRedisClient().Del(ctx, key).Err()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -55,6 +58,7 @@ func (r *RedisCache) Delete(key string) error {
 	return r.client.Del(ctx, key)
 }
 
+// AcquirePerformerLock acquires a distributed lock for a performer using Redis SetNX
 func (r *RedisCache) AcquirePerformerLock(performerID string, ttl time.Duration) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -62,7 +66,7 @@ func (r *RedisCache) AcquirePerformerLock(performerID string, ttl time.Duration)
 
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
-		res, err := redisclient.GetClient().SetNX(ctx, key, "1", ttl).Result()
+		res, err := GetRedisClient().SetNX(ctx, key, "1", ttl).Result()
 		return res, err
 	}
 
@@ -70,6 +74,7 @@ func (r *RedisCache) AcquirePerformerLock(performerID string, ttl time.Duration)
 	return r.client.SetNX(ctx, key, "1", ttl)
 }
 
+// ReleasePerformerLock releases a performer lock by deleting the key
 func (r *RedisCache) ReleasePerformerLock(performerID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -77,7 +82,7 @@ func (r *RedisCache) ReleasePerformerLock(performerID string) error {
 
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
-		return redisclient.GetClient().Del(ctx, key).Err()
+		return GetRedisClient().Del(ctx, key).Err()
 	}
 
 	return r.client.Del(ctx, key)

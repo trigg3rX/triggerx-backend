@@ -12,6 +12,14 @@ import (
 )
 
 const (
+	// Core Job Lifecycle Streams
+	JobsRunningStream   = "jobs:running"   // Currently executing jobs (scheduler tracking)
+	JobsReadyStream     = "jobs:ready"     // Triggered jobs ready for aggregator dispatch
+	JobsRetryStream     = "jobs:retry"     // Failed dispatches needing retry
+	JobsCompletedStream = "jobs:completed" // Successfully completed jobs
+	JobsFailedStream    = "jobs:failed"    // Permanently failed jobs (dead letter queue)
+
+	// Trigger-Specific Ready Streams (existing - keep for granular control)
 	JobsReadyTimeStream      = "jobs:ready:time"
 	JobsRetryTimeStream      = "jobs:retry:time"
 	JobsReadyEventStream     = "jobs:ready:event"
@@ -29,7 +37,7 @@ func AddJobToStream(stream string, job interface{}) error {
 		return nil
 	}
 
-	client := GetClient()
+	client := GetRedisClient()
 	if client == nil {
 		return fmt.Errorf("redis client not initialized")
 	}
@@ -85,7 +93,7 @@ func (c *Client) AddJobToStream(stream string, job interface{}) error {
 		return err
 	}
 
-	res, err := c.client.XAdd(ctx, &redis.XAddArgs{
+	res, err := c.redisClient.XAdd(ctx, &redis.XAddArgs{
 		Stream: stream,
 		MaxLen: int64(config.GetStreamMaxLen()),
 		Approx: true,
@@ -103,13 +111,13 @@ func (c *Client) AddJobToStream(stream string, job interface{}) error {
 	c.logger.Infof("Job added to stream %s with ID %s", stream, res)
 
 	// Set TTL on the stream key (refreshes on each add)
-	expireRes := c.client.Expire(ctx, stream, config.GetStreamTTL())
+	expireRes := c.redisClient.Expire(ctx, stream, config.GetStreamTTL())
 	if expireRes.Err() != nil {
 		c.logger.Warnf("Failed to set TTL on stream %s: %v", stream, expireRes.Err())
 	}
 
 	// Check stream length for overflow
-	lenRes := c.client.XLen(ctx, stream)
+	lenRes := c.redisClient.XLen(ctx, stream)
 	if lenRes.Err() == nil && lenRes.Val() >= int64(config.GetStreamMaxLen()) {
 		c.logger.Warnf("Stream %s reached max length (%d)", stream, config.GetStreamMaxLen())
 	}
@@ -139,9 +147,9 @@ func AddJobToStreamGlobal(stream string, job interface{}) error {
 		defaultLogger = logging.GetServiceLogger()
 	}
 
-	client := GetGlobalClient(defaultLogger)
-	if client == nil {
-		return fmt.Errorf("global Redis client not initialized")
+	client, err := NewRedisClient(defaultLogger)
+	if err != nil {
+		return fmt.Errorf("failed to create Redis client: %w", err)
 	}
 
 	return client.AddJobToStream(stream, job)
@@ -153,7 +161,14 @@ func GetStreamInfo() map[string]interface{} {
 		"available":  config.IsRedisAvailable(),
 		"max_length": config.GetStreamMaxLen(),
 		"ttl":        config.GetStreamTTL().String(),
-		"streams": map[string]string{
+		"lifecycle_streams": map[string]string{
+			"jobs_running":   JobsRunningStream,
+			"jobs_ready":     JobsReadyStream,
+			"jobs_retry":     JobsRetryStream,
+			"jobs_completed": JobsCompletedStream,
+			"jobs_failed":    JobsFailedStream,
+		},
+		"trigger_specific_streams": map[string]string{
 			"jobs_ready_time":      JobsReadyTimeStream,
 			"jobs_retry_time":      JobsRetryTimeStream,
 			"jobs_ready_event":     JobsReadyEventStream,

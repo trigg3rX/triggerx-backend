@@ -33,6 +33,10 @@ type Config struct {
 	writeTimeout time.Duration
 	poolTimeout  time.Duration
 
+	aggregatorRPCURL string
+	dispatcherPrivateKey string
+	dispatcherAddress    string
+
 	// Stream settings
 	streamMaxLen int
 	streamTTL    time.Duration
@@ -59,6 +63,9 @@ func Init() error {
 		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT_SEC", 3*time.Second),
 		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT_SEC", 3*time.Second),
 		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT_SEC", 4*time.Second),
+		aggregatorRPCURL: env.GetEnv("AGGREGATOR_RPC_URL", ""),
+		dispatcherPrivateKey: env.GetEnv("DISPATCHER_PRIVATE_KEY", ""),
+		dispatcherAddress:    env.GetEnv("DISPATCHER_ADDRESS", ""),
 		streamMaxLen:  env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
 		streamTTL:     env.GetEnvDuration("REDIS_STREAM_TTL_HOURS", 24*time.Hour),
 	}
@@ -77,6 +84,15 @@ func validateConfig() error {
 	}
 	if env.IsEmpty(cfg.upstashToken) {
 		return fmt.Errorf("invalid upstash token: %s", cfg.upstashToken)
+	}
+	if !env.IsValidURL(cfg.aggregatorRPCURL) {
+		return fmt.Errorf("invalid aggregator rpc url: %s", cfg.aggregatorRPCURL)
+	}
+	if !env.IsValidEthAddress(cfg.dispatcherAddress) {
+		return fmt.Errorf("invalid dispatcher address: %s", cfg.dispatcherAddress)
+	}
+	if !env.IsValidPrivateKey(cfg.dispatcherPrivateKey) {
+		return fmt.Errorf("invalid dispatcher private key: %s", cfg.dispatcherPrivateKey)
 	}
 	return nil
 }
@@ -161,4 +177,16 @@ func GetWriteTimeout() time.Duration {
 
 func GetPoolTimeout() time.Duration {
 	return cfg.poolTimeout
+}
+
+func GetAggregatorRPCURL() string {
+	return cfg.aggregatorRPCURL
+}
+
+func GetDispatcherPrivateKey() string {
+	return cfg.dispatcherPrivateKey
+}
+
+func GetDispatcherAddress() string {
+	return cfg.dispatcherAddress
 }

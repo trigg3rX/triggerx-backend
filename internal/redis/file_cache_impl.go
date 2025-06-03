@@ -1,4 +1,4 @@
-package cache
+package redis
 
 import (
 	"encoding/json"
@@ -8,11 +8,13 @@ import (
 	"time"
 )
 
+// fileCacheEntry represents a cached entry with expiration
 type fileCacheEntry struct {
 	Value      string `json:"value"`
 	Expiration int64  `json:"expiration"` // unix timestamp
 }
 
+// FileCache implements the Cache interface using file-based storage as fallback
 type FileCache struct{}
 
 var (
@@ -20,6 +22,7 @@ var (
 	fileCacheMu   sync.Mutex
 )
 
+// load reads the cache data from file
 func (f *FileCache) load() (map[string]fileCacheEntry, error) {
 	fileCacheMu.Lock()
 	defer fileCacheMu.Unlock()
@@ -39,6 +42,7 @@ func (f *FileCache) load() (map[string]fileCacheEntry, error) {
 	return m, nil
 }
 
+// save writes the cache data to file
 func (f *FileCache) save(m map[string]fileCacheEntry) error {
 	fileCacheMu.Lock()
 	defer fileCacheMu.Unlock()
@@ -51,6 +55,7 @@ func (f *FileCache) save(m map[string]fileCacheEntry) error {
 	return enc.Encode(m)
 }
 
+// Get retrieves a value from file cache
 func (f *FileCache) Get(key string) (string, error) {
 	m, err := f.load()
 	if err != nil {
@@ -69,6 +74,7 @@ func (f *FileCache) Get(key string) (string, error) {
 	return entry.Value, nil
 }
 
+// Set stores a value in file cache with TTL
 func (f *FileCache) Set(key string, value string, ttl time.Duration) error {
 	m, err := f.load()
 	if err != nil {
@@ -82,6 +88,7 @@ func (f *FileCache) Set(key string, value string, ttl time.Duration) error {
 	return f.save(m)
 }
 
+// Delete removes a key from file cache
 func (f *FileCache) Delete(key string) error {
 	m, err := f.load()
 	if err != nil {
