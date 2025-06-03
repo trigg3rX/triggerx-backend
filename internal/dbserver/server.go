@@ -9,7 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
-	"github.com/trigg3rX/triggerx-backend/internal/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
@@ -71,16 +71,12 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 
 	// Initialize Redis client with enhanced features
 	var redisClient *redis.Client
-	if redis.IsAvailable() {
-		client, err := redis.NewClient(logger)
-		if err != nil {
-			logger.Errorf("Failed to initialize Redis client: %v", err)
-		} else {
-			redisClient = client
-			logger.Infof("Redis client initialized successfully (%s)", redis.GetRedisInfo()["type"])
-		}
+	client, err := redis.NewClient(logger)
+	if err != nil {
+		logger.Errorf("Failed to initialize Redis client: %v", err)
 	} else {
-		logger.Warn("Redis is not configured - rate limiting and caching features will be disabled")
+		redisClient = client
+		logger.Infof("Redis client initialized successfully")
 	}
 
 	// Initialize rate limiter
