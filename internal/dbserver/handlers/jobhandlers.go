@@ -31,7 +31,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	var err error
 
 	existingUserID, existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
-	if err != nil {
+	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user ID: " + err.Error()})
 		return
@@ -53,7 +53,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUserID, tempJobs[0].UserAddress)
+		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUser.UserID, tempJobs[0].UserAddress)
 	}
 
 	createdJobs := types.CreateJobResponse{
