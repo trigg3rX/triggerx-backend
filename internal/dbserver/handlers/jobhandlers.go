@@ -338,7 +338,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		return
 	}
 
-	jobIDs, err := h.userRepository.GetUserJobIDsByAddress(strings.ToLower(userAddress))
+	userID, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(strings.ToLower(userAddress))
 	if err != nil {
 		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user data: " + err.Error()})
@@ -396,6 +396,8 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 		jobs = append(jobs, jobResponse)
 	}
+
+	h.logger.Infof("[GetJobsByUserAddress] Successfully retrieved %d jobs for user %d", len(jobs), userID)
 
 	c.JSON(http.StatusOK, jobs)
 }
