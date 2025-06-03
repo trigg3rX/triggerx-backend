@@ -44,7 +44,13 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 
 func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
-	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(&timeJob)
+	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
+		&timeJob.JobID, &timeJob.TimeFrame, &timeJob.Recurring, &timeJob.NextExecutionTimestamp,
+		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
+		&timeJob.SpecificSchedule, &timeJob.TargetChainID, &timeJob.TargetContractAddress,
+		&timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, &timeJob.Arguments,
+		&timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive,
+	)
 	if err != nil {
 		return types.TimeJobData{}, errors.New("failed to get time job by job ID")
 	}

@@ -84,9 +84,12 @@ func (r *jobRepository) UpdateJobStatus(jobID int64, status string) error {
 
 func (r *jobRepository) GetJobByID(jobID int64) (*types.JobData, error) {
 	var jobData types.JobData
-	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
+	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
+		&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
 		&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
-		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.TaskIDs)
+		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.JobCostActual,
+		&jobData.TaskIDs, &jobData.CreatedAt, &jobData.UpdatedAt, &jobData.LastExecutedAt,
+		&jobData.Timezone)
 
 	if err != nil {
 		return nil, err
