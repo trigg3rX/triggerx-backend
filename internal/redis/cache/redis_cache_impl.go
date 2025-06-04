@@ -1,16 +1,17 @@
-package redis
+package cache
 
 import (
 	"context"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 )
 
 // RedisCache implements the Cache interface using Redis as the backend
 type RedisCache struct {
-	client *Client
-}
+	client *redisx.Client
+}	
 
 // Get retrieves a value from Redis cache
 func (r *RedisCache) Get(key string) (string, error) {
@@ -18,7 +19,7 @@ func (r *RedisCache) Get(key string) (string, error) {
 		// Fallback to legacy client for backward compatibility
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		val, err := GetRedisClient().Get(ctx, key).Result()
+		val, err := redisx.GetRedisClient().Get(ctx, key).Result()
 		if err == redis.Nil {
 			return "", nil
 		}
@@ -36,7 +37,7 @@ func (r *RedisCache) Set(key string, value string, ttl time.Duration) error {
 		// Fallback to legacy client for backward compatibility
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return GetRedisClient().Set(ctx, key, value, ttl).Err()
+		return redisx.GetRedisClient().Set(ctx, key, value, ttl).Err()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -50,7 +51,7 @@ func (r *RedisCache) Delete(key string) error {
 		// Fallback to legacy client for backward compatibility
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return GetRedisClient().Del(ctx, key).Err()
+		return redisx.GetRedisClient().Del(ctx, key).Err()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -66,7 +67,7 @@ func (r *RedisCache) AcquirePerformerLock(performerID string, ttl time.Duration)
 
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
-		res, err := GetRedisClient().SetNX(ctx, key, "1", ttl).Result()
+		res, err := redisx.GetRedisClient().SetNX(ctx, key, "1", ttl).Result()
 		return res, err
 	}
 
@@ -82,7 +83,7 @@ func (r *RedisCache) ReleasePerformerLock(performerID string) error {
 
 	if r.client == nil {
 		// Fallback to legacy client for backward compatibility
-		return GetRedisClient().Del(ctx, key).Err()
+		return redisx.GetRedisClient().Del(ctx, key).Err()
 	}
 
 	return r.client.Del(ctx, key)
