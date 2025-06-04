@@ -18,6 +18,7 @@ type CacheStore interface {
 	Delete(key string) error
 	AcquirePerformerLock(performerID string, ttl time.Duration) (bool, error)
 	ReleasePerformerLock(performerID string) error
+	Close() error
 }
 
 var (
@@ -28,55 +29,35 @@ var (
 
 // InitCacheWithLogger initializes the cache system with a specific logger
 func InitCacheWithLogger(logger logging.Logger) error {
-	var err error
+	var initErr error
 	cacheInitOnce.Do(func() {
 		cacheStoreLogger = logger
 
-		// Try Upstash Redis first (cloud Redis - preferred)
-		if config.IsUpstashEnabled() {
-			redisClient, redisErr := redis.NewRedisClient(logger)
-			if redisErr == nil {
-				// Test connection
-				if pingErr := redisClient.Ping(); pingErr == nil {
-					cacheStoreInstance = &RedisCache{client: redisClient}
-					cacheStoreLogger.Infof("Cache initialized with Upstash Redis")
-					return
-				} else {
-					cacheStoreLogger.Warnf("Upstash Redis ping failed: %v", pingErr)
-				}
-			} else {
-				cacheStoreLogger.Warnf("Failed to create Upstash Redis client: %v", redisErr)
-			}
+		// Use centralized Redis client creation
+		redisClient, err := redis.NewRedisClient(logger)
+		if err != nil {
+			initErr = fmt.Errorf("failed to create Redis client: %w", err)
+			cacheStoreLogger.Errorf("Cache initialization failed: %v", initErr)
+			return
 		}
 
-		// Fallback to local Redis
-		if config.IsLocalRedisEnabled() {
-			redisClient, redisErr := redis.NewRedisClient(logger)
-			if redisErr == nil {
-				// Test connection
-				if pingErr := redisClient.Ping(); pingErr == nil {
-					cacheStoreInstance = &RedisCache{client: redisClient}
-					cacheStoreLogger.Infof("Cache initialized with local Redis")
-					return
-				} else {
-					cacheStoreLogger.Warnf("Local Redis ping failed: %v", pingErr)
-				}
-			} else {
-				cacheStoreLogger.Warnf("Failed to create local Redis client: %v", redisErr)
-			}
+		// Test connection
+		if err := redisClient.Ping(); err != nil {
+			initErr = fmt.Errorf("redis connection test failed: %w", err)
+			cacheStoreLogger.Errorf("Cache initialization failed: %v", initErr)
+			return
 		}
 
-		// No Redis available - fail initialization
-		err = fmt.Errorf("no Redis configuration available - cache initialization failed")
-		cacheStoreLogger.Errorf("Cache initialization failed: %v", err)
+		cacheStoreInstance = &RedisCache{client: redisClient}
+		cacheStoreLogger.Infof("Cache initialized with %s Redis", config.GetRedisType())
 	})
-	return err
+	return initErr
 }
 
 // GetCacheStore returns the initialized cache instance
 func GetCacheStore() (CacheStore, error) {
 	if cacheStoreInstance == nil {
-		return nil, errors.New("cache not initialized - call InitCache() first")
+		return nil, errors.New("cache not initialized - call InitCacheWithLogger() first")
 	}
 	return cacheStoreInstance, nil
 }
@@ -84,25 +65,12 @@ func GetCacheStore() (CacheStore, error) {
 // GetCacheStoreInfo returns information about the current cache configuration
 func GetCacheStoreInfo() map[string]interface{} {
 	info := map[string]interface{}{
-		"initialized":     cacheStoreInstance != nil,
-		"upstash_enabled": config.IsUpstashEnabled(),
-		"local_enabled":   config.IsLocalRedisEnabled(),
+		"initialized": cacheStoreInstance != nil,
+		"redis_type":  config.GetRedisType(),
 	}
 
 	if cacheStoreInstance != nil {
-		if _, isRedis := cacheStoreInstance.(*RedisCache); isRedis {
-			info["type"] = "redis"
-			if config.IsUpstashEnabled() {
-				info["redis_type"] = "upstash"
-			} else {
-				info["redis_type"] = "local"
-			}
-		} else {
-			info["type"] = "unknown"
-		}
-	} else {
-		info["type"] = "none"
+		info["type"] = "redis"
 	}
-
 	return info
 }
