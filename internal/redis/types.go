@@ -14,6 +14,18 @@ const (
 	JobsRunningStream   = "jobs:running"	 // Jobs that are running
 	JobsCompletedStream = "jobs:completed"   // Jobs completed their cycle
 
+	// Condition Scheduler Streams
+	JobsReadyConditionStream = "jobs:ready:condition" // Condition scheduler ready jobs
+	JobsRetryConditionStream = "jobs:retry:condition" // Condition scheduler retry jobs
+
+	// Event Scheduler Streams
+	JobsReadyEventStream = "jobs:ready:event" // Event scheduler ready jobs
+	JobsRetryEventStream = "jobs:retry:event" // Event scheduler retry jobs
+
+	// Time Scheduler Streams
+	JobsReadyTimeStream = "jobs:ready:time" // Time scheduler ready jobs
+	JobsRetryTimeStream = "jobs:retry:time" // Time scheduler retry jobs
+
 	// Retry Configuration
 	MaxRetryAttempts = 3
 	RetryBackoffBase = 5 * time.Second
