@@ -16,7 +16,7 @@ type fileCacheEntry struct {
 type FileCache struct{}
 
 var (
-	fileCachePath = "cache.json"
+	fileCachePath = "data/cache/cache.json"
 	fileCacheMu   sync.Mutex
 )
 

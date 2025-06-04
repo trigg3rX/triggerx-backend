@@ -17,12 +17,18 @@ type Config struct {
 	dbServerURL      string
 	maxWorkers       int
 	// Chain RPC URLs
+
 	alchemyAPIKey string
 }
 
 var cfg Config
 
-// Init initializes the configuration
+// Helper to detect test environment
+func isTestEnv() bool {
+	return env.GetEnv("APP_ENV", "") == "test"
+}
+
+// Init initializes the configuration for production
 func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
@@ -73,10 +79,23 @@ func GetDBServerURL() string {
 	return cfg.dbServerURL
 }
 
-// GetChainRPCUrls returns a map of chain IDs to RPC URLs
-func GetChainRPCUrls() map[string]string {
+// GetChainRPCUrlsTest returns local/test chain RPC URLs
+func GetChainRPCUrlsTest() map[string]string {
+	local := "http://127.0.0.1:8545"
 	return map[string]string{
-		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),   // OP Sepolia
+		"11155420": local,
+		"84532":    local,
+		"11155111": local,
+	}
+}
+
+// GetChainRPCUrls returns chain RPC URLs for production or test
+func GetChainRPCUrls() map[string]string {
+	if isTestEnv() {
+		return GetChainRPCUrlsTest()
+	}
+	return map[string]string{
+		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // OP Sepolia
 		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
 		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
 	}
@@ -85,4 +104,9 @@ func GetChainRPCUrls() map[string]string {
 // GetMaxWorkers returns the maximum number of concurrent workers allowed
 func GetMaxWorkers() int {
 	return cfg.maxWorkers
+}
+
+// SetMaxWorkersForTest sets maxWorkers for testing purposes only.
+func SetMaxWorkersForTest(n int) {
+	cfg.maxWorkers = n
 }
