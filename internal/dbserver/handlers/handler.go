@@ -34,10 +34,12 @@ type Handler struct {
 	userRepository         repository.UserRepository
 	keeperRepository       repository.KeeperRepository
 	apiKeysRepository      repository.ApiKeysRepository
+
+	scanNowQuery func(*time.Time) error // for testability
 }
 
 func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig) *Handler {
-	return &Handler{
+	h := &Handler{
 		db:                     db,
 		logger:                 logger,
 		config:                 config,
@@ -50,6 +52,12 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		keeperRepository:       repository.NewKeeperRepository(db),
 		apiKeysRepository:      repository.NewApiKeysRepository(db),
 	}
+	h.scanNowQuery = h.defaultScanNowQuery
+	return h
+}
+
+func (h *Handler) defaultScanNowQuery(timestamp *time.Time) error {
+	return h.db.Session().Query("SELECT now() FROM system.local").Scan(timestamp)
 }
 
 // SendDataToEventScheduler sends data to the event scheduler
@@ -178,7 +186,6 @@ func (h *Handler) sendPauseToScheduler(apiURL string, schedulerName string) (boo
 	return true, nil
 }
 
-// HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
 	startTime := time.Now()
 
@@ -187,9 +194,8 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	dbError := ""
 
 	// Use a simple system query to test the connection
-	query := h.db.Session().Query("SELECT now() FROM system.local")
 	var timestamp time.Time
-	if err := query.Scan(&timestamp); err != nil {
+	if err := h.scanNowQuery(&timestamp); err != nil {
 		dbStatus = "unhealthy"
 		dbError = err.Error()
 		h.logger.Errorf("Database health check failed: %v", err)
