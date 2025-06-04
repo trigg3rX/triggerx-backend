@@ -46,7 +46,6 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		newUser.TokenBalance = tempJobs[0].TokenBalance
 		newUser.UserPoints = 0.0
 
-
 		existingUser, err = h.userRepository.CreateNewUser(&newUser)
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
