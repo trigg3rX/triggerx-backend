@@ -27,6 +27,10 @@ var (
 	cacheStoreLogger   logging.Logger
 )
 
+func IsCacheAvailable() bool {
+	return cacheStoreInstance != nil
+}
+
 // InitCacheWithLogger initializes the cache system with a specific logger
 func InitCacheWithLogger(logger logging.Logger) error {
 	var initErr error

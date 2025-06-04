@@ -18,6 +18,10 @@ type Client struct {
 	mu          sync.Mutex
 }
 
+func IsRedisAvailable() bool {
+	return config.IsRedisAvailable()
+}
+
 // NewRedisClient creates a new Redis client instance with enhanced features
 func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if !config.IsRedisAvailable() {
