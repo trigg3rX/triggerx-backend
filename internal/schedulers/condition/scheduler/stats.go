@@ -23,7 +23,6 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 		"total_workers":     len(s.workers),
 		"running_workers":   runningWorkers,
 		"max_workers":       s.maxWorkers,
-		"cache_available":   s.cache != nil,
 		"supported_sources": []string{"api", "oracle", "static"},
 		"supported_conditions": []string{
 			"greater_than", "less_than", "between",

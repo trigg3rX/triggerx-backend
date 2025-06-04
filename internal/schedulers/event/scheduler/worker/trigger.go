@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/metrics"
 	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 )
@@ -33,16 +31,6 @@ func (w *EventWorker) checkForEvents() error {
 	// Check if there are new blocks to process
 	if safeBlock <= w.LastBlock {
 		return nil // No new blocks to process
-	}
-
-	// Check cache for recent events in this block range to avoid reprocessing
-	blockRangeKey := fmt.Sprintf("events_%d_%d_%d", w.Job.JobID, w.LastBlock+1, safeBlock)
-	if w.Cache != nil {
-		if _, err := w.Cache.Get(blockRangeKey); err == nil {
-			w.Logger.Debug("Block range already processed", "job_id", w.Job.JobID, "from", w.LastBlock+1, "to", safeBlock)
-			w.LastBlock = safeBlock
-			return nil
-		}
 	}
 
 	// Query logs for events
@@ -74,22 +62,6 @@ func (w *EventWorker) checkForEvents() error {
 		}
 	}
 
-	// Cache that this block range has been processed
-	if w.Cache != nil {
-		processedData := map[string]interface{}{
-			"job_id":       w.Job.JobID,
-			"from_block":   w.LastBlock + 1,
-			"to_block":     safeBlock,
-			"events_found": len(logs),
-			"processed_at": time.Now().Unix(),
-		}
-		if jsonData, err := json.Marshal(processedData); err == nil {
-			if err := w.Cache.Set(blockRangeKey, string(jsonData), schedulerTypes.EventCacheTTL); err != nil {
-				w.Logger.Errorf("Failed to set block range cache: %v", err)
-			}
-		}
-	}
-
 	// Update last processed block
 	w.LastBlock = safeBlock
 
@@ -114,43 +86,6 @@ func (w *EventWorker) processEvent(log types.Log) error {
 		"log_index", log.Index,
 	)
 
-	// Check for duplicate event processing
-	eventKey := fmt.Sprintf("event_%s_%d", log.TxHash.Hex(), log.Index)
-	if w.Cache != nil {
-		if cachedValue, err := w.Cache.Get(eventKey); err == nil {
-			w.Logger.Debug("Event already processed, skipping",
-				"tx_hash", log.TxHash.Hex(),
-				"cached_at", cachedValue,
-			)
-
-			// Add duplicate event detection to Redis stream
-			if redisx.IsAvailable() {
-				duplicateEvent := map[string]interface{}{
-					"event_type":   "event_duplicate_detected",
-					"job_id":       w.Job.JobID,
-					"manager_id":   w.ManagerID,
-					"chain_id":     w.Job.TriggerChainID,
-					"contract":     w.Job.TriggerContractAddress,
-					"event":        w.Job.TriggerEvent,
-					"tx_hash":      log.TxHash.Hex(),
-					"block_number": log.BlockNumber,
-					"log_index":    log.Index,
-					"cached_at":    cachedValue,
-					"detected_at":  startTime.Unix(),
-				}
-				if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, duplicateEvent); err != nil {
-					w.Logger.Warnf("Failed to add event duplicate detection to Redis stream: %v", err)
-				}
-			}
-			return nil
-		}
-
-		// Mark event as processed
-		if err := w.Cache.Set(eventKey, time.Now().Format(time.RFC3339), schedulerTypes.DuplicateEventWindow); err != nil {
-			w.Logger.Errorf("Failed to set event cache: %v", err)
-		}
-	}
-
 	// Create comprehensive event context for Redis streaming
 	eventContext := map[string]interface{}{
 		"event_type":               "event_detected",
@@ -165,17 +100,9 @@ func (w *EventWorker) processEvent(log types.Log) error {
 		"tx_hash":                  log.TxHash.Hex(),
 		"block_number":             log.BlockNumber,
 		"log_index":                log.Index,
-		"gas_used":                 log.BlockHash.Hex(), // Block hash for reference
-		"cache_available":          w.Cache != nil,
+		"gas_used":                 log.BlockHash.Hex(),
 		"detected_at":              startTime.Unix(),
 		"status":                   "processing",
-	}
-
-	// Add event detection to Redis stream
-	if redisx.IsAvailable() {
-		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
-			w.Logger.Warnf("Failed to add event detection to Redis stream: %v", err)
-		}
 	}
 
 	// Execute the action
@@ -191,12 +118,6 @@ func (w *EventWorker) processEvent(log types.Log) error {
 		eventContext["event_type"] = "event_completed"
 		eventContext["status"] = "completed"
 
-		if redisx.IsAvailable() {
-			if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, eventContext); err != nil {
-				w.Logger.Warnf("Failed to add event completion to Redis stream: %v", err)
-			}
-		}
-
 		w.Logger.Info("Event processed successfully",
 			"job_id", w.Job.JobID,
 			"tx_hash", log.TxHash.Hex(),
@@ -209,12 +130,6 @@ func (w *EventWorker) processEvent(log types.Log) error {
 		eventContext["event_type"] = "event_failed"
 		eventContext["status"] = "failed"
 		eventContext["error"] = "action execution failed"
-
-		if redisx.IsAvailable() {
-			if err := redisx.AddJobToStream(redisx.JobsRetryEventStream, eventContext); err != nil {
-				w.Logger.Warnf("Failed to add event failure to Redis stream: %v", err)
-			}
-		}
 
 		w.Logger.Error("Event processing failed",
 			"job_id", w.Job.JobID,

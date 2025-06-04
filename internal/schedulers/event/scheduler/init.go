@@ -8,8 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/cache"
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/metrics"
@@ -27,7 +25,6 @@ type EventBasedScheduler struct {
 	chainClients map[string]*ethclient.Client // chainID -> client
 	clientsMutex sync.RWMutex
 	dbClient     *client.DBServerClient
-	cache        cache.Cache
 	metrics      *metrics.Collector
 	managerID    string
 	maxWorkers   int
@@ -39,22 +36,6 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 
 	maxWorkers := config.GetMaxWorkers()
 
-	// Initialize cache with enhanced Redis support
-	if err := cache.InitWithLogger(logger); err != nil {
-		logger.Warnf("Failed to initialize cache: %v", err)
-	}
-
-	cacheInstance, err := cache.GetCache()
-	if err != nil {
-		logger.Warnf("Cache not available, running without cache: %v", err)
-		cacheInstance = nil
-	} else {
-		// Log cache type and Redis availability
-		cacheInfo := cache.GetCacheInfo()
-		logger.Infof("Cache initialized: type=%s, redis_available=%v",
-			cacheInfo["type"], cacheInfo["redis_available"])
-	}
-
 	scheduler := &EventBasedScheduler{
 		ctx:          ctx,
 		cancel:       cancel,
@@ -62,7 +43,6 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 		workers:      make(map[int64]*worker.EventWorker),
 		chainClients: make(map[string]*ethclient.Client),
 		dbClient:     dbClient,
-		cache:        cacheInstance,
 		metrics:      metrics.NewCollector(),
 		managerID:    managerID,
 		maxWorkers:   maxWorkers,
@@ -77,30 +57,9 @@ func NewEventBasedScheduler(managerID string, logger logging.Logger, dbClient *c
 	// Start metrics collection
 	scheduler.metrics.Start()
 
-	// Add scheduler startup event to Redis stream (Redis is already initialized in main.go)
-	if redisx.IsAvailable() {
-		startupEvent := map[string]interface{}{
-			"event_type":       "scheduler_startup",
-			"manager_id":       managerID,
-			"max_workers":      maxWorkers,
-			"cache_available":  cacheInstance != nil,
-			"redis_available":  redisx.IsAvailable(),
-			"supported_chains": len(scheduler.chainClients),
-			"started_at":       time.Now().Unix(),
-		}
-
-		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, startupEvent); err != nil {
-			logger.Warnf("Failed to add scheduler startup event to Redis stream: %v", err)
-		} else {
-			logger.Info("Scheduler startup event added to Redis stream")
-		}
-	}
-
 	scheduler.logger.Info("Event-based scheduler initialized",
 		"max_workers", maxWorkers,
 		"manager_id", managerID,
-		"cache_available", cacheInstance != nil,
-		"redis_available", redisx.IsAvailable(),
 		"connected_chains", len(scheduler.chainClients),
 	)
 
@@ -171,28 +130,6 @@ func (s *EventBasedScheduler) Stop() {
 	s.clientsMutex.Unlock()
 
 	duration := time.Since(startTime)
-
-	// Add comprehensive scheduler shutdown event to Redis stream
-	if redisx.IsAvailable() {
-		shutdownEvent := map[string]interface{}{
-			"event_type":        "scheduler_shutdown",
-			"manager_id":        s.managerID,
-			"total_workers":     totalWorkers,
-			"running_workers":   runningWorkers,
-			"connected_chains":  connectedChains,
-			"cache_available":   s.cache != nil,
-			"worker_details":    workerDetails,
-			"shutdown_at":       startTime.Unix(),
-			"duration_ms":       duration.Milliseconds(),
-			"graceful_shutdown": true,
-		}
-
-		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, shutdownEvent); err != nil {
-			s.logger.Warnf("Failed to add scheduler shutdown event to Redis stream: %v", err)
-		} else {
-			s.logger.Info("Scheduler shutdown event added to Redis stream")
-		}
-	}
 
 	s.logger.Info("Event-based scheduler stopped",
 		"total_workers_stopped", totalWorkers,

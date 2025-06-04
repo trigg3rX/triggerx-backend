@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/cache"
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
@@ -31,7 +29,6 @@ type TimeBasedScheduler struct {
 	activeJobs map[int64]*types.TimeJobData
 	jobQueue   chan *types.TimeJobData
 	dbClient   *client.DBServerClient
-	cache      cache.Cache
 	metrics    *metrics.Collector
 	managerID  string
 	maxWorkers int
@@ -43,22 +40,6 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 
 	maxWorkers := config.GetMaxWorkers()
 
-	// Initialize cache with enhanced Redis support
-	if err := cache.InitWithLogger(logger); err != nil {
-		logger.Warnf("Failed to initialize cache: %v", err)
-	}
-
-	cacheInstance, err := cache.GetCache()
-	if err != nil {
-		logger.Warnf("Cache not available, running without cache: %v", err)
-		cacheInstance = nil
-	} else {
-		// Log cache type and Redis availability
-		cacheInfo := cache.GetCacheInfo()
-		logger.Infof("Cache initialized: type=%s, redis_available=%v",
-			cacheInfo["type"], cacheInfo["redis_available"])
-	}
-
 	scheduler := &TimeBasedScheduler{
 		ctx:        ctx,
 		cancel:     cancel,
@@ -67,7 +48,6 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		activeJobs: make(map[int64]*types.TimeJobData),
 		jobQueue:   make(chan *types.TimeJobData, 100),
 		dbClient:   dbClient,
-		cache:      cacheInstance,
 		metrics:    metrics.NewCollector(),
 		managerID:  managerID,
 		maxWorkers: maxWorkers,
@@ -80,31 +60,10 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 	for i := 0; i < maxWorkers; i++ {
 		go scheduler.worker()
 	}
-
-	// Add scheduler startup event to Redis stream (Redis is already initialized in main.go)
-	if redisx.IsAvailable() {
-		startupEvent := map[string]interface{}{
-			"event_type":      "scheduler_startup",
-			"manager_id":      managerID,
-			"max_workers":     maxWorkers,
-			"cache_available": cacheInstance != nil,
-			"redis_available": redisx.IsAvailable(),
-			"poll_interval":   pollInterval.String(),
-			"started_at":      time.Now().Unix(),
-		}
-
-		if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, startupEvent); err != nil {
-			logger.Warnf("Failed to add scheduler startup event to Redis stream: %v", err)
-		} else {
-			logger.Info("Scheduler startup event added to Redis stream")
-		}
-	}
-
+	
 	scheduler.logger.Info("Time-based scheduler initialized",
 		"max_workers", maxWorkers,
 		"manager_id", managerID,
-		"cache_available", cacheInstance != nil,
-		"redis_available", redisx.IsAvailable(),
 		"poll_interval", pollInterval,
 	)
 

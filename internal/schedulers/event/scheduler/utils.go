@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/config"
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -38,34 +37,4 @@ func (s *EventBasedScheduler) initChainClients() error {
 	}
 
 	return nil
-}
-
-// getCachedOrFetchBlockNumber gets block number from cache or fetches from chain
-func (s *EventBasedScheduler) getCachedOrFetchBlockNumber(client *ethclient.Client, chainID string) (uint64, error) {
-	cacheKey := fmt.Sprintf("block_number_%s", chainID)
-
-	if s.cache != nil {
-		if cached, err := s.cache.Get(cacheKey); err == nil {
-			var blockNum uint64
-			if _, err := fmt.Sscanf(cached, "%d", &blockNum); err == nil {
-				return blockNum, nil
-			}
-		}
-	}
-
-	// Fetch from chain
-	currentBlock, err := client.BlockNumber(context.Background())
-	if err != nil {
-		return 0, err
-	}
-
-	// Cache the result
-	if s.cache != nil {
-		err := s.cache.Set(cacheKey, fmt.Sprintf("%d", currentBlock), schedulerTypes.BlockCacheTTL)
-		if err != nil {
-			s.logger.Errorf("Error caching block number: %v", err)
-		}
-	}
-
-	return currentBlock, nil
 }

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 
 	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/types"
@@ -20,19 +19,6 @@ func (w *ConditionWorker) checkCondition() error {
 
 	// Track condition check
 	metrics.ConditionsChecked.Inc()
-
-	// Check for duplicate condition check prevention
-	checkKey := fmt.Sprintf("condition_check_%d_%d", w.Job.JobID, startTime.Unix())
-	if w.Cache != nil {
-		if _, err := w.Cache.Get(checkKey); err == nil {
-			w.Logger.Debug("Condition check already performed recently, skipping", "job_id", w.Job.JobID)
-			return nil
-		}
-		// Mark this check time to prevent duplicates
-		if err := w.Cache.Set(checkKey, time.Now().Format(time.RFC3339), schedulerTypes.DuplicateConditionWindow); err != nil {
-			w.Logger.Errorf("Failed to set condition check cache: %v", err)
-		}
-	}
 
 	// Fetch current value from source (with caching)
 	currentValue, err := w.fetchValueWithCache()
@@ -59,9 +45,6 @@ func (w *ConditionWorker) checkCondition() error {
 	if err != nil {
 		conditionContext["status"] = "evaluation_error"
 		conditionContext["error"] = err.Error()
-		if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, conditionContext); err != nil {
-			w.Logger.Warnf("Failed to add condition evaluation error to Redis stream: %v", err)
-		}
 		return fmt.Errorf("failed to evaluate condition: %w", err)
 	}
 
@@ -81,11 +64,6 @@ func (w *ConditionWorker) checkCondition() error {
 			"consecutive_checks", w.ConditionMet,
 		)
 
-		// Add satisfied condition to Redis stream
-		if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, conditionContext); err != nil {
-			w.Logger.Warnf("Failed to add condition satisfied event to Redis stream: %v", err)
-		}
-
 		// Execute action
 		executionSuccess := w.performActionExecution(currentValue)
 
@@ -95,14 +73,8 @@ func (w *ConditionWorker) checkCondition() error {
 
 		if executionSuccess {
 			conditionContext["action_status"] = "completed"
-			if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, conditionContext); err != nil {
-				w.Logger.Warnf("Failed to add condition action completion to Redis stream: %v", err)
-			}
 		} else {
 			conditionContext["action_status"] = "failed"
-			if err := redisx.AddJobToStream(redisx.JobsRetryConditionStream, conditionContext); err != nil {
-				w.Logger.Warnf("Failed to add condition action failure to Redis stream: %v", err)
-			}
 		}
 	} else {
 		w.ConditionMet = 0
@@ -113,75 +85,19 @@ func (w *ConditionWorker) checkCondition() error {
 			"current_value", currentValue,
 			"condition_type", w.Job.ConditionType,
 		)
-
-		// Periodically log condition checks for monitoring
-		if time.Now().Unix()%60 == 0 { // Every minute
-			if err := redisx.AddJobToStream(redisx.JobsReadyConditionStream, conditionContext); err != nil {
-				w.Logger.Warnf("Failed to add condition check status to Redis stream: %v", err)
-			}
-		}
 	}
-
-	// Cache the condition state
-	if w.Cache != nil {
-		w.cacheConditionState(currentValue, satisfied)
-	}
-
 	return nil
 }
 
 // fetchValueWithCache retrieves the current value with caching support
 func (w *ConditionWorker) fetchValueWithCache() (float64, error) {
-	// Try to get cached value first
-	if w.Cache != nil {
-		cacheKey := fmt.Sprintf("value_%d_%s", w.Job.JobID, w.Job.ValueSourceUrl)
-		if cached, err := w.Cache.Get(cacheKey); err == nil {
-			var cachedValue float64
-			if _, err := fmt.Sscanf(cached, "%f", &cachedValue); err == nil {
-				w.Logger.Debug("Using cached value", "job_id", w.Job.JobID, "value", cachedValue)
-				return cachedValue, nil
-			}
-		}
-	}
-
 	// Fetch fresh value
 	currentValue, err := w.fetchValue()
 	if err != nil {
 		return 0, err
 	}
 
-	// Cache the value
-	if w.Cache != nil {
-		cacheKey := fmt.Sprintf("value_%d_%s", w.Job.JobID, w.Job.ValueSourceUrl)
-		if err := w.Cache.Set(cacheKey, fmt.Sprintf("%f", currentValue), schedulerTypes.ValueCacheTTL); err != nil {
-			w.Logger.Errorf("Failed to set value cache: %v", err)
-		}
-	}
-
 	return currentValue, nil
-}
-
-// cacheConditionState caches the current condition state
-func (w *ConditionWorker) cacheConditionState(value float64, satisfied bool) {
-	if w.Cache == nil {
-		return
-	}
-
-	stateData := map[string]interface{}{
-		"job_id":        w.Job.JobID,
-		"current_value": value,
-		"satisfied":     satisfied,
-		"condition_met": w.ConditionMet,
-		"last_check":    w.LastCheck.Unix(),
-		"cached_at":     time.Now().Unix(),
-	}
-
-	if jsonData, err := json.Marshal(stateData); err == nil {
-		cacheKey := fmt.Sprintf("condition_state_%d", w.Job.JobID)
-		if err := w.Cache.Set(cacheKey, string(jsonData), schedulerTypes.ConditionStateCacheTTL); err != nil {
-			w.Logger.Errorf("Failed to set condition state cache: %v", err)
-		}
-	}
 }
 
 // fetchValue retrieves the current value from the configured source
