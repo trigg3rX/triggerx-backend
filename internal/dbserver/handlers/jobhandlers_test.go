@@ -57,9 +57,9 @@ func (m *MockUserRepository) UpdateUserJobIDs(userID int64, jobIDs []int64) erro
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) GetUserJobIDsByAddress(address string) ([]int64, error) {
+func (m *MockUserRepository) GetUserJobIDsByAddress(address string) (int64, []int64, error) {
 	args := m.Called(address)
-	return args.Get(0).([]int64), args.Error(1)
+	return args.Get(0).(int64), args.Get(1).([]int64), args.Error(2)
 }
 
 func (m *MockUserRepository) CheckUserExists(address string) (int64, error) {
@@ -456,7 +456,7 @@ func TestGetJobsByUserAddress(t *testing.T) {
 			name:        "Success - Get User Jobs",
 			userAddress: "0x123",
 			setupMocks: func() {
-				mockUserRepo.On("GetUserJobIDsByAddress", "0x123").Return([]int64{1, 2}, nil)
+				mockUserRepo.On("GetUserJobIDsByAddress", "0x123").Return(int64(1), []int64{1, 2}, nil)
 				mockJobRepo.On("GetJobByID", int64(1)).Return(&types.JobData{
 					JobID:            1,
 					TaskDefinitionID: 1,
@@ -481,7 +481,7 @@ func TestGetJobsByUserAddress(t *testing.T) {
 			name:        "Error - User Not Found",
 			userAddress: "0x123",
 			setupMocks: func() {
-				mockUserRepo.On("GetUserJobIDsByAddress", "0x123").Return([]int64{}, assert.AnError)
+				mockUserRepo.On("GetUserJobIDsByAddress", "0x123").Return(int64(0), []int64{}, assert.AnError)
 			},
 			expectedCode:  http.StatusOK,
 			expectedError: "",
