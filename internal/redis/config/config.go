@@ -19,7 +19,6 @@ type Config struct {
 	// Fallback: Local Redis settings (optional)
 	localAddr     string
 	localPassword string
-	localEnabled  bool
 
 	// Common settings
 	db           int
@@ -33,13 +32,10 @@ type Config struct {
 	writeTimeout time.Duration
 	poolTimeout  time.Duration
 
-	aggregatorRPCURL string
-	dispatcherPrivateKey string
-	dispatcherAddress    string
-
 	// Stream settings
 	streamMaxLen int
-	streamTTL    time.Duration
+	jobStreamTTL    time.Duration
+	taskStreamTTL   time.Duration
 }
 
 var cfg Config
@@ -54,7 +50,6 @@ func Init() error {
 		upstashToken:  env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 		localAddr:     env.GetEnv("REDIS_ADDR", "localhost:6379"),
 		localPassword: env.GetEnv("REDIS_PASSWORD", ""),
-		localEnabled:  env.GetEnvBool("REDIS_LOCAL_ENABLED", false),
 		db:            0,
 		poolSize:      env.GetEnvInt("REDIS_POOL_SIZE", 10),
 		minIdleConns:  env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
@@ -63,14 +58,9 @@ func Init() error {
 		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT_SEC", 3*time.Second),
 		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT_SEC", 3*time.Second),
 		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT_SEC", 4*time.Second),
-		aggregatorRPCURL: env.GetEnv("AGGREGATOR_RPC_URL", ""),
-		dispatcherPrivateKey: env.GetEnv("DISPATCHER_PRIVATE_KEY", ""),
-		dispatcherAddress:    env.GetEnv("DISPATCHER_ADDRESS", ""),
 		streamMaxLen:  env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		streamTTL:     env.GetEnvDuration("REDIS_STREAM_TTL_HOURS", 24*time.Hour),
-	}
-	if err := validateConfig(); err != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
+		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL_HOURS", 120*time.Hour),
+		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL_HOURS", 1*time.Hour),
 	}
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
@@ -78,55 +68,12 @@ func Init() error {
 	return nil
 }
 
-func validateConfig() error {
-	if env.IsEmpty(cfg.upstashURL) {
-		return fmt.Errorf("invalid upstash url: %s", cfg.upstashURL)
-	}
-	if env.IsEmpty(cfg.upstashToken) {
-		return fmt.Errorf("invalid upstash token: %s", cfg.upstashToken)
-	}
-	if !env.IsValidURL(cfg.aggregatorRPCURL) {
-		return fmt.Errorf("invalid aggregator rpc url: %s", cfg.aggregatorRPCURL)
-	}
-	if !env.IsValidEthAddress(cfg.dispatcherAddress) {
-		return fmt.Errorf("invalid dispatcher address: %s", cfg.dispatcherAddress)
-	}
-	if !env.IsValidPrivateKey(cfg.dispatcherPrivateKey) {
-		return fmt.Errorf("invalid dispatcher private key: %s", cfg.dispatcherPrivateKey)
-	}
-	return nil
-}
-
-func IsDevMode() bool {
-	return cfg.devMode
-}
-
 func IsUpstashEnabled() bool {
 	return cfg.upstashURL != ""
 }
 
-func GetUpstashURL() string {
-	return cfg.upstashURL
-}
-
-func GetUpstashToken() string {
-	return cfg.upstashToken
-}
-
 func IsLocalRedisEnabled() bool {
-	return cfg.localEnabled && cfg.localAddr != ""
-}
-
-func GetRedisAddr() string {
-	return cfg.localAddr
-}
-
-func GetRedisPassword() string {
-	return cfg.localPassword
-}
-
-func GetRedisDB() int {
-	return cfg.db
+	return cfg.localAddr != ""
 }
 
 func IsRedisAvailable() bool {
@@ -143,12 +90,40 @@ func GetRedisType() string {
 	return "none"
 }
 
+func IsDevMode() bool {
+	return cfg.devMode
+}
+
+func GetUpstashURL() string {
+	return cfg.upstashURL
+}
+
+func GetUpstashToken() string {
+	return cfg.upstashToken
+}
+
+func GetRedisAddr() string {
+	return cfg.localAddr
+}
+
+func GetRedisPassword() string {
+	return cfg.localPassword
+}
+
+func GetRedisDB() int {
+	return cfg.db
+}
+
 func GetStreamMaxLen() int {
 	return cfg.streamMaxLen
 }
 
-func GetStreamTTL() time.Duration {
-	return cfg.streamTTL
+func GetJobStreamTTL() time.Duration {
+	return cfg.jobStreamTTL
+}
+
+func GetTaskStreamTTL() time.Duration {
+	return cfg.taskStreamTTL
 }
 
 func GetPoolSize() int {
@@ -177,16 +152,4 @@ func GetWriteTimeout() time.Duration {
 
 func GetPoolTimeout() time.Duration {
 	return cfg.poolTimeout
-}
-
-func GetAggregatorRPCURL() string {
-	return cfg.aggregatorRPCURL
-}
-
-func GetDispatcherPrivateKey() string {
-	return cfg.dispatcherPrivateKey
-}
-
-func GetDispatcherAddress() string {
-	return cfg.dispatcherAddress
 }
