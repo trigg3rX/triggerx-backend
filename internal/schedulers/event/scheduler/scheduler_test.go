@@ -382,7 +382,12 @@ func TestConcurrency_ScheduleUnschedule(t *testing.T) {
 // Additional test to verify config initialization
 func TestConfigInitialization(t *testing.T) {
 	os.Setenv("MAX_WORKERS", "100")
-	config.Init()
+	if err := config.Init(); err != nil {
+		// Ignore .env file not found error in tests
+		if !strings.Contains(err.Error(), ".env") {
+			t.Fatalf("Failed to initialize config: %v", err)
+		}
+	}
 	config.SetMaxWorkersForTest(100)
 	t.Logf("MAX_WORKERS env: %s", os.Getenv("MAX_WORKERS"))
 	t.Logf("config.GetMaxWorkers(): %d", config.GetMaxWorkers())
@@ -397,7 +402,12 @@ func TestConfigInitialization(t *testing.T) {
 // Test scheduler creation with proper maxWorkers
 func TestSchedulerCreation(t *testing.T) {
 	os.Setenv("MAX_WORKERS", "100")
-	config.Init()
+	if err := config.Init(); err != nil {
+		// Ignore .env file not found error in tests
+		if !strings.Contains(err.Error(), ".env") {
+			t.Fatalf("Failed to initialize config: %v", err)
+		}
+	}
 	config.SetMaxWorkersForTest(100)
 	t.Logf("MAX_WORKERS env: %s", os.Getenv("MAX_WORKERS"))
 	t.Logf("config.GetMaxWorkers(): %d", config.GetMaxWorkers())
