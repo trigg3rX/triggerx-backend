@@ -8,20 +8,17 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Client represents a Redis client with logging capabilities
 type Client struct {
 	redisClient *redis.Client
-	aggClient   *aggregator.AggregatorClient
 	logger      logging.Logger
 }
 
 var (
 	redisClient *redis.Client
-	aggClient   *aggregator.AggregatorClient
 	once        sync.Once
 )
 
@@ -43,85 +40,98 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 		return nil, fmt.Errorf("redis is not configured. Please set UPSTASH_REDIS_URL or enable local Redis with REDIS_LOCAL_ENABLED=true")
 	}
 
-	opt, err := parseRedisConfigFromSettings()
-	if err != nil {
-		return nil, err
+	// Try configurations in priority order: Upstash first, then local
+	var opt *redis.Options
+	var err error
+	var redisType string
+
+	// Priority 1: Try Upstash Redis (cloud)
+	if config.IsUpstashEnabled() {
+		opt, err = parseUpstashConfig()
+		if err == nil {
+			redisType = "upstash"
+			logger.Infof("Using Upstash Redis configuration")
+		} else {
+			logger.Warnf("Failed to parse Upstash config: %v", err)
+		}
 	}
 
-	aggClient, err := aggregator.NewAggregatorClient(
-		logger,
-		aggregator.AggregatorClientConfig{
-			AggregatorRPCUrl: config.GetAggregatorRPCURL(),
-			SenderPrivateKey: config.GetDispatcherPrivateKey(),
-			SenderAddress:    config.GetDispatcherAddress(),
-			RetryAttempts:    3,
-			RetryDelay:       1 * time.Second,
-			RequestTimeout:   10 * time.Second,
-		},
-	)
-	if err != nil {
-		return nil, err
+	// Priority 2: Try local Redis if Upstash failed or not available
+	if opt == nil && config.IsLocalRedisEnabled() {
+		opt, err = parseLocalRedisConfig()
+		if err == nil {
+			redisType = "local"
+			logger.Infof("Using local Redis configuration")
+		} else {
+			logger.Warnf("Failed to parse local Redis config: %v", err)
+		}
+	}
+
+	if opt == nil {
+		return nil, fmt.Errorf("no valid Redis configuration found")
 	}
 
 	client := redis.NewClient(opt)
 
 	redisClient := &Client{
 		redisClient: client,
-		aggClient: aggClient,
-		logger: logger,
+		logger:      logger,
 	}
 
 	if err := redisClient.CheckConnection(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to %s Redis: %w", redisType, err)
 	}
 
-	logger.Infof("Connected to Redis (%s)", config.GetRedisType())
+	logger.Infof("Successfully connected to %s Redis", redisType)
 	return redisClient, nil
 }
 
-// parseRedisConfigFromSettings determines Redis configuration from config settings
-func parseRedisConfigFromSettings() (*redis.Options, error) {
-	// Try Upstash configuration first (cloud Redis - preferred)
-	if config.IsUpstashEnabled() {
-		opt, err := redis.ParseURL(config.GetUpstashURL())
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse Upstash Redis URL: %w", err)
-		}
-
-		// Set token as password if provided
-		if config.GetUpstashToken() != "" {
-			opt.Password = config.GetUpstashToken()
-		}
-
-		// Apply additional settings
-		opt.PoolSize = config.GetPoolSize()
-		opt.MinIdleConns = config.GetMinIdleConns()
-		opt.MaxRetries = config.GetMaxRetries()
-		opt.DialTimeout = config.GetDialTimeout()
-		opt.ReadTimeout = config.GetReadTimeout()
-		opt.WriteTimeout = config.GetWriteTimeout()
-		opt.PoolTimeout = config.GetPoolTimeout()
-
-		return opt, nil
+// parseUpstashConfig parses Upstash Redis configuration
+func parseUpstashConfig() (*redis.Options, error) {
+	if !config.IsUpstashEnabled() {
+		return nil, fmt.Errorf("upstash not enabled")
 	}
 
-	// Fall back to local Redis configuration (if explicitly enabled)
-	if config.IsLocalRedisEnabled() {
-		return &redis.Options{
-			Addr:         config.GetRedisAddr(),
-			Password:     config.GetRedisPassword(),
-			DB:           config.GetRedisDB(),
-			PoolSize:     config.GetPoolSize(),
-			MinIdleConns: config.GetMinIdleConns(),
-			MaxRetries:   config.GetMaxRetries(),
-			DialTimeout:  config.GetDialTimeout(),
-			ReadTimeout:  config.GetReadTimeout(),
-			WriteTimeout: config.GetWriteTimeout(),
-			PoolTimeout:  config.GetPoolTimeout(),
-		}, nil
+	opt, err := redis.ParseURL(config.GetUpstashURL())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Upstash Redis URL: %w", err)
 	}
 
-	return nil, fmt.Errorf("no Redis configuration available")
+	// Set token as password if provided
+	if config.GetUpstashToken() != "" {
+		opt.Password = config.GetUpstashToken()
+	}
+
+	// Apply additional settings
+	opt.PoolSize = config.GetPoolSize()
+	opt.MinIdleConns = config.GetMinIdleConns()
+	opt.MaxRetries = config.GetMaxRetries()
+	opt.DialTimeout = config.GetDialTimeout()
+	opt.ReadTimeout = config.GetReadTimeout()
+	opt.WriteTimeout = config.GetWriteTimeout()
+	opt.PoolTimeout = config.GetPoolTimeout()
+
+	return opt, nil
+}
+
+// parseLocalRedisConfig parses local Redis configuration
+func parseLocalRedisConfig() (*redis.Options, error) {
+	if !config.IsLocalRedisEnabled() {
+		return nil, fmt.Errorf("local Redis not enabled")
+	}
+
+	return &redis.Options{
+		Addr:         config.GetRedisAddr(),
+		Password:     config.GetRedisPassword(),
+		DB:           config.GetRedisDB(),
+		PoolSize:     config.GetPoolSize(),
+		MinIdleConns: config.GetMinIdleConns(),
+		MaxRetries:   config.GetMaxRetries(),
+		DialTimeout:  config.GetDialTimeout(),
+		ReadTimeout:  config.GetReadTimeout(),
+		WriteTimeout: config.GetWriteTimeout(),
+		PoolTimeout:  config.GetPoolTimeout(),
+	}, nil
 }
 
 // CheckConnection validates the Redis connection
@@ -158,7 +168,8 @@ func GetRedisInfo() map[string]interface{} {
 		"type":          config.GetRedisType(),
 		"upstash":       config.IsUpstashEnabled(),
 		"local":         config.IsLocalRedisEnabled(),
-		"stream_ttl":    config.GetStreamTTL().String(),
+		"job_stream_ttl": config.GetJobStreamTTL().String(),
+		"task_stream_ttl": config.GetTaskStreamTTL().String(),
 		"stream_maxlen": config.GetStreamMaxLen(),
 	}
 }
