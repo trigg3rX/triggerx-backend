@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
@@ -96,19 +97,28 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 
 		createdJobs.JobIDs[i] = jobID
+		expirationTime := time.Now().Add(time.Duration(tempJobs[i].TimeFrame) * time.Second)
 
 		switch {
 		case tempJobs[i].TaskDefinitionID == 1 || tempJobs[i].TaskDefinitionID == 2:
 			// Time-based job
+
+			var nextExecutionTimestamp time.Time
+			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(tempJobs[i].ScheduleType, tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule, tempJobs[i].Timezone)
+			if err != nil {
+				h.logger.Errorf("[getNextExecutionTimestamp] Error calculating next execution timestamp: %v", err)
+				nextExecutionTimestamp = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
+			}
+
 			timeJobData := types.TimeJobData{
 				JobID: jobID,
-				TimeFrame: tempJobs[i].TimeFrame,
+				ExpirationTime: expirationTime,
 				Recurring: tempJobs[i].Recurring,
 				TimeInterval: tempJobs[i].TimeInterval,
 				ScheduleType: tempJobs[i].ScheduleType,
 				CronExpression: tempJobs[i].CronExpression,
 				SpecificSchedule: tempJobs[i].SpecificSchedule,
-				NextExecutionTimestamp: time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second),
+				NextExecutionTimestamp: nextExecutionTimestamp,
 				TargetChainID: tempJobs[i].TargetChainID,
 				TargetContractAddress: tempJobs[i].TargetContractAddress,
 				TargetFunction: tempJobs[i].TargetFunction,
@@ -132,7 +142,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Event-based job
 			eventJobData := types.EventJobData{
 				JobID: jobID,
-				TimeFrame: tempJobs[i].TimeFrame,
+				ExpirationTime: expirationTime,
 				Recurring: tempJobs[i].Recurring,
 				TriggerChainID: tempJobs[i].TriggerChainID,
 				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
@@ -161,7 +171,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Condition-based job
 			conditionJobData := types.ConditionJobData{
 				JobID: jobID,
-				TimeFrame: tempJobs[i].TimeFrame,
+				ExpirationTime: expirationTime,
 				Recurring: tempJobs[i].Recurring,
 				ConditionType: tempJobs[i].ConditionType,
 				UpperLimit: tempJobs[i].UpperLimit,

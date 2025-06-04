@@ -29,9 +29,9 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.TimeFrame, timeJob.Recurring, timeJob.NextExecutionTimestamp, 
+		timeJob.JobID, timeJob.ExpirationTime, timeJob.Recurring, timeJob.NextExecutionTimestamp, 
 		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
-		timeJob.SpecificSchedule, timeJob.TargetChainID,
+		timeJob.SpecificSchedule, timeJob.Timezone, timeJob.TargetChainID,
 		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType, 
 		timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl, false, true).Exec()
 
@@ -44,7 +44,12 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 
 func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
-	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(&timeJob)
+	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
+		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp, 
+		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
+		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
+		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive)
 	if err != nil {
 		return types.TimeJobData{}, errors.New("failed to get time job by job ID")
 	}
@@ -71,10 +76,22 @@ func (r *timeJobRepository) UpdateTimeJobStatus(jobID int64, isActive bool) erro
 }
 
 func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]types.TimeJobData, error) {
+	iter := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, nextExecutionTimestamp).Iter()
+
 	var timeJobs []types.TimeJobData
-	err := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, nextExecutionTimestamp).Scan(&timeJobs)
-	if err != nil {
-		return []types.TimeJobData{}, errors.New("failed to get time jobs by next execution timestamp")
+	var timeJob types.TimeJobData
+	
+	for iter.Scan(
+		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp,
+		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
+		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
+		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive,
+	) {
+		timeJobs = append(timeJobs, timeJob)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, err
 	}
 
 	return timeJobs, nil

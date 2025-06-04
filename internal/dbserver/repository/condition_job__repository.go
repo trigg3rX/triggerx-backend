@@ -27,7 +27,7 @@ func NewConditionJobRepository(db *database.Connection) ConditionJobRepository {
 
 func (r *conditionJobRepository) CreateConditionJob(conditionJob *types.ConditionJobData) error {
 	err := r.db.Session().Query(queries.CreateConditionJobDataQuery,
-		conditionJob.JobID, conditionJob.TimeFrame, conditionJob.Recurring, conditionJob.ConditionType, conditionJob.UpperLimit, conditionJob.LowerLimit,
+		conditionJob.JobID, conditionJob.ExpirationTime, conditionJob.Recurring, conditionJob.ConditionType, conditionJob.UpperLimit, conditionJob.LowerLimit,
 		conditionJob.ValueSourceType, conditionJob.ValueSourceUrl, conditionJob.TargetChainID, conditionJob.TargetContractAddress, conditionJob.TargetFunction,
 		conditionJob.ABI, conditionJob.ArgType, conditionJob.Arguments, conditionJob.DynamicArgumentsScriptUrl, false, true).Exec()
 
