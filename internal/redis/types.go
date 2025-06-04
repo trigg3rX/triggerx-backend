@@ -13,7 +13,6 @@ const (
 	// Job Lifecycle Streams (Secondary - for monitoring)
 	JobsRunningStream   = "jobs:running"	 // Jobs that are running
 	JobsCompletedStream = "jobs:completed"   // Jobs completed their cycle
-	JobsFailedStream    = "jobs:failed"      // Jobs that failed
 
 	// Retry Configuration
 	MaxRetryAttempts = 3
@@ -34,7 +33,9 @@ type TaskStreamData struct {
 // JobTriggeredData represents job trigger information
 type JobStreamData struct {
 	JobID          int64                  `json:"job_id"`
-	TriggerCount   int                    `json:"trigger_count"`
+	SuccessCount   int                    `json:"success_count"`
+	FailureCount   int                    `json:"failure_count"`
+	ExpireTime     *time.Time             `json:"expire_time,omitempty"`
 	TaskIDs        []int64                `json:"task_ids"`
 	TaskDefinitionID int                  `json:"task_definition_id"`
 	ManagerID        int64                `json:"manager_id"`
