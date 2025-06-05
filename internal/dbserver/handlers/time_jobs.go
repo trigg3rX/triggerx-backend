@@ -31,6 +31,14 @@ func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
 		jobs = []commonTypes.ScheduleTimeJobData{}
 	}
 
+	for _, job := range jobs {
+		if job.DynamicArgumentsScriptUrl != "" {
+			job.TaskDefinitionID = 2
+		} else {
+			job.TaskDefinitionID = 1
+		}
+	}
+
 	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(jobs))
 	c.JSON(http.StatusOK, jobs)
 }
