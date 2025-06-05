@@ -43,9 +43,8 @@ type Config struct {
 	grafanaPort       string
 
 	// IPFS configuration
-	pinataApiKey       string
-	pinataSecretApiKey string
 	ipfsHost           string
+	pinataJWT          string
 
 	// Backend Service URLs
 	aggregatorRPCUrl string
@@ -83,9 +82,6 @@ func Init() error {
 		keeperP2PPort:            env.GetEnv("KEEPER_P2P_PORT", "9012"),
 		keeperMetricsPort:        env.GetEnv("KEEPER_METRICS_PORT", "9013"),
 		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
-		pinataApiKey:             env.GetEnv("PINATA_API_KEY", ""),
-		pinataSecretApiKey:       env.GetEnv("PINATA_SECRET_API_KEY", ""),
-		ipfsHost:                 env.GetEnv("IPFS_HOST", ""),
 		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
 		healthRPCUrl:             env.GetEnv("HEALTH_RPC_ADDRESS", "http://localhost:9003"),
 		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
@@ -204,14 +200,23 @@ func GetAttestationCenterAddress() string {
 	return cfg.attestationCenterAddress
 }
 
+func GetVersion() string {
+	return "0.1.2"
+}
+
+// IPFS configuration
+func SetIpfsHost(host string) {
+	cfg.ipfsHost = host
+}
+
 func GetIpfsHost() string {
 	return cfg.ipfsHost
 }
 
-func GetPinataApiKey() string {
-	return cfg.pinataApiKey
+func SetPinataJWT(jwt string) {
+	cfg.pinataJWT = jwt
 }
 
-func GetVersion() string {
-	return "0.1.2"
+func GetPinataJWT() string {
+	return cfg.pinataJWT
 }
