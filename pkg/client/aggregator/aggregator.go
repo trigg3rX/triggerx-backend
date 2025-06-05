@@ -9,11 +9,12 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // NewAggregatorClient creates a new instance of AggregatorClient
-func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*AggregatorClient, error) {
+func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig, tsm *redis.TaskStreamManager) (*AggregatorClient, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
@@ -38,10 +39,11 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	}
 
 	return &AggregatorClient{
-		logger:     logger,
-		config:     cfg,
-		privateKey: privateKey,
-		publicKey:  publicKey,
+		logger:            logger,
+		config:            cfg,
+		privateKey:        privateKey,
+		publicKey:         publicKey,
+		TaskStreamManager: tsm,
 	}, nil
 }
 
