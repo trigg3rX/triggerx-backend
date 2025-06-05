@@ -24,14 +24,14 @@ import (
 
 const executionContractAddress = "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
 
-func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTargetData, triggerData *types.TriggerData) (types.ActionData, error) {
+func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
 
-	executionResult := types.ActionData{
+	executionResult := types.PerformerActionData{
 		TaskID:       0,
 		ActionTxHash: "0x",
 		GasUsed:      "0",
 		Status:       false,
-		Timestamp:    time.Now().UTC(),
+		ExecutionTimestamp: time.Now().UTC(),
 	}
 
 	// e.logger.Infof("DEBUG: In executeActionWithStaticArgs - executionContractAddress: %s", executionContractAddress)

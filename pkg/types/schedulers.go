@@ -60,15 +60,16 @@ type ScheduleConditionJobData struct {
 	ArgType                       int      `json:"arg_type"`
 	Arguments                     []string `json:"arguments"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url"`
-	IsCompleted                 bool      `json:"is_completed"`
-	IsActive 					bool      `json:"is_active"`
 }
 
 // Data to pass to Performer to execution action
 type SendTaskTargetData struct {
     JobID                         int64     `json:"job_id"`
     TaskDefinitionID              int       `json:"task_definition_id"`
-    TargetChainID                 string    `json:"target_chain_id"`
+	Recurring                     bool      `json:"recurring"`
+	ExpirationTime                time.Time `json:"expiration_time"`
+	TimeFrame                     int64     `json:"time_frame"`
+	TargetChainID                 string    `json:"target_chain_id"`
     TargetContractAddress         string    `json:"target_contract_address"`
     TargetFunction                string    `json:"target_function"`
     ABI                           string    `json:"abi"`

@@ -169,7 +169,7 @@ func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Arg
 	return convertedArgs, nil
 }
 
-func (e *TaskExecutor) getContractMethodAndABI(methodName string, job *jobtypes.HandleCreateJobData) (*abi.ABI, *abi.Method, error) {
+func (e *TaskExecutor) getContractMethodAndABI(methodName string, job *jobtypes.SendTaskTargetData) (*abi.ABI, *abi.Method, error) {
 	// Use ABI from database instead of fetching it
 	if job.ABI == "" {
 		return nil, nil, fmt.Errorf("contract ABI not provided in job data")

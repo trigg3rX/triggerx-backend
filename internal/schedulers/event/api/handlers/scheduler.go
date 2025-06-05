@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler"
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -26,7 +25,7 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.EventBasedS
 
 // ScheduleJob schedules a new event-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
-	var req schedulerTypes.JobScheduleRequest
+	var req types.ScheduleEventJobData
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -39,9 +38,11 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	}
 
 	// Convert request to EventJobData
-	jobData := &types.EventJobData{
+	jobData := &types.ScheduleEventJobData{
 		JobID:                         req.JobID,
-		TimeFrame:                     req.TimeFrame,
+		TaskDefinitionID:              req.TaskDefinitionID,
+		LastExecutedAt:                req.LastExecutedAt,
+		ExpirationTime:                req.ExpirationTime,
 		Recurring:                     req.Recurring,
 		TriggerChainID:                req.TriggerChainID,
 		TriggerContractAddress:        req.TriggerContractAddress,
@@ -52,7 +53,7 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		ABI:                           req.ABI,
 		ArgType:                       req.ArgType,
 		Arguments:                     req.Arguments,
-		DynamicArgumentsScriptIPFSUrl: req.DynamicArgumentsScriptIPFSUrl,
+		DynamicArgumentsScriptUrl: req.DynamicArgumentsScriptUrl,
 	}
 
 	// Schedule the job

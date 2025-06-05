@@ -15,7 +15,7 @@ import (
 )
 
 // ScheduleJob creates and starts a new job worker
-func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.EventJobData) error {
+func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleEventJobData) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
@@ -75,7 +75,7 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.EventJobData) err
 }
 
 // createJobWorker creates a new job worker instance
-func (s *EventBasedScheduler) createJobWorker(jobData *commonTypes.EventJobData, client *ethclient.Client) (*worker.EventWorker, error) {
+func (s *EventBasedScheduler) createJobWorker(jobData *commonTypes.ScheduleEventJobData, client *ethclient.Client) (*worker.EventWorker, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	// Validate contract address

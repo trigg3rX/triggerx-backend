@@ -23,13 +23,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTargetData, triggerData *types.TriggerData) (types.ActionData, error) {
-	executionResult := types.ActionData{
+func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
+	executionResult := types.PerformerActionData{
 		TaskID:       0,
 		ActionTxHash: "0x",
 		GasUsed:      "0",
 		Status:       false,
-		Timestamp:    time.Now().UTC(),
+		ExecutionTimestamp: time.Now().UTC(),
 	}
 
 	// e.logger.Infof("Executing job %d with dynamic arguments", job.JobID)

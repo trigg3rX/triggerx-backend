@@ -22,8 +22,8 @@ type TimeBasedTaskData struct {
 
 type TaskData struct {
 	TaskDefinitionID int                 `json:"taskDefinitionId"`
-	TaskTargetData *types.TaskTargetData `json:"taskTargetData"`
-	TriggerData    *types.TriggerData    `json:"triggerData"`
+	TaskTargetData *types.SendTaskTargetData `json:"taskTargetData"`
+	TriggerData    *types.SendTriggerData    `json:"triggerData"`
 	PerformerData  types.GetPerformerData `json:"performerData"`
 }
 
@@ -107,7 +107,7 @@ func (c *AggregatorClient) SendTimeBasedTaskToPerformer(
 }
 
 // SendTaskToPerformer sends a task to the specified performer through the aggregator
-func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskTargetData *types.TaskTargetData, triggerData *types.TriggerData, performerData types.GetPerformerData) (bool, error) {
+func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData, performerData types.GetPerformerData) (bool, error) {
 	c.logger.Debug("Sending task to performer",
 		"performerID", performerData.KeeperID,
 		"jobID", taskTargetData.JobID)

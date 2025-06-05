@@ -21,7 +21,7 @@ type PerformerActionData struct {
 	StaticComplexity  float64       `json:"static_complexity"`
 	DynamicComplexity float64       `json:"dynamic_complexity"`
 	ComplexityIndex   float64       `json:"complexity_index"`
-	ExecutionTimestamp     time.Duration `json:"execution_timestamp"`
+	ExecutionTimestamp     time.Time `json:"execution_timestamp"`
 }
 
 // Data from keeper's proof generation for execution done above

@@ -82,7 +82,7 @@ func GenerateAndStoreProof(
 	}
 
 	tempData.SendProofData.TaskID = tempData.SendProofData.TaskID
-	tempData.SendProofData.Timestamp = time.Now().UTC()
+	tempData.SendProofData.TxTimestamp = time.Now().UTC()
 	tempData.SendProofData.CertificateHash = proof.CertificateHash
 	tempData.SendProofData.ResponseHash = proof.ResponseHash
 
@@ -97,8 +97,8 @@ func GenerateAndStoreProof(
 	}
 
 	fileName := fmt.Sprintf("proof_%d_%d_%s.json",
-		tempData.JobData.JobID,
-		tempData.ActionData.TaskID,
+		tempData.SendTaskTargetData.JobID,
+		tempData.SendProofData.TaskID,
 		time.Now().UTC().Format(time.RFC3339))
 
 	ipfsData, err := uploadToPinata(tempData, jsonData, fileName, pinataConfig)
@@ -155,7 +155,7 @@ func uploadToPinata(tempData types.IPFSData, data []byte, fileName string, confi
 	}
 
 	var ipfsData = tempData
-	ipfsData.ProofData.ActionDataCID = result.IpfsHash
+	ipfsData.SendProofData.ProofOfTask = result.IpfsHash
 
 	return ipfsData, nil
 }

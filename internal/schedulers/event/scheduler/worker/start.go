@@ -16,7 +16,7 @@ import (
 
 // JobWorker represents an individual worker watching a specific job
 type EventWorker struct {
-	Job          *commonTypes.EventJobData
+	Job          *commonTypes.ScheduleEventJobData
 	Client       *ethclient.Client
 	Logger       logging.Logger
 	Ctx          context.Context

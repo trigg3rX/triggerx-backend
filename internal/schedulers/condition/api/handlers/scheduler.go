@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -26,7 +25,7 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.ConditionBa
 
 // ScheduleJob schedules a new condition-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
-	var req schedulerTypes.JobScheduleRequest
+	var req types.ScheduleConditionJobData
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -41,7 +40,9 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	// Convert request to ConditionJobData
 	jobData := &types.ConditionJobData{
 		JobID:                         req.JobID,
-		TimeFrame:                     req.TimeFrame,
+		TaskDefinitionID:              req.TaskDefinitionID,
+		LastExecutedAt:                req.LastExecutedAt,
+		ExpirationTime:                req.ExpirationTime,
 		Recurring:                     req.Recurring,
 		ConditionType:                 req.ConditionType,
 		UpperLimit:                    req.UpperLimit,
@@ -54,7 +55,7 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		ABI:                           req.ABI,
 		ArgType:                       req.ArgType,
 		Arguments:                     req.Arguments,
-		DynamicArgumentsScriptIPFSUrl: req.DynamicArgumentsScriptIPFSUrl,
+		DynamicArgumentsScriptUrl: req.DynamicArgumentsScriptUrl,
 	}
 
 	// Schedule the job

@@ -29,15 +29,15 @@ func NewTaskExecutor(ethClient *ethclient.Client, etherscanAPIKey string, logger
 }
 
 // Execute implements the TaskExecutor interface
-func (e *TaskExecutor) ExecuteTimeBasedTask(timeJobData *types.ScheduleTimeJobData) (types.ActionData, error) {
+func (e *TaskExecutor) ExecuteTimeBasedTask(timeJobData *types.ScheduleTimeJobData) (types.PerformerActionData, error) {
 	e.logger.Info("Executing time based task", "jobID", timeJobData.JobID)
 
 	// TODO: Execute the task
-	return types.ActionData{}, nil
+	return types.PerformerActionData{}, nil
 }
 
 
-func (e *TaskExecutor) ExecuteTask(taskTargetData *types.TaskTargetData, triggerData *types.TriggerData) (types.ActionData, error) {
+func (e *TaskExecutor) ExecuteTask(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
 	e.logger.Info("Executing task", "jobID", taskTargetData.JobID)
 
 	switch taskTargetData.TaskDefinitionID {
@@ -46,6 +46,6 @@ func (e *TaskExecutor) ExecuteTask(taskTargetData *types.TaskTargetData, trigger
 	case 4, 6:
 		return e.executeActionWithDynamicArgs(taskTargetData, triggerData)
 	default:
-		return types.ActionData{}, fmt.Errorf("unsupported task definition id: %d", taskTargetData.TaskDefinitionID)
+		return types.PerformerActionData{}, fmt.Errorf("unsupported task definition id: %d", taskTargetData.TaskDefinitionID)
 	}
 }

@@ -17,7 +17,7 @@ import (
 
 // ValidateConditionBasedJob validates a condition-based job by executing the condition script
 // and checking if it returns true
-func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobData, ipfsData *types.IPFSData) (bool, error) {
+func (v *TaskValidator) ValidateConditionBasedTask(job *types.SendTaskTargetData, trigger types.SendTriggerData, ipfsData *types.IPFSData) (bool, error) {
 	// Ensure this is a condition-based job
 	if job.TaskDefinitionID != 5 && job.TaskDefinitionID != 6 {
 		return false, fmt.Errorf("not a condition-based job: task definition ID %d", job.TaskDefinitionID)
@@ -26,34 +26,29 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.HandleCreateJobDat
 	v.logger.Infof("Validating condition-based job %d (taskDefID: %d)", job.JobID, job.TaskDefinitionID)
 
 	// For non-recurring jobs, check if job has already been executed and shouldn't run again
-	if !job.Recurring && !job.LastExecutedAt.IsZero() {
+	if !job.Recurring && !trigger.Timestamp.IsZero() {
 		v.logger.Infof("Job %d is non-recurring and has already been executed on %s",
-			job.JobID, job.LastExecutedAt.Format(time.RFC3339))
+			job.JobID, trigger.Timestamp.Format(time.RFC3339))
 		return false, nil
 	}
 
 	// Check if the ScriptTriggerFunction is provided
-	if job.ScriptTriggerFunction == "" {
+	if trigger.ConditionSourceUrl == "" {
 		return false, fmt.Errorf("missing ScriptTriggerFunction for condition-based job %d", job.JobID)
 	}
 
 	// Fetch and execute the condition script
-	v.logger.Infof("Fetching condition script from IPFS: %s", job.ScriptTriggerFunction)
-	scriptContent, err := ipfs.FetchIPFSContent(config.GetIpfsHost(), job.ScriptTriggerFunction)
+	v.logger.Infof("Fetching condition script from IPFS: %s", trigger.ConditionSourceUrl)
+	scriptContent, err := ipfs.FetchIPFSContent(config.GetIpfsHost(), trigger.ConditionSourceUrl)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch condition script: %v", err)
 	}
 	v.logger.Infof("Successfully fetched condition script for job %d", job.JobID)
 
 	// Check if job is within its timeframe before executing script
-	now := time.Now().UTC()
-	if job.TimeFrame > 0 {
-		endTime := job.CreatedAt.Add(time.Duration(job.TimeFrame) * time.Second)
-		if now.After(endTime) {
-			v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds)",
-				job.JobID, job.CreatedAt.Format(time.RFC3339), job.TimeFrame)
-			return false, nil
-		}
+	if trigger.Timestamp.After(job.ExpirationTime) {
+		v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds)", job.JobID, trigger.Timestamp.Format(time.RFC3339), job.TimeFrame)
+		return false, nil
 	}
 
 	// Create a temporary file for the script
