@@ -58,9 +58,10 @@ CREATE TABLE IF NOT EXISTS job_data (
 -- Create Time_Job_data table
 CREATE TABLE IF NOT EXISTS time_job_data (
     job_id bigint,
+    task_definition_id int,
     recurring boolean,
-    time_interval bigint,
     schedule_type text,
+    time_interval bigint,
     cron_expression text,
     specific_schedule text,
     timezone text,
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS time_job_data (
 -- Create Event_Job_data table
 CREATE TABLE IF NOT EXISTS event_job_data (
     job_id bigint,
+    task_definition_id int,
     recurring boolean,
     trigger_chain_id text,
     trigger_contract_address text,
@@ -155,8 +157,8 @@ CREATE TABLE IF NOT EXISTS task_data (
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint,
-    keeper_name text,
     keeper_address text,
+    keeper_name text,
     consensus_address text,
     registered_tx text,
     operator_id text,
