@@ -18,11 +18,12 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // StateManagerInterface defines the interface for StateManager
 type StateManagerInterface interface {
-	UpdateKeeperHealth(health types.KeeperHealthCheckIn) error
+	UpdateKeeperHealth(health commonTypes.KeeperHealthCheckIn) error
 	GetKeeperCount() (int, int)
 	GetAllActiveKeepers() []string
 	GetDetailedKeeperInfo() []types.KeeperInfo
@@ -83,7 +84,7 @@ type MockStateManager struct {
 	mock.Mock
 }
 
-func (m *MockStateManager) UpdateKeeperHealth(health types.KeeperHealthCheckIn) error {
+func (m *MockStateManager) UpdateKeeperHealth(health commonTypes.KeeperHealthCheckIn) error {
 	args := m.Called(health)
 	return args.Error(0)
 }
@@ -129,7 +130,7 @@ func mockVerifySignature(message string, signatureHex string, expectedAddress st
 }
 
 func (h *TestHandler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth types.KeeperHealthCheckIn
+	var keeperHealth commonTypes.KeeperHealthCheckIn
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
 		h.logger.Error("Failed to parse keeper health check-in request",
 			"error", err,
@@ -167,7 +168,7 @@ func (h *TestHandler) HandleCheckInEvent(c *gin.Context) {
 	}
 
 	if keeperHealth.Version == "0.1.2" {
-		ok, err := mockVerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+		ok, err := mockVerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusPubKey)
 		if !ok {
 			h.logger.Error("Invalid keeper signature",
 				"keeper", keeperHealth.KeeperAddress,
@@ -186,7 +187,7 @@ func (h *TestHandler) HandleCheckInEvent(c *gin.Context) {
 		)
 
 		keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
-		keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
+		keeperHealth.ConsensusPubKey = strings.ToLower(keeperHealth.ConsensusPubKey)
 
 		if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
 			if errors.Is(err, keeper.ErrKeeperNotVerified) {
@@ -289,7 +290,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		keeperHealth   types.KeeperHealthCheckIn
+		keeperHealth   commonTypes.KeeperHealthCheckIn
 		expectedStatus int
 		mockSetup      func(*MockLogger, *MockStateManager)
 		verifyResult   bool
@@ -297,11 +298,11 @@ func TestHandleCheckInEvent(t *testing.T) {
 	}{
 		{
 			name: "Valid keeper check-in",
-			keeperHealth: types.KeeperHealthCheckIn{
+			keeperHealth: commonTypes.KeeperHealthCheckIn{
 				KeeperAddress:    "0x123",
 				Version:          "0.1.2",
 				Signature:        "0x456",
-				ConsensusAddress: "0x789",
+				ConsensusPubKey:  "0x789",
 				PeerID:           "test-peer",
 			},
 			expectedStatus: http.StatusOK,
@@ -315,7 +316,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 		},
 		{
 			name: "Obsolete version",
-			keeperHealth: types.KeeperHealthCheckIn{
+			keeperHealth: commonTypes.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "0.0.7",
 				PeerID:        "test-peer",
@@ -328,7 +329,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 		},
 		{
 			name: "Older version",
-			keeperHealth: types.KeeperHealthCheckIn{
+			keeperHealth: commonTypes.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "0.1.1",
 				PeerID:        "test-peer",
@@ -341,7 +342,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 		},
 		{
 			name:           "Invalid JSON",
-			keeperHealth:   types.KeeperHealthCheckIn{},
+			keeperHealth:   commonTypes.KeeperHealthCheckIn{},
 			expectedStatus: http.StatusPreconditionFailed,
 			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
 				logger.On("Debug", mock.Anything, mock.Anything).Return()
@@ -351,11 +352,11 @@ func TestHandleCheckInEvent(t *testing.T) {
 		},
 		{
 			name: "Invalid signature",
-			keeperHealth: types.KeeperHealthCheckIn{
+			keeperHealth: commonTypes.KeeperHealthCheckIn{
 				KeeperAddress:    "0x123",
 				Version:          "0.1.2",
 				Signature:        "invalid",
-				ConsensusAddress: "0x789",
+				ConsensusPubKey:  "0x789",
 				PeerID:           "test-peer",
 			},
 			expectedStatus: http.StatusPreconditionFailed,

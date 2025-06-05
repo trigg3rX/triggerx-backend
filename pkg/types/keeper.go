@@ -55,3 +55,20 @@ type PerformerBroadcastData struct {
 	PerformerSignature string `json:"performer_signature"`
 	IPFSDataCID        string `json:"ipfs_data_cid"`
 }
+
+// KeeperHealthCheckIn represents the health check-in data from a keeper
+type KeeperHealthCheckIn struct {
+	KeeperAddress    string    `json:"keeper_address" validate:"required,eth_addr"`
+	ConsensusPubKey  string    `json:"consensus_pub_key" validate:"required"`
+	ConsensusAddress string    `json:"consensus_address" validate:"required,eth_addr"`
+	Version          string    `json:"version" validate:"required"`
+	Timestamp        time.Time `json:"timestamp" validate:"required"`
+	Signature        string    `json:"signature" validate:"required"`
+	PeerID           string    `json:"peer_id" validate:"required"`
+}
+
+// KeeperHealthCheckInResponse represents the response from the health check-in endpoint
+type KeeperHealthCheckInResponse struct {
+	Status bool `json:"status"`
+	Data   string `json:"data"`
+}
