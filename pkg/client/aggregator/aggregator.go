@@ -12,47 +12,12 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-// Common errors
-var (
-	ErrInvalidKey    = fmt.Errorf("invalid key")
-	ErrSigningFailed = fmt.Errorf("signing operation failed")
-	ErrRPCFailed     = fmt.Errorf("RPC operation failed")
-	ErrMarshalFailed = fmt.Errorf("marshaling operation failed")
-)
-
-// AggregatorClientConfig holds the configuration for AggregatorClient
-type AggregatorClientConfig struct {
-	AggregatorRPCAddress string
-	SenderPrivateKey     string
-	SenderAddress        string
-	RetryAttempts        int
-	RetryDelay           time.Duration
-	RequestTimeout       time.Duration
-}
-
-// taskParams represents the parameters for sending a task
-type taskParams struct {
-	proofOfTask      string
-	data             string
-	taskDefinitionID int
-	performerAddress string
-	signature        string
-}
-
-// AggregatorClient handles communication with the aggregator service
-type AggregatorClient struct {
-	logger     logging.Logger
-	config     AggregatorClientConfig
-	privateKey *ecdsa.PrivateKey
-	publicKey  *ecdsa.PublicKey
-}
-
 // NewAggregatorClient creates a new instance of AggregatorClient
 func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*AggregatorClient, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
-	if cfg.AggregatorRPCAddress == "" {
+	if cfg.AggregatorRPCUrl == "" {
 		return nil, fmt.Errorf("RPC address cannot be empty")
 	}
 	if cfg.SenderPrivateKey == "" {
@@ -80,17 +45,6 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	}, nil
 }
 
-// Close cleans up any resources used by the client
-func (c *AggregatorClient) Close() error {
-	// Currently no resources to clean up
-	return nil
-}
-
-// getPerformerAddress returns the performer's Ethereum address
-func (c *AggregatorClient) getPerformerAddress() string {
-	return crypto.PubkeyToAddress(*c.publicKey).Hex()
-}
-
 // signMessage signs the given data with the client's private key
 func (c *AggregatorClient) signMessage(data []byte) (string, error) {
 	messageHash := crypto.Keccak256Hash(data)
@@ -115,7 +69,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 	var lastErr error
 
 	for attempt := 0; attempt < c.config.RetryAttempts; attempt++ {
-		rpcClient, err := rpc.Dial(c.config.AggregatorRPCAddress)
+		rpcClient, err := rpc.Dial(c.config.AggregatorRPCUrl)
 		if err != nil {
 			return fmt.Errorf("failed to dial aggregator RPC: %w", err)
 		}

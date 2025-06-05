@@ -48,7 +48,7 @@ func main() {
 
 	// Initialize clients
 	aggregatorCfg := aggregator.Config{
-		RPCAddress:     config.GetAggregatorRPCAddress(),
+		RPCAddress:     config.GetAggregatorRPCUrl(),
 		PrivateKey:     config.GetPrivateKeyController(),
 		KeeperAddress:  config.GetKeeperAddress(),
 		RetryAttempts:  3,
@@ -62,7 +62,7 @@ func main() {
 	defer aggregatorClient.Close()
 
 	healthCfg := health.Config{
-		HealthServiceURL: config.GetHealthRPCAddress(),
+		HealthServiceURL: config.GetHealthRPCUrl(),
 		PrivateKey:       config.GetPrivateKeyConsensus(),
 		KeeperAddress:    config.GetKeeperAddress(),
 		PeerID:           config.GetPeerID(),
@@ -75,7 +75,7 @@ func main() {
 	}
 	defer healthClient.Close()
 
-	ethClient, err := ethclient.Dial(config.GetAggregatorRPCAddress())
+	ethClient, err := ethclient.Dial(config.GetAggregatorRPCUrl())
 	if err != nil {
 		logger.Fatal("Failed to initialize Ethereum client", "error", err)
 	}

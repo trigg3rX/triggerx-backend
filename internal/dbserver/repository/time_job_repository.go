@@ -6,6 +6,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 )
 
@@ -14,7 +15,7 @@ type TimeJobRepository interface {
 	GetTimeJobByJobID(jobID int64) (types.TimeJobData, error)
 	CompleteTimeJob(jobID int64) error
 	UpdateTimeJobStatus(jobID int64, isActive bool) error
-	GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]types.TimeJobData, error)
+	GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]commonTypes.ScheduleTimeJobData, error)
 }
 
 type timeJobRepository struct {
@@ -29,9 +30,9 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.TimeFrame, timeJob.Recurring, timeJob.NextExecutionTimestamp, 
+		timeJob.JobID, timeJob.ExpirationTime, timeJob.Recurring, timeJob.NextExecutionTimestamp, 
 		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
-		timeJob.SpecificSchedule, timeJob.TargetChainID,
+		timeJob.SpecificSchedule, timeJob.Timezone, timeJob.TargetChainID,
 		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType, 
 		timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl, false, true).Exec()
 
@@ -45,12 +46,11 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
-		&timeJob.JobID, &timeJob.TimeFrame, &timeJob.Recurring, &timeJob.NextExecutionTimestamp,
+		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp, 
 		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
-		&timeJob.SpecificSchedule, &timeJob.TargetChainID, &timeJob.TargetContractAddress,
-		&timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, &timeJob.Arguments,
-		&timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive,
-	)
+		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
+		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive)
 	if err != nil {
 		return types.TimeJobData{}, errors.New("failed to get time job by job ID")
 	}
@@ -76,11 +76,22 @@ func (r *timeJobRepository) UpdateTimeJobStatus(jobID int64, isActive bool) erro
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]types.TimeJobData, error) {
-	var timeJobs []types.TimeJobData
-	err := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, nextExecutionTimestamp).Scan(&timeJobs)
-	if err != nil {
-		return []types.TimeJobData{}, errors.New("failed to get time jobs by next execution timestamp")
+func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]commonTypes.ScheduleTimeJobData, error) {
+	iter := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, nextExecutionTimestamp).Iter()
+
+	var timeJobs []commonTypes.ScheduleTimeJobData
+	var timeJob commonTypes.ScheduleTimeJobData
+	
+	for iter.Scan(
+		&timeJob.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
+		&timeJob.ScheduleType, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.NextExecutionTimestamp,
+		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl,
+	) {
+		timeJobs = append(timeJobs, timeJob)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, err
 	}
 
 	return timeJobs, nil

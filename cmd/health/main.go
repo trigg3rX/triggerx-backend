@@ -53,7 +53,7 @@ func main() {
 
 	// Initialize database connection
 	dbConfig := &database.Config{
-		Hosts:    []string{config.GetDatabaseHost() + ":" + config.GetDatabaseHostPort()},
+		Hosts:    []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace: "triggerx",
 	}
 	dbConn, err := database.NewConnection(dbConfig)

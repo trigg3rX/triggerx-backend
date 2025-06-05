@@ -17,31 +17,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 )
 
-func (h *Handler) CreateTaskData(c *gin.Context) {
-	var req types.CreateTaskDataRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Invalid request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-
-	// Validation: required fields must not be zero
-	if req.JobID == 0 || req.TaskDefinitionID == 0 || req.TaskPerformerID == 0 {
-		h.logger.Error("Missing required fields in request body")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
-		return
-	}
-
-	taskID, err := h.taskRepository.CreateTaskDataInDB(&req)
-	if err != nil {
-		h.logger.Error("Error creating task data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
-}
-
 func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	taskID := c.Param("id")
 	h.logger.Infof("[UpdateTaskExecutionData] Updating task execution data for task with ID: %s", taskID)
@@ -96,48 +71,6 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 
 	h.logger.Infof("[UpdateTaskAttestationData] Successfully updated task attestation data for task with ID: %s", taskID)
 	c.JSON(http.StatusOK, gin.H{"message": "Task attestation data updated successfully"})
-}
-
-func (h *Handler) GetTaskDataByID(c *gin.Context) {
-	taskID := c.Param("id")
-	h.logger.Infof("[GetTaskDataByID] Fetching task with ID: %s", taskID)
-
-	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
-	if err != nil {
-		h.logger.Errorf("[GetTaskDataByID] Error parsing task ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
-		return
-	}
-	taskData, err := h.taskRepository.GetTaskDataByID(taskIDInt)
-	if err != nil {
-		h.logger.Errorf("[GetTaskDataByID] Error retrieving task with ID %s: %v", taskID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	h.logger.Infof("[GetTaskDataByID] Successfully retrieved task with ID: %s", taskID)
-	c.JSON(http.StatusOK, taskData)
-}
-
-func (h *Handler) GetTasksByJobID(c *gin.Context) {
-	jobID := c.Param("id")
-	h.logger.Infof("[GetTasksByJobID] Fetching tasks for job with ID: %s", jobID)
-
-	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
-	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error parsing job ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
-		return
-	}
-	taskData, err := h.taskRepository.GetTasksByJobID(jobIDInt)
-	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for job with ID %s: %v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	h.logger.Infof("[GetTasksByJobID] Successfully retrieved tasks for job with ID: %s", jobID)
-	c.JSON(http.StatusOK, taskData)
 }
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {

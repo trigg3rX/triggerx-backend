@@ -10,32 +10,32 @@ import (
 )
 
 type Config struct {
-	DevMode bool
+	devMode bool
 
 	// Primary: Cloud Redis (Upstash) settings
-	UpstashURL   string
-	UpstashToken string
+	upstashURL   string
+	upstashToken string
 
 	// Fallback: Local Redis settings (optional)
-	LocalAddr     string
-	LocalPassword string
-	LocalEnabled  bool
+	localAddr     string
+	localPassword string
 
 	// Common settings
-	DB           int
-	PoolSize     int
-	MinIdleConns int
-	MaxRetries   int
+	db           int
+	poolSize     int
+	minIdleConns int
+	maxRetries   int
 
 	// Timeout settings
-	DialTimeout  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	PoolTimeout  time.Duration
+	dialTimeout  time.Duration
+	readTimeout  time.Duration
+	writeTimeout time.Duration
+	poolTimeout  time.Duration
 
 	// Stream settings
-	StreamMaxLen int
-	StreamTTL    time.Duration
+	streamMaxLen int
+	jobStreamTTL    time.Duration
+	taskStreamTTL   time.Duration
 }
 
 var cfg Config
@@ -44,68 +44,38 @@ func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-
 	cfg = Config{
-		DevMode: env.GetEnvBool("DEV_MODE", false),
-		UpstashURL:   env.GetEnv("UPSTASH_REDIS_URL", ""),
-		UpstashToken: env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
-		LocalAddr:     env.GetEnv("REDIS_ADDR", "localhost:6379"),
-		LocalPassword: env.GetEnv("REDIS_PASSWORD", ""),
-		LocalEnabled:  env.GetEnvBool("REDIS_LOCAL_ENABLED", false),
-		DB:           0,
-		PoolSize:     env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		MinIdleConns: env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		MaxRetries:   env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		DialTimeout:  time.Duration(env.GetEnvInt("REDIS_DIAL_TIMEOUT_SEC", 5)) * time.Second,
-		ReadTimeout:  time.Duration(env.GetEnvInt("REDIS_READ_TIMEOUT_SEC", 3)) * time.Second,
-		WriteTimeout: time.Duration(env.GetEnvInt("REDIS_WRITE_TIMEOUT_SEC", 3)) * time.Second,
-		PoolTimeout:  time.Duration(env.GetEnvInt("REDIS_POOL_TIMEOUT_SEC", 4)) * time.Second,
-		StreamMaxLen: env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		StreamTTL:    time.Duration(env.GetEnvInt("REDIS_STREAM_TTL_HOURS", 24)) * time.Hour,
+		devMode:       env.GetEnvBool("DEV_MODE", false),
+		upstashURL:    env.GetEnv("UPSTASH_REDIS_URL", ""),
+		upstashToken:  env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
+		localAddr:     env.GetEnv("REDIS_ADDR", "localhost:6379"),
+		localPassword: env.GetEnv("REDIS_PASSWORD", ""),
+		db:            0,
+		poolSize:      env.GetEnvInt("REDIS_POOL_SIZE", 10),
+		minIdleConns:  env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+		maxRetries:    env.GetEnvInt("REDIS_MAX_RETRIES", 3),
+		dialTimeout:   env.GetEnvDuration("REDIS_DIAL_TIMEOUT_SEC", 5*time.Second),
+		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT_SEC", 3*time.Second),
+		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT_SEC", 3*time.Second),
+		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT_SEC", 4*time.Second),
+		streamMaxLen:  env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
+		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL_HOURS", 120*time.Hour),
+		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL_HOURS", 1*time.Hour),
 	}
-
-	if !cfg.DevMode {
+	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
 	return nil
 }
 
-func IsDevMode() bool {
-	return cfg.DevMode
-}
-
-// Primary Redis configuration (Cloud-first)
 func IsUpstashEnabled() bool {
-	return cfg.UpstashURL != ""
+	return cfg.upstashURL != ""
 }
 
-func GetUpstashURL() string {
-	return cfg.UpstashURL
-}
-
-func GetUpstashToken() string {
-	return cfg.UpstashToken
-}
-
-// Fallback Redis configuration (Local)
 func IsLocalRedisEnabled() bool {
-	return cfg.LocalEnabled && cfg.LocalAddr != ""
+	return cfg.localAddr != ""
 }
 
-func GetRedisAddr() string {
-	return cfg.LocalAddr
-}
-
-func GetRedisPassword() string {
-	return cfg.LocalPassword
-}
-
-func GetRedisDB() int {
-	return cfg.DB
-}
-
-// Redis availability check
 func IsRedisAvailable() bool {
 	return IsUpstashEnabled() || IsLocalRedisEnabled()
 }
@@ -120,39 +90,66 @@ func GetRedisType() string {
 	return "none"
 }
 
-// Common Redis settings
-func GetStreamMaxLen() int {
-	return cfg.StreamMaxLen
+func IsDevMode() bool {
+	return cfg.devMode
 }
 
-func GetStreamTTL() time.Duration {
-	return cfg.StreamTTL
+func GetUpstashURL() string {
+	return cfg.upstashURL
+}
+
+func GetUpstashToken() string {
+	return cfg.upstashToken
+}
+
+func GetRedisAddr() string {
+	return cfg.localAddr
+}
+
+func GetRedisPassword() string {
+	return cfg.localPassword
+}
+
+func GetRedisDB() int {
+	return cfg.db
+}
+
+func GetStreamMaxLen() int {
+	return cfg.streamMaxLen
+}
+
+func GetJobStreamTTL() time.Duration {
+	return cfg.jobStreamTTL
+}
+
+func GetTaskStreamTTL() time.Duration {
+	return cfg.taskStreamTTL
 }
 
 func GetPoolSize() int {
-	return cfg.PoolSize
+	return cfg.poolSize
 }
 
 func GetMinIdleConns() int {
-	return cfg.MinIdleConns
+	return cfg.minIdleConns
 }
 
 func GetMaxRetries() int {
-	return cfg.MaxRetries
+	return cfg.maxRetries
 }
 
 func GetDialTimeout() time.Duration {
-	return cfg.DialTimeout
+	return cfg.dialTimeout
 }
 
 func GetReadTimeout() time.Duration {
-	return cfg.ReadTimeout
+	return cfg.readTimeout
 }
 
 func GetWriteTimeout() time.Duration {
-	return cfg.WriteTimeout
+	return cfg.writeTimeout
 }
 
 func GetPoolTimeout() time.Duration {
-	return cfg.PoolTimeout
+	return cfg.poolTimeout
 }

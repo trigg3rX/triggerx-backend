@@ -2,27 +2,34 @@ package config
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/validator"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
 type Config struct {
-	AvsGovernanceAddress     string
-	AttestationCenterAddress string
-	EthRPCURL                string
-	BaseRPCURL               string
-	PollingInterval          time.Duration
-	IPFSHost                 string
-	DatabaseHost             string
-	DatabaseHostPort         string
-	LastRewardsUpdate        string
-	DevMode                  bool
+	devMode           bool
+	
+	// Contract Addresses to listen for events
+	avsGovernanceAddress     string
+	attestationCenterAddress string
+
+	// RPC URLs for Ethereum and Base
+	ethRPCURL       string
+	baseRPCURL      string
+	pollingInterval time.Duration
+
+	// IPFS Host
+	ipfsHost string
+
+	// ScyllaDB Host and Port
+	databaseHostAddress string
+	databaseHostPort    string
+
+	lastRewardsUpdate string
 }
 
 var cfg Config
@@ -31,126 +38,79 @@ func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-
 	cfg = Config{
-		DevMode:                  os.Getenv("DEV_MODE") == "true",
-		AvsGovernanceAddress:     os.Getenv("AVS_GOVERNANCE_ADDRESS"),
-		AttestationCenterAddress: os.Getenv("ATTESTATION_CENTER_ADDRESS"),
-		EthRPCURL:                os.Getenv("L1_RPC"),
-		BaseRPCURL:               os.Getenv("L2_RPC"),
-		PollingInterval:          setPollingInterval(),
-		IPFSHost:                 os.Getenv("IPFS_HOST"),
-		DatabaseHost:             os.Getenv("DATABASE_HOST"),
-		DatabaseHostPort:         os.Getenv("DATABASE_HOST_PORT"),
-		LastRewardsUpdate:        os.Getenv("LAST_REWARDS_UPDATE"),
+		devMode:                  env.GetEnvBool("DEV_MODE", false),
+		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
+		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"),
+		ethRPCURL:                env.GetEnv("L1_RPC", ""),
+		baseRPCURL:               env.GetEnv("L2_RPC", ""),
+		pollingInterval:          env.GetEnvDuration("POLLING_INTERVAL", 15*time.Minute),
+		ipfsHost:                 env.GetEnv("IPFS_HOST", ""),
+		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
+		lastRewardsUpdate:        env.GetEnv("LAST_REWARDS_UPDATE", ""),
 	}
-
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
-
-	if !cfg.DevMode {
+	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
 	return nil
 }
 
 func validateConfig() error {
-	if !validator.IsValidAddress(cfg.AvsGovernanceAddress) {
-		log.Fatal("Invalid AvsGovernanceAddress")
+	if env.IsEmpty(cfg.ethRPCURL) {
+		return fmt.Errorf("invalid eth rpc url: %s", cfg.ethRPCURL)
 	}
-
-	if !validator.IsValidAddress(cfg.AttestationCenterAddress) {
-		log.Fatal("Invalid AttestationCenterAddress")
+	if env.IsEmpty(cfg.baseRPCURL) {
+		return fmt.Errorf("invalid base rpc url: %s", cfg.baseRPCURL)
 	}
-
-	if validator.IsEmpty(cfg.EthRPCURL) {
-		log.Fatal("Invalid EthRpcUrl")
+	if env.IsEmpty(cfg.ipfsHost) {
+		return fmt.Errorf("invalid ipfs host: %s", cfg.ipfsHost)
 	}
-
-	if validator.IsEmpty(cfg.BaseRPCURL) {
-		log.Fatal("Invalid BaseRpcUrl")
+	if env.IsEmpty(cfg.lastRewardsUpdate) {
+		cfg.lastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
 	}
-
-	pollingIntervalStr := os.Getenv("POLLING_INTERVAL")
-	if validator.IsEmpty(pollingIntervalStr) {
-		log.Fatal("Invalid PollingInterval")
-	}
-	var parseErr error
-	cfg.PollingInterval, parseErr = time.ParseDuration(pollingIntervalStr)
-	if parseErr != nil {
-		log.Fatal("Invalid PollingInterval format: ", parseErr)
-	}
-
-	if !validator.IsValidIPAddress(cfg.DatabaseHost) {
-		log.Fatal("Invalid DatabaseHost")
-	}
-
-	if !validator.IsValidPort(cfg.DatabaseHostPort) {
-		log.Fatal("Invalid DatabaseHostPort")
-	}
-
-	if validator.IsEmpty(cfg.IPFSHost) {
-		log.Fatal("Invalid IpfsHost")
-	}
-
-	if validator.IsEmpty(cfg.LastRewardsUpdate) {
-		cfg.LastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
-	}
-
 	return nil
 }
 
-func setPollingInterval() time.Duration {
-	pollingIntervalStr := os.Getenv("POLLING_INTERVAL")
-	if validator.IsEmpty(pollingIntervalStr) {
-		log.Fatal("Invalid PollingInterval")
-	}
-	var parseErr error
-	pollingInterval, parseErr := time.ParseDuration(pollingIntervalStr)
-	if parseErr != nil {
-		log.Fatal("Invalid PollingInterval format: ", parseErr)
-	}
-	return pollingInterval
-}
-
 func GetAvsGovernanceAddress() string {
-	return cfg.AvsGovernanceAddress
+	return cfg.avsGovernanceAddress
 }
 
 func GetAttestationCenterAddress() string {
-	return cfg.AttestationCenterAddress
+	return cfg.attestationCenterAddress
 }
 
 func GetEthRPCURL() string {
-	return cfg.EthRPCURL
+	return cfg.ethRPCURL
 }
 
 func GetBaseRPCURL() string {
-	return cfg.BaseRPCURL
+	return cfg.baseRPCURL
 }
 
 func GetIPFSHost() string {
-	return cfg.IPFSHost
+	return cfg.ipfsHost
 }
 
-func GetDatabaseHost() string {
-	return cfg.DatabaseHost
+func GetDatabaseHostAddress() string {
+	return cfg.databaseHostAddress
 }
 
 func GetDatabaseHostPort() string {
-	return cfg.DatabaseHostPort
+	return cfg.databaseHostPort
 }
 
 func GetLastRewardsUpdate() string {
-	return cfg.LastRewardsUpdate
+	return cfg.lastRewardsUpdate
 }
 
 func GetPollingInterval() time.Duration {
-	return cfg.PollingInterval
+	return cfg.pollingInterval
 }
 
 func IsDevMode() bool {
-	return cfg.DevMode
+	return cfg.devMode
 }

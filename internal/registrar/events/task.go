@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
+	"strings"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -15,7 +18,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/converter"
-	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -107,7 +109,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := ipfs.FetchIPFSContent(config.GetIPFSHost(), dataCID)
+			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -119,7 +121,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, converter.ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
+			if err := client.UpdatePointsInDatabase(int(ipfsData.SendTriggerData.TaskID), event.Operator, converter.ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}
@@ -177,7 +179,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := ipfs.FetchIPFSContent(config.GetIPFSHost(), dataCID)
+			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -189,7 +191,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, converter.ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
+			if err := client.UpdatePointsInDatabase(int(ipfsData.SendTriggerData.TaskID), event.Operator, converter.ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}
@@ -314,4 +316,47 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 		AttestersIds:     unpacked.AttestersIds,
 		Raw:              log,
 	}, nil
+}
+
+func FetchIPFSContent(gateway string, cid string) (string, error) {
+	if strings.HasPrefix(cid, "https://") {
+		resp, err := http.Get(cid)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch IPFS content from URL: %v", err)
+		}
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("failed to fetch IPFS content from URL: status code %d", resp.StatusCode)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to read response body: %v", err)
+		}
+
+		return string(body), nil
+	}
+
+	ipfsGateway := "https://" + gateway + "/ipfs/" + cid
+	resp, err := http.Get(ipfsGateway)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return string(body), nil
 }
