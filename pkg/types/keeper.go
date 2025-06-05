@@ -2,25 +2,12 @@ package types
 
 import "time"
 
-type TriggerData struct {
-	TaskID    int64     `json:"task_id"`
-	Timestamp time.Time `json:"timestamp"`
-
-	LastExecuted time.Time `json:"last_executed"`
-	TimeInterval int64     `json:"time_interval"`
-
-	TriggerTxHash string `json:"trigger_tx_hash"`
-
-	ConditionParams map[string]interface{} `json:"condition_params"`
-}
-
-type ActionData struct {
+// Data from performer's action execution
+type PerformerActionData struct {
 	TaskID       int64     `json:"task_id"`
-	Timestamp    time.Time `json:"timestamp"`
 	ActionTxHash string    `json:"action_tx_hash"`
 	GasUsed      string    `json:"gas_used"`
 	Status       bool      `json:"status"`
-	IPFSDataCID  string    `json:"ipfs_data_cid"`
 
 	MemoryUsage   uint64  `json:"memory_usage"`
 	CPUPercentage float64 `json:"cpu_percentage"`
@@ -34,58 +21,37 @@ type ActionData struct {
 	StaticComplexity  float64       `json:"static_complexity"`
 	DynamicComplexity float64       `json:"dynamic_complexity"`
 	ComplexityIndex   float64       `json:"complexity_index"`
-	ExecutionTime     time.Duration `json:"execution_time"`
+	ExecutionTimestamp     time.Duration `json:"execution_timestamp"`
 }
 
-type PerformerData struct {
+// Data from keeper's proof generation for execution done above
+type ProofData struct {
+	TaskID    int64     `json:"task_id"`
+	TxTimestamp time.Time `json:"tx_timestamp"`
+
+	ProofOfTask   string `json:"proof_of_task"`
+	CertificateHash string `json:"certificate_hash"`
+	ResponseHash    string `json:"response_hash"`
+}
+
+// Data to Upload to IPFS
+type IPFSData struct {
+	ScheduleTimeJobData ScheduleTimeJobData `json:"schedule_time_job_data"`
+
+	SendTaskTargetData SendTaskTargetData `json:"send_task_target_data"`
+
+	SendTriggerData SendTriggerData `json:"send_trigger_data"`
+
+	PerformerActionData PerformerActionData `json:"performer_action_data"`
+
+	SendProofData ProofData `json:"send_proof_data"`
+}
+
+// Data to Broadcast to Attesters from performer
+type PerformerBroadcastData struct {
 	ProofOfTask        string `json:"proof_of_task"`
 	TaskDefinitionID   string `json:"task_definition_id"`
 	PerformerAddress   string `json:"performer_address"`
 	PerformerSignature string `json:"performer_signature"`
-	Data               string `json:"data"`
-}
-
-type ProofData struct {
-	TaskID    int64     `json:"task_id"`
-	Timestamp time.Time `json:"timestamp"`
-
-	ProofOfTask   string `json:"proof_of_task"`
-	ActionDataCID string `json:"action_data_cid"`
-
-	CertificateHash string `json:"certificateHash"`
-	ResponseHash    string `json:"responseHash"`
-}
-
-type IPFSData struct {
-	JobData HandleCreateJobData `json:"job_data"`
-
-	TriggerData TriggerData `json:"trigger_data"`
-
-	ActionData ActionData `json:"action_data"`
-
-	ProofData ProofData `json:"proof_data"`
-}
-
-type ProofResponse struct {
-	ProofHash string `json:"proofHash"`
-	CID       string `json:"cid"`
-}
-
-type TaskValidationRequest struct {
-	ProofOfTask      string `json:"proofOfTask"`
-	Data             string `json:"data"`
-	TaskDefinitionID uint16 `json:"taskDefinitionId"`
-	Performer        string `json:"performer"`
-}
-
-type ValidationResult struct {
-	IsValid bool   `json:"isValid"`
-	Message string `json:"message"`
-	Error   string `json:"error,omitempty"`
-}
-
-type ValidationResponse struct {
-	Data    bool   `json:"data"`
-	Error   bool   `json:"error"`
-	Message string `json:"message,omitempty"`
+	IPFSDataCID        string `json:"ipfs_data_cid"`
 }

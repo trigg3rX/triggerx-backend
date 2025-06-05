@@ -5,28 +5,6 @@ import (
 	"time"
 )
 
-const (
-	// Time-based job task definitions
-	TaskDefTimeBasedStart = 1
-	TaskDefTimeBasedEnd   = 2
-
-	// Event-based job task definitions
-	TaskDefEventBasedStart = 3
-	TaskDefEventBasedEnd   = 4
-
-	// Condition-based job task definitions
-	TaskDefConditionBasedStart = 5
-	TaskDefConditionBasedEnd   = 6
-)
-
-type JobType string
-
-const (
-	JobTypeTime      JobType = "time"
-	JobTypeEvent     JobType = "event"
-	JobTypeCondition JobType = "condition"
-)
-
 type JobStatus string
 
 const (
@@ -35,11 +13,11 @@ const (
 	JobStatusRunning JobStatus = "running"
 )
 
-type CreateJobData struct {
+type CreateJobRequest struct {
 	// Common fields for all job types
 	UserAddress       string    `json:"user_address" validate:"required,ethereum_address"`
-	StakeAmount       *big.Int  `json:"stake_amount" validate:"required"`
-	TokenAmount       *big.Int  `json:"token_amount" validate:"required"`
+	DepositedEther    *big.Int  `json:"deposited_ether" validate:"required"`
+	DepositedToken    *big.Int  `json:"deposited_token" validate:"required"`
 	TaskDefinitionID  int       `json:"task_definition_id" validate:"required,min=1,max=6"`
 	Custom            bool      `json:"custom"`
 	JobTitle          string    `json:"job_title" validate:"required,min=3,max=100"`
@@ -47,47 +25,30 @@ type CreateJobData struct {
 	Recurring         bool      `json:"recurring"`
 	JobCostPrediction float64   `json:"job_cost_prediction" validate:"required,min=0"`
 	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	LastExecutedAt    time.Time `json:"last_executed_at"`
-	// Timezone          string    `json:"timezone" validate:"required,timezone"`
-	Timezone string `json:"timezone"`
-
-	// Job type specific fields
-	// JobType JobType `json:"job_type" validate:"required,oneof=time event condition"`
-	JobType JobType `json:"job_type"`
-
+	Timezone          string    `json:"timezone" validate:"required,timezone"`
 	// Time job specific fields
-	TimeInterval int64 `json:"time_interval,omitempty" validate:"omitempty,min=1"`
-
+	ScheduleType string `json:"schedule_type" validate:"required,oneof=cron interval specific"`
+	TimeInterval int64 `json:"time_interval,omitempty" validate:"omitempty,min=30"`
+	CronExpression string `json:"cron_expression,omitempty"`
+	SpecificSchedule string `json:"specific_schedule,omitempty"`
 	// Event job specific fields
-	// TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
-	// TriggerContractAddress string `json:"trigger_contract_address,omitempty" validate:"omitempty,ethereum_address"`
-	// TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
-	TriggerChainID         string `json:"trigger_chain_id,omitempty"`
-	TriggerContractAddress string `json:"trigger_contract_address,omitempty"`
-	TriggerEvent           string `json:"trigger_event,omitempty"`
-
+	TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
+	TriggerContractAddress string `json:"trigger_contract_address,omitempty" validate:"omitempty,ethereum_address"`
+	TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
 	// Condition job specific fields
 	ConditionType   string  `json:"condition_type,omitempty" validate:"omitempty,oneof=price volume"`
 	UpperLimit      float64 `json:"upper_limit,omitempty" validate:"omitempty,gt=0"`
 	LowerLimit      float64 `json:"lower_limit,omitempty" validate:"omitempty,gt=0"`
 	ValueSourceType string  `json:"value_source_type,omitempty" validate:"omitempty,oneof=api websocket"`
 	ValueSourceUrl  string  `json:"value_source_url,omitempty" validate:"omitempty,url"`
-
 	// Target fields (common for all job types)
 	TargetChainID         string `json:"target_chain_id" validate:"required,chain_id"`
 	TargetContractAddress string `json:"target_contract_address" validate:"required,ethereum_address"`
 	TargetFunction        string `json:"target_function" validate:"required"`
 	ABI                   string `json:"abi" validate:"required"`
-	// ArgType               int      `json:"arg_type" validate:"required"`
-	// Arguments             []string `json:"arguments" validate:"required"`
-	ArgType   int      `json:"arg_type"`
-	Arguments []string `json:"arguments"`
-
-	// Script fields (optional)
-	ScriptIPFSUrl         string `json:"script_ipfs_url,omitempty" validate:"omitempty,ipfs_url"`
-	ScriptTriggerFunction string `json:"script_trigger_function,omitempty" validate:"omitempty"`
-	ScriptTargetFunction  string `json:"script_target_function,omitempty" validate:"omitempty"`
+	ArgType               int      `json:"arg_type" validate:"required"`
+	Arguments             []string `json:"arguments" validate:"required"`
+	DynamicArgumentsScriptUrl string `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,url"`
 }
 
 type CreateJobResponse struct {
@@ -99,7 +60,14 @@ type CreateJobResponse struct {
 	TimeFrames        []int64  `json:"time_frames"`
 }
 
-type UpdateJobData struct {
+type JobResponse struct {
+	JobData          JobData           `json:"job_data"`
+	TimeJobData      *TimeJobData      `json:"time_job_data,omitempty"`
+	EventJobData     *EventJobData     `json:"event_job_data,omitempty"`
+	ConditionJobData *ConditionJobData `json:"condition_job_data,omitempty"`
+}
+
+type UpdateJobRequest struct {
 	JobID          int64     `json:"job_id"`
 	Recurring      bool      `json:"recurring"`
 	TimeFrame      int64     `json:"time_frame"`
@@ -107,7 +75,7 @@ type UpdateJobData struct {
 	LastExecutedAt time.Time `json:"last_executed_at"`
 }
 
-type CreateTaskData struct {
+type CreateTaskRequest struct {
 	JobID            int64 `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
 	TaskPerformerID  int64 `json:"task_performer_id" validate:"required"`
