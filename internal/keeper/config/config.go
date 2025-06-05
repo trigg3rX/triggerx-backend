@@ -69,8 +69,8 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnv("ETH_RPC_URL", ""),
-		baseRPCUrl:               env.GetEnv("BASE_RPC_URL", ""),
+		ethRPCUrl:                env.GetEnv("L1_RPC", ""),
+		baseRPCUrl:               env.GetEnv("L2_RPC", ""),
 		alchemyAPIKey:            env.GetEnv("ALCHEMY_API_KEY", ""),
 		etherscanAPIKey:          env.GetEnv("ETHERSCAN_API_KEY", ""),
 		privateKeyConsensus:      env.GetEnv("PRIVATE_KEY", ""),
@@ -83,7 +83,7 @@ func Init() error {
 		keeperMetricsPort:        env.GetEnv("KEEPER_METRICS_PORT", "9013"),
 		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
 		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
-		healthRPCUrl:             env.GetEnv("HEALTH_RPC_ADDRESS", "http://localhost:9003"),
+		healthRPCUrl:             env.GetEnv("HEALTH_RPC_URL", "http://localhost:9003"),
 		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
 		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
@@ -201,7 +201,7 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return "0.1.2"
+	return "0.1.3"
 }
 
 // IPFS configuration

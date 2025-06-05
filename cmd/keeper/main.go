@@ -139,20 +139,22 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, l
 	defer ticker.Stop()
 
 	// Initial check-in
-	if err := healthClient.CheckIn(ctx); err != nil {
+	response, err := healthClient.CheckIn(ctx)
+	if err != nil {
 		if errors.Is(err, health.ErrKeeperNotVerified) {
 			logger.Error("Keeper is not verified. Shutting down...", "error", err)
 			performGracefulShutdown(ctx, server, logger)
 			return
 		}
-		logger.Error("Failed initial health check-in", "error", err)
+		logger.Error("Failed initial health check-in", "error", response.Data)
 	}
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := healthClient.CheckIn(ctx); err != nil {
-				logger.Error("Failed health check-in", "error", err)
+			response, err := healthClient.CheckIn(ctx)
+			if err != nil {
+				logger.Error("Failed health check-in", "error", response.Data)
 			}
 		case <-ctx.Done():
 			logger.Info("Stopping health check routine")

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/security"
+	"github.com/trigg3rX/triggerx-backend/pkg/encrypt"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -110,7 +110,7 @@ func (c *Client) signTaskData(result *TaskResult) (string, error) {
 		result.TaskDefinitionID,
 		result.PerformerAddress)
 
-	signature, err := security.SignMessage(message, c.config.PrivateKey)
+	signature, err := encrypt.SignMessage(message, c.config.PrivateKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign message: %w", err)
 	}

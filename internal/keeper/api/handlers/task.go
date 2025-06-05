@@ -10,10 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/ipfs"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -220,28 +220,13 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	}
 
 	// Fetch the ActionData from IPFS using CID from the proof of task
-	ipfsContent, err := ipfs.FetchIPFSContent(config.GetIpfsHost(), decodedData)
+	ipfsData, err := utils.FetchIPFSContent(decodedData)
 	if err != nil {
 		h.logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
 			Data:    false,
 			Error:   true,
 			Message: fmt.Sprintf("Failed to fetch IPFS content from ProofOfTask: %v", err),
-		})
-		return
-	}
-
-	// Log the decoded data CID for context
-	h.logger.Infof("Data CID: %s", decodedData)
-
-	// Parse IPFS data into IPFSData struct
-	var ipfsData types.IPFSData
-	if err := json.Unmarshal([]byte(ipfsContent), &ipfsData); err != nil {
-		h.logger.Errorf("Failed to parse IPFS content into IPFSData: %v", err)
-		c.JSON(http.StatusInternalServerError, ValidationResponse{
-			Data:    false,
-			Error:   true,
-			Message: fmt.Sprintf("Failed to parse IPFS content: %v", err),
 		})
 		return
 	}

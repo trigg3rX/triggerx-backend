@@ -10,8 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/ipfs"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -39,7 +38,7 @@ func (v *TaskValidator) ValidateConditionBasedTask(job *types.SendTaskTargetData
 
 	// Fetch and execute the condition script
 	v.logger.Infof("Fetching condition script from IPFS: %s", trigger.ConditionSourceUrl)
-	scriptContent, err := ipfs.FetchIPFSContent(config.GetIpfsHost(), trigger.ConditionSourceUrl)
+	scriptContent, err := utils.FetchDataFromUrl(trigger.ConditionSourceUrl)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch condition script: %v", err)
 	}
