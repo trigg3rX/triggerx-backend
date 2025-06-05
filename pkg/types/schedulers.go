@@ -4,6 +4,7 @@ import "time"
 
 type ScheduleTimeJobData struct {
 	JobID                         int64     `json:"job_id"`
+	TaskDefinitionID              int       `json:"task_definition_id"`
 	LastExecutedAt                time.Time `json:"last_executed_at"`
 	ExpirationTime                time.Time `json:"expiration_time"`
 	TimeInterval                  int64     `json:"time_interval"`
@@ -26,4 +27,9 @@ type ScheduleEventJobData struct {
 
 type ScheduleConditionJobData struct {
 	
+}
+
+type TaskTargetData struct {
+	JobID int64 `json:"job_id"`
+	TaskDefinitionID int `json:"task_definition_id"`
 }
