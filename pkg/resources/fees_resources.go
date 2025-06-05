@@ -97,14 +97,20 @@ func DownloadIPFSFile(ipfsURL string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to download file: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	filePath := filepath.Join(tmpDir, "code.go")
 	out, err := os.Create(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to create local file: %v", err)
 	}
-	defer out.Close()
+	defer func() {
+		if err := out.Close(); err != nil {
+			fmt.Printf("Warning: failed to close file: %v\n", err)
+		}
+	}()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
@@ -241,7 +247,11 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container logs: %v", err)
 	}
-	defer logReader.Close()
+	defer func() {
+		if err := logReader.Close(); err != nil {
+			fmt.Printf("Warning: failed to close log reader: %v\n", err)
+		}
+	}()
 
 	errChan := make(chan error, 1)
 	doneChan := make(chan bool)
@@ -253,7 +263,11 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 			errChan <- fmt.Errorf("failed to get stats stream: %v", err)
 			return
 		}
-		defer statsReader.Body.Close()
+		defer func() {
+			if err := statsReader.Body.Close(); err != nil {
+				fmt.Printf("Warning: failed to close stats reader: %v\n", err)
+			}
+		}()
 
 		decoder := json.NewDecoder(statsReader.Body)
 		for {
@@ -344,9 +358,10 @@ func MonitorResources(ctx context.Context, cli *client.Client, containerID strin
 	stats.BandwidthRate = float64(stats.RxBytes + stats.TxBytes)
 
 	for _, bioStat := range lastStats.BlkioStats.IoServiceBytesRecursive {
-		if bioStat.Op == "Read" {
+		switch bioStat.Op {
+		case "Read":
 			stats.BlockRead += bioStat.Value
-		} else if bioStat.Op == "Write" {
+		case "Write":
 			stats.BlockWrite += bioStat.Value
 		}
 	}

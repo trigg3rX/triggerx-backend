@@ -180,7 +180,11 @@ func (s *Server) Start(port string) error {
 	s.metricsServer.Start()
 
 	if s.redisClient != nil {
-		defer s.redisClient.Close()
+		defer func() {
+			if err := s.redisClient.Close(); err != nil {
+				s.logger.Errorf("Failed to close Redis client: %v", err)
+			}
+		}()
 	}
 
 	return s.router.Run(fmt.Sprintf(":%s", port))

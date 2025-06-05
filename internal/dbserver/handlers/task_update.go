@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/trigg3rX/triggerx-backend/pkg/resources"
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/resources"
 )
 
 func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
@@ -24,7 +24,14 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	var taskData types.UpdateTaskExecutionDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskExecutionData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Validate required fields
+	if taskData.TaskID == 0 || taskData.ExecutionTimestamp.IsZero() || taskData.ExecutionTxHash == "" {
+		h.logger.Errorf("[UpdateTaskExecutionData] Missing required fields")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
 		return
 	}
 
@@ -45,7 +52,14 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	var taskData types.UpdateTaskAttestationDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskAttestationData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Validate required fields
+	if taskData.TaskID == 0 || taskData.TaskNumber == 0 || len(taskData.TaskAttesterIDs) == 0 || len(taskData.TpSignature) == 0 || len(taskData.TaSignature) == 0 || taskData.TaskSubmissionTxHash == "" {
+		h.logger.Errorf("[UpdateTaskAttestationData] Missing required fields")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
 		return
 	}
 
@@ -78,7 +92,11 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to create Docker client: %v", err)
 	}
-	defer cli.Close()
+	defer func() {
+		if err := cli.Close(); err != nil {
+			h.logger.Errorf("Error closing Docker client: %v", err)
+		}
+	}()
 
 	for _, ipfsURL := range urlList {
 		ipfsURL = strings.TrimSpace(ipfsURL)
@@ -92,7 +110,11 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 				h.logger.Errorf("Error downloading IPFS file: %v", err)
 				return
 			}
-			defer os.RemoveAll(filepath.Dir(codePath))
+			defer func() {
+				if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+					h.logger.Errorf("Error removing temporary directory: %v", err)
+				}
+			}()
 
 			containerID, err := resources.CreateDockerContainer(ctx, cli, codePath)
 			if err != nil {

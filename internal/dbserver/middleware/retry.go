@@ -64,7 +64,14 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 		var bodyBytes []byte
 		if c.Request.Body != nil {
 			bodyBytes, _ = io.ReadAll(c.Request.Body)
-			c.Request.Body.Close()
+			var bodyBytes []byte
+			if c.Request.Body != nil {
+				bodyBytes, _ = io.ReadAll(c.Request.Body)
+				if err := c.Request.Body.Close(); err != nil {
+					logger.Warnf("Failed to close request body: %v", err)
+				}
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 

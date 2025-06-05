@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	redis "github.com/redis/go-redis/v9" // Add alias here
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )

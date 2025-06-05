@@ -138,7 +138,9 @@ func uploadToPinata(tempData types.IPFSData, data []byte, fileName string, confi
 	if err != nil {
 		return types.IPFSData{}, fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return types.IPFSData{}, fmt.Errorf("failed to upload to Pinata: status %d", resp.StatusCode)
@@ -152,7 +154,7 @@ func uploadToPinata(tempData types.IPFSData, data []byte, fileName string, confi
 		return types.IPFSData{}, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	var ipfsData types.IPFSData = tempData
+	var ipfsData = tempData
 	ipfsData.ProofData.ActionDataCID = result.IpfsHash
 
 	return ipfsData, nil

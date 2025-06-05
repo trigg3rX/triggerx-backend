@@ -16,7 +16,9 @@ func (v *TaskValidator) fetchContractABI(contractAddress string) (string, error)
 
 	resp, err := http.Get(blockscoutUrl)
 	if err == nil && resp.StatusCode == http.StatusOK {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 
 		body, err := io.ReadAll(resp.Body)
 		if err == nil {
@@ -45,7 +47,9 @@ func (v *TaskValidator) fetchContractABI(contractAddress string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch ABI from both APIs: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to fetch ABI from both APIs, Etherscan status code: %d", resp.StatusCode)

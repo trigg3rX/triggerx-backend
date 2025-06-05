@@ -24,10 +24,12 @@ type Handler struct {
 	userRepository         repository.UserRepository
 	keeperRepository       repository.KeeperRepository
 	apiKeysRepository      repository.ApiKeysRepository
+
+	scanNowQuery func(*time.Time) error // for testability
 }
 
 func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig) *Handler {
-	return &Handler{
+	h := &Handler{
 		db:                     db,
 		logger:                 logger,
 		config:                 config,

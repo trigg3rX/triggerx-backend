@@ -56,7 +56,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize database client", "error", err)
 	}
-	defer dbClient.Close()
+	defer func() {
+		if err := dbClient.Close(); err != nil {
+			logger.Warnf("Error closing database client: %v", err)
+		}
+	}()
 
 	// Perform initial health check
 	logger.Info("Performing initial health check...")
