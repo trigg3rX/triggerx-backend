@@ -53,7 +53,12 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job status: " + err.Error()})
 			return
 		}
-		h.SendPauseToEventScheduler("/pause")
+		_, err = h.SendPauseToEventScheduler("/pause")
+		if err != nil {
+			h.logger.Errorf("[DeleteJobData] Error sending pause to event scheduler for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to event scheduler: " + err.Error()})
+			return
+		}
 	case 5, 6:
 		err = h.conditionJobRepository.UpdateConditionJobStatus(jobIDInt, false)
 		if err != nil {
@@ -61,7 +66,12 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job status: " + err.Error()})
 			return
 		}
-		h.SendPauseToConditionScheduler("/pause")
+		_, err = h.SendPauseToConditionScheduler("/pause")
+		if err != nil {
+			h.logger.Errorf("[DeleteJobData] Error sending pause to condition scheduler for jobID %s: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to condition scheduler: " + err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})

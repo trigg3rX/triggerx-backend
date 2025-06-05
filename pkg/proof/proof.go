@@ -81,7 +81,6 @@ func GenerateAndStoreProof(
 		return types.IPFSData{}, fmt.Errorf("failed to generate proof: %v", err)
 	}
 
-	tempData.SendProofData.TaskID = tempData.SendProofData.TaskID
 	tempData.SendProofData.TxTimestamp = time.Now().UTC()
 	tempData.SendProofData.CertificateHash = proof.CertificateHash
 	tempData.SendProofData.ResponseHash = proof.ResponseHash

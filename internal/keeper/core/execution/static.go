@@ -22,7 +22,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-const executionContractAddress = "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
+// const executionContractAddress = "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
 
 func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
 

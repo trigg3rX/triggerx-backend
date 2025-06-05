@@ -50,7 +50,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]types.TimeJobData{
 					{
 						JobID:                     1,
-						TimeFrame:                 3600,
+						ExpirationTime:            mockTime.Add(60 * time.Second),
 						Recurring:                 true,
 						TimeInterval:              60,
 						ScheduleType:              "interval",
@@ -69,7 +69,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 					},
 					{
 						JobID:                     2,
-						TimeFrame:                 7200,
+						ExpirationTime:            mockTime.Add(60 * time.Second),
 						Recurring:                 false,
 						TimeInterval:              120,
 						ScheduleType:              "specific",
@@ -92,7 +92,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 			expectedJobs: []types.TimeJobData{
 				{
 					JobID:                     1,
-					TimeFrame:                 3600,
+					ExpirationTime:            mockTime.Add(60 * time.Second),
 					Recurring:                 true,
 					TimeInterval:              60,
 					ScheduleType:              "interval",
@@ -111,7 +111,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				},
 				{
 					JobID:                     2,
-					TimeFrame:                 7200,
+					ExpirationTime:            mockTime.Add(60 * time.Second),
 					Recurring:                 false,
 					TimeInterval:              120,
 					ScheduleType:              "specific",

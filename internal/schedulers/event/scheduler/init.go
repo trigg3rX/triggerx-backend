@@ -86,23 +86,23 @@ func (s *EventBasedScheduler) Stop() {
 	s.workersMutex.RLock()
 	totalWorkers := len(s.workers)
 	runningWorkers := 0
-	workerDetails := make([]map[string]interface{}, 0, totalWorkers)
+	// workerDetails := make([]map[string]interface{}, 0, totalWorkers)
 
-	for jobID, worker := range s.workers {
-		isRunning := worker.IsRunning()
-		if isRunning {
-			runningWorkers++
-		}
+	// for jobID, worker := range s.workers {
+	// 	isRunning := worker.IsRunning()
+	// 	if isRunning {
+	// 		runningWorkers++
+	// 	}
 
-		workerDetails = append(workerDetails, map[string]interface{}{
-			"job_id":           jobID,
-			"is_running":       isRunning,
-			"trigger_chain_id": worker.Job.TriggerChainID,
-			"contract_address": worker.Job.TriggerContractAddress,
-			"trigger_event":    worker.Job.TriggerEvent,
-			"last_block":       worker.LastBlock,
-		})
-	}
+		// workerDetails = append(workerDetails, map[string]interface{}{
+		// 	"job_id":           jobID,
+		// 	"is_running":       isRunning,
+		// 	"trigger_chain_id": worker.Job.TriggerChainID,
+		// 	"contract_address": worker.Job.TriggerContractAddress,
+		// 	"trigger_event":    worker.Job.TriggerEvent,
+		// 	"last_block":       worker.LastBlock,
+		// })
+	// }
 	s.workersMutex.RUnlock()
 
 	s.clientsMutex.RLock()

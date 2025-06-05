@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	pkgtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Mock repositories
@@ -142,9 +143,9 @@ func (m *MockTimeJobRepository) CompleteTimeJob(jobID int64) error {
 	return args.Error(0)
 }
 
-func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp time.Time) ([]types.TimeJobData, error) {
+func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp time.Time) ([]pkgtypes.ScheduleTimeJobData, error) {
 	args := m.Called(timestamp)
-	return args.Get(0).([]types.TimeJobData), args.Error(1)
+	return args.Get(0).([]pkgtypes.ScheduleTimeJobData), args.Error(1)
 }
 
 func (m *MockEventJobRepository) CreateEventJob(job *types.EventJobData) error {

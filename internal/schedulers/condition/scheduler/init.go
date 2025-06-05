@@ -81,24 +81,24 @@ func (s *ConditionBasedScheduler) Stop() {
 	s.workersMutex.RLock()
 	totalWorkers := len(s.workers)
 	runningWorkers := 0
-	workerDetails := make([]map[string]interface{}, 0, totalWorkers)
+	// workerDetails := make([]map[string]interface{}, 0, totalWorkers)
 
-	for jobID, worker := range s.workers {
-		isRunning := worker.IsRunning()
-		if isRunning {
-			runningWorkers++
-		}
+	// for jobID, worker := range s.workers {
+	// 	isRunning := worker.IsRunning()
+	// 	if isRunning {
+	// 		runningWorkers++
+	// 	}
 
-		workerDetails = append(workerDetails, map[string]interface{}{
-			"job_id":            jobID,
-			"is_running":        isRunning,
-			"condition_type":    worker.Job.ConditionType,
-			"value_source_type": worker.Job.ValueSourceType,
-			"value_source_url":  worker.Job.ValueSourceUrl,
-			"last_value":        worker.LastValue,
-			"condition_met":     worker.ConditionMet,
-		})
-	}
+	// 	workerDetails = append(workerDetails, map[string]interface{}{
+	// 		"job_id":            jobID,
+	// 		"is_running":        isRunning,
+	// 		"condition_type":    worker.Job.ConditionType,
+	// 		"value_source_type": worker.Job.ValueSourceType,
+	// 		"value_source_url":  worker.Job.ValueSourceUrl,
+	// 		"last_value":        worker.LastValue,
+	// 		"condition_met":     worker.ConditionMet,
+	// 	})
+	// }
 	s.workersMutex.RUnlock()
 
 	s.cancel()
