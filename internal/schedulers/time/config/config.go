@@ -18,6 +18,8 @@ type Config struct {
 
 	// Database RPC URL
 	dbServerURL string
+	// Aggregator RPC URL
+	aggregatorRPCUrl string
 
 	// Scheduler Private Key and Address
 	schedulerPrivateKey string
@@ -41,6 +43,7 @@ func Init() error {
 		devMode:             env.GetEnvBool("DEV_MODE", false),
 		schedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
 		dbServerURL:         env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:    env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
 		schedulerPrivateKey: env.GetEnv("SCHEDULER_PRIVATE_KEY", ""),
 		schedulerAddress:    env.GetEnv("SCHEDULER_ADDRESS", ""),
 		maxWorkers:          env.GetEnvInt("MAX_WORKERS", 10),
@@ -76,6 +79,18 @@ func GetSchedulerRPCPort() string {
 
 func GetDBServerURL() string {
 	return cfg.dbServerURL
+}
+
+func GetAggregatorRPCUrl() string {
+	return cfg.aggregatorRPCUrl
+}
+
+func GetSchedulerPrivateKey() string {
+	return cfg.schedulerPrivateKey
+}
+
+func GetSchedulerAddress() string {
+	return cfg.schedulerAddress
 }
 
 func GetPollingInterval() time.Duration {

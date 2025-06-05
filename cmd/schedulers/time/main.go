@@ -15,6 +15,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -58,6 +59,20 @@ func main() {
 	}
 	defer dbClient.Close()
 
+	// Initialize aggregator client
+	aggClientCfg := aggregator.AggregatorClientConfig{
+		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+		SenderPrivateKey: config.GetSchedulerPrivateKey(),
+		SenderAddress:    config.GetSchedulerAddress(),
+		RetryAttempts:    3,
+		RetryDelay:       2 * time.Second,
+		RequestTimeout:   10 * time.Second,
+	}
+	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
+	if err != nil {
+		logger.Fatal("Failed to initialize aggregator client", "error", err)
+	}
+
 	// Perform initial health check
 	logger.Info("Performing initial health check...")
 	if err := dbClient.HealthCheck(); err != nil {
@@ -69,7 +84,7 @@ func main() {
 
 	// Initialize time-based scheduler
 	managerID := fmt.Sprintf("time-scheduler-%d", time.Now().Unix())
-	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, dbClient)
+	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, dbClient, aggClient)
 	if err != nil {
 		logger.Fatal("Failed to initialize time-based scheduler", "error", err)
 	}

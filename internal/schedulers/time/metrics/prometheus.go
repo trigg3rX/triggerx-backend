@@ -49,6 +49,22 @@ var (
 		Name:      "jobs_failed",
 		Help:      "Total number of jobs failed",
 	})
+
+	// TasksExecuted tracks the total number of tasks executed
+	TasksExecuted = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "time_scheduler",
+		Name:      "tasks_executed",
+		Help:      "Total number of tasks executed",
+	})
+
+	// TasksFailed tracks the total number of tasks failed
+	TasksFailed = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "time_scheduler",
+		Name:      "tasks_failed",
+		Help:      "Total number of tasks failed",
+	})
 )
 
 // StartMetricsCollection starts collecting metrics
