@@ -94,11 +94,10 @@ const (
 			WHERE job_id = ?`
 
 	GetTimeJobsByNextExecutionTimestampQuery = `
-			SELECT job_id, expiration_time, recurring, next_execution_timestamp,
-				time_interval, cron_expression, specific_schedule, timezone,
+			SELECT job_id, last_executed_at, expiration_time, time_interval,
+				schedule_type, cron_expression, specific_schedule, next_execution_timestamp,
 				target_chain_id, target_contract_address, target_function, 
-				abi, arg_type, arguments, dynamic_arguments_script_url,
-				is_completed, is_active
+				abi, arg_type, arguments, dynamic_arguments_script_url
 			FROM triggerx.time_job_data
 			WHERE next_execution_timestamp <= ?`
 )

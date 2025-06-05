@@ -6,6 +6,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 )
 
@@ -14,7 +15,7 @@ type TimeJobRepository interface {
 	GetTimeJobByJobID(jobID int64) (types.TimeJobData, error)
 	CompleteTimeJob(jobID int64) error
 	UpdateTimeJobStatus(jobID int64, isActive bool) error
-	GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]types.TimeJobData, error)
+	GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]commonTypes.ScheduleTimeJobData, error)
 }
 
 type timeJobRepository struct {
@@ -75,18 +76,17 @@ func (r *timeJobRepository) UpdateTimeJobStatus(jobID int64, isActive bool) erro
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]types.TimeJobData, error) {
+func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]commonTypes.ScheduleTimeJobData, error) {
 	iter := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, nextExecutionTimestamp).Iter()
 
-	var timeJobs []types.TimeJobData
-	var timeJob types.TimeJobData
+	var timeJobs []commonTypes.ScheduleTimeJobData
+	var timeJob commonTypes.ScheduleTimeJobData
 	
 	for iter.Scan(
-		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp,
-		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
-		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
-		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
-		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive,
+		&timeJob.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
+		&timeJob.ScheduleType, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.NextExecutionTimestamp,
+		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl,
 	) {
 		timeJobs = append(timeJobs, timeJob)
 	}

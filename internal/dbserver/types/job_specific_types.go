@@ -4,6 +4,7 @@ import "time"
 
 type TimeJobData struct {
 	JobID                         int64     `json:"job_id"`
+	LastExecutedAt                time.Time `json:"last_executed_at"`
 	ExpirationTime                time.Time `json:"expiration_time"`
 	Recurring                     bool      `json:"recurring"`
 	TimeInterval                  int64     `json:"time_interval"`

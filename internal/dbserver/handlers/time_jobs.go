@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
@@ -18,7 +18,7 @@ func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
 
 	nextExecutionTimestamp := time.Now().Add(time.Duration(pollInterval) * time.Second)
 
-	var jobs []types.TimeJobData
+	var jobs []commonTypes.ScheduleTimeJobData
 
 	jobs, err := h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp)
 	if err != nil {
@@ -28,7 +28,7 @@ func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
 	}
 
 	if jobs == nil {
-		jobs = []types.TimeJobData{}
+		jobs = []commonTypes.ScheduleTimeJobData{}
 	}
 
 	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(jobs))
