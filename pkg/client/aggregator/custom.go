@@ -13,14 +13,15 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// CustomTaskData represents the data for a custom task
+// TimeBasedTaskData represents the data for a time based task
 type TimeBasedTaskData struct {
-	JobType       string                     `json:"jobType"`
+	TaskDefinitionID int                 `json:"taskDefinitionId"`
 	TimeJobData   *types.ScheduleTimeJobData `json:"timeJobData"`
 	PerformerData types.GetPerformerData     `json:"performerData"`
 }
 
 type TaskData struct {
+	TaskDefinitionID int                 `json:"taskDefinitionId"`
 	TaskTargetData *types.TaskTargetData `json:"taskTargetData"`
 	TriggerData    *types.TriggerData    `json:"triggerData"`
 	PerformerData  types.GetPerformerData `json:"performerData"`
@@ -38,7 +39,7 @@ func (c *AggregatorClient) SendTimeBasedTaskToPerformer(
 
 	// Pack task data
 	taskData := &TimeBasedTaskData{
-		JobType:       "time",
+		TaskDefinitionID: timeJobData.TaskDefinitionID,
 		TimeJobData:   timeJobData,
 		PerformerData: performerData,
 	}
@@ -113,6 +114,7 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskTargetDa
 
 	// Pack task data
 	taskData := &TaskData{
+		TaskDefinitionID: taskTargetData.TaskDefinitionID,
 		TaskTargetData: taskTargetData,
 		TriggerData:    triggerData,
 		PerformerData:  performerData,
