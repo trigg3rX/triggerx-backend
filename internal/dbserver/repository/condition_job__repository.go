@@ -41,7 +41,7 @@ func (r *conditionJobRepository) CreateConditionJob(conditionJob *types.Conditio
 func (r *conditionJobRepository) GetConditionJobByJobID(jobID int64) (types.ConditionJobData, error) {
 	var conditionJob types.ConditionJobData
 	err := r.db.Session().Query(queries.GetConditionJobDataByJobIDQuery, jobID).Scan(
-		&conditionJob.JobID, &conditionJob.TimeFrame, &conditionJob.Recurring, &conditionJob.ConditionType,
+		&conditionJob.JobID, &conditionJob.ExpirationTime, &conditionJob.Recurring, &conditionJob.ConditionType,
 		&conditionJob.UpperLimit, &conditionJob.LowerLimit, &conditionJob.ValueSourceType,
 		&conditionJob.ValueSourceUrl, &conditionJob.TargetChainID, &conditionJob.TargetContractAddress,
 		&conditionJob.TargetFunction, &conditionJob.ABI, &conditionJob.ArgType, &conditionJob.Arguments,

@@ -81,10 +81,10 @@ func GenerateAndStoreProof(
 		return types.IPFSData{}, fmt.Errorf("failed to generate proof: %v", err)
 	}
 
-	tempData.ProofData.TaskID = tempData.ActionData.TaskID
-	tempData.ProofData.Timestamp = time.Now().UTC()
-	tempData.ProofData.CertificateHash = proof.CertificateHash
-	tempData.ProofData.ResponseHash = proof.ResponseHash
+	tempData.SendProofData.TaskID = tempData.SendProofData.TaskID
+	tempData.SendProofData.Timestamp = time.Now().UTC()
+	tempData.SendProofData.CertificateHash = proof.CertificateHash
+	tempData.SendProofData.ResponseHash = proof.ResponseHash
 
 	jsonData, err := json.MarshalIndent(tempData, "", "  ")
 	if err != nil {

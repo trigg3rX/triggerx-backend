@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -42,4 +44,10 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		keeperRepository:       repository.NewKeeperRepository(db),
 		apiKeysRepository:      repository.NewApiKeysRepository(db),
 	}
+	h.scanNowQuery = h.defaultScanNowQuery
+	return h
+}
+
+func (h *Handler) defaultScanNowQuery(timestamp *time.Time) error {
+	return h.db.Session().Query("SELECT now() FROM system.local").Scan(timestamp)
 }

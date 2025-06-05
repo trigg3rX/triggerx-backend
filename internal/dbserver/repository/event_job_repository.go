@@ -41,7 +41,7 @@ func (r *eventJobRepository) CreateEventJob(eventJob *types.EventJobData) error 
 func (r *eventJobRepository) GetEventJobByJobID(jobID int64) (types.EventJobData, error) {
 	var eventJob types.EventJobData
 	err := r.db.Session().Query(queries.GetEventJobDataByJobIDQuery, jobID).Scan(
-		&eventJob.JobID, &eventJob.TimeFrame, &eventJob.Recurring, &eventJob.TriggerChainID,
+		&eventJob.JobID, &eventJob.ExpirationTime, &eventJob.Recurring, &eventJob.TriggerChainID,
 		&eventJob.TriggerContractAddress, &eventJob.TriggerEvent, &eventJob.TargetChainID,
 		&eventJob.TargetContractAddress, &eventJob.TargetFunction, &eventJob.ABI, &eventJob.ArgType,
 		&eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl, &eventJob.IsCompleted, &eventJob.IsActive,

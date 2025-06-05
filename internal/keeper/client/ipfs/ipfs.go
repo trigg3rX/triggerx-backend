@@ -1,6 +1,7 @@
 package ipfs
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,6 +41,27 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	return string(body), nil
+}
+
+func UploadToIPFS(gateway string, data []byte) (string, error) {
+	resp, err := http.Post(gateway, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return "", fmt.Errorf("failed to upload to IPFS: %v", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to upload to IPFS: status code %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
