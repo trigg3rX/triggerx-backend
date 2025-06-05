@@ -75,11 +75,9 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	jobDataRaw := requestData["jobData"]
-	triggerDataRaw := requestData["triggerData"]
+	taskDefinitionID := requestData["taskDefinitionId"]
 	performerDataRaw := requestData["performerData"]
-	var resultBytes []byte
-
+	
 	// Convert to proper types
 	var performerData types.GetPerformerData
 	performerDataBytes, err := json.Marshal(performerDataRaw)
@@ -91,53 +89,78 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse performer data"})
 		return
 	}
-	// h.logger.Infof("performerData: %v\n", performerData)
 
+	var resultBytes []byte
 	if config.GetKeeperAddress() != performerData.KeeperAddress {
 		h.logger.Infof("I am not the performer: %s", performerData.KeeperAddress)
 		c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
 		return
 	} else {
-		var jobData types.HandleCreateJobData
-		jobDataBytes, err := json.Marshal(jobDataRaw)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job data format"})
-			return
-		}
-		if err := json.Unmarshal(jobDataBytes, &jobData); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse job data"})
-			return
-		}
-		h.logger.Infof("jobData: %v\n", jobData)
+		switch taskDefinitionID {
+		case 1, 2:
+			var timeJobData types.ScheduleTimeJobData
+			timeJobDataBytes, err := json.Marshal(requestData["timeJobData"])
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid time job data format"})
+				return
+			}
+			if err := json.Unmarshal(timeJobDataBytes, &timeJobData); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse time job data"})
+				return
+			}
 
-		var triggerData types.TriggerData
-		triggerDataBytes, err := json.Marshal(triggerDataRaw)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})
-			return
-		}
-		if err := json.Unmarshal(triggerDataBytes, &triggerData); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
-			return
-		}
-		h.logger.Infof("triggerData: %v\n", triggerData)
+			// TODO: Execute the task
+			actionData, err := h.executor.ExecuteTimeBasedTask(&timeJobData)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
+				return
+			}
 
-		// Execute task
-		actionData, err := h.executor.Execute(&jobData)
-		if err != nil {
-			h.logger.Error("Failed to execute task", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
-			return
-		}
+			// Convert result to bytes
+			resultBytes, err = json.Marshal(actionData)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal result"})
+				return
+			}
+		case 3, 4, 5, 6:
+			var taskTargetData types.TaskTargetData
+			var triggerData types.TriggerData
 
-		// Set task ID from trigger data
-		actionData.TaskID = triggerData.TaskID
+			taskTargetDataBytes, err := json.Marshal(requestData["taskTargetData"])
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event job data format"})
+				return
+			}
+			if err := json.Unmarshal(taskTargetDataBytes, &taskTargetData); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse task target data"})
+				return
+			}
 
-		// Convert result to bytes
-		resultBytes, err = json.Marshal(actionData)
-		if err != nil {
-			h.logger.Error("Failed to marshal result", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process result"})
+			triggerDataBytes, err := json.Marshal(requestData["triggerData"])
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})
+				return
+			}
+			if err := json.Unmarshal(triggerDataBytes, &triggerData); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
+				return
+			}
+
+			// TODO: Execute the task
+			actionData, err := h.executor.ExecuteTask(&taskTargetData, &triggerData)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
+				return
+			}
+
+			// Convert result to bytes
+			resultBytes, err = json.Marshal(actionData)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal result"})
+				return
+			}
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
 			return
 		}
 	}
