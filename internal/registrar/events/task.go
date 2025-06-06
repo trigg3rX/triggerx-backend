@@ -17,7 +17,6 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/converter"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -121,7 +120,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.SendTriggerData.TaskID), event.Operator, converter.ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
+			if err := client.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}
@@ -191,7 +190,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.SendTriggerData.TaskID), event.Operator, converter.ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
+			if err := client.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}
@@ -359,4 +358,12 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 	}
 
 	return string(body), nil
+}
+
+func ConvertBigIntToStrings(bigInts []*big.Int) []string {
+	strings := make([]string, len(bigInts))
+	for i, bigInt := range bigInts {
+		strings[i] = bigInt.String()
+	}
+	return strings
 }
