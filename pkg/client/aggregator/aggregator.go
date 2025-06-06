@@ -12,6 +12,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+// AggregatorClient handles communication with the aggregator service
+type AggregatorClient struct {
+	logger     logging.Logger
+	config     AggregatorClientConfig
+	privateKey *ecdsa.PrivateKey
+	publicKey  *ecdsa.PublicKey
+}
+
 // NewAggregatorClient creates a new instance of AggregatorClient
 func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*AggregatorClient, error) {
 	if logger == nil {
