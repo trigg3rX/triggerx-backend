@@ -9,13 +9,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -68,7 +69,11 @@ func main() {
 		RetryDelay:       2 * time.Second,
 		RequestTimeout:   10 * time.Second,
 	}
-	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
+	tsm, err := redis.NewTaskStreamManager(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
+	}
+	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, tsm)
 	if err != nil {
 		logger.Fatal("Failed to initialize aggregator client", "error", err)
 	}
@@ -116,10 +121,10 @@ func main() {
 
 	// Log comprehensive service status
 	serviceStatus := map[string]interface{}{
-		"manager_id":      managerID,
-		"api_port":        config.GetSchedulerRPCPort(),
-		"max_workers":     config.GetMaxWorkers(),
-		"poll_interval":   "30s",
+		"manager_id":    managerID,
+		"api_port":      config.GetSchedulerRPCPort(),
+		"max_workers":   config.GetMaxWorkers(),
+		"poll_interval": "30s",
 	}
 
 	logger.Info("Time-based scheduler service ready", serviceStatus)
