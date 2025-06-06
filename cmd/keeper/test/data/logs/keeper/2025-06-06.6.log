@@ -1,0 +1,7 @@
+{"level":"info","ts":"2025-06-06 03:25:48","caller":"main_test.go:55","msg":"[\u001b[32minfo\u001b[0m] Server created successfully"}
+{"level":"info","ts":"2025-06-06 03:25:48","caller":"server.go:77","msg":"[\u001b[32minfo\u001b[0m] Starting API server","addr":":8080"}
+{"level":"info","ts":"2025-06-06 03:25:49","caller":"main_test.go:65","msg":"[\u001b[32minfo\u001b[0m] Server started successfully"}
+{"level":"info","ts":"2025-06-06 03:25:49","caller":"server.go:86","msg":"[\u001b[32minfo\u001b[0m] Stopping API server"}
+{"level":"info","ts":"2025-06-06 03:25:49","caller":"main_test.go:72","msg":"[\u001b[32minfo\u001b[0m] Server stopped successfully"}
+{"level":"info","ts":"2025-06-06 03:25:49","caller":"main_test.go:79","msg":"[\u001b[32minfo\u001b[0m] Server shutdown returned nil error (graceful shutdown)"}
+{"level":"info","ts":"2025-06-06 03:25:49","caller":"main_test.go:96","msg":"[\u001b[32minfo\u001b[0m] Health check client created successfully"}

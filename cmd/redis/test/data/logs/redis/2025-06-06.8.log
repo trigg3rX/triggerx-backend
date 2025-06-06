@@ -1,0 +1,7 @@
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"redis.go:40","msg":"[\u001b[32minfo\u001b[0m] Using Upstash Redis configuration"}
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"redis.go:71","msg":"[\u001b[32minfo\u001b[0m] Successfully connected to upstash Redis"}
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"main_test.go:103","msg":"[\u001b[32minfo\u001b[0m] Redis client created successfully"}
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"main_test.go:108","msg":"[\u001b[32minfo\u001b[0m] Redis ping successful"}
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"main_test.go:132","msg":"[\u001b[32minfo\u001b[0m] Test job added to stream successfully","stream_id":""}
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"main_test.go:137","msg":"[\u001b[32minfo\u001b[0m] Redis info retrieved successfully","info":{"available":true,"job_stream_ttl":"120h0m0s","local":true,"stream_maxlen":10000,"task_stream_ttl":"1h0m0s","type":"upstash","upstash":true}}
+{"level":"info","ts":"2025-06-06 03:15:58","caller":"main_test.go:142","msg":"[\u001b[32minfo\u001b[0m] Redis client closed successfully"}

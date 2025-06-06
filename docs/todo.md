@@ -106,7 +106,7 @@ type TriggerData struct {
     EventTxHash                   string    `json:"event_tx_hash"`
     EventTriggerContractAddress   string    `json:"event_trigger_contract_address"`
     EventTriggerFunction          string    `json:"event_trigger_function"`
-    ConditionType                 string    `json:"condition_type"`
+    ConditionType                 string    `json:"condition_ type"`
     ConditionSourceType           string    `json:"condition_source_type"`
     ConditionSourceUrl            string    `json:"condition_source_url"`
     ConditionUpperLimit           int       `json:"condition_upper_limit"`
