@@ -59,7 +59,6 @@ CREATE TABLE IF NOT EXISTS job_data (
 CREATE TABLE IF NOT EXISTS time_job_data (
     job_id bigint,
     task_definition_id int,
-    recurring boolean,
     schedule_type text,
     time_interval bigint,
     cron_expression text,

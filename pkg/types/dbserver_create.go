@@ -13,6 +13,7 @@ const (
 	JobStatusRunning JobStatus = "running"
 )
 
+// Create New Job
 type CreateJobRequest struct {
 	// Common fields for all job types
 	UserAddress       string    `json:"user_address" validate:"required,ethereum_address"`
@@ -60,21 +61,7 @@ type CreateJobResponse struct {
 	TimeFrames        []int64  `json:"time_frames"`
 }
 
-type JobResponse struct {
-	JobData          JobData           `json:"job_data"`
-	TimeJobData      *TimeJobData      `json:"time_job_data,omitempty"`
-	EventJobData     *EventJobData     `json:"event_job_data,omitempty"`
-	ConditionJobData *ConditionJobData `json:"condition_job_data,omitempty"`
-}
-
-type UpdateJobRequest struct {
-	JobID          int64     `json:"job_id"`
-	Recurring      bool      `json:"recurring"`
-	TimeFrame      int64     `json:"time_frame"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	LastExecutedAt time.Time `json:"last_executed_at"`
-}
-
+// Create New Task
 type CreateTaskRequest struct {
 	JobID            int64 `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
@@ -86,14 +73,9 @@ type CreateTaskResponse struct {
 	JobID            int64 `json:"job_id"`
 	TaskDefinitionID int   `json:"task_definition_id"`
 	TaskPerformerID  int64 `json:"task_performer_id"`
-	IsApproved       bool  `json:"is_approved"`
 }
 
-type GetPerformerData struct {
-	KeeperID      int64  `json:"keeper_id"`
-	KeeperAddress string `json:"keeper_address"`
-}
-
+// Create New Keeper from Contracts (registrar)
 type CreateKeeperData struct {
 	KeeperAddress  string `json:"keeper_address"`
 	RegisteredTx   string `json:"registered_tx"`
@@ -101,6 +83,7 @@ type CreateKeeperData struct {
 	ChatID         int64  `json:"chat_id"`
 }
 
+// Create New Keeper from Google Form (google script)
 type GoogleFormCreateKeeperData struct {
 	KeeperAddress  string `json:"keeper_address" validate:"required,ethereum_address"`
 	RewardsAddress string `json:"rewards_address" validate:"required,ethereum_address"`
@@ -108,46 +91,8 @@ type GoogleFormCreateKeeperData struct {
 	EmailID        string `json:"email_id" validate:"required,email"`
 }
 
-type UpdateKeeperConnectionDataResponse struct {
-	KeeperID      int64  `json:"keeper_id"`
-	KeeperAddress string `json:"keeper_address"`
-	Verified      bool   `json:"verified"`
-}
-
-type UpdateKeeperStakeData struct {
-	KeeperID      int64     `json:"keeper_id"`
-	KeeperAddress string    `json:"keeper_address"`
-	Stakes        []float64 `json:"stakes"`
-	Strategies    []string  `json:"strategies"`
-}
-
-type KeeperLeaderboardEntry struct {
-	KeeperID      int64   `json:"keeper_id"`
-	KeeperAddress string  `json:"keeper_address"`
-	KeeperName    string  `json:"keeper_name"`
-	TasksExecuted int64   `json:"tasks_executed"`
-	KeeperPoints  float64 `json:"keeper_points"`
-}
-
-type UserLeaderboardEntry struct {
-	UserID         int64   `json:"user_id"`
-	UserAddress    string  `json:"user_address"`
-	TotalJobs      int64   `json:"total_jobs"`
-	TasksCompleted int64   `json:"tasks_completed"`
-	UserPoints     float64 `json:"user_points"`
-}
-
-type KeeperStatusUpdate struct {
-	Status bool `json:"status"`
-}
-
+// Create New API Key (SDK)
 type CreateApiKeyRequest struct {
 	Owner     string `json:"owner" validate:"required,min=3,max=50"`
 	RateLimit int    `json:"rateLimit" validate:"required,min=1,max=1000"`
-}
-
-type DailyRewardsPoints struct {
-	KeeperID       int64   `json:"keeper_id"`
-	RewardsBooster float32 `json:"rewards_booster"`
-	KeeperPoints   float64 `json:"keeper_points"`
 }
