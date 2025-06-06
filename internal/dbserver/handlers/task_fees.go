@@ -25,9 +25,9 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 
 	ctx := context.Background()
 
-	executor, err := docker.NewCodeExecutor(docker.ExecutorConfig{
+	executor, err := docker.NewCodeExecutor(ctx, docker.ExecutorConfig{
 		Docker: h.docker,
-	})
+	}, h.logger)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create code executor: %v", err)
 	}

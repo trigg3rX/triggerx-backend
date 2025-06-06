@@ -46,6 +46,9 @@ type Config struct {
 	ipfsHost           string
 	pinataJWT          string
 
+	// Wallet Configuration
+	chainNonces map[string]uint64
+
 	// Backend Service URLs
 	aggregatorRPCUrl string
 	healthRPCUrl     string
@@ -219,4 +222,12 @@ func SetPinataJWT(jwt string) {
 
 func GetPinataJWT() string {
 	return cfg.pinataJWT
+}
+
+func GetChainNonce(chain string) uint64 {
+	return cfg.chainNonces[chain]
+}
+
+func IncrementChainNonce(chain string) {
+	cfg.chainNonces[chain]++
 }
