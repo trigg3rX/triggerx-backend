@@ -17,8 +17,8 @@ import (
 )
 
 type CodeExecutor struct {
-	dockerManager *Manager
-	downloader *Downloader
+	DockerManager *Manager
+	Downloader *Downloader
 	config        ExecutorConfig
 }
 
@@ -29,15 +29,15 @@ func NewCodeExecutor(cfg ExecutorConfig) (*CodeExecutor, error) {
 	}
 
 	return &CodeExecutor{
-		dockerManager:  NewManager(cli, cfg.Docker),
-		downloader:     NewDownloader(cfg.Docker.TimeoutSeconds),
+		DockerManager:  NewManager(cli, cfg.Docker),
+		Downloader:     NewDownloader(cfg.Docker.TimeoutSeconds),
 		config:         cfg,
 	}, nil
 }
 
 func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*ExecutionResult, error) {
 	// 1. Download code from IPFS
-	codePath, err := e.downloader.DownloadFile(ctx, fileURL)
+	codePath, err := e.Downloader.DownloadFile(ctx, fileURL)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,
@@ -46,16 +46,16 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 	}
 
 	// 2. Create and setup container
-	containerID, err := e.dockerManager.CreateContainer(ctx, filepath.Dir(codePath))
+	containerID, err := e.DockerManager.CreateContainer(ctx, filepath.Dir(codePath))
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,
 			Error:   fmt.Errorf("container creation failed: %w", err),
 		}, nil
 	}
-	defer e.dockerManager.CleanupContainer(ctx, containerID)
+	defer e.DockerManager.CleanupContainer(ctx, containerID)
 
-	result, err := e.monitorExecution(ctx, e.dockerManager.cli, containerID, noOfAttesters)
+	result, err := e.MonitorExecution(ctx, e.DockerManager.Cli, containerID, noOfAttesters)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,
@@ -66,7 +66,7 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 	return result, nil
 }
 
-func (e *CodeExecutor) monitorExecution(ctx context.Context, cli *client.Client, containerID string, noOfAttesters int) (*ExecutionResult, error) {
+func (e *CodeExecutor) MonitorExecution(ctx context.Context, cli *client.Client, containerID string, noOfAttesters int) (*ExecutionResult, error) {
 	result := &ExecutionResult{}
 	var executionStartTime time.Time
 	var executionEndTime time.Time
@@ -75,7 +75,7 @@ func (e *CodeExecutor) monitorExecution(ctx context.Context, cli *client.Client,
 	executionStarted := false
 	var outputBuffer bytes.Buffer
 
-	containerInfo, err := e.dockerManager.GetContainerInfo(ctx, containerID)
+	containerInfo, err := e.DockerManager.GetContainerInfo(ctx, containerID)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,

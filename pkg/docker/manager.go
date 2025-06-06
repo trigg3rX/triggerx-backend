@@ -25,13 +25,13 @@ echo "END_EXECUTION"
 )
 
 type Manager struct {
-	cli     *client.Client
+	Cli  *client.Client
 	config  DockerConfig
 }
 
 func NewManager(cli *client.Client, config DockerConfig) *Manager {
 	return &Manager{
-		cli:    cli,
+		Cli:    cli,
 		config: config,
 	}
 }
@@ -68,7 +68,7 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 		},
 	}
 
-	resp, err := m.cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	resp, err := m.Cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
@@ -81,13 +81,13 @@ func (m *Manager) CleanupContainer(ctx context.Context, containerID string) erro
 		return nil
 	}
 	
-	return m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{
+	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{
 		Force: true,
 	})
 }
 
 func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (*container.InspectResponse, error) {
-	info, err := m.cli.ContainerInspect(ctx, containerID)
+	info, err := m.Cli.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container info: %w", err)
 	}
