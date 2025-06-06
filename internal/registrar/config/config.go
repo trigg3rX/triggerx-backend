@@ -44,7 +44,7 @@ func Init() error {
 		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"),
 		ethRPCURL:                env.GetEnv("L1_RPC", ""),
 		baseRPCURL:               env.GetEnv("L2_RPC", ""),
-		pollingInterval:          env.GetEnvDuration("POLLING_INTERVAL", 15*time.Minute),
+		pollingInterval:          env.GetEnvDuration("REGISTRAR_POLLING_INTERVAL", 15*time.Minute),
 		ipfsHost:                 env.GetEnv("IPFS_HOST", ""),
 		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),

@@ -9,7 +9,7 @@ import (
 )
 
 // SendTaskResult sends a task result to the aggregator
-func (c *AggregatorClient) SendTaskResult(ctx context.Context, taskResult *types.PerformerBroadcastData) error {
+func (c *AggregatorClient) SendTaskToAggregator(ctx context.Context, taskResult *types.PerformerBroadcastData) error {
 	c.logger.Debug("Sending task result to aggregator",
 		"taskDefinitionId", taskResult.TaskDefinitionID,
 		"proofOfTask", taskResult.ProofOfTask)
