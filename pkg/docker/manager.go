@@ -15,10 +15,12 @@ const (
 cd /code
 go mod init code
 go mod tidy
+echo "START_EXECUTION"
 go run code.go 2>&1 || {
     echo "Error executing Go program. Exit code: $?"
     exit 1
 }
+echo "END_EXECUTION"
 `
 )
 

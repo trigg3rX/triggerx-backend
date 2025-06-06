@@ -11,26 +11,25 @@ import (
 )
 
 type Downloader struct {
-	config IPFSConfig
+	timeoutSeconds int
 	client *http.Client
 }
 
-func NewDownloader(config IPFSConfig) *Downloader {
+func NewDownloader(timeoutSeconds int) *Downloader {
 	return &Downloader{
-		config: config,
+		timeoutSeconds: timeoutSeconds,
 		client: &http.Client{
-			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
+			Timeout: time.Duration(timeoutSeconds) * time.Second,
 		},
 	}
 }
 
-func (d *Downloader) DownloadFile(ctx context.Context, cid string) (string, error) {
+func (d *Downloader) DownloadFile(ctx context.Context, url string) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "ipfs-code")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	url := d.config.GatewayURL + cid
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)

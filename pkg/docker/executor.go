@@ -18,7 +18,7 @@ import (
 
 type CodeExecutor struct {
 	dockerManager *Manager
-	ipfsDownloader *Downloader
+	downloader *Downloader
 	config        ExecutorConfig
 }
 
@@ -30,14 +30,14 @@ func NewCodeExecutor(cfg ExecutorConfig) (*CodeExecutor, error) {
 
 	return &CodeExecutor{
 		dockerManager:  NewManager(cli, cfg.Docker),
-		ipfsDownloader: NewDownloader(cfg.IPFS),
-		config:        cfg,
+		downloader:     NewDownloader(cfg.Docker.TimeoutSeconds),
+		config:         cfg,
 	}, nil
 }
 
-func (e *CodeExecutor) Execute(ctx context.Context, ipfsCID string) (*ExecutionResult, error) {
+func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*ExecutionResult, error) {
 	// 1. Download code from IPFS
-	codePath, err := e.ipfsDownloader.DownloadFile(ctx, ipfsCID)
+	codePath, err := e.downloader.DownloadFile(ctx, fileURL)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,
@@ -55,7 +55,7 @@ func (e *CodeExecutor) Execute(ctx context.Context, ipfsCID string) (*ExecutionR
 	}
 	defer e.dockerManager.CleanupContainer(ctx, containerID)
 
-	result, err := e.monitorExecution(ctx, containerID)
+	result, err := e.monitorExecution(ctx, e.dockerManager.cli, containerID, noOfAttesters)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,
@@ -66,12 +66,7 @@ func (e *CodeExecutor) Execute(ctx context.Context, ipfsCID string) (*ExecutionR
 	return result, nil
 }
 
-func (e *CodeExecutor) monitorExecution(ctx context.Context, containerID string) (*ExecutionResult, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
-	}
-
+func (e *CodeExecutor) monitorExecution(ctx context.Context, cli *client.Client, containerID string, noOfAttesters int) (*ExecutionResult, error) {
 	result := &ExecutionResult{}
 	var executionStartTime time.Time
 	var executionEndTime time.Time
@@ -151,9 +146,18 @@ func (e *CodeExecutor) monitorExecution(ctx context.Context, containerID string)
 					if err != io.EOF {
 						errChan <- fmt.Errorf("failed to decode stats: %v", err)
 					}
-					return
 				}
 				lastStats = statsJSON
+				if lastStats.MemoryStats.Usage > uint64(0.9 * float64(e.config.Docker.MemoryLimitBytes())) {
+					result.Warnings = append(result.Warnings, "Memory usage approaching limit")
+				}
+				if lastStats.CPUStats.CPUUsage.TotalUsage > uint64(0.9 * float64(e.config.Docker.CPULimit * 1e9)) {
+					result.Warnings = append(result.Warnings, "CPU usage approaching limit")
+				}
+				if lastStats.MemoryStats.MaxUsage > uint64(1.01 * float64(e.config.Docker.MemoryLimitBytes())) {
+					errChan <- fmt.Errorf("container was killed due to exceeding memory limit")
+					return
+				}
 			}
 		}
 	}()
@@ -242,7 +246,9 @@ func (e *CodeExecutor) monitorExecution(ctx context.Context, containerID string)
 		fmt.Println("Warning: Could not determine precise code execution time, using container execution time instead")
 	}
 
-	result.Stats.TotalCost = calculateFees(content, &result.Stats, codeExecutionTime)
+	result.Stats.NoOfAttesters = noOfAttesters
+
+	result.Stats.TotalCost = e.calculateFees(content, &result.Stats, codeExecutionTime)
 
 	result.Output = outputBuffer.String()
 
@@ -251,28 +257,20 @@ func (e *CodeExecutor) monitorExecution(ctx context.Context, containerID string)
 	return result, nil
 }
 
-func calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) float64 {
-	const (
-		PriceperTG            = 0.0001
-		Fixedcost             = 1
-		TransactionSimulation = 1
-		OverheadCost          = 0.1
-	)
-
-	var NoOfAttesters int
-	contentSizeKB := float64(len(content)) / (1024)
-
-	staticComplexity := contentSizeKB
+func (e *CodeExecutor) calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) float64 {
+	// static complexity is the size of the file in KB
+	staticComplexity := float64(len(content)) / (1024)
 
 	execTimeInSeconds := executionTime.Seconds()
+	// memory used is the memory usage of the container in MB
 	memoryUsedMB := float64(stats.MemoryUsage) / (1024 * 1024)
 
-	ComputationCost := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)
-	NetworkScalingFactor := (1 + NoOfAttesters)
+	computationCost := (execTimeInSeconds * 2) + (memoryUsedMB / 128 * 1) + (staticComplexity / 1024 * 1)
+	networkScalingFactor := (1 + stats.NoOfAttesters)
 
-	TotalTG := (ComputationCost * float64(NetworkScalingFactor)) + Fixedcost + TransactionSimulation + OverheadCost
+	totalTG := (computationCost * float64(networkScalingFactor)) + e.config.Fees.FixedCost + e.config.Fees.TransactionSimulation + e.config.Fees.OverheadCost
 
-	totalFee := TotalTG * PriceperTG
+	totalFee := totalTG * e.config.Fees.PricePerTG
 
 	stats.TotalCost = totalFee
 

@@ -10,11 +10,6 @@ type DockerConfig struct {
     CPULimit       float64
 }
 
-type IPFSConfig struct {
-    GatewayURL    string
-    TimeoutSeconds int
-}
-
 type FeeConfig struct {
     PricePerTG           float64
     FixedCost            float64
@@ -24,7 +19,6 @@ type FeeConfig struct {
 
 type ExecutorConfig struct {
     Docker DockerConfig
-    IPFS   IPFSConfig
     Fees   FeeConfig
 }
 
@@ -34,10 +28,8 @@ func DefaultConfig() ExecutorConfig {
             Image:          "golang:latest",
             TimeoutSeconds: 600,
             AutoCleanup:    true,
-        },
-        IPFS: IPFSConfig{
-            GatewayURL:     "https://ipfs.io/ipfs/",
-            TimeoutSeconds: 30,
+            MemoryLimit:    "1024m",
+            CPULimit:       1.0,
         },
         Fees: FeeConfig{
             PricePerTG:           0.0001,

@@ -3,6 +3,7 @@ package docker
 import "time"
 
 type ResourceStats struct {
+	NoOfAttesters     int     `json:"no_of_attesters"`
 	MemoryUsage       uint64  `json:"memory_usage"`
 	CPUPercentage     float64 `json:"cpu_percentage"`
 	NetworkRx         uint64  `json:"network_rx"`
