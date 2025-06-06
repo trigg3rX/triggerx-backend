@@ -1,19 +1,25 @@
 package validation
 
 import (
-	"github.com/ethereum/go-ethereum/ethclient"
-
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type TaskValidator struct {
-	logger    logging.Logger
-	ethClient *ethclient.Client
+	alchemyAPIKey   string
+	etherscanAPIKey string
+	codeExecutor    *docker.CodeExecutor
+	aggregatorClient *aggregator.AggregatorClient
+	logger          logging.Logger
 }
 
-func NewTaskValidator(logger logging.Logger, ethClient *ethclient.Client) *TaskValidator {
+func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, codeExecutor *docker.CodeExecutor, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskValidator {
 	return &TaskValidator{
-		logger:    logger,
-		ethClient: ethClient,
+		alchemyAPIKey:   alchemyAPIKey,
+		etherscanAPIKey: etherscanAPIKey,
+		codeExecutor:    codeExecutor,
+		aggregatorClient: aggregatorClient,
+		logger:          logger,
 	}
 }

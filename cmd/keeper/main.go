@@ -9,18 +9,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 )
 
-const shutdownTimeout = 30 * time.Second
+const shutdownTimeout = 10 * time.Second
 
 func main() {
 	// Initialize configuration
@@ -35,6 +35,8 @@ func main() {
 		ProcessName: logging.KeeperProcess,
 		Environment: getEnvironment(),
 		UseColors:   true,
+		MinStdoutLevel:  getLogLevel(),
+		MinFileLogLevel: getLogLevel(),
 	}
 
 	if err := logging.InitServiceLogger(logConfig); err != nil {
@@ -42,24 +44,25 @@ func main() {
 	}
 	logger := logging.GetServiceLogger()
 
-	logger.Info("Starting keeper node ...")
-	logger.Info("Keeper address: ", "address", config.GetKeeperAddress())
-	logger.Info("Consensus address: ", "address", config.GetConsensusAddress())
+	logger.Info("Starting keeper node ...", 
+		"keeper_address", config.GetKeeperAddress(), 
+		"consensus_address", config.GetConsensusAddress(),
+		"version", config.GetVersion(),
+	)
 
 	// Initialize clients
-	aggregatorCfg := aggregator.Config{
-		RPCAddress:     config.GetAggregatorRPCUrl(),
-		PrivateKey:     config.GetPrivateKeyController(),
-		KeeperAddress:  config.GetKeeperAddress(),
+	aggregatorCfg := aggregator.AggregatorClientConfig{
+		AggregatorRPCUrl:     config.GetAggregatorRPCUrl(),
+		SenderPrivateKey:     config.GetPrivateKeyConsensus(),
+		SenderAddress:  config.GetConsensusAddress(),
 		RetryAttempts:  3,
 		RetryDelay:     2 * time.Second,
 		RequestTimeout: 10 * time.Second,
 	}
-	aggregatorClient, err := aggregator.NewClient(logger, aggregatorCfg)
+	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
 	if err != nil {
 		logger.Fatal("Failed to initialize aggregator client", "error", err)
 	}
-	defer aggregatorClient.Close()
 
 	healthCfg := health.Config{
 		HealthServiceURL: config.GetHealthRPCUrl(),
@@ -75,15 +78,16 @@ func main() {
 	}
 	defer healthClient.Close()
 
-	ethClient, err := ethclient.Dial(config.GetAggregatorRPCUrl())
+	codeExecutorConfig := docker.DefaultConfig()
+	codeExecutor, err := docker.NewCodeExecutor(context.Background(), codeExecutorConfig, logger)
 	if err != nil {
-		logger.Fatal("Failed to initialize Ethereum client", "error", err)
+		logger.Fatal("Failed to initialize code executor", "error", err)
 	}
-	defer ethClient.Close()
+	defer codeExecutor.Close()
 
 	// Initialize task executor and validator
-	executor := execution.NewTaskExecutor(ethClient, config.GetEtherscanAPIKey(), logger)
-	validator := validation.NewTaskValidator(logger, ethClient)
+	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), codeExecutor, aggregatorClient, logger)
+	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), codeExecutor, aggregatorClient, logger)
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -126,11 +130,19 @@ func main() {
 	performGracefulShutdown(ctx, server, logger)
 }
 
+
 func getEnvironment() logging.LogLevel {
 	if config.IsDevMode() {
 		return logging.Development
 	}
 	return logging.Production
+}
+
+func getLogLevel() logging.Level {
+	if config.IsDevMode() {
+		return logging.DebugLevel
+	}
+	return logging.InfoLevel
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins

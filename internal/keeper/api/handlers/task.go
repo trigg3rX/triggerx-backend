@@ -3,17 +3,17 @@ package handlers
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	// "fmt"
 	"net/http"
-	"strings"
+	// "strings"
 
-	"github.com/ethereum/go-ethereum/ethclient"
+	// "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
+	// "github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -142,8 +142,8 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 				return
 			}
 		case 3, 4, 5, 6:
-			var taskTargetData types.SendTaskTargetData
-			var triggerData types.SendTriggerData
+			var taskTargetData types.SendTaskTargetDataToKeeper
+			var triggerData types.SendTaskTriggerDataToKeeper
 
 			taskTargetDataBytes, err := json.Marshal(requestData["taskTargetData"])
 			if err != nil {
@@ -188,108 +188,95 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 }
 
 // ValidateTask handles task validation requests
-func (h *TaskHandler) ValidateTask(c *gin.Context) {
-	var taskRequest TaskValidationRequest
-	if err := c.ShouldBindJSON(&taskRequest); err != nil {
-		c.JSON(http.StatusBadRequest, ValidationResponse{
-			Data:    false,
-			Error:   true,
-			Message: fmt.Sprintf("Failed to parse request body: %v", err),
-		})
-		return
-	}
+// func (h *TaskHandler) ValidateTask(c *gin.Context) {
+// 	var taskRequest TaskValidationRequest
+// 	if err := c.ShouldBindJSON(&taskRequest); err != nil {
+// 		c.JSON(http.StatusBadRequest, ValidationResponse{
+// 			Data:    false,
+// 			Error:   true,
+// 			Message: fmt.Sprintf("Failed to parse request body: %v", err),
+// 		})
+// 		return
+// 	}
 
 
-	// Decode the data if it's hex-encoded (with 0x prefix)
-	var decodedData string
-	if strings.HasPrefix(taskRequest.Data, "0x") {
-		dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
-		if err != nil {
-			h.logger.Errorf("Failed to hex-decode data: %v", err)
-			c.JSON(http.StatusBadRequest, ValidationResponse{
-				Data:    false,
-				Error:   true,
-				Message: fmt.Sprintf("Failed to decode hex data: %v", err),
-			})
-			return
-		}
-		decodedData = string(dataBytes)
-		h.logger.Infof("Decoded Data CID: %s", decodedData)
-	} else {
-		decodedData = taskRequest.Data
-	}
+// 	// Decode the data if it's hex-encoded (with 0x prefix)
+// 	var decodedData string
+// 	if strings.HasPrefix(taskRequest.Data, "0x") {
+// 		dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
+// 		if err != nil {
+// 			h.logger.Errorf("Failed to hex-decode data: %v", err)
+// 			c.JSON(http.StatusBadRequest, ValidationResponse{
+// 				Data:    false,
+// 				Error:   true,
+// 				Message: fmt.Sprintf("Failed to decode hex data: %v", err),
+// 			})
+// 			return
+// 		}
+// 		decodedData = string(dataBytes)
+// 		h.logger.Infof("Decoded Data CID: %s", decodedData)
+// 	} else {
+// 		decodedData = taskRequest.Data
+// 	}
 
-	// Fetch the ActionData from IPFS using CID from the proof of task
-	ipfsData, err := utils.FetchIPFSContent(decodedData)
-	if err != nil {
-		h.logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
-		c.JSON(http.StatusInternalServerError, ValidationResponse{
-			Data:    false,
-			Error:   true,
-			Message: fmt.Sprintf("Failed to fetch IPFS content from ProofOfTask: %v", err),
-		})
-		return
-	}
+// 	// Fetch the ActionData from IPFS using CID from the proof of task
+// 	// ipfsData, err := utils.FetchIPFSContent(decodedData)
+// 	// if err != nil {
+// 	// 	h.logger.Errorf("Failed to fetch IPFS content from ProofOfTask: %v", err)
+// 	// 	c.JSON(http.StatusInternalServerError, ValidationResponse{
+// 	// 		Data:    false,
+// 	// 		Error:   true,
+// 	// 		Message: fmt.Sprintf("Failed to fetch IPFS content from ProofOfTask: %v", err),
+// 	// 	})
+// 	// 	return
+// 	// }
 
-	// Create a job validator
-	ethClient, err := ethclient.Dial("https://opt-sepolia.g.alchemy.com/v2/E3OSaENxCMNoRBi_quYcmTNPGfRitxQa")
-	if err != nil {
-		h.logger.Errorf("Failed to connect to Ethereum client: %v", err)
-		c.JSON(http.StatusInternalServerError, ValidationResponse{
-			Data:    false,
-			Error:   true,
-			Message: fmt.Sprintf("Failed to connect to Ethereum client: %v", err),
-		})
-		return
-	}
-	defer ethClient.Close()
+// 	// jobValidator := validation.NewTaskValidator(h.logger, ethClient)
 
-	jobValidator := validation.NewTaskValidator(h.logger, ethClient)
+// 	// Validate job based on task definition ID
+// 	isValid := false
+// 	var validationErr error
 
-	// Validate job based on task definition ID
-	isValid := false
-	var validationErr error
+// 	// switch taskRequest.TaskDefinitionID {
+// 	// case 1, 2: // Time-based jobs
+// 	// 	isValid, validationErr = jobValidator.ValidateTimeBasedTask(&ipfsData.ScheduleTimeJobData)
+// 	// case 3, 4: // Event-based jobs
+// 	// 	isValid, validationErr = jobValidator.ValidateEventBasedTask(&ipfsData.SendTaskTargetData, &ipfsData.SendTriggerData, &ipfsData)
+// 	// case 5, 6: // Condition-based jobs
+// 		// For condition-based jobs, make sure we have the ScriptTriggerFunction
+// 		// if ipfsData.SendTriggerData.ConditionSourceUrl == "" {
+// 		// 	h.logger.Warnf("Missing ScriptTriggerFunction for condition-based job %d", ipfsData.JobData.JobID)
 
-	switch taskRequest.TaskDefinitionID {
-	case 1, 2: // Time-based jobs
-		isValid, validationErr = jobValidator.ValidateTimeBasedTask(&ipfsData.ScheduleTimeJobData)
-	case 3, 4: // Event-based jobs
-		isValid, validationErr = jobValidator.ValidateEventBasedTask(&ipfsData.SendTaskTargetData, &ipfsData.SendTriggerData, &ipfsData)
-	case 5, 6: // Condition-based jobs
-		// For condition-based jobs, make sure we have the ScriptTriggerFunction
-		// if ipfsData.SendTriggerData.ConditionSourceUrl == "" {
-		// 	h.logger.Warnf("Missing ScriptTriggerFunction for condition-based job %d", ipfsData.JobData.JobID)
+// 		// 	// Try to extract from trigger data if available
+// 		// 	scriptURL, ok := ipfsData.TriggerData.ConditionParams["script_url"].(string)
+// 		// 	if ok && scriptURL != "" {
+// 		// 		h.logger.Infof("Found script URL in TriggerData.ConditionParams: %s", scriptURL)
+// 		// 		ipfsData.JobData.ScriptTriggerFunction = scriptURL
+// 		// 	} else {
+// 		// 		validationErr = fmt.Errorf("missing ScriptTriggerFunction for condition-based job")
+// 		// 		break
+// 		// 	}
+// 		// }
 
-		// 	// Try to extract from trigger data if available
-		// 	scriptURL, ok := ipfsData.TriggerData.ConditionParams["script_url"].(string)
-		// 	if ok && scriptURL != "" {
-		// 		h.logger.Infof("Found script URL in TriggerData.ConditionParams: %s", scriptURL)
-		// 		ipfsData.JobData.ScriptTriggerFunction = scriptURL
-		// 	} else {
-		// 		validationErr = fmt.Errorf("missing ScriptTriggerFunction for condition-based job")
-		// 		break
-		// 	}
-		// }
+// 	// 	h.logger.Infof("Validating condition-based job: %s", ipfsData.SendTaskTargetData.DynamicArgumentsScriptUrl)
+// 	// 	// isValid, validationErr = jobValidator.ValidateConditionBasedTask(&ipfsData.JobData, &ipfsData)
+// 	// default:
+// 	// 	validationErr = fmt.Errorf("unsupported task definition ID: %d", taskRequest.TaskDefinitionID)
+// 	// }
 
-		h.logger.Infof("Validating condition-based job: %s", ipfsData.SendTaskTargetData.DynamicArgumentsScriptUrl)
-		// isValid, validationErr = jobValidator.ValidateConditionBasedTask(&ipfsData.JobData, &ipfsData)
-	default:
-		validationErr = fmt.Errorf("unsupported task definition ID: %d", taskRequest.TaskDefinitionID)
-	}
+// 	if validationErr != nil {
+// 		h.logger.Errorf("Validation error: %v", validationErr)
+// 		c.JSON(http.StatusOK, ValidationResponse{
+// 			Data:    false,
+// 			Error:   true,
+// 			Message: validationErr.Error(),
+// 		})
+// 		return
+// 	}
 
-	if validationErr != nil {
-		h.logger.Errorf("Validation error: %v", validationErr)
-		c.JSON(http.StatusOK, ValidationResponse{
-			Data:    false,
-			Error:   true,
-			Message: validationErr.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, ValidationResponse{
-		Data:    isValid,
-		Error:   false,
-		Message: "",
-	})
-}
+// 	c.JSON(http.StatusOK, ValidationResponse{
+// 		Data:    isValid,
+// 		Error:   false,
+// 		Message: "",
+// 	})
+// }

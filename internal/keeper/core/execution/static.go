@@ -24,7 +24,7 @@ import (
 
 // const executionContractAddress = "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
 
-func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.SendTaskTargetDataToKeeper, triggerData *types.SendTaskTriggerDataToKeeper) (types.PerformerActionData, error) {
 
 	executionResult := types.PerformerActionData{
 		TaskID:       0,
@@ -172,7 +172,7 @@ func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.SendTas
 	// executionResult.ActionTxHash = signedTx.Hash().Hex()
 	// executionResult.GasUsed = strconv.FormatUint(receipt.GasUsed, 10)
 
-	e.logger.Infof("Job %d executed successfully. Transaction: %s", taskTargetData.JobID, "") //signedTx.Hash().Hex())
+	e.logger.Infof("Job %d executed successfully. Transaction: %s", taskTargetData.TaskID, "") //signedTx.Hash().Hex())
 
 	return executionResult, nil
 }

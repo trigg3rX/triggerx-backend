@@ -211,9 +211,6 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	config.SetIpfsHost(string(parts[0]))
 	config.SetPinataJWT(string(parts[1]))
 
-	c.logger.Infof("IPFS Host: %s", string(parts[0]))
-	c.logger.Infof("Pinata JWT: %s", string(parts[1]))
-
 	return types.KeeperHealthCheckInResponse{
 		Status: true,
 		Data:   "Health check-in successful",

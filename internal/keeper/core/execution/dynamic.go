@@ -23,7 +23,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.SendTaskTargetDataToKeeper, triggerData *types.SendTaskTriggerDataToKeeper) (types.PerformerActionData, error) {
 	executionResult := types.PerformerActionData{
 		TaskID:       0,
 		ActionTxHash: "0x",
@@ -258,7 +258,7 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.SendTa
 	// executionResult.GasUsed = strconv.FormatUint(receipt.GasUsed, 10)
 
 	e.logger.Infof("✅ Job %d executed successfully with dynamic arguments. Transaction: %s",
-		taskTargetData.JobID, "") //signedTx.Hash().Hex())
+		taskTargetData.TaskID, "") //signedTx.Hash().Hex())
 
 	return executionResult, nil
 }

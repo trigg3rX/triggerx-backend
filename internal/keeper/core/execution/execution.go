@@ -3,27 +3,30 @@ package execution
 import (
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/ethclient"
-
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TaskExecutor is the default implementation of TaskExecutor
 type TaskExecutor struct {
-	ethClient       *ethclient.Client
+	alchemyAPIKey   string
 	etherscanAPIKey string
+	codeExecutor    *docker.CodeExecutor
 	argConverter    *ArgumentConverter
+	aggregatorClient *aggregator.AggregatorClient
 	logger          logging.Logger
 }
 
 // NewTaskExecutor creates a new instance of TaskExecutor
-func NewTaskExecutor(ethClient *ethclient.Client, etherscanAPIKey string, logger logging.Logger) *TaskExecutor {
+func NewTaskExecutor(alchemyAPIKey string, etherscanAPIKey string, codeExecutor *docker.CodeExecutor, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskExecutor {
 	return &TaskExecutor{
-		ethClient:       ethClient,
+		alchemyAPIKey:   alchemyAPIKey,
 		etherscanAPIKey: etherscanAPIKey,
+		codeExecutor:    codeExecutor,
 		argConverter:    &ArgumentConverter{},
-		// validator:       validation.NewJobValidator(logger, ethClient),
+		aggregatorClient: aggregatorClient,
 		logger: logger,
 	}
 }
@@ -37,8 +40,8 @@ func (e *TaskExecutor) ExecuteTimeBasedTask(timeJobData *types.ScheduleTimeJobDa
 }
 
 
-func (e *TaskExecutor) ExecuteTask(taskTargetData *types.SendTaskTargetData, triggerData *types.SendTriggerData) (types.PerformerActionData, error) {
-	e.logger.Info("Executing task", "jobID", taskTargetData.JobID)
+func (e *TaskExecutor) ExecuteTask(taskTargetData *types.SendTaskTargetDataToKeeper, triggerData *types.SendTaskTriggerDataToKeeper) (types.PerformerActionData, error) {
+	e.logger.Info("Executing task", "jobID", taskTargetData.TaskID)
 
 	switch taskTargetData.TaskDefinitionID {
 	case 3, 5:
