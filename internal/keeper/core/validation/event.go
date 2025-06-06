@@ -9,7 +9,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (v *TaskValidator) ValidateEventBasedTask(targetData *types.SendTaskTargetDataToKeeper, triggerData *types.SendTaskTriggerDataToKeeper, ipfsData *types.IPFSData) (bool, error) {
+func (v *TaskValidator) ValidateEventBasedTask(ipfsData types.IPFSData) (bool, error) {
+	targetData := ipfsData.TargetData
+	triggerData := ipfsData.TriggerData
+
 	// Ensure this is an event-based job
 	if targetData.TaskDefinitionID != 3 && targetData.TaskDefinitionID != 4 {
 		return false, fmt.Errorf("not an event-based job: task definition ID %d", targetData.TaskDefinitionID)
