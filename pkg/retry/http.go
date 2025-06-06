@@ -23,8 +23,6 @@ type HTTPRetryConfig struct {
 	RetryStatusCodes []int
 	// HTTP client configuration
 	Timeout             time.Duration
-	MaxIdleConns        int
-	MaxIdleConnsPerHost int
 	IdleConnTimeout     time.Duration
 }
 
@@ -44,8 +42,6 @@ func DefaultHTTPRetryConfig() *HTTPRetryConfig {
 			http.StatusGatewayTimeout,
 		},
 		Timeout:             3 * time.Second,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
 		IdleConnTimeout:     30 * time.Second,
 	}
 }
@@ -66,8 +62,6 @@ func NewHTTPClient(config *HTTPRetryConfig, logger logging.Logger) *HTTPClient {
 	client := &http.Client{
 		Timeout: config.Timeout,
 		Transport: &http.Transport{
-			MaxIdleConns:        config.MaxIdleConns,
-			MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
 			IdleConnTimeout:     config.IdleConnTimeout,
 			DisableKeepAlives:   false,
 			DialContext: (&net.Dialer{
