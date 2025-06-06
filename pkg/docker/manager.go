@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const (
@@ -27,27 +29,54 @@ echo "END_EXECUTION"
 type Manager struct {
 	Cli  *client.Client
 	config  DockerConfig
+	logger  logging.Logger
 }
 
-func NewManager(cli *client.Client, config DockerConfig) *Manager {
+func NewManager(cli *client.Client, config DockerConfig, logger logging.Logger) *Manager {
 	return &Manager{
 		Cli:    cli,
 		config: config,
+		logger: logger,
 	}
+}
+
+func (m *Manager) PullImage(ctx context.Context, imageName string) error {
+	_, err := m.Cli.ImagePull(ctx, imageName, image.PullOptions{})
+	if err != nil {
+		m.logger.Errorf("failed to pull image: %v", err)
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) CleanupImages(ctx context.Context) error {
+	images, err := m.Cli.ImageList(ctx, image.ListOptions{})
+	if err != nil {
+		m.logger.Errorf("failed to list images: %v", err)
+		return fmt.Errorf("failed to list images: %w", err)
+	}
+
+	for _, dockerImage := range images {
+		m.Cli.ImageRemove(ctx, dockerImage.ID, image.RemoveOptions{Force: true})
+	}
+	return nil
 }
 
 func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string, error) {
 	absPath, err := filepath.Abs(codePath)
 	if err != nil {
+		m.logger.Errorf("failed to get absolute path: %v", err)
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
 	setupScriptPath := filepath.Join(filepath.Dir(absPath), "setup.sh")
 	if err := os.WriteFile(setupScriptPath, []byte(SetupScript), 0755); err != nil {
+		m.logger.Errorf("failed to write setup script: %v", err)
 		return "", fmt.Errorf("failed to write setup script: %w", err)
 	}
 
 	if err := os.Chmod(setupScriptPath, 0755); err != nil {
+		m.logger.Errorf("failed to set permissions for setup script: %v", err)
 		return "", fmt.Errorf("failed to set permissions for setup script: %w", err)
 	}
 
@@ -70,6 +99,7 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 
 	resp, err := m.Cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
+		m.logger.Errorf("failed to create container: %v", err)
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 
@@ -78,17 +108,17 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 
 func (m *Manager) CleanupContainer(ctx context.Context, containerID string) error {
 	if !m.config.AutoCleanup {
+		m.logger.Infof("auto cleanup is disabled, skipping container cleanup")
 		return nil
 	}
 	
-	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{
-		Force: true,
-	})
+	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
 func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (*container.InspectResponse, error) {
 	info, err := m.Cli.ContainerInspect(ctx, containerID)
 	if err != nil {
+		m.logger.Errorf("failed to get container info: %v", err)
 		return nil, fmt.Errorf("failed to get container info: %w", err)
 	}
 	return &info, nil

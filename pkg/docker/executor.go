@@ -14,24 +14,35 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type CodeExecutor struct {
 	DockerManager *Manager
 	Downloader *Downloader
 	config        ExecutorConfig
+	logger        logging.Logger
 }
 
-func NewCodeExecutor(cfg ExecutorConfig) (*CodeExecutor, error) {
+func NewCodeExecutor(ctx context.Context, cfg ExecutorConfig, logger logging.Logger) (*CodeExecutor, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
+	manager := NewManager(cli, cfg.Docker, logger)
+
+	// if err := manager.PullImage(ctx, cfg.Docker.Image); err != nil {
+	// 	return nil, fmt.Errorf("failed to pull image: %w", err)
+	// }
+
+	// logger.Infof("pulled image: %s", cfg.Docker.Image)
+
 	return &CodeExecutor{
-		DockerManager:  NewManager(cli, cfg.Docker),
+		DockerManager:  manager,
 		Downloader:     NewDownloader(cfg.Docker.TimeoutSeconds),
 		config:         cfg,
+		logger:         logger,
 	}, nil
 }
 
@@ -275,4 +286,8 @@ func (e *CodeExecutor) calculateFees(content []byte, stats *ResourceStats, execu
 	stats.TotalCost = totalFee
 
 	return totalFee
+}
+
+func (e *CodeExecutor) Close() error {
+	return e.DockerManager.CleanupImages(context.Background())
 }
