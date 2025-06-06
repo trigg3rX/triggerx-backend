@@ -12,19 +12,19 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 )
 
 type Server struct {
 	router             *gin.Engine
 	db                 *database.Connection
 	logger             logging.Logger
-	metricsServer      *metrics.MetricsServer
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
+	docker             docker.DockerConfig
 }
 
 func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
@@ -66,9 +66,6 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		},
 	}
 
-	// Initialize metrics server
-	metricsServer := metrics.NewMetricsServer(db, logger)
-
 	// Initialize Redis client with enhanced features
 	var redisClient *redis.Client
 	client, err := redis.NewClient(logger)
@@ -97,7 +94,6 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		router:        router,
 		db:            db,
 		logger:        logger,
-		metricsServer: metricsServer,
 		rateLimiter:   rateLimiter,
 		redisClient:   redisClient,
 		validator:     middleware.NewValidator(logger),
@@ -105,6 +101,13 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),
 			BotToken:      config.GetBotToken(),
+		},
+		docker: docker.DockerConfig{
+			Image:          "golang:latest",
+			TimeoutSeconds: 600,
+			AutoCleanup:    true,
+			MemoryLimit:    "1024m",
+			CPULimit:       1.0,
 		},
 	}
 
@@ -118,7 +121,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.docker)
 
 	api := router.Group("/api")
 
@@ -176,8 +179,6 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 func (s *Server) Start(port string) error {
 	s.logger.Infof("Starting server on port %s", port)
-
-	s.metricsServer.Start()
 
 	if s.redisClient != nil {
 		defer func() {

@@ -311,7 +311,7 @@ func TestSendPauseToScheduler(t *testing.T) {
 			tt.setupMock()
 
 			// Execute
-			result, err := handler.sendPauseToScheduler(tt.apiURL, tt.schedulerName)
+			result, err := handler.notifyPauseToEventScheduler(1)
 
 			// Assert
 			if tt.expectedError != "" {
