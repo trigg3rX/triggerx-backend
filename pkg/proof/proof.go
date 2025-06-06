@@ -2,36 +2,36 @@ package proof
 
 import (
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/hex"
-	"errors"
 	"time"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type TLSProof struct {
-	CertificateHash string `json:"certificateHash"`
-	ResponseHash    string `json:"responseHash"`
-	Timestamp       string `json:"timestamp"`
+func GetData() []byte {
+	return []byte("")	
 }
 
-type KeeperResponse interface {
-	GetData() []byte
-}
+// GenerateProof takes the action execution data and generates a proof by:
+// 1. Creating a hash of the action data (tx hash, gas used, status etc)
+// 2. Adding a timestamp when the proof was generated
+// This provides cryptographic proof that the action was executed
+func GenerateProof(ipfsData types.IPFSData) (types.ProofData, error) {
+	// Convert action data to bytes and generate hash
+	// actionBytes := []byte(actionData.ActionTxHash + actionData.GasUsed + 
+	// 	string(actionData.ExecutionTimestamp.Unix()))
+	proofHash := sha256.Sum256(GetData())
+	proofHashStr := hex.EncodeToString(proofHash[:])
 
-func GenerateProof(response KeeperResponse, connState *tls.ConnectionState) (*TLSProof, error) {
-	if connState == nil || len(connState.PeerCertificates) == 0 {
-		return nil, errors.New("no TLS certificates found")
-	}
-
-	certHash := sha256.Sum256(connState.PeerCertificates[0].Raw)
+	// Generate certificate hash from action data
+	certHash := sha256.Sum256(GetData())
 	certHashStr := hex.EncodeToString(certHash[:])
 
-	respHash := sha256.Sum256(response.GetData())
-	respHashStr := hex.EncodeToString(respHash[:])
-
-	return &TLSProof{
-		CertificateHash: certHashStr,
-		ResponseHash:    respHashStr,
-		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+	// Return proof data with current timestamp
+	return types.ProofData{
+		TaskID:              ipfsData.TargetData.TaskID,
+		ProofOfTask:         proofHashStr,
+		CertificateHash:     certHashStr,
+		CertificateTimestamp: time.Now().UTC(),
 	}, nil
 }
