@@ -32,13 +32,27 @@ func TestMain(t *testing.T) {
 	}
 
 	// Set environment variables for testing
-	os.Setenv("ENV", "development")
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("DEV_MODE", "true")
-	os.Setenv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC")
-	os.Setenv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0")
-	os.Setenv("POLLING_INTERVAL", "5m")
-	os.Setenv("LAST_REWARDS_UPDATE", "2025-05-14T06:31:00Z")
+	if err := os.Setenv("ENV", "development"); err != nil {
+		t.Fatalf("Failed to set ENV: %v", err)
+	}
+	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatalf("Failed to set LOG_LEVEL: %v", err)
+	}
+	if err := os.Setenv("DEV_MODE", "true"); err != nil {
+		t.Fatalf("Failed to set DEV_MODE: %v", err)
+	}
+	if err := os.Setenv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"); err != nil {
+		t.Fatalf("Failed to set AVS_GOVERNANCE_ADDRESS: %v", err)
+	}
+	if err := os.Setenv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"); err != nil {
+		t.Fatalf("Failed to set ATTESTATION_CENTER_ADDRESS: %v", err)
+	}
+	if err := os.Setenv("POLLING_INTERVAL", "5m"); err != nil {
+		t.Fatalf("Failed to set POLLING_INTERVAL: %v", err)
+	}
+	if err := os.Setenv("LAST_REWARDS_UPDATE", "2025-05-14T06:31:00Z"); err != nil {
+		t.Fatalf("Failed to set LAST_REWARDS_UPDATE: %v", err)
+	}
 
 	// Test configuration initialization
 	t.Run("Config Initialization", func(t *testing.T) {

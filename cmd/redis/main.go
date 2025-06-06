@@ -52,7 +52,9 @@ func main() {
 	if err := client.Ping(); err != nil {
 		logger.Errorf("Redis is not reachable: %v", err)
 		fmt.Fprintf(os.Stderr, "Redis is not reachable: %v\n", err)
-		client.Close()
+		if err := client.Close(); err != nil {
+			logger.Errorf("Error closing Redis client: %v", err)
+		}
 		os.Exit(1)
 	}
 	logger.Info("Redis ping successful.")

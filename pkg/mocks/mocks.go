@@ -77,3 +77,4 @@ func (m *MockSession) ExecuteBatch(batch *gocql.Batch) error {
 func (m *MockSession) Close() {
 	// Mock implementation
 }
+ 

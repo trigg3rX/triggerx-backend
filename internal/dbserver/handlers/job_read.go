@@ -40,8 +40,8 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		jobResponse := types.JobResponse{JobData: *jobData}
 
 		// Check task_definition_id to determine job type
-		switch {
-		case jobData.TaskDefinitionID == 1 || jobData.TaskDefinitionID == 2:
+		switch jobData.TaskDefinitionID {
+		case 1, 2:
 			// Time-based job
 			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
 			if err != nil {
@@ -50,7 +50,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			}
 			jobResponse.TimeJobData = &timeJobData
 
-		case jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4:
+		case 3, 4:
 			// Event-based job
 			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
 			if err != nil {
@@ -59,7 +59,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			}
 			jobResponse.EventJobData = &eventJobData
 
-		case jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6:
+		case 5, 6:
 			// Condition-based job
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
 			if err != nil {

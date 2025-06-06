@@ -18,9 +18,15 @@ import (
 
 func TestMain(t *testing.T) {
 	// Set environment variables for testing
-	os.Setenv("ENV", "development")
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("PORT", "8080")
+	if err := os.Setenv("ENV", "development"); err != nil {
+		t.Fatalf("Failed to set ENV: %v", err)
+	}
+	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatalf("Failed to set LOG_LEVEL: %v", err)
+	}
+	if err := os.Setenv("PORT", "8080"); err != nil {
+		t.Fatalf("Failed to set PORT: %v", err)
+	}
 
 	// Test configuration initialization
 	t.Run("Config Initialization", func(t *testing.T) {

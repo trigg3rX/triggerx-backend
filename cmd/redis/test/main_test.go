@@ -18,21 +18,51 @@ import (
 
 func TestMain(t *testing.T) {
 	// Set environment variables for testing
-	os.Setenv("ENV", "development")
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("DEV_MODE", "true")
-	os.Setenv("REDIS_ADDR", "localhost:6379")
-	os.Setenv("REDIS_PASSWORD", "")
-	os.Setenv("REDIS_POOL_SIZE", "10")
-	os.Setenv("REDIS_MIN_IDLE_CONNS", "2")
-	os.Setenv("REDIS_MAX_RETRIES", "3")
-	os.Setenv("REDIS_DIAL_TIMEOUT_SEC", "5")
-	os.Setenv("REDIS_READ_TIMEOUT_SEC", "3")
-	os.Setenv("REDIS_WRITE_TIMEOUT_SEC", "3")
-	os.Setenv("REDIS_POOL_TIMEOUT_SEC", "4")
-	os.Setenv("REDIS_STREAM_MAX_LEN", "10000")
-	os.Setenv("REDIS_JOB_STREAM_TTL_HOURS", "120")
-	os.Setenv("REDIS_TASK_STREAM_TTL_HOURS", "1")
+	if err := os.Setenv("ENV", "development"); err != nil {
+		t.Fatalf("Failed to set ENV: %v", err)
+	}
+	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatalf("Failed to set LOG_LEVEL: %v", err)
+	}
+	if err := os.Setenv("DEV_MODE", "true"); err != nil {
+		t.Fatalf("Failed to set DEV_MODE: %v", err)
+	}
+	if err := os.Setenv("REDIS_ADDR", "localhost:6379"); err != nil {
+		t.Fatalf("Failed to set REDIS_ADDR: %v", err)
+	}
+	if err := os.Setenv("REDIS_PASSWORD", ""); err != nil {
+		t.Fatalf("Failed to set REDIS_PASSWORD: %v", err)
+	}
+	if err := os.Setenv("REDIS_POOL_SIZE", "10"); err != nil {
+		t.Fatalf("Failed to set REDIS_POOL_SIZE: %v", err)
+	}
+	if err := os.Setenv("REDIS_MIN_IDLE_CONNS", "2"); err != nil {
+		t.Fatalf("Failed to set REDIS_MIN_IDLE_CONNS: %v", err)
+	}
+	if err := os.Setenv("REDIS_MAX_RETRIES", "3"); err != nil {
+		t.Fatalf("Failed to set REDIS_MAX_RETRIES: %v", err)
+	}
+	if err := os.Setenv("REDIS_DIAL_TIMEOUT_SEC", "5"); err != nil {
+		t.Fatalf("Failed to set REDIS_DIAL_TIMEOUT_SEC: %v", err)
+	}
+	if err := os.Setenv("REDIS_READ_TIMEOUT_SEC", "3"); err != nil {
+		t.Fatalf("Failed to set REDIS_READ_TIMEOUT_SEC: %v", err)
+	}
+	if err := os.Setenv("REDIS_WRITE_TIMEOUT_SEC", "3"); err != nil {
+		t.Fatalf("Failed to set REDIS_WRITE_TIMEOUT_SEC: %v", err)
+	}
+	if err := os.Setenv("REDIS_POOL_TIMEOUT_SEC", "4"); err != nil {
+		t.Fatalf("Failed to set REDIS_POOL_TIMEOUT_SEC: %v", err)
+	}
+	if err := os.Setenv("REDIS_STREAM_MAX_LEN", "10000"); err != nil {
+		t.Fatalf("Failed to set REDIS_STREAM_MAX_LEN: %v", err)
+	}
+	if err := os.Setenv("REDIS_JOB_STREAM_TTL_HOURS", "120"); err != nil {
+		t.Fatalf("Failed to set REDIS_JOB_STREAM_TTL_HOURS: %v", err)
+	}
+	if err := os.Setenv("REDIS_TASK_STREAM_TTL_HOURS", "1"); err != nil {
+		t.Fatalf("Failed to set REDIS_TASK_STREAM_TTL_HOURS: %v", err)
+	}
 
 	// Debug: print env and .env presence
 	fmt.Println("[DEBUG] Current working directory:", getCurrentDir())
@@ -59,7 +89,11 @@ func TestMain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to get current directory: %v", err)
 		}
-		defer os.Chdir(originalDir)
+		defer func() {
+			if err := os.Chdir(originalDir); err != nil {
+				t.Errorf("Failed to change back to original directory: %v", err)
+			}
+		}()
 
 		if err := os.Chdir(rootDir); err != nil {
 			t.Fatalf("Failed to change to root directory: %v", err)

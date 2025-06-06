@@ -13,14 +13,30 @@ import (
 
 func TestMain(t *testing.T) {
 	// Set environment variables for testing
-	os.Setenv("ENV", "development")
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("DEV_MODE", "true")
-	os.Setenv("DATABASE_HOST_ADDRESS", "localhost")
-	os.Setenv("DATABASE_HOST_PORT", "9042")
-	os.Setenv("DATABASE_KEYSPACE", "triggerx")
-	os.Setenv("DATABASE_USERNAME", "")
-	os.Setenv("DATABASE_PASSWORD", "")
+	if err := os.Setenv("ENV", "development"); err != nil {
+		t.Fatalf("Failed to set ENV: %v", err)
+	}
+	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatalf("Failed to set LOG_LEVEL: %v", err)
+	}
+	if err := os.Setenv("DEV_MODE", "true"); err != nil {
+		t.Fatalf("Failed to set DEV_MODE: %v", err)
+	}
+	if err := os.Setenv("DATABASE_HOST_ADDRESS", "localhost"); err != nil {
+		t.Fatalf("Failed to set DATABASE_HOST_ADDRESS: %v", err)
+	}
+	if err := os.Setenv("DATABASE_HOST_PORT", "9042"); err != nil {
+		t.Fatalf("Failed to set DATABASE_HOST_PORT: %v", err)
+	}
+	if err := os.Setenv("DATABASE_KEYSPACE", "triggerx"); err != nil {
+		t.Fatalf("Failed to set DATABASE_KEYSPACE: %v", err)
+	}
+	if err := os.Setenv("DATABASE_USERNAME", ""); err != nil {
+		t.Fatalf("Failed to set DATABASE_USERNAME: %v", err)
+	}
+	if err := os.Setenv("DATABASE_PASSWORD", ""); err != nil {
+		t.Fatalf("Failed to set DATABASE_PASSWORD: %v", err)
+	}
 
 	// Test configuration initialization
 	t.Run("Config Initialization", func(t *testing.T) {

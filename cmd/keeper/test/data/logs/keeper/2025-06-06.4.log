@@ -1,6 +1,0 @@
-{"level":"info","ts":"2025-06-06 02:43:37","caller":"main_test.go:55","msg":"[\u001b[32minfo\u001b[0m] Server created successfully"}
-{"level":"info","ts":"2025-06-06 02:43:37","caller":"server.go:77","msg":"[\u001b[32minfo\u001b[0m] Starting API server","addr":":8080"}
-{"level":"info","ts":"2025-06-06 02:43:38","caller":"main_test.go:65","msg":"[\u001b[32minfo\u001b[0m] Server started successfully"}
-{"level":"info","ts":"2025-06-06 02:43:38","caller":"server.go:86","msg":"[\u001b[32minfo\u001b[0m] Stopping API server"}
-{"level":"info","ts":"2025-06-06 02:43:38","caller":"main_test.go:72","msg":"[\u001b[32minfo\u001b[0m] Server stopped successfully"}
-{"level":"info","ts":"2025-06-06 02:43:38","caller":"main_test.go:92","msg":"[\u001b[32minfo\u001b[0m] Health check client created successfully"}

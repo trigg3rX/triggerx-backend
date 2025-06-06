@@ -1,4 +1,0 @@
-{"level":"info","ts":"2025-06-06 02:40:54","caller":"main_test.go:66","msg":"[\u001b[32minfo\u001b[0m] Server created successfully"}
-{"level":"info","ts":"2025-06-06 02:40:54","caller":"main_test.go:76","msg":"[\u001b[32minfo\u001b[0m] Server started successfully"}
-{"level":"info","ts":"2025-06-06 02:40:54","caller":"main_test.go:83","msg":"[\u001b[32minfo\u001b[0m] Server stopped successfully"}
-{"level":"info","ts":"2025-06-06 02:40:54","caller":"main_test.go:132","msg":"[\u001b[32minfo\u001b[0m] Server stopped gracefully"}

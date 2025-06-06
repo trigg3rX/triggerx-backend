@@ -12,10 +12,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -23,11 +22,9 @@ const shutdownTimeout = 30 * time.Second
 func main() {
 	// Initialize configuration
 	if err := config.Init(); err != nil {
-		panic(fmt.Sprintf("Failed to initialize config: %v", err))
+		fmt.Printf("Error loading configuration: %v\n", err)
+		os.Exit(1)
 	}
-
-	// Start metrics collection
-	metrics.StartMetricsCollection()
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
@@ -38,20 +35,24 @@ func main() {
 		MinStdoutLevel:  getLogLevel(),
 		MinFileLogLevel: getLogLevel(),
 	}
-
 	if err := logging.InitServiceLogger(logConfig); err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		fmt.Printf("Error initializing logger: %v\n", err)
+		os.Exit(1)
 	}
-	logger := logging.GetServiceLogger()
+	defer func() {
+		if err := logging.Shutdown(); err != nil {
+			fmt.Printf("Error shutting down logger: %v\n", err)
+		}
+	}()
 
-	logger.Info("Starting time-based scheduler service...")
+	logger := logging.GetServiceLogger()
 
 	// Initialize database client
 	dbClientCfg := client.Config{
 		DBServerURL:    config.GetDBServerURL(),
 		RequestTimeout: 10 * time.Second,
 		MaxRetries:     3,
-		RetryDelay:     2 * time.Second,
+		RetryDelay:     1 * time.Second,
 	}
 	dbClient, err := client.NewDBServerClient(logger, dbClientCfg)
 	if err != nil {
@@ -116,10 +117,10 @@ func main() {
 
 	// Log comprehensive service status
 	serviceStatus := map[string]interface{}{
-		"manager_id":      managerID,
-		"api_port":        config.GetSchedulerRPCPort(),
-		"max_workers":     config.GetMaxWorkers(),
-		"poll_interval":   "30s",
+		"manager_id":    managerID,
+		"api_port":      config.GetSchedulerRPCPort(),
+		"max_workers":   config.GetMaxWorkers(),
+		"poll_interval": "30s",
 	}
 
 	logger.Info("Time-based scheduler service ready", serviceStatus)
@@ -167,11 +168,6 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeSch
 	}
 
 	shutdownDuration := time.Since(shutdownStart)
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
-	}
 
 	logger.Info("Time-based scheduler shutdown complete", "duration", shutdownDuration)
 	os.Exit(0)
