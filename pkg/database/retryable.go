@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -81,7 +82,7 @@ func (c *Connection) RetryableExec(query string, values ...interface{}) error {
 	logger := logging.GetServiceLogger()
 	config := DefaultRetryableConfig()
 
-	_, err := retry.Retry(func() (interface{}, error) {
+	_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 		// For testing purposes, we'll use a special error to indicate mock execution
 		if err := c.session.Query(query, values...).Exec(); err != nil {
 			if err.Error() == "mock execution" {
@@ -110,7 +111,7 @@ func (c *Connection) RetryableScan(query string, dest ...interface{}) error {
 	logger := logging.GetServiceLogger()
 	config := DefaultRetryableConfig()
 
-	_, err := retry.Retry(func() (interface{}, error) {
+	_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 		err := c.session.Query(query).Scan(dest...)
 		if err != nil && !isRetryableError(err) {
 			// If error is not retryable, return it immediately
@@ -139,7 +140,7 @@ func (c *Connection) RetryableBatch(batch *gocql.Batch) error {
 	logger := logging.GetServiceLogger()
 	config := DefaultRetryableConfig()
 
-	_, err := retry.Retry(func() (interface{}, error) {
+	_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 		err := c.session.ExecuteBatch(batch)
 		if err != nil && !isRetryableError(err) {
 			// If error is not retryable, return it immediately

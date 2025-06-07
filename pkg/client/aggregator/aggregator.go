@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 // AggregatorClient handles communication with the aggregator service
@@ -18,6 +18,7 @@ type AggregatorClient struct {
 	config     AggregatorClientConfig
 	privateKey *ecdsa.PrivateKey
 	publicKey  *ecdsa.PublicKey
+	retry      *retry.HTTPClient
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient
@@ -45,41 +46,35 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 		return nil, fmt.Errorf("%w: invalid public key type", ErrInvalidKey)
 	}
 
+	// Create retry client with configuration
+	retryConfig := &retry.HTTPRetryConfig{
+		Config: retry.Config{
+			MaxRetries:      cfg.RetryAttempts,
+			InitialDelay:    cfg.RetryDelay,
+			BackoffFactor:   2.0,
+			JitterFactor:    0.1,
+			LogRetryAttempt: true,
+		},
+		Timeout:         cfg.RequestTimeout,
+		IdleConnTimeout: 30 * time.Second,
+	}
+
 	return &AggregatorClient{
 		logger:     logger,
 		config:     cfg,
 		privateKey: privateKey,
 		publicKey:  publicKey,
+		retry:      retry.NewHTTPClient(retryConfig, logger),
 	}, nil
 }
 
-// signMessage signs the given data with the client's private key
-func (c *AggregatorClient) signMessage(data []byte) (string, error) {
-	messageHash := crypto.Keccak256Hash(data)
-
-	sig, err := crypto.Sign(messageHash.Bytes(), c.privateKey)
-	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrSigningFailed, err)
-	}
-
-	sig[64] += 27
-	return hexutil.Encode(sig), nil
-}
-
-// executeWithRetry executes an RPC call with retry logic
-func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, result interface{}, params struct {
-	ProofOfTask      string `json:"proofOfTask"`
-	Data             string `json:"data"`
-	TaskDefinitionID int    `json:"taskDefinitionId"`
-	PerformerAddress string `json:"performerAddress"`
-	Signature        string `json:"signature"`
-}) error {
-	var lastErr error
-
-	for attempt := 0; attempt < c.config.RetryAttempts; attempt++ {
+// executeWithRetry executes an RPC call with retry logic using the retry package
+func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, result interface{}, params interface{}) error {
+	// Create a new request for each attempt to ensure fresh state
+	operation := func() (interface{}, error) {
 		rpcClient, err := rpc.Dial(c.config.AggregatorRPCUrl)
 		if err != nil {
-			return fmt.Errorf("failed to dial aggregator RPC: %w", err)
+			return nil, fmt.Errorf("failed to dial aggregator RPC: %w", err)
 		}
 		defer rpcClient.Close()
 
@@ -87,32 +82,21 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		ctxWithTimeout, cancel := context.WithTimeout(ctx, c.config.RequestTimeout)
 		defer cancel()
 
-		err = rpcClient.CallContext(ctxWithTimeout, result, method,
-			params.ProofOfTask,
-			params.Data,
-			params.TaskDefinitionID,
-			params.PerformerAddress,
-			params.Signature)
-
-		if err == nil {
-			return nil
+		err = rpcClient.CallContext(ctxWithTimeout, result, method, params)
+		if err != nil {
+			return nil, fmt.Errorf("RPC call failed: %w", err)
 		}
 
-		lastErr = err
-		c.logger.Warn("RPC request failed, retrying",
-			"attempt", attempt+1,
-			"maxAttempts", c.config.RetryAttempts,
-			"error", err)
-
-		// Check if context is cancelled before sleeping
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		if attempt < c.config.RetryAttempts-1 {
-			time.Sleep(c.config.RetryDelay)
-		}
+		return result, nil
 	}
 
-	return fmt.Errorf("all retry attempts failed: %w", lastErr)
+	_, err := retry.Retry(ctx, operation, &retry.Config{
+		MaxRetries:      c.config.RetryAttempts,
+		InitialDelay:    c.config.RetryDelay,
+		BackoffFactor:   2.0,
+		JitterFactor:    0.1,
+		LogRetryAttempt: true,
+	}, c.logger)
+
+	return err
 }

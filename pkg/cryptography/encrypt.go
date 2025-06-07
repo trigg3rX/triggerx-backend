@@ -1,4 +1,4 @@
-package encrypt
+package cryptography
 
 import (
 	"fmt"
@@ -30,7 +30,7 @@ func EncryptMessage(publicKeyHex string, message string) (string, error) {
 	return hexutil.Encode(encryptedBytes), nil
 }
 
-func DecryptMessageForKeeper(privateKey string, encryptedHex string) (string, error) {
+func DecryptMessage(privateKey string, encryptedHex string) (string, error) {
 	encryptedBytes, err := hexutil.Decode(encryptedHex)
 	if err != nil {
 		return "", fmt.Errorf("invalid encrypted hex: %w", err)

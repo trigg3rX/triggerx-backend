@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -37,14 +38,14 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 		"proofOfTask",
 		jsonData,
 		common.HexToAddress(taskData.PerformerData.KeeperAddress),
-		big.NewInt(int64(taskData.TaskDefinitionID)),
+		big.NewInt(int64(taskData.TriggerData.TaskDefinitionID)),
 	)
 	if err != nil {
 		c.logger.Error("Failed to encode task data", "error", err)
 		return false, fmt.Errorf("%w: failed to encode data: %v", ErrMarshalFailed, err)
 	}
 
-	signature, err := c.signMessage(dataPacked)
+	signature, err := cryptography.SignJSONMessage(dataPacked, c.config.SenderPrivateKey)
 	if err != nil {
 		c.logger.Error("Failed to sign task data", "error", err)
 		return false, err
@@ -62,7 +63,7 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 	}{
 		ProofOfTask:      "proofOfTask",
 		Data:             "0x" + hex.EncodeToString(jsonData),
-		TaskDefinitionID: taskData.TaskDefinitionID,
+		TaskDefinitionID: taskData.TriggerData.TaskDefinitionID,
 		PerformerAddress: taskData.PerformerData.KeeperAddress,
 		Signature:        signature,
 	}

@@ -2,6 +2,7 @@ package retry
 
 import (
 	"errors"
+	"context"
 	"testing"
 	"time"
 
@@ -97,7 +98,7 @@ func TestRetry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			start := time.Now()
-			result, err := Retry(tt.operation, tt.config, logger)
+			result, err := Retry(context.Background(), tt.operation, tt.config, logger)
 			duration := time.Since(start)
 
 			if tt.expectError {
@@ -121,7 +122,7 @@ func TestWithExponentialBackoff(t *testing.T) {
 	logger := logging.GetServiceLogger()
 
 	t.Run("success with default config", func(t *testing.T) {
-		result, err := WithExponentialBackoff(func() (string, error) {
+		result, err := WithExponentialBackoff(context.Background(), func() (string, error) {
 			return "success", nil
 		}, logger)
 
@@ -130,7 +131,7 @@ func TestWithExponentialBackoff(t *testing.T) {
 	})
 
 	t.Run("failure with default config", func(t *testing.T) {
-		result, err := WithExponentialBackoff(func() (string, error) {
+		result, err := WithExponentialBackoff(context.Background(), func() (string, error) {
 			return "", errors.New("operation failed")
 		}, logger)
 
@@ -145,7 +146,7 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 	logger := logging.GetServiceLogger()
 
 	t.Run("int type", func(t *testing.T) {
-		result, err := Retry(func() (int, error) {
+		result, err := Retry(context.Background(), func() (int, error) {
 			return 42, nil
 		}, DefaultConfig(), logger)
 
@@ -158,7 +159,7 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 			Value string
 		}
 
-		result, err := Retry(func() (TestStruct, error) {
+		result, err := Retry(context.Background(), func() (TestStruct, error) {
 			return TestStruct{Value: "test"}, nil
 		}, DefaultConfig(), logger)
 
@@ -167,7 +168,7 @@ func TestRetryWithDifferentTypes(t *testing.T) {
 	})
 
 	t.Run("pointer type", func(t *testing.T) {
-		result, err := Retry(func() (*string, error) {
+		result, err := Retry(context.Background(), func() (*string, error) {
 			value := "pointer"
 			return &value, nil
 		}, DefaultConfig(), logger)

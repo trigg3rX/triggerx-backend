@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -15,7 +16,7 @@ func (c *AggregatorClient) SendTaskToAggregator(ctx context.Context, taskResult 
 		"proofOfTask", taskResult.ProofOfTask)
 
 	// Sign the task data
-	signature, err := c.signMessage([]byte(taskResult.IPFSDataCID))
+	signature, err := cryptography.SignJSONMessage([]byte(taskResult.IPFSDataCID), c.config.SenderPrivateKey)
 	if err != nil {
 		c.logger.Error("Failed to sign task data", "error", err)
 		return fmt.Errorf("failed to sign task data: %w", err)

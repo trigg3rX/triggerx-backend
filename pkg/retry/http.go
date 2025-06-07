@@ -13,36 +13,33 @@ import (
 
 // HTTPRetryConfig holds configuration for HTTP retry operations
 type HTTPRetryConfig struct {
-	MaxRetries      int
-	InitialDelay    time.Duration
-	MaxDelay        time.Duration
-	BackoffFactor   float64
-	JitterFactor    float64
-	LogRetryAttempt bool
+	Config
 	// Status codes that should trigger a retry
 	RetryStatusCodes []int
 	// HTTP client configuration
-	Timeout             time.Duration
-	IdleConnTimeout     time.Duration
+	Timeout         time.Duration
+	IdleConnTimeout time.Duration
 }
 
 // DefaultHTTPRetryConfig returns default configuration for HTTP retry operations
 func DefaultHTTPRetryConfig() *HTTPRetryConfig {
 	return &HTTPRetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    time.Second,
-		MaxDelay:        10 * time.Second,
-		BackoffFactor:   2.0,
-		JitterFactor:    0.1,
-		LogRetryAttempt: true,
+		Config: Config{
+			MaxRetries:      3,
+			InitialDelay:    time.Second,
+			MaxDelay:        10 * time.Second,
+			BackoffFactor:   2.0,
+			JitterFactor:    0.1,
+			LogRetryAttempt: true,
+		},
 		RetryStatusCodes: []int{
 			http.StatusInternalServerError,
 			http.StatusBadGateway,
 			http.StatusServiceUnavailable,
 			http.StatusGatewayTimeout,
 		},
-		Timeout:             3 * time.Second,
-		IdleConnTimeout:     30 * time.Second,
+		Timeout:         3 * time.Second,
+		IdleConnTimeout: 30 * time.Second,
 	}
 }
 
@@ -81,83 +78,114 @@ func NewHTTPClient(config *HTTPRetryConfig, logger logging.Logger) *HTTPClient {
 	}
 }
 
-// DoWithRetry performs an HTTP request with retry logic
+// DoWithRetry performs an HTTP request with retry logic.
+// The caller is responsible for closing the response body.
 func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
-	var lastErr error
-	var lastResp *http.Response
+	var (
+		lastErr  error
+		lastResp *http.Response
+		attempt  int
+		delay    = c.config.InitialDelay
+	)
 
-	attempts := 0
-	delay := c.config.InitialDelay
+	// Store the original body if it exists
+	var bodyBytes []byte
+	var err error
+	if req.Body != nil {
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading request body: %w", err)
+		}
+		if err := req.Body.Close(); err != nil {
+			c.logger.Warnf("Failed to close request body: %v", err)
+		}
+		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
 
-	for attempts < c.config.MaxRetries {
-		attempts++
-
-		// Clone the request to ensure we can retry it
+	for attempt = 1; attempt <= c.config.MaxRetries; attempt++ {
+		// Clone the request for each attempt
 		reqClone := req.Clone(req.Context())
-		if req.Body != nil {
-			bodyBytes, err := io.ReadAll(req.Body)
-			if err != nil {
-				return nil, fmt.Errorf("error reading request body: %v", err)
-			}
-			defer func() {
-				if err := req.Body.Close(); err != nil {
-					c.logger.Warnf("Failed to close request body: %v", err)
-				}
-			}()
-			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		if bodyBytes != nil {
 			reqClone.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
 		resp, err := c.client.Do(reqClone)
 		if err != nil {
-			lastErr = err
-			if attempts == c.config.MaxRetries {
+			lastErr = fmt.Errorf("http request failed: %w", err)
+			if attempt == c.config.MaxRetries {
 				break
 			}
+
 			if c.config.LogRetryAttempt {
-				c.logger.Warnf("Attempt %d failed: %v. Retrying in %v...", attempts, err, delay)
+				c.logger.Warnf("Attempt %d/%d failed: %v. Retrying in %v...", attempt, c.config.MaxRetries, err, delay)
 			}
-			time.Sleep(delay)
-			delay = time.Duration(float64(delay) * c.config.BackoffFactor)
-			continue
+
+			select {
+			case <-time.After(delay):
+				delay = c.nextDelay(delay)
+				continue
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			}
 		}
 
 		// Check if we should retry based on status code
-		retryable := false
-		for _, retryCode := range c.config.RetryStatusCodes {
-			if resp.StatusCode == retryCode {
-				retryable = true
-				break
-			}
-		}
-
-		if !retryable {
+		if !c.shouldRetry(resp.StatusCode) {
 			return resp, nil
 		}
 
-		// Read and close the response body
+		// Read and close the response body for retryable responses
 		body, _ := io.ReadAll(resp.Body)
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				c.logger.Warnf("Failed to close response body: %v", err)
-			}
-		}()
+		_ = resp.Body.Close()
 		lastResp = resp
 		lastErr = fmt.Errorf("received retryable status code: %d, body: %s", resp.StatusCode, string(body))
 
-		if attempts == c.config.MaxRetries {
+		if attempt == c.config.MaxRetries {
 			break
 		}
 
 		if c.config.LogRetryAttempt {
-			c.logger.Warnf("Attempt %d failed with status %d. Retrying in %v...", attempts, resp.StatusCode, delay)
+			c.logger.Warnf("Attempt %d/%d failed with status %d. Retrying in %v...", attempt, c.config.MaxRetries, resp.StatusCode, delay)
 		}
-		time.Sleep(delay)
-		delay = time.Duration(float64(delay) * c.config.BackoffFactor)
+
+		select {
+		case <-time.After(delay):
+			delay = c.nextDelay(delay)
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
 	}
 
 	if lastResp != nil {
 		return lastResp, lastErr
 	}
-	return nil, fmt.Errorf("failed after %d attempts: %v", attempts, lastErr)
+	return nil, fmt.Errorf("failed after %d attempts: %w", attempt, lastErr)
+}
+
+// shouldRetry checks if the status code is in the list of retryable status codes
+func (c *HTTPClient) shouldRetry(statusCode int) bool {
+	for _, retryCode := range c.config.RetryStatusCodes {
+		if statusCode == retryCode {
+			return true
+		}
+	}
+	return false
+}
+
+// nextDelay calculates the next delay with backoff and jitter
+func (c *HTTPClient) nextDelay(currentDelay time.Duration) time.Duration {
+	nextDelay := time.Duration(float64(currentDelay) * c.config.BackoffFactor)
+
+	// Add jitter
+	if c.config.JitterFactor > 0 {
+		jitter := time.Duration(float64(nextDelay) * c.config.JitterFactor)
+		nextDelay += time.Duration(float64(jitter) * (0.5 - secureFloat64()))
+	}
+
+	// Cap at max delay
+	if nextDelay > c.config.MaxDelay {
+		nextDelay = c.config.MaxDelay
+	}
+
+	return nextDelay
 }
