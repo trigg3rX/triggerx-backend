@@ -18,44 +18,28 @@ var (
 		Help:      "The uptime of the time scheduler service in seconds",
 	})
 
-	// JobsScheduled tracks the total number of jobs scheduled
-	JobsScheduled = promauto.NewGauge(prometheus.GaugeOpts{
+	// TasksScheduled tracks the total number of tasks scheduled
+	TasksScheduled = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
-		Name:      "jobs_scheduled",
+		Name:      "tasks_scheduled",
 		Help:      "Total number of jobs scheduled",
 	})
 
-	// JobsRunning tracks the number of jobs currently running
-	JobsRunning = promauto.NewGauge(prometheus.GaugeOpts{
+	// TasksRunning tracks the number of tasks currently running
+	TasksRunning = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
-		Name:      "jobs_running",
+		Name:      "tasks_running",
 		Help:      "Total number of jobs currently running",
 	})
 
-	// JobsCompleted tracks the total number of jobs completed
-	JobsCompleted = promauto.NewGauge(prometheus.GaugeOpts{
+	// TasksCompleted tracks the total number of tasks completed
+	TasksCompleted = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
-		Name:      "jobs_completed",
+		Name:      "tasks_completed",
 		Help:      "Total number of jobs completed",
-	})
-
-	// JobsFailed tracks the total number of jobs failed
-	JobsFailed = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: "triggerx",
-		Subsystem: "time_scheduler",
-		Name:      "jobs_failed",
-		Help:      "Total number of jobs failed",
-	})
-
-	// TasksExecuted tracks the total number of tasks executed
-	TasksExecuted = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: "triggerx",
-		Subsystem: "time_scheduler",
-		Name:      "tasks_executed",
-		Help:      "Total number of tasks executed",
 	})
 
 	// TasksFailed tracks the total number of tasks failed
@@ -63,7 +47,16 @@ var (
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
 		Name:      "tasks_failed",
-		Help:      "Total number of tasks failed",
+		Help:      "Total number of jobs failed",
+	})
+
+	
+	TaskExecutionTime = promauto.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "triggerx",
+		Subsystem: "time_scheduler",
+		Name:      "task_execution_time",
+		Help:      "Time taken to execute a task",
+		Buckets:   []float64{1, 5, 10, 50, 100, 500},
 	})
 )
 
