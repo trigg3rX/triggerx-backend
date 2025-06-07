@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -15,8 +17,9 @@ func SignMessage(message string, privateKey string) (string, error) {
 	}
 
 	messageHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	messageBytes := messageHash.Bytes()
 
-	signature, err := crypto.Sign(messageHash.Bytes(), privateKeyECDSA)
+	signature, err := crypto.Sign(messageBytes, privateKeyECDSA)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign message: %w", err)
 	}
@@ -48,6 +51,41 @@ func SignJSONMessage(jsonData interface{}, privateKey string) (string, error) {
 	message := string(jsonDataBytes)
 
 	return SignMessage(message, privateKey)
+}
+
+
+func VerifySignature(message string, signature string, signerAddress string) (bool, error) {
+	messageHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
+	messageBytes := messageHash.Bytes()
+
+	signatureBytes, err := hexutil.Decode(signature)
+	if err != nil {
+		return false, fmt.Errorf("invalid signature: %w", err)
+	}
+
+	if len(signature) != 65 {
+		return false, fmt.Errorf("invalid signature length")
+	}
+
+	if signatureBytes[64] >= 27 {
+		signatureBytes[64] -= 27
+	}
+
+	pubKeyRaw, err := crypto.Ecrecover(messageBytes, signatureBytes)
+	if err != nil {
+		return false, fmt.Errorf("failed to recover public key: %w", err)
+	}
+
+	pubKey, err := crypto.UnmarshalPubkey(pubKeyRaw)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal public key: %w", err)
+	}
+
+	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+
+	checksumAddr := common.HexToAddress(signerAddress)
+
+	return checksumAddr == recoveredAddr, nil
 }
 
 func convertToLower(data map[string]interface{}) {

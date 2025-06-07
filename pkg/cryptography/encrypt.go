@@ -9,7 +9,7 @@ import (
 	"crypto/rand"
 )
 
-func EncryptMessageForKeeper(publicKeyHex string, ipfsHost string, pinataJWT string) (string, error) {
+func EncryptMessage(publicKeyHex string, message string) (string, error) {
 	publicKeyBytes, err := hexutil.Decode(fmt.Sprintf("0x%s", publicKeyHex))
 	if err != nil {
 		return "", fmt.Errorf("invalid public key hex: %w", err)
@@ -22,12 +22,30 @@ func EncryptMessageForKeeper(publicKeyHex string, ipfsHost string, pinataJWT str
 
 	eciesPubKey := ecies.ImportECDSAPublic(pubKey)
 
-	message := fmt.Sprintf("%s:%s", ipfsHost, pinataJWT)
-
 	encryptedBytes, err := ecies.Encrypt(rand.Reader, eciesPubKey, []byte(message), nil, nil)
 	if err != nil {
 		return "", fmt.Errorf("encryption failed: %w", err)
 	}
 
 	return hexutil.Encode(encryptedBytes), nil
+}
+
+func DecryptMessageForKeeper(privateKey string, encryptedHex string) (string, error) {
+	encryptedBytes, err := hexutil.Decode(encryptedHex)
+	if err != nil {
+		return "", fmt.Errorf("invalid encrypted hex: %w", err)
+	}
+
+	privateKeyECDSA, err := crypto.HexToECDSA(privateKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid private key: %w", err)
+	}
+
+	eciesPrivKey := ecies.ImportECDSA(privateKeyECDSA)
+	decrypted, err := eciesPrivKey.Decrypt(encryptedBytes, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("decryption failed: %w", err)
+	}
+
+	return string(decrypted), nil
 }
