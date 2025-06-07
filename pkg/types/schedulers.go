@@ -63,7 +63,7 @@ type ScheduleConditionJobData struct {
 }
 
 // Data to pass to Performer to execution action
-type SendTaskTargetDataToKeeper struct {
+type TaskTargetData struct {
     TaskID                        int64     `json:"task_id"`
     TaskDefinitionID              int       `json:"task_definition_id"`
 	TimeFrame                     int64     `json:"time_frame"`
@@ -77,7 +77,7 @@ type SendTaskTargetDataToKeeper struct {
 }
 
 // Trigger data from schedulers to keepers for validation
-type SendTaskTriggerDataToKeeper struct {
+type TaskTriggerData struct {
 	TaskID                        int64     `json:"task_id"`
 	Recurring                     bool      `json:"recurring"`
 	ExpirationTime                time.Time `json:"expiration_time"`
@@ -102,9 +102,16 @@ type SendTaskTriggerDataToKeeper struct {
     ConditionSatisfiedValue       int       `json:"condition_satisfied_value"`
 }
 
+type SchedulerSignatureData struct {
+	TaskID 						int64               `json:"task_id"`
+	SchedulerSigningAddress     string 			  `json:"scheduler_signing_address"`
+	SchedulerSignature          string 			  `json:"scheduler_signature"`
+}
+
 type SendTaskDataToKeeper struct {
-	TaskDefinitionID int                 				`json:"task_definition_id"`
+	TaskID 			int64                 			`json:"task_id"`
 	PerformerData    GetPerformerData 			`json:"performer_data"`
-	TargetData       *SendTaskTargetDataToKeeper  `json:"target_data"`
-	TriggerData      *SendTaskTriggerDataToKeeper `json:"trigger_data"`
+	TargetData       *TaskTargetData  `json:"target_data"`
+	TriggerData      *TaskTriggerData `json:"trigger_data"`
+	SchedulerSignature *SchedulerSignatureData `json:"scheduler_signature_data"`
 }
