@@ -6,18 +6,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Handler encapsulates the dependencies for health handlers
 type Handler struct {
-	logger       logging.Logger
+	logger logging.Logger
+	tsm    *redis.TaskStreamManager
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger) *Handler {
+func NewHandler(logger logging.Logger, tsm *redis.TaskStreamManager) *Handler {
 	return &Handler{
-		logger:       logger.With("component", "redis_handler"),
+		logger: logger,
+		tsm:    tsm,
 	}
 }
 
@@ -65,7 +68,11 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 // RegisterRoutes registers all HTTP routes for the health service
 func RegisterRoutes(router *gin.Engine) {
 	logger := logging.GetServiceLogger()
-	handler := NewHandler(logger)
+	tsm, err := redis.NewTaskStreamManager(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
+	}
+	handler := NewHandler(logger, tsm)
 
 	router.GET("/", handler.handleRoot)
 	router.POST("/task/validate", handler.ValidateTask)
@@ -79,4 +86,3 @@ func (h *Handler) handleRoot(c *gin.Context) {
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }
-

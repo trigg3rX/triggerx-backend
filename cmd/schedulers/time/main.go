@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
@@ -69,7 +70,11 @@ func main() {
 		RetryDelay:       2 * time.Second,
 		RequestTimeout:   10 * time.Second,
 	}
-	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
+	tsm, err := redis.NewTaskStreamManager(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
+	}
+	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, tsm)
 	if err != nil {
 		logger.Fatal("Failed to initialize aggregator client", "error", err)
 	}

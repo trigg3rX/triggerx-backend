@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
 )
 
 // TaskResult represents the data to be sent to the aggregator
@@ -57,4 +59,15 @@ func (c *AggregatorClient) SendTaskResult(ctx context.Context, taskResult *TaskR
 		"response", response)
 
 	return nil
+}
+
+// SendTaskResultWithAggregatorResponse sends a task result and waits for aggregator response, handling Redis stream transitions.
+func (c *AggregatorClient) SendTaskResultWithAggregatorResponse(ctx context.Context, taskResult *TaskResult, taskData *redis.TaskStreamData, performerID int64) error {
+	if err := c.SendTaskResult(ctx, taskResult); err != nil {
+		return err
+	}
+	if c.TaskStreamManager == nil {
+		return fmt.Errorf("TaskStreamManager is not set on AggregatorClient")
+	}
+	return redis.WaitForAggregatorResponse(c.TaskStreamManager, taskData, performerID)
 }

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/redis"
+	// "github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -16,6 +17,7 @@ type TaskValidationRequest struct {
 	Data             string `json:"data"`
 	TaskDefinitionID uint16 `json:"taskDefinitionId"`
 	Performer        string `json:"performer"`
+	TaskID           int64  `json:"task_id"`
 }
 
 type ValidationResult struct {
@@ -29,6 +31,13 @@ type ValidationResponse struct {
 	Error   bool   `json:"error"`
 	Message string `json:"message,omitempty"`
 }
+
+// Handler encapsulates the dependencies for health handlers
+// Add tsm (TaskStreamManager) to Handler
+
+
+// NewHandler creates a new instance of Handler
+
 
 func (h *Handler) HandleP2PMessage(c *gin.Context) {
 	if c.Request.Method != http.MethodPost {
@@ -70,7 +79,7 @@ func (h *Handler) HandleP2PMessage(c *gin.Context) {
 
 	taskDefinitionID := requestData["taskDefinitionId"]
 	performerDataRaw := requestData["performerData"]
-	
+
 	// Convert to proper types
 	var performerData types.GetPerformerData
 	performerDataBytes, err := json.Marshal(performerDataRaw)
@@ -173,28 +182,68 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 		return
 	}
 
-	var decodedData string
-	if strings.HasPrefix(taskRequest.Data, "0x") {
-		dataBytes, err := hex.DecodeString(taskRequest.Data[2:])
-		if err != nil {
-			h.logger.Errorf("Failed to hex-decode data: %v", err)
-			c.JSON(http.StatusBadRequest, ValidationResponse{
-				Data:    false,
-				Error:   true,
-				Message: fmt.Sprintf("Failed to decode hex data: %v", err),
-			})
-			return
-		}
-		decodedData = string(dataBytes)
-		h.logger.Infof("Decoded Data CID: %s", decodedData)
-	} else {
-		decodedData = taskRequest.Data
+	// Fetch the IPFS file from the URL in Data
+	ipfsURL := taskRequest.Data
+	resp, err := http.Get(ipfsURL)
+	if err != nil {
+		h.logger.Errorf("Failed to fetch IPFS file: %v", err)
+		c.JSON(http.StatusInternalServerError, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: "Failed to fetch IPFS file",
+		})
+		return
 	}
-	
-	h.logger.Infof("Decoded Data: %s", decodedData[:20])
-	c.JSON(http.StatusOK, ValidationResponse{
-		Data:    true,
-		Error:   false,
-		Message: "",
-	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		h.logger.Errorf("IPFS file fetch returned status: %d", resp.StatusCode)
+		c.JSON(http.StatusInternalServerError, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: "IPFS file not found",
+		})
+		return
+	}
+
+	// Parse the file as types.IPFSData (nested JSON)
+	var ipfsData types.IPFSData
+	if err := json.NewDecoder(resp.Body).Decode(&ipfsData); err != nil {
+		h.logger.Errorf("Failed to decode IPFSData: %v", err)
+		c.JSON(http.StatusInternalServerError, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: "Failed to decode IPFSData",
+		})
+		return
+	}
+
+	// Reconstruct taskData from request
+	taskData := &redis.TaskStreamData{
+		TaskID: taskRequest.TaskID,
+	}
+
+	if ipfsData.PerformerActionData.ActionTxHash != "" {
+		err := h.tsm.AddTaskToCompletedStream(taskData, map[string]interface{}{
+			"action_tx_hash": ipfsData.PerformerActionData.ActionTxHash,
+		})
+		if err != nil {
+			h.logger.Errorf("Failed to add task to completed stream: %v", err)
+		}
+		c.JSON(http.StatusOK, ValidationResponse{
+			Data:    true,
+			Error:   false,
+			Message: "Task completed successfully",
+		})
+	} else {
+		err := h.tsm.AddTaskToFailedStream(taskData)
+		if err != nil {
+			h.logger.Errorf("Failed to add task to failed stream: %v", err)
+		}
+		c.JSON(http.StatusOK, ValidationResponse{
+			Data:    false,
+			Error:   true,
+			Message: "Task failed: ActionTxHash is empty",
+		})
+	}
 }
