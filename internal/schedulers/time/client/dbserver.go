@@ -70,7 +70,7 @@ func NewDBServerClient(logger logging.Logger, config Config) (*DBServerClient, e
 
 // GetTimeBasedJobs fetches jobs that need to be executed in the next window
 func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeJobData, error) {
-	url := fmt.Sprintf("%s/api/v1/time/jobs", c.baseURL)
+	url := fmt.Sprintf("%s/api/jobs/time", c.baseURL)
 
 	var jobs []types.ScheduleTimeJobData
 	err := c.doWithRetry("GET", url, nil, &jobs)
@@ -84,7 +84,7 @@ func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeJobData, error)
 
 // UpdateJobNextExecution updates the next execution timestamp for a job
 func (c *DBServerClient) UpdateJobNextExecution(jobID int64, nextExecution time.Time) error {
-	url := fmt.Sprintf("%s/api/v1/time/jobs/%d/next-execution", c.baseURL, jobID)
+	url := fmt.Sprintf("%s/api/jobs/%d/lastexecuted", c.baseURL, jobID)
 
 	payload := map[string]string{
 		"next_execution_timestamp": nextExecution.Format(time.RFC3339),
@@ -101,7 +101,7 @@ func (c *DBServerClient) UpdateJobNextExecution(jobID int64, nextExecution time.
 
 // UpdateJobStatus updates the status of a job
 func (c *DBServerClient) UpdateJobStatus(jobID int64, status bool) error {
-	url := fmt.Sprintf("%s/api/v1/time/jobs/%d/status", c.baseURL, jobID)
+	url := fmt.Sprintf("%s/api/jobs/%d/status/%t", c.baseURL, jobID, status)
 
 	payload := map[string]bool{
 		"status": status,
