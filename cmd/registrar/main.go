@@ -9,6 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
 
 	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -49,6 +50,10 @@ func main() {
 	// Initialize database manager with logger
 	client.InitDatabaseManager(logger, dbConn)
 	logger.Info("Database manager initialized")
+
+	// Start weekly Pinata cleanup goroutine
+	events.StartWeeklyPinataCleanup(logger)
+	logger.Info("Weekly Pinata cleanup goroutine started")
 
 	// Initialize and start registrar service
 	registrarService, err := registrar.NewRegistrarService(logger)

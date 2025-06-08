@@ -30,6 +30,9 @@ type Config struct {
 	databaseHostPort    string
 
 	lastRewardsUpdate string
+
+	// Pinata JWT
+	pinataJWT string
 }
 
 var cfg Config
@@ -49,6 +52,7 @@ func Init() error {
 		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		lastRewardsUpdate:        env.GetEnv("LAST_REWARDS_UPDATE", ""),
+		pinataJWT:                env.GetEnv("PINATA_JWT", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -71,6 +75,9 @@ func validateConfig() error {
 	}
 	if env.IsEmpty(cfg.lastRewardsUpdate) {
 		cfg.lastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
+	}
+	if env.IsEmpty(cfg.pinataJWT) {
+		return fmt.Errorf("invalid pinata jwt: %s", cfg.pinataJWT)
 	}
 	return nil
 }
@@ -113,4 +120,8 @@ func GetPollingInterval() time.Duration {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetPinataJWT() string {
+	return cfg.pinataJWT
 }
