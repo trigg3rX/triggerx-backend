@@ -223,9 +223,9 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 		TaskID: taskRequest.TaskID,
 	}
 
-	if ipfsData.PerformerActionData.ActionTxHash != "" {
+	if ipfsData.ActionData.ActionTxHash != "" {
 		err := h.tsm.AddTaskToCompletedStream(taskData, map[string]interface{}{
-			"action_tx_hash": ipfsData.PerformerActionData.ActionTxHash,
+			"action_tx_hash": ipfsData.ActionData.ActionTxHash,
 		})
 		if err != nil {
 			h.logger.Errorf("Failed to add task to completed stream: %v", err)

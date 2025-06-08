@@ -111,23 +111,24 @@ func TestMain(t *testing.T) {
 		fmt.Println("- GetRedisAddr:", config.GetRedisAddr())
 	})
 
+	logConfig := logging.LoggerConfig{
+		ProcessName:     logging.RedisProcess,
+		IsDevelopment:   true,
+	}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	// Test logger initialization
 	t.Run("Logger Initialization", func(t *testing.T) {
-		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
-			ProcessName:     logging.RedisProcess,
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+		if logger == nil {
+			t.Fatalf("Logger should not be nil")
 		}
-		err := logging.InitServiceLogger(logConfig)
 		assert.NoError(t, err, "Logger initialization should not fail")
 	})
 
 	// Test Redis client creation and connection
 	t.Run("Redis Client", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
 		client, err := redisx.NewRedisClient(logger)
 		if err != nil {
 			t.Fatalf("Redis client creation failed: %v", err)

@@ -36,19 +36,7 @@ func main() {
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	if err := logging.InitServiceLogger(logConfig); err != nil {
-		fmt.Printf("Error initializing logger: %v\n", err)
-		os.Exit(1)
 	}
-
-	logger.Info("Starting time-based scheduler service...")
-	defer func() {
-		if err := logging.Shutdown(); err != nil {
-			fmt.Printf("Error shutting down logger: %v\n", err)
-		}
-	}()
-
-	logger := logging.GetServiceLogger()
 
 	// Initialize database client
 	dbClientCfg := client.Config{
@@ -66,8 +54,8 @@ func main() {
 	// Initialize aggregator client
 	aggClientCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetSchedulerPrivateKey(),
-		SenderAddress:    config.GetSchedulerAddress(),
+		SenderPrivateKey: config.GetSchedulerSigningKey(),
+		SenderAddress:    config.GetSchedulerSigningAddress(),
 		RetryAttempts:    3,
 		RetryDelay:       2 * time.Second,
 		RequestTimeout:   10 * time.Second,
@@ -132,10 +120,6 @@ func main() {
 		"performer_lock_ttl": config.GetPerformerLockTTL(),
 		"task_cache_ttl": config.GetTaskCacheTTL(),
 		"duplicate_task_window": config.GetDuplicateTaskWindow(),
-		"manager_id":    managerID,
-		"api_port":      config.GetSchedulerRPCPort(),
-		"max_workers":   config.GetMaxWorkers(),
-		"poll_interval": "30s",
 	}
 
 	logger.Info("Time-based scheduler service ready", serviceStatus)

@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/redis"
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TaskResult represents the data to be sent to the aggregator
@@ -62,8 +64,8 @@ func (c *AggregatorClient) SendTaskToAggregator(ctx context.Context, taskResult 
 }
 
 // SendTaskResultWithAggregatorResponse sends a task result and waits for aggregator response, handling Redis stream transitions.
-func (c *AggregatorClient) SendTaskResultWithAggregatorResponse(ctx context.Context, taskResult *TaskResult, taskData *redis.TaskStreamData, performerID int64) error {
-	if err := c.SendTaskResult(ctx, taskResult); err != nil {
+func (c *AggregatorClient) SendTaskResultWithAggregatorResponse(ctx context.Context, taskResult *types.PerformerBroadcastData, taskData *redis.TaskStreamData, performerID int64) error {
+	if err := c.SendTaskToAggregator(ctx, taskResult); err != nil {
 		return err
 	}
 	if c.TaskStreamManager == nil {

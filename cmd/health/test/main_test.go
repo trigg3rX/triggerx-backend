@@ -41,15 +41,13 @@ func TestMain(t *testing.T) {
 	// Test HTTP server setup
 	t.Run("HTTP Server Setup", func(t *testing.T) {
 		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
 			ProcessName:     "health-test",
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+			IsDevelopment:   true,
 		}
-		_ = logging.InitServiceLogger(logConfig)
-		logger := logging.GetServiceLogger()
+		logger, err := logging.NewZapLogger(logConfig)
+		if err != nil {
+			t.Fatalf("Failed to initialize logger: %v", err)
+		}
 
 		// Initialize test dependencies
 		mocks.InitializeTestDependencies(logger)
@@ -61,7 +59,7 @@ func TestMain(t *testing.T) {
 		router := gin.New()
 		router.Use(gin.Recovery())
 		router.Use(health.LoggerMiddleware(logger))
-		health.RegisterRoutes(router)
+		health.RegisterRoutes(router, logger)
 
 		// Create server
 		srv := &http.Server{
@@ -84,7 +82,7 @@ func TestMain(t *testing.T) {
 		// Test server stop
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		err := srv.Shutdown(ctx)
+		err = srv.Shutdown(ctx)
 		assert.NoError(t, err, "Server should stop gracefully")
 		logger.Info("Server stopped successfully")
 	})
@@ -92,15 +90,13 @@ func TestMain(t *testing.T) {
 	// Test graceful shutdown
 	t.Run("Graceful Shutdown", func(t *testing.T) {
 		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
 			ProcessName:     "health-test",
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+			IsDevelopment:   true,
 		}
-		_ = logging.InitServiceLogger(logConfig)
-		logger := logging.GetServiceLogger()
+		logger, err := logging.NewZapLogger(logConfig)
+		if err != nil {
+			t.Fatalf("Failed to initialize logger: %v", err)
+		}
 
 		// Initialize test dependencies
 		mocks.InitializeTestDependencies(logger)
@@ -112,7 +108,7 @@ func TestMain(t *testing.T) {
 		router := gin.New()
 		router.Use(gin.Recovery())
 		router.Use(health.LoggerMiddleware(logger))
-		health.RegisterRoutes(router)
+		health.RegisterRoutes(router, logger)
 
 		// Create server
 		srv := &http.Server{
@@ -133,7 +129,7 @@ func TestMain(t *testing.T) {
 		// Test graceful shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		err := srv.Shutdown(ctx)
+		err = srv.Shutdown(ctx)
 		assert.NoError(t, err, "Server should stop gracefully")
 		logger.Info("Server stopped gracefully")
 	})

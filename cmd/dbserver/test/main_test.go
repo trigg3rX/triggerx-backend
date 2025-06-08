@@ -50,23 +50,23 @@ func TestMain(t *testing.T) {
 	})
 
 	// Test logger initialization
+	logConfig := logging.LoggerConfig{
+		ProcessName:     "dbserver",
+		IsDevelopment:   true,
+	}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	t.Run("Logger Initialization", func(t *testing.T) {
-		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
-			ProcessName:     "dbserver",
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+		if logger == nil {
+			t.Fatalf("Logger should not be nil")
 		}
-		err := logging.InitServiceLogger(logConfig)
 		assert.NoError(t, err, "Logger initialization should not fail")
 	})
 
 	// Test database connection
 	t.Run("Database Connection", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
-
 		// Use environment variables directly for testing
 		host := os.Getenv("DATABASE_HOST_ADDRESS")
 		port := os.Getenv("DATABASE_HOST_PORT")
@@ -78,7 +78,7 @@ func TestMain(t *testing.T) {
 		dbConfig := database.NewConfig(host, port)
 		dbConfig = dbConfig.WithKeyspace("triggerx")
 
-		conn, err := database.NewConnection(dbConfig)
+		conn, err := database.NewConnection(dbConfig, logger)
 		if err != nil {
 			t.Logf("Database connection error: %v", err)
 			t.Skip("Skipping database connection test due to connection error")

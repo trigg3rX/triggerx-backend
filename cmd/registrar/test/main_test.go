@@ -65,23 +65,24 @@ func TestMain(t *testing.T) {
 		assert.NoError(t, err, "Config initialization should not fail")
 	})
 
+	logConfig := logging.LoggerConfig{
+		ProcessName:     "registrar",
+		IsDevelopment:   true,
+	}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	// Test logger initialization
 	t.Run("Logger Initialization", func(t *testing.T) {
-		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
-			ProcessName:     "registrar",
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+		if logger == nil {
+			t.Fatalf("Logger should not be nil")
 		}
-		err := logging.InitServiceLogger(logConfig)
 		assert.NoError(t, err, "Logger initialization should not fail")
 	})
 
 	// Test event processor initialization
 	t.Run("Event Processor", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
 		processor := events.NewEventProcessor(logger)
 		assert.NotNil(t, processor, "Event processor should be created successfully")
 		logger.Info("Event processor created successfully")
@@ -95,15 +96,6 @@ func TestMain(t *testing.T) {
 			methods = events.AttestationCenterABI.Methods
 			assert.NotEmpty(t, methods, "AttestationCenter ABI should have methods")
 		})
-	})
-
-	// Test environment and log level
-	t.Run("Environment and Log Level", func(t *testing.T) {
-		env := getEnvironment()
-		assert.Contains(t, []logging.LogLevel{logging.Development, logging.Production}, env, "Environment should be either Development or Production")
-
-		level := getLogLevel()
-		assert.Contains(t, []logging.Level{logging.DebugLevel, logging.InfoLevel}, level, "Log level should be either Debug or Info")
 	})
 }
 
@@ -129,18 +121,4 @@ func getProjectRoot() (string, error) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }

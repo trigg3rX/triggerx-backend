@@ -3,9 +3,6 @@ package aggregator
 import (
 	"fmt"
 	"time"
-
-	"github.com/trigg3rX/triggerx-backend/internal/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Common errors
@@ -24,13 +21,4 @@ type AggregatorClientConfig struct {
 	RetryAttempts    int
 	RetryDelay       time.Duration
 	RequestTimeout   time.Duration
-}
-
-// AggregatorClient handles communication with the aggregator service
-type AggregatorClient struct {
-	logger            logging.Logger
-	config            AggregatorClientConfig
-	privateKey        *ecdsa.PrivateKey
-	publicKey         *ecdsa.PublicKey
-	TaskStreamManager *redis.TaskStreamManager
 }

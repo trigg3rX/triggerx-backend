@@ -19,6 +19,7 @@ type AggregatorClient struct {
 	privateKey *ecdsa.PrivateKey
 	publicKey  *ecdsa.PublicKey
 	httpClient *retry.HTTPClient
+	TaskStreamManager *redis.TaskStreamManager
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient

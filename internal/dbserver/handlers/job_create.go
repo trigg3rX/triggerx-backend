@@ -30,7 +30,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	var err error
 
 	existingUserID, existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
-	if err != nil {
+	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user ID: " + err.Error()})
 		return
@@ -104,7 +104,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Time-based job
 
 			var nextExecutionTimestamp time.Time
-			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(tempJobs[i].ScheduleType, tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule, tempJobs[i].Timezone)
+			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), tempJobs[i].ScheduleType, tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
 			if err != nil {
 				h.logger.Errorf("[getNextExecutionTimestamp] Error calculating next execution timestamp: %v", err)
 				nextExecutionTimestamp = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)

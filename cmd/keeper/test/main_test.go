@@ -35,23 +35,24 @@ func TestMain(t *testing.T) {
 		assert.NoError(t, err, "Config initialization should not fail")
 	})
 
+	logConfig := logging.LoggerConfig{
+		ProcessName:     logging.KeeperProcess,
+		IsDevelopment:   true,
+	}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		t.Fatalf("Failed to initialize logger: %v", err)
+	}
 	// Test logger initialization
 	t.Run("Logger Initialization", func(t *testing.T) {
-		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
-			ProcessName:     logging.KeeperProcess,
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+		if logger == nil {
+			t.Fatalf("Logger should not be nil")
 		}
-		err := logging.InitServiceLogger(logConfig)
 		assert.NoError(t, err, "Logger initialization should not fail")
 	})
 
 	// Test server setup
 	t.Run("Server Setup", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
 		srv := api.NewServer(api.Config{
 			Port: "8080",
 		}, api.Dependencies{
@@ -88,7 +89,6 @@ func TestMain(t *testing.T) {
 
 	// Test health check client
 	t.Run("Health Check Client", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
 		client, err := health.NewClient(logger, health.Config{
 			HealthServiceURL: "http://localhost:8080",
 			PrivateKey:       "test-private-key",

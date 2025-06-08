@@ -93,6 +93,9 @@ func (r *userRepository) UpdateUserTasksAndPoints(userID int64, tasksCompleted i
 func (r *userRepository) GetUserDataByAddress(address string) (int64, types.UserData, error) {
 	var userID int64
 	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
+	if err == gocql.ErrNotFound {
+		return -1, types.UserData{}, gocql.ErrNotFound
+	}
 	if err != nil {
 		return -1, types.UserData{}, err
 	}

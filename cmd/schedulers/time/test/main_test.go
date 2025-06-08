@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -31,9 +32,9 @@ func (m *MockDBServerClient) Close() {
 	m.Called()
 }
 
-func (m *MockDBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeJobData, error) {
+func (m *MockDBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeTaskData, error) {
 	args := m.Called()
-	return args.Get(0).([]types.ScheduleTimeJobData), args.Error(1)
+	return args.Get(0).([]types.ScheduleTimeTaskData), args.Error(1)
 }
 
 func (m *MockDBServerClient) UpdateJobNextExecution(jobID int64, nextExecution time.Time) error {
@@ -84,29 +85,29 @@ func TestMain(t *testing.T) {
 		}
 	})
 
+	logConfig := logging.LoggerConfig{
+		ProcessName:     logging.TimeSchedulerProcess,
+		IsDevelopment:   true,
+	}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
 	// Test logger initialization
-	t.Run("Logger Initialization", func(t *testing.T) {
-		logConfig := logging.LoggerConfig{
-			LogDir:          logging.BaseDataDir,
-			ProcessName:     logging.TimeSchedulerProcess,
-			Environment:     logging.Development,
-			UseColors:       true,
-			MinStdoutLevel:  logging.DebugLevel,
-			MinFileLogLevel: logging.DebugLevel,
+	t.Run("Logger Initialization", func(t *testing.T) {		
+		if logger == nil {
+			panic("Logger should not be nil")
 		}
-		err := logging.InitServiceLogger(logConfig)
 		assert.NoError(t, err, "Logger initialization should not fail")
 	})
 
 	// Test database client
 	t.Run("Database Client", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
-
 		// Create mock database client
 		mockDBClient := new(MockDBServerClient)
 		mockDBClient.On("HealthCheck").Return(nil)
 		mockDBClient.On("Close").Return()
-		mockDBClient.On("GetTimeBasedJobs").Return([]types.ScheduleTimeJobData{}, nil)
+		mockDBClient.On("GetTimeBasedJobs").Return([]types.ScheduleTimeTaskData{}, nil)
 		mockDBClient.On("UpdateJobNextExecution", mock.Anything, mock.Anything).Return(nil)
 		mockDBClient.On("UpdateJobStatus", mock.Anything, mock.Anything).Return(nil)
 
@@ -122,7 +123,6 @@ func TestMain(t *testing.T) {
 
 	// Test aggregator client
 	t.Run("Aggregator Client", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
 		aggClientCfg := aggregator.AggregatorClientConfig{
 			AggregatorRPCUrl: "http://localhost:9003",
 			SenderPrivateKey: "0000000000000000000000000000000000000000000000000000000000000001",
@@ -131,7 +131,7 @@ func TestMain(t *testing.T) {
 			RetryDelay:       2 * time.Second,
 			RequestTimeout:   10 * time.Second,
 		}
-		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
+		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, nil)
 		assert.NoError(t, err, "Aggregator client creation should not fail")
 		assert.NotNil(t, aggClient, "Aggregator client should not be nil")
 		logger.Info("Aggregator client created successfully")
@@ -139,13 +139,11 @@ func TestMain(t *testing.T) {
 
 	// Test scheduler setup
 	t.Run("Scheduler Setup", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
-
 		// Create mock database client
 		mockDBClient := new(MockDBServerClient)
 		mockDBClient.On("HealthCheck").Return(nil)
 		mockDBClient.On("Close").Return()
-		mockDBClient.On("GetTimeBasedJobs").Return([]types.ScheduleTimeJobData{}, nil)
+		mockDBClient.On("GetTimeBasedJobs").Return([]types.ScheduleTimeTaskData{}, nil)
 		mockDBClient.On("UpdateJobNextExecution", mock.Anything, mock.Anything).Return(nil)
 		mockDBClient.On("UpdateJobStatus", mock.Anything, mock.Anything).Return(nil)
 
@@ -157,12 +155,12 @@ func TestMain(t *testing.T) {
 			RetryDelay:       2 * time.Second,
 			RequestTimeout:   10 * time.Second,
 		}
-		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
+		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, nil)
 		assert.NoError(t, err, "Aggregator client creation should not fail")
 
 		// Create scheduler
 		managerID := "test-time-scheduler"
-		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, mockDBClient, aggClient)
+		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, &client.DBServerClient{}, aggClient)
 		assert.NoError(t, err, "Scheduler creation should not fail")
 		assert.NotNil(t, timeScheduler, "Scheduler should not be nil")
 		logger.Info("Time scheduler created successfully")
@@ -180,13 +178,11 @@ func TestMain(t *testing.T) {
 
 	// Test server setup
 	t.Run("Server Setup", func(t *testing.T) {
-		logger := logging.GetServiceLogger()
-
 		// Create mock database client
 		mockDBClient := new(MockDBServerClient)
 		mockDBClient.On("HealthCheck").Return(nil)
 		mockDBClient.On("Close").Return()
-		mockDBClient.On("GetTimeBasedJobs").Return([]types.ScheduleTimeJobData{}, nil)
+		mockDBClient.On("GetTimeBasedJobs").Return([]types.ScheduleTimeTaskData{}, nil)
 		mockDBClient.On("UpdateJobNextExecution", mock.Anything, mock.Anything).Return(nil)
 		mockDBClient.On("UpdateJobStatus", mock.Anything, mock.Anything).Return(nil)
 
@@ -198,12 +194,12 @@ func TestMain(t *testing.T) {
 			RetryDelay:       2 * time.Second,
 			RequestTimeout:   10 * time.Second,
 		}
-		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
+		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, nil)
 		assert.NoError(t, err, "Aggregator client creation should not fail")
 
 		// Create scheduler
 		managerID := "test-time-scheduler"
-		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, mockDBClient, aggClient)
+		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, &client.DBServerClient{}, aggClient)
 		assert.NoError(t, err, "Scheduler creation should not fail")
 
 		// Create server
@@ -233,27 +229,4 @@ func TestMain(t *testing.T) {
 		assert.NoError(t, err, "Server should stop gracefully")
 		logger.Info("Server stopped successfully")
 	})
-
-	// Test environment and log level
-	t.Run("Environment and Log Level", func(t *testing.T) {
-		env := getEnvironment()
-		assert.Contains(t, []logging.LogLevel{logging.Development, logging.Production}, env, "Environment should be either Development or Production")
-
-		level := getLogLevel()
-		assert.Contains(t, []logging.Level{logging.DebugLevel, logging.InfoLevel}, level, "Log level should be either Debug or Info")
-	})
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }

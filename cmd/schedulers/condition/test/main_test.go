@@ -9,29 +9,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func init() {
-	// Initialize logger for tests
+func TestConditionSchedulerInitialization(t *testing.T) {
+	// Use a real DBServerClient, but with dummy config
 	logConfig := logging.LoggerConfig{
-		LogDir:          "/tmp/triggerx-test-logs",
 		ProcessName:     "condition-scheduler-test",
-		Environment:     logging.Development,
-		UseColors:       true,
-		MinStdoutLevel:  logging.DebugLevel,
-		MinFileLogLevel: logging.DebugLevel,
+		IsDevelopment:   true,
 	}
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
-}
-
-func TestConditionSchedulerInitialization(t *testing.T) {
-	logger := logging.GetServiceLogger()
-	// Use a real DBServerClient, but with dummy config
 	dbClient := &client.DBServerClient{}
 	managerID := "test-condition-scheduler"
 	sched, err := scheduler.NewConditionBasedScheduler(managerID, logger, dbClient)
@@ -45,7 +36,14 @@ func TestConditionSchedulerInitialization(t *testing.T) {
 }
 
 func TestConditionSchedulerServer(t *testing.T) {
-	logger := logging.GetServiceLogger()
+	logConfig := logging.LoggerConfig{
+		ProcessName:     "condition-scheduler-test",
+		IsDevelopment:   true,
+	}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
 	dbClient := &client.DBServerClient{}
 	managerID := "test-condition-scheduler"
 	sched, err := scheduler.NewConditionBasedScheduler(managerID, logger, dbClient)
@@ -65,25 +63,4 @@ func TestConditionSchedulerServer(t *testing.T) {
 	defer cancel()
 	err = server.Stop(ctx)
 	assert.NoError(t, err)
-}
-
-func TestEnvironmentAndLogLevel(t *testing.T) {
-	env := getEnvironment()
-	assert.Contains(t, []logging.LogLevel{logging.Development, logging.Production}, env)
-	level := getLogLevel()
-	assert.Contains(t, []logging.Level{logging.DebugLevel, logging.InfoLevel}, level)
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }
