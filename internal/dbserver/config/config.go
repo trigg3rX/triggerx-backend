@@ -39,6 +39,9 @@ type Config struct {
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
+
+	// Polling Look Ahead
+	pollingLookAhead int
 }
 
 var cfg Config
@@ -63,6 +66,7 @@ func Init() error {
 		upstashRedisUrl:          env.GetEnv("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:    env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
+		pollingLookAhead:         env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -158,4 +162,8 @@ func GetUpstashRedisRestToken() string {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetPollingLookAhead() int {
+	return cfg.pollingLookAhead
 }

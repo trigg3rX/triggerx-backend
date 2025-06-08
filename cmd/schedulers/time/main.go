@@ -29,17 +29,19 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
 		ProcessName:     logging.TimeSchedulerProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		IsDevelopment:   config.IsDevMode(),
 	}
+
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	if err := logging.InitServiceLogger(logConfig); err != nil {
 		fmt.Printf("Error initializing logger: %v\n", err)
 		os.Exit(1)
 	}
+
+	logger.Info("Starting time-based scheduler service...")
 	defer func() {
 		if err := logging.Shutdown(); err != nil {
 			fmt.Printf("Error shutting down logger: %v\n", err)
@@ -122,6 +124,14 @@ func main() {
 
 	// Log comprehensive service status
 	serviceStatus := map[string]interface{}{
+		"manager_id":      managerID,
+		"api_port":        config.GetSchedulerRPCPort(),
+		"poll_interval":   config.GetPollingInterval(),
+		"look_ahead":      config.GetPollingLookAhead(),
+		"batch_size":      config.GetJobBatchSize(),
+		"performer_lock_ttl": config.GetPerformerLockTTL(),
+		"task_cache_ttl": config.GetTaskCacheTTL(),
+		"duplicate_task_window": config.GetDuplicateTaskWindow(),
 		"manager_id":    managerID,
 		"api_port":      config.GetSchedulerRPCPort(),
 		"max_workers":   config.GetMaxWorkers(),
@@ -137,20 +147,6 @@ func main() {
 	<-shutdown
 
 	performGracefulShutdown(cancel, srv, timeScheduler, logger)
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }
 
 func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, logger logging.Logger) {

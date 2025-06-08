@@ -16,8 +16,8 @@ type Config struct {
 	schedulerRPCPort string
 
 	// Scheduler Private Key and Address
-	schedulerPrivateKey string
-	schedulerAddress    string
+	schedulerSigningKey     string
+	schedulerSigningAddress string
 
 	// Maximum number of workers
 	maxWorkers int
@@ -34,12 +34,12 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:             env.GetEnvBool("DEV_MODE", false),
-		schedulerRPCPort:    env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"),
-		dbServerURL:         env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
-		schedulerPrivateKey: env.GetEnv("SCHEDULER_PRIVATE_KEY", ""),
-		schedulerAddress:    env.GetEnv("SCHEDULER_ADDRESS", ""),
-		maxWorkers:          env.GetEnvInt("MAX_WORKERS", 100),
+		devMode:                 env.GetEnvBool("DEV_MODE", false),
+		schedulerRPCPort:        env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"),
+		dbServerURL:             env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		schedulerSigningKey:     env.GetEnv("CONDITION_SCHEDULER_SIGNING_KEY", ""),
+		schedulerSigningAddress: env.GetEnv("CONDITION_SCHEDULER_ADDRESS", ""),
+		maxWorkers:              env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -51,11 +51,11 @@ func Init() error {
 }
 
 func validateConfig() error {
-	if !env.IsValidPrivateKey(cfg.schedulerPrivateKey) {
-		return fmt.Errorf("invalid scheduler private key: %s", cfg.schedulerPrivateKey)
+	if !env.IsValidPrivateKey(cfg.schedulerSigningKey) {
+		return fmt.Errorf("invalid scheduler private key: %s", cfg.schedulerSigningKey)
 	}
-	if !env.IsValidEthAddress(cfg.schedulerAddress) {
-		return fmt.Errorf("invalid scheduler address: %s", cfg.schedulerAddress)
+	if !env.IsValidEthAddress(cfg.schedulerSigningAddress) {
+		return fmt.Errorf("invalid scheduler address: %s", cfg.schedulerSigningAddress)
 	}
 	return nil
 }
@@ -78,4 +78,12 @@ func GetDBServerURL() string {
 // GetMaxWorkers returns the maximum number of concurrent workers allowed
 func GetMaxWorkers() int {
 	return cfg.maxWorkers
+}
+
+func GetSchedulerSigningKey() string {
+	return cfg.schedulerSigningKey
+}
+
+func GetSchedulerSigningAddress() string {
+	return cfg.schedulerSigningAddress
 }

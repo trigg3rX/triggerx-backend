@@ -9,6 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
 
 	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -23,28 +24,24 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
 		ProcessName:     logging.RegistrarProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		IsDevelopment:   config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting registrar service...",
-		"mode", getEnvironment(),
+		"mode", config.IsDevMode(),
 		"avs_governance", config.GetAvsGovernanceAddress(),
 		"attestation_center", config.GetAttestationCenterAddress(),
 	)
 
 	// Initialize database connection
 	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
-	dbConn, err := database.NewConnection(dbConfig)
+	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to database", "error", err)
 	}
@@ -53,6 +50,10 @@ func main() {
 	// Initialize database manager with logger
 	client.InitDatabaseManager(logger, dbConn)
 	logger.Info("Database manager initialized")
+
+	// Start weekly Pinata cleanup goroutine
+	events.StartWeeklyPinataCleanup(logger)
+	logger.Info("Weekly Pinata cleanup goroutine started")
 
 	// Initialize and start registrar service
 	registrarService, err := registrar.NewRegistrarService(logger)
@@ -78,25 +79,6 @@ func main() {
 
 	// Cleanup
 	registrarService.Stop()
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
-	}
-
+	
 	logger.Info("Shutdown complete")
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }

@@ -10,35 +10,17 @@ import (
 
 func setupCacheTestLogger() logging.Logger {
 	logConfig := logging.LoggerConfig{
-		LogDir:          "data/logs",
 		ProcessName:     "test-cache",
-		Environment:     logging.Development,
-		UseColors:       false,
-		MinStdoutLevel:  logging.InfoLevel,
-		MinFileLogLevel: logging.InfoLevel,
+		IsDevelopment:   true,
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
-		return &testCacheLogger{}
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		panic("failed to initialize logger: " + err.Error())
 	}
 
-	return logging.GetServiceLogger()
+	return logger
 }
-
-type testCacheLogger struct{}
-
-func (l *testCacheLogger) Debug(msg string, fields ...interface{})                {}
-func (l *testCacheLogger) Info(msg string, fields ...interface{})                 {}
-func (l *testCacheLogger) Warn(msg string, fields ...interface{})                 {}
-func (l *testCacheLogger) Error(msg string, fields ...interface{})                {}
-func (l *testCacheLogger) Fatal(msg string, fields ...interface{})                {}
-func (l *testCacheLogger) Debugf(format string, args ...interface{})              {}
-func (l *testCacheLogger) Infof(format string, args ...interface{})               {}
-func (l *testCacheLogger) Warnf(format string, args ...interface{})               {}
-func (l *testCacheLogger) Errorf(format string, args ...interface{})              {}
-func (l *testCacheLogger) Fatalf(format string, args ...interface{})              {}
-func (l *testCacheLogger) With(fields ...interface{}) logging.Logger              { return l }
-func (l *testCacheLogger) WithField(key string, value interface{}) logging.Logger { return l }
 
 func TestCacheStoreInitialization(t *testing.T) {
 	logger := setupCacheTestLogger()

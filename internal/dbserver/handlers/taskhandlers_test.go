@@ -38,13 +38,11 @@ func TestCreateTaskData(t *testing.T) {
 			requestBody: types.CreateTaskDataRequest{
 				JobID:            1,
 				TaskDefinitionID: 1,
-				TaskPerformerID:  1,
 			},
 			setupMocks: func() {
 				mockTaskRepo.On("CreateTaskDataInDB", &types.CreateTaskDataRequest{
 					JobID:            1,
 					TaskDefinitionID: 1,
-					TaskPerformerID:  1,
 				}).Return(int64(1), nil)
 			},
 			expectedCode: http.StatusCreated,
@@ -63,13 +61,11 @@ func TestCreateTaskData(t *testing.T) {
 			requestBody: types.CreateTaskDataRequest{
 				JobID:            1,
 				TaskDefinitionID: 1,
-				TaskPerformerID:  1,
 			},
 			setupMocks: func() {
 				mockTaskRepo.On("CreateTaskDataInDB", &types.CreateTaskDataRequest{
 					JobID:            1,
 					TaskDefinitionID: 1,
-					TaskPerformerID:  1,
 				}).Return(int64(0), assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,

@@ -1,199 +1,236 @@
 package execution
 
 import (
-	// "bytes"
-	// "encoding/json"
-	// "fmt"
+	"bytes"
+	"encoding/json"
+	"fmt"
 	// "io/ioutil"
 	// "net/http"
 	// "reflect"
-	// "strings"
+	"strings"
 
-	// "github.com/ethereum/go-ethereum/accounts/abi"
-	// jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
-// 	convertedArgs := make([]interface{}, 0)
+func (e *TaskExecutor) getChainRpcUrl(chainID string) string {
+	switch chainID {
+	case "11155111":
+		return fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "11155420":
+		return fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "84532":
+		return fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	default:
+		return ""
+	}
+}
 
-// 	// Handle the case where we have a single struct argument
-// 	if len(methodInputs) == 1 && methodInputs[0].Type.T == abi.TupleTy {
-// 		// Check if the input is a map or JSON string representing the struct
-// 		switch v := args.(type) {
-// 		case map[string]interface{}:
-// 			// Direct map to struct conversion
-// 			convertedArg, err := e.argConverter.convertToStruct(v, methodInputs[0].Type)
-// 			if err != nil {
-// 				return nil, fmt.Errorf("error converting to struct: %v", err)
-// 			}
-// 			convertedArgs = append(convertedArgs, convertedArg)
-// 			return convertedArgs, nil
-// 		case string:
-// 			// Try to parse as JSON struct
-// 			var structData map[string]interface{}
-// 			if err := json.Unmarshal([]byte(v), &structData); err == nil {
-// 				convertedArg, err := e.argConverter.convertToStruct(structData, methodInputs[0].Type)
-// 				if err != nil {
-// 					return nil, fmt.Errorf("error converting JSON string to struct: %v", err)
-// 				}
-// 				convertedArgs = append(convertedArgs, convertedArg)
-// 				return convertedArgs, nil
-// 			}
-// 		case []interface{}:
-// 			// If there's a single array element and it's a map, try to use it as a struct
-// 			if len(v) == 1 {
-// 				if mapVal, ok := v[0].(map[string]interface{}); ok {
-// 					convertedArg, err := e.argConverter.convertToStruct(mapVal, methodInputs[0].Type)
-// 					if err != nil {
-// 						return nil, fmt.Errorf("error converting map from array to struct: %v", err)
-// 					}
-// 					convertedArgs = append(convertedArgs, convertedArg)
-// 					return convertedArgs, nil
-// 				} else if strVal, ok := v[0].(string); ok {
-// 					// Try to parse as JSON struct
-// 					var structData map[string]interface{}
-// 					if err := json.Unmarshal([]byte(strVal), &structData); err == nil {
-// 						convertedArg, err := e.argConverter.convertToStruct(structData, methodInputs[0].Type)
-// 						if err != nil {
-// 							return nil, fmt.Errorf("error converting JSON string to struct: %v", err)
-// 						}
-// 						convertedArgs = append(convertedArgs, convertedArg)
-// 						return convertedArgs, nil
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
+func (e *TaskExecutor) getExecutionContractAddress(chainID string) string {
+	switch chainID {
+	case "11155111":
+		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
+	case "11155420":
+		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
+	case "84532":
+		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
+	default:
+		return ""
+	}
+}
 
-// 	// Handle multiple arguments or non-struct arguments
-// 	switch argData := args.(type) {
-// 	case string:
-// 		// Handle a single string value (like from our script)
-// 		// If there's only one input parameter, use the string value directly
-// 		if len(methodInputs) == 1 {
-// 			// First attempt to remove JSON string quotes if present
-// 			strValue := argData
-// 			if strings.HasPrefix(strValue, "\"") && strings.HasSuffix(strValue, "\"") {
-// 				strValue = strings.Trim(strValue, "\"")
-// 			}
+func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {
+	if targetData.ABI == "" {
+		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
+	}
 
-// 			convertedArg, err := e.argConverter.convertToType(strValue, methodInputs[0].Type)
-// 			if err != nil {
-// 				return nil, fmt.Errorf("error converting string argument: %v", err)
-// 			}
-// 			convertedArgs = append(convertedArgs, convertedArg)
-// 			return convertedArgs, nil
-// 		} else {
-// 			// Try to parse as JSON array for multiple parameters
-// 			var arrayData []interface{}
-// 			if err := json.Unmarshal([]byte(argData), &arrayData); err == nil {
-// 				if len(arrayData) < len(methodInputs) {
-// 					return nil, fmt.Errorf("not enough arguments in JSON array: expected %d, got %d",
-// 						len(methodInputs), len(arrayData))
-// 				}
+	abiData := []byte(targetData.ABI)
 
-// 				for i, inputParam := range methodInputs {
-// 					convertedArg, err := e.argConverter.convertToType(arrayData[i], inputParam.Type)
-// 					if err != nil {
-// 						return nil, fmt.Errorf("error converting argument %d: %v", i, err)
-// 					}
-// 					convertedArgs = append(convertedArgs, convertedArg)
-// 				}
-// 				return convertedArgs, nil
-// 			}
+	parsed, err := abi.JSON(bytes.NewReader(abiData))
+	if err != nil {
+		e.logger.Warnf("Error parsing ABI: %v", err)
+		return nil, nil, err
+	}
 
-// 			return nil, fmt.Errorf("cannot convert single string to %d arguments", len(methodInputs))
-// 		}
-// 	case []string:
-// 		// Handle simple string array
-// 		if len(argData) < len(methodInputs) {
-// 			return nil, fmt.Errorf("not enough arguments provided: expected %d, got %d",
-// 				len(methodInputs), len(argData))
-// 		}
+	e.logger.Debugf("Using ABI from database for contract %s", targetData.TargetContractAddress)
 
-// 		for i, inputParam := range methodInputs {
-// 			convertedArg, err := e.argConverter.convertToType(argData[i], inputParam.Type)
-// 			if err != nil {
-// 				return nil, fmt.Errorf("error converting argument %d: %v", i, err)
-// 			}
-// 			convertedArgs = append(convertedArgs, convertedArg)
-// 		}
-// 	case []interface{}:
-// 		// Handle array of mixed types
-// 		if len(argData) < len(methodInputs) {
-// 			return nil, fmt.Errorf("not enough arguments provided: expected %d, got %d",
-// 				len(methodInputs), len(argData))
-// 		}
+	method, ok := parsed.Methods[methodName]
+	if !ok {
+		e.logger.Warnf("Method %s not found in contract ABI", methodName)
+		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
+	}
 
-// 		for i, inputParam := range methodInputs {
-// 			convertedArg, err := e.argConverter.convertToType(argData[i], inputParam.Type)
-// 			if err != nil {
-// 				return nil, fmt.Errorf("error converting argument %d: %v", i, err)
-// 			}
-// 			convertedArgs = append(convertedArgs, convertedArg)
-// 		}
-// 	case map[string]interface{}:
-// 		// Handle map of named arguments
-// 		for _, inputParam := range methodInputs {
-// 			paramName := inputParam.Name
-// 			if paramName == "" {
-// 				return nil, fmt.Errorf("cannot use map arguments with unnamed parameters")
-// 			}
+	e.logger.Debugf("Found method: %+v", method)
+	return &parsed, &method, nil
+}
 
-// 			argValue, exists := argData[paramName]
-// 			if !exists {
-// 				// Try with case-insensitive match
-// 				for k, v := range argData {
-// 					if strings.EqualFold(k, paramName) {
-// 						argValue = v
-// 						exists = true
-// 						break
-// 					}
-// 				}
+func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
+	convertedArgs := make([]interface{}, 0)
 
-// 				if !exists {
-// 					return nil, fmt.Errorf("argument %s not found in input data", paramName)
-// 				}
-// 			}
+	// Handle the case where we have a single struct argument
+	if len(methodInputs) == 1 && methodInputs[0].Type.T == abi.TupleTy {
+		// Check if the input is a map or JSON string representing the struct
+		switch v := args.(type) {
+		case map[string]interface{}:
+			// Direct map to struct conversion
+			convertedArg, err := e.argConverter.convertToStruct(v, methodInputs[0].Type)
+			if err != nil {
+				return nil, fmt.Errorf("error converting to struct: %v", err)
+			}
+			convertedArgs = append(convertedArgs, convertedArg)
+			return convertedArgs, nil
+		case string:
+			// Try to parse as JSON struct
+			var structData map[string]interface{}
+			if err := json.Unmarshal([]byte(v), &structData); err == nil {
+				convertedArg, err := e.argConverter.convertToStruct(structData, methodInputs[0].Type)
+				if err != nil {
+					return nil, fmt.Errorf("error converting JSON string to struct: %v", err)
+				}
+				convertedArgs = append(convertedArgs, convertedArg)
+				return convertedArgs, nil
+			}
+		case []interface{}:
+			// If there's a single array element and it's a map, try to use it as a struct
+			if len(v) == 1 {
+				if mapVal, ok := v[0].(map[string]interface{}); ok {
+					convertedArg, err := e.argConverter.convertToStruct(mapVal, methodInputs[0].Type)
+					if err != nil {
+						return nil, fmt.Errorf("error converting map from array to struct: %v", err)
+					}
+					convertedArgs = append(convertedArgs, convertedArg)
+					return convertedArgs, nil
+				} else if strVal, ok := v[0].(string); ok {
+					// Try to parse as JSON struct
+					var structData map[string]interface{}
+					if err := json.Unmarshal([]byte(strVal), &structData); err == nil {
+						convertedArg, err := e.argConverter.convertToStruct(structData, methodInputs[0].Type)
+						if err != nil {
+							return nil, fmt.Errorf("error converting JSON string to struct: %v", err)
+						}
+						convertedArgs = append(convertedArgs, convertedArg)
+						return convertedArgs, nil
+					}
+				}
+			}
+		}
+	}
 
-// 			convertedArg, err := e.argConverter.convertToType(argValue, inputParam.Type)
-// 			if err != nil {
-// 				return nil, fmt.Errorf("error converting argument %s: %v", paramName, err)
-// 			}
-// 			convertedArgs = append(convertedArgs, convertedArg)
-// 		}
-// 	default:
-// 		return nil, fmt.Errorf("unsupported argument format: %T", args)
-// 	}
+	// Handle multiple arguments or non-struct arguments
+	switch argData := args.(type) {
+	case string:
+		// Handle a single string value (like from our script)
+		// If there's only one input parameter, use the string value directly
+		if len(methodInputs) == 1 {
+			// First attempt to remove JSON string quotes if present
+			strValue := argData
+			if strings.HasPrefix(strValue, "\"") && strings.HasSuffix(strValue, "\"") {
+				strValue = strings.Trim(strValue, "\"")
+			}
 
-// 	return convertedArgs, nil
-// }
+			convertedArg, err := e.argConverter.convertToType(strValue, methodInputs[0].Type)
+			if err != nil {
+				return nil, fmt.Errorf("error converting string argument: %v", err)
+			}
+			convertedArgs = append(convertedArgs, convertedArg)
+			return convertedArgs, nil
+		} else {
+			// Try to parse as JSON array for multiple parameters
+			var arrayData []interface{}
+			if err := json.Unmarshal([]byte(argData), &arrayData); err == nil {
+				if len(arrayData) < len(methodInputs) {
+					return nil, fmt.Errorf("not enough arguments in JSON array: expected %d, got %d",
+						len(methodInputs), len(arrayData))
+				}
 
-// func (e *TaskExecutor) getContractMethodAndABI(methodName string, job *jobtypes.SendTaskTargetData) (*abi.ABI, *abi.Method, error) {
-// 	// Use ABI from database instead of fetching it
-// 	if job.ABI == "" {
-// 		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
-// 	}
+				for i, inputParam := range methodInputs {
+					convertedArg, err := e.argConverter.convertToType(arrayData[i], inputParam.Type)
+					if err != nil {
+						return nil, fmt.Errorf("error converting argument %d: %v", i, err)
+					}
+					convertedArgs = append(convertedArgs, convertedArg)
+				}
+				return convertedArgs, nil
+			}
 
-// 	abiData := []byte(job.ABI)
+			return nil, fmt.Errorf("cannot convert single string to %d arguments", len(methodInputs))
+		}
+	case []string:
+		// Handle simple string array
+		if len(argData) < len(methodInputs) {
+			return nil, fmt.Errorf("not enough arguments provided: expected %d, got %d",
+				len(methodInputs), len(argData))
+		}
 
-// 	parsed, err := abi.JSON(bytes.NewReader(abiData))
-// 	if err != nil {
-// 		e.logger.Warnf("Error parsing ABI: %v", err)
-// 		return nil, nil, err
-// 	}
+		for i, inputParam := range methodInputs {
+			convertedArg, err := e.argConverter.convertToType(argData[i], inputParam.Type)
+			if err != nil {
+				return nil, fmt.Errorf("error converting argument %d: %v", i, err)
+			}
+			convertedArgs = append(convertedArgs, convertedArg)
+		}
+	case []interface{}:
+		// Handle array of mixed types
+		if len(argData) < len(methodInputs) {
+			return nil, fmt.Errorf("not enough arguments provided: expected %d, got %d",
+				len(methodInputs), len(argData))
+		}
 
-// 	e.logger.Infof("Using ABI from database for contract %s", job.TargetContractAddress)
+		for i, inputParam := range methodInputs {
+			convertedArg, err := e.argConverter.convertToType(argData[i], inputParam.Type)
+			if err != nil {
+				return nil, fmt.Errorf("error converting argument %d: %v", i, err)
+			}
+			convertedArgs = append(convertedArgs, convertedArg)
+		}
+	case map[string]interface{}:
+		// Handle map of named arguments
+		for _, inputParam := range methodInputs {
+			paramName := inputParam.Name
+			if paramName == "" {
+				return nil, fmt.Errorf("cannot use map arguments with unnamed parameters")
+			}
 
-// 	method, ok := parsed.Methods[methodName]
-// 	if !ok {
-// 		e.logger.Warnf("Method %s not found in contract ABI", methodName)
-// 		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
-// 	}
+			argValue, exists := argData[paramName]
+			if !exists {
+				// Try with case-insensitive match
+				for k, v := range argData {
+					if strings.EqualFold(k, paramName) {
+						argValue = v
+						exists = true
+						break
+					}
+				}
 
-// 	e.logger.Infof("Found method: %+v", method)
-// 	return &parsed, &method, nil
-// }
+				if !exists {
+					return nil, fmt.Errorf("argument %s not found in input data", paramName)
+				}
+			}
+
+			convertedArg, err := e.argConverter.convertToType(argValue, inputParam.Type)
+			if err != nil {
+				return nil, fmt.Errorf("error converting argument %s: %v", paramName, err)
+			}
+			convertedArgs = append(convertedArgs, convertedArg)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported argument format: %T", args)
+	}
+
+	return convertedArgs, nil
+}
+
+func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
+	var argData []interface{}
+
+	if err := json.Unmarshal([]byte(output), &argData); err != nil {
+		e.logger.Warnf("Error parsing dynamic arguments: %v", err)
+		return nil
+	}
+
+	return argData
+}
 
 // func (e *TaskExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
 // 	// Handle different output scenarios

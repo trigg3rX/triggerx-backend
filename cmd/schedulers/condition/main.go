@@ -30,18 +30,14 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
 		ProcessName:     logging.ConditionSchedulerProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		IsDevelopment:   config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting condition-based scheduler service...")
 
@@ -127,20 +123,6 @@ func main() {
 	performGracefulShutdown(cancel, srv, conditionScheduler, logger)
 }
 
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
-}
-
 func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditionScheduler *scheduler.ConditionBasedScheduler, logger logging.Logger) {
 	shutdownStart := time.Now()
 	logger.Info("Initiating graceful shutdown...")
@@ -161,11 +143,6 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditi
 	}
 
 	shutdownDuration := time.Since(shutdownStart)
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
-	}
 
 	logger.Info("Condition-based scheduler shutdown complete", "duration", shutdownDuration)
 	os.Exit(0)

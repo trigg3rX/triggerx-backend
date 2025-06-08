@@ -1,7 +1,6 @@
 package aggregator
 
 import (
-	"crypto/ecdsa"
 	"fmt"
 	"time"
 

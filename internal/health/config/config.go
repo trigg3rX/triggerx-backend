@@ -24,6 +24,10 @@ type Config struct {
 	// ScyllaDB Host and Port
 	databaseHostAddress string
 	databaseHostPort    string
+
+	// IPFS configuration
+	ipfsHost string
+	pinataJWT string
 }
 
 var cfg Config
@@ -40,6 +44,8 @@ func Init() error {
 		emailPassword:       env.GetEnv("EMAIL_PASSWORD", ""),
 		databaseHostAddress: env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
+		ipfsHost:            env.GetEnv("IPFS_HOST", ""),
+		pinataJWT:           env.GetEnv("PINATA_JWT", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -53,6 +59,12 @@ func Init() error {
 func validateConfig() error {
 	if !env.IsValidPort(cfg.healthRPCPort) {
 		return fmt.Errorf("invalid Health RPC Port: %s", cfg.healthRPCPort)
+	}
+	if env.IsEmpty(cfg.ipfsHost) {
+		return fmt.Errorf("invalid IPFS Host: %s", cfg.ipfsHost)
+	}
+	if env.IsEmpty(cfg.pinataJWT) {
+		return fmt.Errorf("invalid Pinata JWT: %s", cfg.pinataJWT)
 	}
 	return nil
 }
@@ -83,4 +95,12 @@ func GetEmailPassword() string {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetIpfsHost() string {
+	return cfg.ipfsHost
+}
+
+func GetPinataJWT() string {
+	return cfg.pinataJWT
 }

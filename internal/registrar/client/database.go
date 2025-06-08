@@ -71,7 +71,7 @@ func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash strin
 
 		if err := dm.db.Session().Query(`
 			INSERT INTO triggerx.keeper_data (
-				keeper_id, keeper_address, registered_tx, status, rewards_booster
+				keeper_id, keeper_address, registered_tx, registered, rewards_booster
 			) VALUES (?, ?, ?, ?, ?)`,
 			currentKeeperID, operatorAddress, txHash, true, booster).Exec(); err != nil {
 			dm.logger.Errorf("Error creating new keeper: %v", err)
@@ -83,7 +83,7 @@ func (dm *DatabaseManager) KeeperRegistered(operatorAddress string, txHash strin
 	} else {
 		if err := dm.db.Session().Query(`
 			UPDATE triggerx.keeper_data SET 
-				registered_tx = ?, status = ?
+				registered_tx = ?, registered = ?
 			WHERE keeper_id = ?`,
 			txHash, true, currentKeeperID).Exec(); err != nil {
 			dm.logger.Errorf("Error updating keeper with ID %d: %v", currentKeeperID, err)
@@ -108,7 +108,7 @@ func (dm *DatabaseManager) KeeperUnregistered(operatorAddress string) error {
 
 	if err := dm.db.Session().Query(`
 		UPDATE triggerx.keeper_data SET 
-			status = ?
+			registered = ?
 		WHERE keeper_id = ?`,
 		false, currentKeeperID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating keeper with ID %d: %v", currentKeeperID, err)
@@ -126,7 +126,7 @@ func (dm *DatabaseManager) UpdatePointsInDatabase(taskID int, performerAddress c
 	var userID int64
 
 	if err := dm.db.Session().Query(`
-		SELECT task_fee, job_id 
+		SELECT task_opx_cost, job_id 
 		FROM triggerx.task_data 
 		WHERE task_id = ?`,
 		taskID).Scan(&taskFee, &jobID); err != nil {
@@ -134,7 +134,7 @@ func (dm *DatabaseManager) UpdatePointsInDatabase(taskID int, performerAddress c
 		return err
 	}
 
-	dm.logger.Infof("Task ID %d has a fee of %f and job ID %d", taskID, taskFee, jobID)
+	dm.logger.Infof("Task ID %d has a cost of %f and job ID %d", taskID, taskFee, jobID)
 
 	if err := dm.db.Session().Query(`
 		SELECT user_id 
@@ -184,13 +184,24 @@ func (dm *DatabaseManager) UpdatePerformerPoints(performerAddress string, taskFe
 
 	newPerformerPoints := performerPoints + float64(rewardsBooster)*taskFee
 
-	if err := dm.db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET keeper_points = ? 
-		WHERE keeper_id = ?`,
-		newPerformerPoints, performerId).Exec(); err != nil {
-		dm.logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
-		return err
+	if isAccepted {
+		if err := dm.db.Session().Query(`
+				UPDATE triggerx.keeper_data 
+				SET keeper_points = ? 
+				WHERE keeper_id = ?`,
+			newPerformerPoints, performerId).Exec(); err != nil {
+			dm.logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
+			return err
+		}
+	} else {
+		if err := dm.db.Session().Query(`
+			UPDATE triggerx.keeper_data 
+			SET keeper_points = ? 
+			WHERE keeper_id = ?`,
+			performerPoints, performerId).Exec(); err != nil {
+			dm.logger.Error(fmt.Sprintf("Failed to update performer points: %v", err))
+			return err
+		}
 	}
 
 	dm.logger.Infof("Added %f points to performer %s (ID: %d)", taskFee, performerAddress, performerId)
@@ -237,18 +248,16 @@ func (dm *DatabaseManager) UpdateAttesterPoints(attesterId string, taskFee float
 // UpdateUserPoints updates points for a user
 func (dm *DatabaseManager) UpdateUserPoints(userID int64, points float64) error {
 	var userPoints float64
-	var lastUpdatedAt time.Time
-
 	if err := dm.db.Session().Query(`
-		SELECT user_points, last_updated_at FROM triggerx.user_data
+		SELECT user_points FROM triggerx.user_data
 		WHERE user_id = ?`,
-		userID).Scan(&userPoints, &lastUpdatedAt); err != nil {
-		dm.logger.Errorf("Failed to get user points and last updated at: %v", err)
+		userID).Scan(&userPoints); err != nil {
+		dm.logger.Errorf("Failed to get user points: %v", err)
 		return err
 	}
 
 	userPoints = userPoints + points
-	lastUpdatedAt = time.Now().UTC()
+	lastUpdatedAt := time.Now().UTC()
 
 	if err := dm.db.Session().Query(`
 		UPDATE triggerx.user_data 

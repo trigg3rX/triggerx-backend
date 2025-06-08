@@ -26,7 +26,7 @@ func NewHandler(logger logging.Logger, tsm *redis.TaskStreamManager) *Handler {
 
 // LoggerMiddleware creates a gin middleware for logging
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
-	middlewareLogger := logger.With("component", "http_middleware")
+	middlewareLogger := logger
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -66,8 +66,7 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 }
 
 // RegisterRoutes registers all HTTP routes for the health service
-func RegisterRoutes(router *gin.Engine) {
-	logger := logging.GetServiceLogger()
+func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
 	tsm, err := redis.NewTaskStreamManager(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)

@@ -22,15 +22,16 @@ type Config struct {
 	aggregatorRPCUrl string
 
 	// Scheduler Private Key and Address
-	schedulerPrivateKey string
-	schedulerAddress    string
-
-	// Maximum number of workers
-	maxWorkers int
+	schedulerSigningKey     string
+	schedulerSigningAddress string
 
 	// Time Durations
 	pollingInterval  time.Duration
 	pollingLookAhead time.Duration
+	jobBatchSize int
+	performerLockTTL time.Duration
+	taskCacheTTL time.Duration
+	duplicateTaskWindow time.Duration
 }
 
 var cfg Config
@@ -40,15 +41,18 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:             env.GetEnvBool("DEV_MODE", false),
-		schedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
-		dbServerURL:         env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:    env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
-		schedulerPrivateKey: env.GetEnv("SCHEDULER_PRIVATE_KEY", ""),
-		schedulerAddress:    env.GetEnv("SCHEDULER_ADDRESS", ""),
-		maxWorkers:          env.GetEnvInt("MAX_WORKERS", 10),
-		pollingInterval:     env.GetEnvDuration("POLLING_INTERVAL", 50*time.Second),
-		pollingLookAhead:    env.GetEnvDuration("POLLING_LOOK_AHEAD", 60*time.Second),
+		devMode:                 env.GetEnvBool("DEV_MODE", false),
+		schedulerRPCPort:        env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
+		dbServerURL:             env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
+		schedulerSigningKey:     env.GetEnv("TIME_SCHEDULER_SIGNING_KEY", ""),
+		schedulerSigningAddress: env.GetEnv("TIME_SCHEDULER_ADDRESS", ""),
+		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
+		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOK_AHEAD", 40*time.Minute),
+		jobBatchSize:            env.GetEnvInt("TIME_SCHEDULER_JOB_BATCH_SIZE", 15),
+		performerLockTTL:        env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
+		taskCacheTTL:            env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
+		duplicateTaskWindow:     env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -60,11 +64,11 @@ func Init() error {
 }
 
 func validateConfig() error {
-	if !env.IsValidPrivateKey(cfg.schedulerPrivateKey) {
-		return fmt.Errorf("invalid scheduler private key: %s", cfg.schedulerPrivateKey)
+	if !env.IsValidPrivateKey(cfg.schedulerSigningKey) {
+		return fmt.Errorf("invalid scheduler private key: %s", cfg.schedulerSigningKey)
 	}
-	if !env.IsValidEthAddress(cfg.schedulerAddress) {
-		return fmt.Errorf("invalid scheduler address: %s", cfg.schedulerAddress)
+	if !env.IsValidEthAddress(cfg.schedulerSigningAddress) {
+		return fmt.Errorf("invalid scheduler address: %s", cfg.schedulerSigningAddress)
 	}
 	return nil
 }
@@ -85,12 +89,12 @@ func GetAggregatorRPCUrl() string {
 	return cfg.aggregatorRPCUrl
 }
 
-func GetSchedulerPrivateKey() string {
-	return cfg.schedulerPrivateKey
+func GetSchedulerSigningKey() string {
+	return cfg.schedulerSigningKey
 }
 
-func GetSchedulerAddress() string {
-	return cfg.schedulerAddress
+func GetSchedulerSigningAddress() string {
+	return cfg.schedulerSigningAddress
 }
 
 func GetPollingInterval() time.Duration {
@@ -101,6 +105,18 @@ func GetPollingLookAhead() time.Duration {
 	return cfg.pollingLookAhead
 }
 
-func GetMaxWorkers() int {
-	return cfg.maxWorkers
+func GetJobBatchSize() int {
+	return cfg.jobBatchSize
+}
+
+func GetPerformerLockTTL() time.Duration {
+	return cfg.performerLockTTL
+}
+
+func GetTaskCacheTTL() time.Duration {
+	return cfg.taskCacheTTL
+}
+
+func GetDuplicateTaskWindow() time.Duration {
+	return cfg.duplicateTaskWindow
 }

@@ -23,21 +23,17 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
 		ProcessName:     logging.RedisProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		IsDevelopment:   config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting Redis service main...",
-		"mode", getEnvironment(),
+		"mode", config.IsDevMode(),
 	)
 
 	// Create Redis client
@@ -162,12 +158,6 @@ func main() {
 		logger.Info("Redis client closed successfully")
 	}
 
-	// Close logger
-	logger.Info("Shutting down logger...")
-	if err := logging.Shutdown(); err != nil {
-		fmt.Fprintf(os.Stderr, "Logger shutdown error: %v\n", err)
-	}
-
 	shutdownDuration := time.Since(shutdownStart)
 	fmt.Printf("Redis service shutdown completed in %v\n", shutdownDuration)
 
@@ -179,18 +169,4 @@ func main() {
 	default:
 		os.Exit(0)
 	}
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }

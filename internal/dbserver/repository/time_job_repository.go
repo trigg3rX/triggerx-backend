@@ -8,6 +8,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 )
 
 type TimeJobRepository interface {
@@ -15,7 +16,8 @@ type TimeJobRepository interface {
 	GetTimeJobByJobID(jobID int64) (types.TimeJobData, error)
 	CompleteTimeJob(jobID int64) error
 	UpdateTimeJobStatus(jobID int64, isActive bool) error
-	GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]commonTypes.ScheduleTimeJobData, error)
+	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error)
+	UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error
 }
 
 type timeJobRepository struct {
@@ -76,11 +78,12 @@ func (r *timeJobRepository) UpdateTimeJobStatus(jobID int64, isActive bool) erro
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp time.Time) ([]commonTypes.ScheduleTimeJobData, error) {
-	iter := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, nextExecutionTimestamp).Iter()
+func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error) {
+	currentTime := time.Now()
+	iter := r.db.Session().Query(queries.GetTimeJobsByNextExecutionTimestampQuery, currentTime, lookAheadTime).Iter()
 
-	var timeJobs []commonTypes.ScheduleTimeJobData
-	var timeJob commonTypes.ScheduleTimeJobData
+	var timeJobs []commonTypes.ScheduleTimeTaskData
+	var timeJob commonTypes.ScheduleTimeTaskData
 	
 	for iter.Scan(
 		&timeJob.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
@@ -88,6 +91,35 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTim
 		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
 		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl,
 	) {
+		if timeJob.DynamicArgumentsScriptUrl != "" {
+			timeJob.TaskDefinitionID = 2
+		} else {
+			timeJob.TaskDefinitionID = 1
+		}
+
+		// Calculate next execution time after the current execution time
+		nextExecutionTime, err := parser.CalculateNextExecutionTime(timeJob.NextExecutionTimestamp, timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule)
+		if err != nil {
+			return nil, err
+		}
+
+		// If the next execution time is after the expiration time, That means the job will be completed after current execution time that is being passed
+		if nextExecutionTime.After(timeJob.ExpirationTime) {
+			err = r.CompleteTimeJob(timeJob.JobID)
+			if err != nil {
+				return nil, err
+			}
+			err = r.UpdateTimeJobStatus(timeJob.JobID, false)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err = r.UpdateTimeJobNextExecutionTimestamp(timeJob.JobID, nextExecutionTime)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		timeJobs = append(timeJobs, timeJob)
 	}
 	if err := iter.Close(); err != nil {
@@ -95,4 +127,13 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(nextExecutionTim
 	}
 
 	return timeJobs, nil
+}
+
+func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error {
+	err := r.db.Session().Query(queries.UpdateTimeJobNextExecutionTimestampQuery, nextExecutionTimestamp, jobID).Exec()
+	if err != nil {
+		return errors.New("failed to update time job next execution timestamp")
+	}
+
+	return nil
 }

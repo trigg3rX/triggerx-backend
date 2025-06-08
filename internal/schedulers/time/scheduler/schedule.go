@@ -5,14 +5,15 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Start begins the scheduler's main polling and execution loop
 func (s *TimeBasedScheduler) Start(ctx context.Context) {
-	s.logger.Info("Starting time-based scheduler", "manager_id", s.managerID)
+	s.logger.Info("Starting time-based scheduler", "scheduler_signing_address", s.schedulerSigningAddress)
 
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(s.pollingInterval)
 	defer ticker.Stop()
 
 	for {
@@ -34,21 +35,21 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 	jobs, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
-		metrics.JobsFailed.Inc()
+		metrics.TasksFailed.Inc()
 
 		return
 	}
 
 	if len(jobs) == 0 {
-		s.logger.Debug("No jobs found for execution")
+		s.logger.Debug("No tasks found for execution")
 		return
 	}
 
-	s.logger.Infof("Found %d jobs to process", len(jobs))
-	metrics.JobsScheduled.Set(float64(len(jobs)))
+	s.logger.Infof("Found %d tasks to process", len(jobs))
+	metrics.TasksScheduled.Set(float64(len(jobs)))
 
-	for i := 0; i < len(jobs); i += batchSize {
-		end := i + batchSize
+	for i := 0; i < len(jobs); i += s.jobBatchSize {
+		end := i + s.jobBatchSize
 		if end > len(jobs) {
 			end = len(jobs)
 		}
@@ -59,30 +60,30 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 }
 
 // processBatch processes a batch of jobs
-func (s *TimeBasedScheduler) processBatch(jobs []types.ScheduleTimeJobData) {
-	for _, job := range jobs {
+func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
+	for _, task := range tasks {
 		// Add job to execution queue
 		select {
-		case s.jobQueue <- &job:
-			s.executeJob(&job)
-			metrics.JobsRunning.Inc()
-			s.logger.Debugf("Queued job %d for execution", job.JobID)
+		case s.taskQueue <- &task:
+			s.executeJob(&task)
+			metrics.TasksRunning.Inc()
+			s.logger.Debugf("Queued task %d for execution", task.TaskID)
 		default:
-			s.logger.Warnf("Job queue is full, skipping job %d", job.JobID)
-			metrics.JobsFailed.Inc()
+			s.logger.Warnf("Task queue is full, skipping task %d", task.TaskID)
+			metrics.TasksFailed.Inc()
 		}
 	}
 }
 
 // executeJob executes a single job and updates its next execution time
-func (s *TimeBasedScheduler) executeJob(job *types.ScheduleTimeJobData) {
+func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	startTime := time.Now()
 
-	s.logger.Infof("Executing time-based job %d (type: %s)", job.JobID, job.ScheduleType)
+	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.JobID)
 
 	// Check if ExpirationTime of the job has passed or not
-	if job.ExpirationTime.Before(time.Now()) {
-		s.logger.Infof("Job %d has expired, skipping execution", job.JobID)
+	if task.ExpirationTime.Before(time.Now()) {
+		s.logger.Infof("Job for this task ID %d has expired, skipping execution", task.TaskID)
 		return
 	}
 
@@ -94,22 +95,67 @@ func (s *TimeBasedScheduler) executeJob(job *types.ScheduleTimeJobData) {
 		KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 	}
 
+	// Generate the task data to send to the performer
+	targetData := types.TaskTargetData{
+		TaskID: task.TaskID,
+		TaskDefinitionID: task.TaskDefinitionID,
+		TargetChainID: task.TargetChainID,
+		TargetContractAddress: task.TargetContractAddress,
+		TargetFunction: task.TargetFunction,
+		ABI: task.ABI,
+		ArgType: task.ArgType,
+		Arguments: task.Arguments,
+		DynamicArgumentsScriptUrl: task.DynamicArgumentsScriptUrl,
+	}
+	triggerData := types.TaskTriggerData{
+		TaskID: task.TaskID,
+		ExpirationTime: task.ExpirationTime,
+		TriggerTimestamp: time.Now(),
+		TimeScheduleType: task.ScheduleType,
+		TimeCronExpression: task.CronExpression,
+		TimeSpecificSchedule: task.SpecificSchedule,
+		TimeInterval: task.TimeInterval,
+		NextExecutionTimestamp: task.NextExecutionTimestamp,
+	}
+
+	schedulerSignatureData := types.SchedulerSignatureData{
+		TaskID: task.TaskID,
+		SchedulerSigningAddress: s.schedulerSigningAddress,
+	}
+
+	sendTaskData := types.SendTaskDataToKeeper{
+		TaskID: task.TaskID,
+		PerformerData: performerData,
+		TargetData: &targetData,
+		TriggerData: &triggerData,
+		SchedulerSignature: &schedulerSignatureData,
+	}
+
+	signature, err := cryptography.SignJSONMessage(sendTaskData, s.schedulerSigningAddress)
+	if err != nil {
+		s.logger.Errorf("Failed to sign task data: %v", err)
+		return
+	}
+
+	sendTaskData.SchedulerSignature.SchedulerSignature = signature
+
 	// Execute the actual job
-	executionSuccess := s.performJobExecution(job, performerData)
+	executionSuccess := s.performJobExecution(sendTaskData)
 
 	if executionSuccess {
-		metrics.TasksExecuted.Inc()
-		s.logger.Infof("Executed task for job %d in %v", job.JobID, time.Since(startTime))
+		metrics.TasksCompleted.Inc()
+		metrics.TaskExecutionTime.Observe(time.Since(startTime).Seconds())
+		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.JobID, time.Since(startTime))
 
 	} else {
 		metrics.TasksFailed.Inc()
-		s.logger.Errorf("Failed to execute job %d after %v", job.JobID, time.Since(startTime))
+		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.JobID, time.Since(startTime))
 	}
 }
 
 // performJobExecution handles the actual job execution logic
-func (s *TimeBasedScheduler) performJobExecution(job *types.ScheduleTimeJobData, performerData types.GetPerformerData) bool {
-	success, err := s.aggClient.SendTimeBasedTaskToPerformer(s.ctx, job, performerData)
+func (s *TimeBasedScheduler) performJobExecution(sendTaskData types.SendTaskDataToKeeper) bool {
+	success, err := s.aggClient.SendTaskToPerformer(s.ctx, &sendTaskData)
 
 	if err != nil {
 		s.logger.Errorf("Failed to send task to performer: %v", err)
@@ -125,20 +171,22 @@ func (s *TimeBasedScheduler) Stop() {
 	s.logger.Info("Stopping time-based scheduler")
 
 	// Capture statistics before shutdown
-	activeJobsCount := len(s.activeJobs)
-	queueLength := len(s.jobQueue)
+	activeTasksCount := len(s.activeTasks)
+	queueLength := len(s.taskQueue)
 
 	s.cancel()
 
 	// Close job queue
-	close(s.jobQueue)
+	close(s.taskQueue)
 
 	duration := time.Since(startTime)
 
 	s.logger.Info("Time-based scheduler stopped",
 		"duration", duration,
-		"active_jobs_stopped", activeJobsCount,
+		"active_tasks_stopped", activeTasksCount,
 		"queue_length", queueLength,
-		"workers_stopped", s.maxWorkers,
+		"performer_lock_ttl", s.performerLockTTL,
+		"task_cache_ttl", s.taskCacheTTL,
+		"duplicate_task_window", s.duplicateTaskWindow,
 	)
 }

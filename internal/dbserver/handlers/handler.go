@@ -6,6 +6,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 )
 
 type NotificationConfig struct {
@@ -18,6 +19,7 @@ type Handler struct {
 	db                     *database.Connection
 	logger                 logging.Logger
 	config                 NotificationConfig
+	docker                 docker.DockerConfig
 	jobRepository          repository.JobRepository
 	timeJobRepository      repository.TimeJobRepository
 	eventJobRepository     repository.EventJobRepository
@@ -30,11 +32,12 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, docker docker.DockerConfig) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
 		config:                 config,
+		docker:                 docker,
 		jobRepository:          repository.NewJobRepository(db),
 		timeJobRepository:      repository.NewTimeJobRepository(db),
 		eventJobRepository:     repository.NewEventJobRepository(db),

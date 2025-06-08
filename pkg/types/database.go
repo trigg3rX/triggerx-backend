@@ -47,13 +47,11 @@ type JobData struct {
 type TimeJobData struct {
 	JobID                         int64     `json:"job_id"`
 	TaskDefinitionID              int       `json:"task_definition_id"`
-	Recurring                     bool      `json:"recurring"`
 	// Time based job specific fields
 	ScheduleType                  string    `json:"schedule_type"`
 	TimeInterval                  int64     `json:"time_interval"`
 	CronExpression                string    `json:"cron_expression"`
 	SpecificSchedule              string    `json:"specific_schedule"`
-	Timezone                      string    `json:"timezone"`
 	NextExecutionTimestamp        time.Time `json:"next_execution_timestamp"`
 	// Target fields (common for all job types)
 	TargetChainID                 string    `json:"target_chain_id"`
@@ -135,7 +133,7 @@ type TaskData struct {
 	TaskPerformerID      int64     `json:"task_performer_id"`
 	TaskAttesterIDs      []int64   `json:"task_attester_ids"`
 	ProofOfTask          string    `json:"proof_of_task"`
-	IsApproved           bool      `json:"is_approved"`
+	TriggerData          []byte    `json:"trigger_data"`
 	TpSignature          []byte    `json:"tp_signature"`
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
@@ -144,8 +142,8 @@ type TaskData struct {
 
 type KeeperData struct {
 	KeeperID          int64    `json:"keeper_id"`
-	KeeperAddress     string   `json:"keeper_address"`
 	KeeperName        string   `json:"keeper_name"`
+	KeeperAddress     string   `json:"keeper_address"`
 	ConsensusAddress  string   `json:"consensus_address"`
 	RegisteredTx      string   `json:"registered_tx"`
 	OperatorID        int64    `json:"operator_id"`
@@ -155,7 +153,6 @@ type KeeperData struct {
 	KeeperPoints      float64  `json:"keeper_points"`
 	ConnectionAddress string   `json:"connection_address"`
 	PeerID            string   `json:"peer_id"`
-	Strategies        []string `json:"strategies"`
 	Whitelisted       bool     `json:"whitelisted"`
 	Registered        bool     `json:"registered"`
 	Online            bool     `json:"online"`

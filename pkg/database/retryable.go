@@ -1,10 +1,10 @@
 package database
 
 import (
+	"context"
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -64,13 +64,6 @@ func isRetryableError(err error) bool {
 	return false
 }
 
-// // Sessioner defines the interface for database session operations
-// type Sessioner interface {
-// 	Query(string, ...interface{}) *gocql.Query
-// 	ExecuteBatch(*gocql.Batch) error
-// 	Close()
-// }
-
 // RetryableQuery executes a query with retry logic
 func (c *Connection) RetryableQuery(query string, values ...interface{}) *gocql.Query {
 	return c.session.Query(query, values...)
@@ -78,10 +71,9 @@ func (c *Connection) RetryableQuery(query string, values ...interface{}) *gocql.
 
 // RetryableExec executes a query with retry logic and returns error
 func (c *Connection) RetryableExec(query string, values ...interface{}) error {
-	logger := logging.GetServiceLogger()
 	config := DefaultRetryableConfig()
 
-	_, err := retry.Retry(func() (interface{}, error) {
+	_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 		// For testing purposes, we'll use a special error to indicate mock execution
 		if err := c.session.Query(query, values...).Exec(); err != nil {
 			if err.Error() == "mock execution" {
@@ -93,38 +85,37 @@ func (c *Connection) RetryableExec(query string, values ...interface{}) error {
 			return nil, err
 		}
 		return nil, nil
-	}, &retry.Config{
+	}, &retry.RetryConfig{
 		MaxRetries:      config.MaxRetries,
 		InitialDelay:    config.InitialDelay,
 		MaxDelay:        config.MaxDelay,
 		BackoffFactor:   config.BackoffFactor,
 		JitterFactor:    config.JitterFactor,
 		LogRetryAttempt: config.LogRetryAttempt,
-	}, logger)
+	}, c.logger)
 
 	return err
 }
 
 // RetryableScan executes a query with retry logic and scans the result
 func (c *Connection) RetryableScan(query string, dest ...interface{}) error {
-	logger := logging.GetServiceLogger()
 	config := DefaultRetryableConfig()
 
-	_, err := retry.Retry(func() (interface{}, error) {
+	_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 		err := c.session.Query(query).Scan(dest...)
 		if err != nil && !isRetryableError(err) {
 			// If error is not retryable, return it immediately
 			return nil, err
 		}
 		return nil, err
-	}, &retry.Config{
+	}, &retry.RetryConfig{
 		MaxRetries:      config.MaxRetries,
 		InitialDelay:    config.InitialDelay,
 		MaxDelay:        config.MaxDelay,
 		BackoffFactor:   config.BackoffFactor,
 		JitterFactor:    config.JitterFactor,
 		LogRetryAttempt: config.LogRetryAttempt,
-	}, logger)
+	}, c.logger)
 
 	return err
 }
@@ -136,24 +127,23 @@ func (c *Connection) RetryableIter(query string, values ...interface{}) *gocql.I
 
 // RetryableBatch executes a batch with retry logic
 func (c *Connection) RetryableBatch(batch *gocql.Batch) error {
-	logger := logging.GetServiceLogger()
 	config := DefaultRetryableConfig()
 
-	_, err := retry.Retry(func() (interface{}, error) {
+	_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 		err := c.session.ExecuteBatch(batch)
 		if err != nil && !isRetryableError(err) {
 			// If error is not retryable, return it immediately
 			return nil, err
 		}
 		return nil, err
-	}, &retry.Config{
+	}, &retry.RetryConfig{
 		MaxRetries:      config.MaxRetries,
 		InitialDelay:    config.InitialDelay,
 		MaxDelay:        config.MaxDelay,
 		BackoffFactor:   config.BackoffFactor,
 		JitterFactor:    config.JitterFactor,
 		LogRetryAttempt: config.LogRetryAttempt,
-	}, logger)
+	}, c.logger)
 
 	return err
 }

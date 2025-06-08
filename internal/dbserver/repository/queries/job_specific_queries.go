@@ -60,6 +60,11 @@ const (
 			UPDATE triggerx.condition_job_data
 			SET is_active = ?
 			WHERE job_id = ?`
+
+	UpdateTimeJobNextExecutionTimestampQuery = `
+			UPDATE triggerx.time_job_data
+			SET next_execution_timestamp = ?
+			WHERE job_id = ?`
 )
 
 // Read Queries
@@ -99,5 +104,6 @@ const (
 				target_chain_id, target_contract_address, target_function, 
 				abi, arg_type, arguments, dynamic_arguments_script_url
 			FROM triggerx.time_job_data
-			WHERE next_execution_timestamp <= ?`
+			WHERE next_execution_timestamp >= ? AND next_execution_timestamp <= ? AND is_active = true
+			ALLOW FILTERING`
 )

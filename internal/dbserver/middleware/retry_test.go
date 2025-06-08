@@ -13,19 +13,21 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func init() {
-	// Initialize logger for tests
-	config := logging.NewDefaultConfig(logging.DatabaseProcess)
-	config.Environment = logging.Development
-	config.UseColors = true
-	if err := logging.InitServiceLogger(config); err != nil {
-		panic(err)
-	}
-}
+var logger logging.Logger
+var err error
 
 func setupRetryTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+
+	loggerConfig := logging.LoggerConfig{
+		ProcessName: logging.DatabaseProcess,
+		IsDevelopment: true,
+	}
+	logger, err = logging.NewZapLogger(loggerConfig)
+	if err != nil {
+		panic("failed to initialize logger: " + err.Error())
+	}
 	return router
 }
 
@@ -46,7 +48,7 @@ func TestRetryMiddleware_SuccessfulRequest(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/success", func(c *gin.Context) {
 		attempts++
@@ -69,7 +71,7 @@ func TestRetryMiddleware_RetryableFailure(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/retry", func(c *gin.Context) {
 		attempts++
@@ -96,7 +98,7 @@ func TestRetryMiddleware_MaxRetriesExceeded(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/fail", func(c *gin.Context) {
 		attempts++
@@ -119,7 +121,7 @@ func TestRetryMiddleware_NonIdempotentMethod(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.POST("/post", func(c *gin.Context) {
 		attempts++
@@ -142,7 +144,7 @@ func TestRetryMiddleware_WithRequestBody(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/body", func(c *gin.Context) {
 		attempts++
@@ -180,7 +182,7 @@ func TestRetryMiddleware_CustomConfig(t *testing.T) {
 		RetryStatusCodes: []int{429},
 	}
 
-	router.Use(RetryMiddleware(config))
+	router.Use(RetryMiddleware(config, logger))
 
 	router.GET("/custom", func(c *gin.Context) {
 		attempts++
@@ -208,7 +210,7 @@ func TestRetryMiddleware_HeadersPreserved(t *testing.T) {
 	attempts := 0
 	headerValue := ""
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/headers", func(c *gin.Context) {
 		attempts++
@@ -239,7 +241,7 @@ func TestRetryMiddleware_NilConfig(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/nil-config", func(c *gin.Context) {
 		attempts++
@@ -266,7 +268,7 @@ func TestRetryMiddleware_ResponseWriter(t *testing.T) {
 	router := setupRetryTestRouter()
 	attempts := 0
 
-	router.Use(RetryMiddleware(nil))
+	router.Use(RetryMiddleware(nil, logger))
 
 	router.GET("/writer", func(c *gin.Context) {
 		attempts++
@@ -287,6 +289,13 @@ func TestRetryMiddleware_ResponseWriter(t *testing.T) {
 }
 
 func TestRetryMiddleware_Logger(t *testing.T) {
-	logger := logging.GetServiceLogger()
+	loggerConfig := logging.LoggerConfig{
+		ProcessName: logging.DatabaseProcess,
+		IsDevelopment: true,
+	}
+	logger, err := logging.NewZapLogger(loggerConfig)
+	if err != nil {
+		panic("failed to initialize logger: " + err.Error())
+	}
 	assert.NotNil(t, logger)
 }

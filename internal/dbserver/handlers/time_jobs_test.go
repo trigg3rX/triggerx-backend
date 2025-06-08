@@ -25,13 +25,6 @@ func setupTestTimeJobHandler() (*Handler, *MockTimeJobRepository) {
 }
 
 func TestGetTimeBasedJobs(t *testing.T) {
-	// Save original time.Now and restore it after the test
-	originalTimeNow := timeNow
-	defer func() { timeNow = originalTimeNow }()
-
-	// Set our mock time
-	timeNow = func() time.Time { return mockTime }
-
 	handler, mockTimeJobRepo := setupTestTimeJobHandler()
 
 	tests := []struct {
@@ -179,7 +172,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 			tt.setupMocks()
 
 			// Execute
-			handler.GetTimeBasedJobs(c)
+			handler.GetTimeBasedTasks(c)
 
 			// Assert
 			assert.Equal(t, tt.expectedCode, w.Code)

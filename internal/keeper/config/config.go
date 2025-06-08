@@ -43,9 +43,11 @@ type Config struct {
 	grafanaPort       string
 
 	// IPFS configuration
-	pinataApiKey       string
-	pinataSecretApiKey string
 	ipfsHost           string
+	pinataJWT          string
+
+	// Wallet Configuration
+	chainNonces map[string]uint64
 
 	// Backend Service URLs
 	aggregatorRPCUrl string
@@ -70,8 +72,8 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnv("ETH_RPC_URL", ""),
-		baseRPCUrl:               env.GetEnv("BASE_RPC_URL", ""),
+		ethRPCUrl:                env.GetEnv("L1_RPC", ""),
+		baseRPCUrl:               env.GetEnv("L2_RPC", ""),
 		alchemyAPIKey:            env.GetEnv("ALCHEMY_API_KEY", ""),
 		etherscanAPIKey:          env.GetEnv("ETHERSCAN_API_KEY", ""),
 		privateKeyConsensus:      env.GetEnv("PRIVATE_KEY", ""),
@@ -83,11 +85,8 @@ func Init() error {
 		keeperP2PPort:            env.GetEnv("KEEPER_P2P_PORT", "9012"),
 		keeperMetricsPort:        env.GetEnv("KEEPER_METRICS_PORT", "9013"),
 		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
-		pinataApiKey:             env.GetEnv("PINATA_API_KEY", ""),
-		pinataSecretApiKey:       env.GetEnv("PINATA_SECRET_API_KEY", ""),
-		ipfsHost:                 env.GetEnv("IPFS_HOST", ""),
 		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
-		healthRPCUrl:             env.GetEnv("HEALTH_RPC_ADDRESS", "http://localhost:9003"),
+		healthRPCUrl:             env.GetEnv("HEALTH_RPC_URL", "http://localhost:9003"),
 		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
 		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
@@ -204,14 +203,31 @@ func GetAttestationCenterAddress() string {
 	return cfg.attestationCenterAddress
 }
 
+func GetVersion() string {
+	return "0.1.3"
+}
+
+// IPFS configuration
+func SetIpfsHost(host string) {
+	cfg.ipfsHost = host
+}
+
 func GetIpfsHost() string {
 	return cfg.ipfsHost
 }
 
-func GetPinataApiKey() string {
-	return cfg.pinataApiKey
+func SetPinataJWT(jwt string) {
+	cfg.pinataJWT = jwt
 }
 
-func GetVersion() string {
-	return "0.1.2"
+func GetPinataJWT() string {
+	return cfg.pinataJWT
+}
+
+func GetChainNonce(chain string) uint64 {
+	return cfg.chainNonces[chain]
+}
+
+func IncrementChainNonce(chain string) {
+	cfg.chainNonces[chain]++
 }

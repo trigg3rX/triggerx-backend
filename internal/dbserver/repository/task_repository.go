@@ -11,6 +11,7 @@ import (
 
 type TaskRepository interface {
 	CreateTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error)
+	AddTaskPerformerID(taskID int64, performerID int64) error
 	UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error
 	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
 	GetTaskDataByID(taskID int64) (types.TaskData, error)
@@ -35,11 +36,19 @@ func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (
 	if err != nil {
 		return -1, errors.New("error getting max task ID")
 	}
-	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID + 1, task.JobID, task.TaskDefinitionID, task.TaskPerformerID, time.Now()).Exec()
+	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID + 1, task.JobID, task.TaskDefinitionID, time.Now()).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
 	}
 	return maxTaskID + 1, nil
+}
+
+func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) error {
+	err := r.db.Session().Query(queries.AddTaskPerformerIDQuery, taskID, performerID).Exec()
+	if err != nil {
+		return errors.New("error adding task performer ID")
+	}
+	return nil
 }
 
 func (r *taskRepository) UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error {
