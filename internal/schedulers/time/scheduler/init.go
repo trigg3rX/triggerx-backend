@@ -16,8 +16,8 @@ type TimeBasedScheduler struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	logger     logging.Logger
-	activeTasks map[int64]*types.ScheduleTimeJobData
-	taskQueue   chan *types.ScheduleTimeJobData
+	activeTasks map[int64]*types.ScheduleTimeTaskData
+	taskQueue   chan *types.ScheduleTimeTaskData
 	dbClient   *client.DBServerClient
 	aggClient  *aggregator.AggregatorClient
 	metrics    *metrics.Collector
@@ -38,8 +38,8 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		ctx:        ctx,
 		cancel:     cancel,
 		logger:     logger,
-		activeTasks: make(map[int64]*types.ScheduleTimeJobData),
-		taskQueue:   make(chan *types.ScheduleTimeJobData, 100),
+		activeTasks: make(map[int64]*types.ScheduleTimeTaskData),
+		taskQueue:   make(chan *types.ScheduleTimeTaskData, 100),
 		dbClient:   dbClient,
 		aggClient:  aggClient,
 		metrics:    metrics.NewCollector(),

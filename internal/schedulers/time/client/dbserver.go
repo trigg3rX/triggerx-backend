@@ -69,10 +69,10 @@ func NewDBServerClient(logger logging.Logger, config Config) (*DBServerClient, e
 }
 
 // GetTimeBasedJobs fetches jobs that need to be executed in the next window
-func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeJobData, error) {
+func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeTaskData, error) {
 	url := fmt.Sprintf("%s/api/jobs/time", c.baseURL)
 
-	var jobs []types.ScheduleTimeJobData
+	var jobs []types.ScheduleTimeTaskData
 	err := c.doWithRetry("GET", url, nil, &jobs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch time-based jobs: %v", err)

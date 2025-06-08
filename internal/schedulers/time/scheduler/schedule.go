@@ -60,7 +60,7 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 }
 
 // processBatch processes a batch of jobs
-func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeJobData) {
+func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	for _, task := range tasks {
 		// Add job to execution queue
 		select {
@@ -76,7 +76,7 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeJobData) {
 }
 
 // executeJob executes a single job and updates its next execution time
-func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeJobData) {
+func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	startTime := time.Now()
 
 	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.JobID)
@@ -98,6 +98,7 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeJobData) {
 	// Generate the task data to send to the performer
 	targetData := types.TaskTargetData{
 		TaskID: task.TaskID,
+		TaskDefinitionID: task.TaskDefinitionID,
 		TargetChainID: task.TargetChainID,
 		TargetContractAddress: task.TargetContractAddress,
 		TargetFunction: task.TargetFunction,
@@ -108,7 +109,6 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeJobData) {
 	}
 	triggerData := types.TaskTriggerData{
 		TaskID: task.TaskID,
-		TaskDefinitionID: task.TaskDefinitionID,
 		ExpirationTime: task.ExpirationTime,
 		TriggerTimestamp: time.Now(),
 		TimeScheduleType: task.ScheduleType,

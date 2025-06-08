@@ -143,9 +143,14 @@ func (m *MockTimeJobRepository) CompleteTimeJob(jobID int64) error {
 	return args.Error(0)
 }
 
-func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp time.Time) ([]pkgtypes.ScheduleTimeJobData, error) {
+func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp time.Time) ([]pkgtypes.ScheduleTimeTaskData, error) {
 	args := m.Called(timestamp)
-	return args.Get(0).([]pkgtypes.ScheduleTimeJobData), args.Error(1)
+	return args.Get(0).([]pkgtypes.ScheduleTimeTaskData), args.Error(1)
+}
+
+func (m *MockTimeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error {
+	args := m.Called(jobID, nextExecutionTimestamp)
+	return args.Error(0)
 }
 
 func (m *MockEventJobRepository) CreateEventJob(job *types.EventJobData) error {

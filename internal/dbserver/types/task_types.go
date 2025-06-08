@@ -23,7 +23,6 @@ type TaskData struct {
 type CreateTaskDataRequest struct {
 	JobID            int64 `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
-	TaskPerformerID  int64 `json:"task_performer_id" validate:"required"`
 }
 
 type UpdateTaskExecutionDataRequest struct {

@@ -2,49 +2,40 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// timeNow is a variable that holds the time.Now function
-// It can be overridden in tests
-var timeNow = time.Now
+func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
+	pollLookAhead := config.GetPollingLookAhead()
+	lookAheadTime := time.Now().Add(time.Duration(pollLookAhead) * time.Second)
 
-func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
-	pollIntervalStr := c.Query("pollInterval")
-	pollInterval, err := strconv.ParseInt(pollIntervalStr, 10, 64)
+	var tasks []commonTypes.ScheduleTimeTaskData
+	var err error
+
+	tasks, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(lookAheadTime)
 	if err != nil {
-		h.logger.Errorf("[GetTimeBasedJobs] Error parsing poll interval: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid poll interval"})
+		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time based tasks: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "tasks": tasks})
 		return
 	}
 
-	nextExecutionTimestamp := timeNow().Add(time.Duration(pollInterval) * time.Second)
-
-	var jobs []commonTypes.ScheduleTimeJobData
-
-	jobs, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp)
-	if err != nil {
-		h.logger.Errorf("[GetTimeBasedJobs] Error retrieving time based jobs: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	if jobs == nil {
-		jobs = []commonTypes.ScheduleTimeJobData{}
-	}
-
-	for _, job := range jobs {
-		if job.DynamicArgumentsScriptUrl != "" {
-			job.TaskDefinitionID = 2
-		} else {
-			job.TaskDefinitionID = 1
+	for _, task := range tasks {
+		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
+			JobID:            task.JobID,
+			TaskDefinitionID: task.TaskDefinitionID,
+		})
+		if err != nil {
+			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
+			continue
 		}
+		task.TaskID = taskID
 	}
 
-	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(jobs))
-	c.JSON(http.StatusOK, jobs)
+	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
+	c.JSON(http.StatusOK, tasks)
 }
