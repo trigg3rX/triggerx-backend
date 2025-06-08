@@ -38,7 +38,7 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 		"proofOfTask",
 		jsonData,
 		common.HexToAddress(taskData.PerformerData.KeeperAddress),
-		big.NewInt(int64(taskData.TriggerData.TaskDefinitionID)),
+		big.NewInt(int64(taskData.TargetData.TaskDefinitionID)),
 	)
 	if err != nil {
 		c.logger.Error("Failed to encode task data", "error", err)
@@ -63,7 +63,7 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 	}{
 		ProofOfTask:      "proofOfTask",
 		Data:             "0x" + hex.EncodeToString(jsonData),
-		TaskDefinitionID: taskData.TriggerData.TaskDefinitionID,
+		TaskDefinitionID: taskData.TargetData.TaskDefinitionID,
 		PerformerAddress: taskData.PerformerData.KeeperAddress,
 		Signature:        signature,
 	}

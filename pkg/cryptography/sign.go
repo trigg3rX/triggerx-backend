@@ -63,7 +63,7 @@ func VerifySignature(message string, signature string, signerAddress string) (bo
 		return false, fmt.Errorf("invalid signature: %w", err)
 	}
 
-	if len(signature) != 65 {
+	if len(signatureBytes) != 65 {
 		return false, fmt.Errorf("invalid signature length")
 	}
 

@@ -2,7 +2,6 @@ package aggregator
 
 import (
 	"fmt"
-	"time"
 )
 
 // Common errors
@@ -18,7 +17,4 @@ type AggregatorClientConfig struct {
 	AggregatorRPCUrl string
 	SenderPrivateKey string
 	SenderAddress    string
-	RetryAttempts    int
-	RetryDelay       time.Duration
-	RequestTimeout   time.Duration
 }

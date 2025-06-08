@@ -38,7 +38,7 @@ func NewZapLogger(config LoggerConfig) (*zapLogger, error) {
 	consoleCore := zapcore.NewCore(
 		coloredConsoleEncoder(),
 		consoleWriter,
-		zapcore.DebugLevel,
+		getLogLevel(config.IsDevelopment),
 	)
 
 	// Combine cores
@@ -54,6 +54,13 @@ func NewZapLogger(config LoggerConfig) (*zapLogger, error) {
 	return &zapLogger{
 		sugarLogger: logger.Sugar(),
 	}, nil
+}
+
+func getLogLevel(isDevelopment bool) zapcore.Level {
+	if isDevelopment {
+		return zapcore.DebugLevel
+	}
+	return zapcore.InfoLevel
 }
 
 // Custom console encoder with colors
@@ -90,7 +97,7 @@ func plainFileEncoder() zapcore.Encoder {
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.StringDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
+		EncodeLevel:    zapcore.LowercaseLevelEncoder,
 	}
 	return zapcore.NewJSONEncoder(config)
 }

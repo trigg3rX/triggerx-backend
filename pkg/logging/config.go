@@ -7,13 +7,6 @@ const (
 	LogsDir       = "logs"
 )
 
-type Environment string
-
-const (
-	Development Environment = "development"
-	Production  Environment = "production"
-)
-
 type ProcessName string
 
 const (
@@ -28,10 +21,8 @@ const (
 )
 
 type LoggerConfig struct {
-	LogDir           string
 	ProcessName      ProcessName
-	Environment      Environment
-	UseColors        bool
+	IsDevelopment    bool
 }
 
 const (

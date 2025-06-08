@@ -3,25 +3,28 @@ package docker
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
+	"io"
 	"os"
 	"path/filepath"
-	"time"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 type Downloader struct {
-	timeoutSeconds int
-	client *http.Client
+	client *retry.HTTPClient
 }
 
-func NewDownloader(timeoutSeconds int) *Downloader {
-	return &Downloader{
-		timeoutSeconds: timeoutSeconds,
-		client: &http.Client{
-			Timeout: time.Duration(timeoutSeconds) * time.Second,
-		},
+func NewDownloader(logger logging.Logger) (*Downloader, error) {
+	httpClient, err := retry.NewHTTPClient(retry.DefaultHTTPRetryConfig(), logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
+
+	return &Downloader{
+		client: httpClient,
+	}, nil
 }
 
 func (d *Downloader) DownloadFile(ctx context.Context, url string) (string, error) {
@@ -35,7 +38,7 @@ func (d *Downloader) DownloadFile(ctx context.Context, url string) (string, erro
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := d.client.Do(req)
+	resp, err := d.client.DoWithRetry(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to download file: %w", err)
 	}

@@ -38,9 +38,14 @@ func NewCodeExecutor(ctx context.Context, cfg ExecutorConfig, logger logging.Log
 
 	// logger.Infof("pulled image: %s", cfg.Docker.Image)
 
+	downloader, err := NewDownloader(logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create downloader: %w", err)
+	}
+
 	return &CodeExecutor{
 		DockerManager:  manager,
-		Downloader:     NewDownloader(cfg.Docker.TimeoutSeconds),
+		Downloader:     downloader,
 		config:         cfg,
 		logger:         logger,
 	}, nil

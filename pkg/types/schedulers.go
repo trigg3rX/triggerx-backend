@@ -3,7 +3,8 @@ package types
 import "time"
 
 // Data to pass to time scheduler
-type ScheduleTimeJobData struct {
+type ScheduleTimeTaskData struct {
+	TaskID                        int64     `json:"task_id"`
 	JobID                         int64     `json:"job_id"`
 	TaskDefinitionID              int       `json:"task_definition_id"`
 	LastExecutedAt                time.Time `json:"last_executed_at"`
@@ -66,7 +67,6 @@ type ScheduleConditionJobData struct {
 type TaskTargetData struct {
     TaskID                        int64     `json:"task_id"`
     TaskDefinitionID              int       `json:"task_definition_id"`
-	TimeFrame                     int64     `json:"time_frame"`
 	TargetChainID                 string    `json:"target_chain_id"`
     TargetContractAddress         string    `json:"target_contract_address"`
     TargetFunction                string    `json:"target_function"`

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -18,7 +17,7 @@ type AggregatorClient struct {
 	config     AggregatorClientConfig
 	privateKey *ecdsa.PrivateKey
 	publicKey  *ecdsa.PublicKey
-	retry      *retry.HTTPClient
+	httpClient *retry.HTTPClient
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient
@@ -32,9 +31,6 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	if cfg.SenderPrivateKey == "" {
 		return nil, fmt.Errorf("private key cannot be empty")
 	}
-	if cfg.RequestTimeout <= 0 {
-		cfg.RequestTimeout = 10 * time.Second
-	}
 
 	privateKey, err := crypto.HexToECDSA(cfg.SenderPrivateKey)
 	if err != nil {
@@ -47,16 +43,11 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	}
 
 	// Create retry client with configuration
-	retryConfig := &retry.HTTPRetryConfig{
-		Config: retry.Config{
-			MaxRetries:      cfg.RetryAttempts,
-			InitialDelay:    cfg.RetryDelay,
-			BackoffFactor:   2.0,
-			JitterFactor:    0.1,
-			LogRetryAttempt: true,
-		},
-		Timeout:         cfg.RequestTimeout,
-		IdleConnTimeout: 30 * time.Second,
+	retryConfig := retry.DefaultHTTPRetryConfig()
+
+	httpClient, err := retry.NewHTTPClient(retryConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
 	return &AggregatorClient{
@@ -64,7 +55,7 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 		config:     cfg,
 		privateKey: privateKey,
 		publicKey:  publicKey,
-		retry:      retry.NewHTTPClient(retryConfig, logger),
+		httpClient: httpClient,
 	}, nil
 }
 
@@ -79,7 +70,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		defer rpcClient.Close()
 
 		// Create a context with timeout for this attempt
-		ctxWithTimeout, cancel := context.WithTimeout(ctx, c.config.RequestTimeout)
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, c.httpClient.GetTimeout())
 		defer cancel()
 
 		err = rpcClient.CallContext(ctxWithTimeout, result, method, params)
@@ -90,9 +81,9 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		return result, nil
 	}
 
-	_, err := retry.Retry(ctx, operation, &retry.Config{
-		MaxRetries:      c.config.RetryAttempts,
-		InitialDelay:    c.config.RetryDelay,
+	_, err := retry.Retry(ctx, operation, &retry.RetryConfig{
+		MaxRetries:      c.httpClient.HTTPConfig.RetryConfig.MaxRetries,
+		InitialDelay:    c.httpClient.HTTPConfig.RetryConfig.InitialDelay,
 		BackoffFactor:   2.0,
 		JitterFactor:    0.1,
 		LogRetryAttempt: true,
