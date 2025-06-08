@@ -40,7 +40,7 @@ func (e *TaskExecutor) getExecutionContractAddress(chainID string) string {
 	}
 }
 
-func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.SendTaskTargetDataToKeeper) (*abi.ABI, *abi.Method, error) {
+func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {
 	if targetData.ABI == "" {
 		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
 	}

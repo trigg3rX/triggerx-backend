@@ -27,15 +27,13 @@ type Server struct {
 	docker             docker.DockerConfig
 }
 
-func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
+func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-
-	logger := logging.GetServiceLogger()
 
 	// Configure CORS
 	router.Use(func(c *gin.Context) {
@@ -114,7 +112,7 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
 	// Apply middleware in the correct order
-	router.Use(middleware.RetryMiddleware(retryConfig)) // Retry middleware first
+	router.Use(middleware.RetryMiddleware(retryConfig, logger)) // Retry middleware first
 	// Rate limiting is handled through the API key auth middleware
 
 	return s
@@ -137,7 +135,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	// Apply validation middleware to routes that need it
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
-	api.GET("/jobs/time", handler.GetTimeBasedJobs)
+	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)

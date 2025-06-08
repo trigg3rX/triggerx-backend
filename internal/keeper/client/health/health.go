@@ -3,22 +3,21 @@ package health
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"encoding/hex"
-	"crypto/ecdsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/encrypt"
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Custom error types
@@ -34,7 +33,7 @@ type ErrorResponse struct {
 
 // Client represents a Health service client
 type Client struct {
-	httpClient *http.Client
+	httpClient *retry.HTTPClient
 	logger     logging.Logger
 	config     Config
 }
@@ -56,11 +55,14 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 	}
 
 	if cfg.Version == "" {
-		cfg.Version = "0.1.2"
+		cfg.Version = "0.1.3"
 	}
 
-	httpClient := &http.Client{
-		Timeout: cfg.RequestTimeout,
+	retryConfig := retry.DefaultHTTPRetryConfig()
+
+	httpClient, err := retry.NewHTTPClient(retryConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
 	return &Client{
@@ -86,7 +88,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 
 	// Create message to sign
 	msg := []byte(c.config.KeeperAddress)
-	signature, err := encrypt.SignMessage(string(msg), c.config.PrivateKey)
+	signature, err := cryptography.SignMessage(string(msg), c.config.PrivateKey)
 	if err != nil {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
@@ -116,7 +118,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		}, fmt.Errorf("health check failed: %w", err)
 	}
 
-	c.logger.Info("Successfully completed health check-in",
+	c.logger.Debug("Successfully completed health check-in",
 		"status", response.Status,
 		"keeperAddress", c.config.KeeperAddress,
 		"timestamp", payload.Timestamp)
@@ -146,7 +148,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.DoWithRetry(req)
 	if err != nil {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
@@ -185,14 +187,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		}, fmt.Errorf("failed to unmarshal health check response: %w", err)
 	}
 
-	privateKey, err := ethcrypto.HexToECDSA(config.GetPrivateKeyConsensus())
-	if err != nil {
-		return types.KeeperHealthCheckInResponse{
-			Status: false,
-			Data:   err.Error(),
-		}, fmt.Errorf("invalid private key: %w", err)
-	}
-	decryptedData, err := DecryptMessageWithKeeperKey(privateKey, response.Data)
+	decryptedString, err := cryptography.DecryptMessage(c.config.PrivateKey, response.Data)
 	if err != nil {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
@@ -200,7 +195,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		}, fmt.Errorf("failed to decrypt health check response: %w", err)
 	}
 
-	parts := bytes.SplitN([]byte(decryptedData), []byte(":"), 2)
+	parts := strings.Split(decryptedString, ":")
 	if len(parts) != 2 {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
@@ -208,8 +203,8 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		}, fmt.Errorf("invalid response format: expected host:token")
 	}
 
-	config.SetIpfsHost(string(parts[0]))
-	config.SetPinataJWT(string(parts[1]))
+	config.SetIpfsHost(parts[0])
+	config.SetPinataJWT(parts[1])
 
 	return types.KeeperHealthCheckInResponse{
 		Status: true,
@@ -219,18 +214,5 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 
 // Close closes the HTTP client
 func (c *Client) Close() {
-	c.httpClient.CloseIdleConnections()
-}
-
-func DecryptMessageWithKeeperKey(privateKey *ecdsa.PrivateKey, encryptedHex string) (string, error) {
-	encryptedBytes, err := hexutil.Decode(encryptedHex)
-	if err != nil {
-		return "", fmt.Errorf("invalid encrypted hex: %w", err)
-	}
-	eciesPrivKey := ecies.ImportECDSA(privateKey)
-	decrypted, err := eciesPrivKey.Decrypt(encryptedBytes, nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("decryption failed: %w", err)
-	}
-	return string(decrypted), nil
+	c.httpClient.Close()
 }

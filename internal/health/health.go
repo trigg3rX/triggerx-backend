@@ -2,6 +2,7 @@ package health
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/encrypt"
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -24,14 +25,14 @@ type Handler struct {
 // NewHandler creates a new instance of Handler
 func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handler {
 	return &Handler{
-		logger:       logger.With("component", "health_handler"),
+		logger:       logger,
 		stateManager: stateManager,
 	}
 }
 
 // LoggerMiddleware creates a gin middleware for logging
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
-	middlewareLogger := logger.With("component", "http_middleware")
+	middlewareLogger := logger
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -71,8 +72,8 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 }
 
 // RegisterRoutes registers all HTTP routes for the health service
-func RegisterRoutes(router *gin.Engine) {
-	handler := NewHandler(logging.GetServiceLogger(), keeper.GetStateManager())
+func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
+	handler := NewHandler(logger, keeper.GetStateManager())
 
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
@@ -108,7 +109,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	)
 
 	if keeperHealth.Version == "0.1.3" {
-		ok, err := encrypt.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 		if !ok {
 			h.logger.Error("Invalid keeper signature",
 				"keeper", keeperHealth.KeeperAddress,
@@ -154,7 +155,8 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			"version", keeperHealth.Version,
 		)
 
-		msgData, err := encrypt.EncryptMessageForKeeper(keeperHealth.ConsensusPubKey, config.GetIpfsHost(), config.GetPinataJWT())
+		message := fmt.Sprintf("%s:%s", config.GetIpfsHost(), config.GetPinataJWT())
+		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
 			h.logger.Error("Failed to encrypt message for keeper",
 				"error", err,

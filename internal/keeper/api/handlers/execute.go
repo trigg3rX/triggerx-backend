@@ -70,7 +70,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
 		return
 	} else {
-		var targetData types.SendTaskTargetDataToKeeper
+		var targetData types.TaskTargetData
 		targetDataBytes, err := json.Marshal(requestData.TargetData)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid time job data format"})
@@ -81,7 +81,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 			return
 		}
 
-		var triggerData types.SendTaskTriggerDataToKeeper
+		var triggerData types.TaskTriggerData
 		triggerDataBytes, err := json.Marshal(requestData.TriggerData)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})

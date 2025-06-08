@@ -23,28 +23,24 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
 		ProcessName:     logging.RegistrarProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		IsDevelopment:   config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting registrar service...",
-		"mode", getEnvironment(),
+		"mode", config.IsDevMode(),
 		"avs_governance", config.GetAvsGovernanceAddress(),
 		"attestation_center", config.GetAttestationCenterAddress(),
 	)
 
 	// Initialize database connection
 	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
-	dbConn, err := database.NewConnection(dbConfig)
+	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to connect to database", "error", err)
 	}
@@ -78,25 +74,6 @@ func main() {
 
 	// Cleanup
 	registrarService.Stop()
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
-	}
-
+	
 	logger.Info("Shutdown complete")
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }

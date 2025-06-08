@@ -17,13 +17,13 @@ type Handler struct {
 // NewHandler creates a new instance of Handler
 func NewHandler(logger logging.Logger) *Handler {
 	return &Handler{
-		logger:       logger.With("component", "redis_handler"),
+		logger:       logger,
 	}
 }
 
 // LoggerMiddleware creates a gin middleware for logging
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
-	middlewareLogger := logger.With("component", "http_middleware")
+	middlewareLogger := logger
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -63,8 +63,7 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 }
 
 // RegisterRoutes registers all HTTP routes for the health service
-func RegisterRoutes(router *gin.Engine) {
-	logger := logging.GetServiceLogger()
+func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
 	handler := NewHandler(logger)
 
 	router.GET("/", handler.handleRoot)

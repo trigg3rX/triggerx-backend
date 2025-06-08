@@ -87,23 +87,31 @@ func (h *Handler) sendDataToScheduler(route string, data interface{}, schedulerN
 	}
 
 	// Create a client with aggressive timeouts and connection pooling
-	retryConfig := &retry.HTTPRetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    200 * time.Millisecond,
-		MaxDelay:        2 * time.Second,
-		BackoffFactor:   2.0,
-		LogRetryAttempt: true,
-		RetryStatusCodes: []int{
-			http.StatusInternalServerError,
-			http.StatusBadGateway,
-			http.StatusServiceUnavailable,
-			http.StatusGatewayTimeout,
+	httpConfig := &retry.HTTPRetryConfig{
+		RetryConfig: &retry.RetryConfig{
+			MaxRetries: 3,
+			InitialDelay: 1 * time.Second,
+			MaxDelay: 10 * time.Second,
+			BackoffFactor: 2.0,
+			JitterFactor: 0.5,
+			LogRetryAttempt: true,
+			StatusCodes: []int{
+				http.StatusInternalServerError,
+				http.StatusBadGateway,
+				http.StatusServiceUnavailable,
+				http.StatusGatewayTimeout,
+			},
+			ShouldRetry: func(err error) bool {
+				return err != nil
+			},
 		},
-		Timeout:             3 * time.Second,
-		IdleConnTimeout:     30 * time.Second,
+		Timeout: 3 * time.Second,
+		IdleConnTimeout: 30 * time.Second,
 	}
-
-	client := retry.NewHTTPClient(retryConfig, h.logger)
+	client, err := retry.NewHTTPClient(httpConfig, h.logger)
+	if err != nil {
+		return false, fmt.Errorf("error creating HTTP client: %v", err)
+	}
 
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {

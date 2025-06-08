@@ -31,18 +31,14 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
 		ProcessName:     logging.TimeSchedulerProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		IsDevelopment:   config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting time-based scheduler service...")
 
@@ -62,11 +58,8 @@ func main() {
 	// Initialize aggregator client
 	aggClientCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetSchedulerPrivateKey(),
-		SenderAddress:    config.GetSchedulerAddress(),
-		RetryAttempts:    3,
-		RetryDelay:       2 * time.Second,
-		RequestTimeout:   10 * time.Second,
+		SenderPrivateKey: config.GetSchedulerSigningKey(),
+		SenderAddress:    config.GetSchedulerSigningAddress(),
 	}
 	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
 	if err != nil {
@@ -118,8 +111,12 @@ func main() {
 	serviceStatus := map[string]interface{}{
 		"manager_id":      managerID,
 		"api_port":        config.GetSchedulerRPCPort(),
-		"max_workers":     config.GetMaxWorkers(),
-		"poll_interval":   "30s",
+		"poll_interval":   config.GetPollingInterval(),
+		"look_ahead":      config.GetPollingLookAhead(),
+		"batch_size":      config.GetJobBatchSize(),
+		"performer_lock_ttl": config.GetPerformerLockTTL(),
+		"task_cache_ttl": config.GetTaskCacheTTL(),
+		"duplicate_task_window": config.GetDuplicateTaskWindow(),
 	}
 
 	logger.Info("Time-based scheduler service ready", serviceStatus)
@@ -131,20 +128,6 @@ func main() {
 	<-shutdown
 
 	performGracefulShutdown(cancel, srv, timeScheduler, logger)
-}
-
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }
 
 func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, logger logging.Logger) {
@@ -167,11 +150,6 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeSch
 	}
 
 	shutdownDuration := time.Since(shutdownStart)
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
-	}
 
 	logger.Info("Time-based scheduler shutdown complete", "duration", shutdownDuration)
 	os.Exit(0)

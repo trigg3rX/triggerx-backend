@@ -20,7 +20,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.SendTaskTargetDataToKeeper) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTargetData) (types.PerformerActionData, error) {
 	chainRpcUrl := e.getChainRpcUrl(taskTargetData.TargetChainID)
 
 	chainClient, err := ethclient.Dial(chainRpcUrl)

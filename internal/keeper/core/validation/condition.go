@@ -43,7 +43,7 @@ func (v *TaskValidator) ValidateConditionBasedTask(ipfsData types.IPFSData) (boo
 
 	// Check if job is within its timeframe before executing script
 	if triggerData.TriggerTimestamp.After(triggerData.ExpirationTime) {
-		v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds)", targetData.TaskID, triggerData.TriggerTimestamp.Format(time.RFC3339), targetData.TimeFrame)
+		v.logger.Infof("Job %d is outside its timeframe (created: %s, timeframe: %d seconds)", targetData.TaskID, triggerData.TriggerTimestamp.Format(time.RFC3339), triggerData.TimeInterval)
 		return false, nil
 	}
 

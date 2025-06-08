@@ -32,7 +32,7 @@ func NewTaskExecutor(alchemyAPIKey string, etherscanAPIKey string, codeExecutor 
 	}
 }
 
-func (e *TaskExecutor) ExecuteTask(taskTargetData *types.SendTaskTargetDataToKeeper, triggerData *types.SendTaskTriggerDataToKeeper) (bool, error) {
+func (e *TaskExecutor) ExecuteTask(taskTargetData *types.TaskTargetData, triggerData *types.TaskTriggerData) (bool, error) {
 	e.logger.Info("Executing task", "jobID", taskTargetData.TaskID)
 
 	isTriggerTrue := e.validateTrigger(triggerData)
@@ -59,9 +59,9 @@ func (e *TaskExecutor) ExecuteTask(taskTargetData *types.SendTaskTargetDataToKee
 		e.logger.Infof("Action data: %+v", actionData)
 
 		ipfsData := types.IPFSData{
-			TargetData: *taskTargetData,
-			TriggerData: *triggerData,
-			ActionData: actionData,
+			TargetData: taskTargetData,
+			TriggerData: triggerData,
+			ActionData: &actionData,
 		}
 
 		proofData, err := proof.GenerateProof(ipfsData)

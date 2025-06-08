@@ -18,7 +18,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.SendTaskTargetDataToKeeper) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTargetData) (types.PerformerActionData, error) {
 	chainRpcUrl := e.getChainRpcUrl(taskTargetData.TargetChainID)
 
 	chainClient, err := ethclient.Dial(chainRpcUrl)
