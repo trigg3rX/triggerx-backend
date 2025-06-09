@@ -104,7 +104,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Time-based job
 
 			var nextExecutionTimestamp time.Time
-			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), tempJobs[i].ScheduleType, tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
+			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
 			if err != nil {
 				h.logger.Errorf("[getNextExecutionTimestamp] Error calculating next execution timestamp: %v", err)
 				nextExecutionTimestamp = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
