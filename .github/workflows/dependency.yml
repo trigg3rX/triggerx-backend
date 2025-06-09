@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0  # Important for the action to work properly
+      
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -38,14 +40,14 @@ jobs:
           else
             echo "updates_available=false" >> $GITHUB_OUTPUT
           fi
-
+    
       - name: Create Pull Request
-        if: steps.check_updates.outputs.updates_available == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          title: 'chore(deps): update Go dependencies'
-          branch: update-go-dependencies
-          commit-message: 'chore(deps): update Go dependencies'
-          body: |
-            Automated dependency updates.
-            Please review the changes before merging.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "chore(deps): update Go dependencies"
+          branch: "update-go-dependencies"
+          commit-message: "chore(deps): update Go dependencies"
+          body: "Automated dependency updates.\nPlease review the changes before merging."
+          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          author: "5kyguy <167390221+5kyguy@users.noreply.github.com>"
