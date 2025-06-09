@@ -1,27 +1,27 @@
-name: Go Dependencies
+name: Update Go Dependencies
 
 on:
   push:
     branches:
       - dev
-  pull_request:
-  schedule:
-    - cron: '0 0 * * 1'  # Run every Monday
-  workflow_dispatch:  # Allow manual triggers
+  workflow_dispatch:
 
 jobs:
-  update:
+  update-dependencies:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.ACTIONS_TOKEN }}
-          ref: dev  # Explicitly checkout dev branch
-      
+          fetch-depth: 0
+
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: '1.24.2'
+          cache: true
 
       - name: Install go-mod-outdated
         run: go install github.com/psampaz/go-mod-outdated@latest
@@ -35,30 +35,75 @@ jobs:
           # Check if there are any updates
           if [ -s outdated.txt ]; then
             echo "updates_available=true" >> $GITHUB_OUTPUT
+            echo "Found outdated dependencies:"
+            cat outdated.txt
+            
             # Run go get to update dependencies
             go get -u ./...
             go mod tidy
+            
+            # Verify the build still works
+            go build ./...
+            
+            # Run tests to ensure nothing is broken
+            go test ./...
           else
             echo "updates_available=false" >> $GITHUB_OUTPUT
+            echo "No dependency updates available"
           fi
-    
-      - name: Create Pull Request
+
+      - name: Check for changes
+        id: check_changes
         if: steps.check_updates.outputs.updates_available == 'true'
+        run: |
+          if git diff --quiet go.mod go.sum; then
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_available == 'true' && steps.check_changes.outputs.changes_detected == 'true'
         uses: peter-evans/create-pull-request@v7.0.8
         with:
           token: ${{ secrets.ACTIONS_TOKEN }}
-          title: "chore(deps): update Go dependencies"
-          branch: "update-go-dependencies"
-          commit-message: "chore(deps): update Go dependencies"
+          commit-message: "chore: update Go dependencies"
+          title: "chore: update Go dependencies"
           body: |
-            Automated dependency updates.
-            Please review the changes before merging.
+            This PR was automatically created to update Go dependencies.
             
-            Updated dependencies:
-            - Check the diff for specific package updates
-          base: dev
-          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          author: "5kyguy <167390221+5kyguy@users.noreply.github.com>"
+            ## Outdated Dependencies
+            ```
+            $(cat outdated.txt)
+            ```
+          branch: "automated-dependency-updates"
           delete-branch: true
-          labels: dependencies
-          draft: false
+          base: dev
+          labels: |
+            dependencies
+            
+      - name: Auto-merge PR (Optional)
+        if: steps.check_updates.outputs.updates_available == 'true' && steps.check_changes.outputs.changes_detected == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
+        run: |
+          # Wait a moment for PR to be created
+          sleep 10
+          
+          # Get the PR number
+          PR_NUMBER=$(gh pr list --head "automated-dependency-updates" --json number --jq '.[0].number')
+          
+          if [ ! -z "$PR_NUMBER" ]; then
+            echo "Auto-merging PR #$PR_NUMBER"
+            # Enable auto-merge (requires branch protection rules)
+            gh pr merge $PR_NUMBER --auto --squash
+          fi
+
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          # Clean up any temporary files
+          rm -f outdated.txt
+          
+          # Reset any changes if the workflow failed
+          git checkout -- go.mod go.sum || true
