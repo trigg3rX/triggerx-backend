@@ -11,12 +11,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Minimal IPFSData struct for test unmarshalling
-// (adjust fields as per your actual types.IPFSData definition)
-type testIPFSData struct {
-	Field string `json:"field"`
-}
-
 func TestUploadToIPFS_Success(t *testing.T) {
 	// Set PINATA_JWT env var if needed by config.GetPinataJWT
 	os.Setenv("PINATA_JWT", "testtoken")
@@ -64,7 +58,7 @@ func TestFetchIPFSContent_Success(t *testing.T) {
 	defer server.Close()
 
 	// We cannot change the URL in FetchIPFSContent, so this test will only check for network errors (unless the function is refactored)
-	_, err := FetchIPFSContent("testcid")
+	_, err := FetchIPFSContent("testcid", "testcid", nil)
 	if err == nil {
 		t.Skip("Cannot test FetchIPFSContent fully without code modification to inject URL")
 	}
@@ -72,7 +66,7 @@ func TestFetchIPFSContent_Success(t *testing.T) {
 
 func TestFetchIPFSContent_NotFound(t *testing.T) {
 	// This will always hit the real endpoint, so we only check for error on invalid CID
-	_, err := FetchIPFSContent("")
+	_, err := FetchIPFSContent("", "testcid", nil)
 	if err == nil {
 		t.Error("expected error for empty CID, got nil")
 	}
