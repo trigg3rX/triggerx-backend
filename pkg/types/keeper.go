@@ -57,19 +57,19 @@ type PerformerSignatureData struct {
 
 // Data to Upload to IPFS
 type IPFSData struct {
-	TargetData *TaskTargetData `json:"target_data"`
-	TriggerData *TaskTriggerData `json:"trigger_data"`
-	SchedulerSignature *SchedulerSignatureData `json:"scheduler_signature_data"`
+	TaskData *SendTaskDataToKeeper `json:"task_data"`
 	ActionData *PerformerActionData `json:"action_data"`
 	ProofData *ProofData `json:"proof_data"`
 	PerformerSignature *PerformerSignatureData `json:"performer_signature_data"`
 }
 
 // Data to Broadcast to Attesters from performer
-type PerformerBroadcastData struct {
+type BroadcastDataForValidators struct {
 	ProofOfTask        string `json:"proof_of_task"`
+	Data			   []byte `json:"data"`
 	TaskDefinitionID   int `json:"task_definition_id"`
 	PerformerAddress   string `json:"performer_address"`
 	PerformerSignature string `json:"performer_signature"`
-	IPFSDataCID        string `json:"ipfs_data_cid"`
+	SignatureType      string `json:"signature_type"`
+	TargetChainID      int `json:"target_chain_id"`
 }

@@ -67,6 +67,7 @@ type ScheduleConditionJobData struct {
 type TaskTargetData struct {
     TaskID                        int64     `json:"task_id"`
     TaskDefinitionID              int       `json:"task_definition_id"`
+	NextExecutionTimestamp time.Time `json:"next_execution_timestamp"`
 	TargetChainID                 string    `json:"target_chain_id"`
     TargetContractAddress         string    `json:"target_contract_address"`
     TargetFunction                string    `json:"target_function"`
@@ -79,6 +80,7 @@ type TaskTargetData struct {
 // Trigger data from schedulers to keepers for validation
 type TaskTriggerData struct {
 	TaskID                        int64     `json:"task_id"`
+	TaskDefinitionID              int       `json:"task_definition_id"`
 	Recurring                     bool      `json:"recurring"`
 	ExpirationTime                time.Time `json:"expiration_time"`
 	TriggerTimestamp              time.Time `json:"trigger_timestamp"`
@@ -87,12 +89,11 @@ type TaskTriggerData struct {
 	TimeCronExpression      string    `json:"time_cron_expression"`
 	TimeSpecificSchedule    string    `json:"time_specific_schedule"`
 	TimeInterval        int64     `json:"time_interval"`
-	NextExecutionTimestamp time.Time `json:"next_execution_timestamp"`
 
     EventChainId                  string    `json:"event_chain_id"`
     EventTxHash                   string    `json:"event_tx_hash"`
     EventTriggerContractAddress   string    `json:"event_trigger_contract_address"`
-    EventTriggerFunction          string    `json:"event_trigger_function"`
+    EventTriggerName              string    `json:"event_trigger_name"`
 
     ConditionType                 string    `json:"condition_type"`
     ConditionSourceType           string    `json:"condition_source_type"`
@@ -114,4 +115,11 @@ type SendTaskDataToKeeper struct {
 	TargetData       *TaskTargetData  `json:"target_data"`
 	TriggerData      *TaskTriggerData `json:"trigger_data"`
 	SchedulerSignature *SchedulerSignatureData `json:"scheduler_signature_data"`
+}
+
+type BroadcastDataForPerformer struct {
+	TaskID 			int64                 			`json:"task_id"`
+	TaskDefinitionID   int `json:"task_definition_id"`
+	PerformerAddress string `json:"performer_address"`
+	Data			   []byte `json:"data"`
 }
