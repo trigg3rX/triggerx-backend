@@ -76,6 +76,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		ctxWithTimeout, cancel := context.WithTimeout(ctx, c.httpClient.GetTimeout())
 		defer cancel()
 
+		// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
 		err = rpcClient.CallContext(ctxWithTimeout, result, method, params)
 		if err != nil {
 			return nil, fmt.Errorf("RPC call failed: %w", err)
