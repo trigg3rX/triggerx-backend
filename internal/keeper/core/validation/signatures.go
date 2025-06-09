@@ -67,9 +67,9 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 
 	// Create a copy of the ipfs data without the signature for verification
 	ipfsDataForVerification := types.IPFSData{
-		TaskData: ipfsData.TaskData,
+		TaskData:   ipfsData.TaskData,
 		ActionData: ipfsData.ActionData,
-		ProofData: ipfsData.ProofData,
+		ProofData:  ipfsData.ProofData,
 		PerformerSignature: &types.PerformerSignatureData{
 			PerformerSigningAddress: ipfsData.PerformerSignature.PerformerSigningAddress,
 			// Note: PerformerSignature field is intentionally left empty for verification

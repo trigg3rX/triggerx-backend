@@ -1,9 +1,9 @@
 package validation
 
 import (
-	"fmt"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
@@ -26,7 +26,7 @@ func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (
 	// that was used during proof generation
 	tlsConfig := proof.DefaultTLSProofConfig(config.GetTLSProofHost())
 	tlsConfig.TargetPort = config.GetTLSProofPort()
-	
+
 	connState, err := proof.EstablishTLSConnection(tlsConfig)
 	if err != nil {
 		v.logger.Warn("Failed to establish TLS connection for validation", "trace_id", traceID, "error", err)
@@ -41,7 +41,7 @@ func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (
 	currentCertHashStr := hex.EncodeToString(currentCertHash[:])
 
 	if currentCertHashStr != proofData.CertificateHash {
-		v.logger.Warn("Certificate hash mismatch during validation", 
+		v.logger.Warn("Certificate hash mismatch during validation",
 			"trace_id", traceID,
 			"expected", proofData.CertificateHash,
 			"actual", currentCertHashStr)
@@ -75,7 +75,7 @@ func (v *TaskValidator) validateProofHash(ipfsData types.IPFSData, traceID strin
 	expectedProofHashStr := hex.EncodeToString(expectedProofHash[:])
 
 	if expectedProofHashStr != ipfsData.ProofData.ProofOfTask {
-		return false, fmt.Errorf("proof hash validation failed: expected %s, got %s", 
+		return false, fmt.Errorf("proof hash validation failed: expected %s, got %s",
 			expectedProofHashStr, ipfsData.ProofData.ProofOfTask)
 	}
 

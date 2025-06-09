@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type Validator struct {
@@ -121,53 +121,53 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 // 		return err
 // 	}
 
-	// Determine job type based on TaskDefinitionID
-	// switch {
-	// case jobData.TaskDefinitionID >= types.TaskDefTimeBasedStart && jobData.TaskDefinitionID <= types.TaskDefTimeBasedEnd:
-		// Time-based job validation
-		// if jobData.TimeInterval <= 0 {
-		// 	return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// Time jobs don't need trigger or condition fields
-		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
-		// 	return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
-		// 	return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
+// Determine job type based on TaskDefinitionID
+// switch {
+// case jobData.TaskDefinitionID >= types.TaskDefTimeBasedStart && jobData.TaskDefinitionID <= types.TaskDefTimeBasedEnd:
+// Time-based job validation
+// if jobData.TimeInterval <= 0 {
+// 	return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// Time jobs don't need trigger or condition fields
+// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
+// 	return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
+// 	return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
 
-	// case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
-	// 	// Event-based job validation
-	// 	if jobData.TriggerChainID == "" || jobData.TriggerContractAddress == "" || jobData.TriggerEvent == "" {
-	// 		return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-	// 	}
-		// Event jobs don't need time interval or condition fields
-		// if jobData.TimeInterval != 0 {
-		// 	return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
-		// 	return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
+// case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
+// 	// Event-based job validation
+// 	if jobData.TriggerChainID == "" || jobData.TriggerContractAddress == "" || jobData.TriggerEvent == "" {
+// 		return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// 	}
+// Event jobs don't need time interval or condition fields
+// if jobData.TimeInterval != 0 {
+// 	return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
+// 	return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
 
-	// case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
-	// 	// Condition-based job validation
-	// 	if jobData.ConditionType == "" || jobData.UpperLimit == 0 || jobData.LowerLimit == 0 {
-	// 		return fmt.Errorf("condition fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-	// 	}
-	// 	if jobData.ValueSourceType == "" || jobData.ValueSourceUrl == "" {
-	// 		return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-	// 	}
-		// Condition jobs don't need time interval or trigger fields
-		// if jobData.TimeInterval != 0 {
-		// 	return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
-		// 	return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
+// case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
+// 	// Condition-based job validation
+// 	if jobData.ConditionType == "" || jobData.UpperLimit == 0 || jobData.LowerLimit == 0 {
+// 		return fmt.Errorf("condition fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// 	}
+// 	if jobData.ValueSourceType == "" || jobData.ValueSourceUrl == "" {
+// 		return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// 	}
+// Condition jobs don't need time interval or trigger fields
+// if jobData.TimeInterval != 0 {
+// 	return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
+// 	return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
 
-	// default:
-	// 	return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)
-	// }
+// default:
+// 	return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)
+// }
 
 // 	return nil
 // }

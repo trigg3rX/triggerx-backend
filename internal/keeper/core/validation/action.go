@@ -8,8 +8,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
@@ -32,7 +32,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, actionD
 		return false, fmt.Errorf("transaction is not successful")
 	}
 
-	// TODO: get the action tx check right 
+	// TODO: get the action tx check right
 	// check if the tx was made to correct target contract
 	// fetch the AA contract address and the transaction from there to complete the flow
 
@@ -49,7 +49,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, actionD
 			return false, fmt.Errorf("failed to get block: %v", err)
 		}
 		txTimestamp := time.Unix(int64(block.Time()), 0)
-		
+
 		if txTimestamp.After(targetData.NextExecutionTimestamp.Add(timeTolerance)) {
 			return false, fmt.Errorf("transaction was made after the next execution timestamp")
 		}
@@ -57,6 +57,6 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, actionD
 			return false, fmt.Errorf("transaction was made before the next execution timestamp")
 		}
 		return true, nil
-	}	
+	}
 	return true, nil
 }

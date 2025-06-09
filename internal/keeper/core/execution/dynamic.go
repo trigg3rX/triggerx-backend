@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -128,20 +128,20 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 	}
 
 	executionResult := types.PerformerActionData{
-		TaskID: taskTargetData.TaskID,
-		ActionTxHash:  signedTx.Hash().Hex(),
-		GasUsed:       strconv.FormatUint(receipt.GasUsed, 10),
-		Status:        receipt.Status == ethtypes.ReceiptStatusSuccessful,
-		MemoryUsage:   result.Stats.MemoryUsage,
-		CPUPercentage: result.Stats.CPUPercentage,
-		NetworkRx:     result.Stats.RxBytes,
-		NetworkTx:     result.Stats.TxBytes,
-		BlockRead:     result.Stats.BlockRead,
-		BlockWrite:    result.Stats.BlockWrite,
-		BandwidthRate: result.Stats.BandwidthRate,
-		TotalFee:      result.Stats.TotalCost,
-		StaticComplexity: result.Stats.StaticComplexity,
-		DynamicComplexity: result.Stats.DynamicComplexity,
+		TaskID:             taskTargetData.TaskID,
+		ActionTxHash:       signedTx.Hash().Hex(),
+		GasUsed:            strconv.FormatUint(receipt.GasUsed, 10),
+		Status:             receipt.Status == ethtypes.ReceiptStatusSuccessful,
+		MemoryUsage:        result.Stats.MemoryUsage,
+		CPUPercentage:      result.Stats.CPUPercentage,
+		NetworkRx:          result.Stats.RxBytes,
+		NetworkTx:          result.Stats.TxBytes,
+		BlockRead:          result.Stats.BlockRead,
+		BlockWrite:         result.Stats.BlockWrite,
+		BandwidthRate:      result.Stats.BandwidthRate,
+		TotalFee:           result.Stats.TotalCost,
+		StaticComplexity:   result.Stats.StaticComplexity,
+		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
 	}
 

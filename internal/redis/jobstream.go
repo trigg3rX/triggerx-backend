@@ -91,7 +91,7 @@ func (jsm *JobStreamManager) addJobToStream(stream string, job *JobStreamData) e
 		MaxLen: int64(config.GetStreamMaxLen()),
 		Approx: true,
 		Values: map[string]interface{}{
-			"job":       jobJSON,
+			"job":        jobJSON,
 			"created_at": time.Now().Unix(),
 		},
 	})

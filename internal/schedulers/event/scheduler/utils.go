@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/config"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/config"
 )
 
 // initChainClients initializes RPC clients for supported chains

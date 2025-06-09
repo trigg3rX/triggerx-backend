@@ -4,28 +4,28 @@ import (
 	"context"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 )
 
 type TaskValidator struct {
-	alchemyAPIKey   string
-	etherscanAPIKey string
-	codeExecutor    *docker.CodeExecutor
+	alchemyAPIKey    string
+	etherscanAPIKey  string
+	codeExecutor     *docker.CodeExecutor
 	aggregatorClient *aggregator.AggregatorClient
-	logger          logging.Logger
+	logger           logging.Logger
 }
 
 func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, codeExecutor *docker.CodeExecutor, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskValidator {
 	return &TaskValidator{
-		alchemyAPIKey:   alchemyAPIKey,
-		etherscanAPIKey: etherscanAPIKey,
-		codeExecutor:    codeExecutor,
+		alchemyAPIKey:    alchemyAPIKey,
+		etherscanAPIKey:  etherscanAPIKey,
+		codeExecutor:     codeExecutor,
 		aggregatorClient: aggregatorClient,
-		logger:          logger,
+		logger:           logger,
 	}
 }
 

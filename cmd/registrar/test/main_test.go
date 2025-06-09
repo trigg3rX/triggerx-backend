@@ -66,8 +66,8 @@ func TestMain(t *testing.T) {
 	})
 
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "registrar",
-		IsDevelopment:   true,
+		ProcessName:   "registrar",
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {

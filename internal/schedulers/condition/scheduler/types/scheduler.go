@@ -5,11 +5,11 @@ import (
 )
 
 const (
-	MaxRetries               = 3                // Max retries for failed operations
-	RequestTimeout           = 10 * time.Second // HTTP request timeout
-	WorkerTimeout            = 30 * time.Second // Timeout for worker operations
+	MaxRetries     = 3                // Max retries for failed operations
+	RequestTimeout = 10 * time.Second // HTTP request timeout
+	WorkerTimeout  = 30 * time.Second // Timeout for worker operations
 
-	PollInterval             = 1 * time.Second  // Poll every 1 second as requested
+	PollInterval = 1 * time.Second // Poll every 1 second as requested
 )
 
 // JobScheduleRequest represents the request to schedule a new condition job

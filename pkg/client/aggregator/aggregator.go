@@ -14,11 +14,11 @@ import (
 
 // AggregatorClient handles communication with the aggregator service
 type AggregatorClient struct {
-	logger     logging.Logger
-	config     AggregatorClientConfig
-	privateKey *ecdsa.PrivateKey
-	publicKey  *ecdsa.PublicKey
-	httpClient *retry.HTTPClient
+	logger            logging.Logger
+	config            AggregatorClientConfig
+	privateKey        *ecdsa.PrivateKey
+	publicKey         *ecdsa.PublicKey
+	httpClient        *retry.HTTPClient
 	TaskStreamManager *redis.TaskStreamManager
 }
 
@@ -57,7 +57,7 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig, tsm 
 		config:            cfg,
 		privateKey:        privateKey,
 		publicKey:         publicKey,
-		httpClient: httpClient,
+		httpClient:        httpClient,
 		TaskStreamManager: tsm,
 	}, nil
 }

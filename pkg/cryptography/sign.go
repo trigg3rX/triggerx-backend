@@ -31,14 +31,14 @@ func SignMessage(message string, privateKey string) (string, error) {
 
 func SignJSONMessage(jsonData interface{}, privateKey string) (string, error) {
 	jsonDataMap := make(map[string]interface{})
-	
+
 	jsonBytes, err := json.Marshal(jsonData)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal input data: %w", err)
 	}
-	
+
 	if err := json.Unmarshal(jsonBytes, &jsonDataMap); err != nil {
-		return "", fmt.Errorf("failed to unmarshal to map: %w", err) 
+		return "", fmt.Errorf("failed to unmarshal to map: %w", err)
 	}
 
 	convertToLower(jsonDataMap)
@@ -52,7 +52,6 @@ func SignJSONMessage(jsonData interface{}, privateKey string) (string, error) {
 
 	return SignMessage(message, privateKey)
 }
-
 
 func VerifySignature(message string, signature string, signerAddress string) (bool, error) {
 	messageHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
@@ -90,14 +89,14 @@ func VerifySignature(message string, signature string, signerAddress string) (bo
 
 func VerifySignatureFromJSON(jsonData interface{}, signature string, signerAddress string) (bool, error) {
 	jsonDataMap := make(map[string]interface{})
-	
+
 	jsonBytes, err := json.Marshal(jsonData)
 	if err != nil {
 		return false, fmt.Errorf("failed to marshal input data: %w", err)
 	}
-	
+
 	if err := json.Unmarshal(jsonBytes, &jsonDataMap); err != nil {
-		return false, fmt.Errorf("failed to unmarshal to map: %w", err) 
+		return false, fmt.Errorf("failed to unmarshal to map: %w", err)
 	}
 
 	convertToLower(jsonDataMap)

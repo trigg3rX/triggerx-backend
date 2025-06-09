@@ -3,8 +3,8 @@ package logging
 // import "path/filepath"
 
 const (
-	BaseDataDir   = "data"
-	LogsDir       = "logs"
+	BaseDataDir = "data"
+	LogsDir     = "logs"
 )
 
 type ProcessName string
@@ -22,8 +22,8 @@ const (
 )
 
 type LoggerConfig struct {
-	ProcessName      ProcessName
-	IsDevelopment    bool
+	ProcessName   ProcessName
+	IsDevelopment bool
 }
 
 const (

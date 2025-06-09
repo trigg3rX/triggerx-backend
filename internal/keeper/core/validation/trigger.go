@@ -51,7 +51,7 @@ func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, trac
 	return false, nil
 }
 
-func (v *TaskValidator) IsValidTimeBasedTrigger (triggerData *types.TaskTriggerData) (bool, error) {
+func (v *TaskValidator) IsValidTimeBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
 	// check if expiration time is before trigger timestamp
 	if triggerData.ExpirationTime.Before(triggerData.TriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
@@ -62,7 +62,7 @@ func (v *TaskValidator) IsValidTimeBasedTrigger (triggerData *types.TaskTriggerD
 	return true, nil
 }
 
-func (v *TaskValidator) IsValidEventBasedTrigger (triggerData *types.TaskTriggerData) (bool, error) {
+func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
 	rpcURL := utils.GetChainRpcUrl(triggerData.EventChainId)
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
@@ -134,7 +134,7 @@ func (v *TaskValidator) IsValidEventBasedTrigger (triggerData *types.TaskTrigger
 		return false, fmt.Errorf("failed to get block: %v", err)
 	}
 	txTimestamp := time.Unix(int64(block.Time()), 0)
-	
+
 	if txTimestamp.After(triggerData.ExpirationTime.Add(timeTolerance)) {
 		return false, fmt.Errorf("transaction was made after the expiration time")
 	}
@@ -142,7 +142,7 @@ func (v *TaskValidator) IsValidEventBasedTrigger (triggerData *types.TaskTrigger
 	return true, nil
 }
 
-func (v *TaskValidator) IsValidConditionBasedTrigger (triggerData *types.TaskTriggerData) (bool, error) {
+func (v *TaskValidator) IsValidConditionBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
 	// check if the condition was satisfied by the value
 	if triggerData.ConditionSourceType == ConditionEquals {
 		return triggerData.ConditionSatisfiedValue == triggerData.ConditionUpperLimit, nil

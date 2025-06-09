@@ -3,8 +3,8 @@ package logging
 import (
 	"fmt"
 	"os"
-	"time"
 	"path/filepath"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

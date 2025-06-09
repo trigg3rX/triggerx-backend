@@ -10,7 +10,7 @@ const (
 				dynamic_arguments_script_url, is_completed, is_active
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	// 18 values to be inserted, so 18 ?s
-	
+
 	CreateEventJobDataQuery = `
 			INSERT INTO triggerx.event_job_data (
 				job_id, expiration_time, recurring, trigger_chain_id, trigger_contract_address, 

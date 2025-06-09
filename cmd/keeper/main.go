@@ -11,14 +11,14 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -32,7 +32,7 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName: logging.KeeperProcess,
+		ProcessName:   logging.KeeperProcess,
 		IsDevelopment: config.IsDevMode(),
 	}
 
@@ -41,8 +41,8 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting keeper node ...", 
-		"keeper_address", config.GetKeeperAddress(), 
+	logger.Info("Starting keeper node ...",
+		"keeper_address", config.GetKeeperAddress(),
 		"consensus_address", config.GetConsensusAddress(),
 		"version", config.GetVersion(),
 	)
@@ -52,9 +52,9 @@ func main() {
 
 	// Initialize clients
 	aggregatorCfg := aggregator.AggregatorClientConfig{
-		AggregatorRPCUrl:     config.GetAggregatorRPCUrl(),
-		SenderPrivateKey:     config.GetPrivateKeyConsensus(),
-		SenderAddress:  config.GetConsensusAddress(),
+		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+		SenderPrivateKey: config.GetPrivateKeyConsensus(),
+		SenderAddress:    config.GetConsensusAddress(),
 	}
 	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg, nil)
 	if err != nil {

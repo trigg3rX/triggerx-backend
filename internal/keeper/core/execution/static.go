@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -99,10 +99,10 @@ func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTar
 	}
 
 	executionResult := types.PerformerActionData{
-		TaskID: taskTargetData.TaskID,
-		ActionTxHash:  signedTx.Hash().Hex(),
-		GasUsed:       strconv.FormatUint(receipt.GasUsed, 10),
-		Status:        receipt.Status == ethtypes.ReceiptStatusSuccessful,
+		TaskID:             taskTargetData.TaskID,
+		ActionTxHash:       signedTx.Hash().Hex(),
+		GasUsed:            strconv.FormatUint(receipt.GasUsed, 10),
+		Status:             receipt.Status == ethtypes.ReceiptStatusSuccessful,
 		ExecutionTimestamp: time.Now().UTC(),
 	}
 

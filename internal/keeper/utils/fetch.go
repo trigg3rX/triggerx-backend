@@ -2,8 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"net/http"
 	"io"
+	"net/http"
 )
 
 func FetchDataFromUrl(url string) (string, error) {

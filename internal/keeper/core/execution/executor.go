@@ -94,9 +94,9 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 	// generate proof data with real TLS connection
 	ipfsData := types.IPFSData{
-		TaskData:   task,
-		ActionData: &actionData,
-		ProofData:  &types.ProofData{},
+		TaskData:           task,
+		ActionData:         &actionData,
+		ProofData:          &types.ProofData{},
 		PerformerSignature: &types.PerformerSignatureData{},
 	}
 	ipfsData.ProofData.TaskID = task.TaskID

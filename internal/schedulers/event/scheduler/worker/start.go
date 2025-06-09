@@ -9,9 +9,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/metrics"
+	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 )
 
 // JobWorker represents an individual worker watching a specific job

@@ -21,7 +21,7 @@ func setupRetryTestRouter() *gin.Engine {
 	router := gin.New()
 
 	loggerConfig := logging.LoggerConfig{
-		ProcessName: logging.DatabaseProcess,
+		ProcessName:   logging.DatabaseProcess,
 		IsDevelopment: true,
 	}
 	logger, err = logging.NewZapLogger(loggerConfig)
@@ -290,7 +290,7 @@ func TestRetryMiddleware_ResponseWriter(t *testing.T) {
 
 func TestRetryMiddleware_Logger(t *testing.T) {
 	loggerConfig := logging.LoggerConfig{
-		ProcessName: logging.DatabaseProcess,
+		ProcessName:   logging.DatabaseProcess,
 		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(loggerConfig)

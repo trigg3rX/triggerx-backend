@@ -68,7 +68,7 @@ func ErrorMiddleware(logger logging.Logger) gin.HandlerFunc {
 			// If the response hasn't been written yet
 			if !c.Writer.Written() {
 				c.JSON(c.Writer.Status(), gin.H{
-					"error": err.Error(),
+					"error":    err.Error(),
 					"trace_id": traceID,
 				})
 			}

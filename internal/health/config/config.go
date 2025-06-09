@@ -26,7 +26,7 @@ type Config struct {
 	databaseHostPort    string
 
 	// IPFS configuration
-	ipfsHost string
+	ipfsHost  string
 	pinataJWT string
 }
 
