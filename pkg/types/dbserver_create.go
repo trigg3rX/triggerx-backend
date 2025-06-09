@@ -28,9 +28,9 @@ type CreateJobRequest struct {
 	CreatedAt         time.Time `json:"created_at"`
 	Timezone          string    `json:"timezone" validate:"required,timezone"`
 	// Time job specific fields
-	ScheduleType string `json:"schedule_type" validate:"required,oneof=cron interval specific"`
-	TimeInterval int64 `json:"time_interval,omitempty" validate:"omitempty,min=30"`
-	CronExpression string `json:"cron_expression,omitempty"`
+	ScheduleType     string `json:"schedule_type" validate:"required,oneof=cron interval specific"`
+	TimeInterval     int64  `json:"time_interval,omitempty" validate:"omitempty,min=30"`
+	CronExpression   string `json:"cron_expression,omitempty"`
 	SpecificSchedule string `json:"specific_schedule,omitempty"`
 	// Event job specific fields
 	TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
@@ -43,13 +43,13 @@ type CreateJobRequest struct {
 	ValueSourceType string  `json:"value_source_type,omitempty" validate:"omitempty,oneof=api websocket"`
 	ValueSourceUrl  string  `json:"value_source_url,omitempty" validate:"omitempty,url"`
 	// Target fields (common for all job types)
-	TargetChainID         string `json:"target_chain_id" validate:"required,chain_id"`
-	TargetContractAddress string `json:"target_contract_address" validate:"required,ethereum_address"`
-	TargetFunction        string `json:"target_function" validate:"required"`
-	ABI                   string `json:"abi" validate:"required"`
-	ArgType               int      `json:"arg_type" validate:"required"`
-	Arguments             []string `json:"arguments" validate:"required"`
-	DynamicArgumentsScriptUrl string `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,url"`
+	TargetChainID             string   `json:"target_chain_id" validate:"required,chain_id"`
+	TargetContractAddress     string   `json:"target_contract_address" validate:"required,ethereum_address"`
+	TargetFunction            string   `json:"target_function" validate:"required"`
+	ABI                       string   `json:"abi" validate:"required"`
+	ArgType                   int      `json:"arg_type" validate:"required"`
+	Arguments                 []string `json:"arguments" validate:"required"`
+	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,url"`
 }
 
 type CreateJobResponse struct {

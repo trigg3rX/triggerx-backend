@@ -31,8 +31,8 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.HealthProcess,
-		IsDevelopment:   config.IsDevMode(),
+		ProcessName:   logging.HealthProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
 	logger, err := logging.NewZapLogger(logConfig)

@@ -89,11 +89,11 @@ func (h *Handler) sendDataToScheduler(route string, data interface{}, schedulerN
 	// Create a client with aggressive timeouts and connection pooling
 	httpConfig := &retry.HTTPRetryConfig{
 		RetryConfig: &retry.RetryConfig{
-			MaxRetries: 3,
-			InitialDelay: 1 * time.Second,
-			MaxDelay: 10 * time.Second,
-			BackoffFactor: 2.0,
-			JitterFactor: 0.5,
+			MaxRetries:      3,
+			InitialDelay:    1 * time.Second,
+			MaxDelay:        10 * time.Second,
+			BackoffFactor:   2.0,
+			JitterFactor:    0.5,
 			LogRetryAttempt: true,
 			StatusCodes: []int{
 				http.StatusInternalServerError,
@@ -105,7 +105,7 @@ func (h *Handler) sendDataToScheduler(route string, data interface{}, schedulerN
 				return err != nil
 			},
 		},
-		Timeout: 3 * time.Second,
+		Timeout:         3 * time.Second,
 		IdleConnTimeout: 30 * time.Second,
 	}
 	client, err := retry.NewHTTPClient(httpConfig, h.logger)

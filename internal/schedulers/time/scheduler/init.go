@@ -13,21 +13,21 @@ import (
 )
 
 type TimeBasedScheduler struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	logger     logging.Logger
-	activeTasks map[int64]*types.ScheduleTimeTaskData
-	taskQueue   chan *types.ScheduleTimeTaskData
-	dbClient   *client.DBServerClient
-	aggClient  *aggregator.AggregatorClient
-	metrics    *metrics.Collector
-	schedulerSigningAddress  string
-	pollingInterval time.Duration
-	pollingLookAhead time.Duration
-	jobBatchSize int
-	performerLockTTL time.Duration
-	taskCacheTTL time.Duration
-	duplicateTaskWindow time.Duration
+	ctx                     context.Context
+	cancel                  context.CancelFunc
+	logger                  logging.Logger
+	activeTasks             map[int64]*types.ScheduleTimeTaskData
+	taskQueue               chan *types.ScheduleTimeTaskData
+	dbClient                *client.DBServerClient
+	aggClient               *aggregator.AggregatorClient
+	metrics                 *metrics.Collector
+	schedulerSigningAddress string
+	pollingInterval         time.Duration
+	pollingLookAhead        time.Duration
+	jobBatchSize            int
+	performerLockTTL        time.Duration
+	taskCacheTTL            time.Duration
+	duplicateTaskWindow     time.Duration
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
@@ -35,21 +35,21 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 	ctx, cancel := context.WithCancel(context.Background())
 
 	scheduler := &TimeBasedScheduler{
-		ctx:        ctx,
-		cancel:     cancel,
-		logger:     logger,
-		activeTasks: make(map[int64]*types.ScheduleTimeTaskData),
-		taskQueue:   make(chan *types.ScheduleTimeTaskData, 100),
-		dbClient:   dbClient,
-		aggClient:  aggClient,
-		metrics:    metrics.NewCollector(),
+		ctx:                     ctx,
+		cancel:                  cancel,
+		logger:                  logger,
+		activeTasks:             make(map[int64]*types.ScheduleTimeTaskData),
+		taskQueue:               make(chan *types.ScheduleTimeTaskData, 100),
+		dbClient:                dbClient,
+		aggClient:               aggClient,
+		metrics:                 metrics.NewCollector(),
 		schedulerSigningAddress: config.GetSchedulerSigningAddress(),
-		pollingInterval: config.GetPollingInterval(),
-		pollingLookAhead: config.GetPollingLookAhead(),
-		jobBatchSize: config.GetJobBatchSize(),
-		performerLockTTL: config.GetPerformerLockTTL(),
-		taskCacheTTL: config.GetTaskCacheTTL(),
-		duplicateTaskWindow: config.GetDuplicateTaskWindow(),
+		pollingInterval:         config.GetPollingInterval(),
+		pollingLookAhead:        config.GetPollingLookAhead(),
+		jobBatchSize:            config.GetJobBatchSize(),
+		performerLockTTL:        config.GetPerformerLockTTL(),
+		taskCacheTTL:            config.GetTaskCacheTTL(),
+		duplicateTaskWindow:     config.GetDuplicateTaskWindow(),
 	}
 
 	// Start metrics collection

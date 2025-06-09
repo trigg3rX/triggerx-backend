@@ -11,8 +11,8 @@ import (
 )
 
 type Config struct {
-	devMode           bool
-	
+	devMode bool
+
 	// Contract Addresses to listen for events
 	avsGovernanceAddress     string
 	attestationCenterAddress string

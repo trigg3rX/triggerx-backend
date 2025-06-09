@@ -14,11 +14,11 @@ import (
 
 // AggregatorClient handles communication with the aggregator service
 type AggregatorClient struct {
-	logger     logging.Logger
-	config     AggregatorClientConfig
-	privateKey *ecdsa.PrivateKey
-	publicKey  *ecdsa.PublicKey
-	httpClient *retry.HTTPClient
+	logger            logging.Logger
+	config            AggregatorClientConfig
+	privateKey        *ecdsa.PrivateKey
+	publicKey         *ecdsa.PublicKey
+	httpClient        *retry.HTTPClient
 	TaskStreamManager *redis.TaskStreamManager
 }
 
@@ -57,7 +57,7 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig, tsm 
 		config:            cfg,
 		privateKey:        privateKey,
 		publicKey:         publicKey,
-		httpClient: httpClient,
+		httpClient:        httpClient,
 		TaskStreamManager: tsm,
 	}, nil
 }
@@ -76,6 +76,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		ctxWithTimeout, cancel := context.WithTimeout(ctx, c.httpClient.GetTimeout())
 		defer cancel()
 
+		// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
 		err = rpcClient.CallContext(ctxWithTimeout, result, method, params)
 		if err != nil {
 			return nil, fmt.Errorf("RPC call failed: %w", err)

@@ -27,7 +27,7 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Keeper already exists"})
 		return
 	}
-	
+
 	currentKeeperID, err := h.keeperRepository.CreateKeeper(keeperData)
 	if err != nil {
 		h.logger.Errorf("Error creating keeper: %v", err)

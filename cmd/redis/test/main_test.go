@@ -112,8 +112,8 @@ func TestMain(t *testing.T) {
 	})
 
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.RedisProcess,
-		IsDevelopment:   true,
+		ProcessName:   logging.RedisProcess,
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {

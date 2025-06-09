@@ -32,8 +32,8 @@ func (m *MockDBServerClient) Close() error {
 
 func TestEventSchedulerInitialization(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "event-scheduler-test",
-		IsDevelopment:   true,
+		ProcessName:   "event-scheduler-test",
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {
@@ -55,8 +55,8 @@ func TestEventSchedulerInitialization(t *testing.T) {
 
 func TestEventSchedulerServer(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "event-scheduler-test",
-		IsDevelopment:   true,
+		ProcessName:   "event-scheduler-test",
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {

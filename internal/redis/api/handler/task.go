@@ -35,9 +35,7 @@ type ValidationResponse struct {
 // Handler encapsulates the dependencies for health handlers
 // Add tsm (TaskStreamManager) to Handler
 
-
 // NewHandler creates a new instance of Handler
-
 
 func (h *Handler) HandleP2PMessage(c *gin.Context) {
 	if c.Request.Method != http.MethodPost {

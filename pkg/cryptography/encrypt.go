@@ -3,10 +3,10 @@ package cryptography
 import (
 	"fmt"
 
+	"crypto/rand"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
-	"crypto/rand"
 )
 
 func EncryptMessage(publicKeyHex string, message string) (string, error) {

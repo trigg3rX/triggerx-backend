@@ -6,9 +6,9 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TimeJobRepository interface {
@@ -32,10 +32,10 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.ExpirationTime, timeJob.Recurring, timeJob.NextExecutionTimestamp, 
+		timeJob.JobID, timeJob.ExpirationTime, timeJob.Recurring, timeJob.NextExecutionTimestamp,
 		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
 		timeJob.SpecificSchedule, timeJob.Timezone, timeJob.TargetChainID,
-		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType, 
+		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType,
 		timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl, false, true).Exec()
 
 	if err != nil {
@@ -48,10 +48,10 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
-		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp, 
+		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp,
 		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
 		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
-		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
 		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive)
 	if err != nil {
 		return types.TimeJobData{}, errors.New("failed to get time job by job ID")
@@ -84,11 +84,11 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 
 	var timeJobs []commonTypes.ScheduleTimeTaskData
 	var timeJob commonTypes.ScheduleTimeTaskData
-	
+
 	for iter.Scan(
 		&timeJob.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
 		&timeJob.ScheduleType, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.NextExecutionTimestamp,
-		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType, 
+		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
 		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl,
 	) {
 		if timeJob.DynamicArgumentsScriptUrl != "" {

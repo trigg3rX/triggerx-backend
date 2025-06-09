@@ -2,8 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -91,56 +93,68 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	// TODO: Get the performer data from redis service, which gets it from online keepers list from health service, and sets the performerLock in redis
 	// For now, I fixed the performer
 	performerData := types.GetPerformerData{
-		KeeperID: 3,
+		KeeperID:      3,
 		KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 	}
 
 	// Generate the task data to send to the performer
 	targetData := types.TaskTargetData{
-		TaskID: task.TaskID,
-		TaskDefinitionID: task.TaskDefinitionID,
-		TargetChainID: task.TargetChainID,
-		TargetContractAddress: task.TargetContractAddress,
-		TargetFunction: task.TargetFunction,
-		ABI: task.ABI,
-		ArgType: task.ArgType,
-		Arguments: task.Arguments,
+		TaskID:                    task.TaskID,
+		TaskDefinitionID:          task.TaskDefinitionID,
+		NextExecutionTimestamp:    task.NextExecutionTimestamp,
+		TargetChainID:             task.TargetChainID,
+		TargetContractAddress:     task.TargetContractAddress,
+		TargetFunction:            task.TargetFunction,
+		ABI:                       task.ABI,
+		ArgType:                   task.ArgType,
+		Arguments:                 task.Arguments,
 		DynamicArgumentsScriptUrl: task.DynamicArgumentsScriptUrl,
 	}
 	triggerData := types.TaskTriggerData{
-		TaskID: task.TaskID,
-		ExpirationTime: task.ExpirationTime,
-		TriggerTimestamp: time.Now(),
-		TimeScheduleType: task.ScheduleType,
-		TimeCronExpression: task.CronExpression,
+		TaskID:               task.TaskID,
+		ExpirationTime:       task.ExpirationTime,
+		TriggerTimestamp:     time.Now(),
+		TimeScheduleType:     task.ScheduleType,
+		TimeCronExpression:   task.CronExpression,
 		TimeSpecificSchedule: task.SpecificSchedule,
-		TimeInterval: task.TimeInterval,
-		NextExecutionTimestamp: task.NextExecutionTimestamp,
+		TimeInterval:         task.TimeInterval,
 	}
-
 	schedulerSignatureData := types.SchedulerSignatureData{
-		TaskID: task.TaskID,
+		TaskID:                  task.TaskID,
 		SchedulerSigningAddress: s.schedulerSigningAddress,
 	}
-
 	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID: task.TaskID,
-		PerformerData: performerData,
-		TargetData: &targetData,
-		TriggerData: &triggerData,
+		TaskID:             task.TaskID,
+		PerformerData:      performerData,
+		TargetData:         &targetData,
+		TriggerData:        &triggerData,
 		SchedulerSignature: &schedulerSignatureData,
 	}
 
-	signature, err := cryptography.SignJSONMessage(sendTaskData, s.schedulerSigningAddress)
+	// Sign the task data
+	signature, err := cryptography.SignJSONMessage(sendTaskData, config.GetSchedulerSigningKey())
 	if err != nil {
 		s.logger.Errorf("Failed to sign task data: %v", err)
 		return
 	}
-
 	sendTaskData.SchedulerSignature.SchedulerSignature = signature
 
+	jsonData, err := json.Marshal(sendTaskData)
+	if err != nil {
+		s.logger.Errorf("Failed to marshal task data: %v", err)
+		return
+	}
+	dataBytes := []byte(jsonData)
+
+	broadcastDataForPerformer := types.BroadcastDataForPerformer{
+		TaskID:           task.TaskID,
+		TaskDefinitionID: task.TaskDefinitionID,
+		PerformerAddress: performerData.KeeperAddress,
+		Data:             dataBytes,
+	}
+
 	// Execute the actual job
-	executionSuccess := s.performJobExecution(sendTaskData)
+	executionSuccess := s.performJobExecution(broadcastDataForPerformer)
 
 	if executionSuccess {
 		metrics.TasksCompleted.Inc()
@@ -154,8 +168,8 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 }
 
 // performJobExecution handles the actual job execution logic
-func (s *TimeBasedScheduler) performJobExecution(sendTaskData types.SendTaskDataToKeeper) bool {
-	success, err := s.aggClient.SendTaskToPerformer(s.ctx, &sendTaskData)
+func (s *TimeBasedScheduler) performJobExecution(broadcastDataForPerformer types.BroadcastDataForPerformer) bool {
+	success, err := s.aggClient.SendTaskToPerformer(s.ctx, &broadcastDataForPerformer)
 
 	if err != nil {
 		s.logger.Errorf("Failed to send task to performer: %v", err)

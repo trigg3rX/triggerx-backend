@@ -24,8 +24,8 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.RegistrarProcess,
-		IsDevelopment:   config.IsDevMode(),
+		ProcessName:   logging.RegistrarProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
 	logger, err := logging.NewZapLogger(logConfig)
@@ -79,6 +79,6 @@ func main() {
 
 	// Cleanup
 	registrarService.Stop()
-	
+
 	logger.Info("Shutdown complete")
 }

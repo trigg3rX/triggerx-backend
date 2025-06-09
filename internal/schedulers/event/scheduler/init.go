@@ -94,14 +94,14 @@ func (s *EventBasedScheduler) Stop() {
 	// 		runningWorkers++
 	// 	}
 
-		// workerDetails = append(workerDetails, map[string]interface{}{
-		// 	"job_id":           jobID,
-		// 	"is_running":       isRunning,
-		// 	"trigger_chain_id": worker.Job.TriggerChainID,
-		// 	"contract_address": worker.Job.TriggerContractAddress,
-		// 	"trigger_event":    worker.Job.TriggerEvent,
-		// 	"last_block":       worker.LastBlock,
-		// })
+	// workerDetails = append(workerDetails, map[string]interface{}{
+	// 	"job_id":           jobID,
+	// 	"is_running":       isRunning,
+	// 	"trigger_chain_id": worker.Job.TriggerChainID,
+	// 	"contract_address": worker.Job.TriggerContractAddress,
+	// 	"trigger_event":    worker.Job.TriggerEvent,
+	// 	"last_block":       worker.LastBlock,
+	// })
 	// }
 	s.workersMutex.RUnlock()
 

@@ -10,25 +10,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTargetData) (types.PerformerActionData, error) {
-	chainRpcUrl := e.getChainRpcUrl(taskTargetData.TargetChainID)
-
-	chainClient, err := ethclient.Dial(chainRpcUrl)
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to connect to chain: %v", err)
-	}
-	defer chainClient.Close()
-
+func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTargetData, client *ethclient.Client) (types.PerformerActionData, error) {
 	if taskTargetData.TargetContractAddress == "" {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
@@ -50,7 +43,11 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to create container: %v", err)
 	}
-	defer e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID)
+	defer func() {
+		if err := e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID); err != nil {
+			e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
+		}
+	}()
 
 	result, err := e.codeExecutor.MonitorExecution(context.Background(), e.codeExecutor.DockerManager.Cli, containerID, 1)
 	if err != nil {
@@ -87,7 +84,7 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 	nonce := lastUsedNonce + 1
 	config.IncrementChainNonce(taskTargetData.TargetChainID)
 
-	gasPrice, err := chainClient.SuggestGasPrice(context.Background())
+	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
 		return types.PerformerActionData{}, err
 	}
@@ -103,8 +100,8 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
 
-	executionContractAddress := e.getExecutionContractAddress(taskTargetData.TargetChainID)
-	chainID, err := chainClient.ChainID(context.Background())
+	executionContractAddress := utils.GetExecutionContractAddress(taskTargetData.TargetChainID)
+	chainID, err := client.ChainID(context.Background())
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to get chain ID: %v", err)
 	}
@@ -116,7 +113,7 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 		return types.PerformerActionData{}, err
 	}
 
-	err = chainClient.SendTransaction(context.Background(), signedTx)
+	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
 		return types.PerformerActionData{}, err
 	}
@@ -124,27 +121,27 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 	e.logger.Debugf("Transaction sent to execution contract: %s, tx hash: %s",
 		executionContractAddress, signedTx.Hash().Hex())
 	// Wait for transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), chainClient, signedTx)
+	receipt, err := bind.WaitMined(context.Background(), client, signedTx)
 	if err != nil {
 		e.logger.Warnf("Error waiting for transaction: %v", err)
 		return types.PerformerActionData{}, err
 	}
 
 	executionResult := types.PerformerActionData{
-		TaskID: taskTargetData.TaskID,
-		ActionTxHash:  signedTx.Hash().Hex(),
-		GasUsed:       strconv.FormatUint(receipt.GasUsed, 10),
-		Status:        receipt.Status == ethtypes.ReceiptStatusSuccessful,
-		MemoryUsage:   result.Stats.MemoryUsage,
-		CPUPercentage: result.Stats.CPUPercentage,
-		NetworkRx:     result.Stats.RxBytes,
-		NetworkTx:     result.Stats.TxBytes,
-		BlockRead:     result.Stats.BlockRead,
-		BlockWrite:    result.Stats.BlockWrite,
-		BandwidthRate: result.Stats.BandwidthRate,
-		TotalFee:      result.Stats.TotalCost,
-		StaticComplexity: result.Stats.StaticComplexity,
-		DynamicComplexity: result.Stats.DynamicComplexity,
+		TaskID:             taskTargetData.TaskID,
+		ActionTxHash:       signedTx.Hash().Hex(),
+		GasUsed:            strconv.FormatUint(receipt.GasUsed, 10),
+		Status:             receipt.Status == ethtypes.ReceiptStatusSuccessful,
+		MemoryUsage:        result.Stats.MemoryUsage,
+		CPUPercentage:      result.Stats.CPUPercentage,
+		NetworkRx:          result.Stats.RxBytes,
+		NetworkTx:          result.Stats.TxBytes,
+		BlockRead:          result.Stats.BlockRead,
+		BlockWrite:         result.Stats.BlockWrite,
+		BandwidthRate:      result.Stats.BandwidthRate,
+		TotalFee:           result.Stats.TotalCost,
+		StaticComplexity:   result.Stats.StaticComplexity,
+		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
 	}
 

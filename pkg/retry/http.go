@@ -63,8 +63,8 @@ func NewHTTPClient(httpConfig *HTTPRetryConfig, logger logging.Logger) (*HTTPCli
 	client := &http.Client{
 		Timeout: httpConfig.Timeout,
 		Transport: &http.Transport{
-			IdleConnTimeout:     httpConfig.IdleConnTimeout,
-			DisableKeepAlives:   false,
+			IdleConnTimeout:   httpConfig.IdleConnTimeout,
+			DisableKeepAlives: false,
 			DialContext: (&net.Dialer{
 				Timeout:   httpConfig.Timeout / 2,
 				KeepAlive: httpConfig.IdleConnTimeout,
@@ -173,7 +173,7 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 		}
 
 		if c.HTTPConfig.RetryConfig.LogRetryAttempt {
-			c.logger.Warnf("Attempt %d/%d failed with status %d%s. Retrying in %v...", 
+			c.logger.Warnf("Attempt %d/%d failed with status %d%s. Retrying in %v...",
 				attempt, c.HTTPConfig.RetryConfig.MaxRetries, resp.StatusCode, bodyPreview, delay)
 		}
 

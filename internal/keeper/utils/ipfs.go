@@ -1,12 +1,12 @@
 package utils
 
 import (
-	"fmt"
-	"net/http"
 	"bytes"
-	"mime/multipart"
 	"encoding/json"
+	"fmt"
 	"io"
+	"mime/multipart"
+	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"

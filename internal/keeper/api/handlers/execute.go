@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -14,7 +15,8 @@ import (
 
 // ExecuteTask handles task execution requests
 func (h *TaskHandler) ExecuteTask(c *gin.Context) {
-	h.logger.Infof("Executing task ...")
+	traceID := h.getTraceID(c)
+	h.logger.Info("Executing task ...", "trace_id", traceID)
 
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -53,51 +55,23 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	// Convert to proper types
-	var performerData types.GetPerformerData
-	performerDataBytes, err := json.Marshal(requestData.PerformerData)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid performer data format"})
-		return
-	}
-	if err := json.Unmarshal(performerDataBytes, &performerData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse performer data"})
-		return
-	}
-
-	if config.GetKeeperAddress() != performerData.KeeperAddress {
-		h.logger.Infof("I am not the performer: %s", performerData.KeeperAddress)
+	if config.GetKeeperAddress() != requestData.PerformerData.KeeperAddress {
+		h.logger.Infof("I am not the performer: %s", requestData.PerformerData.KeeperAddress)
 		c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
 		return
 	} else {
-		var targetData types.TaskTargetData
-		targetDataBytes, err := json.Marshal(requestData.TargetData)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid time job data format"})
-			return
-		}
-		if err := json.Unmarshal(targetDataBytes, &targetData); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse time job data"})
-			return
-		}
+		h.logger.Infof("I am the performer: %s", requestData.PerformerData.KeeperAddress)
 
-		var triggerData types.TaskTriggerData
-		triggerDataBytes, err := json.Marshal(requestData.TriggerData)
+		h.logger.Info("Execution starts for task ID: ", "task_id", requestData.TargetData.TaskID, "trace_id", traceID)
+		h.logger.Infof("Task Definition ID: %d | Target Chain ID: %s", requestData.TargetData.TaskDefinitionID, requestData.TargetData.TargetChainID)
+		success, err := h.executor.ExecuteTask(context.Background(), &requestData, traceID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})
-			return
-		}
-		if err := json.Unmarshal(triggerDataBytes, &triggerData); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
-			return
-		}
-
-		success, err := h.executor.ExecuteTask(&targetData, &triggerData)
-		if err != nil {
+			h.logger.Error("Task execution failed", "error", err, "trace_id", traceID)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
 			return
 		}
 
+		h.logger.Info("Task execution completed", "success", success, "trace_id", traceID)
 		c.JSON(http.StatusOK, gin.H{"success": strconv.FormatBool(success)})
 	}
 }

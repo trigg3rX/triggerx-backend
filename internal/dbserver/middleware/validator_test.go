@@ -18,7 +18,7 @@ func setupTestRouter() (*gin.Engine, *Validator) {
 	router := gin.New()
 
 	loggerConfig := logging.LoggerConfig{
-		ProcessName: logging.DatabaseProcess,
+		ProcessName:   logging.DatabaseProcess,
 		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(loggerConfig)

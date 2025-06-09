@@ -3,14 +3,13 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"github.com/gin-gonic/gin"
 
 	"github.com/stretchr/testify/assert"
 )
-
 
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)

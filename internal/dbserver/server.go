@@ -11,8 +11,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type Server struct {
@@ -89,12 +89,12 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	}
 
 	s := &Server{
-		router:        router,
-		db:            db,
-		logger:        logger,
-		rateLimiter:   rateLimiter,
-		redisClient:   redisClient,
-		validator:     middleware.NewValidator(logger),
+		router:      router,
+		db:          db,
+		logger:      logger,
+		rateLimiter: rateLimiter,
+		redisClient: redisClient,
+		validator:   middleware.NewValidator(logger),
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),

@@ -97,7 +97,7 @@ func (s *EventBasedScheduler) createJobWorker(jobData *commonTypes.ScheduleEvent
 		EventSig:     eventSig,
 		ContractAddr: contractAddr,
 		LastBlock:    0,
-		IsActive:    false,
+		IsActive:     false,
 		ManagerID:    s.managerID,
 	}
 

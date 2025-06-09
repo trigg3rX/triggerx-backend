@@ -36,9 +36,9 @@ func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
 	if err == gocql.ErrNotFound {
 		return -1, nil
 	}
-	
+
 	err = r.db.Session().Query(queries.CreateJobDataQuery,
-		lastJobID + 1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
+		lastJobID+1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
 		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone).Exec()
 
 	if err != nil {
@@ -63,7 +63,7 @@ func (r *jobRepository) UpdateJobLastExecutedAt(jobID int64, taskID int64, jobCo
 	if err != nil {
 		return errors.New("failed to get task ids by job id")
 	}
-	
+
 	existingTaskIDs = append(existingTaskIDs, taskID)
 	err = r.db.Session().Query(queries.UpdateJobDataLastExecutedAtQuery,
 		existingTaskIDs, jobCostActual, lastExecutedAt).Exec()

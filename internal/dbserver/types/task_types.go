@@ -26,30 +26,30 @@ type CreateTaskDataRequest struct {
 }
 
 type UpdateTaskExecutionDataRequest struct {
-	TaskID int64 `json:"task_id" validate:"required"`
+	TaskID             int64     `json:"task_id" validate:"required"`
 	ExecutionTimestamp time.Time `json:"execution_timestamp" validate:"required"`
-	ExecutionTxHash string `json:"execution_tx_hash" validate:"required"`
-	ProofOfTask string `json:"proof_of_task" validate:"required"`
-	TaskOpXCost float64 `json:"task_opx_cost" validate:"required"`
+	ExecutionTxHash    string    `json:"execution_tx_hash" validate:"required"`
+	ProofOfTask        string    `json:"proof_of_task" validate:"required"`
+	TaskOpXCost        float64   `json:"task_opx_cost" validate:"required"`
 }
 
 type UpdateTaskAttestationDataRequest struct {
-	TaskID int64 `json:"task_id" validate:"required"`
-	TaskNumber int64 `json:"task_number" validate:"required"`
-	TaskAttesterIDs []int64 `json:"task_attester_ids" validate:"required"`
-	TpSignature []byte `json:"tp_signature" validate:"required"`
-	TaSignature []byte `json:"ta_signature" validate:"required"`
-	TaskSubmissionTxHash string `json:"task_submission_tx_hash" validate:"required"`
-	IsSuccessful bool `json:"is_successful" validate:"required"`
+	TaskID               int64   `json:"task_id" validate:"required"`
+	TaskNumber           int64   `json:"task_number" validate:"required"`
+	TaskAttesterIDs      []int64 `json:"task_attester_ids" validate:"required"`
+	TpSignature          []byte  `json:"tp_signature" validate:"required"`
+	TaSignature          []byte  `json:"ta_signature" validate:"required"`
+	TaskSubmissionTxHash string  `json:"task_submission_tx_hash" validate:"required"`
+	IsSuccessful         bool    `json:"is_successful" validate:"required"`
 }
 
 type TasksByJobIDResponse struct {
-	TaskID int64 `json:"task_id"`
-	TaskNumber int64 `json:"task_number"`
-	TaskOpXCost float64 `json:"task_opx_cost"`
+	TaskID             int64     `json:"task_id"`
+	TaskNumber         int64     `json:"task_number"`
+	TaskOpXCost        float64   `json:"task_opx_cost"`
 	ExecutionTimestamp time.Time `json:"execution_timestamp"`
-	ExecutionTxHash string `json:"execution_tx_hash"`
-	TaskPerformerID int64 `json:"task_performer_id"`
-	TaskAttesterIDs []int64 `json:"task_attester_ids"`
-	IsSuccessful bool `json:"is_successful"`
+	ExecutionTxHash    string    `json:"execution_tx_hash"`
+	TaskPerformerID    int64     `json:"task_performer_id"`
+	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
+	IsSuccessful       bool      `json:"is_successful"`
 }
