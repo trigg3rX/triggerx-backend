@@ -15,8 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Important for the action to work properly
-          ref: dev  # Explicitly checkout the dev branch
+          token: ${{ secrets.ACTIONS_TOKEN }}
       
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -49,8 +48,9 @@ jobs:
           token: ${{ secrets.ACTIONS_TOKEN }}
           title: "chore(deps): update Go dependencies"
           branch: "update-go-dependencies"
-          base: dev
           commit-message: "chore(deps): update Go dependencies"
           body: "Automated dependency updates.\nPlease review the changes before merging."
+          base: dev
           committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
           author: "5kyguy <167390221+5kyguy@users.noreply.github.com>"
+          delete-branch: true
