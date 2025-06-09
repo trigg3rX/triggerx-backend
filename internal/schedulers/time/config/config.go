@@ -26,11 +26,11 @@ type Config struct {
 	schedulerSigningAddress string
 
 	// Time Durations
-	pollingInterval  time.Duration
-	pollingLookAhead time.Duration
-	jobBatchSize int
-	performerLockTTL time.Duration
-	taskCacheTTL time.Duration
+	pollingInterval     time.Duration
+	pollingLookAhead    time.Duration
+	jobBatchSize        int
+	performerLockTTL    time.Duration
+	taskCacheTTL        time.Duration
 	duplicateTaskWindow time.Duration
 }
 

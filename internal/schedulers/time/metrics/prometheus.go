@@ -50,7 +50,6 @@ var (
 		Help:      "Total number of jobs failed",
 	})
 
-	
 	TaskExecutionTime = promauto.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",

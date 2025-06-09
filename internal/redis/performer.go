@@ -1,6 +1,6 @@
 package redis
 
-// TODO: 
+// TODO:
 // - Add a variable and function to maintain the current performer ID, for round robin selection of performers
 // - Add a function which maintains the performer lock in redis
 // - Add a function to fetch the available performers from health service

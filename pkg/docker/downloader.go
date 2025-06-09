@@ -3,8 +3,8 @@ package docker
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 

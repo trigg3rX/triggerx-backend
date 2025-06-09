@@ -9,4 +9,3 @@ type UpdateJobRequest struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 	LastExecutedAt time.Time `json:"last_executed_at"`
 }
-

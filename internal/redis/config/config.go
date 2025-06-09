@@ -33,9 +33,9 @@ type Config struct {
 	poolTimeout  time.Duration
 
 	// Stream settings
-	streamMaxLen int
-	jobStreamTTL    time.Duration
-	taskStreamTTL   time.Duration
+	streamMaxLen  int
+	jobStreamTTL  time.Duration
+	taskStreamTTL time.Duration
 }
 
 var cfg Config

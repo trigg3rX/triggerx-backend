@@ -1,8 +1,8 @@
 package retry
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,7 +13,7 @@ import (
 // TestRetry tests the basic retry functionality
 func TestRetry(t *testing.T) {
 	config := logging.LoggerConfig{
-		ProcessName: logging.TestProcess,
+		ProcessName:   logging.TestProcess,
 		IsDevelopment: true,
 	}
 
@@ -118,7 +118,7 @@ func TestRetry(t *testing.T) {
 // TestWithExponentialBackoff tests the convenience function
 func TestWithExponentialBackoff(t *testing.T) {
 	config := logging.LoggerConfig{
-		ProcessName: logging.TestProcess,
+		ProcessName:   logging.TestProcess,
 		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(config)
@@ -149,7 +149,7 @@ func TestWithExponentialBackoff(t *testing.T) {
 // TestRetryWithDifferentTypes tests retry with different return types
 func TestRetryWithDifferentTypes(t *testing.T) {
 	config := logging.LoggerConfig{
-		ProcessName: logging.TestProcess,
+		ProcessName:   logging.TestProcess,
 		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(config)

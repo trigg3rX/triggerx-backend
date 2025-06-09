@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -25,7 +26,8 @@ type ValidationResponse struct {
 
 // ValidateTask handles task validation requests
 func (h *TaskHandler) ValidateTask(c *gin.Context) {
-	h.logger.Infof("Validating task ...")
+	traceID := h.getTraceID(c)
+	h.logger.Info("Validating task ...", "trace_id", traceID)
 
 	var taskRequest TaskValidationRequest
 	if err := c.ShouldBindJSON(&taskRequest); err != nil {
@@ -67,10 +69,11 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	isValid := false
 	var validationErr error
 
-	isValid, validationErr = h.validator.ValidateTask(ipfsData)
+	h.logger.Info("Validating task ...", "trace_id", traceID)
+	isValid, validationErr = h.validator.ValidateTask(context.Background(), ipfsData, traceID)
 
 	if validationErr != nil {
-		h.logger.Errorf("Validation error: %v", validationErr)
+		h.logger.Error("Validation error", "error", validationErr, "trace_id", traceID)
 		c.JSON(http.StatusOK, ValidationResponse{
 			Data:    false,
 			Error:   true,
@@ -79,6 +82,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 		return
 	}
 
+	h.logger.Info("Task validation completed", "trace_id", traceID)
 	c.JSON(http.StatusOK, ValidationResponse{
 		Data:    isValid,
 		Error:   false,

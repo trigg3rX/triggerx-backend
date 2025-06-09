@@ -30,8 +30,8 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.EventSchedulerProcess,
-		IsDevelopment:   config.IsDevMode(),
+		ProcessName:   logging.EventSchedulerProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
 	logger, err := logging.NewZapLogger(logConfig)

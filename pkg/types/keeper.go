@@ -15,16 +15,16 @@ type KeeperHealthCheckIn struct {
 
 // KeeperHealthCheckInResponse represents the response from the health check-in endpoint
 type KeeperHealthCheckInResponse struct {
-	Status bool `json:"status"`
+	Status bool   `json:"status"`
 	Data   string `json:"data"`
 }
 
 // Data from performer's action execution
 type PerformerActionData struct {
-	TaskID       int64     `json:"task_id"`
-	ActionTxHash string    `json:"action_tx_hash"`
-	GasUsed      string    `json:"gas_used"`
-	Status       bool      `json:"status"`
+	TaskID       int64  `json:"task_id"`
+	ActionTxHash string `json:"action_tx_hash"`
+	GasUsed      string `json:"gas_used"`
+	Status       bool   `json:"status"`
 
 	MemoryUsage   uint64  `json:"memory_usage"`
 	CPUPercentage float64 `json:"cpu_percentage"`
@@ -34,42 +34,42 @@ type PerformerActionData struct {
 	BlockWrite    uint64  `json:"block_write"`
 	BandwidthRate float64 `json:"bandwidth_rate"`
 
-	TotalFee          float64       `json:"total_fee"`
-	StaticComplexity  float64       `json:"static_complexity"`
-	DynamicComplexity float64       `json:"dynamic_complexity"`
-	ComplexityIndex   float64       `json:"complexity_index"`
-	ExecutionTimestamp     time.Time `json:"execution_timestamp"`
+	TotalFee           float64   `json:"total_fee"`
+	StaticComplexity   float64   `json:"static_complexity"`
+	DynamicComplexity  float64   `json:"dynamic_complexity"`
+	ComplexityIndex    float64   `json:"complexity_index"`
+	ExecutionTimestamp time.Time `json:"execution_timestamp"`
 }
 
 // Data from keeper's proof generation for execution done above
 type ProofData struct {
-	TaskID    int64     `json:"task_id"`
-	ProofOfTask   string `json:"proof_of_task"`
-	CertificateHash string `json:"certificate_hash"`
+	TaskID               int64     `json:"task_id"`
+	ProofOfTask          string    `json:"proof_of_task"`
+	CertificateHash      string    `json:"certificate_hash"`
 	CertificateTimestamp time.Time `json:"certificate_timestamp"`
 }
 
 type PerformerSignatureData struct {
-	TaskID int64 `json:"task_id"`
+	TaskID                  int64  `json:"task_id"`
 	PerformerSigningAddress string `json:"performer_signing_address"`
-	PerformerSignature string `json:"performer_signature"`
+	PerformerSignature      string `json:"performer_signature"`
 }
 
 // Data to Upload to IPFS
 type IPFSData struct {
-	TargetData *TaskTargetData `json:"target_data"`
-	TriggerData *TaskTriggerData `json:"trigger_data"`
-	SchedulerSignature *SchedulerSignatureData `json:"scheduler_signature_data"`
-	ActionData *PerformerActionData `json:"action_data"`
-	ProofData *ProofData `json:"proof_data"`
+	TaskData           *SendTaskDataToKeeper   `json:"task_data"`
+	ActionData         *PerformerActionData    `json:"action_data"`
+	ProofData          *ProofData              `json:"proof_data"`
 	PerformerSignature *PerformerSignatureData `json:"performer_signature_data"`
 }
 
 // Data to Broadcast to Attesters from performer
-type PerformerBroadcastData struct {
+type BroadcastDataForValidators struct {
 	ProofOfTask        string `json:"proof_of_task"`
-	TaskDefinitionID   int `json:"task_definition_id"`
+	Data               []byte `json:"data"`
+	TaskDefinitionID   int    `json:"task_definition_id"`
 	PerformerAddress   string `json:"performer_address"`
 	PerformerSignature string `json:"performer_signature"`
-	IPFSDataCID        string `json:"ipfs_data_cid"`
+	SignatureType      string `json:"signature_type"`
+	TargetChainID      int    `json:"target_chain_id"`
 }

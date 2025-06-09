@@ -36,8 +36,8 @@ func TestMain(t *testing.T) {
 	})
 
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.KeeperProcess,
-		IsDevelopment:   true,
+		ProcessName:   logging.KeeperProcess,
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {

@@ -41,8 +41,8 @@ func TestMain(t *testing.T) {
 	// Test HTTP server setup
 	t.Run("HTTP Server Setup", func(t *testing.T) {
 		logConfig := logging.LoggerConfig{
-			ProcessName:     "health-test",
-			IsDevelopment:   true,
+			ProcessName:   "health-test",
+			IsDevelopment: true,
 		}
 		logger, err := logging.NewZapLogger(logConfig)
 		if err != nil {
@@ -90,8 +90,8 @@ func TestMain(t *testing.T) {
 	// Test graceful shutdown
 	t.Run("Graceful Shutdown", func(t *testing.T) {
 		logConfig := logging.LoggerConfig{
-			ProcessName:     "health-test",
-			IsDevelopment:   true,
+			ProcessName:   "health-test",
+			IsDevelopment: true,
 		}
 		logger, err := logging.NewZapLogger(logConfig)
 		if err != nil {

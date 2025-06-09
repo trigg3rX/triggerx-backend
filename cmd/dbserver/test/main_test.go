@@ -51,8 +51,8 @@ func TestMain(t *testing.T) {
 
 	// Test logger initialization
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "dbserver",
-		IsDevelopment:   true,
+		ProcessName:   "dbserver",
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {

@@ -299,11 +299,11 @@ func TestHandleCheckInEvent(t *testing.T) {
 		{
 			name: "Valid keeper check-in",
 			keeperHealth: commonTypes.KeeperHealthCheckIn{
-				KeeperAddress:    "0x123",
-				Version:          "0.1.2",
-				Signature:        "0x456",
-				ConsensusPubKey:  "0x789",
-				PeerID:           "test-peer",
+				KeeperAddress:   "0x123",
+				Version:         "0.1.2",
+				Signature:       "0x456",
+				ConsensusPubKey: "0x789",
+				PeerID:          "test-peer",
 			},
 			expectedStatus: http.StatusOK,
 			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
@@ -353,11 +353,11 @@ func TestHandleCheckInEvent(t *testing.T) {
 		{
 			name: "Invalid signature",
 			keeperHealth: commonTypes.KeeperHealthCheckIn{
-				KeeperAddress:    "0x123",
-				Version:          "0.1.2",
-				Signature:        "invalid",
-				ConsensusPubKey:  "0x789",
-				PeerID:           "test-peer",
+				KeeperAddress:   "0x123",
+				Version:         "0.1.2",
+				Signature:       "invalid",
+				ConsensusPubKey: "0x789",
+				PeerID:          "test-peer",
 			},
 			expectedStatus: http.StatusPreconditionFailed,
 			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {

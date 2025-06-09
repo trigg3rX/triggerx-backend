@@ -12,6 +12,7 @@ const (
 	EventCacheTTL        = 10 * time.Minute // Cache TTL for event data
 	DuplicateEventWindow = 30 * time.Second // Window to prevent duplicate event processing
 )
+
 // JobScheduleRequest represents the request to schedule a new job
 type JobScheduleRequest struct {
 	JobID                         int64    `json:"job_id" binding:"required"`

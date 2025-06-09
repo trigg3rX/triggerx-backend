@@ -27,9 +27,9 @@ echo "END_EXECUTION"
 )
 
 type Manager struct {
-	Cli  *client.Client
-	config  DockerConfig
-	logger  logging.Logger
+	Cli    *client.Client
+	config DockerConfig
+	logger logging.Logger
 }
 
 func NewManager(cli *client.Client, config DockerConfig, logger logging.Logger) *Manager {
@@ -57,7 +57,10 @@ func (m *Manager) CleanupImages(ctx context.Context) error {
 	}
 
 	for _, dockerImage := range images {
-		m.Cli.ImageRemove(ctx, dockerImage.ID, image.RemoveOptions{Force: true})
+		_, err := m.Cli.ImageRemove(ctx, dockerImage.ID, image.RemoveOptions{Force: true})
+		if err != nil {
+			m.logger.Errorf("failed to remove image: %v", err)
+		}
 	}
 	return nil
 }
@@ -92,8 +95,8 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 			fmt.Sprintf("%s:/code", absPath),
 		},
 		Resources: container.Resources{
-			Memory:     int64(m.config.MemoryLimitBytes()),
-			NanoCPUs:   int64(m.config.CPULimit * 1e9),
+			Memory:   int64(m.config.MemoryLimitBytes()),
+			NanoCPUs: int64(m.config.CPULimit * 1e9),
 		},
 	}
 
@@ -111,7 +114,7 @@ func (m *Manager) CleanupContainer(ctx context.Context, containerID string) erro
 		m.logger.Infof("auto cleanup is disabled, skipping container cleanup")
 		return nil
 	}
-	
+
 	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 

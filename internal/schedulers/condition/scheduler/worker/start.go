@@ -9,8 +9,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ConditionWorker represents an individual worker monitoring a specific condition

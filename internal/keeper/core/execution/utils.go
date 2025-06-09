@@ -10,35 +10,8 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-func (e *TaskExecutor) getChainRpcUrl(chainID string) string {
-	switch chainID {
-	case "11155111":
-		return fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
-	case "11155420":
-		return fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
-	case "84532":
-		return fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
-	default:
-		return ""
-	}
-}
-
-func (e *TaskExecutor) getExecutionContractAddress(chainID string) string {
-	switch chainID {
-	case "11155111":
-		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
-	case "11155420":
-		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
-	case "84532":
-		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
-	default:
-		return ""
-	}
-}
 
 func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {
 	if targetData.ABI == "" {
