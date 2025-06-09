@@ -91,6 +91,9 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
 	s.router.Use(TraceMiddleware())
+	s.router.Use(MetricsMiddleware())
+	s.router.Use(TaskMetricsMiddleware())
+	s.router.Use(RestartTrackingMiddleware())
 	s.router.Use(LoggerMiddleware(s.logger))
 	s.router.Use(ErrorMiddleware(s.logger))
 }

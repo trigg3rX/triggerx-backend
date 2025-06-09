@@ -14,6 +14,7 @@ import (
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
@@ -117,6 +118,8 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 			Data:   err.Error(),
 		}, fmt.Errorf("health check failed: %w", err)
 	}
+
+	metrics.SuccessfulHealthCheckinsTotal.Inc()
 
 	c.logger.Debug("Successfully completed health check-in",
 		"status", response.Status,

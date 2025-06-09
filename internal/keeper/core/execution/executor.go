@@ -74,21 +74,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 	// execute the action
 	var actionData types.PerformerActionData
-	switch task.TargetData.TaskDefinitionID {
-	case 1, 3, 5:
-		actionData, err = e.executeActionWithStaticArgs(task.TargetData, client)
-		if err != nil {
-			e.logger.Error("Failed to execute action with static args", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-			return false, err
-		}
-	case 2, 4, 6:
-		actionData, err = e.executeActionWithDynamicArgs(task.TargetData, client)
-		if err != nil {
-			e.logger.Error("Failed to execute action with static args", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-			return false, err
-		}
-	default:
-		return false, fmt.Errorf("unsupported task definition id: %d", task.TargetData.TaskDefinitionID)
+	actionData, err = e.executeAction(task.TargetData, client)
+	if err != nil {
+		e.logger.Error("Failed to execute action", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+		return false, err
 	}
 	e.logger.Info("Action execution completed", "task_id", task.TaskID, "trace_id", traceID)
 

@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -61,6 +62,10 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		return
 	} else {
 		h.logger.Infof("I am the performer: %s", requestData.PerformerData.KeeperAddress)
+
+		// Track task by definition ID
+		taskDefID := strconv.Itoa(int(requestData.TargetData.TaskDefinitionID))
+		metrics.TasksByDefinitionIDTotal.WithLabelValues(taskDefID).Inc()
 
 		h.logger.Info("Execution starts for task ID: ", "task_id", requestData.TargetData.TaskID, "trace_id", traceID)
 		h.logger.Infof("Task Definition ID: %d | Target Chain ID: %s", requestData.TargetData.TaskDefinitionID, requestData.TargetData.TargetChainID)

@@ -9,10 +9,13 @@ import (
 	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func UploadToIPFS(filename string, data []byte) (string, error) {
+	metrics.IPFSUploadSizeBytes.Add(float64(len(data)))
+
 	url := "https://uploads.pinata.cloud/v3/files"
 
 	body := &bytes.Buffer{}
@@ -91,6 +94,8 @@ func FetchIPFSContent(cid string) (types.IPFSData, error) {
 	if err := json.Unmarshal(body, &ipfsData); err != nil {
 		return types.IPFSData{}, fmt.Errorf("failed to unmarshal IPFS data: %v", err)
 	}
+
+	metrics.IPFSDownloadSizeBytes.Add(float64(len(body)))
 
 	return ipfsData, nil
 }
