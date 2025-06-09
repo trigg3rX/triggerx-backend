@@ -25,15 +25,17 @@ import (
 // TaskProcessor handles task-related events
 type TaskProcessor struct {
 	*EventProcessor
+	logger logging.Logger
 }
 
 // NewTaskProcessor creates a new task event processor
-func NewTaskProcessor(base *EventProcessor) *TaskProcessor {
+func NewTaskProcessor(base *EventProcessor, logger logging.Logger) *TaskProcessor {
 	if base == nil {
 		panic("base processor cannot be nil")
 	}
 	return &TaskProcessor{
 		EventProcessor: base,
+		logger:         logger,
 	}
 }
 
@@ -109,7 +111,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID)
+			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID, t.logger)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -181,7 +183,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID)
+			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID, t.logger)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -221,7 +223,7 @@ func ProcessTaskSubmittedEvents(
 	logger logging.Logger,
 ) error {
 	logger = logger.With("processor", "task_submitted")
-	processor := NewTaskProcessor(NewEventProcessor(logger))
+	processor := NewTaskProcessor(NewEventProcessor(logger), logger)
 	return processor.ProcessTaskSubmittedEvents(client, contractAddress, fromBlock, toBlock)
 }
 
@@ -234,7 +236,7 @@ func ProcessTaskRejectedEvents(
 	logger logging.Logger,
 ) error {
 	logger = logger.With("processor", "task_rejected")
-	processor := NewTaskProcessor(NewEventProcessor(logger))
+	processor := NewTaskProcessor(NewEventProcessor(logger), logger)
 	return processor.ProcessTaskRejectedEvents(client, contractAddress, fromBlock, toBlock)
 }
 
@@ -322,14 +324,16 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 	}, nil
 }
 
-func FetchIPFSContent(gateway string, cid string) (string, error) {
+func FetchIPFSContent(gateway string, cid string, logger logging.Logger) (string, error) {
 	if strings.HasPrefix(cid, "https://") {
 		resp, err := http.Get(cid)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch IPFS content from URL: %v", err)
 		}
 		defer func() {
-			_ = resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				logger.Error("Error closing response body", "error", err)
+			}
 		}()
 
 		if resp.StatusCode != http.StatusOK {
@@ -350,7 +354,9 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing response body", "error", err)
+		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -385,7 +391,11 @@ func DeletePinataCID(cid string, logger logging.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to send delete request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing response body", "error", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to delete CID %s: status %d, body: %s", cid, resp.StatusCode, string(body))
@@ -414,7 +424,11 @@ func listPinataPins(logger logging.Logger) ([]pinataPin, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send list request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing response body", "error", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to list pins: status %d, body: %s", resp.StatusCode, string(body))

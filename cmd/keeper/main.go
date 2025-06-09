@@ -83,7 +83,7 @@ func main() {
 	logger.Info("[4/5] Dependency: Code executor Initialised")
 
 	// Initialize task executor and validator
-	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), codeExecutor, aggregatorClient, logger)
+	validator := validation.NewTaskValidator(logger)
 	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), codeExecutor, validator, aggregatorClient, logger)
 
 	// Initialize API server
@@ -179,7 +179,9 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, c
 	logger.Info("[1/3] Process: Health client Closed")
 
 	// Close code executor
-	codeExecutor.Close()
+	if err := codeExecutor.Close(); err != nil {
+		logger.Error("Error closing code executor", "error", err)
+	}
 	logger.Info("[2/3] Process: Code executor Closed")
 
 	// Shutdown server gracefully

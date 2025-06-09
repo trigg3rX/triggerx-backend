@@ -9,14 +9,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
+func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, actionData *types.PerformerActionData, client EthClientInterface, traceID string) (bool, error) {
 	// Fetch the tx details from the action data
 	txHash := common.HexToHash(actionData.ActionTxHash)
 	receipt, err := client.TransactionReceipt(context.Background(), txHash)
-	if err != nil {
+	if err != nil || receipt == nil {
 		_, isPending, err := client.TransactionByHash(context.Background(), txHash)
 		if err != nil {
 			return false, fmt.Errorf("failed to get transaction: %v", err)

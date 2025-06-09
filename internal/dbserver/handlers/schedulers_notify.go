@@ -78,11 +78,12 @@ func (h *Handler) sendDataToScheduler(route string, data interface{}, schedulerN
 	}
 
 	var apiURL string
-	if schedulerName == "event scheduler" {
+	switch schedulerName {
+	case "event scheduler":
 		apiURL = fmt.Sprintf("%s%s", config.GetEventSchedulerRPCUrl(), route)
-	} else if schedulerName == "condition scheduler" {
+	case "condition scheduler":
 		apiURL = fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCUrl(), route)
-	} else {
+	default:
 		return false, fmt.Errorf("invalid scheduler name: %s", schedulerName)
 	}
 

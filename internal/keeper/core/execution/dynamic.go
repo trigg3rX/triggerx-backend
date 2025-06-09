@@ -33,11 +33,15 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 		return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
 	}
 
-	codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), taskTargetData.DynamicArgumentsScriptUrl)
+	codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), taskTargetData.DynamicArgumentsScriptUrl, e.logger)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
 	}
-	defer os.RemoveAll(filepath.Dir(codePath))
+	defer func() {
+		if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
+			e.logger.Error("Error removing temporary directory", "error", err)
+		}
+	}()
 
 	containerID, err := e.codeExecutor.DockerManager.CreateContainer(context.Background(), codePath)
 	if err != nil {

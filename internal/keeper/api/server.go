@@ -98,7 +98,7 @@ func (s *Server) setupMiddleware() {
 // setupRoutes sets up the routes for the server
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
-	taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
+	taskHandler := handlers.NewTaskHandler(deps.Logger, &deps.Executor, &deps.Validator)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
 
 	// Task routes

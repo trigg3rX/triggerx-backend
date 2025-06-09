@@ -3,21 +3,25 @@ package validation
 import (
 	"fmt"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
+	logger := v.logger.With("traceID", traceID)
+
 	// check if the scheduler signature is valid
 	if task.SchedulerSignature == nil {
+		logger.Error("Scheduler signature data is missing")
 		return false, fmt.Errorf("scheduler signature data is missing")
 	}
 
 	if task.SchedulerSignature.SchedulerSignature == "" {
+		logger.Error("Scheduler signature is empty")
 		return false, fmt.Errorf("scheduler signature is empty")
 	}
 
 	if task.SchedulerSignature.SchedulerSigningAddress == "" {
+		logger.Error("Scheduler signing address is empty")
 		return false, fmt.Errorf("scheduler signing address is empty")
 	}
 
@@ -35,33 +39,48 @@ func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKee
 	}
 
 	// Convert the task data to JSON message format (same as signing process)
-	isValid, err := cryptography.VerifySignatureFromJSON(
+	isValid, err := v.crypto.VerifySignatureFromJSON(
 		taskDataForVerification,
 		task.SchedulerSignature.SchedulerSignature,
 		task.SchedulerSignature.SchedulerSigningAddress,
 	)
 	if err != nil {
+		logger.Error("Failed to verify scheduler signature", "error", err)
 		return false, fmt.Errorf("failed to verify scheduler signature: %w", err)
 	}
 
-	return isValid, nil
+	if !isValid {
+		logger.Error("Scheduler signature verification failed")
+		return false, fmt.Errorf("scheduler signature verification failed")
+	}
+
+	logger.Info("Scheduler signature verification successful")
+	return true, nil
 }
 
 func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, traceID string) (bool, error) {
+	logger := v.logger.With("traceID", traceID)
+
 	if ipfsData.PerformerSignature == nil {
+		logger.Error("Performer signature data is missing")
 		return false, fmt.Errorf("performer signature data is missing")
 	}
 
 	if ipfsData.PerformerSignature.PerformerSignature == "" {
+		logger.Error("Performer signature is empty")
 		return false, fmt.Errorf("performer signature is empty")
 	}
 
 	if ipfsData.PerformerSignature.PerformerSigningAddress == "" {
+		logger.Error("Performer signing address is empty")
 		return false, fmt.Errorf("performer signing address is empty")
 	}
 
 	// check if the performer is the same as the the one assigned to the task
 	if ipfsData.PerformerSignature.PerformerSigningAddress != ipfsData.TaskData.PerformerData.KeeperAddress {
+		logger.Error("Performer signing address does not match the assigned performer",
+			"expected", ipfsData.TaskData.PerformerData.KeeperAddress,
+			"got", ipfsData.PerformerSignature.PerformerSigningAddress)
 		return false, fmt.Errorf("performer signing address does not match the assigned performer")
 	}
 
@@ -77,14 +96,21 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 	}
 
 	// Convert the task data to JSON message format (same as signing process)
-	isValid, err := cryptography.VerifySignatureFromJSON(
+	isValid, err := v.crypto.VerifySignatureFromJSON(
 		ipfsDataForVerification,
 		ipfsData.PerformerSignature.PerformerSignature,
 		ipfsData.PerformerSignature.PerformerSigningAddress,
 	)
 	if err != nil {
+		logger.Error("Failed to verify performer signature", "error", err)
 		return false, fmt.Errorf("failed to verify performer signature: %w", err)
 	}
 
-	return isValid, nil
+	if !isValid {
+		logger.Error("Performer signature verification failed")
+		return false, fmt.Errorf("performer signature verification failed")
+	}
+
+	logger.Info("Performer signature verification successful")
+	return true, nil
 }
