@@ -57,7 +57,10 @@ func (m *Manager) CleanupImages(ctx context.Context) error {
 	}
 
 	for _, dockerImage := range images {
-		m.Cli.ImageRemove(ctx, dockerImage.ID, image.RemoveOptions{Force: true})
+		_, err := m.Cli.ImageRemove(ctx, dockerImage.ID, image.RemoveOptions{Force: true})
+		if err != nil {
+			m.logger.Errorf("failed to remove image: %v", err)
+		}
 	}
 	return nil
 }

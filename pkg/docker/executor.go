@@ -69,7 +69,11 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 			Error:   fmt.Errorf("container creation failed: %w", err),
 		}, nil
 	}
-	defer e.DockerManager.CleanupContainer(ctx, containerID)
+	defer func() {
+		if err := e.DockerManager.CleanupContainer(ctx, containerID); err != nil {
+			e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
+		}
+	}()
 
 	result, err := e.MonitorExecution(ctx, e.DockerManager.Cli, containerID, noOfAttesters)
 	if err != nil {

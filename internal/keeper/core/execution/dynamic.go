@@ -43,7 +43,11 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to create container: %v", err)
 	}
-	defer e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID)
+	defer func() {
+		if err := e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID); err != nil {
+			e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
+		}
+	}()
 
 	result, err := e.codeExecutor.MonitorExecution(context.Background(), e.codeExecutor.DockerManager.Cli, containerID, 1)
 	if err != nil {
