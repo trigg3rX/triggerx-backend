@@ -21,7 +21,10 @@ func TestUploadToIPFS_Success(t *testing.T) {
 			t.Errorf("missing or invalid Authorization header: %v", r.Header.Get("Authorization"))
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data":{"cid":"testcid123"}}`))
+		_, err := w.Write([]byte(`{"data":{"cid":"testcid123"}}`))
+		if err != nil {
+			t.Errorf("error writing response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -53,7 +56,10 @@ func TestFetchIPFSContent_Success(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(body)
+		_, err := w.Write(body)
+		if err != nil {
+			t.Errorf("error writing response: %v", err)
+		}
 	}))
 	defer server.Close()
 

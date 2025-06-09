@@ -9,7 +9,10 @@ import (
 
 func TestFetchDataFromUrl_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hello world"))
+		_, err := w.Write([]byte("hello world"))
+		if err != nil {
+			t.Errorf("error writing response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -25,7 +28,10 @@ func TestFetchDataFromUrl_Success(t *testing.T) {
 func TestFetchDataFromUrl_Non200(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
+		_, err := w.Write([]byte("not found"))
+		if err != nil {
+			t.Errorf("error writing response: %v", err)
+		}
 	}))
 	defer server.Close()
 
