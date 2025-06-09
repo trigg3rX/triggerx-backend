@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Important for the action to work properly
+          ref: dev  # Explicitly checkout the dev branch
       
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -42,11 +43,13 @@ jobs:
           fi
     
       - name: Create Pull Request
+        if: steps.check_updates.outputs.updates_available == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.ACTIONS_TOKEN }}
           title: "chore(deps): update Go dependencies"
           branch: "update-go-dependencies"
+          base: dev
           commit-message: "chore(deps): update Go dependencies"
           body: "Automated dependency updates.\nPlease review the changes before merging."
           committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
