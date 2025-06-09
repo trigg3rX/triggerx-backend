@@ -15,18 +15,11 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTargetData) (types.PerformerActionData, error) {
-	chainRpcUrl := e.getChainRpcUrl(taskTargetData.TargetChainID)
-
-	chainClient, err := ethclient.Dial(chainRpcUrl)
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to connect to chain: %v", err)
-	}
-	defer chainClient.Close()
-
+func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTargetData, client *ethclient.Client) (types.PerformerActionData, error) {
 	if taskTargetData.TargetContractAddress == "" {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
@@ -62,7 +55,7 @@ func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTar
 	nonce := lastUsedNonce + 1
 	config.IncrementChainNonce(taskTargetData.TargetChainID)
 
-	gasPrice, err := chainClient.SuggestGasPrice(context.Background())
+	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
 		return types.PerformerActionData{}, err
 	}
@@ -78,8 +71,8 @@ func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTar
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
 
-	executionContractAddress := e.getExecutionContractAddress(taskTargetData.TargetChainID)
-	chainID, err := chainClient.ChainID(context.Background())
+	executionContractAddress := utils.GetExecutionContractAddress(taskTargetData.TargetChainID)
+	chainID, err := client.ChainID(context.Background())
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to get chain ID: %v", err)
 	}
@@ -91,7 +84,7 @@ func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTar
 		return types.PerformerActionData{}, err
 	}
 
-	err = chainClient.SendTransaction(context.Background(), signedTx)
+	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
 		return types.PerformerActionData{}, err
 	}
@@ -99,7 +92,7 @@ func (e *TaskExecutor) executeActionWithStaticArgs(taskTargetData *types.TaskTar
 	e.logger.Debugf("Transaction sent to execution contract: %s, tx hash: %s",
 		executionContractAddress, signedTx.Hash().Hex())
 	// Wait for transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), chainClient, signedTx)
+	receipt, err := bind.WaitMined(context.Background(), client, signedTx)
 	if err != nil {
 		e.logger.Warnf("Error waiting for transaction: %v", err)
 		return types.PerformerActionData{}, err
