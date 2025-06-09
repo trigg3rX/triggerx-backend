@@ -17,11 +17,13 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTargetData, client *ethclient.Client) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeAction(taskTargetData *types.TaskTargetData, client *ethclient.Client) (types.PerformerActionData, error) {
 	if taskTargetData.TargetContractAddress == "" {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
@@ -33,32 +35,49 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 		return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
 	}
 
-	codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), taskTargetData.DynamicArgumentsScriptUrl)
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
-	}
-	defer os.RemoveAll(filepath.Dir(codePath))
-
-	containerID, err := e.codeExecutor.DockerManager.CreateContainer(context.Background(), codePath)
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to create container: %v", err)
-	}
-	defer func() {
-		if err := e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID); err != nil {
-			e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
+	var argData []interface{}
+	var result *docker.ExecutionResult
+	switch taskTargetData.TaskDefinitionID {
+	case 1, 3, 5:
+		codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), taskTargetData.DynamicArgumentsScriptUrl)
+		if err != nil {
+			return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
 		}
-	}()
+		defer os.RemoveAll(filepath.Dir(codePath))
 
-	result, err := e.codeExecutor.MonitorExecution(context.Background(), e.codeExecutor.DockerManager.Cli, containerID, 1)
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to monitor execution: %v", err)
+		containerID, err := e.codeExecutor.DockerManager.CreateContainer(context.Background(), codePath)
+		if err != nil {
+			return types.PerformerActionData{}, fmt.Errorf("failed to create container: %v", err)
+		}
+		defer func() {
+			if err := e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID); err != nil {
+				e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
+			}
+		}()
+		metrics.DockerContainersCreatedTotal.WithLabelValues("golang").Inc()
+
+		start := time.Now()
+		result, err := e.codeExecutor.MonitorExecution(context.Background(), e.codeExecutor.DockerManager.Cli, containerID, 1)
+		if err != nil {
+			return types.PerformerActionData{}, fmt.Errorf("failed to monitor execution: %v", err)
+		}
+
+		if !result.Success {
+			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", result.Error)
+		}
+		metrics.DockerContainerDurationSeconds.WithLabelValues("golang").Set(time.Since(start).Seconds())
+
+		argData = e.parseDynamicArgs(result.Output)
+	case 2, 4, 6:
+		argData = e.parseStaticArgs(taskTargetData.Arguments)
+		result = &docker.ExecutionResult{
+			Stats: docker.ResourceStats{
+				TotalCost: 0.1,
+			},
+		}
+	default:
+		return types.PerformerActionData{}, fmt.Errorf("unsupported task definition id: %d", taskTargetData.TaskDefinitionID)
 	}
-
-	if !result.Success {
-		return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", result.Error)
-	}
-
-	argData := e.parseDynamicArgs(result.Output)
 
 	// Handle args as potentially structured data
 	convertedArgs, err := e.processArguments(argData, method.Inputs, contractABI)
@@ -144,6 +163,9 @@ func (e *TaskExecutor) executeActionWithDynamicArgs(taskTargetData *types.TaskTa
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
 	}
+	metrics.TransactionsSentTotal.WithLabelValues(taskTargetData.TargetChainID, "success").Inc()
+	metrics.GasUsedTotal.WithLabelValues(taskTargetData.TargetChainID).Add(float64(receipt.GasUsed))
+	metrics.TransactionFeesTotal.WithLabelValues(taskTargetData.TargetChainID).Add(result.Stats.TotalCost)
 
 	e.logger.Infof("Task ID %d executed successfully. Transaction: %s", taskTargetData.TaskID, signedTx.Hash().Hex())
 
