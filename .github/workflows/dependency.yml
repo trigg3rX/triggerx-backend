@@ -44,7 +44,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.ACTIONS_TOKEN }}
           title: "chore(deps): update Go dependencies"
           branch: "update-go-dependencies"
           commit-message: "chore(deps): update Go dependencies"
