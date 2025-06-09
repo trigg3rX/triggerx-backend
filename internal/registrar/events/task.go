@@ -375,55 +375,65 @@ func ConvertBigIntToStrings(bigInts []*big.Int) []string {
 
 // Pinata API helpers
 func DeletePinataCID(cid string, logger logging.Logger) error {
-	url := "https://api.pinata.cloud/pinning/unpin/" + cid
+	url := fmt.Sprintf("https://api.pinata.cloud/psa/pins/%s", cid)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+config.GetPinataJWT())
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send delete request: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete CID %s: status %d, body: %s", cid, resp.StatusCode, string(body))
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("failed to delete CID %s: status %d, body: %s",
+			cid, resp.StatusCode, string(body))
 	}
-	logger.Infof("Deleted CID %s from Pinata", cid)
+
+	logger.Infof("Successfully deleted CID %s from Pinata", cid)
 	return nil
 }
 
 // List pins from Pinata (returns a list of pin objects)
 type pinataPin struct {
-	IpfsHash   string `json:"ipfs_pin_hash"`
-	DatePinned string `json:"date_pinned"`
+	CID     string    `json:"cid"`
+	Created time.Time `json:"created"`
 }
+
 type pinataListResponse struct {
-	Rows []pinataPin `json:"rows"`
+	Pins []pinataPin `json:"pins"`
 }
 
 func listPinataPins(logger logging.Logger) ([]pinataPin, error) {
-	url := "https://api.pinata.cloud/data/pinList?pageLimit=1000"
+	url := "https://api.pinata.cloud/psa/pins?status=pinned"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create list request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+config.GetPinataJWT())
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send list request: %w", err)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to list pins: status %d, body: %s", resp.StatusCode, string(body))
 	}
+
 	var result pinataListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode pinata list response: %w", err)
 	}
-	return result.Rows, nil
+
+	return result.Pins, nil
 }
 
 // Schedule a 24h delayed deletion for a CID
@@ -459,20 +469,22 @@ func StartWeeklyPinataCleanup(logger logging.Logger) {
 				logger.Errorf("Failed to list Pinata pins: %v", err)
 				continue
 			}
+
 			cutoff := time.Now().Add(-24 * time.Hour)
+			deletedCount := 0
+
 			for _, pin := range pins {
-				pinTime, err := time.Parse(time.RFC3339, pin.DatePinned)
-				if err != nil {
-					logger.Warnf("Could not parse pin date for CID %s: %v", pin.IpfsHash, err)
-					continue
-				}
-				if pinTime.Before(cutoff) {
-					logger.Infof("Deleting old CID %s pinned at %s", pin.IpfsHash, pin.DatePinned)
-					if err := DeletePinataCID(pin.IpfsHash, logger); err != nil {
-						logger.Errorf("Failed to delete old CID %s: %v", pin.IpfsHash, err)
+				if pin.Created.Before(cutoff) {
+					logger.Infof("Deleting old CID %s created at %s", pin.CID, pin.Created)
+					if err := DeletePinataCID(pin.CID, logger); err != nil {
+						logger.Errorf("Failed to delete old CID %s: %v", pin.CID, err)
+					} else {
+						deletedCount++
 					}
 				}
 			}
+
+			logger.Infof("Weekly cleanup completed. Deleted %d old pins.", deletedCount)
 		}
 	}()
 }
