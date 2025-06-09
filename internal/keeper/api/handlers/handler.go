@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+const TraceIDKey = "trace_id"
 
 // TaskHandler handles task-related requests
 type TaskHandler struct {
@@ -21,4 +23,12 @@ func NewTaskHandler(logger logging.Logger, executor execution.TaskExecutor, vali
 		executor:  executor,
 		validator: validator,
 	}
+}
+
+func (h *TaskHandler) getTraceID(c *gin.Context) string {
+	traceID, exists := c.Get(TraceIDKey)
+	if !exists {
+		return ""
+	}
+	return traceID.(string)
 }
