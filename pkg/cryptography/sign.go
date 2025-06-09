@@ -88,6 +88,30 @@ func VerifySignature(message string, signature string, signerAddress string) (bo
 	return checksumAddr == recoveredAddr, nil
 }
 
+func VerifySignatureFromJSON(jsonData interface{}, signature string, signerAddress string) (bool, error) {
+	jsonDataMap := make(map[string]interface{})
+	
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal input data: %w", err)
+	}
+	
+	if err := json.Unmarshal(jsonBytes, &jsonDataMap); err != nil {
+		return false, fmt.Errorf("failed to unmarshal to map: %w", err) 
+	}
+
+	convertToLower(jsonDataMap)
+
+	jsonDataBytes, err := json.Marshal(jsonDataMap)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal json data: %w", err)
+	}
+
+	message := string(jsonDataBytes)
+
+	return VerifySignature(message, signature, signerAddress)
+}
+
 func convertToLower(data map[string]interface{}) {
 	for k, v := range data {
 		if s, ok := v.(string); ok {
