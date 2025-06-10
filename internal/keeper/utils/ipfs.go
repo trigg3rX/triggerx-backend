@@ -21,6 +21,11 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
+	// Add the "network" field and set it to "public"
+	if err := writer.WriteField("network", "public"); err != nil {
+		return "", fmt.Errorf("failed to write network field: %v", err)
+	}
+
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to create form file: %v", err)
