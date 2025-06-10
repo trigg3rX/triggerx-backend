@@ -190,7 +190,7 @@ func (e *TaskExecutor) submitTransactionWithRetry(
 	initialGasPrice *big.Int,
 ) (*ethtypes.Receipt, string, error) {
 	const (
-		txTimeout     = 30 * time.Second // Wait 30 seconds before resubmitting
+		txTimeout     = 5 * time.Second // Wait 5 seconds before resubmitting
 		maxRetries    = 3                // Maximum number of retries
 		feeBumpFactor = 1.2              // Increase fees by 20% on each retry
 	)
