@@ -199,15 +199,17 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	}
 
 	parts := strings.Split(decryptedString, ":")
-	if len(parts) != 2 {
+	if len(parts) != 4 {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
 			Data:   "invalid response format",
 		}, fmt.Errorf("invalid response format: expected host:token")
 	}
 
-	config.SetIpfsHost(parts[0])
-	config.SetPinataJWT(parts[1])
+	config.SetEtherscanAPIKey(parts[0])
+	config.SetAlchemyAPIKey(parts[1])
+	config.SetIpfsHost(parts[2])
+	config.SetPinataJWT(parts[3])
 
 	return types.KeeperHealthCheckInResponse{
 		Status: true,
