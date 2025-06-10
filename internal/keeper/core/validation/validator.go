@@ -38,7 +38,7 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSDat
 	}
 	v.logger.Info("Scheduler signature validation passed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID)
 
-	rpcURL := utils.GetChainRpcUrl(ipfsData.TaskData.TargetData.TargetChainID)
+	rpcURL := utils.GetChainRpcUrl(ipfsData.TaskData.TargetData[0].TargetChainID)
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		v.logger.Error("Failed to connect to chain", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
@@ -47,7 +47,7 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSDat
 	defer client.Close()
 
 	// check if trigger is valid
-	isTriggerTrue, err := v.ValidateTrigger(ipfsData.TaskData.TriggerData, traceID)
+	isTriggerTrue, err := v.ValidateTrigger(&ipfsData.TaskData.TriggerData[0], traceID)
 	if !isTriggerTrue {
 		v.logger.Error("Trigger validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
 		return false, err
@@ -55,7 +55,7 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSDat
 	v.logger.Info("Trigger validation passed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID)
 
 	// check if the action is valid
-	isActionTrue, err := v.ValidateAction(ipfsData.TaskData.TargetData, ipfsData.ActionData, client, traceID)
+	isActionTrue, err := v.ValidateAction(&ipfsData.TaskData.TargetData[0], &ipfsData.TaskData.TriggerData[0], ipfsData.ActionData, client, traceID)
 	if !isActionTrue {
 		v.logger.Error("Action validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
 		return false, err
