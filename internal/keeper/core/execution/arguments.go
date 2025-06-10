@@ -54,6 +54,12 @@ func (ac *ArgumentConverter) convertToInteger(value interface{}, targetType abi.
 				if err != nil {
 					return nil, err
 				}
+				if floatVal < 0 {
+					return nil, fmt.Errorf("cannot convert negative value %f to uint32", floatVal)
+				}
+				if floatVal > math.MaxUint32 {
+					return nil, fmt.Errorf("value %f exceeds maximum uint32 value", floatVal)
+				}
 				return uint32(floatVal), nil
 			case float64:
 				return uint32(v), nil

@@ -47,6 +47,22 @@ func NewTaskExecutor(
 }
 
 func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
+	// Check for nil task
+	if task == nil {
+		e.logger.Error("Task data is nil", "trace_id", traceID)
+		return false, fmt.Errorf("task data cannot be nil")
+	}
+
+	// Check for nil TargetData and TriggerData
+	if task.TargetData == nil {
+		e.logger.Error("TargetData is nil", "task_id", task.TaskID, "trace_id", traceID)
+		return false, fmt.Errorf("target data cannot be nil")
+	}
+	if task.TriggerData == nil {
+		e.logger.Error("TriggerData is nil", "task_id", task.TaskID, "trace_id", traceID)
+		return false, fmt.Errorf("trigger data cannot be nil")
+	}
+
 	// check if the scheduler signature is valid
 	isSchedulerSignatureTrue, err := e.validator.ValidateSchedulerSignature(task, traceID)
 	if !isSchedulerSignatureTrue {

@@ -39,7 +39,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 		go func(url string) {
 			defer wg.Done()
 
-			codePath, err := executor.Downloader.DownloadFile(ctx, url)
+			codePath, err := executor.Downloader.DownloadFile(ctx, url, h.logger)
 			if err != nil {
 				h.logger.Errorf("Error downloading IPFS file: %v", err)
 				return

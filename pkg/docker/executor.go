@@ -53,7 +53,7 @@ func NewCodeExecutor(ctx context.Context, cfg ExecutorConfig, logger logging.Log
 
 func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*ExecutionResult, error) {
 	// 1. Download code from IPFS
-	codePath, err := e.Downloader.DownloadFile(ctx, fileURL)
+	codePath, err := e.Downloader.DownloadFile(ctx, fileURL, e.logger)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,

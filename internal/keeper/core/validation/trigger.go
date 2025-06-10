@@ -8,7 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -28,27 +27,18 @@ func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, trac
 	e.logger.Info("Validating trigger data", "task_id", triggerData.TaskID, "trace_id", traceID)
 
 	if triggerData.TaskDefinitionID == 1 || triggerData.TaskDefinitionID == 2 {
-		isValid, err := e.IsValidTimeBasedTrigger(triggerData)
-		if !isValid {
-			return isValid, err
-		}
+		return e.IsValidTimeBasedTrigger(triggerData)
 	}
 
 	if triggerData.TaskDefinitionID == 3 || triggerData.TaskDefinitionID == 4 {
-		isValid, err := e.IsValidEventBasedTrigger(triggerData)
-		if !isValid {
-			return isValid, err
-		}
+		return e.IsValidEventBasedTrigger(triggerData)
 	}
 
 	if triggerData.TaskDefinitionID == 5 || triggerData.TaskDefinitionID == 6 {
-		isValid, err := e.IsValidConditionBasedTrigger(triggerData)
-		if !isValid {
-			return isValid, err
-		}
+		return e.IsValidConditionBasedTrigger(triggerData)
 	}
 
-	return false, nil
+	return false, fmt.Errorf("invalid task definition ID: %d", triggerData.TaskDefinitionID)
 }
 
 func (v *TaskValidator) IsValidTimeBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
@@ -64,7 +54,7 @@ func (v *TaskValidator) IsValidTimeBasedTrigger(triggerData *types.TaskTriggerDa
 
 func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
 	rpcURL := utils.GetChainRpcUrl(triggerData.EventChainId)
-	client, err := ethclient.Dial(rpcURL)
+	client, err := v.ethClientMaker(rpcURL)
 	if err != nil {
 		return false, fmt.Errorf("failed to connect to chain: %v", err)
 	}
