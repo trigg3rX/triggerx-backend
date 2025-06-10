@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -63,12 +62,16 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 	} else {
 		h.logger.Infof("I am the performer: %s", requestData.PerformerData.KeeperAddress)
 
-		// Track task by definition ID
-		taskDefID := strconv.Itoa(int(requestData.TargetData.TaskDefinitionID))
-		metrics.TasksByDefinitionIDTotal.WithLabelValues(taskDefID).Inc()
-
-		h.logger.Info("Execution starts for task ID: ", "task_id", requestData.TargetData.TaskID, "trace_id", traceID)
-		h.logger.Infof("Task Definition ID: %d | Target Chain ID: %s", requestData.TargetData.TaskDefinitionID, requestData.TargetData.TargetChainID)
+		TaskDefinitionID := requestData.TriggerData[0].TaskDefinitionID
+		switch TaskDefinitionID {
+		case 1, 2:
+			h.logger.Info("Execution starts for following tasks:", "trace_id", traceID)
+			for _, task := range requestData.TargetData {
+				h.logger.Infof("Task ID: %d | Target Chain ID: %s", task.TaskID, task.TargetChainID)
+			}
+		case 3, 4, 5, 6:
+			h.logger.Info("Execution starts for task:", "task_id", requestData.TargetData[0].TaskID, "target_chain_id", requestData.TargetData[0].TargetChainID, "trace_id", traceID)
+		}
 		success, err := h.executor.ExecuteTask(context.Background(), &requestData, traceID)
 		if err != nil {
 			h.logger.Error("Task execution failed", "error", err, "trace_id", traceID)
