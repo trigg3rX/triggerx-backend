@@ -13,8 +13,14 @@ import (
 
 func TestUploadToIPFS_Success(t *testing.T) {
 	// Set PINATA_JWT env var if needed by config.GetPinataJWT
-	os.Setenv("PINATA_JWT", "testtoken")
-	defer os.Unsetenv("PINATA_JWT")
+	if err := os.Setenv("PINATA_JWT", "testtoken"); err != nil {
+		t.Fatalf("failed to set PINATA_JWT: %v", err)
+	}
+	defer func() {
+		if err := os.Unsetenv("PINATA_JWT"); err != nil {
+			t.Logf("failed to unset PINATA_JWT: %v", err)
+		}
+	}()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
@@ -48,8 +54,14 @@ func TestUploadToIPFS_ErrorCases(t *testing.T) {
 
 func TestFetchIPFSContent_Success(t *testing.T) {
 	// Set IPFS_HOST env var if needed by config.GetIpfsHost
-	os.Setenv("IPFS_HOST", "localhost")
-	defer os.Unsetenv("IPFS_HOST")
+	if err := os.Setenv("IPFS_HOST", "localhost"); err != nil {
+		t.Fatalf("failed to set IPFS_HOST: %v", err)
+	}
+	defer func() {
+		if err := os.Unsetenv("IPFS_HOST"); err != nil {
+			t.Logf("failed to unset IPFS_HOST: %v", err)
+		}
+	}()
 
 	expected := types.IPFSData{}
 	body, _ := json.Marshal(expected)

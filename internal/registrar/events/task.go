@@ -431,7 +431,11 @@ func findPinataFileIDByCID(cid string, logger logging.Logger) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to search for CID %s: %w", cid, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Debugf("failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -460,7 +464,11 @@ func deletePinataFileByID(fileID string, logger logging.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete file %s: %w", fileID, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Debugf("failed to close response body: %v", err)
+		}
+	}()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -510,17 +518,23 @@ func listPinataFiles(logger logging.Logger) ([]PinataFile, error) {
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				logger.Debugf("failed to close response body: %v", err)
+			}
 			return nil, fmt.Errorf("failed to list files: status %d, body: %s",
 				resp.StatusCode, string(body))
 		}
 
 		var listResp PinataListResponse
 		if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-			resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				logger.Debugf("failed to close response body: %v", err)
+			}
 			return nil, fmt.Errorf("failed to decode list response: %w", err)
 		}
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			logger.Debugf("failed to close response body: %v", err)
+		}
 
 		allFiles = append(allFiles, listResp.Data.Files...)
 

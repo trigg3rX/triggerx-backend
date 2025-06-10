@@ -40,7 +40,7 @@ func (t *UnitTestLogger) With(tags ...any) logging.Logger             { return t
 
 // Add mock assertion methods
 func (t *UnitTestLogger) AssertExpected(tb testing.TB) bool {
-	return t.Mock.AssertExpectations(tb)
+	return t.AssertExpectations(tb)
 }
 
 // ===========================================
