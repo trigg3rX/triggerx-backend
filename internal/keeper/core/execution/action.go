@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"os"
@@ -23,23 +24,39 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeAction(taskTargetData *types.TaskTargetData, client *ethclient.Client) (types.PerformerActionData, error) {
-	if taskTargetData.TargetContractAddress == "" {
+func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client) (types.PerformerActionData, error) {
+	if targetData.TargetContractAddress == "" {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
 	}
 
-	taregtContractAddress := ethcommon.HexToAddress(taskTargetData.TargetContractAddress)
-	contractABI, method, err := e.getContractMethodAndABI(taskTargetData.TargetFunction, taskTargetData)
+	var timeToNextTrigger time.Duration
+	switch targetData.TaskDefinitionID {
+	case 1:
+		timeToNextTrigger = time.Until(triggerData.NextTriggerTimestamp)
+		timeToNextTrigger = timeToNextTrigger - 2*time.Second
+	case 2:
+		timeToNextTrigger = time.Until(triggerData.NextTriggerTimestamp)
+		timeToNextTrigger = timeToNextTrigger - 10*time.Second
+		if timeToNextTrigger < 0 {
+			timeToNextTrigger = 0
+		}
+	default:
+		timeToNextTrigger = 0
+	}
+	time.Sleep(timeToNextTrigger)
+
+	taregtContractAddress := ethcommon.HexToAddress(targetData.TargetContractAddress)
+	contractABI, method, err := e.getContractMethodAndABI(targetData.TargetFunction, targetData)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
 	}
 
 	var argData []interface{}
 	var result *docker.ExecutionResult
-	switch taskTargetData.TaskDefinitionID {
-	case 1, 3, 5:
-		codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), taskTargetData.DynamicArgumentsScriptUrl)
+	switch targetData.TaskDefinitionID {
+	case 2, 4, 6:
+		codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), targetData.DynamicArgumentsScriptUrl)
 		if err != nil {
 			return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
 		}
@@ -68,15 +85,15 @@ func (e *TaskExecutor) executeAction(taskTargetData *types.TaskTargetData, clien
 		metrics.DockerContainerDurationSeconds.WithLabelValues("golang").Set(time.Since(start).Seconds())
 
 		argData = e.parseDynamicArgs(result.Output)
-	case 2, 4, 6:
-		argData = e.parseStaticArgs(taskTargetData.Arguments)
+	case 1, 3, 5:
+		argData = e.parseStaticArgs(targetData.Arguments)
 		result = &docker.ExecutionResult{
 			Stats: docker.ResourceStats{
 				TotalCost: 0.1,
 			},
 		}
 	default:
-		return types.PerformerActionData{}, fmt.Errorf("unsupported task definition id: %d", taskTargetData.TaskDefinitionID)
+		return types.PerformerActionData{}, fmt.Errorf("unsupported task definition id: %d", targetData.TaskDefinitionID)
 	}
 
 	// Handle args as potentially structured data
@@ -98,10 +115,7 @@ func (e *TaskExecutor) executeAction(taskTargetData *types.TaskTargetData, clien
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to parse private key: %v", err)
 	}
-
-	lastUsedNonce := config.GetChainNonce(taskTargetData.TargetChainID)
-	nonce := lastUsedNonce + 1
-	config.IncrementChainNonce(taskTargetData.TargetChainID)
+	e.logger.Debugf("Using nonce: %d", nonce)
 
 	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
@@ -119,36 +133,29 @@ func (e *TaskExecutor) executeAction(taskTargetData *types.TaskTargetData, clien
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
 
-	executionContractAddress := utils.GetExecutionContractAddress(taskTargetData.TargetChainID)
+	executionContractAddress := utils.GetProxyHubAddress(targetData.TargetChainID)
 	chainID, err := client.ChainID(context.Background())
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to get chain ID: %v", err)
 	}
 
-	// Create and sign transaction
-	tx := ethtypes.NewTransaction(nonce, ethcommon.HexToAddress(executionContractAddress), big.NewInt(0), 300000, gasPrice, executionInput)
-	signedTx, err := ethtypes.SignTx(tx, ethtypes.NewEIP155Signer(chainID), privateKey)
+	// Create and sign transaction with retry mechanism
+	receipt, finalTxHash, err := e.submitTransactionWithRetry(
+		client,
+		privateKey,
+		nonce,
+		ethcommon.HexToAddress(executionContractAddress),
+		executionInput,
+		chainID,
+		gasPrice,
+	)
 	if err != nil {
-		return types.PerformerActionData{}, err
-	}
-
-	err = client.SendTransaction(context.Background(), signedTx)
-	if err != nil {
-		return types.PerformerActionData{}, err
-	}
-
-	e.logger.Debugf("Transaction sent to execution contract: %s, tx hash: %s",
-		executionContractAddress, signedTx.Hash().Hex())
-	// Wait for transaction receipt
-	receipt, err := bind.WaitMined(context.Background(), client, signedTx)
-	if err != nil {
-		e.logger.Warnf("Error waiting for transaction: %v", err)
 		return types.PerformerActionData{}, err
 	}
 
 	executionResult := types.PerformerActionData{
-		TaskID:             taskTargetData.TaskID,
-		ActionTxHash:       signedTx.Hash().Hex(),
+		TaskID:             targetData.TaskID,
+		ActionTxHash:       finalTxHash,
 		GasUsed:            strconv.FormatUint(receipt.GasUsed, 10),
 		Status:             receipt.Status == ethtypes.ReceiptStatusSuccessful,
 		MemoryUsage:        result.Stats.MemoryUsage,
@@ -163,11 +170,85 @@ func (e *TaskExecutor) executeAction(taskTargetData *types.TaskTargetData, clien
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
 	}
-	metrics.TransactionsSentTotal.WithLabelValues(taskTargetData.TargetChainID, "success").Inc()
-	metrics.GasUsedTotal.WithLabelValues(taskTargetData.TargetChainID).Add(float64(receipt.GasUsed))
-	metrics.TransactionFeesTotal.WithLabelValues(taskTargetData.TargetChainID).Add(result.Stats.TotalCost)
+	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
+	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
+	metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(result.Stats.TotalCost)
 
-	e.logger.Infof("Task ID %d executed successfully. Transaction: %s", taskTargetData.TaskID, signedTx.Hash().Hex())
+	e.logger.Infof("Task ID %d executed successfully. Transaction: %s", targetData.TaskID, finalTxHash)
 
 	return executionResult, nil
+}
+
+// submitTransactionWithRetry handles transaction submission with timeout and fee bumping
+func (e *TaskExecutor) submitTransactionWithRetry(
+	client *ethclient.Client,
+	privateKey *ecdsa.PrivateKey,
+	nonce uint64,
+	to ethcommon.Address,
+	data []byte,
+	chainID *big.Int,
+	initialGasPrice *big.Int,
+) (*ethtypes.Receipt, string, error) {
+	const (
+		txTimeout     = 5 * time.Second // Wait 5 seconds before resubmitting
+		maxRetries    = 3                // Maximum number of retries
+		feeBumpFactor = 1.2              // Increase fees by 20% on each retry
+	)
+
+	currentGasPrice := new(big.Int).Set(initialGasPrice)
+	var lastTxHash string
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Create and sign transaction
+		tx := ethtypes.NewTransaction(nonce, to, big.NewInt(0), 300000, currentGasPrice, data)
+		signedTx, err := ethtypes.SignTx(tx, ethtypes.NewEIP155Signer(chainID), privateKey)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to sign transaction: %v", err)
+		}
+
+		// Send transaction
+		err = client.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			e.logger.Warnf("Failed to send transaction (attempt %d): %v", attempt+1, err)
+			if attempt == maxRetries-1 {
+				return nil, "", fmt.Errorf("failed to send transaction after %d attempts: %v", maxRetries, err)
+			}
+			continue
+		}
+
+		lastTxHash = signedTx.Hash().Hex()
+		e.logger.Infof("Transaction sent (attempt %d): %s with gas price: %s",
+			attempt+1, lastTxHash, currentGasPrice.String())
+
+		// Wait for transaction with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), txTimeout)
+		receipt, err := bind.WaitMined(ctx, client, signedTx)
+		cancel()
+
+		if err == nil {
+			// Transaction was mined successfully
+			e.logger.Infof("Transaction confirmed: %s", lastTxHash)
+			return receipt, lastTxHash, nil
+		}
+
+		// Check if it's a timeout or other error
+		if ctx.Err() == context.DeadlineExceeded {
+			e.logger.Warnf("Transaction %s timed out after %v, attempting resubmission with higher fees",
+				lastTxHash, txTimeout)
+
+			// Increase gas price for next attempt
+			currentGasPrice = new(big.Int).Mul(currentGasPrice, big.NewInt(int64(feeBumpFactor*100)))
+			currentGasPrice = new(big.Int).Div(currentGasPrice, big.NewInt(100))
+
+			continue
+		}
+
+		// Other error occurred
+		e.logger.Warnf("Error waiting for transaction %s: %v", lastTxHash, err)
+		if attempt == maxRetries-1 {
+			return nil, "", fmt.Errorf("transaction failed after %d attempts: %v", maxRetries, err)
+		}
+	}
+
+	return nil, "", fmt.Errorf("transaction failed after %d attempts", maxRetries)
 }

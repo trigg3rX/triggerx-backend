@@ -22,3 +22,11 @@ type AggregatorClientConfig struct {
 	RetryDelay       time.Duration
 	RequestTimeout   time.Duration
 }
+
+type CallParams struct {
+	ProofOfTask      string
+	Data             string
+	TaskDefinitionID int
+	PerformerAddress string
+	Signature        string
+}

@@ -18,10 +18,10 @@ func GetChainRpcUrl(chainID string) string {
 	}
 }
 
-func GetExecutionContractAddress(chainID string) string {
+func GetProxyHubAddress(chainID string) string {
 	switch chainID {
-	case "11155111":
-		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
+	// case "11155111":
+	// 	return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
 	case "11155420":
 		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
 	case "84532":
