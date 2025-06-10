@@ -7,6 +7,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/redis"
@@ -36,7 +37,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	encodedData, err := arguments.Pack(
 		taskResult.ProofOfTask,
 		taskResult.Data,
-		taskResult.PerformerAddress,
+		common.HexToAddress(taskResult.PerformerAddress),
 		big.NewInt(int64(taskResult.TaskDefinitionID)),
 	)
 	if err != nil {
@@ -57,22 +58,12 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	c.logger.Debug("Task data signed successfully", "signature", sig)
 
 	// Prepare parameters using consistent structure
-	params := struct {
-		ProofOfTask      string `json:"proofOfTask"`
-		Data             string `json:"data"`
-		TaskDefinitionID int    `json:"taskDefinitionId"`
-		PerformerAddress string `json:"performerAddress"`
-		Signature        string `json:"signature"`
-		SignatureType    string `json:"signatureType"`
-		TargetChainID    int    `json:"targetChainId"`
-	}{
+	params := CallParams{
 		ProofOfTask:      taskResult.ProofOfTask,
 		Data:             "0x" + hex.EncodeToString(taskResult.Data),
 		TaskDefinitionID: taskResult.TaskDefinitionID,
 		PerformerAddress: taskResult.PerformerAddress,
 		Signature:        serializedSignature,
-		SignatureType:    "ECDSA",
-		TargetChainID:    taskResult.TargetChainID,
 	}
 
 	var response interface{}
