@@ -19,7 +19,7 @@ import (
 
 type CodeExecutor struct {
 	DockerManager *Manager
-	Downloader *Downloader
+	Downloader    *Downloader
 	config        ExecutorConfig
 	logger        logging.Logger
 }
@@ -44,16 +44,16 @@ func NewCodeExecutor(ctx context.Context, cfg ExecutorConfig, logger logging.Log
 	}
 
 	return &CodeExecutor{
-		DockerManager:  manager,
-		Downloader:     downloader,
-		config:         cfg,
-		logger:         logger,
+		DockerManager: manager,
+		Downloader:    downloader,
+		config:        cfg,
+		logger:        logger,
 	}, nil
 }
 
 func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*ExecutionResult, error) {
 	// 1. Download code from IPFS
-	codePath, err := e.Downloader.DownloadFile(ctx, fileURL)
+	codePath, err := e.Downloader.DownloadFile(ctx, fileURL, e.logger)
 	if err != nil {
 		return &ExecutionResult{
 			Success: false,
@@ -69,7 +69,11 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 			Error:   fmt.Errorf("container creation failed: %w", err),
 		}, nil
 	}
-	defer e.DockerManager.CleanupContainer(ctx, containerID)
+	defer func() {
+		if err := e.DockerManager.CleanupContainer(ctx, containerID); err != nil {
+			e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
+		}
+	}()
 
 	result, err := e.MonitorExecution(ctx, e.DockerManager.Cli, containerID, noOfAttesters)
 	if err != nil {
@@ -78,7 +82,7 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 			Error:   fmt.Errorf("execution failed: %w", err),
 		}, nil
 	}
-	
+
 	return result, nil
 }
 
@@ -164,13 +168,13 @@ func (e *CodeExecutor) MonitorExecution(ctx context.Context, cli *client.Client,
 					}
 				}
 				lastStats = statsJSON
-				if lastStats.MemoryStats.Usage > uint64(0.9 * float64(e.config.Docker.MemoryLimitBytes())) {
+				if lastStats.MemoryStats.Usage > uint64(0.9*float64(e.config.Docker.MemoryLimitBytes())) {
 					result.Warnings = append(result.Warnings, "Memory usage approaching limit")
 				}
-				if lastStats.CPUStats.CPUUsage.TotalUsage > uint64(0.9 * float64(e.config.Docker.CPULimit * 1e9)) {
+				if lastStats.CPUStats.CPUUsage.TotalUsage > uint64(0.9*float64(e.config.Docker.CPULimit*1e9)) {
 					result.Warnings = append(result.Warnings, "CPU usage approaching limit")
 				}
-				if lastStats.MemoryStats.MaxUsage > uint64(1.01 * float64(e.config.Docker.MemoryLimitBytes())) {
+				if lastStats.MemoryStats.MaxUsage > uint64(1.01*float64(e.config.Docker.MemoryLimitBytes())) {
 					errChan <- fmt.Errorf("container was killed due to exceeding memory limit")
 					return
 				}

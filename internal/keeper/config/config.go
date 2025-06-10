@@ -43,8 +43,12 @@ type Config struct {
 	grafanaPort       string
 
 	// IPFS configuration
-	ipfsHost           string
-	pinataJWT          string
+	ipfsHost  string
+	pinataJWT string
+
+	// TLS Proof configuration
+	tlsProofHost string
+	tlsProofPort string
 
 	// Wallet Configuration
 	chainNonces map[string]uint64
@@ -87,6 +91,8 @@ func Init() error {
 		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
 		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
 		healthRPCUrl:             env.GetEnv("HEALTH_RPC_URL", "http://localhost:9003"),
+		tlsProofHost:             env.GetEnv("TLS_PROOF_HOST", "www.google.com"),
+		tlsProofPort:             env.GetEnv("TLS_PROOF_PORT", "443"),
 		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
 		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
@@ -230,4 +236,18 @@ func GetChainNonce(chain string) uint64 {
 
 func IncrementChainNonce(chain string) {
 	cfg.chainNonces[chain]++
+}
+
+// TLS Proof configuration
+func GetTLSProofHost() string {
+	return cfg.tlsProofHost
+}
+
+func GetTLSProofPort() string {
+	return cfg.tlsProofPort
+}
+
+// SetKeeperAddress sets the keeper address in the config (for testing)
+func SetKeeperAddress(addr string) {
+	cfg.keeperAddress = addr
 }

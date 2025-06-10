@@ -36,7 +36,7 @@ func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (
 	if err != nil {
 		return -1, errors.New("error getting max task ID")
 	}
-	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID + 1, task.JobID, task.TaskDefinitionID, time.Now()).Exec()
+	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID+1, task.JobID, task.TaskDefinitionID, time.Now()).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
 	}

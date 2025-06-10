@@ -25,15 +25,17 @@ import (
 // TaskProcessor handles task-related events
 type TaskProcessor struct {
 	*EventProcessor
+	logger logging.Logger
 }
 
 // NewTaskProcessor creates a new task event processor
-func NewTaskProcessor(base *EventProcessor) *TaskProcessor {
+func NewTaskProcessor(base *EventProcessor, logger logging.Logger) *TaskProcessor {
 	if base == nil {
 		panic("base processor cannot be nil")
 	}
 	return &TaskProcessor{
 		EventProcessor: base,
+		logger:         logger,
 	}
 }
 
@@ -109,7 +111,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID)
+			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID, t.logger)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -121,7 +123,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
+			if err := client.UpdatePointsInDatabase(int(ipfsData.TaskData.TriggerData.TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}
@@ -182,7 +184,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID)
+			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID, t.logger)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -194,7 +196,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TriggerData.TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
+			if err := client.UpdatePointsInDatabase(int(ipfsData.TaskData.TriggerData.TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
 				continue
 			}
@@ -223,7 +225,7 @@ func ProcessTaskSubmittedEvents(
 	logger logging.Logger,
 ) error {
 	logger = logger.With("processor", "task_submitted")
-	processor := NewTaskProcessor(NewEventProcessor(logger))
+	processor := NewTaskProcessor(NewEventProcessor(logger), logger)
 	return processor.ProcessTaskSubmittedEvents(client, contractAddress, fromBlock, toBlock)
 }
 
@@ -236,7 +238,7 @@ func ProcessTaskRejectedEvents(
 	logger logging.Logger,
 ) error {
 	logger = logger.With("processor", "task_rejected")
-	processor := NewTaskProcessor(NewEventProcessor(logger))
+	processor := NewTaskProcessor(NewEventProcessor(logger), logger)
 	return processor.ProcessTaskRejectedEvents(client, contractAddress, fromBlock, toBlock)
 }
 
@@ -324,14 +326,16 @@ func ParseTaskRejected(log ethtypes.Log) (*TaskRejectedEvent, error) {
 	}, nil
 }
 
-func FetchIPFSContent(gateway string, cid string) (string, error) {
+func FetchIPFSContent(gateway string, cid string, logger logging.Logger) (string, error) {
 	if strings.HasPrefix(cid, "https://") {
 		resp, err := http.Get(cid)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch IPFS content from URL: %v", err)
 		}
 		defer func() {
-			_ = resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				logger.Error("Error closing response body", "error", err)
+			}
 		}()
 
 		if resp.StatusCode != http.StatusOK {
@@ -352,7 +356,9 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing response body", "error", err)
+		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {

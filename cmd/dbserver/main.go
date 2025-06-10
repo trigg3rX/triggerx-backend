@@ -27,8 +27,8 @@ func main() {
 	}
 
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.DatabaseProcess,
-		IsDevelopment:   config.IsDevMode(),
+		ProcessName:   logging.DatabaseProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
 	logger, err := logging.NewZapLogger(logConfig)

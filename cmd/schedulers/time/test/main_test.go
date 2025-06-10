@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -86,15 +86,15 @@ func TestMain(t *testing.T) {
 	})
 
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.TimeSchedulerProcess,
-		IsDevelopment:   true,
+		ProcessName:   logging.TimeSchedulerProcess,
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
 	// Test logger initialization
-	t.Run("Logger Initialization", func(t *testing.T) {		
+	t.Run("Logger Initialization", func(t *testing.T) {
 		if logger == nil {
 			panic("Logger should not be nil")
 		}

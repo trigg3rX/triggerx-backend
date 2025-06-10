@@ -51,90 +51,25 @@ Pool of workers, each monitoring the "condition". When it happens, it notifies t
 * [ ] `check.go`: Will receive the list of tasks from redis that were successfully executed from api server endpoints. Update the JobStream and TaskStream accordingly.
   * **TODO**: It is a blank file.
 
-## Keepers
-
-Before understanding the keepers, take a look at data being sent to the keeper from Aggregator:
-
-```go
-type TimeBasedTaskData struct {
-    TaskDefinitionID int                    `json:"task_definition_id"`
-    TimeJobData      ScheduleTimeJobData    `json:"time_job_data"`
-    PerformerData    GetPerformerData       `json:"performer_data"`
-}
-type TaskData struct {
-    TaskDefinitionID int                    `json:"task_definition_id"`
-    TaskTargetData   TaskTargetData         `json:"task_target_data"`
-    TriggerData      TriggerData            `json:"trigger_data"`
-    PerformerData    GetPerformerData       `json:"performer_data"`
-}
-type GetPerformerData struct {
-    KeeperID                      int64     `json:"keeper_id"`
-    KeeperAddress                 string    `json:"keeper_address"`
-}
-type ScheduleTimeJobData struct {
-    JobID                         int64     `json:"job_id"`
-    TaskDefinitionID              int       `json:"task_definition_id"`
-    LastExecutedAt                time.Time `json:"last_executed_at"`
-    ExpirationTime                time.Time `json:"expiration_time"`
-    TimeInterval                  int64     `json:"time_interval"`
-    ScheduleType                  string    `json:"schedule_type"`
-    CronExpression                string    `json:"cron_expression"`
-    SpecificSchedule              string    `json:"specific_schedule"`
-    NextExecutionTimestamp        time.Time `json:"next_execution_timestamp"`
-    TargetChainID                 string    `json:"target_chain_id"`
-    TargetContractAddress         string    `json:"target_contract_address"`
-    TargetFunction                string    `json:"target_function"`
-    ABI                           string    `json:"abi"`
-    ArgType                       int       `json:"arg_type"`
-    Arguments                     []string  `json:"arguments"`
-    DynamicArgumentsScriptUrl     string    `json:"dynamic_arguments_script_url"`
-}
-type TaskTargetData struct {
-    JobID                         int64     `json:"job_id"`
-    TaskDefinitionID              int       `json:"task_definition_id"`
-    TargetChainID                 string    `json:"target_chain_id"`
-    TargetContractAddress         string    `json:"target_contract_address"`
-    TargetFunction                string    `json:"target_function"`
-    ABI                           string    `json:"abi"`
-    ArgType                       int       `json:"arg_type"`
-    Arguments                     []string  `json:"arguments"`
-    DynamicArgumentsScriptUrl     string    `json:"dynamic_arguments_script_url"`
-}
-type TriggerData struct {
-    TaskDefinitionID              int       `json:"task_definition_id"`
-    EventChainId                  string    `json:"event_chain_id"`
-    EventTxHash                   string    `json:"event_tx_hash"`
-    EventTriggerContractAddress   string    `json:"event_trigger_contract_address"`
-    EventTriggerFunction          string    `json:"event_trigger_function"`
-    ConditionType                 string    `json:"condition_ type"`
-    ConditionSourceType           string    `json:"condition_source_type"`
-    ConditionSourceUrl            string    `json:"condition_source_url"`
-    ConditionUpperLimit           int       `json:"condition_upper_limit"`
-    ConditionLowerLimit           int       `json:"condition_lower_limit"`
-    ConditionSatisfiedValue       int       `json:"condition_satisfied_value"`
-    ConditionSatisfiedAt          time.Time `json:"condition_satisfied_at"`
-}
-```
-
 ### Task Execution
 
 * [x] `checkIfPerformer`: Check is the performer is self. If not, it will not perform the task.
-  * [ ] `executeTimeBasedTask`:
-    * [ ] `validateTimeTrigger`: Validate the time trigger by `next_execution_timestamp - last_executed_at = time_interval`.
-    * [ ] `takeActionWithStaticArgs`: Take action with static arguments.
-    * [ ] `takeActionWithDynamicArgs`: Take action with dynamic arguments.
-  * [ ] `executeTask`:
-    * [ ] `validateEventTrigger`: Validate the event trigger.
-    * [ ] `validateConditionTrigger`: Validate the condition trigger.
-    * [ ] `takeActionWithStaticArgs`: Take action with static arguments.
-    * [ ] `takeActionWithDynamicArgs`: Take action with dynamic arguments.
-  * [ ] `generateProof`: TLS certificate proof generation.
-  * [ ] `uploadToIPFS`: Upload the data + proof to IPFS.
+  * [x] `executeTask`:
+    * [x] `validateSchedulerSignature`: Validate the scheduler signature.
+    * [x] `validateTrigger`: Validate the trigger.
+    * [x] `takeActionWithStaticArgs`: Take action with static arguments.
+    * [x] `takeActionWithDynamicArgs`: Take action with dynamic arguments.
+  * [x] `generateProof`: TLS certificate proof generation.
+  * [x] `signIPFSData`: Sign the ipfs data using Consensus private key.
+  * [x] `uploadToIPFS`: Upload the data + proof to IPFS.
 
 ### Task Validation
 
-* [ ] `validateTask`: Validate the task.
-  * [ ] `validateTimeTrigger`: Validate the time trigger.
-  * [ ] `validateEventTrigger`: Validate the event trigger.
-  * [ ] `validateConditionTrigger`: Validate the condition trigger.
-  * [ ] `validateAction`: Validate the action.
+* [x] `validateTask`: Validate the task.
+  * [x] `validateSchedulerSignature`: Validate the scheduler signature.
+  * [x] `validateTrigger`: Validate the trigger.
+  * [x] `validateAction`: Validate the action.
+  * [x] `validateProof`: Validate the proof.
+  * [x] `validateSignature`: Validate the performer signature.
+
+More details in [Keeper](keeper.md).

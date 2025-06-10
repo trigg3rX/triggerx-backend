@@ -104,7 +104,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Time-based job
 
 			var nextExecutionTimestamp time.Time
-			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), tempJobs[i].ScheduleType, tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
+			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
 			if err != nil {
 				h.logger.Errorf("[getNextExecutionTimestamp] Error calculating next execution timestamp: %v", err)
 				nextExecutionTimestamp = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
@@ -163,7 +163,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting event job data: " + err.Error()})
 				return
 			}
-			h.notifyEventScheduler(jobID, eventJobData)
+			success, err := h.notifyEventScheduler(jobID, eventJobData)
+			if !success {
+				h.logger.Errorf("[CreateJobData] Error notifying event scheduler for jobID %d: %v", jobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying event scheduler: " + err.Error()})
+				return
+			}
 			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
 				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
 
@@ -194,7 +199,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting condition job data: " + err.Error()})
 				return
 			}
-			h.notifyConditionScheduler(jobID, conditionJobData)
+			success, err := h.notifyConditionScheduler(jobID, conditionJobData)
+			if !success {
+				h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying condition scheduler: " + err.Error()})
+				return
+			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
 		default:

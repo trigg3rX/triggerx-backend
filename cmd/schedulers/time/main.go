@@ -29,8 +29,8 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:     logging.TimeSchedulerProcess,
-		IsDevelopment:   config.IsDevMode(),
+		ProcessName:   logging.TimeSchedulerProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
 	logger, err := logging.NewZapLogger(logConfig)
@@ -112,13 +112,13 @@ func main() {
 
 	// Log comprehensive service status
 	serviceStatus := map[string]interface{}{
-		"manager_id":      managerID,
-		"api_port":        config.GetSchedulerRPCPort(),
-		"poll_interval":   config.GetPollingInterval(),
-		"look_ahead":      config.GetPollingLookAhead(),
-		"batch_size":      config.GetJobBatchSize(),
-		"performer_lock_ttl": config.GetPerformerLockTTL(),
-		"task_cache_ttl": config.GetTaskCacheTTL(),
+		"manager_id":            managerID,
+		"api_port":              config.GetSchedulerRPCPort(),
+		"poll_interval":         config.GetPollingInterval(),
+		"look_ahead":            config.GetPollingLookAhead(),
+		"batch_size":            config.GetJobBatchSize(),
+		"performer_lock_ttl":    config.GetPerformerLockTTL(),
+		"task_cache_ttl":        config.GetTaskCacheTTL(),
 		"duplicate_task_window": config.GetDuplicateTaskWindow(),
 	}
 

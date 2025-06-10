@@ -98,11 +98,11 @@ func parseLocalRedisConfig() (*redis.Options, error) {
 	}
 
 	opt := &redis.Options{
-		Addr:         config.GetRedisAddr(),
-		Password:     config.GetRedisPassword(),
-		DB:           config.GetRedisDB(),
+		Addr:     config.GetRedisAddr(),
+		Password: config.GetRedisPassword(),
+		DB:       config.GetRedisDB(),
 	}
-	
+
 	applyConnectionSettings(opt)
 	return opt, nil
 }
@@ -141,13 +141,13 @@ func (c *Client) Ping() error {
 // GetRedisInfo returns information about the current Redis configuration
 func GetRedisInfo() map[string]interface{} {
 	return map[string]interface{}{
-		"available":      config.IsRedisAvailable(),
-		"type":           config.GetRedisType(),
-		"upstash":        config.IsUpstashEnabled(),
-		"local":          config.IsLocalRedisEnabled(),
-		"job_stream_ttl": config.GetJobStreamTTL().String(),
+		"available":       config.IsRedisAvailable(),
+		"type":            config.GetRedisType(),
+		"upstash":         config.IsUpstashEnabled(),
+		"local":           config.IsLocalRedisEnabled(),
+		"job_stream_ttl":  config.GetJobStreamTTL().String(),
 		"task_stream_ttl": config.GetTaskStreamTTL().String(),
-		"stream_maxlen":  config.GetStreamMaxLen(),
+		"stream_maxlen":   config.GetStreamMaxLen(),
 	}
 }
 
@@ -155,12 +155,12 @@ func GetRedisInfo() map[string]interface{} {
 func (c *Client) CreateStreamIfNotExists(ctx context.Context, stream string, ttl time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	exists, err := c.redisClient.Exists(ctx, stream).Result()
 	if err != nil {
 		return err
 	}
-	
+
 	if exists == 0 {
 		// Create empty stream
 		if _, err := c.redisClient.XAdd(ctx, &redis.XAddArgs{
@@ -170,7 +170,7 @@ func (c *Client) CreateStreamIfNotExists(ctx context.Context, stream string, ttl
 		}).Result(); err != nil {
 			return err
 		}
-		
+
 		// Set TTL only once at creation
 		if err := c.redisClient.Expire(ctx, stream, ttl).Err(); err != nil {
 			return err

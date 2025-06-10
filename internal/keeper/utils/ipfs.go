@@ -1,14 +1,15 @@
 package utils
 
 import (
-	"fmt"
-	"net/http"
 	"bytes"
-	"mime/multipart"
 	"encoding/json"
+	"fmt"
 	"io"
+	"mime/multipart"
+	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -42,7 +43,11 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("Warning: failed to close response body: %v\n", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to upload to IPFS: status code %d", resp.StatusCode)
@@ -68,29 +73,31 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 	return cid, nil
 }
 
-func FetchIPFSContent(cid string) (types.IPFSData, error) {
-	ipfsUrl := "https://" + config.GetIpfsHost() + "/ipfs/" + cid
+func FetchIPFSContent(gateway string, cid string, logger logging.Logger) (string, error) {
+	ipfsUrl := gateway + "/ipfs/" + cid
 	resp, err := http.Get(ipfsUrl)
 	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: %v", err)
+		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing response body", "error", err)
+		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
+		return "", fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to read response body: %v", err)
+		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	var ipfsData types.IPFSData
 	if err := json.Unmarshal(body, &ipfsData); err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to unmarshal IPFS data: %v", err)
+		return "", fmt.Errorf("failed to unmarshal IPFS data: %v", err)
 	}
 
-	return ipfsData, nil
+	return string(body), nil
 }

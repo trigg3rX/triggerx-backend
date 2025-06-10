@@ -14,13 +14,13 @@ import (
 
 // Config holds the configuration for retry operations
 type RetryConfig struct {
-	MaxRetries      int           // Maximum number of retry attempts
-	InitialDelay    time.Duration // Initial delay between retries
-	MaxDelay        time.Duration // Maximum delay between retries
-	BackoffFactor   float64       // Multiplier for exponential backoff
-	JitterFactor    float64       // Factor for adding jitter to delays
-	LogRetryAttempt bool          // Whether to log retry attempts
-	StatusCodes     []int         // Status codes that should trigger a retry
+	MaxRetries      int              // Maximum number of retry attempts
+	InitialDelay    time.Duration    // Initial delay between retries
+	MaxDelay        time.Duration    // Maximum delay between retries
+	BackoffFactor   float64          // Multiplier for exponential backoff
+	JitterFactor    float64          // Factor for adding jitter to delays
+	LogRetryAttempt bool             // Whether to log retry attempts
+	StatusCodes     []int            // Status codes that should trigger a retry
 	ShouldRetry     func(error) bool // Custom function to determine if error should be retried
 }
 

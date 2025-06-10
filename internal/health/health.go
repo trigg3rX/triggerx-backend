@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"

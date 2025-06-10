@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/redis"
+
 	// "github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -35,9 +36,7 @@ type ValidationResponse struct {
 // Handler encapsulates the dependencies for health handlers
 // Add tsm (TaskStreamManager) to Handler
 
-
 // NewHandler creates a new instance of Handler
-
 
 func (h *Handler) HandleP2PMessage(c *gin.Context) {
 	if c.Request.Method != http.MethodPost {
@@ -194,7 +193,11 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 		})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			h.logger.Error("Error closing response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		h.logger.Errorf("IPFS file fetch returned status: %d", resp.StatusCode)

@@ -11,14 +11,14 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -32,7 +32,7 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName: logging.KeeperProcess,
+		ProcessName:   logging.KeeperProcess,
 		IsDevelopment: config.IsDevMode(),
 	}
 
@@ -41,8 +41,8 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting keeper node ...", 
-		"keeper_address", config.GetKeeperAddress(), 
+	logger.Info("Starting keeper node ...",
+		"keeper_address", config.GetKeeperAddress(),
 		"consensus_address", config.GetConsensusAddress(),
 		"version", config.GetVersion(),
 	)
@@ -52,9 +52,9 @@ func main() {
 
 	// Initialize clients
 	aggregatorCfg := aggregator.AggregatorClientConfig{
-		AggregatorRPCUrl:     config.GetAggregatorRPCUrl(),
-		SenderPrivateKey:     config.GetPrivateKeyConsensus(),
-		SenderAddress:  config.GetConsensusAddress(),
+		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+		SenderPrivateKey: config.GetPrivateKeyConsensus(),
+		SenderAddress:    config.GetConsensusAddress(),
 	}
 	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg, nil)
 	if err != nil {
@@ -83,8 +83,8 @@ func main() {
 	logger.Info("[4/5] Dependency: Code executor Initialised")
 
 	// Initialize task executor and validator
-	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), codeExecutor, aggregatorClient, logger)
-	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), codeExecutor, aggregatorClient, logger)
+	validator := validation.NewTaskValidator(logger)
+	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), codeExecutor, validator, aggregatorClient, logger)
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -176,23 +176,19 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, c
 
 	// Close health client
 	healthClient.Close()
-	logger.Info("[1/4] Process: Health client Closed")
+	logger.Info("[1/3] Process: Health client Closed")
 
 	// Close code executor
-	codeExecutor.Close()
-	logger.Info("[2/4] Process: Code executor Closed")
+	if err := codeExecutor.Close(); err != nil {
+		logger.Error("Error closing code executor", "error", err)
+	}
+	logger.Info("[2/3] Process: Code executor Closed")
 
 	// Shutdown server gracefully
 	if err := server.Stop(shutdownCtx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
 	}
-	logger.Info("[3/4] Process: API server Stopped")
-
-	// Ensure logger is properly shutdown
-	// if err := logging.Shutdown(); err != nil {
-	// 	fmt.Printf("Error shutting down logger: %v\n", err)
-	// }
-	logger.Info("[4/4] Process: Logger Stopped")
+	logger.Info("[3/3] Process: API server Stopped")
 
 	logger.Info("Shutdown complete")
 	os.Exit(0)

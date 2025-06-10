@@ -20,11 +20,12 @@ func WaitForAggregatorResponse(tsm *TaskStreamManager, job *TaskStreamData, perf
 	redisKey := fmt.Sprintf("aggregator:response:%d", job.JobID)
 	found := false
 
+outerLoop:
 	for {
 		select {
 		case <-ctx.Done():
 			found = false
-			break
+			break outerLoop
 		default:
 			// Try to get the response from Redis
 			val, err := tsm.client.Get(context.Background(), redisKey)

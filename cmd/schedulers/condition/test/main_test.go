@@ -16,8 +16,8 @@ import (
 func TestConditionSchedulerInitialization(t *testing.T) {
 	// Use a real DBServerClient, but with dummy config
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "condition-scheduler-test",
-		IsDevelopment:   true,
+		ProcessName:   "condition-scheduler-test",
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {
@@ -37,8 +37,8 @@ func TestConditionSchedulerInitialization(t *testing.T) {
 
 func TestConditionSchedulerServer(t *testing.T) {
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "condition-scheduler-test",
-		IsDevelopment:   true,
+		ProcessName:   "condition-scheduler-test",
+		IsDevelopment: true,
 	}
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {

@@ -43,7 +43,7 @@ func (r *keeperRepository) CreateKeeper(keeperData types.CreateKeeperData) (int6
 		return -1, err
 	}
 
-	err = r.db.Session().Query(queries.CreateNewKeeperQuery, maxKeeperID + 1, keeperData.KeeperName, keeperData.KeeperAddress, 1, 0.0, true, keeperData.EmailID).Exec()
+	err = r.db.Session().Query(queries.CreateNewKeeperQuery, maxKeeperID+1, keeperData.KeeperName, keeperData.KeeperAddress, 1, 0.0, true, keeperData.EmailID).Exec()
 	if err != nil {
 		return -1, err
 	}

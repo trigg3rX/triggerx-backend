@@ -2,9 +2,9 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"context"
 	"net/http"
 	"time"
 

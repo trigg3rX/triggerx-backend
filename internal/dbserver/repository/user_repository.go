@@ -53,16 +53,16 @@ func (r *userRepository) CreateNewUser(user *types.CreateUserDataRequest) (types
 	if err != nil {
 		return types.UserData{}, err
 	}
-	err = r.db.Session().Query(queries.CreateUserDataQuery, maxUserID + 1, user.UserAddress, user.EtherBalance, user.TokenBalance, user.UserPoints, 0, 0, time.Now()).Exec()
+	err = r.db.Session().Query(queries.CreateUserDataQuery, maxUserID+1, user.UserAddress, user.EtherBalance, user.TokenBalance, user.UserPoints, 0, 0, time.Now()).Exec()
 	if err != nil {
 		return types.UserData{}, err
 	}
 	return types.UserData{
-		UserID: maxUserID + 1,
-		UserAddress: user.UserAddress,
+		UserID:       maxUserID + 1,
+		UserAddress:  user.UserAddress,
 		EtherBalance: user.EtherBalance,
 		TokenBalance: user.TokenBalance,
-		UserPoints: user.UserPoints,
+		UserPoints:   user.UserPoints,
 	}, nil
 }
 
@@ -101,9 +101,9 @@ func (r *userRepository) GetUserDataByAddress(address string) (int64, types.User
 	}
 	var userData types.UserData
 	err = r.db.Session().Query(queries.GetUserDataByIDQuery, userID).Scan(
-			&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.TotalJobs, &userData.TotalTasks,
-			&userData.EtherBalance, &userData.TokenBalance, &userData.UserPoints, 
-			&userData.CreatedAt, &userData.LastUpdatedAt)
+		&userData.UserID, &userData.UserAddress, &userData.JobIDs, &userData.TotalJobs, &userData.TotalTasks,
+		&userData.EtherBalance, &userData.TokenBalance, &userData.UserPoints,
+		&userData.CreatedAt, &userData.LastUpdatedAt)
 	if err != nil {
 		return -1, types.UserData{}, err
 	}

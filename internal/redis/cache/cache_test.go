@@ -10,8 +10,8 @@ import (
 
 func setupCacheTestLogger() logging.Logger {
 	logConfig := logging.LoggerConfig{
-		ProcessName:     "test-cache",
-		IsDevelopment:   true,
+		ProcessName:   "test-cache",
+		IsDevelopment: true,
 	}
 
 	logger, err := logging.NewZapLogger(logConfig)
