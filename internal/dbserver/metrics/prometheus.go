@@ -18,14 +18,6 @@ var (
 		Help:      "The uptime of the database server in seconds",
 	})
 
-	// StartupDuration tracks the time taken for database server to start
-	StartupDuration = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: "triggerx",
-		Subsystem: "db_server",
-		Name:      "startup_duration_seconds",
-		Help:      "Time taken in seconds for the database server to start",
-	})
-
 	// Health check metrics with status
 	HealthChecksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
