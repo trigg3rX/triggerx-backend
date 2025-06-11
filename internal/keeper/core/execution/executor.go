@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
+	// "strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -209,10 +209,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 	return true, nil
 }
 
-func parseStringToInt(str string) int {
-	num, err := strconv.Atoi(str)
-	if err != nil {
-		return 0
-	}
-	return num
-}
+// func parseStringToInt(str string) int {
+// 	num, err := strconv.Atoi(str)
+// 	if err != nil {
+// 		return 0
+// 	}
+// 	return num
+// }
