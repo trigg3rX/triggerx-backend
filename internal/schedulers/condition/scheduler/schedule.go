@@ -52,7 +52,6 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleCondi
 
 	// Update metrics
 	metrics.JobsScheduled.Inc()
-	metrics.JobsRunning.Inc()
 
 	duration := time.Since(startTime)
 
@@ -106,9 +105,6 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	// Remove from workers map
 	delete(s.workers, jobID)
-
-	// Update metrics
-	metrics.JobsRunning.Dec()
 
 	s.logger.Info("Condition job unscheduled successfully", "job_id", jobID)
 	return nil

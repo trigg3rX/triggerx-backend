@@ -18,7 +18,7 @@ func (w *ConditionWorker) checkCondition() error {
 	startTime := time.Now()
 
 	// Track condition check
-	metrics.ConditionsChecked.Inc()
+	metrics.ConditionsBySourceTotal.WithLabelValues("api").Inc()
 
 	// Fetch current value from source (with caching)
 	currentValue, err := w.fetchValueWithCache()
@@ -50,7 +50,7 @@ func (w *ConditionWorker) checkCondition() error {
 
 	if satisfied {
 		w.ConditionMet++
-		metrics.ConditionsSatisfied.Inc()
+		metrics.ConditionsByTypeTotal.WithLabelValues(w.Job.ConditionType).Inc()
 
 		conditionContext["status"] = "satisfied"
 		conditionContext["consecutive_checks"] = w.ConditionMet
@@ -116,11 +116,11 @@ func (w *ConditionWorker) fetchValue() (float64, error) {
 
 // fetchFromAPI fetches value from an HTTP API endpoint
 func (w *ConditionWorker) fetchFromAPI() (float64, error) {
-	metrics.ValueSourceRequests.Inc()
+	metrics.HTTPRequestsTotal.WithLabelValues("GET", w.Job.ValueSourceUrl, "200").Inc()
 
 	resp, err := w.HttpClient.Get(w.Job.ValueSourceUrl)
 	if err != nil {
-		metrics.ValueSourceErrors.Inc()
+		metrics.HTTPRequestsTotal.WithLabelValues("GET", w.Job.ValueSourceUrl, "500").Inc()
 		return 0, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer func() {
@@ -130,13 +130,13 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		metrics.ValueSourceErrors.Inc()
+		metrics.HTTPRequestsTotal.WithLabelValues("GET", w.Job.ValueSourceUrl, strconv.Itoa(resp.StatusCode)).Inc()
 		return 0, fmt.Errorf("HTTP request failed with status: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		metrics.ValueSourceErrors.Inc()
+		metrics.HTTPRequestsTotal.WithLabelValues("GET", w.Job.ValueSourceUrl, "500").Inc()
 		return 0, fmt.Errorf("failed to read response body: %w", err)
 	}
 
@@ -178,7 +178,7 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		}
 	}
 
-	metrics.ValueSourceErrors.Inc()
+	metrics.HTTPRequestsTotal.WithLabelValues("GET", w.Job.ValueSourceUrl, "500").Inc()
 	return 0, fmt.Errorf("could not extract numeric value from response: %s", string(body))
 }
 

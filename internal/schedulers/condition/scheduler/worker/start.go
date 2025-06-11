@@ -63,11 +63,12 @@ func (w *ConditionWorker) Start() {
 				"last_value", w.LastValue,
 				"condition_met_count", w.ConditionMet,
 			)
+			metrics.JobsCompleted.WithLabelValues("success").Inc()
 			return
 		case <-ticker.C:
 			if err := w.checkCondition(); err != nil {
 				w.Logger.Error("Error checking condition", "job_id", w.Job.JobID, "error", err)
-				metrics.JobsFailed.Inc()
+				metrics.JobsCompleted.WithLabelValues("failed").Inc()
 			}
 		}
 	}
