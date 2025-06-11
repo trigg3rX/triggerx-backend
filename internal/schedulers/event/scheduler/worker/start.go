@@ -66,7 +66,7 @@ func (w *EventWorker) Start() {
 		case <-ticker.C:
 			if err := w.checkForEvents(); err != nil {
 				w.Logger.Error("Error checking for events", "job_id", w.Job.JobID, "error", err)
-				metrics.JobsFailed.Inc()
+				metrics.JobsCompleted.WithLabelValues("failed").Inc()
 			}
 		}
 	}

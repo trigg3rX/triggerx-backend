@@ -48,7 +48,7 @@ func (w *EventWorker) checkForEvents() error {
 
 	// Process each event
 	for _, log := range logs {
-		metrics.EventsDetected.Inc()
+		metrics.EventsPerMinute.WithLabelValues(w.Job.TriggerChainID).Inc()
 		if err := w.processEvent(log); err != nil {
 			w.Logger.Error("Failed to process event",
 				"job_id", w.Job.JobID,
@@ -56,9 +56,9 @@ func (w *EventWorker) checkForEvents() error {
 				"block", log.BlockNumber,
 				"error", err,
 			)
-			metrics.JobsFailed.Inc()
+			metrics.JobsCompleted.WithLabelValues("failed").Inc()
 		} else {
-			metrics.EventsProcessed.Inc()
+			metrics.JobsCompleted.WithLabelValues("success").Inc()
 		}
 	}
 
