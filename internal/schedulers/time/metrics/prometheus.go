@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -178,17 +179,38 @@ var (
 		Name:      "duplicate_task_window_seconds",
 		Help:      "Duplicate task detection window",
 	})
+
+	// Internal tracking variables for performance calculations
+	taskStatsLock       sync.RWMutex
+	taskCompletionTimes []float64
+	successfulTasks     int64
+	totalTasks          int64
+	tasksLastMinute     int64
+	lastMinuteReset     time.Time
 )
 
-// StartMetricsCollection starts collecting metrics
+// Starts collecting metrics
 func StartMetricsCollection() {
-	// Update uptime every 60 seconds
+	// Update uptime every 15 seconds
 	go func() {
-		ticker := time.NewTicker(60 * time.Second)
+		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
 		}
 	}()
 }
