@@ -109,7 +109,7 @@ func TestGetExecutionContractAddress(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := GetExecutionContractAddress(tt.chainID)
+			actual := GetProxyHubAddress(tt.chainID)
 			assert.Equal(t, tt.expected, actual)
 		})
 	}

@@ -94,9 +94,9 @@ func (w *EventWorker) processEvent(log types.Log) error {
 		"trigger_chain_id":         w.Job.TriggerChainID,
 		"trigger_contract_address": w.Job.TriggerContractAddress,
 		"trigger_event":            w.Job.TriggerEvent,
-		"target_chain_id":          w.Job.TargetChainID,
-		"target_contract_address":  w.Job.TargetContractAddress,
-		"target_function":          w.Job.TargetFunction,
+		"target_chain_id":          w.Job.TaskTargetData.TargetChainID,
+		"target_contract_address":  w.Job.TaskTargetData.TargetContractAddress,
+		"target_function":          w.Job.TaskTargetData.TargetFunction,
 		"tx_hash":                  log.TxHash.Hex(),
 		"block_number":             log.BlockNumber,
 		"log_index":                log.Index,
@@ -122,8 +122,8 @@ func (w *EventWorker) processEvent(log types.Log) error {
 			"job_id", w.Job.JobID,
 			"tx_hash", log.TxHash.Hex(),
 			"block", log.BlockNumber,
-			"target_chain", w.Job.TargetChainID,
-			"target_function", w.Job.TargetFunction,
+			"target_chain", w.Job.TaskTargetData.TargetChainID,
+			"target_function", w.Job.TaskTargetData.TargetFunction,
 			"duration", duration,
 		)
 	} else {
@@ -135,8 +135,8 @@ func (w *EventWorker) processEvent(log types.Log) error {
 			"job_id", w.Job.JobID,
 			"tx_hash", log.TxHash.Hex(),
 			"block", log.BlockNumber,
-			"target_chain", w.Job.TargetChainID,
-			"target_function", w.Job.TargetFunction,
+			"target_chain", w.Job.TaskTargetData.TargetChainID,
+			"target_function", w.Job.TaskTargetData.TargetFunction,
 			"duration", duration,
 		)
 	}

@@ -63,7 +63,7 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig, tsm 
 }
 
 // executeWithRetry executes an RPC call with retry logic using the retry package
-func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, result interface{}, params interface{}) error {
+func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, result interface{}, params CallParams) error {
 	// Create a new request for each attempt to ensure fresh state
 	operation := func() (interface{}, error) {
 		rpcClient, err := rpc.Dial(c.config.AggregatorRPCUrl)
@@ -72,12 +72,12 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		}
 		defer rpcClient.Close()
 
-		// Create a context with timeout for this attempt
-		ctxWithTimeout, cancel := context.WithTimeout(ctx, c.httpClient.GetTimeout())
-		defer cancel()
-
-		// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
-		err = rpcClient.CallContext(ctxWithTimeout, result, method, params)
+		if method == "sendTask" {
+			// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
+			err = rpcClient.Call(result, method, params.ProofOfTask, params.Data, params.TaskDefinitionID, params.PerformerAddress, params.Signature)
+		} else if method == "sendCustomMessage" {
+			err = rpcClient.Call(result, method, params.Data, params.TaskDefinitionID)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("RPC call failed: %w", err)
 		}
@@ -88,6 +88,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 	_, err := retry.Retry(ctx, operation, &retry.RetryConfig{
 		MaxRetries:      c.httpClient.HTTPConfig.RetryConfig.MaxRetries,
 		InitialDelay:    c.httpClient.HTTPConfig.RetryConfig.InitialDelay,
+		MaxDelay:        c.httpClient.HTTPConfig.RetryConfig.MaxDelay,
 		BackoffFactor:   2.0,
 		JitterFactor:    0.1,
 		LogRetryAttempt: true,

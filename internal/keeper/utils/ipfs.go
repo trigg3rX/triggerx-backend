@@ -9,15 +9,22 @@ import (
 	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func UploadToIPFS(filename string, data []byte) (string, error) {
+	metrics.IPFSUploadSizeBytes.Add(float64(len(data)))
+
 	url := "https://uploads.pinata.cloud/v3/files"
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+
+	// Add the "network" field and set it to "public"
+	if err := writer.WriteField("network", "public"); err != nil {
+		return "", fmt.Errorf("failed to write network field: %v", err)
+	}
 
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
@@ -73,31 +80,31 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 	return cid, nil
 }
 
-func FetchIPFSContent(gateway string, cid string, logger logging.Logger) (string, error) {
-	ipfsUrl := gateway + "/ipfs/" + cid
+func FetchIPFSContent(cid string) (types.IPFSData, error) {
+	ipfsUrl := "https://" + config.GetIpfsHost() + "/ipfs/" + cid
 	resp, err := http.Get(ipfsUrl)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
+		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logger.Error("Error closing response body", "error", err)
-		}
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
+		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %v", err)
+		return types.IPFSData{}, fmt.Errorf("failed to read response body: %v", err)
 	}
 
 	var ipfsData types.IPFSData
 	if err := json.Unmarshal(body, &ipfsData); err != nil {
-		return "", fmt.Errorf("failed to unmarshal IPFS data: %v", err)
+		return types.IPFSData{}, fmt.Errorf("failed to unmarshal IPFS data: %v", err)
 	}
 
-	return string(body), nil
+	metrics.IPFSDownloadSizeBytes.Add(float64(len(body)))
+
+	return ipfsData, nil
 }

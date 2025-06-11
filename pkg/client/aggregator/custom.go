@@ -15,10 +15,7 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 		"PerformerAddress", taskData.PerformerAddress)
 
 	// Prepare parameters using consistent structure
-	params := struct {
-		Data             string `json:"data"`
-		TaskDefinitionID int    `json:"taskDefinitionId"`
-	}{
+	params := CallParams{
 		Data:             "0x" + hex.EncodeToString(taskData.Data),
 		TaskDefinitionID: taskData.TaskDefinitionID,
 	}

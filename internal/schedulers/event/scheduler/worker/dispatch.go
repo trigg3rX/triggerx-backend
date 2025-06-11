@@ -17,9 +17,9 @@ func (w *EventWorker) performActionExecution(log types.Log) bool {
 	// Simulate action execution for now
 	w.Logger.Info("Simulating action execution",
 		"job_id", w.Job.JobID,
-		"target_chain", w.Job.TargetChainID,
-		"target_contract", w.Job.TargetContractAddress,
-		"target_function", w.Job.TargetFunction,
+		"target_chain", w.Job.TaskTargetData.TargetChainID,
+		"target_contract", w.Job.TaskTargetData.TargetContractAddress,
+		"target_function", w.Job.TaskTargetData.TargetFunction,
 	)
 
 	// Simulate processing time

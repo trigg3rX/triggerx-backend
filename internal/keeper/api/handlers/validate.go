@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 )
 
 type TaskValidationRequest struct {
@@ -36,6 +41,10 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 		return
 	}
 
+	// Track task by definition ID for validation
+	taskDefID := strconv.Itoa(int(taskRequest.TaskDefinitionID))
+	metrics.TasksByDefinitionIDTotal.WithLabelValues(taskDefID).Inc()
+
 	// Decode the data if it's hex-encoded (with 0x prefix)
 	var decodedData string
 	dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
@@ -51,7 +60,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	decodedData = string(dataBytes)
 	h.logger.Infof("Decoded Data CID: %s", decodedData)
 
-	ipfsData, err := h.ipfsFetcher.FetchContent(decodedData)
+	ipfsData, err := utils.FetchIPFSContent(decodedData)
 	if err != nil {
 		h.logger.Errorf("Failed to fetch IPFS content: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
@@ -67,7 +76,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	var validationErr error
 
 	h.logger.Info("Validating task ...", "trace_id", traceID)
-	isValid, validationErr = h.validator.ValidateTask(ipfsData.TaskData, traceID)
+	isValid, validationErr = h.validator.ValidateTask(context.Background(), ipfsData, traceID)
 
 	if validationErr != nil {
 		h.logger.Error("Validation error", "error", validationErr, "trace_id", traceID)

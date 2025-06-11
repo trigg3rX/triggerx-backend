@@ -7,7 +7,7 @@ type JobResponse struct {
 	ConditionJobData *ConditionJobData `json:"condition_job_data,omitempty"`
 }
 
-type GetPerformerData struct {
+type PerformerData struct {
 	KeeperID      int64  `json:"keeper_id"`
 	KeeperAddress string `json:"keeper_address"`
 }

@@ -47,13 +47,7 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		TriggerChainID:            req.TriggerChainID,
 		TriggerContractAddress:    req.TriggerContractAddress,
 		TriggerEvent:              req.TriggerEvent,
-		TargetChainID:             req.TargetChainID,
-		TargetContractAddress:     req.TargetContractAddress,
-		TargetFunction:            req.TargetFunction,
-		ABI:                       req.ABI,
-		ArgType:                   req.ArgType,
-		Arguments:                 req.Arguments,
-		DynamicArgumentsScriptUrl: req.DynamicArgumentsScriptUrl,
+		TaskTargetData:            req.TaskTargetData,
 	}
 
 	// Schedule the job

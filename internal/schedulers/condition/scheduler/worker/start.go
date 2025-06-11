@@ -15,7 +15,7 @@ import (
 
 // ConditionWorker represents an individual worker monitoring a specific condition
 type ConditionWorker struct {
-	Job          *commonTypes.ConditionJobData
+	Job          *commonTypes.ScheduleConditionJobData
 	Logger       logging.Logger
 	HttpClient   *http.Client
 	Ctx          context.Context

@@ -91,6 +91,9 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
 	s.router.Use(TraceMiddleware())
+	s.router.Use(MetricsMiddleware())
+	s.router.Use(TaskMetricsMiddleware())
+	s.router.Use(RestartTrackingMiddleware())
 	s.router.Use(LoggerMiddleware(s.logger))
 	s.router.Use(ErrorMiddleware(s.logger))
 }
@@ -98,7 +101,7 @@ func (s *Server) setupMiddleware() {
 // setupRoutes sets up the routes for the server
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
-	taskHandler := handlers.NewTaskHandler(deps.Logger, &deps.Executor, &deps.Validator)
+	taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
 
 	// Task routes

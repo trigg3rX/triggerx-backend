@@ -28,6 +28,12 @@ type Config struct {
 	// IPFS configuration
 	ipfsHost  string
 	pinataJWT string
+
+	// Etherscan API Key
+	etherscanAPIKey string
+
+	// Alchemy API Key
+	alchemyAPIKey string
 }
 
 var cfg Config
@@ -46,6 +52,8 @@ func Init() error {
 		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		ipfsHost:            env.GetEnv("IPFS_HOST", ""),
 		pinataJWT:           env.GetEnv("PINATA_JWT", ""),
+		etherscanAPIKey:     env.GetEnv("ETHERSCAN_API_KEY", ""),
+		alchemyAPIKey:       env.GetEnv("ALCHEMY_API_KEY", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -65,6 +73,12 @@ func validateConfig() error {
 	}
 	if env.IsEmpty(cfg.pinataJWT) {
 		return fmt.Errorf("invalid Pinata JWT: %s", cfg.pinataJWT)
+	}
+	if env.IsEmpty(cfg.etherscanAPIKey) {
+		return fmt.Errorf("invalid Etherscan API Key: %s", cfg.etherscanAPIKey)
+	}
+	if env.IsEmpty(cfg.alchemyAPIKey) {
+		return fmt.Errorf("invalid Alchemy API Key: %s", cfg.alchemyAPIKey)
 	}
 	return nil
 }
@@ -103,4 +117,12 @@ func GetIpfsHost() string {
 
 func GetPinataJWT() string {
 	return cfg.pinataJWT
+}
+
+func GetEtherscanAPIKey() string {
+	return cfg.etherscanAPIKey
+}
+
+func GetAlchemyAPIKey() string {
+	return cfg.alchemyAPIKey
 }

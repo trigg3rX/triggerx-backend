@@ -205,6 +205,16 @@ func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
 	return argData
 }
 
+func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {
+	var argData []interface{}
+
+	for _, arg := range args {
+		argData = append(argData, arg)
+	}
+
+	return argData
+}
+
 // func (e *TaskExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
 // 	// Handle different output scenarios
 // 	if len(method.Outputs) == 0 {

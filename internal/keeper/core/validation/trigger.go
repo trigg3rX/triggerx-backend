@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -26,24 +27,32 @@ const (
 func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, traceID string) (bool, error) {
 	e.logger.Info("Validating trigger data", "task_id", triggerData.TaskID, "trace_id", traceID)
 
-	if triggerData.TaskDefinitionID == 1 || triggerData.TaskDefinitionID == 2 {
-		return e.IsValidTimeBasedTrigger(triggerData)
+	switch triggerData.TaskDefinitionID {
+	case 1, 2:
+		isValid, err := e.IsValidTimeBasedTrigger(triggerData)
+		if !isValid {
+			return isValid, err
+		}
+	case 3, 4:
+		isValid, err := e.IsValidEventBasedTrigger(triggerData)
+		if !isValid {
+			return isValid, err
+		}
+	case 5, 6:
+		isValid, err := e.IsValidConditionBasedTrigger(triggerData)
+		if !isValid {
+			return isValid, err
+		}
+	default:
+		return false, fmt.Errorf("invalid task definition id: %d", triggerData.TaskDefinitionID)
 	}
 
-	if triggerData.TaskDefinitionID == 3 || triggerData.TaskDefinitionID == 4 {
-		return e.IsValidEventBasedTrigger(triggerData)
-	}
-
-	if triggerData.TaskDefinitionID == 5 || triggerData.TaskDefinitionID == 6 {
-		return e.IsValidConditionBasedTrigger(triggerData)
-	}
-
-	return false, fmt.Errorf("invalid task definition ID: %d", triggerData.TaskDefinitionID)
+	return true, nil
 }
 
 func (v *TaskValidator) IsValidTimeBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
 	// check if expiration time is before trigger timestamp
-	if triggerData.ExpirationTime.Before(triggerData.TriggerTimestamp) {
+	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
 	}
 
@@ -53,8 +62,13 @@ func (v *TaskValidator) IsValidTimeBasedTrigger(triggerData *types.TaskTriggerDa
 }
 
 func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
+	// check if expiration time is before trigger timestamp
+	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
+		return false, errors.New("expiration time is before trigger timestamp")
+	}
+	
 	rpcURL := utils.GetChainRpcUrl(triggerData.EventChainId)
-	client, err := v.ethClientMaker(rpcURL)
+	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		return false, fmt.Errorf("failed to connect to chain: %v", err)
 	}
@@ -133,6 +147,11 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 }
 
 func (v *TaskValidator) IsValidConditionBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
+	// check if expiration time is before trigger timestamp
+	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
+		return false, errors.New("expiration time is before trigger timestamp")
+	}
+	
 	// check if the condition was satisfied by the value
 	if triggerData.ConditionSourceType == ConditionEquals {
 		return triggerData.ConditionSatisfiedValue == triggerData.ConditionUpperLimit, nil

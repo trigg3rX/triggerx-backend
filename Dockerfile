@@ -1,5 +1,5 @@
-# Use golang:1.23-alpine as the base image
-FROM golang:1.23-alpine AS builder
+# Use golang:1.24.2-alpine as the base image
+FROM golang:1.24.2-alpine AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -21,7 +21,7 @@ RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-keeper ./cmd/keeper
 
 # Use a minimal alpine image for the final stage
-FROM golang:1.23-alpine
+FROM golang:1.24.2-alpine
 
 # Install ca-certificates, curl, Docker, and Docker Compose
 RUN apk --no-cache add ca-certificates curl \
