@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
@@ -59,6 +60,11 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			return
 		}
 
+		endpoint := c.FullPath()
+		if endpoint == "" {
+			endpoint = c.Request.URL.Path
+		}
+
 		// Create a copy of the request body if it exists
 		var bodyBytes []byte
 		if c.Request.Body != nil {
@@ -88,6 +94,9 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 		var finalBody []byte
 		_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 			attempts++
+			// Record retry attempt
+			metrics.RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprintf("%d", attempts)).Inc()
+
 			w.body.Reset()
 			w.statusCode = 0
 
@@ -130,6 +139,8 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			if !retryable {
 				finalStatus = newWriter.statusCode
 				finalBody = newWriter.body.Bytes()
+				// Record successful retry
+				metrics.RetrySuccessesTotal.WithLabelValues(endpoint).Inc()
 				return nil, nil
 			}
 
@@ -153,6 +164,8 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 
 		if err != nil {
 			logger.Errorf("Error retrying request: %v", err)
+			// Record failed retry
+			metrics.RetryFailuresTotal.WithLabelValues(endpoint).Inc()
 			if finalStatus == 0 {
 				finalStatus = http.StatusInternalServerError
 				finalBody = []byte("Internal server error during retry operation")

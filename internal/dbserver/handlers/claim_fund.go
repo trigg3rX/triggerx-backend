@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
 
 type ClaimFundRequest struct {
@@ -38,6 +39,9 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid wallet address"})
 		return
 	}
+
+	// Track database operation for checking wallet balance
+	trackDBOp := metrics.TrackDBOperation("read", "wallet_balance")
 
 	var rpcURL string
 	switch req.Network {
@@ -137,4 +141,6 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		Message:         "Funds sent successfully",
 		TransactionHash: signedTx.Hash().Hex(),
 	})
+
+	trackDBOp(nil) // No error if we reach this point
 }

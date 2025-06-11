@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -34,6 +35,16 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Start metrics collection
+	metrics.StartMetricsCollection()
+	metrics.StartSystemMetricsCollection()
+	metrics.TrackDBConnections()
+
+	// Apply middleware in the correct order
+	router.Use(middleware.RecoveryMiddleware(logger))          // First, to catch panics
+	router.Use(middleware.TimeoutMiddleware(30 * time.Second)) // Set appropriate timeout
+	router.Use(middleware.MetricsMiddleware())                 // Track HTTP metrics
 
 	// Configure CORS
 	router.Use(func(c *gin.Context) {
@@ -112,7 +123,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
 	// Apply middleware in the correct order
-	router.Use(middleware.RetryMiddleware(retryConfig, logger)) // Retry middleware first
+	router.Use(middleware.RetryMiddleware(retryConfig, logger)) // Retry middleware after other middleware
 	// Rate limiting is handled through the API key auth middleware
 
 	return s

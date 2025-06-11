@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
@@ -26,11 +27,14 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("update", "task_data")
 	if err := h.taskRepository.UpdateTaskExecutionDataInDB(&taskData); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskExecutionData] Error updating task execution data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	trackDBOp(nil)
 
 	h.logger.Infof("[UpdateTaskExecutionData] Successfully updated task execution data for task with ID: %s", taskID)
 	c.JSON(http.StatusOK, gin.H{"message": "Task execution data updated successfully"})
@@ -54,11 +58,14 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("update", "task_data")
 	if err := h.taskRepository.UpdateTaskAttestationDataInDB(&taskData); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskAttestationData] Error updating task attestation data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	trackDBOp(nil)
 
 	h.logger.Infof("[UpdateTaskAttestationData] Successfully updated task attestation data for task with ID: %s", taskID)
 	c.JSON(http.StatusOK, gin.H{"message": "Task attestation data updated successfully"})
@@ -83,11 +90,14 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
 		return
 	}
+	trackDBOp := metrics.TrackDBOperation("update", "task_data")
 	if err := h.taskRepository.UpdateTaskFee(taskIDInt, taskFee.Fee); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	trackDBOp(nil)
 
 	h.logger.Infof("[UpdateTaskFee] Successfully updated task fee for task with ID: %s", taskID)
 	c.JSON(http.StatusOK, taskFee)

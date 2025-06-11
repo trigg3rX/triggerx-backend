@@ -6,10 +6,13 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
 
 func (h *Handler) GetPerformers(c *gin.Context) {
+	trackDBOp := metrics.TrackDBOperation("read", "keepers")
 	performers, err := h.keeperRepository.GetKeeperAsPerformer()
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetPerformers] Error retrieving performers: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -35,7 +38,9 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
 	keeperData, err := h.keeperRepository.GetKeeperDataByID(keeperIDInt)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -57,7 +62,9 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_tasks")
 	taskCount, err := h.keeperRepository.GetKeeperTaskCount(keeperIDInt)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperTaskCount] Error retrieving task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -79,7 +86,9 @@ func (h *Handler) GetKeeperPoints(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_points")
 	points, err := h.keeperRepository.GetKeeperPointsByIDInDB(keeperIDInt)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperPoints] Error retrieving keeper points: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -101,7 +110,9 @@ func (h *Handler) GetKeeperCommunicationInfo(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_communication")
 	keeperData, err := h.keeperRepository.GetKeeperCommunicationInfo(keeperIDInt)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperChatInfo] Error retrieving chat ID, keeper name, and email for ID %s: %v", keeperID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

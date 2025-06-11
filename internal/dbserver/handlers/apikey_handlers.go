@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
@@ -30,7 +31,9 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 
 	h.logger.Infof("[CreateApiKey] Checking for existing API key for owner: %s", req.Owner)
 
+	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
 	existingKey, err := h.apiKeysRepository.GetApiKeyDataByOwner(req.Owner)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateApiKey] Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -52,11 +55,14 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		CreatedAt: time.Now().UTC(),
 	}
 
+	trackDBOp = metrics.TrackDBOperation("create", "apikey_data")
 	if err := h.apiKeysRepository.CreateApiKey(&apiKey); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("[CreateApiKey] Failed to insert API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create API key"})
 		return
 	}
+	trackDBOp(nil)
 
 	h.logger.Infof("[CreateApiKey] Successfully created new API key for owner %s (Key: %s)", req.Owner, apiKey.Key)
 	c.JSON(http.StatusCreated, apiKey)
@@ -72,7 +78,9 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
 	apiKey, err := h.apiKeysRepository.GetApiKeyDataByKey(keyID)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("API key not found: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "API key not found"})
@@ -87,11 +95,14 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 		apiKey.RateLimit = *req.RateLimit
 	}
 
+	trackDBOp = metrics.TrackDBOperation("update", "apikey_data")
 	if err := h.apiKeysRepository.UpdateApiKey(&req); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("Failed to update API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update API key"})
 		return
 	}
+	trackDBOp(nil)
 
 	c.JSON(http.StatusOK, apiKey)
 }
@@ -99,11 +110,14 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 func (h *Handler) DeleteApiKey(c *gin.Context) {
 	keyID := c.Param("key")
 
+	trackDBOp := metrics.TrackDBOperation("update", "apikey_data")
 	if err := h.apiKeysRepository.UpdateApiKeyStatus(&types.UpdateApiKeyStatusRequest{Key: keyID, IsActive: false}); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("Failed to delete API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return
 	}
+	trackDBOp(nil)
 
 	c.Status(http.StatusNoContent)
 }

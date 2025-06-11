@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
@@ -19,7 +20,9 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("update", "keeper_data")
 	newCount, err := h.keeperRepository.IncrementKeeperTaskCount(keeperIDInt)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving current task count: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -52,14 +55,18 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 	taskID := requestBody.TaskID
 	h.logger.Infof("[AddTaskFeeToKeeperPoints] Processing task fee for task ID %d to keeper with ID: %s", taskID, keeperID)
 
+	trackDBOp := metrics.TrackDBOperation("read", "task_data")
 	taskFee, err := h.taskRepository.GetTaskFee(taskID)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving task fee for task ID %d: %v", taskID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	trackDBOp = metrics.TrackDBOperation("update", "keeper_data")
 	newPoints, err := h.keeperRepository.UpdateKeeperPoints(keeperIDInt, taskFee)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving current points: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -83,7 +90,9 @@ func (h *Handler) UpdateKeeperChatID(c *gin.Context) {
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("update", "keeper_data")
 	err := h.keeperRepository.UpdateKeeperChatID(requestData.KeeperAddress, requestData.ChatID)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper: %s", requestData.KeeperAddress)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

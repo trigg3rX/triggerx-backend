@@ -5,18 +5,24 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
-	userAddress := c.Param("user_address")
+	userAddress := strings.ToLower(c.Param("address"))
 	if userAddress == "" {
-		h.logger.Error("[GetJobsByUserAddress] No user address provided")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No user address provided"})
+		h.logger.Error("[GetJobsByUserAddress] Invalid user address")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user address"})
 		return
 	}
 
-	userID, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(strings.ToLower(userAddress))
+	h.logger.Infof("[GetJobsByUserAddress] Retrieving jobs for user address: %s", userAddress)
+
+	// First get user ID and job IDs
+	trackDBOp := metrics.TrackDBOperation("read", "user_data")
+	userID, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user data: " + err.Error()})
@@ -31,7 +37,9 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	var jobs []types.JobResponse
 	for _, jobID := range jobIDs {
 		// Get basic job data
+		trackDBOp = metrics.TrackDBOperation("read", "job_data")
 		jobData, err := h.jobRepository.GetJobByID(jobID)
+		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %d: %v", jobID, err)
 			continue
@@ -43,7 +51,9 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		switch jobData.TaskDefinitionID {
 		case 1, 2:
 			// Time-based job
+			trackDBOp = metrics.TrackDBOperation("read", "time_job")
 			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
+			trackDBOp(err)
 			if err != nil {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %d: %v", jobID, err)
 				continue
@@ -52,7 +62,9 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 		case 3, 4:
 			// Event-based job
+			trackDBOp = metrics.TrackDBOperation("read", "event_job")
 			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
+			trackDBOp(err)
 			if err != nil {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %d: %v", jobID, err)
 				continue
@@ -61,7 +73,9 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 		case 5, 6:
 			// Condition-based job
+			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
+			trackDBOp(err)	
 			if err != nil {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %d: %v", jobID, err)
 				continue

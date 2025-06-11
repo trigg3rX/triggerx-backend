@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -17,7 +18,9 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	var tasks []commonTypes.ScheduleTimeTaskData
 	var err error
 
+	trackDBOp := metrics.TrackDBOperation("read", "time_jobs")
 	tasks, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(lookAheadTime)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time based tasks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "tasks": tasks})
@@ -25,10 +28,12 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	}
 
 	for _, task := range tasks {
+		trackDBOp = metrics.TrackDBOperation("create", "task_data")
 		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
 			JobID:            task.TaskTargetData.JobID,
 			TaskDefinitionID: task.TaskDefinitionID,
 		})
+		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
 			continue
