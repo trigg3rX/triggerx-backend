@@ -85,14 +85,14 @@ func Init() error {
 		keeperP2PPort:            env.GetEnv("OPERATOR_P2P_PORT", "9012"),
 		keeperMetricsPort:        env.GetEnv("OPERATOR_METRICS_PORT", "9013"),
 		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
-		healthRPCUrl:             env.GetEnv("HEALTH_RPC_URL", "http://localhost:9003"),
+		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:             env.GetEnv("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
 		tlsProofHost:             env.GetEnv("TLS_PROOF_HOST", "www.google.com"),
 		tlsProofPort:             env.GetEnv("TLS_PROOF_PORT", "443"),
 		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
-		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"),
+		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
+		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
 		othenticBootstrapID:      env.GetEnv("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 	if err := validateConfig(cfg); err != nil {
