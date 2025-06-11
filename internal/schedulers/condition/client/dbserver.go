@@ -44,7 +44,7 @@ func NewDBServerClient(logger logging.Logger, config Config) (*DBServerClient, e
 
 // HealthCheck performs a health check against the database server
 func (c *DBServerClient) HealthCheck() error {
-	url := fmt.Sprintf("%s/status", c.baseURL)
+	url := fmt.Sprintf("%s/api/health", c.baseURL)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -55,7 +55,9 @@ func (c *DBServerClient) HealthCheck() error {
 	if err != nil {
 		return fmt.Errorf("health check request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check failed with status: %s", resp.Status)
@@ -77,7 +79,9 @@ func (c *DBServerClient) GetConditionBasedJobs() ([]types.ConditionJobData, erro
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status: %s", resp.Status)
@@ -119,7 +123,9 @@ func (c *DBServerClient) UpdateJobStatus(jobID int64, isRunning bool) error {
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("request failed with status: %s", resp.Status)
@@ -154,7 +160,9 @@ func (c *DBServerClient) SendTaskToManager(jobID int64, triggerValue float64, co
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("request failed with status: %s", resp.Status)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // LoadVerifiedKeepers loads only verified keepers from the database
@@ -54,7 +55,7 @@ func (sm *StateManager) DumpState() error {
 	for address, state := range sm.keepers {
 		if state.IsActive {
 			// Create a minimal health check-in with just the address
-			health := types.KeeperHealthCheckIn{
+			health := commonTypes.KeeperHealthCheckIn{
 				KeeperAddress: address,
 			}
 

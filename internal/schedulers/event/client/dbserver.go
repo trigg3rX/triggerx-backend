@@ -132,7 +132,9 @@ func (c *DBServerClient) doRequest(method, url string, payload interface{}, resu
 	if err != nil {
 		return fmt.Errorf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
@@ -175,7 +177,7 @@ func (c *DBServerClient) doRequest(method, url string, payload interface{}, resu
 
 // HealthCheck checks if the database server is healthy
 func (c *DBServerClient) HealthCheck() error {
-	url := fmt.Sprintf("%s/health", c.baseURL)
+	url := fmt.Sprintf("%s/api/health", c.baseURL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -189,7 +191,9 @@ func (c *DBServerClient) HealthCheck() error {
 	if err != nil {
 		return fmt.Errorf("health check request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check failed: status code %d", resp.StatusCode)

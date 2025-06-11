@@ -20,7 +20,7 @@ const (
 			SET job_title = ?, time_frame = ?, recurring = ?, status = ?,
 			job_cost_prediction = ?, updated_at = ?
 			WHERE job_id = ?`
-	
+
 	UpdateJobDataLastExecutedAtQuery = `
 			UPDATE triggerx.job_data 
 			SET task_ids = ?, job_cost_actual = ?, last_executed_at = ?

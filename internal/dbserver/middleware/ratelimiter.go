@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 

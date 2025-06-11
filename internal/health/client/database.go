@@ -16,6 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // DatabaseManager handles database operations
@@ -58,7 +59,7 @@ func GetInstance() *DatabaseManager {
 }
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)
-func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
 	dm.logger.Debug("Updating keeper status in database",
 		"keeper", keeperHealth.KeeperAddress,
 		"active", isActive,
@@ -113,7 +114,9 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthChe
 	}
 
 	if err := dm.db.Session().Query(`
-		UPDATE triggerx.keeper_data SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? WHERE keeper_id = ?`,
+		UPDATE triggerx.keeper_data 
+		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
+		WHERE keeper_id = ?`,
 		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec(); err != nil {
 		dm.logger.Error("Failed to update keeper status",
 			"error", err,
@@ -261,7 +264,7 @@ func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error
 }
 
 // Public wrapper functions
-func UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+func UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
 	return GetInstance().UpdateKeeperHealth(keeperHealth, isActive)
 }
 
@@ -272,7 +275,7 @@ func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 	iter := dm.db.Session().Query(`
 		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in 
 		FROM triggerx.keeper_data 
-		WHERE verified = true AND status = true 
+		WHERE registered = true AND whitelisted = true 
 		ALLOW FILTERING`).Iter()
 
 	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID string

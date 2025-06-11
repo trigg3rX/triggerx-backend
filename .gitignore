@@ -27,3 +27,5 @@ data/logs/*/*.log
 
 # peerstore
 peerstore/
+
+.log

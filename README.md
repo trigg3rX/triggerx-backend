@@ -20,6 +20,7 @@ The **TriggerX Keeper Backend** is a decentralized system designed to automate a
     - [Schedulers](#schedulers)
     - [Keepers](#keepers)
     - [Aggregator](#aggregator)
+      - [Developer Notes can be found here at devNotes.md](#developer-notes-can-be-found-here-at-devnotesmd)
   - [Steps to Run the Keeper Backend](#steps-to-run-the-keeper-backend)
 
 ---
@@ -67,6 +68,8 @@ The **Aggregator** ensures the consensus of tasks by:
 - Aggregating tasks from multiple Keepers.
 - Submitting the tasks to the blockchain.
 - Acting as a bootstrap for the p2p network.
+
+#### Developer Notes can be found here at [devNotes.md](docs/devNotes.md)
 
 ---
 

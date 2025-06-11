@@ -4,16 +4,6 @@ import (
 	"time"
 )
 
-// KeeperHealthCheckIn represents the health check-in data from a keeper
-type KeeperHealthCheckIn struct {
-	KeeperAddress    string    `json:"keeper_address" validate:"required,eth_addr"`
-	ConsensusAddress string    `json:"consensus_address" validate:"required,eth_addr"`
-	Version          string    `json:"version" validate:"required"`
-	Timestamp        time.Time `json:"timestamp" validate:"required"`
-	Signature        string    `json:"signature" validate:"required"`
-	PeerID           string    `json:"peer_id" validate:"required"`
-}
-
 // KeeperInfo represents the public information about a keeper
 type KeeperInfo struct {
 	KeeperName       string    `json:"keeper_name"`

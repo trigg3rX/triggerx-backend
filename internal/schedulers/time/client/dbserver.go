@@ -69,10 +69,10 @@ func NewDBServerClient(logger logging.Logger, config Config) (*DBServerClient, e
 }
 
 // GetTimeBasedJobs fetches jobs that need to be executed in the next window
-func (c *DBServerClient) GetTimeBasedJobs() ([]types.TimeJobData, error) {
-	url := fmt.Sprintf("%s/api/v1/time/jobs", c.baseURL)
+func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeTaskData, error) {
+	url := fmt.Sprintf("%s/api/jobs/time", c.baseURL)
 
-	var jobs []types.TimeJobData
+	var jobs []types.ScheduleTimeTaskData
 	err := c.doWithRetry("GET", url, nil, &jobs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch time-based jobs: %v", err)
@@ -84,7 +84,7 @@ func (c *DBServerClient) GetTimeBasedJobs() ([]types.TimeJobData, error) {
 
 // UpdateJobNextExecution updates the next execution timestamp for a job
 func (c *DBServerClient) UpdateJobNextExecution(jobID int64, nextExecution time.Time) error {
-	url := fmt.Sprintf("%s/api/v1/time/jobs/%d/next-execution", c.baseURL, jobID)
+	url := fmt.Sprintf("%s/api/jobs/%d/lastexecuted", c.baseURL, jobID)
 
 	payload := map[string]string{
 		"next_execution_timestamp": nextExecution.Format(time.RFC3339),
@@ -101,7 +101,7 @@ func (c *DBServerClient) UpdateJobNextExecution(jobID int64, nextExecution time.
 
 // UpdateJobStatus updates the status of a job
 func (c *DBServerClient) UpdateJobStatus(jobID int64, status bool) error {
-	url := fmt.Sprintf("%s/api/v1/time/jobs/%d/status", c.baseURL, jobID)
+	url := fmt.Sprintf("%s/api/jobs/%d/status/%t", c.baseURL, jobID, status)
 
 	payload := map[string]bool{
 		"status": status,
@@ -164,7 +164,9 @@ func (c *DBServerClient) doRequest(method, url string, payload interface{}, resu
 	if err != nil {
 		return fmt.Errorf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
@@ -207,7 +209,7 @@ func (c *DBServerClient) doRequest(method, url string, payload interface{}, resu
 
 // HealthCheck checks if the database server is healthy
 func (c *DBServerClient) HealthCheck() error {
-	url := fmt.Sprintf("%s/health", c.baseURL)
+	url := fmt.Sprintf("%s/api/health", c.baseURL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -221,7 +223,9 @@ func (c *DBServerClient) HealthCheck() error {
 	if err != nil {
 		return fmt.Errorf("health check request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check failed: status code %d", resp.StatusCode)

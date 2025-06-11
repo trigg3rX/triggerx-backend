@@ -54,7 +54,7 @@ start-keeper: ## Start the Keeper
 ############################ GITHUB ACTIONS ####################################
 
 install-tools-for-github-actions: ## Install the tools for GitHub Actions
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
 	go install github.com/psampaz/go-mod-outdated@latest
 
 format-go: ## Format the Go code

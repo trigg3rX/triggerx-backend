@@ -8,7 +8,6 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // QueryExecutor defines the interface for executing queries
@@ -107,16 +106,6 @@ func (m *MockSession) ExecuteBatchWithContextAndConsistencyAndSerialConsistency(
 
 func (m *MockSession) ExecuteBatchWithConsistencyAndSerialConsistency(batch *gocql.Batch, consistency gocql.Consistency, serialConsistency gocql.Consistency) error {
 	return m.batchFunc(batch)
-}
-
-func init() {
-	// Initialize logger for tests
-	config := logging.NewDefaultConfig("retryable_test")
-	config.Environment = logging.Development
-	config.UseColors = true
-	if err := logging.InitServiceLogger(config); err != nil {
-		panic(err)
-	}
 }
 
 func TestRetryableExec(t *testing.T) {

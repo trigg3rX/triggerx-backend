@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,14 +47,12 @@ func DefaultRetryConfig() *RetryConfig {
 }
 
 // RetryMiddleware creates a new retry middleware
-func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
+func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc {
 	if config == nil {
 		config = DefaultRetryConfig()
 	}
 
 	return func(c *gin.Context) {
-		logger := logging.GetServiceLogger()
-
 		// Skip retry for non-idempotent methods
 		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 			c.Next()
@@ -64,7 +63,14 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 		var bodyBytes []byte
 		if c.Request.Body != nil {
 			bodyBytes, _ = io.ReadAll(c.Request.Body)
-			c.Request.Body.Close()
+			var bodyBytes []byte
+			if c.Request.Body != nil {
+				bodyBytes, _ = io.ReadAll(c.Request.Body)
+				if err := c.Request.Body.Close(); err != nil {
+					logger.Warnf("Failed to close request body: %v", err)
+				}
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 
@@ -80,7 +86,7 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 		attempts := 0
 		var finalStatus int
 		var finalBody []byte
-		_, err := retry.Retry(func() (interface{}, error) {
+		_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 			attempts++
 			w.body.Reset()
 			w.statusCode = 0
@@ -136,7 +142,7 @@ func RetryMiddleware(config *RetryConfig) gin.HandlerFunc {
 			finalStatus = newWriter.statusCode
 			finalBody = newWriter.body.Bytes()
 			return nil, lastErr
-		}, &retry.Config{
+		}, &retry.RetryConfig{
 			MaxRetries:      config.MaxRetries,
 			InitialDelay:    config.InitialDelay,
 			MaxDelay:        config.MaxDelay,

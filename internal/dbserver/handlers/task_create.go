@@ -1,0 +1,27 @@
+package handlers
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+)
+
+func (h *Handler) CreateTaskData(c *gin.Context) {
+	var taskData types.CreateTaskDataRequest
+	if err := c.ShouldBindJSON(&taskData); err != nil {
+		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	taskID, err := h.taskRepository.CreateTaskDataInDB(&taskData)
+	if err != nil {
+		h.logger.Errorf("[CreateTaskData] Error creating task: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskID)
+	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
+}

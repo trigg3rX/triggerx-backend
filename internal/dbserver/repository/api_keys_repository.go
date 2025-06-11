@@ -1,12 +1,12 @@
 package repository
 
 import (
-	"time"
 	"errors"
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"time"
 )
 
 type ApiKeysRepository interface {
@@ -129,4 +129,3 @@ func (r *apiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool) err
 	}
 	return nil
 }
-

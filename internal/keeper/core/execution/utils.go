@@ -10,8 +10,33 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	jobtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
+
+func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {
+	if targetData.ABI == "" {
+		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
+	}
+
+	abiData := []byte(targetData.ABI)
+
+	parsed, err := abi.JSON(bytes.NewReader(abiData))
+	if err != nil {
+		e.logger.Warnf("Error parsing ABI: %v", err)
+		return nil, nil, err
+	}
+
+	e.logger.Debugf("Using ABI from database for contract %s", targetData.TargetContractAddress)
+
+	method, ok := parsed.Methods[methodName]
+	if !ok {
+		e.logger.Warnf("Method %s not found in contract ABI", methodName)
+		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
+	}
+
+	e.logger.Debugf("Found method: %+v", method)
+	return &parsed, &method, nil
+}
 
 func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
 	convertedArgs := make([]interface{}, 0)
@@ -169,30 +194,25 @@ func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Arg
 	return convertedArgs, nil
 }
 
-func (e *TaskExecutor) getContractMethodAndABI(methodName string, job *jobtypes.HandleCreateJobData) (*abi.ABI, *abi.Method, error) {
-	// Use ABI from database instead of fetching it
-	if job.ABI == "" {
-		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
+func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
+	var argData []interface{}
+
+	if err := json.Unmarshal([]byte(output), &argData); err != nil {
+		e.logger.Warnf("Error parsing dynamic arguments: %v", err)
+		return nil
 	}
 
-	abiData := []byte(job.ABI)
+	return argData
+}
 
-	parsed, err := abi.JSON(bytes.NewReader(abiData))
-	if err != nil {
-		e.logger.Warnf("Error parsing ABI: %v", err)
-		return nil, nil, err
+func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {
+	var argData []interface{}
+
+	for _, arg := range args {
+		argData = append(argData, arg)
 	}
 
-	e.logger.Infof("Using ABI from database for contract %s", job.TargetContractAddress)
-
-	method, ok := parsed.Methods[methodName]
-	if !ok {
-		e.logger.Warnf("Method %s not found in contract ABI", methodName)
-		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
-	}
-
-	e.logger.Infof("Found method: %+v", method)
-	return &parsed, &method, nil
+	return argData
 }
 
 // func (e *TaskExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {

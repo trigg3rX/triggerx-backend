@@ -1,159 +1,202 @@
 package proof
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"os"
+	"net"
+	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type TLSProof struct {
-	CertificateHash string `json:"certificateHash"`
-	ResponseHash    string `json:"responseHash"`
-	Timestamp       string `json:"timestamp"`
+// TLSProofConfig holds configuration for TLS proof generation
+type TLSProofConfig struct {
+	TargetHost string        // Host to establish TLS connection with
+	TargetPort string        // Port to connect to (default: "443")
+	Timeout    time.Duration // Connection timeout (default: 10s)
+	VerifyPeer bool          // Whether to verify peer certificates (default: true)
+	ServerName string        // Server name for SNI (optional, defaults to TargetHost)
 }
 
-type PinataConfig struct {
-	APIKey    string
-	SecretKey string
-	Host      string
+// DefaultTLSProofConfig returns a default configuration for TLS proof generation
+func DefaultTLSProofConfig(host string) *TLSProofConfig {
+	return &TLSProofConfig{
+		TargetHost: host,
+		TargetPort: "443",
+		Timeout:    5 * time.Second,
+		VerifyPeer: true,
+		ServerName: host,
+	}
 }
 
-type KeeperResponse interface {
-	GetData() []byte
-}
-
-func LoadPinataConfig() (*PinataConfig, error) {
-	err := godotenv.Load()
+// GenerateProofWithTLSConnection generates a proof using a real TLS connection
+func GenerateProofWithTLSConnection(ipfsData types.IPFSData, config *TLSProofConfig) (types.ProofData, error) {
+	connState, err := EstablishTLSConnection(config)
 	if err != nil {
-		return nil, fmt.Errorf("error loading .env file: %v", err)
+		return types.ProofData{}, fmt.Errorf("failed to establish TLS connection: %w", err)
 	}
 
-	apiKey := os.Getenv("PINATA_API_KEY")
-	secretKey := os.Getenv("PINATA_SECRET_API_KEY")
-	host := os.Getenv("IPFS_HOST")
-
-	if apiKey == "" || secretKey == "" || host == "" {
-		return nil, errors.New("missing required Pinata configuration")
-	}
-
-	return &PinataConfig{
-		APIKey:    apiKey,
-		SecretKey: secretKey,
-		Host:      host,
-	}, nil
+	return GenerateProof(ipfsData, connState)
 }
 
-func GenerateProof(response KeeperResponse, connState *tls.ConnectionState) (*TLSProof, error) {
-	if connState == nil || len(connState.PeerCertificates) == 0 {
-		return nil, errors.New("no TLS certificates found")
+// EstablishTLSConnection creates a real TLS connection and returns the connection state
+func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error) {
+	if config == nil {
+		return nil, errors.New("TLS proof config cannot be nil")
 	}
 
-	certHash := sha256.Sum256(connState.PeerCertificates[0].Raw)
+	if config.TargetHost == "" {
+		return nil, errors.New("target host cannot be empty")
+	}
+
+	if config.TargetPort == "" {
+		config.TargetPort = "443"
+	}
+
+	if config.Timeout == 0 {
+		config.Timeout = 5 * time.Second
+	}
+
+	if config.ServerName == "" {
+		config.ServerName = config.TargetHost
+	}
+
+	// Configure TLS
+	tlsConfig := &tls.Config{
+		ServerName:         config.ServerName,
+		InsecureSkipVerify: !config.VerifyPeer,
+	}
+
+	// Establish connection with timeout
+	dialer := &net.Dialer{
+		Timeout: config.Timeout,
+	}
+
+	address := net.JoinHostPort(config.TargetHost, config.TargetPort)
+	conn, err := tls.DialWithDialer(dialer, "tcp", address, tlsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to establish TLS connection to %s: %w", address, err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			fmt.Printf("Warning: failed to close connection: %v\n", err)
+		}
+	}()
+
+	// Get connection state
+	connState := conn.ConnectionState()
+
+	// Verify we have certificates
+	if len(connState.PeerCertificates) == 0 {
+		return nil, errors.New("no peer certificates found in TLS connection")
+	}
+
+	return &connState, nil
+}
+
+// GenerateProof takes the action execution data and generates a proof by:
+// 1. Creating a hash of the action data (tx hash, gas used, status etc)
+// 2. Adding a timestamp when the proof was generated
+// 3. Including TLS certificate information for verification
+// This provides cryptographic proof that the action was executed
+func GenerateProof(ipfsData types.IPFSData, connState *tls.ConnectionState) (types.ProofData, error) {
+	// Validate inputs
+	if connState == nil {
+		return types.ProofData{}, errors.New("TLS connection state cannot be nil")
+	}
+
+	if len(connState.PeerCertificates) == 0 {
+		return types.ProofData{}, errors.New("no TLS certificates found in connection state")
+	}
+
+	// Stringify the ipfs data, after converting all the strings to lowercase
+	dataStr, err := StringifyIPFSData(ipfsData)
+	if err != nil {
+		return types.ProofData{}, fmt.Errorf("failed to stringify IPFS data: %w", err)
+	}
+
+	// Validate and process the first certificate
+	cert := connState.PeerCertificates[0]
+	if cert == nil {
+		return types.ProofData{}, errors.New("first peer certificate is nil")
+	}
+
+	// Verify certificate validity
+	if err := validateCertificate(cert); err != nil {
+		return types.ProofData{}, fmt.Errorf("certificate validation failed: %w", err)
+	}
+
+	// Hash the certificate
+	certHash := sha256.Sum256(cert.Raw)
 	certHashStr := hex.EncodeToString(certHash[:])
 
-	respHash := sha256.Sum256(response.GetData())
-	respHashStr := hex.EncodeToString(respHash[:])
+	// Generate proof hash from the data
+	proofHash := sha256.Sum256([]byte(dataStr))
+	proofHashStr := hex.EncodeToString(proofHash[:])
 
-	return &TLSProof{
-		CertificateHash: certHashStr,
-		ResponseHash:    respHashStr,
-		Timestamp:       time.Now().UTC().Format(time.RFC3339),
-	}, nil
+	// Create enhanced proof with additional TLS information
+	proofData := types.ProofData{
+		TaskID:               ipfsData.TaskData.TaskID,
+		ProofOfTask:          proofHashStr,
+		CertificateHash:      certHashStr,
+		CertificateTimestamp: time.Now().UTC(),
+	}
+
+	return proofData, nil
 }
 
-func GenerateAndStoreProof(
-	response KeeperResponse,
-	connState *tls.ConnectionState,
-	tempData types.IPFSData,
-) (types.IPFSData, error) {
-	proof, err := GenerateProof(response, connState)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to generate proof: %v", err)
+// validateCertificate performs basic validation on the certificate
+func validateCertificate(cert *x509.Certificate) error {
+	if cert == nil {
+		return errors.New("certificate is nil")
 	}
 
-	tempData.ProofData.TaskID = tempData.ActionData.TaskID
-	tempData.ProofData.Timestamp = time.Now().UTC()
-	tempData.ProofData.CertificateHash = proof.CertificateHash
-	tempData.ProofData.ResponseHash = proof.ResponseHash
-
-	jsonData, err := json.MarshalIndent(tempData, "", "  ")
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to marshal template: %v", err)
+	// Check if certificate is expired
+	now := time.Now()
+	if now.Before(cert.NotBefore) {
+		return fmt.Errorf("certificate is not yet valid (valid from: %v)", cert.NotBefore)
 	}
 
-	pinataConfig, err := LoadPinataConfig()
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to load Pinata config: %v", err)
+	if now.After(cert.NotAfter) {
+		return fmt.Errorf("certificate has expired (expired on: %v)", cert.NotAfter)
 	}
 
-	fileName := fmt.Sprintf("proof_%d_%d_%s.json",
-		tempData.JobData.JobID,
-		tempData.ActionData.TaskID,
-		time.Now().UTC().Format(time.RFC3339))
-
-	ipfsData, err := uploadToPinata(tempData, jsonData, fileName, pinataConfig)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to upload to Pinata: %v", err)
+	// Check if certificate has required fields
+	if len(cert.Raw) == 0 {
+		return errors.New("certificate raw data is empty")
 	}
 
-	return ipfsData, nil
+	return nil
 }
 
-func uploadToPinata(tempData types.IPFSData, data []byte, fileName string, config *PinataConfig) (types.IPFSData, error) {
-	url := "https://api.pinata.cloud/pinning/pinJSONToIPFS"
+func StringifyIPFSData(ipfsData types.IPFSData) (string, error) {
+	ipfsDataMap := make(map[string]interface{})
+	ipfsDataMap["task_data"] = ipfsData.TaskData
+	ipfsDataMap["action_data"] = ipfsData.ActionData
+	ipfsDataMap["proof_data"] = ipfsData.ProofData
+	ipfsDataMap["performer_signature"] = ipfsData.PerformerSignature
 
-	metadata := map[string]interface{}{
-		"pinataMetadata": map[string]interface{}{
-			"name": fileName,
-		},
-		"pinataContent": json.RawMessage(data),
-	}
+	convertToLower(ipfsDataMap)
 
-	jsonData, err := json.Marshal(metadata)
+	ipfsDataBytes, err := json.Marshal(ipfsDataMap)
 	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to marshal metadata: %v", err)
+		return "", fmt.Errorf("failed to marshal IPFS data: %w", err)
 	}
+	return string(ipfsDataBytes), nil
+}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to create request: %v", err)
+func convertToLower(data map[string]interface{}) {
+	for k, v := range data {
+		if s, ok := v.(string); ok {
+			data[k] = strings.ToLower(s)
+		} else if m, ok := v.(map[string]interface{}); ok {
+			convertToLower(m)
+		}
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("pinata_api_key", config.APIKey)
-	req.Header.Set("pinata_secret_api_key", config.SecretKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to send request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return types.IPFSData{}, fmt.Errorf("failed to upload to Pinata: status %d", resp.StatusCode)
-	}
-
-	var result struct {
-		IpfsHash string `json:"IpfsHash"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	var ipfsData types.IPFSData = tempData
-	ipfsData.ProofData.ActionDataCID = result.IpfsHash
-
-	return ipfsData, nil
 }
