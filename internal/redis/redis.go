@@ -3,11 +3,13 @@ package redis
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
 	redis "github.com/redis/go-redis/v9" // Add alias here
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -24,9 +26,17 @@ func IsRedisAvailable() bool {
 
 // NewRedisClient creates a new Redis client instance with enhanced features
 func NewRedisClient(logger logging.Logger) (*Client, error) {
+	start := time.Now()
+
 	if !config.IsRedisAvailable() {
+		metrics.RedisAvailable.Set(0)
 		return nil, fmt.Errorf("redis is not configured")
 	}
+
+	// Update availability metrics
+	metrics.RedisAvailable.Set(1)
+	metrics.UpstashEnabled.Set(boolToFloat64(config.IsUpstashEnabled()))
+	metrics.LocalRedisEnabled.Set(boolToFloat64(config.IsLocalRedisEnabled()))
 
 	var opt *redis.Options
 	var redisType string
@@ -38,8 +48,11 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 		if err == nil {
 			redisType = "upstash"
 			logger.Infof("Using Upstash Redis configuration")
+			metrics.RedisTypeActive.WithLabelValues("upstash").Set(1)
+			metrics.RedisTypeActive.WithLabelValues("local").Set(0)
 		} else {
 			logger.Warnf("Failed to parse Upstash config: %v", err)
+			metrics.ClientConnectionErrorsTotal.WithLabelValues("upstash", "config_parse").Inc()
 		}
 	}
 
@@ -49,12 +62,16 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 		if err == nil {
 			redisType = "local"
 			logger.Infof("Using local Redis configuration")
+			metrics.RedisTypeActive.WithLabelValues("local").Set(1)
+			metrics.RedisTypeActive.WithLabelValues("upstash").Set(0)
 		} else {
 			logger.Warnf("Failed to parse local Redis config: %v", err)
+			metrics.ClientConnectionErrorsTotal.WithLabelValues("local", "config_parse").Inc()
 		}
 	}
 
 	if opt == nil {
+		metrics.ServiceStatus.WithLabelValues("client").Set(0)
 		return nil, fmt.Errorf("no valid Redis configuration found")
 	}
 
@@ -65,8 +82,17 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	}
 
 	if err := redisClient.CheckConnection(); err != nil {
+		metrics.ClientConnectionsTotal.WithLabelValues(redisType, "failure").Inc()
+		metrics.ClientConnectionErrorsTotal.WithLabelValues(redisType, "connection_failed").Inc()
+		metrics.ServiceStatus.WithLabelValues("client").Set(0)
 		return nil, fmt.Errorf("failed to connect to %s Redis: %w", redisType, err)
 	}
+
+	// Record successful connection
+	connectionDuration := time.Since(start)
+	metrics.ClientConnectionsTotal.WithLabelValues(redisType, "success").Inc()
+	metrics.ClientConnectionDuration.WithLabelValues(redisType).Observe(connectionDuration.Seconds())
+	metrics.ServiceStatus.WithLabelValues("client").Set(1)
 
 	logger.Infof("Successfully connected to %s Redis", redisType)
 	return redisClient, nil
@@ -120,22 +146,42 @@ func applyConnectionSettings(opt *redis.Options) {
 
 // CheckConnection validates the Redis connection
 func (c *Client) CheckConnection() error {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err := c.redisClient.Ping(ctx).Result()
+	duration := time.Since(start)
+
 	if err != nil {
 		c.logger.Errorf("Redis connection failed (%s): %v", config.GetRedisType(), err)
+		metrics.ConnectionChecksTotal.WithLabelValues("failure").Inc()
 		return fmt.Errorf("redis connection failed: %w", err)
 	}
+
+	metrics.ConnectionChecksTotal.WithLabelValues("success").Inc()
+	metrics.PingOperationsTotal.WithLabelValues("success").Inc()
+	metrics.PingDuration.Observe(duration.Seconds())
 	return nil
 }
 
 // Ping checks if Redis is reachable
 func (c *Client) Ping() error {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return c.redisClient.Ping(ctx).Err()
+
+	err := c.redisClient.Ping(ctx).Err()
+	duration := time.Since(start)
+
+	if err != nil {
+		metrics.PingOperationsTotal.WithLabelValues("failure").Inc()
+		return err
+	}
+
+	metrics.PingOperationsTotal.WithLabelValues("success").Inc()
+	metrics.PingDuration.Observe(duration.Seconds())
+	return nil
 }
 
 // GetRedisInfo returns information about the current Redis configuration
@@ -226,4 +272,22 @@ func (c *Client) XAck(ctx context.Context, stream, group, id string) error {
 
 func (c *Client) Close() error {
 	return c.redisClient.Close()
+}
+
+// Helper function to convert bool to float64 for metrics
+func boolToFloat64(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// UpdateSystemMetrics updates system metrics (similar to keeper's middleware)
+func UpdateSystemMetrics() {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	metrics.MemoryUsageBytes.Set(float64(memStats.Alloc))
+	metrics.CPUUsagePercent.Set(float64(memStats.Sys))
+	metrics.GoroutinesActive.Set(float64(runtime.NumGoroutine()))
+	metrics.GCDurationSeconds.Set(float64(memStats.PauseTotalNs) / 1e9)
 }
