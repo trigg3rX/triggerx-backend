@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -67,7 +68,7 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 	}
 	
 	rpcURL := utils.GetChainRpcUrl(triggerData.EventChainId)
-	client, err := v.ethClientMaker(rpcURL)
+	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		return false, fmt.Errorf("failed to connect to chain: %v", err)
 	}

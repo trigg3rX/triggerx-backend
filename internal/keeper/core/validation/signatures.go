@@ -3,6 +3,7 @@ package validation
 import (
 	"fmt"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -39,7 +40,7 @@ func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKee
 	}
 
 	// Convert the task data to JSON message format (same as signing process)
-	isValid, err := v.crypto.VerifySignatureFromJSON(
+	isValid, err := cryptography.VerifySignatureFromJSON(
 		taskDataForVerification,
 		task.SchedulerSignature.SchedulerSignature,
 		task.SchedulerSignature.SchedulerSigningAddress,
@@ -95,7 +96,7 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 	}
 
 	// Convert the task data to JSON message format (same as signing process)
-	isValid, err := v.crypto.VerifySignatureFromJSON(
+	isValid, err := cryptography.VerifySignatureFromJSON(
 		ipfsDataForVerification,
 		ipfsData.PerformerSignature.PerformerSignature,
 		ipfsData.PerformerSignature.PerformerSigningAddress,

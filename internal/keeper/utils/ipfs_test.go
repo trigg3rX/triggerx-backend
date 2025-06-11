@@ -76,7 +76,7 @@ func TestFetchIPFSContent_Success(t *testing.T) {
 	defer server.Close()
 
 	// We cannot change the URL in FetchIPFSContent, so this test will only check for network errors (unless the function is refactored)
-	_, err := FetchIPFSContent("testcid", "testcid", nil)
+	_, err := FetchIPFSContent("testcid")
 	if err == nil {
 		t.Skip("Cannot test FetchIPFSContent fully without code modification to inject URL")
 	}
@@ -84,7 +84,7 @@ func TestFetchIPFSContent_Success(t *testing.T) {
 
 func TestFetchIPFSContent_NotFound(t *testing.T) {
 	// This will always hit the real endpoint, so we only check for error on invalid CID
-	_, err := FetchIPFSContent("", "testcid", nil)
+	_, err := FetchIPFSContent("testcid")
 	if err == nil {
 		t.Error("expected error for empty CID, got nil")
 	}

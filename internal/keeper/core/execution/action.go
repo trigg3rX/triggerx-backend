@@ -56,7 +56,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	var result *docker.ExecutionResult
 	switch targetData.TaskDefinitionID {
 	case 2, 4, 6:
-		codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), targetData.DynamicArgumentsScriptUrl)
+		codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), targetData.DynamicArgumentsScriptUrl, e.logger)
 		if err != nil {
 			return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
 		}

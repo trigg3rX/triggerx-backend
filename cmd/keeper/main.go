@@ -83,7 +83,7 @@ func main() {
 	logger.Info("[4/5] Dependency: Code executor Initialised")
 
 	// Initialize task executor and validator
-	validator := validation.NewTaskValidator(logger)
+	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), codeExecutor, aggregatorClient, logger)
 	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), codeExecutor, validator, aggregatorClient, logger)
 
 	// Initialize API server

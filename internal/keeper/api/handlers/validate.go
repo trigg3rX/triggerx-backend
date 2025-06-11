@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -59,7 +60,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	decodedData = string(dataBytes)
 	h.logger.Infof("Decoded Data CID: %s", decodedData)
 
-	ipfsData, err := h.ipfsFetcher.FetchContent(decodedData)
+	ipfsData, err := utils.FetchIPFSContent(decodedData)
 	if err != nil {
 		h.logger.Errorf("Failed to fetch IPFS content: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
@@ -75,7 +76,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	var validationErr error
 
 	h.logger.Info("Validating task ...", "trace_id", traceID)
-	isValid, validationErr = h.validator.ValidateTask(ipfsData.TaskData, traceID)
+	isValid, validationErr = h.validator.ValidateTask(context.Background(), ipfsData, traceID)
 
 	if validationErr != nil {
 		h.logger.Error("Validation error", "error", validationErr, "trace_id", traceID)
