@@ -13,9 +13,9 @@ func (w *ConditionWorker) performActionExecution(triggerValue float64) bool {
 	w.Logger.Info("Simulating action execution",
 		"job_id", w.Job.JobID,
 		"trigger_value", triggerValue,
-		"target_chain", w.Job.TargetChainID,
-		"target_contract", w.Job.TargetContractAddress,
-		"target_function", w.Job.TargetFunction,
+		"target_chain", w.Job.TaskTargetData.TargetChainID,
+		"target_contract", w.Job.TaskTargetData.TargetContractAddress,
+		"target_function", w.Job.TaskTargetData.TargetFunction,
 	)
 
 	// Simulate processing time

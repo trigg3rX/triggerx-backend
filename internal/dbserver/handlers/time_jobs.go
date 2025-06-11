@@ -26,7 +26,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 
 	for _, task := range tasks {
 		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
-			JobID:            task.JobID,
+			JobID:            task.TaskTargetData.JobID,
 			TaskDefinitionID: task.TaskDefinitionID,
 		})
 		if err != nil {

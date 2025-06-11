@@ -86,15 +86,17 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 	var timeJob commonTypes.ScheduleTimeTaskData
 
 	for iter.Scan(
-		&timeJob.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
+		&timeJob.TaskTargetData.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
 		&timeJob.ScheduleType, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.NextExecutionTimestamp,
-		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
-		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl,
+		&timeJob.TaskTargetData.TargetChainID, &timeJob.TaskTargetData.TargetContractAddress, &timeJob.TaskTargetData.TargetFunction, &timeJob.TaskTargetData.ABI, &timeJob.TaskTargetData.ArgType,
+		&timeJob.TaskTargetData.Arguments, &timeJob.TaskTargetData.DynamicArgumentsScriptUrl,
 	) {
-		if timeJob.DynamicArgumentsScriptUrl != "" {
+		if timeJob.TaskTargetData.DynamicArgumentsScriptUrl != "" {
 			timeJob.TaskDefinitionID = 2
+			timeJob.TaskTargetData.TaskDefinitionID = 2
 		} else {
 			timeJob.TaskDefinitionID = 1
+			timeJob.TaskTargetData.TaskDefinitionID = 1
 		}
 
 		// Calculate next execution time after the current execution time
@@ -105,16 +107,16 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 
 		// If the next execution time is after the expiration time, That means the job will be completed after current execution time that is being passed
 		if nextExecutionTime.After(timeJob.ExpirationTime) {
-			err = r.CompleteTimeJob(timeJob.JobID)
+			err = r.CompleteTimeJob(timeJob.TaskTargetData.JobID)
 			if err != nil {
 				return nil, err
 			}
-			err = r.UpdateTimeJobStatus(timeJob.JobID, false)
+			err = r.UpdateTimeJobStatus(timeJob.TaskTargetData.JobID, false)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			err = r.UpdateTimeJobNextExecutionTimestamp(timeJob.JobID, nextExecutionTime)
+			err = r.UpdateTimeJobNextExecutionTimestamp(timeJob.TaskTargetData.JobID, nextExecutionTime)
 			if err != nil {
 				return nil, err
 			}
