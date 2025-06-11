@@ -11,7 +11,9 @@ func IsEmpty(value string) bool {
 
 // Email Address
 func IsValidEmail(email string) bool {
-	matched, _ := regexp.MatchString("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", email)
+	// Improved regex: allows TLDs with more than 2 chars and supports subdomains and hyphens
+	emailPattern := `^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+	matched, _ := regexp.MatchString(emailPattern, email)
 	return matched
 }
 

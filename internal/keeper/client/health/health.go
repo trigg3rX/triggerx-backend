@@ -14,6 +14,7 @@ import (
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
@@ -118,6 +119,8 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		}, fmt.Errorf("health check failed: %w", err)
 	}
 
+	metrics.SuccessfulHealthCheckinsTotal.Inc()
+
 	c.logger.Debug("Successfully completed health check-in",
 		"status", response.Status,
 		"keeperAddress", c.config.KeeperAddress,
@@ -196,15 +199,17 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	}
 
 	parts := strings.Split(decryptedString, ":")
-	if len(parts) != 2 {
+	if len(parts) != 4 {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
 			Data:   "invalid response format",
 		}, fmt.Errorf("invalid response format: expected host:token")
 	}
 
-	config.SetIpfsHost(parts[0])
-	config.SetPinataJWT(parts[1])
+	config.SetEtherscanAPIKey(parts[0])
+	config.SetAlchemyAPIKey(parts[1])
+	config.SetIpfsHost(parts[2])
+	config.SetPinataJWT(parts[3])
 
 	return types.KeeperHealthCheckInResponse{
 		Status: true,

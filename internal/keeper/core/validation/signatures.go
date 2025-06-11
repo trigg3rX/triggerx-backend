@@ -76,13 +76,11 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		return false, fmt.Errorf("performer signing address is empty")
 	}
 
+	// TODO: Uncomment this when we have a way to get the Consensus address to perform the action with AA
 	// check if the performer is the same as the the one assigned to the task
-	if ipfsData.PerformerSignature.PerformerSigningAddress != ipfsData.TaskData.PerformerData.KeeperAddress {
-		logger.Error("Performer signing address does not match the assigned performer",
-			"expected", ipfsData.TaskData.PerformerData.KeeperAddress,
-			"got", ipfsData.PerformerSignature.PerformerSigningAddress)
-		return false, fmt.Errorf("performer signing address does not match the assigned performer")
-	}
+	// if ipfsData.PerformerSignature.PerformerSigningAddress != ipfsData.TaskData.PerformerData.KeeperAddress {
+	// 	return false, fmt.Errorf("performer signing address does not match the assigned performer")
+	// }
 
 	// Create a copy of the ipfs data without the signature for verification
 	ipfsDataForVerification := types.IPFSData{
@@ -90,6 +88,7 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		ActionData: ipfsData.ActionData,
 		ProofData:  ipfsData.ProofData,
 		PerformerSignature: &types.PerformerSignatureData{
+			TaskID:                  ipfsData.TaskData.TaskID,
 			PerformerSigningAddress: ipfsData.PerformerSignature.PerformerSigningAddress,
 			// Note: PerformerSignature field is intentionally left empty for verification
 		},

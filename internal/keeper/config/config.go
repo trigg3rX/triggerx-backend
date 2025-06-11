@@ -50,9 +50,6 @@ type Config struct {
 	tlsProofHost string
 	tlsProofPort string
 
-	// Wallet Configuration
-	chainNonces map[string]uint64
-
 	// Backend Service URLs
 	aggregatorRPCUrl string
 	healthRPCUrl     string
@@ -78,25 +75,24 @@ func Init() error {
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
 		ethRPCUrl:                env.GetEnv("L1_RPC", ""),
 		baseRPCUrl:               env.GetEnv("L2_RPC", ""),
-		alchemyAPIKey:            env.GetEnv("ALCHEMY_API_KEY", ""),
-		etherscanAPIKey:          env.GetEnv("ETHERSCAN_API_KEY", ""),
 		privateKeyConsensus:      env.GetEnv("PRIVATE_KEY", ""),
+		privateKeyController:     env.GetEnv("OPERATOR_PRIVATE_KEY", ""),
 		keeperAddress:            env.GetEnv("OPERATOR_ADDRESS", ""),
 		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnv("PRIVATE_KEY", ""))).PublicKey).Hex(),
 		publicIPV4Address:        env.GetEnv("PUBLIC_IPV4_ADDRESS", ""),
 		peerID:                   env.GetEnv("PEER_ID", ""),
-		keeperRPCPort:            env.GetEnv("KEEPER_RPC_PORT", "9011"),
-		keeperP2PPort:            env.GetEnv("KEEPER_P2P_PORT", "9012"),
-		keeperMetricsPort:        env.GetEnv("KEEPER_METRICS_PORT", "9013"),
+		keeperRPCPort:            env.GetEnv("OPERATOR_RPC_PORT", "9011"),
+		keeperP2PPort:            env.GetEnv("OPERATOR_P2P_PORT", "9012"),
+		keeperMetricsPort:        env.GetEnv("OPERATOR_METRICS_PORT", "9013"),
 		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "http://localhost:9001"),
-		healthRPCUrl:             env.GetEnv("HEALTH_RPC_URL", "http://localhost:9003"),
+		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:             env.GetEnv("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
 		tlsProofHost:             env.GetEnv("TLS_PROOF_HOST", "www.google.com"),
 		tlsProofPort:             env.GetEnv("TLS_PROOF_PORT", "443"),
 		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x0C77B6273F4852200b17193837960b2f253518FC"),
-		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x710DAb96f318b16F0fC9962D3466C00275414Ff0"),
+		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
+		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
 		othenticBootstrapID:      env.GetEnv("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 	if err := validateConfig(cfg); err != nil {
@@ -120,12 +116,6 @@ func validateConfig(cfg Config) error {
 	if env.IsEmpty(cfg.baseRPCUrl) {
 		return fmt.Errorf("invalid base rpc url: %s", cfg.baseRPCUrl)
 	}
-	if env.IsEmpty(cfg.alchemyAPIKey) {
-		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
-	}
-	// if env.IsEmpty(cfg.EtherscanAPIKey) {
-	// 	return fmt.Errorf("invalid etherscan api key: %s", cfg.EtherscanAPIKey)
-	// }
 	if !env.IsValidIPAddress(cfg.publicIPV4Address) {
 		return fmt.Errorf("invalid public ipv4 address: %s", cfg.publicIPV4Address)
 	}
@@ -149,8 +139,16 @@ func GetBaseRPCUrl() string {
 	return cfg.baseRPCUrl
 }
 
+func SetAlchemyAPIKey(key string) {
+	cfg.alchemyAPIKey = key
+}
+
 func GetAlchemyAPIKey() string {
 	return cfg.alchemyAPIKey
+}
+
+func SetEtherscanAPIKey(key string) {
+	cfg.etherscanAPIKey = key
 }
 
 func GetEtherscanAPIKey() string {
@@ -228,14 +226,6 @@ func SetPinataJWT(jwt string) {
 
 func GetPinataJWT() string {
 	return cfg.pinataJWT
-}
-
-func GetChainNonce(chain string) uint64 {
-	return cfg.chainNonces[chain]
-}
-
-func IncrementChainNonce(chain string) {
-	cfg.chainNonces[chain]++
 }
 
 // TLS Proof configuration

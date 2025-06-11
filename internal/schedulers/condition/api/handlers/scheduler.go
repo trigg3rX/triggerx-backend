@@ -38,7 +38,7 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	}
 
 	// Convert request to ConditionJobData
-	jobData := &types.ConditionJobData{
+	jobData := &types.ScheduleConditionJobData{
 		JobID:                     req.JobID,
 		TaskDefinitionID:          req.TaskDefinitionID,
 		LastExecutedAt:            req.LastExecutedAt,
@@ -49,13 +49,7 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		LowerLimit:                req.LowerLimit,
 		ValueSourceType:           req.ValueSourceType,
 		ValueSourceUrl:            req.ValueSourceUrl,
-		TargetChainID:             req.TargetChainID,
-		TargetContractAddress:     req.TargetContractAddress,
-		TargetFunction:            req.TargetFunction,
-		ABI:                       req.ABI,
-		ArgType:                   req.ArgType,
-		Arguments:                 req.Arguments,
-		DynamicArgumentsScriptUrl: req.DynamicArgumentsScriptUrl,
+		TaskTargetData:            req.TaskTargetData,
 	}
 
 	// Schedule the job

@@ -80,7 +80,7 @@ func (h *Handler) HandleP2PMessage(c *gin.Context) {
 	performerDataRaw := requestData["performerData"]
 
 	// Convert to proper types
-	var performerData types.GetPerformerData
+	var performerData types.PerformerData
 	performerDataBytes, err := json.Marshal(performerDataRaw)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid performer data format"})

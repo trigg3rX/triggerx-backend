@@ -81,7 +81,7 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	startTime := time.Now()
 
-	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.JobID)
+	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.TaskTargetData.JobID)
 
 	// Check if ExpirationTime of the job has passed or not
 	if task.ExpirationTime.Before(time.Now()) {
@@ -92,7 +92,7 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	// Get the performer data
 	// TODO: Get the performer data from redis service, which gets it from online keepers list from health service, and sets the performerLock in redis
 	// For now, I fixed the performer
-	performerData := types.GetPerformerData{
+	performerData := types.PerformerData{
 		KeeperID:      3,
 		KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 	}
@@ -101,19 +101,18 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	targetData := types.TaskTargetData{
 		TaskID:                    task.TaskID,
 		TaskDefinitionID:          task.TaskDefinitionID,
-		NextExecutionTimestamp:    task.NextExecutionTimestamp,
-		TargetChainID:             task.TargetChainID,
-		TargetContractAddress:     task.TargetContractAddress,
-		TargetFunction:            task.TargetFunction,
-		ABI:                       task.ABI,
-		ArgType:                   task.ArgType,
-		Arguments:                 task.Arguments,
-		DynamicArgumentsScriptUrl: task.DynamicArgumentsScriptUrl,
+		TargetChainID:             task.TaskTargetData.TargetChainID,
+		TargetContractAddress:     task.TaskTargetData.TargetContractAddress,
+		TargetFunction:            task.TaskTargetData.TargetFunction,
+		ABI:                       task.TaskTargetData.ABI,
+		ArgType:                   task.TaskTargetData.ArgType,
+		Arguments:                 task.TaskTargetData.Arguments,
+		DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
 	}
 	triggerData := types.TaskTriggerData{
 		TaskID:               task.TaskID,
 		ExpirationTime:       task.ExpirationTime,
-		TriggerTimestamp:     time.Now(),
+		CurrentTriggerTimestamp:     time.Now(),
 		TimeScheduleType:     task.ScheduleType,
 		TimeCronExpression:   task.CronExpression,
 		TimeSpecificSchedule: task.SpecificSchedule,
@@ -126,8 +125,8 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	sendTaskData := types.SendTaskDataToKeeper{
 		TaskID:             task.TaskID,
 		PerformerData:      performerData,
-		TargetData:         &targetData,
-		TriggerData:        &triggerData,
+		TargetData:         []types.TaskTargetData{targetData},
+		TriggerData:        []types.TaskTriggerData{triggerData},
 		SchedulerSignature: &schedulerSignatureData,
 	}
 
@@ -159,11 +158,11 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	if executionSuccess {
 		metrics.TasksCompleted.Inc()
 		metrics.TaskExecutionTime.Observe(time.Since(startTime).Seconds())
-		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.JobID, time.Since(startTime))
+		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.TaskTargetData.JobID, time.Since(startTime))
 
 	} else {
 		metrics.TasksFailed.Inc()
-		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.JobID, time.Since(startTime))
+		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.TaskTargetData.JobID, time.Since(startTime))
 	}
 }
 

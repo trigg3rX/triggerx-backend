@@ -4,8 +4,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 )
 
 type TaskValidationRequest struct {
@@ -35,6 +39,10 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 		})
 		return
 	}
+
+	// Track task by definition ID for validation
+	taskDefID := strconv.Itoa(int(taskRequest.TaskDefinitionID))
+	metrics.TasksByDefinitionIDTotal.WithLabelValues(taskDefID).Inc()
 
 	// Decode the data if it's hex-encoded (with 0x prefix)
 	var decodedData string

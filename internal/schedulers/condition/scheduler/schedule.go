@@ -12,7 +12,7 @@ import (
 )
 
 // ScheduleJob creates and starts a new condition worker
-func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ConditionJobData) error {
+func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleConditionJobData) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
@@ -62,9 +62,9 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ConditionJobD
 		"value_source", jobData.ValueSourceUrl,
 		"upper_limit", jobData.UpperLimit,
 		"lower_limit", jobData.LowerLimit,
-		"target_chain", jobData.TargetChainID,
-		"target_contract", jobData.TargetContractAddress,
-		"target_function", jobData.TargetFunction,
+		"target_chain", jobData.TaskTargetData.TargetChainID,
+		"target_contract", jobData.TaskTargetData.TargetContractAddress,
+		"target_function", jobData.TaskTargetData.TargetFunction,
 		"active_workers", len(s.workers),
 		"max_workers", s.maxWorkers,
 		"duration", duration,
@@ -74,7 +74,7 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ConditionJobD
 }
 
 // createConditionWorker creates a new condition worker instance
-func (s *ConditionBasedScheduler) createConditionWorker(jobData *commonTypes.ConditionJobData) (*worker.ConditionWorker, error) {
+func (s *ConditionBasedScheduler) createConditionWorker(jobData *commonTypes.ScheduleConditionJobData) (*worker.ConditionWorker, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	worker := &worker.ConditionWorker{

@@ -9,15 +9,22 @@ import (
 	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func UploadToIPFS(filename string, data []byte) (string, error) {
+	metrics.IPFSUploadSizeBytes.Add(float64(len(data)))
+
 	url := "https://uploads.pinata.cloud/v3/files"
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+
+	// Add the "network" field and set it to "public"
+	if err := writer.WriteField("network", "public"); err != nil {
+		return "", fmt.Errorf("failed to write network field: %v", err)
+	}
 
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
@@ -99,5 +106,7 @@ func FetchIPFSContent(gateway string, cid string, logger logging.Logger) (string
 		return "", fmt.Errorf("failed to unmarshal IPFS data: %v", err)
 	}
 
-	return string(body), nil
+	metrics.IPFSDownloadSizeBytes.Add(float64(len(body)))
+
+	return ipfsData, nil
 }
