@@ -37,7 +37,7 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 	jobs, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
-		metrics.TasksFailed.Inc()
+		metrics.TasksCompleted.WithLabelValues("failed").Inc()
 
 		return
 	}
@@ -68,11 +68,11 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 		select {
 		case s.taskQueue <- &task:
 			s.executeJob(&task)
-			metrics.TasksRunning.Inc()
+			metrics.TasksCompleted.WithLabelValues("success").Inc()
 			s.logger.Debugf("Queued task %d for execution", task.TaskID)
 		default:
 			s.logger.Warnf("Task queue is full, skipping task %d", task.TaskID)
-			metrics.TasksFailed.Inc()
+			metrics.TasksCompleted.WithLabelValues("failed").Inc()
 		}
 	}
 }
@@ -110,13 +110,13 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 		DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
 	}
 	triggerData := types.TaskTriggerData{
-		TaskID:               task.TaskID,
-		ExpirationTime:       task.ExpirationTime,
-		CurrentTriggerTimestamp:     time.Now(),
-		TimeScheduleType:     task.ScheduleType,
-		TimeCronExpression:   task.CronExpression,
-		TimeSpecificSchedule: task.SpecificSchedule,
-		TimeInterval:         task.TimeInterval,
+		TaskID:                  task.TaskID,
+		ExpirationTime:          task.ExpirationTime,
+		CurrentTriggerTimestamp: time.Now(),
+		TimeScheduleType:        task.ScheduleType,
+		TimeCronExpression:      task.CronExpression,
+		TimeSpecificSchedule:    task.SpecificSchedule,
+		TimeInterval:            task.TimeInterval,
 	}
 	schedulerSignatureData := types.SchedulerSignatureData{
 		TaskID:                  task.TaskID,
@@ -156,12 +156,12 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	executionSuccess := s.performJobExecution(broadcastDataForPerformer)
 
 	if executionSuccess {
-		metrics.TasksCompleted.Inc()
+		metrics.TasksCompleted.WithLabelValues("success").Inc()
 		metrics.TaskExecutionTime.Observe(time.Since(startTime).Seconds())
 		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.TaskTargetData.JobID, time.Since(startTime))
 
 	} else {
-		metrics.TasksFailed.Inc()
+		metrics.TasksCompleted.WithLabelValues("failed").Inc()
 		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.TaskTargetData.JobID, time.Since(startTime))
 	}
 }
