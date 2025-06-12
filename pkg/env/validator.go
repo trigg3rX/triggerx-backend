@@ -3,6 +3,9 @@ package env
 import (
 	"regexp"
 	"strings"
+	
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 func IsEmpty(value string) bool {
@@ -27,6 +30,15 @@ func IsValidEthAddress(address string) bool {
 func IsValidPrivateKey(privateKey string) bool {
 	matched, _ := regexp.MatchString("^[0-9a-fA-F]{64}$", privateKey)
 	return matched
+}
+
+func IsValidEthKeyPair(privateKey string, publicAddress string) bool {
+	if !IsValidEthAddress(publicAddress) || !IsValidPrivateKey(privateKey) {
+		return false
+	} else if crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(privateKey)).PublicKey).Hex() != publicAddress {
+		return false
+	}
+	return true
 }
 
 func IsValidIPAddress(ipAddress string) bool {

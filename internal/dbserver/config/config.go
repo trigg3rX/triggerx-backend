@@ -41,7 +41,7 @@ type Config struct {
 	upstashRedisRestToken string
 
 	// Polling Look Ahead
-	pollingLookAhead int
+	timeSchedulerPollingLookAhead int
 }
 
 var cfg Config
@@ -66,7 +66,7 @@ func Init() error {
 		upstashRedisUrl:          env.GetEnv("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:    env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		pollingLookAhead:         env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
+		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -78,6 +78,24 @@ func Init() error {
 }
 
 func validateConfig(cfg Config) error {
+	if !env.IsValidURL(cfg.timeSchedulerRPCUrl) {
+		return fmt.Errorf("invalid time scheduler RPC URL: %s", cfg.timeSchedulerRPCUrl)
+	}
+	if !env.IsValidURL(cfg.eventSchedulerRPCUrl) {
+		return fmt.Errorf("invalid event scheduler RPC URL: %s", cfg.eventSchedulerRPCUrl)
+	}
+	if !env.IsValidURL(cfg.conditionSchedulerRPCUrl) {
+		return fmt.Errorf("invalid condition scheduler RPC URL: %s", cfg.conditionSchedulerRPCUrl)
+	}
+	if !env.IsValidPort(cfg.databaseRPCPort) {
+		return fmt.Errorf("invalid database RPC port: %s", cfg.databaseRPCPort)
+	}
+	if !env.IsValidIPAddress(cfg.databaseHostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.databaseHostAddress)
+	}
+	if !env.IsValidPort(cfg.databaseHostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
+	}
 	if env.IsEmpty(cfg.alchemyAPIKey) {
 		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
 	}
@@ -91,7 +109,7 @@ func validateConfig(cfg Config) error {
 		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
 	}
 	if !cfg.devMode {
-		if env.IsValidEmail(cfg.emailUser) {
+		if !env.IsValidEmail(cfg.emailUser) {
 			return fmt.Errorf("invalid email user: %s", cfg.emailUser)
 		}
 		if env.IsEmpty(cfg.emailPassword) {
@@ -165,5 +183,5 @@ func IsDevMode() bool {
 }
 
 func GetPollingLookAhead() int {
-	return cfg.pollingLookAhead
+	return cfg.timeSchedulerPollingLookAhead
 }

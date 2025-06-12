@@ -13,7 +13,7 @@ type Config struct {
 	devMode bool
 
 	// Scheduler RPC Port
-	schedulerRPCPort string
+	eventSchedulerRPCPort string
 
 	// Database RPC URL
 	dbServerURL string
@@ -25,8 +25,8 @@ type Config struct {
 	alchemyAPIKey string
 
 	// Scheduler Private Key and Address
-	schedulerSigningKey     string
-	schedulerSigningAddress string
+	eventSchedulerSigningKey     string
+	eventSchedulerSigningAddress string
 
 	// Aggregator RPC URL for forwarding tasks to keeper
 	aggregatorRPCURL string
@@ -46,12 +46,12 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                 env.GetEnvBool("DEV_MODE", false),
-		schedulerRPCPort:        env.GetEnv("EVENT_SCHEDULER_RPC_PORT", "9005"),
-		dbServerURL:             env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
+		eventSchedulerRPCPort:   env.GetEnv("EVENT_SCHEDULER_RPC_PORT", "9005"),
+		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
 		maxWorkers:              env.GetEnvInt("EVENT_SCHEDULER_MAX_WORKERS", 100),
 		alchemyAPIKey:           env.GetEnv("ALCHEMY_API_KEY", ""),
-		schedulerSigningKey:     env.GetEnv("EVENT_SCHEDULER_SIGNING_KEY", ""),
-		schedulerSigningAddress: env.GetEnv("EVENT_SCHEDULER_ADDRESS", ""),
+		eventSchedulerSigningKey:     env.GetEnv("EVENT_SCHEDULER_SIGNING_KEY", ""),
+		eventSchedulerSigningAddress: env.GetEnv("EVENT_SCHEDULER_ADDRESS", ""),
 		aggregatorRPCURL:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 	}
 	if err := validateConfig(); err != nil {
@@ -64,14 +64,20 @@ func Init() error {
 }
 
 func validateConfig() error {
+	if !env.IsValidPort(cfg.eventSchedulerRPCPort) {
+		return fmt.Errorf("invalid event scheduler RPC port: %s", cfg.eventSchedulerRPCPort)
+	}
+	if !env.IsValidURL(cfg.dbServerURL) {
+		return fmt.Errorf("invalid database server URL: %s", cfg.dbServerURL)
+	}
+	if !env.IsValidURL(cfg.aggregatorRPCURL) {
+		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCURL)
+	}
 	if env.IsEmpty(cfg.alchemyAPIKey) {
 		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
 	}
-	if !env.IsValidPrivateKey(cfg.schedulerSigningKey) {
-		return fmt.Errorf("invalid scheduler private key: %s", cfg.schedulerSigningKey)
-	}
-	if !env.IsValidEthAddress(cfg.schedulerSigningAddress) {
-		return fmt.Errorf("invalid scheduler address: %s", cfg.schedulerSigningAddress)
+	if !env.IsValidEthKeyPair(cfg.eventSchedulerSigningKey, cfg.eventSchedulerSigningAddress) {
+		return fmt.Errorf("invalid event scheduler signing key pair address: %s", cfg.eventSchedulerSigningAddress)
 	}
 	return nil
 }
@@ -81,7 +87,7 @@ func IsDevMode() bool {
 }
 
 func GetSchedulerRPCPort() string {
-	return cfg.schedulerRPCPort
+	return cfg.eventSchedulerRPCPort
 }
 
 func GetDBServerURL() string {
@@ -115,11 +121,11 @@ func GetMaxWorkers() int {
 }
 
 func GetSchedulerSigningKey() string {
-	return cfg.schedulerSigningKey
+	return cfg.eventSchedulerSigningKey
 }
 
 func GetSchedulerSigningAddress() string {
-	return cfg.schedulerSigningAddress
+	return cfg.eventSchedulerSigningAddress
 }
 
 func GetAggregatorRPCURL() string {

@@ -36,6 +36,9 @@ type Config struct {
 	streamMaxLen  int
 	jobStreamTTL  time.Duration
 	taskStreamTTL time.Duration
+	cacheTTL 	  time.Duration
+	cleanupInterval time.Duration
+
 }
 
 var cfg Config
@@ -54,14 +57,17 @@ func Init() error {
 		poolSize:      env.GetEnvInt("REDIS_POOL_SIZE", 10),
 		minIdleConns:  env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
 		maxRetries:    env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:   env.GetEnvDuration("REDIS_DIAL_TIMEOUT_SEC", 5*time.Second),
-		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT_SEC", 3*time.Second),
-		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT_SEC", 3*time.Second),
-		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT_SEC", 4*time.Second),
+		dialTimeout:   env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
 		streamMaxLen:  env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL_HOURS", 120*time.Hour),
-		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL_HOURS", 1*time.Hour),
+		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
+		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
+		cacheTTL: 	   env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
+		cleanupInterval: env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
 	}
+	
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -152,4 +158,12 @@ func GetWriteTimeout() time.Duration {
 
 func GetPoolTimeout() time.Duration {
 	return cfg.poolTimeout
+}
+
+func GetCacheTTL() time.Duration {
+	return cfg.cacheTTL
+}
+
+func GetCleanupInterval() time.Duration {
+	return cfg.cleanupInterval
 }
