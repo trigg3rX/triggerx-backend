@@ -269,11 +269,3 @@ func (c *Client) XAck(ctx context.Context, stream, group, id string) error {
 func (c *Client) Close() error {
 	return c.redisClient.Close()
 }
-
-// Helper function to convert bool to float64 for metrics
-func boolToFloat64(b bool) float64 {
-	if b {
-		return 1
-	}
-	return 0
-}

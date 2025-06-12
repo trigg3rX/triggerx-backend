@@ -11,7 +11,7 @@ import (
 
 	redisclient "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
+	redisx "github.com/trigg3rX/triggerx-backend/internal/redis/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
