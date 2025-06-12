@@ -92,7 +92,6 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
 	s.router.Use(TraceMiddleware())
-	s.router.Use(RedisMetricsMiddleware())
 	s.router.Use(StreamMetricsMiddleware())
 	s.router.Use(LoggerMiddleware(s.logger))
 	s.router.Use(ErrorMiddleware(s.logger))

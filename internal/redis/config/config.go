@@ -12,6 +12,9 @@ import (
 type Config struct {
 	devMode bool
 
+	// Redis RPC port
+	redisRPCPort string
+
 	// Primary: Cloud Redis (Upstash) settings
 	upstashURL   string
 	upstashToken string
@@ -49,6 +52,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:       env.GetEnvBool("DEV_MODE", false),
+		redisRPCPort:  env.GetEnv("REDIS_RPC_PORT", "9009"),
 		upstashURL:    env.GetEnv("UPSTASH_REDIS_URL", ""),
 		upstashToken:  env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 		localAddr:     env.GetEnv("REDIS_ADDR", "localhost:6379"),
@@ -98,6 +102,10 @@ func GetRedisType() string {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetRedisRPCPort() string {
+	return cfg.redisRPCPort
 }
 
 func GetUpstashURL() string {

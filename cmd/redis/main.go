@@ -34,14 +34,12 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting Redis service ...",
-		"mode", config.IsDevMode(),
-		"version", "1.0.0",
-	)
+	logger.Info("Starting Redis service ...")
 
 	// Initialize metrics collector
 	collector := metrics.NewCollector()
-	logger.Info("[1/5] Dependency: Metrics collector Initialised")
+	logger.Info("Metrics collector Initialised")
+	collector.Start()
 
 	// Create Redis client and verify connection
 	client, err := redis.NewRedisClient(logger)
@@ -53,27 +51,27 @@ func main() {
 	if err := client.Ping(); err != nil {
 		logger.Fatal("Redis is not reachable", "error", err)
 	}
-	logger.Info("[2/5] Dependency: Redis client Initialised")
+	logger.Info("Redis client Initialised")
 
 	// Initialize task stream manager
 	taskStreamMgr, err := redis.NewTaskStreamManager(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
 	}
-	logger.Info("[3/5] Dependency: Task stream manager Initialised")
+	logger.Info("Task stream manager Initialised")
 
 	// Initialize job stream manager
 	jobStreamMgr, err := redis.NewJobStreamManager(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
 	}
-	logger.Info("[4/5] Dependency: Job stream manager Initialised")
+	logger.Info("Job stream manager Initialised")
 
 	// Initialize API server
 	serverCfg := api.Config{
-		Port:           config.GetRedisAPIPort(),
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
+		Port:           config.GetRedisRPCPort(),
+		ReadTimeout:    config.GetReadTimeout(),
+		WriteTimeout:   config.GetWriteTimeout(),
 		MaxHeaderBytes: 1 << 20,
 	}
 
@@ -85,15 +83,10 @@ func main() {
 	}
 
 	server := api.NewServer(serverCfg, deps)
-	logger.Info("[5/5] Dependency: API server Initialised")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// Start background metrics collection
-	api.StartBackgroundMetricsCollection()
-	logger.Info("[1/3] Process: Background metrics collection Started")
 
 	// Start server in a goroutine
 	go func() {
@@ -101,13 +94,12 @@ func main() {
 			logger.Fatal("Failed to start server", "error", err)
 		}
 	}()
-	logger.Info("[2/3] Process: API server Started")
+	logger.Info("API server Started")
 
 	// Start metrics collector in a goroutine
 	go func() {
 		collector.Start()
 	}()
-	logger.Info("[3/3] Process: Metrics collector Started")
 
 	// Log Redis info
 	redisInfo := redis.GetRedisInfo()
@@ -132,7 +124,7 @@ func performGracefulShutdown(ctx context.Context, client *redis.Client, server *
 	defer cancel()
 
 	// Close Redis client connection
-	logger.Info("[1/2] Process: Closing Redis client connection...")
+	logger.Info("Closing Redis client connection...")
 	if err := client.Close(); err != nil {
 		logger.Error("Error closing Redis client", "error", err)
 	} else {
@@ -140,7 +132,7 @@ func performGracefulShutdown(ctx context.Context, client *redis.Client, server *
 	}
 
 	// Shutdown server gracefully
-	logger.Info("[2/2] Process: Shutting down API server...")
+	logger.Info("Shutting down API server...")
 	if err := server.Stop(shutdownCtx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
 	} else {

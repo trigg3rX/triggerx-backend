@@ -187,16 +187,3 @@ var (
 		Buckets:   []float64{0.1, 0.5, 1, 5, 10, 30, 60, 120, 300, 600}, // Up to 10 minutes
 	}, []string{"from_stream", "to_stream"})
 )
-
-// StartMetricsCollection starts collecting metrics
-func StartMetricsCollection() {
-	// Update uptime every 15 seconds
-	go func() {
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			UptimeSeconds.Set(time.Since(startTime).Seconds())
-		}
-	}()
-}
