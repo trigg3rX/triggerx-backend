@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"sort"
+
 	// "time"
 
 	"github.com/gocql/gocql"
@@ -70,7 +71,30 @@ func (r *keeperRepository) GetKeeperAsPerformer() ([]types.GetPerformerData, err
 
 func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error) {
 	var keeperData types.KeeperData
-	err := r.db.Session().Query(queries.GetKeeperDataByIDQuery, id).Scan(&keeperData.KeeperID, &keeperData.KeeperName, &keeperData.KeeperAddress, &keeperData.RegisteredTx, &keeperData.OperatorID, &keeperData.RewardsAddress, &keeperData.RewardsBooster, &keeperData.VotingPower, &keeperData.KeeperPoints, &keeperData.ConnectionAddress, &keeperData.Strategies, &keeperData.Whitelisted, &keeperData.Registered, &keeperData.Online, &keeperData.Version, &keeperData.NoExecutedTasks, &keeperData.NoAttestedTasks, &keeperData.ChatID, &keeperData.EmailID, &keeperData.LastCheckedIn)
+	err := r.db.Session().Query(queries.GetKeeperDataByIDQuery, id).Scan(
+		&keeperData.KeeperID,
+		&keeperData.KeeperName,
+		&keeperData.KeeperAddress,
+		&keeperData.ConsensusAddress,
+		&keeperData.RegisteredTx,
+		&keeperData.OperatorID,
+		&keeperData.RewardsAddress,
+		&keeperData.RewardsBooster,
+		&keeperData.VotingPower,
+		&keeperData.KeeperPoints,
+		&keeperData.ConnectionAddress,
+		&keeperData.PeerID,
+		&keeperData.Strategies,
+		&keeperData.Whitelisted,
+		&keeperData.Registered,
+		&keeperData.Online,
+		&keeperData.Version,
+		&keeperData.NoExecutedTasks,
+		&keeperData.NoAttestedTasks,
+		&keeperData.ChatID,
+		&keeperData.EmailID,
+		&keeperData.LastCheckedIn,
+	)
 	if err != nil {
 		return types.KeeperData{}, err
 	}

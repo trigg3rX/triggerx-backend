@@ -44,7 +44,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 					{
 						JobID:                     1,
 						ExpirationTime:            mockTime.Add(60 * time.Second),
-						Recurring:                 true,
+						// Recurring:                 true,
 						TimeInterval:              60,
 						ScheduleType:              "interval",
 						CronExpression:            "",
@@ -63,7 +63,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 					{
 						JobID:                     2,
 						ExpirationTime:            mockTime.Add(60 * time.Second),
-						Recurring:                 false,
+						// Recurring:                 false,
 						TimeInterval:              120,
 						ScheduleType:              "specific",
 						CronExpression:            "",
@@ -86,7 +86,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				{
 					JobID:                     1,
 					ExpirationTime:            mockTime.Add(60 * time.Second),
-					Recurring:                 true,
+					// Recurring:                 true,
 					TimeInterval:              60,
 					ScheduleType:              "interval",
 					CronExpression:            "",
@@ -105,7 +105,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				{
 					JobID:                     2,
 					ExpirationTime:            mockTime.Add(60 * time.Second),
-					Recurring:                 false,
+					// Recurring:                 false,
 					TimeInterval:              120,
 					ScheduleType:              "specific",
 					CronExpression:            "",

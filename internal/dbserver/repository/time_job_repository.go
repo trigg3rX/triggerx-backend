@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -32,7 +33,7 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.ExpirationTime, timeJob.Recurring, timeJob.NextExecutionTimestamp,
+		timeJob.JobID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
 		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
 		timeJob.SpecificSchedule, timeJob.Timezone, timeJob.TargetChainID,
 		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType,
@@ -48,13 +49,13 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
-		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.Recurring, &timeJob.NextExecutionTimestamp,
+		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp,
 		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
 		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
 		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
 		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive)
 	if err != nil {
-		return types.TimeJobData{}, errors.New("failed to get time job by job ID")
+		return types.TimeJobData{}, fmt.Errorf("failed to get time job by job ID: %v", err)
 	}
 
 	return timeJob, nil

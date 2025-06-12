@@ -4,12 +4,12 @@ package queries
 const (
 	CreateTimeJobDataQuery = `
 			INSERT INTO triggerx.time_job_data (
-				job_id, expiration_time, recurring, next_execution_timestamp, schedule_type,
+				job_id, expiration_time, next_execution_timestamp, schedule_type,
 				time_interval, cron_expression, specific_schedule, timezone, target_chain_id, 
 				target_contract_address, target_function, abi, arg_type, arguments, 
 				dynamic_arguments_script_url, is_completed, is_active
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	// 18 values to be inserted, so 18 ?s
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	// 17 values to be inserted, so 17 ?s
 
 	CreateEventJobDataQuery = `
 			INSERT INTO triggerx.event_job_data (
@@ -70,7 +70,7 @@ const (
 // Read Queries
 const (
 	GetTimeJobDataByJobIDQuery = `
-			SELECT job_id, expiration_time, recurring, 
+			SELECT job_id, expiration_time, 
 				next_execution_timestamp, schedule_type,
 				time_interval, cron_expression, specific_schedule, 
 				timezone, target_chain_id, target_contract_address, target_function, 

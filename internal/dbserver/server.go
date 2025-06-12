@@ -158,7 +158,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
 	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
 	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
-	api.GET("/tasks/job/:id", handler.GetTasksByJobID)
+	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
 	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.GET("/keepers/performers", handler.GetPerformers)

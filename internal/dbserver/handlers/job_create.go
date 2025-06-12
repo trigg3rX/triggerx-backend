@@ -126,7 +126,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			timeJobData := types.TimeJobData{
 				JobID:                     jobID,
 				ExpirationTime:            expirationTime,
-				Recurring:                 tempJobs[i].Recurring,
+				// Recurring:                 tempJobs[i].Recurring,
 				TimeInterval:              tempJobs[i].TimeInterval,
 				ScheduleType:              tempJobs[i].ScheduleType,
 				CronExpression:            tempJobs[i].CronExpression,

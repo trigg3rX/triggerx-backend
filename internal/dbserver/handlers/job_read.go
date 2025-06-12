@@ -10,10 +10,13 @@ import (
 )
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
-	userAddress := strings.ToLower(c.Param("address"))
+	userAddress := strings.ToLower(c.Param("user_address"))
 	if userAddress == "" {
 		h.logger.Error("[GetJobsByUserAddress] Invalid user address")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user address"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user address",
+			"code":  "INVALID_ADDRESS",
+		})
 		return
 	}
 
@@ -25,16 +28,24 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user data: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve user data",
+			"code":  "USER_DATA_ERROR",
+		})
 		return
 	}
 
 	if len(jobIDs) == 0 {
-		c.JSON(http.StatusOK, []types.JobResponse{})
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No jobs found for this user",
+			"jobs":    []types.JobResponse{},
+		})
 		return
 	}
 
 	var jobs []types.JobResponse
+	var hasErrors bool
+
 	for _, jobID := range jobIDs {
 		// Get basic job data
 		trackDBOp = metrics.TrackDBOperation("read", "job_data")
@@ -42,6 +53,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %d: %v", jobID, err)
+			hasErrors = true
 			continue
 		}
 
@@ -56,6 +68,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			trackDBOp(err)
 			if err != nil {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %d: %v", jobID, err)
+				hasErrors = true
 				continue
 			}
 			jobResponse.TimeJobData = &timeJobData
@@ -67,6 +80,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			trackDBOp(err)
 			if err != nil {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %d: %v", jobID, err)
+				hasErrors = true
 				continue
 			}
 			jobResponse.EventJobData = &eventJobData
@@ -75,19 +89,45 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			// Condition-based job
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
-			trackDBOp(err)	
+			trackDBOp(err)
 			if err != nil {
 				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %d: %v", jobID, err)
+				hasErrors = true
 				continue
 			}
 			jobResponse.ConditionJobData = &conditionJobData
 
 		default:
-			// No specific job data if task_definition_id is not recognized
+			h.logger.Errorf("[GetJobsByUserAddress] Unknown task definition ID %d for jobID %d", jobData.TaskDefinitionID, jobID)
+			hasErrors = true
+			continue
 		}
 
 		jobs = append(jobs, jobResponse)
 	}
+
 	h.logger.Infof("[GetJobsByUserAddress] Found %d jobs for user ID %d", len(jobs), userID)
-	c.JSON(http.StatusOK, jobs)
+
+	// If we have both jobs and errors, return a partial success response
+	if len(jobs) > 0 && hasErrors {
+		c.JSON(http.StatusPartialContent, gin.H{
+			"message": "Some jobs were retrieved successfully, but there were errors with others",
+			"jobs":    jobs,
+		})
+		return
+	}
+
+	// If we have only errors and no jobs, return an error response
+	if len(jobs) == 0 && hasErrors {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve jobs",
+			"code":  "JOB_RETRIEVAL_ERROR",
+		})
+		return
+	}
+
+	// If we have only jobs and no errors, return success
+	c.JSON(http.StatusOK, gin.H{
+		"jobs": jobs,
+	})
 }

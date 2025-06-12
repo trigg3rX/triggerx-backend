@@ -50,7 +50,7 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	// 	keeperPoints = 0
 	// }
 
-	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)
+	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %.2f + %.2f", walletAddress, userPoints, keeperPoints)
 
 	totalPoints := userPoints + keeperPoints
 
