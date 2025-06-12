@@ -9,6 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -20,14 +21,17 @@ type TaskStreamManager struct {
 
 func NewTaskStreamManager(logger logging.Logger) (*TaskStreamManager, error) {
 	if !config.IsRedisAvailable() {
+		metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(0)
 		return nil, fmt.Errorf("redis not available")
 	}
 
 	client, err := NewRedisClient(logger)
 	if err != nil {
+		metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(0)
 		return nil, fmt.Errorf("failed to create redis client: %w", err)
 	}
 
+	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
 	return &TaskStreamManager{
 		client:         client,
 		logger:         logger,
@@ -71,13 +75,23 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(stream, group string) error 
 }
 
 func (tsm *TaskStreamManager) AddTaskToReadyStream(task *TaskStreamData) error {
-	return tsm.addTaskToStream(TasksReadyStream, task)
+	err := tsm.addTaskToStream(TasksReadyStream, task)
+	if err != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("ready", "failure").Inc()
+		return err
+	}
+	metrics.TasksAddedToStreamTotal.WithLabelValues("ready", "success").Inc()
+	return nil
 }
 
 func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryReason string) error {
+	start := time.Now()
 	task.RetryCount++
 	now := time.Now()
 	task.LastAttemptAt = &now
+
+	// Track retry operation
+	metrics.TaskRetryOperationsTotal.Inc()
 
 	// Exponential backoff with jitter
 	baseBackoff := time.Duration(task.RetryCount) * RetryBackoffBase
@@ -89,19 +103,58 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 
 	if task.RetryCount >= MaxRetryAttempts {
 		tsm.logger.Warnf("Task %d exceeded max retry attempts, moving to failed stream", task.TaskID)
-		return tsm.addTaskToStream(TasksFailedStream, task)
+		metrics.TaskMaxRetriesExceededTotal.Inc()
+		metrics.TasksMovedToFailedStreamTotal.Inc()
+
+		err := tsm.addTaskToStream(TasksFailedStream, task)
+		if err != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "failure").Inc()
+		} else {
+			metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
+			// Track lifecycle transition
+			metrics.TaskLifecycleTransitionDuration.WithLabelValues("retry", "failed").Observe(time.Since(start).Seconds())
+		}
+		return err
 	}
 
-	return tsm.addTaskToStream(TasksRetryStream, task)
+	err := tsm.addTaskToStream(TasksRetryStream, task)
+	if err != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("retry", "failure").Inc()
+		return err
+	}
+	metrics.TasksAddedToStreamTotal.WithLabelValues("retry", "success").Inc()
+	return nil
 }
 
 func (tsm *TaskStreamManager) AddTaskToProcessingStream(task *TaskStreamData, performerID int64) error {
+	start := time.Now()
 	task.PerformerID = performerID
-	return tsm.addTaskToStream(TasksProcessingStream, task)
+
+	err := tsm.addTaskToStream(TasksProcessingStream, task)
+	if err != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("processing", "failure").Inc()
+		return err
+	}
+
+	metrics.TasksAddedToStreamTotal.WithLabelValues("processing", "success").Inc()
+	metrics.TaskReadyToProcessingTotal.Inc()
+	metrics.TaskLifecycleTransitionDuration.WithLabelValues("ready", "processing").Observe(time.Since(start).Seconds())
+	return nil
 }
 
 func (tsm *TaskStreamManager) AddTaskToCompletedStream(task *TaskStreamData, executionResult map[string]interface{}) error {
-	return tsm.addTaskToStream(TasksCompletedStream, task)
+	start := time.Now()
+
+	err := tsm.addTaskToStream(TasksCompletedStream, task)
+	if err != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "failure").Inc()
+		return err
+	}
+
+	metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
+	metrics.TaskProcessingToCompletedTotal.Inc()
+	metrics.TaskLifecycleTransitionDuration.WithLabelValues("processing", "completed").Observe(time.Since(start).Seconds())
+	return nil
 }
 
 func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamData) error {
@@ -134,14 +187,22 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 }
 
 func (tsm *TaskStreamManager) ReadTasksFromReadyStream(consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
-	return tsm.readTasksFromStream(TasksReadyStream, consumerGroup, consumerName, count)
+	tasks, err := tsm.readTasksFromStream(TasksReadyStream, consumerGroup, consumerName, count)
+	if err != nil {
+		metrics.TasksReadFromStreamTotal.WithLabelValues("ready", "failure").Inc()
+		return nil, err
+	}
+	metrics.TasksReadFromStreamTotal.WithLabelValues("ready", "success").Inc()
+	return tasks, nil
 }
 
 func (tsm *TaskStreamManager) ReadTasksFromRetryStream(consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
 	tasks, err := tsm.readTasksFromStream(TasksRetryStream, consumerGroup, consumerName, count)
 	if err != nil {
+		metrics.TasksReadFromStreamTotal.WithLabelValues("retry", "failure").Inc()
 		return nil, err
 	}
+	metrics.TasksReadFromStreamTotal.WithLabelValues("retry", "success").Inc()
 
 	now := time.Now()
 	var readyTasks []TaskStreamData
@@ -215,6 +276,20 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 			length = -1
 		}
 		streamLengths[stream] = length
+
+		// Update stream length metrics
+		switch stream {
+		case TasksReadyStream:
+			metrics.TaskStreamLengths.WithLabelValues("ready").Set(float64(length))
+		case TasksRetryStream:
+			metrics.TaskStreamLengths.WithLabelValues("retry").Set(float64(length))
+		case TasksProcessingStream:
+			metrics.TaskStreamLengths.WithLabelValues("processing").Set(float64(length))
+		case TasksCompletedStream:
+			metrics.TaskStreamLengths.WithLabelValues("completed").Set(float64(length))
+		case TasksFailedStream:
+			metrics.TaskStreamLengths.WithLabelValues("failed").Set(float64(length))
+		}
 	}
 
 	return map[string]interface{}{
