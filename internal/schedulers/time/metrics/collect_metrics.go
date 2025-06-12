@@ -7,6 +7,17 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 )
 
+type HealthChecker interface {
+	HealthCheck() error
+}
+
+var dbChecker HealthChecker
+
+// SetHealthChecker sets the health checker for database status monitoring
+func SetHealthChecker(checker HealthChecker) {
+	dbChecker = checker
+}
+
 // Collects system resource metrics
 func collectSystemMetrics() {
 	var memStats runtime.MemStats
@@ -33,8 +44,16 @@ func collectConfigurationMetrics() {
 	// Set duplicate task window from configuration
 	DuplicateTaskWindowSeconds.Set(getDuplicateTaskWindowSeconds())
 
-	// Set API server status (1 for running, 0 for stopped)
-	APIServerStatus.Set(1)
+	// Check database health and update APIServerStatus
+	if dbChecker != nil {
+		if err := dbChecker.HealthCheck(); err != nil {
+			APIServerStatus.Set(0) // Database unhealthy
+		} else {
+			APIServerStatus.Set(1) // Database healthy
+		}
+	} else {
+		APIServerStatus.Set(0) // No health checker configured
+	}
 }
 
 // Collects performance-related metrics

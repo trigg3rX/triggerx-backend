@@ -51,12 +51,12 @@ var (
 		Help:      "Garbage collection time",
 	})
 
-	// API server status
+	// Database server status
 	APIServerStatus = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
 		Name:      "api_server_status",
-		Help:      "API server health status",
+		Help:      "Database server health status (1=healthy, 0=unhealthy)",
 	})
 
 	// Tasks per minute
@@ -129,7 +129,7 @@ var (
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
 		Name:      "db_requests_total",
-		Help:      "Database client HTTP requests",
+		Help:      "Database client requests",
 	}, []string{"method", "endpoint", "status"})
 
 	// HTTP requests
