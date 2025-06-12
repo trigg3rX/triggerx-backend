@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"sync"
 	"time"
 
@@ -26,33 +25,25 @@ func IsRedisAvailable() bool {
 
 // NewRedisClient creates a new Redis client instance with enhanced features
 func NewRedisClient(logger logging.Logger) (*Client, error) {
-	start := time.Now()
-
 	if !config.IsRedisAvailable() {
-		metrics.RedisAvailable.Set(0)
+		metrics.IsRedisUpstashAvailable.Set(0)
 		return nil, fmt.Errorf("redis is not configured")
 	}
 
-	// Update availability metrics
-	metrics.RedisAvailable.Set(1)
-	metrics.UpstashEnabled.Set(boolToFloat64(config.IsUpstashEnabled()))
-	metrics.LocalRedisEnabled.Set(boolToFloat64(config.IsLocalRedisEnabled()))
-
 	var opt *redis.Options
-	var redisType string
+	var isUpstash bool
 	var err error
 
 	// Priority 1: Try Upstash Redis (cloud)
 	if config.IsUpstashEnabled() {
 		opt, err = parseUpstashConfig()
 		if err == nil {
-			redisType = "upstash"
+			isUpstash = true
 			logger.Infof("Using Upstash Redis configuration")
-			metrics.RedisTypeActive.WithLabelValues("upstash").Set(1)
-			metrics.RedisTypeActive.WithLabelValues("local").Set(0)
+			metrics.IsRedisUpstashAvailable.Set(1)
 		} else {
 			logger.Warnf("Failed to parse Upstash config: %v", err)
-			metrics.ClientConnectionErrorsTotal.WithLabelValues("upstash", "config_parse").Inc()
+			metrics.ClientConnectionErrorsTotal.WithLabelValues("config_parse").Inc()
 		}
 	}
 
@@ -60,13 +51,12 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if opt == nil && config.IsLocalRedisEnabled() {
 		opt, err = parseLocalRedisConfig()
 		if err == nil {
-			redisType = "local"
+			isUpstash = false
 			logger.Infof("Using local Redis configuration")
-			metrics.RedisTypeActive.WithLabelValues("local").Set(1)
-			metrics.RedisTypeActive.WithLabelValues("upstash").Set(0)
+			metrics.IsRedisUpstashAvailable.Set(0)
 		} else {
 			logger.Warnf("Failed to parse local Redis config: %v", err)
-			metrics.ClientConnectionErrorsTotal.WithLabelValues("local", "config_parse").Inc()
+			metrics.ClientConnectionErrorsTotal.WithLabelValues("config_parse").Inc()
 		}
 	}
 
@@ -82,18 +72,24 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	}
 
 	if err := redisClient.CheckConnection(); err != nil {
-		metrics.ClientConnectionsTotal.WithLabelValues(redisType, "failure").Inc()
-		metrics.ClientConnectionErrorsTotal.WithLabelValues(redisType, "connection_failed").Inc()
+		metrics.ClientConnectionsTotal.WithLabelValues("failure").Inc()
+		metrics.ClientConnectionErrorsTotal.WithLabelValues("connection_failed").Inc()
 		metrics.ServiceStatus.WithLabelValues("client").Set(0)
+		redisType := "local"
+		if isUpstash {
+			redisType = "upstash"
+		}
 		return nil, fmt.Errorf("failed to connect to %s Redis: %w", redisType, err)
 	}
 
 	// Record successful connection
-	connectionDuration := time.Since(start)
-	metrics.ClientConnectionsTotal.WithLabelValues(redisType, "success").Inc()
-	metrics.ClientConnectionDuration.WithLabelValues(redisType).Observe(connectionDuration.Seconds())
+	metrics.ClientConnectionsTotal.WithLabelValues("success").Inc()
 	metrics.ServiceStatus.WithLabelValues("client").Set(1)
 
+	redisType := "local"
+	if isUpstash {
+		redisType = "upstash"
+	}
 	logger.Infof("Successfully connected to %s Redis", redisType)
 	return redisClient, nil
 }
@@ -280,14 +276,4 @@ func boolToFloat64(b bool) float64 {
 		return 1
 	}
 	return 0
-}
-
-// UpdateSystemMetrics updates system metrics (similar to keeper's middleware)
-func UpdateSystemMetrics() {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-	metrics.MemoryUsageBytes.Set(float64(memStats.Alloc))
-	metrics.CPUUsagePercent.Set(float64(memStats.Sys))
-	metrics.GoroutinesActive.Set(float64(runtime.NumGoroutine()))
-	metrics.GCDurationSeconds.Set(float64(memStats.PauseTotalNs) / 1e9)
 }

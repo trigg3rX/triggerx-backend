@@ -54,32 +54,12 @@ var (
 		Help:      "Service component health status (component=client/job_stream_manager/task_stream_manager)",
 	}, []string{"component"})
 
-	RedisAvailable = promauto.NewGauge(prometheus.GaugeOpts{
+	// Single flag to indicate which Redis is being used
+	IsRedisUpstashAvailable = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "redis",
-		Name:      "redis_available",
-		Help:      "Redis availability flag",
-	})
-
-	RedisTypeActive = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "triggerx",
-		Subsystem: "redis",
-		Name:      "redis_type_active",
-		Help:      "Active Redis type (type=upstash/local)",
-	}, []string{"type"})
-
-	UpstashEnabled = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: "triggerx",
-		Subsystem: "redis",
-		Name:      "upstash_enabled",
-		Help:      "Upstash Redis enabled flag",
-	})
-
-	LocalRedisEnabled = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: "triggerx",
-		Subsystem: "redis",
-		Name:      "local_redis_enabled",
-		Help:      "Local Redis enabled flag",
+		Name:      "is_upstash_available",
+		Help:      "Whether Upstash Redis is available and being used (1=Upstash, 0=Local)",
 	})
 
 	// Connection Management
@@ -87,23 +67,15 @@ var (
 		Namespace: "triggerx",
 		Subsystem: "redis",
 		Name:      "client_connections_total",
-		Help:      "Redis client connections (redis_type=upstash/local, status=success/failure)",
-	}, []string{"redis_type", "status"})
-
-	ClientConnectionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "triggerx",
-		Subsystem: "redis",
-		Name:      "client_connection_duration_seconds",
-		Help:      "Redis client connection establishment time",
-		Buckets:   []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5},
-	}, []string{"redis_type"})
+		Help:      "Redis client connections (status=success/failure)",
+	}, []string{"status"})
 
 	ClientConnectionErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "redis",
 		Name:      "client_connection_errors_total",
 		Help:      "Redis client connection errors",
-	}, []string{"redis_type", "error_type"})
+	}, []string{"error_type"})
 
 	PingOperationsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
@@ -206,12 +178,13 @@ var (
 		Help:      "Tasks moved from processing to completed stream",
 	})
 
+	// Updated buckets for longer task execution times (30+ seconds to several minutes)
 	TaskLifecycleTransitionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "triggerx",
 		Subsystem: "redis",
 		Name:      "task_lifecycle_transition_duration_seconds",
 		Help:      "Task lifecycle transition time",
-		Buckets:   []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5},
+		Buckets:   []float64{0.1, 0.5, 1, 5, 10, 30, 60, 120, 300, 600}, // Up to 10 minutes
 	}, []string{"from_stream", "to_stream"})
 )
 
