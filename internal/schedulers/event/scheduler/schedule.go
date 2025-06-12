@@ -53,7 +53,9 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleEventJobD
 	go worker.Start()
 
 	// Update metrics
-	metrics.JobsScheduled.Inc()
+	metrics.TrackJobScheduled()
+	metrics.UpdateActiveWorkers(len(s.workers))
+	metrics.TrackWorkerStart(fmt.Sprintf("%d", jobData.JobID))
 
 	duration := time.Since(startTime)
 
@@ -132,6 +134,10 @@ func (s *EventBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	// Remove from workers map
 	delete(s.workers, jobID)
+
+	// Update metrics
+	metrics.TrackWorkerStop(fmt.Sprintf("%d", jobID))
+	metrics.UpdateActiveWorkers(len(s.workers))
 
 	duration := time.Since(startTime)
 

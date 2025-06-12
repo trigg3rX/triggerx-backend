@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/api/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/api/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -67,6 +68,9 @@ func (s *Server) Stop(ctx context.Context) error {
 
 // setupRoutes sets up the routes for the server
 func (s *Server) setupRoutes(deps Dependencies) {
+	// Add global middlewares
+	s.router.Use(middleware.MetricsMiddleware())
+
 	// Create handlers
 	statusHandler := handlers.NewStatusHandler(deps.Logger)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)

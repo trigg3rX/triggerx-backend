@@ -106,14 +106,6 @@ var (
 		Help:      "Database client HTTP requests",
 	}, []string{"method", "endpoint", "status"})
 
-	// DB request duration
-	DBRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "triggerx",
-		Subsystem: "event_scheduler",
-		Name:      "db_request_duration_seconds",
-		Help:      "Database request processing time",
-	}, []string{"method", "endpoint"})
-
 	// DB connection errors
 	DBConnectionErrorsTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
@@ -221,7 +213,7 @@ var (
 
 // StartMetricsCollection starts collecting metrics
 func StartMetricsCollection() {
-	// Update uptime every 15 seconds
+	// Update uptime and collect metrics every 15 seconds
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
@@ -229,6 +221,19 @@ func StartMetricsCollection() {
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
 			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+			collectWorkerMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
 		}
 	}()
 }

@@ -19,8 +19,11 @@ func (w *EventWorker) checkForEvents() error {
 	// Get current block number
 	currentBlock, err := w.Client.BlockNumber(context.Background())
 	if err != nil {
+		metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_blockNumber", "failed")
+		metrics.TrackConnectionFailure(w.Job.TriggerChainID)
 		return fmt.Errorf("failed to get current block number: %w", err)
 	}
+	metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_blockNumber", "success")
 
 	// Calculate safe block (with confirmations)
 	safeBlock := currentBlock
@@ -43,12 +46,20 @@ func (w *EventWorker) checkForEvents() error {
 
 	logs, err := w.Client.FilterLogs(context.Background(), query)
 	if err != nil {
+		metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_getLogs", "failed")
+		metrics.TrackConnectionFailure(w.Job.TriggerChainID)
 		return fmt.Errorf("failed to filter logs: %w", err)
 	}
+	metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_getLogs", "success")
 
 	// Process each event
 	for _, log := range logs {
-		metrics.EventsPerMinute.WithLabelValues(w.Job.TriggerChainID).Inc()
+		startTime := time.Now()
+
+		// Track event detection
+		processingDuration := time.Since(startTime)
+		metrics.TrackEvent(w.Job.TriggerChainID, processingDuration)
+
 		if err := w.processEvent(log); err != nil {
 			w.Logger.Error("Failed to process event",
 				"job_id", w.Job.JobID,
@@ -56,9 +67,11 @@ func (w *EventWorker) checkForEvents() error {
 				"block", log.BlockNumber,
 				"error", err,
 			)
-			metrics.JobsCompleted.WithLabelValues("failed").Inc()
+			metrics.TrackJobCompleted("failed")
+			metrics.TrackWorkerError(fmt.Sprintf("%d", w.Job.JobID), "event_processing_error")
 		} else {
-			metrics.JobsCompleted.WithLabelValues("success").Inc()
+			metrics.TrackJobCompleted("success")
+			metrics.TrackEventSuccess(w.Job.TriggerChainID)
 		}
 	}
 
