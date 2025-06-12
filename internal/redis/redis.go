@@ -8,6 +8,7 @@ import (
 
 	redis "github.com/redis/go-redis/v9" // Add alias here
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -25,21 +26,24 @@ func IsRedisAvailable() bool {
 // NewRedisClient creates a new Redis client instance with enhanced features
 func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if !config.IsRedisAvailable() {
+		metrics.IsRedisUpstashAvailable.Set(0)
 		return nil, fmt.Errorf("redis is not configured")
 	}
 
 	var opt *redis.Options
-	var redisType string
+	var isUpstash bool
 	var err error
 
 	// Priority 1: Try Upstash Redis (cloud)
 	if config.IsUpstashEnabled() {
 		opt, err = parseUpstashConfig()
 		if err == nil {
-			redisType = "upstash"
+			isUpstash = true
 			logger.Infof("Using Upstash Redis configuration")
+			metrics.IsRedisUpstashAvailable.Set(1)
 		} else {
 			logger.Warnf("Failed to parse Upstash config: %v", err)
+			metrics.ClientConnectionErrorsTotal.WithLabelValues("config_parse").Inc()
 		}
 	}
 
@@ -47,14 +51,17 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if opt == nil && config.IsLocalRedisEnabled() {
 		opt, err = parseLocalRedisConfig()
 		if err == nil {
-			redisType = "local"
+			isUpstash = false
 			logger.Infof("Using local Redis configuration")
+			metrics.IsRedisUpstashAvailable.Set(0)
 		} else {
 			logger.Warnf("Failed to parse local Redis config: %v", err)
+			metrics.ClientConnectionErrorsTotal.WithLabelValues("config_parse").Inc()
 		}
 	}
 
 	if opt == nil {
+		metrics.ServiceStatus.WithLabelValues("client").Set(0)
 		return nil, fmt.Errorf("no valid Redis configuration found")
 	}
 
@@ -65,9 +72,24 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	}
 
 	if err := redisClient.CheckConnection(); err != nil {
+		metrics.ClientConnectionsTotal.WithLabelValues("failure").Inc()
+		metrics.ClientConnectionErrorsTotal.WithLabelValues("connection_failed").Inc()
+		metrics.ServiceStatus.WithLabelValues("client").Set(0)
+		redisType := "local"
+		if isUpstash {
+			redisType = "upstash"
+		}
 		return nil, fmt.Errorf("failed to connect to %s Redis: %w", redisType, err)
 	}
 
+	// Record successful connection
+	metrics.ClientConnectionsTotal.WithLabelValues("success").Inc()
+	metrics.ServiceStatus.WithLabelValues("client").Set(1)
+
+	redisType := "local"
+	if isUpstash {
+		redisType = "upstash"
+	}
 	logger.Infof("Successfully connected to %s Redis", redisType)
 	return redisClient, nil
 }
@@ -120,22 +142,42 @@ func applyConnectionSettings(opt *redis.Options) {
 
 // CheckConnection validates the Redis connection
 func (c *Client) CheckConnection() error {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err := c.redisClient.Ping(ctx).Result()
+	duration := time.Since(start)
+
 	if err != nil {
 		c.logger.Errorf("Redis connection failed (%s): %v", config.GetRedisType(), err)
+		metrics.ConnectionChecksTotal.WithLabelValues("failure").Inc()
 		return fmt.Errorf("redis connection failed: %w", err)
 	}
+
+	metrics.ConnectionChecksTotal.WithLabelValues("success").Inc()
+	metrics.PingOperationsTotal.WithLabelValues("success").Inc()
+	metrics.PingDuration.Observe(duration.Seconds())
 	return nil
 }
 
 // Ping checks if Redis is reachable
 func (c *Client) Ping() error {
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return c.redisClient.Ping(ctx).Err()
+
+	err := c.redisClient.Ping(ctx).Err()
+	duration := time.Since(start)
+
+	if err != nil {
+		metrics.PingOperationsTotal.WithLabelValues("failure").Inc()
+		return err
+	}
+
+	metrics.PingOperationsTotal.WithLabelValues("success").Inc()
+	metrics.PingDuration.Observe(duration.Seconds())
+	return nil
 }
 
 // GetRedisInfo returns information about the current Redis configuration
@@ -226,4 +268,12 @@ func (c *Client) XAck(ctx context.Context, stream, group, id string) error {
 
 func (c *Client) Close() error {
 	return c.redisClient.Close()
+}
+
+// Helper function to convert bool to float64 for metrics
+func boolToFloat64(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }

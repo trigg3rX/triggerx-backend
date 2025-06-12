@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/redis"
+
 	// "github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -37,6 +38,7 @@ type ValidationResponse struct {
 
 // NewHandler creates a new instance of Handler
 
+// HandleP2PMessage handles peer-to-peer messages (following keeper pattern)
 func (h *Handler) HandleP2PMessage(c *gin.Context) {
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -90,85 +92,25 @@ func (h *Handler) HandleP2PMessage(c *gin.Context) {
 		return
 	}
 
-	// var resultBytes []byte
-	// if config.GetKeeperAddress() != performerData.KeeperAddress {
-	// 	h.logger.Infof("I am not the performer: %s", performerData.KeeperAddress)
-	// 	c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
-	// 	return
-	// } else {
-	// 	switch taskDefinitionID {
-	// 	case 1, 2:
-	// 		var timeJobData types.ScheduleTimeJobData
-	// 		timeJobDataBytes, err := json.Marshal(requestData["timeJobData"])
-	// 		if err != nil {
-	// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid time job data format"})
-	// 			return
-	// 		}
-	// 		if err := json.Unmarshal(timeJobDataBytes, &timeJobData); err != nil {
-	// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse time job data"})
-	// 			return
-	// 		}
+	// Create job data and add to job stream
+	jobData := &redis.JobStreamData{
+		JobID:     int64(taskDefinitionID.(float64)), // Convert from interface{}
+		ManagerID: 1,                                 // Default manager ID
+		TaskIDs:   []int64{},                         // Will be populated based on actual implementation
+	}
 
-	// 		// TODO: Execute the task
-	// 		actionData, err := h.executor.ExecuteTimeBasedTask(&timeJobData)
-	// 		if err != nil {
-	// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
-	// 			return
-	// 		}
+	// Add job to running stream
+	if err := h.jobStreamMgr.AddJobToRunningStream(jobData); err != nil {
+		h.logger.Error("Failed to add job to running stream", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process job"})
+		return
+	}
 
-	// 		// Convert result to bytes
-	// 		resultBytes, err = json.Marshal(actionData)
-	// 		if err != nil {
-	// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal result"})
-	// 			return
-	// 		}
-	// 	case 3, 4, 5, 6:
-	// 		var taskTargetData types.SendTaskTargetData
-	// 		var triggerData types.SendTriggerData
-
-	// 		taskTargetDataBytes, err := json.Marshal(requestData["taskTargetData"])
-	// 		if err != nil {
-	// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event job data format"})
-	// 			return
-	// 		}
-	// 		if err := json.Unmarshal(taskTargetDataBytes, &taskTargetData); err != nil {
-	// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse task target data"})
-	// 			return
-	// 		}
-
-	// 		triggerDataBytes, err := json.Marshal(requestData["triggerData"])
-	// 		if err != nil {
-	// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid trigger data format"})
-	// 			return
-	// 		}
-	// 		if err := json.Unmarshal(triggerDataBytes, &triggerData); err != nil {
-	// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse trigger data"})
-	// 			return
-	// 		}
-
-	// 		// TODO: Execute the task
-	// 		actionData, err := h.executor.ExecuteTask(&taskTargetData, &triggerData)
-	// 		if err != nil {
-	// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Task execution failed"})
-	// 			return
-	// 		}
-
-	// 		// Convert result to bytes
-	// 		resultBytes, err = json.Marshal(actionData)
-	// 		if err != nil {
-	// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal result"})
-	// 			return
-	// 		}
-	// 	default:
-	// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
-	// 		return
-	// 	}
-	// }
-
-	h.logger.Infof("Job ID: %d", taskDefinitionID)
-	c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
+	h.logger.Info("Job processed", "job_id", taskDefinitionID)
+	c.JSON(http.StatusOK, gin.H{"message": "Job processed successfully"})
 }
 
+// ValidateTask validates a task and updates the appropriate stream
 func (h *Handler) ValidateTask(c *gin.Context) {
 	var taskRequest TaskValidationRequest
 	if err := c.ShouldBindJSON(&taskRequest); err != nil {
@@ -184,7 +126,7 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 	ipfsURL := taskRequest.Data
 	resp, err := http.Get(ipfsURL)
 	if err != nil {
-		h.logger.Errorf("Failed to fetch IPFS file: %v", err)
+		h.logger.Error("Failed to fetch IPFS file", "error", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
 			Data:    false,
 			Error:   true,
@@ -195,7 +137,7 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		h.logger.Errorf("IPFS file fetch returned status: %d", resp.StatusCode)
+		h.logger.Error("IPFS file fetch returned status", "status", resp.StatusCode)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
 			Data:    false,
 			Error:   true,
@@ -207,7 +149,7 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 	// Parse the file as types.IPFSData (nested JSON)
 	var ipfsData types.IPFSData
 	if err := json.NewDecoder(resp.Body).Decode(&ipfsData); err != nil {
-		h.logger.Errorf("Failed to decode IPFSData: %v", err)
+		h.logger.Error("Failed to decode IPFSData", "error", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
 			Data:    false,
 			Error:   true,
@@ -222,11 +164,11 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 	}
 
 	if ipfsData.ActionData.ActionTxHash != "" {
-		err := h.tsm.AddTaskToCompletedStream(taskData, map[string]interface{}{
+		err := h.taskStreamMgr.AddTaskToCompletedStream(taskData, map[string]interface{}{
 			"action_tx_hash": ipfsData.ActionData.ActionTxHash,
 		})
 		if err != nil {
-			h.logger.Errorf("Failed to add task to completed stream: %v", err)
+			h.logger.Error("Failed to add task to completed stream", "error", err)
 		}
 		c.JSON(http.StatusOK, ValidationResponse{
 			Data:    true,
@@ -234,9 +176,9 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 			Message: "Task completed successfully",
 		})
 	} else {
-		err := h.tsm.AddTaskToFailedStream(taskData)
+		err := h.taskStreamMgr.AddTaskToFailedStream(taskData)
 		if err != nil {
-			h.logger.Errorf("Failed to add task to failed stream: %v", err)
+			h.logger.Error("Failed to add task to failed stream", "error", err)
 		}
 		c.JSON(http.StatusOK, ValidationResponse{
 			Data:    false,
