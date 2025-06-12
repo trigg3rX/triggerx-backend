@@ -228,6 +228,7 @@ func StartMetricsCollection() {
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			collectSystemMetrics()
 		}
 	}()
 }
