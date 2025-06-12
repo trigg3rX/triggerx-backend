@@ -12,7 +12,7 @@ db-setup: ## Setup ScyllaDB container
 	./scripts/database/setup-db.sh
 
 start-db-server: ## Start the Database Server
-	./scripts/database/start-dbserver.sh
+	./scripts/services/start-dbserver.sh
 
 db-shell: ## Open CQL shell
 	docker exec -it triggerx-scylla cqlsh
