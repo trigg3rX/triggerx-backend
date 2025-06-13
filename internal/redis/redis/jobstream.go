@@ -75,20 +75,16 @@ func (jsm *JobStreamManager) RegisterConsumerGroup(stream, group string) error {
 func (jsm *JobStreamManager) AddJobToRunningStream(job *JobStreamData) error {
 	err := jsm.addJobToStream(JobsRunningStream, job)
 	if err != nil {
-		metrics.JobsAddedToStreamTotal.WithLabelValues("running", "failure").Inc()
 		return err
 	}
-	metrics.JobsAddedToStreamTotal.WithLabelValues("running", "success").Inc()
 	return nil
 }
 
 func (jsm *JobStreamManager) AddJobToCompletedStream(job *JobStreamData, executionResult map[string]interface{}) error {
 	err := jsm.addJobToStream(JobsCompletedStream, job)
 	if err != nil {
-		metrics.JobsAddedToStreamTotal.WithLabelValues("completed", "failure").Inc()
 		return err
 	}
-	metrics.JobsAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
 	return nil
 }
 
@@ -113,10 +109,12 @@ func (jsm *JobStreamManager) addJobToStream(stream string, job *JobStreamData) e
 	})
 
 	if err != nil {
+		metrics.JobsAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
 		jsm.logger.Errorf("Failed to add job to stream %s: %v", stream, err)
 		return err
 	}
 
+	metrics.JobsAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
 	jsm.logger.Debugf("Job %d added to stream %s with ID %s", job.JobID, stream, res)
 	return nil
 }
@@ -124,20 +122,16 @@ func (jsm *JobStreamManager) addJobToStream(stream string, job *JobStreamData) e
 func (jsm *JobStreamManager) ReadJobsFromRunningStream(consumerGroup, consumerName string, count int64) ([]JobStreamData, error) {
 	jobs, err := jsm.readJobsFromStream(JobsRunningStream, consumerGroup, consumerName, count)
 	if err != nil {
-		metrics.JobsReadFromStreamTotal.WithLabelValues("running", "failure").Inc()
 		return nil, err
 	}
-	metrics.JobsReadFromStreamTotal.WithLabelValues("running", "success").Inc()
 	return jobs, nil
 }
 
 func (jsm *JobStreamManager) ReadJobsFromCompletedStream(consumerGroup, consumerName string, count int64) ([]JobStreamData, error) {
 	jobs, err := jsm.readJobsFromStream(JobsCompletedStream, consumerGroup, consumerName, count)
 	if err != nil {
-		metrics.JobsReadFromStreamTotal.WithLabelValues("completed", "failure").Inc()
 		return nil, err
 	}
-	metrics.JobsReadFromStreamTotal.WithLabelValues("completed", "success").Inc()
 
 	now := time.Now()
 	var readyJobs []JobStreamData
@@ -167,10 +161,13 @@ func (jsm *JobStreamManager) readJobsFromStream(stream, consumerGroup, consumerN
 
 	if err != nil {
 		if err == redis.Nil {
+			metrics.JobsReadFromStreamTotal.WithLabelValues(stream, "empty").Inc()
 			return []JobStreamData{}, nil
 		}
 		return nil, fmt.Errorf("failed to read from stream: %w", err)
 	}
+
+	metrics.JobsReadFromStreamTotal.WithLabelValues(stream, "success").Inc()
 
 	var jobs []JobStreamData
 	for _, stream := range streams {

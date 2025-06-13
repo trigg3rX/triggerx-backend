@@ -11,6 +11,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TaskStreamManager struct {
@@ -56,7 +57,7 @@ func (tsm *TaskStreamManager) Initialize() error {
 	return nil
 }
 
-func (tsm *TaskStreamManager) RegisterConsumerGroup(stream, group string) error {
+func (tsm *TaskStreamManager) RegisterConsumerGroup(stream string, group string) error {
 	key := fmt.Sprintf("%s:%s", stream, group)
 	if _, exists := tsm.consumerGroups[key]; exists {
 		return nil
@@ -74,24 +75,43 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(stream, group string) error 
 	return nil
 }
 
-func (tsm *TaskStreamManager) AddTaskToReadyStream(task *TaskStreamData) error {
+// Ready ot be sent to the performer
+func (tsm *TaskStreamManager) AddTaskToReadyStream(task *TaskStreamData) (types.PerformerData, error) {
+	performerData := GetPerformerData()
+	if performerData.KeeperID == 0 {
+		return types.PerformerData{}, fmt.Errorf("no performers available")
+	}
+
 	err := tsm.addTaskToStream(TasksReadyStream, task)
 	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("ready", "failure").Inc()
+		return types.PerformerData{}, err
+	}
+	return performerData, nil
+}
+
+// Processing by the performer
+func (tsm *TaskStreamManager) AddTaskToProcessingStream(task *TaskStreamData) error {
+	err := tsm.addTaskToStream(TasksProcessingStream, task)
+	if err != nil {
 		return err
 	}
-	metrics.TasksAddedToStreamTotal.WithLabelValues("ready", "success").Inc()
 	return nil
 }
 
+// Completed by the performer, sent to the validators
+func (tsm *TaskStreamManager) AddTaskToCompletedStream(task *TaskStreamData) error {
+	err := tsm.addTaskToStream(TasksCompletedStream, task)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Failed to send to the performer, sent to the retry stream
 func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryReason string) error {
-	start := time.Now()
 	task.RetryCount++
 	now := time.Now()
 	task.LastAttemptAt = &now
-
-	// Track retry operation
-	metrics.TaskRetryOperationsTotal.Inc()
 
 	// Exponential backoff with jitter
 	baseBackoff := time.Duration(task.RetryCount) * RetryBackoffBase
@@ -108,13 +128,8 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 
 		err := tsm.addTaskToStream(TasksFailedStream, task)
 		if err != nil {
-			metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "failure").Inc()
-		} else {
-			metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
-			// Track lifecycle transition
-			metrics.TaskLifecycleTransitionDuration.WithLabelValues("retry", "failed").Observe(time.Since(start).Seconds())
+			return err
 		}
-		return err
 	}
 
 	err := tsm.addTaskToStream(TasksRetryStream, task)
@@ -123,37 +138,6 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 		return err
 	}
 	metrics.TasksAddedToStreamTotal.WithLabelValues("retry", "success").Inc()
-	return nil
-}
-
-func (tsm *TaskStreamManager) AddTaskToProcessingStream(task *TaskStreamData, performerID int64) error {
-	start := time.Now()
-	task.PerformerID = performerID
-
-	err := tsm.addTaskToStream(TasksProcessingStream, task)
-	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("processing", "failure").Inc()
-		return err
-	}
-
-	metrics.TasksAddedToStreamTotal.WithLabelValues("processing", "success").Inc()
-	metrics.TaskReadyToProcessingTotal.Inc()
-	metrics.TaskLifecycleTransitionDuration.WithLabelValues("ready", "processing").Observe(time.Since(start).Seconds())
-	return nil
-}
-
-func (tsm *TaskStreamManager) AddTaskToCompletedStream(task *TaskStreamData, executionResult map[string]interface{}) error {
-	start := time.Now()
-
-	err := tsm.addTaskToStream(TasksCompletedStream, task)
-	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "failure").Inc()
-		return err
-	}
-
-	metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
-	metrics.TaskProcessingToCompletedTotal.Inc()
-	metrics.TaskLifecycleTransitionDuration.WithLabelValues("processing", "completed").Observe(time.Since(start).Seconds())
 	return nil
 }
 
@@ -178,10 +162,12 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 	})
 
 	if err != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
 		tsm.logger.Errorf("Failed to add task to stream %s: %v", stream, err)
 		return err
 	}
 
+	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
 	tsm.logger.Debugf("Task %d added to stream %s with ID %s", task.TaskID, stream, res)
 	return nil
 }
@@ -189,20 +175,16 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 func (tsm *TaskStreamManager) ReadTasksFromReadyStream(consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
 	tasks, err := tsm.readTasksFromStream(TasksReadyStream, consumerGroup, consumerName, count)
 	if err != nil {
-		metrics.TasksReadFromStreamTotal.WithLabelValues("ready", "failure").Inc()
 		return nil, err
 	}
-	metrics.TasksReadFromStreamTotal.WithLabelValues("ready", "success").Inc()
 	return tasks, nil
 }
 
 func (tsm *TaskStreamManager) ReadTasksFromRetryStream(consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
 	tasks, err := tsm.readTasksFromStream(TasksRetryStream, consumerGroup, consumerName, count)
 	if err != nil {
-		metrics.TasksReadFromStreamTotal.WithLabelValues("retry", "failure").Inc()
 		return nil, err
 	}
-	metrics.TasksReadFromStreamTotal.WithLabelValues("retry", "success").Inc()
 
 	now := time.Now()
 	var readyTasks []TaskStreamData
@@ -232,10 +214,13 @@ func (tsm *TaskStreamManager) readTasksFromStream(stream, consumerGroup, consume
 
 	if err != nil {
 		if err == redis.Nil {
+			metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "empty").Inc()
 			return []TaskStreamData{}, nil
 		}
 		return nil, fmt.Errorf("failed to read from stream: %w", err)
 	}
+
+	metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "success").Inc()
 
 	var tasks []TaskStreamData
 	for _, stream := range streams {
