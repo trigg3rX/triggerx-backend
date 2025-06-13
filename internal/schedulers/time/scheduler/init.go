@@ -52,6 +52,9 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		duplicateTaskWindow:     config.GetDuplicateTaskWindow(),
 	}
 
+	// Register database client as health checker for metrics
+	metrics.SetHealthChecker(dbClient)
+
 	// Start metrics collection
 	scheduler.metrics.Start()
 
