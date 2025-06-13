@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/event/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -87,15 +88,18 @@ func (c *DBServerClient) UpdateJobStatus(jobID int64, status bool) error {
 // doWithRetry performs HTTP requests with retry logic
 func (c *DBServerClient) doWithRetry(method, url string, payload interface{}, result interface{}) error {
 	var lastErr error
+	endpoint := method + " " + url
 
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
 		if attempt > 0 {
 			c.logger.Debugf("Retrying request (attempt %d/%d) after %v", attempt, c.config.MaxRetries, c.config.RetryDelay)
+			metrics.TrackDBRetry(endpoint)
 			time.Sleep(c.config.RetryDelay)
 		}
 
 		err := c.doRequest(method, url, payload, result)
 		if err == nil {
+			metrics.TrackDBRequest(method, url, "success")
 			return nil // Success
 		}
 
@@ -103,6 +107,8 @@ func (c *DBServerClient) doWithRetry(method, url string, payload interface{}, re
 		c.logger.Warnf("Request failed (attempt %d/%d): %v", attempt+1, c.config.MaxRetries+1, err)
 	}
 
+	metrics.TrackDBRequest(method, url, "failed")
+	metrics.TrackDBConnectionError()
 	return fmt.Errorf("request failed after %d attempts: %v", c.config.MaxRetries+1, lastErr)
 }
 

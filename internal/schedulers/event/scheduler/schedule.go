@@ -28,6 +28,7 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleEventJobD
 
 	// Check if we've reached the maximum number of workers
 	if len(s.workers) >= s.maxWorkers {
+		metrics.TrackCriticalError("max_workers_reached")
 		return fmt.Errorf("maximum number of workers (%d) reached, cannot schedule job %d", s.maxWorkers, jobData.JobID)
 	}
 
@@ -37,12 +38,14 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleEventJobD
 	s.clientsMutex.RUnlock()
 
 	if !exists {
+		metrics.TrackCriticalError("unsupported_chain")
 		return fmt.Errorf("unsupported chain ID: %s", jobData.TriggerChainID)
 	}
 
 	// Create job worker
 	worker, err := s.createJobWorker(jobData, client)
 	if err != nil {
+		metrics.TrackCriticalError("worker_creation_failure")
 		return fmt.Errorf("failed to create job worker: %w", err)
 	}
 
@@ -53,7 +56,9 @@ func (s *EventBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleEventJobD
 	go worker.Start()
 
 	// Update metrics
-	metrics.JobsScheduled.Inc()
+	metrics.TrackJobScheduled()
+	metrics.UpdateActiveWorkers(len(s.workers))
+	metrics.TrackWorkerStart(fmt.Sprintf("%d", jobData.JobID))
 
 	duration := time.Since(startTime)
 
@@ -132,6 +137,10 @@ func (s *EventBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	// Remove from workers map
 	delete(s.workers, jobID)
+
+	// Update metrics
+	metrics.TrackWorkerStop(fmt.Sprintf("%d", jobID))
+	metrics.UpdateActiveWorkers(len(s.workers))
 
 	duration := time.Since(startTime)
 

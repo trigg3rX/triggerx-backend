@@ -106,14 +106,6 @@ var (
 		Help:      "Database client HTTP requests",
 	}, []string{"method", "endpoint", "status"})
 
-	// DB request duration
-	DBRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "triggerx",
-		Subsystem: "event_scheduler",
-		Name:      "db_request_duration_seconds",
-		Help:      "Database request processing time",
-	}, []string{"method", "endpoint"})
-
 	// DB connection errors
 	DBConnectionErrorsTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
@@ -194,14 +186,6 @@ var (
 		Help:      "Blockchain connection failures",
 	}, []string{"chain_id"})
 
-	// Timeouts
-	TimeoutsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "event_scheduler",
-		Name:      "timeouts_total",
-		Help:      "Operation timeouts",
-	}, []string{"operation"})
-
 	// Critical errors
 	CriticalErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
@@ -209,25 +193,32 @@ var (
 		Name:      "critical_errors_total",
 		Help:      "Critical system errors",
 	}, []string{"error_type"})
-
-	// Recovery attempts
-	RecoveryAttemptsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "event_scheduler",
-		Name:      "recovery_attempts_total",
-		Help:      "Automatic recovery attempts",
-	}, []string{"component"})
 )
 
 // StartMetricsCollection starts collecting metrics
 func StartMetricsCollection() {
-	// Update uptime every 15 seconds
+	// Update uptime and collect metrics every 15 seconds
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+			collectWorkerMetrics()
+			collectDatabaseMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
 		}
 	}()
 }
