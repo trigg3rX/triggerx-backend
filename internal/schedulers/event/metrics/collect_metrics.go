@@ -338,3 +338,14 @@ func TrackEventWithDuration(chainID string, duration time.Duration, success bool
 	}
 	eventStatsLock.RUnlock()
 }
+
+// Collects database health metrics
+func collectDatabaseMetrics() {
+	if dbChecker != nil {
+		err := dbChecker.HealthCheck()
+		if err != nil {
+			// Database is unhealthy
+			TrackDBConnectionError()
+		}
+	}
+}

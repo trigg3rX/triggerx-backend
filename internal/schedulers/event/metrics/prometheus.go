@@ -208,6 +208,7 @@ func StartMetricsCollection() {
 			collectConfigurationMetrics()
 			collectPerformanceMetrics()
 			collectWorkerMetrics()
+			collectDatabaseMetrics()
 		}
 	}()
 
