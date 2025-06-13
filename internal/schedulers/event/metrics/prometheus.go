@@ -186,14 +186,6 @@ var (
 		Help:      "Blockchain connection failures",
 	}, []string{"chain_id"})
 
-	// Timeouts
-	TimeoutsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "event_scheduler",
-		Name:      "timeouts_total",
-		Help:      "Operation timeouts",
-	}, []string{"operation"})
-
 	// Critical errors
 	CriticalErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
@@ -201,14 +193,6 @@ var (
 		Name:      "critical_errors_total",
 		Help:      "Critical system errors",
 	}, []string{"error_type"})
-
-	// Recovery attempts
-	RecoveryAttemptsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "event_scheduler",
-		Name:      "recovery_attempts_total",
-		Help:      "Automatic recovery attempts",
-	}, []string{"component"})
 )
 
 // StartMetricsCollection starts collecting metrics

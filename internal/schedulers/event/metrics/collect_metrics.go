@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
 )
 
 type HealthChecker interface {
@@ -77,17 +79,25 @@ func collectPerformanceMetrics() {
 	defer eventStatsLock.RUnlock()
 
 	// Update events per minute for each chain
-	if time.Since(lastMinuteReset) >= time.Minute {
+	now := time.Now()
+	if now.Sub(lastMinuteReset) >= time.Minute {
+		// Take a snapshot of current counts before resetting
+		eventsSnapshot := make(map[string]int64)
 		for chainID, count := range eventsLastMinute {
+			eventsSnapshot[chainID] = count
 			EventsPerMinute.WithLabelValues(chainID).Set(float64(count))
 		}
 
 		// Reset for next minute in a separate goroutine to avoid blocking
 		go func() {
 			eventStatsLock.Lock()
-			eventsLastMinute = make(map[string]int64)
-			lastMinuteReset = time.Now()
-			eventStatsLock.Unlock()
+			defer eventStatsLock.Unlock()
+
+			// Only reset if enough time has passed (prevent race conditions)
+			if time.Since(lastMinuteReset) >= time.Minute {
+				eventsLastMinute = make(map[string]int64)
+				lastMinuteReset = time.Now()
+			}
 		}()
 	}
 
@@ -143,7 +153,8 @@ func resetDailyMetrics() {
 
 // Helper functions to get configuration values
 func getDuplicateEventWindowSeconds() float64 {
-	return 30.0 // Default to 30 seconds, can be made configurable
+	// Use the constant from scheduler types instead of hardcoded value
+	return schedulerTypes.DuplicateEventWindow.Seconds()
 }
 
 // HTTP and API tracking functions
@@ -224,13 +235,6 @@ func TrackWorkerError(jobID, errorType string) {
 	WorkerErrorsTotal.WithLabelValues(jobID, errorType).Inc()
 }
 
-// UpdateWorkerMemoryUsage updates worker memory usage
-func UpdateWorkerMemoryUsage(jobID string, memoryBytes int64) {
-	eventStatsLock.Lock()
-	defer eventStatsLock.Unlock()
-	workerMemoryUsage[jobID] = memoryBytes
-}
-
 // Event tracking functions
 
 // TrackEvent tracks when an event is detected
@@ -272,19 +276,9 @@ func TrackActionExecution(jobID, status string) {
 
 // Error and Recovery tracking functions
 
-// TrackTimeout tracks operation timeouts
-func TrackTimeout(operation string) {
-	TimeoutsTotal.WithLabelValues(operation).Inc()
-}
-
 // TrackCriticalError tracks critical system errors
 func TrackCriticalError(errorType string) {
 	CriticalErrorsTotal.WithLabelValues(errorType).Inc()
-}
-
-// TrackRecoveryAttempt tracks automatic recovery attempts
-func TrackRecoveryAttempt(component string) {
-	RecoveryAttemptsTotal.WithLabelValues(component).Inc()
 }
 
 // Stats and utility functions
@@ -322,23 +316,25 @@ func GetWorkerCount() int {
 	return len(workerStartTimes)
 }
 
-// UpdateEventsPerMinute updates the events per minute metric for a specific chain
-func UpdateEventsPerMinute(chainID string, count float64) {
-	EventsPerMinute.WithLabelValues(chainID).Set(count)
-}
-
-// UpdateAverageEventProcessingTime updates the average event processing time
-func UpdateAverageEventProcessingTime(seconds float64) {
-	AverageEventProcessingTimeSeconds.Set(seconds)
-}
-
-// TrackEventProcessing tracks event processing with timing
-func TrackEventProcessing(chainID string, duration time.Duration, success bool) {
-	// Track the event
+// TrackEventWithDuration tracks event processing with comprehensive metrics
+func TrackEventWithDuration(chainID string, duration time.Duration, success bool) {
+	// Track the basic event
 	TrackEvent(chainID, duration)
 
 	// Track success/failure
 	if success {
 		TrackEventSuccess(chainID)
 	}
+
+	// Update average processing time immediately for real-time accuracy
+	eventStatsLock.RLock()
+	if len(eventProcessingTimes) > 0 {
+		var sum float64
+		for _, processingTime := range eventProcessingTimes {
+			sum += processingTime
+		}
+		avgTime := sum / float64(len(eventProcessingTimes))
+		AverageEventProcessingTimeSeconds.Set(avgTime)
+	}
+	eventStatsLock.RUnlock()
 }
