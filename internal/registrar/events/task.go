@@ -329,7 +329,10 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 			return "", fmt.Errorf("failed to fetch IPFS content from URL: %v", err)
 		}
 		defer func() {
-			_ = resp.Body.Close()
+			if err := resp.Body.Close(); err != nil {
+				// Log the error but don't return it since we're in a defer
+				fmt.Printf("Error closing response body: %v\n", err)
+			}
 		}()
 
 		if resp.StatusCode != http.StatusOK {
@@ -350,7 +353,10 @@ func FetchIPFSContent(gateway string, cid string) (string, error) {
 		return "", fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			// Log the error but don't return it since we're in a defer
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
 	}()
 
 	if resp.StatusCode != http.StatusOK {
@@ -385,7 +391,12 @@ func DeletePinataCID(cid string, logger logging.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to send delete request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log the error but don't return it since we're in a defer
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to delete CID %s: status %d, body: %s", cid, resp.StatusCode, string(body))
@@ -414,7 +425,12 @@ func listPinataPins(logger logging.Logger) ([]pinataPin, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send list request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log the error but don't return it since we're in a defer
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to list pins: status %d, body: %s", resp.StatusCode, string(body))

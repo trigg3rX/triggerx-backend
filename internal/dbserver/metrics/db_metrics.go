@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
 	"github.com/gocql/gocql"
 )
 
@@ -53,7 +54,7 @@ func TrackDBError(err error) {
 
 // TrackRetry tracks retry mechanism metrics
 func TrackRetry(endpoint string, attempt int, success bool) {
-	RetryAttemptsTotal.WithLabelValues(endpoint, string(attempt)).Inc()
+	RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprint(rune(attempt))).Inc()
 	if success {
 		RetrySuccessesTotal.WithLabelValues(endpoint).Inc()
 	} else {

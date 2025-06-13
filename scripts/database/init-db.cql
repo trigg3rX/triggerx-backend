@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     registered_tx text,
     operator_id bigint,
     rewards_address text,
-    rewards_booster float,
+    rewards_booster double,
     voting_power bigint,
     keeper_points double,
     connection_address text,

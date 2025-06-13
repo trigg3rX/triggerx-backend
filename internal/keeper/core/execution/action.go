@@ -60,7 +60,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		if err != nil {
 			return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
 		}
-		defer os.RemoveAll(filepath.Dir(codePath))
+		defer func() { _ = os.RemoveAll(filepath.Dir(codePath)) }()
 
 		containerID, err := e.codeExecutor.DockerManager.CreateContainer(context.Background(), codePath)
 		if err != nil {
@@ -191,8 +191,8 @@ func (e *TaskExecutor) submitTransactionWithRetry(
 ) (*ethtypes.Receipt, string, error) {
 	const (
 		txTimeout     = 5 * time.Second // Wait 5 seconds before resubmitting
-		maxRetries    = 3                // Maximum number of retries
-		feeBumpFactor = 1.2              // Increase fees by 20% on each retry
+		maxRetries    = 3               // Maximum number of retries
+		feeBumpFactor = 1.2             // Increase fees by 20% on each retry
 	)
 
 	currentGasPrice := new(big.Int).Set(initialGasPrice)

@@ -20,14 +20,18 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	existingKeeperID, err := h.keeperRepository.CheckKeeperExists(keeperData.KeeperAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateKeeperData] Error checking for existing keeper: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.logger.Errorf("[CreateKeeperData] Database error while checking keeper existence: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error while checking keeper status"})
 		return
 	}
 
 	if existingKeeperID != -1 {
-		h.logger.Warnf("[CreateKeeperData] Keeper already exists with ID: %d", existingKeeperID)
-		c.JSON(http.StatusConflict, gin.H{"error": "Keeper already exists"})
+		h.logger.Infof("[CreateKeeperData] Keeper already exists with ID: %d", existingKeeperID)
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "Keeper already exists",
+			"keeper_id": existingKeeperID,
+			"status":    "existing",
+		})
 		return
 	}
 

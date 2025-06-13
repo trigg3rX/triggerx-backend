@@ -95,7 +95,7 @@ func (h *Handler) GetKeeperPoints(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetKeeperPoints] Successfully retrieved points %d for keeper ID: %s", points, keeperID)
+	h.logger.Infof("[GetKeeperPoints] Successfully retrieved points %f for keeper ID: %s", points, keeperID)
 	c.JSON(http.StatusOK, gin.H{"keeper_points": points})
 }
 

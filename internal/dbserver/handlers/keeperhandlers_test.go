@@ -54,7 +54,7 @@ func (m *MockKeeperRepository) GetKeeperTaskCount(id int64) (int64, error) {
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockKeeperRepository) UpdateKeeperPoints(id int64, taskFee int64) (float64, error) {
+func (m *MockKeeperRepository) UpdateKeeperPoints(id int64, taskFee float64) (float64, error) {
 	args := m.Called(id, taskFee)
 	return args.Get(0).(float64), args.Error(1)
 }
@@ -85,9 +85,9 @@ func (m *MockKeeperRepository) GetKeeperLeaderboardByIdentifierInDB(address stri
 }
 
 // Mock implementation for TaskRepository
-func (m *MockTaskRepository) GetTaskFee(taskID int64) (int64, error) {
+func (m *MockTaskRepository) GetTaskFee(taskID int64) (float64, error) {
 	args := m.Called(taskID)
-	return args.Get(0).(int64), args.Error(1)
+	return args.Get(0).(float64), args.Error(1)
 }
 
 func (m *MockTaskRepository) CreateTaskDataInDB(taskData *types.CreateTaskDataRequest) (int64, error) {
@@ -447,8 +447,8 @@ func TestAddTaskFeeToKeeperPoints(t *testing.T) {
 			keeperID: "1",
 			taskID:   100,
 			setupMocks: func() {
-				mockTaskRepo.On("GetTaskFee", int64(100)).Return(int64(50), nil)
-				mockKeeperRepo.On("UpdateKeeperPoints", int64(1), int64(50)).Return(float64(150), nil)
+				mockTaskRepo.On("GetTaskFee", int64(100)).Return(float64(50), nil)
+				mockKeeperRepo.On("UpdateKeeperPoints", int64(1), float64(50)).Return(float64(150), nil)
 			},
 			expectedCode: http.StatusOK,
 		},
@@ -465,7 +465,7 @@ func TestAddTaskFeeToKeeperPoints(t *testing.T) {
 			keeperID: "1",
 			taskID:   999,
 			setupMocks: func() {
-				mockTaskRepo.On("GetTaskFee", int64(999)).Return(int64(0), assert.AnError)
+				mockTaskRepo.On("GetTaskFee", int64(999)).Return(float64(0), assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,
 			expectedError: assert.AnError.Error(),

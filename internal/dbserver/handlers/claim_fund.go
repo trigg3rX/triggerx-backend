@@ -46,7 +46,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
-		rpcURL = fmt.Sprintf("https://optimism-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+		rpcURL = fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "base_sepolia":
 		rpcURL = fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	default:

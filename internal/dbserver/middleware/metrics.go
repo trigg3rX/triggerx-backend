@@ -3,6 +3,7 @@ package middleware
 import (
 	"time"
 
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
@@ -27,7 +28,7 @@ func MetricsMiddleware() gin.HandlerFunc {
 
 		// Record total requests with status code
 		status := c.Writer.Status()
-		metrics.HTTPRequestsTotal.WithLabelValues(method, path, string(status)).Inc()
+		metrics.HTTPRequestsTotal.WithLabelValues(method, path, fmt.Sprint(rune(status))).Inc()
 
 		// Update average response time
 		metrics.AverageResponseTime.WithLabelValues(path).Set(duration)

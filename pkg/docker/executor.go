@@ -298,5 +298,10 @@ func (e *CodeExecutor) calculateFees(content []byte, stats *ResourceStats, execu
 }
 
 func (e *CodeExecutor) Close() error {
-	return e.DockerManager.CleanupImages(context.Background())
+	if err := e.DockerManager.CleanupImages(context.Background()); err != nil {
+		e.logger.Error("Error closing code executor", "error", err)
+		return err
+	}
+	e.logger.Info("[2/3] Process: Code executor Closed")
+	return nil
 }

@@ -73,7 +73,7 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[AddTaskFeeToKeeperPoints] Successfully added task fee %d from task ID %d to keeper ID: %s, new points: %d",
+	h.logger.Infof("[AddTaskFeeToKeeperPoints] Successfully added task fee %f from task ID %d to keeper ID: %s, new points: %f",
 		taskFee, taskID, keeperID, newPoints)
 	c.JSON(http.StatusOK, gin.H{
 		"task_id":       taskID,

@@ -83,7 +83,12 @@ func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish TLS connection to %s: %w", address, err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			// Log the error but don't return it since we're in a defer
+			fmt.Printf("Error closing connection: %v\n", err)
+		}
+	}()
 
 	// Get connection state
 	connState := conn.ConnectionState()
