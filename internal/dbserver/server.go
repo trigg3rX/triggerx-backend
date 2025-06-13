@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
@@ -122,15 +123,18 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
-	// Apply middleware in the correct order
-	router.Use(middleware.RetryMiddleware(retryConfig, logger)) // Retry middleware after other middleware
-	// Rate limiting is handled through the API key auth middleware
+	// Apply retry middleware only to API routes
+	apiGroup := router.Group("/api")
+	apiGroup.Use(middleware.RetryMiddleware(retryConfig, logger))
 
 	return s
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.docker)
+
+	// Register metrics endpoint at root level without middleware
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	api := router.Group("/api")
 
