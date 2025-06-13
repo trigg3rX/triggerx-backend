@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -35,6 +36,9 @@ func (w *ConditionWorker) Start() {
 	w.Mutex.Lock()
 	w.IsActive = true
 	w.Mutex.Unlock()
+
+	// Track worker start
+	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.Job.JobID))
 
 	// Try to acquire performer lock
 	lockAcquired := false
@@ -82,6 +86,10 @@ func (w *ConditionWorker) Stop() {
 	if w.IsActive {
 		w.Cancel()
 		w.IsActive = false
+
+		// Track worker stop
+		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.Job.JobID))
+
 		w.Logger.Info("Condition worker stopped", "job_id", w.Job.JobID)
 	}
 }
