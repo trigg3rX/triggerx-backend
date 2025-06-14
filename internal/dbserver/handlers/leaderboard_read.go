@@ -15,7 +15,10 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperLeaderboard] Error fetching keeper leaderboard data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch keeper leaderboard",
+			"code":  "LEADERBOARD_FETCH_ERROR",
+		})
 		return
 	}
 
@@ -32,7 +35,10 @@ func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetUserLeaderboard] Error fetching user leaderboard data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to fetch user leaderboard",
+			"code":  "LEADERBOARD_FETCH_ERROR",
+		})
 		return
 	}
 
@@ -47,7 +53,10 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	keeperName := c.Query("keeper_name")
 
 	if keeperAddress == "" && keeperName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Either keeper_address or keeper_name must be provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Either keeper_address or keeper_name must be provided",
+			"code":  "MISSING_IDENTIFIER",
+		})
 		return
 	}
 
@@ -56,7 +65,10 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperByIdentifier] Error fetching keeper data: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "Keeper not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
 		return
 	}
 
@@ -69,7 +81,10 @@ func (h *Handler) GetUserLeaderboardByAddress(c *gin.Context) {
 
 	userAddress := c.Query("user_address")
 	if userAddress == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_address must be provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "user_address must be provided",
+			"code":  "MISSING_ADDRESS",
+		})
 		return
 	}
 
@@ -78,7 +93,10 @@ func (h *Handler) GetUserLeaderboardByAddress(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetUserLeaderboardByAddress] Error fetching user data: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "User not found",
+			"code":  "USER_NOT_FOUND",
+		})
 		return
 	}
 

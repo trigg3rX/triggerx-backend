@@ -12,7 +12,10 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
@@ -21,7 +24,10 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateTaskData] Error creating task: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create task",
+			"code":  "TASK_CREATION_ERROR",
+		})
 		return
 	}
 

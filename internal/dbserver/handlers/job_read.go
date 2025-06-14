@@ -28,7 +28,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
+		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Failed to retrieve user data",
 			"code":  "USER_DATA_ERROR",
 		})

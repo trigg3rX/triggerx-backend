@@ -12,7 +12,10 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 	userAddress := strings.ToLower(c.Param("address"))
 	if userAddress == "" {
 		h.logger.Errorf("[GetUserDataByAddress] Invalid user address: %v", userAddress)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user address",
+			"code":  "INVALID_ADDRESS",
+		})
 		return
 	}
 
@@ -23,7 +26,10 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetUserData] Error retrieving user with ID %d: %v", userID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "User not found",
+			"code":  "USER_NOT_FOUND",
+		})
 		return
 	}
 

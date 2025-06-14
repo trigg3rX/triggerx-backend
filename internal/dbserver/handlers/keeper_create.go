@@ -12,7 +12,10 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	var keeperData types.CreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
@@ -21,7 +24,10 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateKeeperData] Database error while checking keeper existence: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error while checking keeper status"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database error while checking keeper status",
+			"code":  "DB_ERROR",
+		})
 		return
 	}
 
@@ -40,7 +46,10 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error creating keeper data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create keeper",
+			"code":  "KEEPER_CREATION_ERROR",
+		})
 		return
 	}
 

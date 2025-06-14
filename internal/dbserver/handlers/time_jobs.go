@@ -23,7 +23,11 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time based tasks: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "tasks": tasks})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve time based tasks",
+			"code":  "TIME_TASKS_FETCH_ERROR",
+			"tasks": tasks,
+		})
 		return
 	}
 
@@ -36,6 +40,10 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create task data",
+				"code":  "TASK_CREATION_ERROR",
+			})
 			continue
 		}
 		task.TaskID = taskID

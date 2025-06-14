@@ -14,14 +14,20 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	jobID := c.Param("id")
 	if jobID == "" {
 		h.logger.Error("[DeleteJobData] No job ID provided")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No job ID provided",
+			"code":  "MISSING_JOB_ID",
+		})
 		return
 	}
 
 	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[DeleteJobData] Invalid job ID format: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID format"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid job ID format",
+			"code":  "INVALID_JOB_ID",
+		})
 		return
 	}
 
@@ -31,7 +37,10 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[DeleteJobData] Error getting job data for jobID %s: %v", jobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting job data: " + err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Job not found",
+			"code":  "JOB_NOT_FOUND",
+		})
 		return
 	}
 
@@ -96,7 +105,10 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 	var updateData types.UpdateJobDataFromUserRequest
 	if err := c.ShouldBindJSON(&updateData); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
@@ -105,7 +117,10 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[UpdateJobData] Error updating job data for jobID %d: %v", updateData.JobID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Job not found or update failed",
+			"code":  "JOB_UPDATE_ERROR",
+		})
 		return
 	}
 
@@ -128,7 +143,10 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 	}
 
 	if !validStatuses[status] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status. Must be one of: pending, in-queue, running"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid status. Must be one of: pending, in-queue, running",
+			"code":  "INVALID_STATUS",
+		})
 		return
 	}
 
@@ -136,7 +154,10 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[UpdateJobStatus] Error converting job ID to int64: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid job ID format",
+			"code":  "INVALID_JOB_ID",
+		})
 		return
 	}
 

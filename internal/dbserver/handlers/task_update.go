@@ -16,14 +16,20 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	var taskData types.UpdateTaskExecutionDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskExecutionData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
 	// Validate required fields
 	if taskData.TaskID == 0 || taskData.ExecutionTimestamp.IsZero() || taskData.ExecutionTxHash == "" {
 		h.logger.Errorf("[UpdateTaskExecutionData] Missing required fields")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Missing required fields",
+			"code":  "MISSING_REQUIRED_FIELDS",
+		})
 		return
 	}
 
@@ -31,7 +37,10 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	if err := h.taskRepository.UpdateTaskExecutionDataInDB(&taskData); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskExecutionData] Error updating task execution data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found or update failed",
+			"code":  "TASK_UPDATE_ERROR",
+		})
 		return
 	}
 	trackDBOp(nil)
@@ -47,14 +56,20 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	var taskData types.UpdateTaskAttestationDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskAttestationData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
 	// Validate required fields
 	if taskData.TaskID == 0 || taskData.TaskNumber == 0 || len(taskData.TaskAttesterIDs) == 0 || len(taskData.TpSignature) == 0 || len(taskData.TaSignature) == 0 || taskData.TaskSubmissionTxHash == "" {
 		h.logger.Errorf("[UpdateTaskAttestationData] Missing required fields")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Missing required fields",
+			"code":  "MISSING_REQUIRED_FIELDS",
+		})
 		return
 	}
 
@@ -62,7 +77,10 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	if err := h.taskRepository.UpdateTaskAttestationDataInDB(&taskData); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskAttestationData] Error updating task attestation data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found or update failed",
+			"code":  "TASK_UPDATE_ERROR",
+		})
 		return
 	}
 	trackDBOp(nil)
@@ -80,21 +98,31 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&taskFee); err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[UpdateTaskFee] Error parsing task ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid task ID format",
+			"code":  "INVALID_TASK_ID",
+		})
 		return
 	}
+
 	trackDBOp := metrics.TrackDBOperation("update", "task_data")
 	if err := h.taskRepository.UpdateTaskFee(taskIDInt, taskFee.Fee); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found or update failed",
+			"code":  "TASK_UPDATE_ERROR",
+		})
 		return
 	}
 	trackDBOp(nil)

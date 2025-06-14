@@ -77,7 +77,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	}
 
 	if balance.Cmp(thresholdWei) >= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": "Wallet balance is above the threshold",
 		})

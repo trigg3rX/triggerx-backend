@@ -16,13 +16,19 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	var tempJobs []types.CreateJobData
 	if err := c.ShouldBindJSON(&tempJobs); err != nil {
 		h.logger.Errorf("[CreateJobData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
 	if len(tempJobs) == 0 {
 		h.logger.Error("[CreateJobData] No jobs provided in request")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No jobs provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No jobs provided",
+			"code":  "EMPTY_REQUEST",
+		})
 		return
 	}
 
@@ -37,7 +43,10 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user ID: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database error while retrieving user",
+			"code":  "DB_ERROR",
+		})
 		return
 	}
 
@@ -57,7 +66,10 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating new user: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create new user",
+				"code":  "USER_CREATION_ERROR",
+			})
 			return
 		}
 
@@ -105,7 +117,10 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating job: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating job: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create job",
+				"code":  "JOB_CREATION_ERROR",
+			})
 			return
 		}
 

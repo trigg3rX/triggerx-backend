@@ -12,14 +12,20 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 	taskID := c.Param("id")
 	if taskID == "" {
 		h.logger.Error("[GetTaskDataByID] No task ID provided")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No task ID provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No task ID provided",
+			"code":  "MISSING_TASK_ID",
+		})
 		return
 	}
 
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[GetTaskDataByID] Invalid task ID format: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID format"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid task ID format",
+			"code":  "INVALID_TASK_ID",
+		})
 		return
 	}
 
@@ -30,7 +36,10 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetTaskDataByID] Error retrieving task data for taskID %d: %v", taskIDInt, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found",
+			"code":  "TASK_NOT_FOUND",
+		})
 		return
 	}
 
@@ -42,14 +51,20 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	jobID := c.Param("job_id")
 	if jobID == "" {
 		h.logger.Error("[GetTasksByJobID] No job ID provided")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No job ID provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No job ID provided",
+			"code":  "MISSING_JOB_ID",
+		})
 		return
 	}
 
 	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[GetTasksByJobID] Invalid job ID format: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job ID format"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid job ID format",
+			"code":  "INVALID_JOB_ID",
+		})
 		return
 	}
 
@@ -60,7 +75,10 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %d: %v", jobIDInt, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "No tasks found for this job",
+			"code":  "TASKS_NOT_FOUND",
+		})
 		return
 	}
 

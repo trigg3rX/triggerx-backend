@@ -34,7 +34,10 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperData] Error parsing keeper ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid keeper ID format",
+			"code":  "INVALID_KEEPER_ID",
+		})
 		return
 	}
 
@@ -43,7 +46,10 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
 		return
 	}
 
@@ -58,7 +64,10 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
 		h.logger.Errorf("[GetKeeperTaskCount] Error parsing keeper ID: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid keeper ID format",
+			"code":  "INVALID_KEEPER_ID",
+		})
 		return
 	}
 
