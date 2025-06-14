@@ -67,6 +67,9 @@ func (s *Server) Stop(ctx context.Context) error {
 
 // setupRoutes sets up the routes for the server
 func (s *Server) setupRoutes(deps Dependencies) {
+	// Apply metrics middleware to all routes
+	s.router.Use(MetricsMiddleware())
+
 	// Create handlers
 	statusHandler := handlers.NewStatusHandler(deps.Logger)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)

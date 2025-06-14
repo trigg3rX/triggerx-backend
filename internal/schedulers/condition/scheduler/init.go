@@ -52,6 +52,9 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 	// Start metrics collection
 	scheduler.metrics.Start()
 
+	// Set up health checker for database monitoring
+	metrics.SetHealthChecker(dbClient)
+
 	scheduler.logger.Info("Condition-based scheduler initialized",
 		"max_workers", maxWorkers,
 		"manager_id", managerID,
