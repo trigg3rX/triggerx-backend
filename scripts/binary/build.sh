@@ -51,4 +51,7 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-go build -v -o app/${SERVICE} cmd/${SERVICE}/main.go
+# Convert service name to Docker-compatible name
+DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
+
+go build -v -o root/${DOCKER_NAME} cmd/${SERVICE}/main.go

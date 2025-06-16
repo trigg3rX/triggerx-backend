@@ -19,8 +19,9 @@ COPY . .
 RUN go mod tidy
 
 # Build the binary for the specified service
+ARG DOCKER_NAME
 ARG SERVICE
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/${SERVICE} ./cmd/${SERVICE}
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/${DOCKER_NAME} ./cmd/${SERVICE}
 
 # Use a minimal alpine image for the final stage
 FROM golang:1.24.2-alpine
@@ -31,13 +32,15 @@ RUN apk --no-cache add ca-certificates
 # Set working directory
 WORKDIR /root/
 
-# Copy the built binary
-ARG SERVICE
-COPY --from=builder /app/${SERVICE} .
+# Create a placeholder env file
+RUN touch .env
 
-# Copy the startup script
-COPY ./scripts/docker/services/start-${SERVICE}-binary.sh /root/start-${SERVICE}.sh
-RUN chmod +x /root/start-${SERVICE}.sh
+# Copy the built binary
+ARG DOCKER_NAME
+COPY --from=builder /app/${DOCKER_NAME} .
+
+COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /root/start.sh
+RUN chmod +x /root/start.sh
 
 # Default command: run the binary
-CMD ["sh", "./start-${SERVICE}.sh"]
+CMD ["sh", "./start.sh"]

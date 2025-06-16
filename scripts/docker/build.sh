@@ -40,7 +40,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition)$ ]]; then
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition|all)$ ]]; then
     echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/event, schedulers/condition" 1>&2
     exit 1
 fi
@@ -51,14 +51,32 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-# Build Docker image for the specified service
-docker build --no-cache \
-    -f Dockerfile.backend \
-    --build-arg SERVICE=${SERVICE} \
-    -t triggerx-${SERVICE}:${VERSION} .
+if [[ "$SERVICE" == "all" ]]; then
+    # Build all services
+    for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+        # Convert service name to Docker-compatible name
+        DOCKER_NAME=$(echo $service | sed 's/\//-/g')
 
-# Tag images with version and latest
-docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:${VERSION}
-docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:latest
+        echo "Building $service..."
+        docker build --no-cache \
+            -f Dockerfile.backend \
+            --build-arg SERVICE=${service} \
+            --build-arg DOCKER_NAME=${DOCKER_NAME} \
+            -t triggerx-${DOCKER_NAME}:${VERSION} .
+    done
+else
+    echo "Building $SERVICE..."
+    # Convert service name to Docker-compatible name
+    DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
+
+    echo "DOCKER_NAME: $DOCKER_NAME"
+    # Build a single service
+    echo "Building $SERVICE..."
+    docker build --no-cache \
+        -f Dockerfile.backend \
+        --build-arg SERVICE=${SERVICE} \
+        --build-arg DOCKER_NAME=${DOCKER_NAME} \
+        -t triggerx-${DOCKER_NAME}:${VERSION} .
+fi
 
 echo "Successfully built: triggerx-${SERVICE}:${VERSION} and latest"

@@ -40,7 +40,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition)$ ]]; then
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition|all)$ ]]; then
     echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/event, schedulers/condition" 1>&2
     exit 1
 fi
@@ -54,8 +54,39 @@ fi
 # Login to Docker Hub
 docker login
 
-# Push both version and latest tags
-docker push trigg3rx/triggerx-${SERVICE}:${VERSION}
-docker push trigg3rx/triggerx-${SERVICE}:latest
+if [[ "$SERVICE" == "all" ]]; then
+    # Push all services
+    for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+        # Convert service name to Docker-compatible name
+        DOCKER_NAME=$(echo $service | sed 's/\//-/g')
+
+        # Tag images with version and latest
+        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+        echo "Pushing $service..."
+        docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+        docker rmi trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker rmi trigg3rx/triggerx-${DOCKER_NAME}:latest
+    done
+else
+    # Push a single service
+    echo "Pushing $SERVICE..."
+    # Convert service name to Docker-compatible name
+    DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
+
+    # Tag images with version and latest
+    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+    echo "Pushing $SERVICE..."
+    docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+    docker rmi trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker rmi trigg3rx/triggerx-${DOCKER_NAME}:latest
+fi
 
 echo "Successfully tagged and pushed: triggerx-${SERVICE}:${VERSION} and latest tag"
