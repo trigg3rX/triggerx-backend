@@ -110,7 +110,7 @@ func resetDailyMetrics() {
 
 // Helper functions to get configuration values
 func getJobBatchSize() int {
-	return config.GetJobBatchSize()
+	return config.GetTaskBatchSize()
 }
 
 func getDuplicateTaskWindowSeconds() float64 {

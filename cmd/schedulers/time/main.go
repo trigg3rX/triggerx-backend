@@ -111,7 +111,7 @@ func main() {
 		"api_port":              config.GetSchedulerRPCPort(),
 		"poll_interval":         config.GetPollingInterval(),
 		"look_ahead":            config.GetPollingLookAhead(),
-		"batch_size":            config.GetJobBatchSize(),
+		"batch_size":            config.GetTaskBatchSize(),
 		"performer_lock_ttl":    config.GetPerformerLockTTL(),
 		"task_cache_ttl":        config.GetTaskCacheTTL(),
 		"duplicate_task_window": config.GetDuplicateTaskWindow(),

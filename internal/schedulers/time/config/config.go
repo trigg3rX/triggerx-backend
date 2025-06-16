@@ -28,7 +28,7 @@ type Config struct {
 	// Time Durations
 	pollingInterval     time.Duration
 	pollingLookAhead    time.Duration
-	jobBatchSize        int
+	taskBatchSize        int
 	performerLockTTL    time.Duration
 	taskCacheTTL        time.Duration
 	duplicateTaskWindow time.Duration
@@ -46,10 +46,10 @@ func Init() error {
 		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
 		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
 		timeSchedulerSigningKey:     env.GetEnv("TIME_SCHEDULER_SIGNING_KEY", ""),
-		timeSchedulerSigningAddress: env.GetEnv("TIME_SCHEDULER_ADDRESS", ""),
+		timeSchedulerSigningAddress: env.GetEnv("TIME_SCHEDULER_SIGNING_ADDRESS", ""),
 		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
-		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOK_AHEAD", 40*time.Minute),
-		jobBatchSize:            env.GetEnvInt("TIME_SCHEDULER_JOB_BATCH_SIZE", 15),
+		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
+		taskBatchSize:            env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
 		performerLockTTL:        env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
 		taskCacheTTL:            env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
 		duplicateTaskWindow:     env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
@@ -111,8 +111,8 @@ func GetPollingLookAhead() time.Duration {
 	return cfg.pollingLookAhead
 }
 
-func GetJobBatchSize() int {
-	return cfg.jobBatchSize
+func GetTaskBatchSize() int {
+	return cfg.taskBatchSize
 }
 
 func GetPerformerLockTTL() time.Duration {
