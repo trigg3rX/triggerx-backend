@@ -51,7 +51,7 @@ func Init() error {
 		maxWorkers:              env.GetEnvInt("EVENT_SCHEDULER_MAX_WORKERS", 100),
 		alchemyAPIKey:           env.GetEnv("ALCHEMY_API_KEY", ""),
 		eventSchedulerSigningKey:     env.GetEnv("EVENT_SCHEDULER_SIGNING_KEY", ""),
-		eventSchedulerSigningAddress: env.GetEnv("EVENT_SCHEDULER_ADDRESS", ""),
+		eventSchedulerSigningAddress: env.GetEnv("EVENT_SCHEDULER_SIGNING_ADDRESS", ""),
 		aggregatorRPCURL:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 	}
 	if err := validateConfig(); err != nil {

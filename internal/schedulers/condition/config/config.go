@@ -41,7 +41,7 @@ func Init() error {
 		conditionSchedulerRPCPort:        env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"),
 		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
 		conditionSchedulerSigningKey:     env.GetEnv("CONDITION_SCHEDULER_SIGNING_KEY", ""),
-		conditionSchedulerSigningAddress: env.GetEnv("CONDITION_SCHEDULER_ADDRESS", ""),
+		conditionSchedulerSigningAddress: env.GetEnv("CONDITION_SCHEDULER_SIGNING_ADDRESS", ""),
 		maxWorkers:              env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
 		aggregatorRPCURL:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 	}
