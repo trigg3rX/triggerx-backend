@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
@@ -39,9 +40,9 @@ func DefaultRetryConfig() *RetryConfig {
 			http.StatusBadGateway,
 			http.StatusServiceUnavailable,
 			http.StatusGatewayTimeout,
-			http.StatusTooManyRequests, // Add rate limit status code
+			http.StatusTooManyRequests,
 			http.StatusRequestTimeout,
-			http.StatusConflict, // Add conflict status code
+			http.StatusConflict,
 		},
 	}
 }
@@ -59,17 +60,20 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			return
 		}
 
+		endpoint := c.FullPath()
+		if endpoint == "" {
+			endpoint = c.Request.URL.Path
+		}
+
 		// Create a copy of the request body if it exists
 		var bodyBytes []byte
 		if c.Request.Body != nil {
-			bodyBytes, _ = io.ReadAll(c.Request.Body)
-			var bodyBytes []byte
-			if c.Request.Body != nil {
-				bodyBytes, _ = io.ReadAll(c.Request.Body)
-				if err := c.Request.Body.Close(); err != nil {
-					logger.Warnf("Failed to close request body: %v", err)
-				}
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			var err error
+			bodyBytes, err = io.ReadAll(c.Request.Body)
+			if err != nil {
+				logger.Errorf("Failed to read request body: %v", err)
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
 			}
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
@@ -86,12 +90,16 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 		attempts := 0
 		var finalStatus int
 		var finalBody []byte
+
 		_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 			attempts++
+			metrics.RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprintf("%d", attempts)).Inc()
+
+			// Reset the response writer for this attempt
 			w.body.Reset()
 			w.statusCode = 0
 
-			// Create a new request for each retry attempt
+			// Create a new request for this attempt
 			newReq, err := http.NewRequest(c.Request.Method, c.Request.URL.String(), bytes.NewBuffer(bodyBytes))
 			if err != nil {
 				return nil, fmt.Errorf("failed to create new request: %v", err)
@@ -104,21 +112,20 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 				}
 			}
 
-			// Create a new response writer for this attempt
-			newWriter := &responseWriter{
-				ResponseWriter: origWriter,
-				body:           &bytes.Buffer{},
-			}
-
 			// Create a new context for this attempt
 			newCtx := c.Copy()
 			newCtx.Request = newReq
-			newCtx.Writer = newWriter
+			newCtx.Writer = w
 
-			// Process the request with the new context
+			// Process the request
 			c.Handler()(newCtx)
 
-			statusCode := newWriter.statusCode
+			// If the request was aborted, don't retry
+			if newCtx.IsAborted() {
+				return nil, nil
+			}
+
+			statusCode := w.statusCode
 			retryable := false
 			for _, retryCode := range config.RetryStatusCodes {
 				if statusCode == retryCode {
@@ -128,8 +135,9 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			}
 
 			if !retryable {
-				finalStatus = newWriter.statusCode
-				finalBody = newWriter.body.Bytes()
+				finalStatus = w.statusCode
+				finalBody = w.body.Bytes()
+				metrics.RetrySuccessesTotal.WithLabelValues(endpoint).Inc()
 				return nil, nil
 			}
 
@@ -139,8 +147,8 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			}
 
 			lastErr = fmt.Errorf("received retryable status code: %d", statusCode)
-			finalStatus = newWriter.statusCode
-			finalBody = newWriter.body.Bytes()
+			finalStatus = w.statusCode
+			finalBody = w.body.Bytes()
 			return nil, lastErr
 		}, &retry.RetryConfig{
 			MaxRetries:      config.MaxRetries,
@@ -153,29 +161,21 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 
 		if err != nil {
 			logger.Errorf("Error retrying request: %v", err)
+			metrics.RetryFailuresTotal.WithLabelValues(endpoint).Inc()
 			if finalStatus == 0 {
 				finalStatus = http.StatusInternalServerError
 				finalBody = []byte("Internal server error during retry operation")
 			}
 		}
 
-		// Write the final response to the original writer
+		// Write the final response only once
 		origWriter.WriteHeader(finalStatus)
-		status, err := origWriter.Write(finalBody)
-		if err != nil {
+		if _, err := origWriter.Write(finalBody); err != nil {
 			logger.Errorf("Error writing final response: %v", err)
-		} else {
-			logger.Infof("Wrote %d bytes to response", status)
 		}
 
-		if err != nil {
-			// If all retries failed, return the last error as JSON
-			c.JSON(finalStatus, gin.H{
-				"error": fmt.Sprintf("Request failed after %d attempts: %v", attempts, lastErr),
-			})
-			c.Abort()
-			return
-		}
+		// Abort the context to prevent further handlers from writing
+		c.Abort()
 	}
 }
 
@@ -187,11 +187,11 @@ type responseWriter struct {
 }
 
 func (w *responseWriter) Write(b []byte) (int, error) {
-	// Only write to the buffer, not to the original writer
-	return w.body.Write(b)
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
 }
 
 func (w *responseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
-	// Don't write to the original writer yet
+	w.ResponseWriter.WriteHeader(statusCode)
 }

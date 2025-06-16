@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -42,16 +43,53 @@ func NewDBServerClient(logger logging.Logger, config Config) (*DBServerClient, e
 	return client, nil
 }
 
+// makeRequestWithRetry makes an HTTP request with retry logic and metrics tracking
+func (c *DBServerClient) makeRequestWithRetry(req *http.Request, endpoint string) (*http.Response, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
+		if attempt > 0 {
+			// Track retry attempt
+			metrics.TrackDBRetry(endpoint)
+			c.logger.Warn("Retrying DB request", "endpoint", endpoint, "attempt", attempt)
+			time.Sleep(c.config.RetryDelay)
+		}
+
+		// Make the request
+		resp, err := c.httpClient.Do(req)
+
+		// Track the request
+		if err != nil {
+			// Connection error
+			metrics.TrackDBConnectionError()
+			metrics.TrackDBRequest(req.Method, endpoint, "connection_error")
+			lastErr = err
+			continue
+		}
+
+		// Track successful connection with status code
+		statusCode := fmt.Sprintf("%d", resp.StatusCode)
+		metrics.TrackDBRequest(req.Method, endpoint, statusCode)
+
+		// Return response regardless of status code - let caller handle status
+		return resp, nil
+	}
+
+	// All retries exhausted
+	return nil, fmt.Errorf("request failed after %d retries: %w", c.config.MaxRetries, lastErr)
+}
+
 // HealthCheck performs a health check against the database server
 func (c *DBServerClient) HealthCheck() error {
-	url := fmt.Sprintf("%s/api/health", c.baseURL)
+	endpoint := "/api/health"
+	url := fmt.Sprintf("%s%s", c.baseURL, endpoint)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.makeRequestWithRetry(req, endpoint)
 	if err != nil {
 		return fmt.Errorf("health check request failed: %w", err)
 	}
@@ -68,14 +106,15 @@ func (c *DBServerClient) HealthCheck() error {
 
 // GetConditionBasedJobs retrieves condition-based jobs from the database
 func (c *DBServerClient) GetConditionBasedJobs() ([]types.ConditionJobData, error) {
-	url := fmt.Sprintf("%s/api/v1/jobs/condition", c.baseURL)
+	endpoint := "/api/v1/jobs/condition"
+	url := fmt.Sprintf("%s%s", c.baseURL, endpoint)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.makeRequestWithRetry(req, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -102,7 +141,8 @@ func (c *DBServerClient) GetConditionBasedJobs() ([]types.ConditionJobData, erro
 
 // UpdateJobStatus updates the status of a job
 func (c *DBServerClient) UpdateJobStatus(jobID int64, isRunning bool) error {
-	url := fmt.Sprintf("%s/api/v1/jobs/%d/status", c.baseURL, jobID)
+	endpoint := fmt.Sprintf("/api/v1/jobs/%d/status", jobID)
+	url := fmt.Sprintf("%s%s", c.baseURL, endpoint)
 
 	payload := map[string]interface{}{
 		"status": isRunning,
@@ -119,7 +159,7 @@ func (c *DBServerClient) UpdateJobStatus(jobID int64, isRunning bool) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.makeRequestWithRetry(req, endpoint)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -136,7 +176,8 @@ func (c *DBServerClient) UpdateJobStatus(jobID int64, isRunning bool) error {
 
 // SendTaskToManager sends a task to the manager for execution
 func (c *DBServerClient) SendTaskToManager(jobID int64, triggerValue float64, conditionType string) error {
-	url := fmt.Sprintf("%s/api/v1/tasks/create", c.baseURL)
+	endpoint := "/api/v1/tasks/create"
+	url := fmt.Sprintf("%s%s", c.baseURL, endpoint)
 
 	payload := map[string]interface{}{
 		"job_id":         jobID,
@@ -156,7 +197,7 @@ func (c *DBServerClient) SendTaskToManager(jobID int64, triggerValue float64, co
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.makeRequestWithRetry(req, endpoint)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}

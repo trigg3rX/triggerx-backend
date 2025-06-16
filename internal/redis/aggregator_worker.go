@@ -34,7 +34,7 @@ outerLoop:
 			}
 			if val != "" {
 				found = true
-				break
+				break outerLoop
 			}
 			time.Sleep(pollInterval)
 		}

@@ -75,14 +75,6 @@ var (
 		Help:      "Total database operations performed",
 	}, []string{"operation", "table", "status"})
 
-	// Database queries metrics
-	DBQueriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "db_server",
-		Name:      "db_queries_total",
-		Help:      "Total database queries executed",
-	}, []string{"query_type"})
-
 	// Database query duration metrics
 	DBQueryDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "triggerx",

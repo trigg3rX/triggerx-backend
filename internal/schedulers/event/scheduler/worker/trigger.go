@@ -19,8 +19,11 @@ func (w *EventWorker) checkForEvents() error {
 	// Get current block number
 	currentBlock, err := w.Client.BlockNumber(context.Background())
 	if err != nil {
+		metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_blockNumber", "failed")
+		metrics.TrackConnectionFailure(w.Job.TriggerChainID)
 		return fmt.Errorf("failed to get current block number: %w", err)
 	}
+	metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_blockNumber", "success")
 
 	// Calculate safe block (with confirmations)
 	safeBlock := currentBlock
@@ -43,12 +46,16 @@ func (w *EventWorker) checkForEvents() error {
 
 	logs, err := w.Client.FilterLogs(context.Background(), query)
 	if err != nil {
+		metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_getLogs", "failed")
+		metrics.TrackConnectionFailure(w.Job.TriggerChainID)
 		return fmt.Errorf("failed to filter logs: %w", err)
 	}
+	metrics.TrackRPCRequest(w.Job.TriggerChainID, "eth_getLogs", "success")
 
 	// Process each event
 	for _, log := range logs {
-		metrics.EventsDetected.Inc()
+		startTime := time.Now()
+
 		if err := w.processEvent(log); err != nil {
 			w.Logger.Error("Failed to process event",
 				"job_id", w.Job.JobID,
@@ -56,9 +63,16 @@ func (w *EventWorker) checkForEvents() error {
 				"block", log.BlockNumber,
 				"error", err,
 			)
-			metrics.JobsFailed.Inc()
+			metrics.TrackJobCompleted("failed")
+			metrics.TrackWorkerError(fmt.Sprintf("%d", w.Job.JobID), "event_processing_error")
+
+			// Track as critical error if event processing fails
+			metrics.TrackCriticalError("event_processing_failure")
 		} else {
-			metrics.EventsProcessed.Inc()
+			// Track successful event processing with comprehensive metrics
+			processingDuration := time.Since(startTime)
+			metrics.TrackEventWithDuration(w.Job.TriggerChainID, processingDuration, true)
+			metrics.TrackJobCompleted("success")
 		}
 	}
 
@@ -126,6 +140,7 @@ func (w *EventWorker) processEvent(log types.Log) error {
 			"target_function", w.Job.TaskTargetData.TargetFunction,
 			"duration", duration,
 		)
+		metrics.TrackActionExecution(fmt.Sprintf("%d", w.Job.JobID), "success")
 	} else {
 		eventContext["event_type"] = "event_failed"
 		eventContext["status"] = "failed"
@@ -139,6 +154,7 @@ func (w *EventWorker) processEvent(log types.Log) error {
 			"target_function", w.Job.TaskTargetData.TargetFunction,
 			"duration", duration,
 		)
+		metrics.TrackActionExecution(fmt.Sprintf("%d", w.Job.JobID), "failed")
 	}
 
 	return nil

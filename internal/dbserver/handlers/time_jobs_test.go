@@ -42,9 +42,9 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				nextExecutionTime := mockTime.Add(60 * time.Second)
 				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]types.TimeJobData{
 					{
-						JobID:                     1,
-						ExpirationTime:            mockTime.Add(60 * time.Second),
-						Recurring:                 true,
+						JobID:          1,
+						ExpirationTime: mockTime.Add(60 * time.Second),
+						// Recurring:                 true,
 						TimeInterval:              60,
 						ScheduleType:              "interval",
 						CronExpression:            "",
@@ -61,9 +61,9 @@ func TestGetTimeBasedJobs(t *testing.T) {
 						IsActive:                  true,
 					},
 					{
-						JobID:                     2,
-						ExpirationTime:            mockTime.Add(60 * time.Second),
-						Recurring:                 false,
+						JobID:          2,
+						ExpirationTime: mockTime.Add(60 * time.Second),
+						// Recurring:                 false,
 						TimeInterval:              120,
 						ScheduleType:              "specific",
 						CronExpression:            "",
@@ -84,9 +84,9 @@ func TestGetTimeBasedJobs(t *testing.T) {
 			expectedCode: http.StatusOK,
 			expectedJobs: []types.TimeJobData{
 				{
-					JobID:                     1,
-					ExpirationTime:            mockTime.Add(60 * time.Second),
-					Recurring:                 true,
+					JobID:          1,
+					ExpirationTime: mockTime.Add(60 * time.Second),
+					// Recurring:                 true,
 					TimeInterval:              60,
 					ScheduleType:              "interval",
 					CronExpression:            "",
@@ -103,9 +103,9 @@ func TestGetTimeBasedJobs(t *testing.T) {
 					IsActive:                  true,
 				},
 				{
-					JobID:                     2,
-					ExpirationTime:            mockTime.Add(60 * time.Second),
-					Recurring:                 false,
+					JobID:          2,
+					ExpirationTime: mockTime.Add(60 * time.Second),
+					// Recurring:                 false,
 					TimeInterval:              120,
 					ScheduleType:              "specific",
 					CronExpression:            "",

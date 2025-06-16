@@ -8,6 +8,7 @@ import (
 
 	redis "github.com/redis/go-redis/v9" // Add alias here
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -19,14 +20,17 @@ type JobStreamManager struct {
 
 func NewJobStreamManager(logger logging.Logger) (*JobStreamManager, error) {
 	if !config.IsRedisAvailable() {
+		metrics.ServiceStatus.WithLabelValues("job_stream_manager").Set(0)
 		return nil, fmt.Errorf("redis not available")
 	}
 
 	client, err := NewRedisClient(logger)
 	if err != nil {
+		metrics.ServiceStatus.WithLabelValues("job_stream_manager").Set(0)
 		return nil, fmt.Errorf("failed to create redis client: %w", err)
 	}
 
+	metrics.ServiceStatus.WithLabelValues("job_stream_manager").Set(1)
 	return &JobStreamManager{
 		client:         client,
 		logger:         logger,
@@ -69,11 +73,23 @@ func (jsm *JobStreamManager) RegisterConsumerGroup(stream, group string) error {
 }
 
 func (jsm *JobStreamManager) AddJobToRunningStream(job *JobStreamData) error {
-	return jsm.addJobToStream(JobsRunningStream, job)
+	err := jsm.addJobToStream(JobsRunningStream, job)
+	if err != nil {
+		metrics.JobsAddedToStreamTotal.WithLabelValues("running", "failure").Inc()
+		return err
+	}
+	metrics.JobsAddedToStreamTotal.WithLabelValues("running", "success").Inc()
+	return nil
 }
 
 func (jsm *JobStreamManager) AddJobToCompletedStream(job *JobStreamData, executionResult map[string]interface{}) error {
-	return jsm.addJobToStream(JobsCompletedStream, job)
+	err := jsm.addJobToStream(JobsCompletedStream, job)
+	if err != nil {
+		metrics.JobsAddedToStreamTotal.WithLabelValues("completed", "failure").Inc()
+		return err
+	}
+	metrics.JobsAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
+	return nil
 }
 
 func (jsm *JobStreamManager) addJobToStream(stream string, job *JobStreamData) error {
@@ -106,14 +122,22 @@ func (jsm *JobStreamManager) addJobToStream(stream string, job *JobStreamData) e
 }
 
 func (jsm *JobStreamManager) ReadJobsFromRunningStream(consumerGroup, consumerName string, count int64) ([]JobStreamData, error) {
-	return jsm.readJobsFromStream(JobsRunningStream, consumerGroup, consumerName, count)
+	jobs, err := jsm.readJobsFromStream(JobsRunningStream, consumerGroup, consumerName, count)
+	if err != nil {
+		metrics.JobsReadFromStreamTotal.WithLabelValues("running", "failure").Inc()
+		return nil, err
+	}
+	metrics.JobsReadFromStreamTotal.WithLabelValues("running", "success").Inc()
+	return jobs, nil
 }
 
 func (jsm *JobStreamManager) ReadJobsFromCompletedStream(consumerGroup, consumerName string, count int64) ([]JobStreamData, error) {
 	jobs, err := jsm.readJobsFromStream(JobsCompletedStream, consumerGroup, consumerName, count)
 	if err != nil {
+		metrics.JobsReadFromStreamTotal.WithLabelValues("completed", "failure").Inc()
 		return nil, err
 	}
+	metrics.JobsReadFromStreamTotal.WithLabelValues("completed", "success").Inc()
 
 	now := time.Now()
 	var readyJobs []JobStreamData
@@ -187,6 +211,14 @@ func (jsm *JobStreamManager) GetStreamInfo() map[string]interface{} {
 			length = -1
 		}
 		streamLengths[stream] = length
+
+		// Update stream length metrics
+		switch stream {
+		case JobsRunningStream:
+			metrics.JobStreamLengths.WithLabelValues("running").Set(float64(length))
+		case JobsCompletedStream:
+			metrics.JobStreamLengths.WithLabelValues("completed").Set(float64(length))
+		}
 	}
 
 	return map[string]interface{}{

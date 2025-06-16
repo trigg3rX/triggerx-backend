@@ -36,6 +36,9 @@ type Config struct {
 	streamMaxLen  int
 	jobStreamTTL  time.Duration
 	taskStreamTTL time.Duration
+
+	// API settings
+	apiPort string
 }
 
 var cfg Config
@@ -61,6 +64,7 @@ func Init() error {
 		streamMaxLen:  env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
 		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL_HOURS", 120*time.Hour),
 		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL_HOURS", 1*time.Hour),
+		apiPort:       env.GetEnv("REDIS_API_PORT", "9009"),
 	}
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
@@ -152,4 +156,8 @@ func GetWriteTimeout() time.Duration {
 
 func GetPoolTimeout() time.Duration {
 	return cfg.poolTimeout
+}
+
+func GetRedisAPIPort() string {
+	return cfg.apiPort
 }

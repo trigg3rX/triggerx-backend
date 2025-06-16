@@ -97,7 +97,7 @@ const (
 			WHERE whitelisted = true AND registered = true ALLOW FILTERING`
 
 	GetKeeperTaskCountByIDQuery = `
-			SELECT no_executed_tasks, no_attested_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`
+			SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`
 
 	GetKeeperPointsByIDQuery = `
 			SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
@@ -17,12 +19,13 @@ import (
 func (w *ConditionWorker) checkCondition() error {
 	startTime := time.Now()
 
-	// Track condition check
-	metrics.ConditionsChecked.Inc()
+	// Track condition check by source type
+	metrics.TrackConditionBySource(w.Job.ValueSourceType)
 
 	// Fetch current value from source (with caching)
 	currentValue, err := w.fetchValueWithCache()
 	if err != nil {
+		metrics.TrackValueParsingError(w.Job.ValueSourceType)
 		return fmt.Errorf("failed to fetch value: %w", err)
 	}
 
@@ -45,12 +48,21 @@ func (w *ConditionWorker) checkCondition() error {
 	if err != nil {
 		conditionContext["status"] = "evaluation_error"
 		conditionContext["error"] = err.Error()
+		metrics.TrackCriticalError("condition_evaluation")
 		return fmt.Errorf("failed to evaluate condition: %w", err)
 	}
 
+	// Track condition evaluation
+	evaluationDuration := time.Since(startTime)
+	metrics.TrackConditionEvaluation(evaluationDuration)
+
+	// Track condition check with success status
+	chainID := fmt.Sprintf("%d", w.Job.JobID) // Using job_id as chain identifier for consistency
+	metrics.TrackConditionCheck(chainID, evaluationDuration, satisfied)
+
 	if satisfied {
 		w.ConditionMet++
-		metrics.ConditionsSatisfied.Inc()
+		metrics.TrackConditionByType(w.Job.ConditionType)
 
 		conditionContext["status"] = "satisfied"
 		conditionContext["consecutive_checks"] = w.ConditionMet
@@ -73,8 +85,10 @@ func (w *ConditionWorker) checkCondition() error {
 
 		if executionSuccess {
 			conditionContext["action_status"] = "completed"
+			metrics.TrackActionExecution(fmt.Sprintf("%d", w.Job.JobID), duration)
 		} else {
 			conditionContext["action_status"] = "failed"
+			metrics.TrackActionExecution(fmt.Sprintf("%d", w.Job.JobID), duration)
 		}
 	} else {
 		w.ConditionMet = 0
@@ -114,13 +128,27 @@ func (w *ConditionWorker) fetchValue() (float64, error) {
 	}
 }
 
+// isTimeoutError checks if an error is a timeout error
+func isTimeoutError(err error) bool {
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		return true
+	}
+	return strings.Contains(err.Error(), "timeout") ||
+		strings.Contains(err.Error(), "deadline exceeded")
+}
+
 // fetchFromAPI fetches value from an HTTP API endpoint
 func (w *ConditionWorker) fetchFromAPI() (float64, error) {
-	metrics.ValueSourceRequests.Inc()
-
 	resp, err := w.HttpClient.Get(w.Job.ValueSourceUrl)
 	if err != nil {
-		metrics.ValueSourceErrors.Inc()
+		metrics.TrackHTTPRequest("GET", w.Job.ValueSourceUrl, "error")
+		metrics.TrackHTTPClientConnectionError()
+
+		// Check if it's a timeout error
+		if isTimeoutError(err) {
+			metrics.TrackTimeout("http_api_request")
+		}
+
 		return 0, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer func() {
@@ -129,14 +157,17 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		}
 	}()
 
+	statusCode := strconv.Itoa(resp.StatusCode)
+	metrics.TrackHTTPRequest("GET", w.Job.ValueSourceUrl, statusCode)
+	metrics.TrackAPIResponse(w.Job.ValueSourceUrl, statusCode)
+
 	if resp.StatusCode != http.StatusOK {
-		metrics.ValueSourceErrors.Inc()
 		return 0, fmt.Errorf("HTTP request failed with status: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		metrics.ValueSourceErrors.Inc()
+		metrics.TrackHTTPRequest("GET", w.Job.ValueSourceUrl, "read_error")
 		return 0, fmt.Errorf("failed to read response body: %w", err)
 	}
 
@@ -178,7 +209,8 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		}
 	}
 
-	metrics.ValueSourceErrors.Inc()
+	metrics.TrackInvalidValue(w.Job.ValueSourceUrl)
+	metrics.TrackValueParsingError(w.Job.ValueSourceType)
 	return 0, fmt.Errorf("could not extract numeric value from response: %s", string(body))
 }
 
