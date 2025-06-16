@@ -4,10 +4,7 @@ The **TriggerX Keeper Backend** is a decentralized system designed to automate a
 
 ---
 
-<!-- ![Tests](https://github.com/trigg3rX/triggerx-backend/actions/workflows/tests.yml/badge.svg) -->
-![Build](https://github.com/trigg3rX/triggerx-backend/actions/workflows/build.yml/badge.svg)
-![Dependency](https://github.com/trigg3rX/triggerx-backend/actions/workflows/dependency.yml/badge.svg)
-![Lint](https://github.com/trigg3rX/triggerx-backend/actions/workflows/go_lint.yml/badge.svg)
+<p align="center"><img src="https://github.com/trigg3rX/triggerx-backend/actions/workflows/build.yml/badge.svg" alt="Build" /> <img src="https://github.com/trigg3rX/triggerx-backend/actions/workflows/go_lint.yml/badge.svg" alt="Lint" /></p>
 
 ---
 
