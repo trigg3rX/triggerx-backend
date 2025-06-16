@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,12 +51,12 @@ var (
 		Help:      "Garbage collection time",
 	})
 
-	// API server status
+	// Database server status
 	APIServerStatus = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
 		Name:      "api_server_status",
-		Help:      "API server health status",
+		Help:      "Database server health status (1=healthy, 0=unhealthy)",
 	})
 
 	// Tasks per minute
@@ -128,7 +129,7 @@ var (
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
 		Name:      "db_requests_total",
-		Help:      "Database client HTTP requests",
+		Help:      "Database client requests",
 	}, []string{"method", "endpoint", "status"})
 
 	// HTTP requests
@@ -178,17 +179,38 @@ var (
 		Name:      "duplicate_task_window_seconds",
 		Help:      "Duplicate task detection window",
 	})
+
+	// Internal tracking variables for performance calculations
+	taskStatsLock       sync.RWMutex
+	taskCompletionTimes []float64
+	successfulTasks     int64
+	totalTasks          int64
+	tasksLastMinute     int64
+	lastMinuteReset     time.Time
 )
 
-// StartMetricsCollection starts collecting metrics
+// Starts collecting metrics
 func StartMetricsCollection() {
-	// Update uptime every 60 seconds
+	// Update uptime every 15 seconds
 	go func() {
-		ticker := time.NewTicker(60 * time.Second)
+		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
 		}
 	}()
 }

@@ -37,8 +37,7 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 	jobs, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
-		metrics.TasksCompleted.WithLabelValues("failed").Inc()
-
+		metrics.TrackDBConnectionError()
 		return
 	}
 
@@ -49,6 +48,7 @@ func (s *TimeBasedScheduler) pollAndScheduleJobs() {
 
 	s.logger.Infof("Found %d tasks to process", len(jobs))
 	metrics.TasksScheduled.Set(float64(len(jobs)))
+	metrics.JobBatchSize.Set(float64(s.jobBatchSize))
 
 	for i := 0; i < len(jobs); i += s.jobBatchSize {
 		end := i + s.jobBatchSize
@@ -68,11 +68,9 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 		select {
 		case s.taskQueue <- &task:
 			s.executeJob(&task)
-			metrics.TasksCompleted.WithLabelValues("success").Inc()
 			s.logger.Debugf("Queued task %d for execution", task.TaskID)
 		default:
 			s.logger.Warnf("Task queue is full, skipping task %d", task.TaskID)
-			metrics.TasksCompleted.WithLabelValues("failed").Inc()
 		}
 	}
 }
@@ -86,8 +84,12 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	// Check if ExpirationTime of the job has passed or not
 	if task.ExpirationTime.Before(time.Now()) {
 		s.logger.Infof("Job for this task ID %d has expired, skipping execution", task.TaskID)
+		metrics.TrackTaskExpired()
 		return
 	}
+
+	// Track task by schedule type
+	metrics.TrackTaskByScheduleType(task.ScheduleType)
 
 	// Get the performer data
 	// TODO: Get the performer data from redis service, which gets it from online keepers list from health service, and sets the performerLock in redis
@@ -155,14 +157,14 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	// Execute the actual job
 	executionSuccess := s.performJobExecution(broadcastDataForPerformer)
 
-	if executionSuccess {
-		metrics.TasksCompleted.WithLabelValues("success").Inc()
-		metrics.TaskExecutionTime.Observe(time.Since(startTime).Seconds())
-		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.TaskTargetData.JobID, time.Since(startTime))
+	// Track task completion with timing and success status
+	executionDuration := time.Since(startTime)
+	metrics.TrackTaskCompletion(executionSuccess, executionDuration)
 
+	if executionSuccess {
+		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.TaskTargetData.JobID, executionDuration)
 	} else {
-		metrics.TasksCompleted.WithLabelValues("failed").Inc()
-		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.TaskTargetData.JobID, time.Since(startTime))
+		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.TaskTargetData.JobID, executionDuration)
 	}
 }
 
@@ -172,9 +174,11 @@ func (s *TimeBasedScheduler) performJobExecution(broadcastDataForPerformer types
 
 	if err != nil {
 		s.logger.Errorf("Failed to send task to performer: %v", err)
+		metrics.TrackTaskBroadcast("failed")
 		return false
 	}
 
+	metrics.TrackTaskBroadcast("success")
 	return success
 }
 
