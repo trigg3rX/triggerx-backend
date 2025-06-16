@@ -36,8 +36,8 @@ ARG SERVICE
 COPY --from=builder /app/${SERVICE} .
 
 # Copy the startup script
-COPY ./scripts/docker/services/start-${SERVICE}-binary.sh /root/start-${SERVICE}.sh
-RUN chmod +x /root/start-${SERVICE}.sh
+COPY ./scripts/docker/services/start-${SERVICE}-binary.sh /root/start.sh
+RUN chmod +x /root/start.sh
 
 # Default command: run the binary
-CMD ["sh", "./start-${SERVICE}.sh"]
+CMD ["sh", "./start.sh"]
