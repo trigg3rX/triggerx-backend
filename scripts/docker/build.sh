@@ -40,7 +40,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition)$ ]]; then
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition|all)$ ]]; then
     echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/event, schedulers/condition" 1>&2
     exit 1
 fi
@@ -51,14 +51,30 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-# Build Docker image for the specified service
-docker build --no-cache \
-    -f Dockerfile.backend \
-    --build-arg SERVICE=${SERVICE} \
-    -t triggerx-${SERVICE}:${VERSION} .
+if [[ "$SERVICE" == "all" ]]; then
+    # Build all services
+    for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+        echo "Building $service..."
+        docker build --no-cache \
+            -f Dockerfile.backend \
+            --build-arg SERVICE=${service} \
+            -t triggerx-${service}:${VERSION} .
 
-# Tag images with version and latest
-docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:${VERSION}
-docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:latest
+        # Tag images with version and latest
+        docker tag triggerx-${service}:${VERSION} trigg3rx/triggerx-${service}:${VERSION}
+        docker tag triggerx-${service}:${VERSION} trigg3rx/triggerx-${service}:latest
+    done
+else
+    # Build a single service
+    echo "Building $SERVICE..."
+    docker build --no-cache \
+        -f Dockerfile.backend \
+        --build-arg SERVICE=${SERVICE} \
+        -t triggerx-${SERVICE}:${VERSION} .
+
+    # Tag images with version and latest
+    docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:${VERSION}
+    docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:latest
+fi
 
 echo "Successfully built: triggerx-${SERVICE}:${VERSION} and latest"

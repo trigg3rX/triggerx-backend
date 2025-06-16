@@ -40,7 +40,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition)$ ]]; then
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition|all)$ ]]; then
     echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/event, schedulers/condition" 1>&2
     exit 1
 fi
@@ -54,8 +54,18 @@ fi
 # Login to Docker Hub
 docker login
 
-# Push both version and latest tags
-docker push trigg3rx/triggerx-${SERVICE}:${VERSION}
-docker push trigg3rx/triggerx-${SERVICE}:latest
+if [[ "$SERVICE" == "all" ]]; then
+    # Push all services
+    for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+        echo "Pushing $service..."
+        docker push trigg3rx/triggerx-${service}:${VERSION}
+        docker push trigg3rx/triggerx-${service}:latest
+    done
+else
+    # Push a single service
+    echo "Pushing $SERVICE..."
+    docker push trigg3rx/triggerx-${SERVICE}:${VERSION}
+    docker push trigg3rx/triggerx-${SERVICE}:latest
+fi
 
 echo "Successfully tagged and pushed: triggerx-${SERVICE}:${VERSION} and latest tag"
