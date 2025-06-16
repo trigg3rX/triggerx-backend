@@ -56,7 +56,7 @@ func main() {
 		SenderPrivateKey: config.GetPrivateKeyConsensus(),
 		SenderAddress:    config.GetConsensusAddress(),
 	}
-	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg, nil)
+	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
 	if err != nil {
 		logger.Fatal("Failed to initialize aggregator client", "error", err)
 	}

@@ -26,7 +26,7 @@ func IsRedisAvailable() bool {
 // NewRedisClient creates a new Redis client instance with enhanced features
 func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if !config.IsRedisAvailable() {
-		metrics.IsRedisUpstashAvailable.Set(boolToFloat64(false))
+		metrics.IsRedisUpstashAvailable.Set(float64(0))
 		return nil, fmt.Errorf("redis is not configured")
 	}
 
@@ -40,7 +40,7 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 		if err == nil {
 			isUpstash = true
 			logger.Infof("Using Upstash Redis configuration")
-			metrics.IsRedisUpstashAvailable.Set(boolToFloat64(true))
+			metrics.IsRedisUpstashAvailable.Set(float64(1))
 		} else {
 			logger.Warnf("Failed to parse Upstash config: %v", err)
 			metrics.ClientConnectionErrorsTotal.WithLabelValues("config_parse").Inc()
@@ -53,7 +53,7 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 		if err == nil {
 			isUpstash = false
 			logger.Infof("Using local Redis configuration")
-			metrics.IsRedisUpstashAvailable.Set(boolToFloat64(false))
+			metrics.IsRedisUpstashAvailable.Set(float64(0))
 		} else {
 			logger.Warnf("Failed to parse local Redis config: %v", err)
 			metrics.ClientConnectionErrorsTotal.WithLabelValues("config_parse").Inc()
@@ -61,7 +61,7 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	}
 
 	if opt == nil {
-		metrics.ServiceStatus.WithLabelValues("client").Set(boolToFloat64(false))
+		metrics.ServiceStatus.WithLabelValues("client").Set(float64(0))
 		return nil, fmt.Errorf("no valid Redis configuration found")
 	}
 
@@ -74,7 +74,7 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 	if err := redisClient.CheckConnection(); err != nil {
 		metrics.ClientConnectionsTotal.WithLabelValues("failure").Inc()
 		metrics.ClientConnectionErrorsTotal.WithLabelValues("connection_failed").Inc()
-		metrics.ServiceStatus.WithLabelValues("client").Set(boolToFloat64(false))
+		metrics.ServiceStatus.WithLabelValues("client").Set(float64(0))
 		redisType := "local"
 		if isUpstash {
 			redisType = "upstash"
@@ -84,7 +84,7 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 
 	// Record successful connection
 	metrics.ClientConnectionsTotal.WithLabelValues("success").Inc()
-	metrics.ServiceStatus.WithLabelValues("client").Set(boolToFloat64(true))
+	metrics.ServiceStatus.WithLabelValues("client").Set(float64(1))
 
 	redisType := "local"
 	if isUpstash {

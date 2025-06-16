@@ -169,9 +169,7 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 	}
 
 	if ipfsData.ActionData.ActionTxHash != "" {
-		err := h.taskStreamMgr.AddTaskToCompletedStream(taskData, map[string]interface{}{
-			"action_tx_hash": ipfsData.ActionData.ActionTxHash,
-		})
+		err := h.taskStreamMgr.AddTaskToCompletedStream(taskData)
 		if err != nil {
 			h.logger.Error("Failed to add task to completed stream", "error", err)
 		}
@@ -181,7 +179,7 @@ func (h *Handler) ValidateTask(c *gin.Context) {
 			Message: "Task completed successfully",
 		})
 	} else {
-		err := h.taskStreamMgr.AddTaskToFailedStream(taskData)
+		err := h.taskStreamMgr.AddTaskToCompletedStream(taskData)
 		if err != nil {
 			h.logger.Error("Failed to add task to failed stream", "error", err)
 		}
