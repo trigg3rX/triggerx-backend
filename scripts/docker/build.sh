@@ -61,26 +61,22 @@ if [[ "$SERVICE" == "all" ]]; then
         docker build --no-cache \
             -f Dockerfile.backend \
             --build-arg SERVICE=${service} \
+            --build-arg DOCKER_NAME=${DOCKER_NAME} \
             -t triggerx-${DOCKER_NAME}:${VERSION} .
-
-        # Tag images with version and latest
-        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
-        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
     done
 else
+    echo "Building $SERVICE..."
     # Convert service name to Docker-compatible name
     DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
 
+    echo "DOCKER_NAME: $DOCKER_NAME"
     # Build a single service
     echo "Building $SERVICE..."
     docker build --no-cache \
         -f Dockerfile.backend \
         --build-arg SERVICE=${SERVICE} \
+        --build-arg DOCKER_NAME=${DOCKER_NAME} \
         -t triggerx-${DOCKER_NAME}:${VERSION} .
-
-    # Tag images with version and latest
-    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
-    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
 fi
 
 echo "Successfully built: triggerx-${SERVICE}:${VERSION} and latest"

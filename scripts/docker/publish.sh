@@ -60,9 +60,16 @@ if [[ "$SERVICE" == "all" ]]; then
         # Convert service name to Docker-compatible name
         DOCKER_NAME=$(echo $service | sed 's/\//-/g')
 
+        # Tag images with version and latest
+        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
+
         echo "Pushing $service..."
         docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
         docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+        docker rmi trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker rmi trigg3rx/triggerx-${DOCKER_NAME}:latest
     done
 else
     # Push a single service
@@ -70,8 +77,16 @@ else
     # Convert service name to Docker-compatible name
     DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
 
+    # Tag images with version and latest
+    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+    echo "Pushing $SERVICE..."
     docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
     docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
+
+    docker rmi trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker rmi trigg3rx/triggerx-${DOCKER_NAME}:latest
 fi
 
 echo "Successfully tagged and pushed: triggerx-${SERVICE}:${VERSION} and latest tag"

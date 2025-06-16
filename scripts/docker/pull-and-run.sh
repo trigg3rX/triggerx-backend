@@ -79,7 +79,7 @@ if [ ! -f .env ]; then
     echo "Warning: .env file not found. Container will run without environment variables."
     ENV_FILE=""
 else
-    ENV_FILE="--env-file .env"
+    ENV_FILE="-v ./.env:/root/.env"
 fi
 
 # Run the container
