@@ -69,10 +69,11 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		}
 		defer rpcClient.Close()
 
-		if method == "sendTask" {
+		switch method {
+		case "sendTask":
 			// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
 			err = rpcClient.Call(result, method, params.ProofOfTask, params.Data, params.TaskDefinitionID, params.PerformerAddress, params.Signature)
-		} else if method == "sendCustomMessage" {
+		case "sendCustomMessage":
 			err = rpcClient.Call(result, method, params.Data, params.TaskDefinitionID)
 		}
 		if err != nil {

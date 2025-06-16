@@ -17,7 +17,7 @@ type TaskRepository interface {
 	GetTaskDataByID(taskID int64) (types.TaskData, error)
 	GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error)
 	UpdateTaskFee(taskID int64, fee float64) error
-	GetTaskFee(taskID int64) (int64, error)
+	GetTaskFee(taskID int64) (float64, error)
 }
 
 type taskRepository struct {
@@ -77,11 +77,27 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
 }
 
 func (r *taskRepository) GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error) {
+	iter := r.db.Session().Query(queries.GetTasksByJobIDQuery, jobID).Iter()
 	var tasks []types.TasksByJobIDResponse
-	err := r.db.Session().Query(queries.GetTasksByJobIDQuery, jobID).Scan(&tasks)
-	if err != nil {
+	var task types.TasksByJobIDResponse
+
+	for iter.Scan(
+		&task.TaskID,
+		&task.TaskNumber,
+		&task.TaskOpXCost,
+		&task.ExecutionTimestamp,
+		&task.ExecutionTxHash,
+		&task.TaskPerformerID,
+		&task.TaskAttesterIDs,
+		&task.IsSuccessful,
+	) {
+		tasks = append(tasks, task)
+	}
+
+	if err := iter.Close(); err != nil {
 		return []types.TasksByJobIDResponse{}, errors.New("error getting tasks by job ID")
 	}
+
 	return tasks, nil
 }
 
@@ -93,8 +109,8 @@ func (r *taskRepository) UpdateTaskFee(taskID int64, fee float64) error {
 	return nil
 }
 
-func (r *taskRepository) GetTaskFee(taskID int64) (int64, error) {
-	var fee int64
+func (r *taskRepository) GetTaskFee(taskID int64) (float64, error) {
+	var fee float64
 	err := r.db.Session().Query(queries.GetTaskFeeQuery, taskID).Scan(&fee)
 	if err != nil {
 		return 0, errors.New("error getting task fee")

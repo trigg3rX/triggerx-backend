@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -34,6 +36,16 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Start metrics collection
+	metrics.StartMetricsCollection()
+	metrics.StartSystemMetricsCollection()
+	metrics.TrackDBConnections()
+
+	// Apply middleware in the correct order
+	router.Use(middleware.RecoveryMiddleware(logger))          // First, to catch panics
+	router.Use(middleware.TimeoutMiddleware(30 * time.Second)) // Set appropriate timeout
+	router.Use(middleware.MetricsMiddleware())                 // Track HTTP metrics
 
 	// Configure CORS
 	router.Use(func(c *gin.Context) {
@@ -111,15 +123,18 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
-	// Apply middleware in the correct order
-	router.Use(middleware.RetryMiddleware(retryConfig, logger)) // Retry middleware first
-	// Rate limiting is handled through the API key auth middleware
+	// Apply retry middleware only to API routes
+	apiGroup := router.Group("/api")
+	apiGroup.Use(middleware.RetryMiddleware(retryConfig, logger))
 
 	return s
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.docker)
+
+	// Register metrics endpoint at root level without middleware
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	api := router.Group("/api")
 
@@ -147,7 +162,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
 	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
 	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
-	api.GET("/tasks/job/:id", handler.GetTasksByJobID)
+	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
 	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.GET("/keepers/performers", handler.GetPerformers)

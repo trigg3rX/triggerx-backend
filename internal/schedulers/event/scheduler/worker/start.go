@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -37,6 +38,9 @@ func (w *EventWorker) Start() {
 	w.IsActive = true
 	w.Mutex.Unlock()
 
+	// Track worker start in metrics
+	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.Job.JobID))
+
 	// Try to acquire performer lock
 	lockAcquired := false
 
@@ -66,7 +70,8 @@ func (w *EventWorker) Start() {
 		case <-ticker.C:
 			if err := w.checkForEvents(); err != nil {
 				w.Logger.Error("Error checking for events", "job_id", w.Job.JobID, "error", err)
-				metrics.JobsFailed.Inc()
+				metrics.TrackJobCompleted("failed")
+				metrics.TrackWorkerError(fmt.Sprintf("%d", w.Job.JobID), "event_check_error")
 			}
 		}
 	}
@@ -80,6 +85,10 @@ func (w *EventWorker) Stop() {
 	if w.IsActive {
 		w.Cancel()
 		w.IsActive = false
+
+		// Track worker stop in metrics
+		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.Job.JobID))
+
 		w.Logger.Info("Job worker stopped", "job_id", w.Job.JobID)
 	}
 }

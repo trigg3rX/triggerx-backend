@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 )
@@ -15,13 +16,19 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	var tempJobs []types.CreateJobData
 	if err := c.ShouldBindJSON(&tempJobs); err != nil {
 		h.logger.Errorf("[CreateJobData] Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
 	if len(tempJobs) == 0 {
 		h.logger.Error("[CreateJobData] No jobs provided in request")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No jobs provided"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "No jobs provided",
+			"code":  "EMPTY_REQUEST",
+		})
 		return
 	}
 
@@ -29,10 +36,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	var existingUser types.UserData
 	var err error
 
+	// Track user lookup
+	trackDBOp := metrics.TrackDBOperation("read", "users")
 	existingUserID, existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
+	trackDBOp(err)
+
 	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting user ID: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database error while retrieving user",
+			"code":  "DB_ERROR",
+		})
 		return
 	}
 
@@ -45,10 +59,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		newUser.TokenBalance = tempJobs[0].TokenBalance
 		newUser.UserPoints = 0.0
 
+		// Track user creation
+		trackDBOp = metrics.TrackDBOperation("create", "users")
 		existingUser, err = h.userRepository.CreateNewUser(&newUser)
+		trackDBOp(err)
+
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating new user: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create new user",
+				"code":  "USER_CREATION_ERROR",
+			})
 			return
 		}
 
@@ -89,10 +110,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			Timezone:          tempJobs[i].Timezone,
 		}
 
+		// Track job creation
+		trackDBOp = metrics.TrackDBOperation("create", "jobs")
 		jobID, err := h.jobRepository.CreateNewJob(jobData)
+		trackDBOp(err)
+
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating job: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating job: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create job",
+				"code":  "JOB_CREATION_ERROR",
+			})
 			return
 		}
 
@@ -113,7 +141,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			timeJobData := types.TimeJobData{
 				JobID:                     jobID,
 				ExpirationTime:            expirationTime,
-				Recurring:                 tempJobs[i].Recurring,
+				// Recurring:                 tempJobs[i].Recurring,
 				TimeInterval:              tempJobs[i].TimeInterval,
 				ScheduleType:              tempJobs[i].ScheduleType,
 				CronExpression:            tempJobs[i].CronExpression,
@@ -130,11 +158,15 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				IsActive:                  true,
 			}
 
+			// Track time job creation
+			trackDBOp = metrics.TrackDBOperation("create", "time_jobs")
 			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
+				trackDBOp(err)
 				h.logger.Errorf("[CreateJobData] Error inserting time job data for jobID %d: %v", jobID, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting time job data: " + err.Error()})
 				return
 			}
+			trackDBOp(nil)
 			h.logger.Infof("[CreateJobData] Successfully created time-based job %d with interval %d seconds",
 				jobID, timeJobData.TimeInterval)
 
@@ -219,12 +251,15 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 
 		var currentPoints = existingUser.UserPoints
-
 		newPoints := currentPoints + pointsToAdd
+		trackDBOp = metrics.TrackDBOperation("update", "users")
 		if err := h.userRepository.UpdateUserTasksAndPoints(existingUserID, 0, newPoints); err != nil {
+			trackDBOp(err)
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user points: " + err.Error()})
+			return
 		}
+		trackDBOp(nil)
 
 		createdJobs.JobIDs[i] = jobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
@@ -233,12 +268,19 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	// Update user's job_ids
 	allJobIDs := append(existingUser.JobIDs, createdJobs.JobIDs...)
+	trackDBOp = metrics.TrackDBOperation("update", "users")
 	if err := h.userRepository.UpdateUserJobIDs(existingUserID, allJobIDs); err != nil {
+		trackDBOp(err)
 		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user job IDs: " + err.Error()})
 		return
 	}
+	trackDBOp(nil)
 	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUserID, len(allJobIDs))
+
+	// Track total operation duration
+	trackDBOp = metrics.TrackDBOperation("create", "jobs")
+	trackDBOp(nil)
 
 	c.JSON(http.StatusOK, createdJobs)
 	h.logger.Infof("[CreateJobData] Successfully completed job creation for user %d with %d new jobs",
