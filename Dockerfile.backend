@@ -1,0 +1,43 @@
+# Use golang:1.24.2-alpine as the base image
+FROM golang:1.24.2-alpine AS builder
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy go.mod and go.sum files
+COPY go.mod go.sum ./
+
+# Update dependencies and ensure go.sum is up to date
+RUN apk add --no-cache git
+RUN go mod tidy
+RUN go mod download
+
+# Copy the entire codebase into the container
+COPY . .
+
+# Run go mod tidy again with the full codebase to ensure all imports are accounted for
+RUN go mod tidy
+
+# Build the binary for the specified service
+ARG SERVICE
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/${SERVICE} ./cmd/${SERVICE}
+
+# Use a minimal alpine image for the final stage
+FROM golang:1.24.2-alpine
+
+# Install ca-certificates
+RUN apk --no-cache add ca-certificates
+
+# Set working directory
+WORKDIR /root/
+
+# Copy the built binary
+ARG SERVICE
+COPY --from=builder /app/${SERVICE} .
+
+# Copy the startup script
+COPY ./scripts/docker/services/start-${SERVICE}-binary.sh /root/start-${SERVICE}.sh
+RUN chmod +x /root/start-${SERVICE}.sh
+
+# Default command: run the binary
+CMD ["sh", "./start-${SERVICE}.sh"]

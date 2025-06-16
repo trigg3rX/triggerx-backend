@@ -39,10 +39,6 @@ COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
 RUN mkdir -p /root/data/peerstore/attester
 RUN touch .env
 
-# Set environment variables (customize as needed)
-ENV GIN_MODE=release
-ENV LOG_LEVEL=info
-
 # Disable SSL verification for HTTP client
 ENV GODEBUG=http2client=0
 ENV HTTPS_PROXY=""
