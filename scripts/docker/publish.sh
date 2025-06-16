@@ -57,15 +57,21 @@ docker login
 if [[ "$SERVICE" == "all" ]]; then
     # Push all services
     for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+        # Convert service name to Docker-compatible name
+        DOCKER_NAME=$(echo $service | sed 's/\//-/g')
+
         echo "Pushing $service..."
-        docker push trigg3rx/triggerx-${service}:${VERSION}
-        docker push trigg3rx/triggerx-${service}:latest
+        docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
     done
 else
     # Push a single service
     echo "Pushing $SERVICE..."
-    docker push trigg3rx/triggerx-${SERVICE}:${VERSION}
-    docker push trigg3rx/triggerx-${SERVICE}:latest
+    # Convert service name to Docker-compatible name
+    DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
+
+    docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
 fi
 
 echo "Successfully tagged and pushed: triggerx-${SERVICE}:${VERSION} and latest tag"

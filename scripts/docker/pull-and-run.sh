@@ -60,16 +60,19 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
+# Convert service name to Docker-compatible name
+DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
+
 # Check if container already exists and remove it
-if docker ps -a | grep -q "triggerx-${SERVICE}"; then
-    echo "Stopping and removing existing container triggerx-${SERVICE}..."
-    docker stop triggerx-${SERVICE} 2>/dev/null
-    docker rm triggerx-${SERVICE} 2>/dev/null
+if docker ps -a | grep -q "triggerx-${DOCKER_NAME}"; then
+    echo "Stopping and removing existing container triggerx-${DOCKER_NAME}..."
+    docker stop triggerx-${DOCKER_NAME} 2>/dev/null
+    docker rm triggerx-${DOCKER_NAME} 2>/dev/null
 fi
 
 # Pull the image
-# echo "Pulling trigg3rx/triggerx-${SERVICE}:${VERSION}..."
-# docker pull trigg3rx/triggerx-${SERVICE}:${VERSION}
+echo "Pulling trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}..."
+docker pull trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
 
 # Check if .env file exists
 if [ ! -f .env ]; then
@@ -80,21 +83,21 @@ else
 fi
 
 # Run the container
-echo "Starting container triggerx-${SERVICE}..."
+echo "Starting container triggerx-${DOCKER_NAME}..."
 docker run -d \
-    --name triggerx-${SERVICE} \
+    --name triggerx-${DOCKER_NAME} \
     ${ENV_FILE} \
     -p ${PORT}:${PORT} \
     --restart unless-stopped \
-    trigg3rx/triggerx-${SERVICE}:${VERSION}
+    trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
 
 # Check if container started successfully
 if [ $? -eq 0 ]; then
     echo "Container started successfully!"
-    echo "Container ID: $(docker ps -q -f name=triggerx-${SERVICE})"
+    echo "Container ID: $(docker ps -q -f name=triggerx-${DOCKER_NAME})"
     echo "Port: ${PORT}"
-    echo "To view logs: docker logs triggerx-${SERVICE}"
-    echo "To stop: docker stop triggerx-${SERVICE}"
+    echo "To view logs: docker logs triggerx-${DOCKER_NAME}"
+    echo "To stop: docker stop triggerx-${DOCKER_NAME}"
 else
     echo "Error: Failed to start container"
     exit 1

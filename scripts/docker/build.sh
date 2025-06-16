@@ -54,27 +54,33 @@ fi
 if [[ "$SERVICE" == "all" ]]; then
     # Build all services
     for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+        # Convert service name to Docker-compatible name
+        DOCKER_NAME=$(echo $service | sed 's/\//-/g')
+
         echo "Building $service..."
         docker build --no-cache \
             -f Dockerfile.backend \
             --build-arg SERVICE=${service} \
-            -t triggerx-${service}:${VERSION} .
+            -t triggerx-${DOCKER_NAME}:${VERSION} .
 
         # Tag images with version and latest
-        docker tag triggerx-${service}:${VERSION} trigg3rx/triggerx-${service}:${VERSION}
-        docker tag triggerx-${service}:${VERSION} trigg3rx/triggerx-${service}:latest
+        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
     done
 else
+    # Convert service name to Docker-compatible name
+    DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
+
     # Build a single service
     echo "Building $SERVICE..."
     docker build --no-cache \
         -f Dockerfile.backend \
         --build-arg SERVICE=${SERVICE} \
-        -t triggerx-${SERVICE}:${VERSION} .
+        -t triggerx-${DOCKER_NAME}:${VERSION} .
 
     # Tag images with version and latest
-    docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:${VERSION}
-    docker tag triggerx-${SERVICE}:${VERSION} trigg3rx/triggerx-${SERVICE}:latest
+    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
 fi
 
 echo "Successfully built: triggerx-${SERVICE}:${VERSION} and latest"
