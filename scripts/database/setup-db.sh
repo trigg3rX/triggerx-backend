@@ -10,4 +10,4 @@ if [ $? -eq 0 ]; then
 else
     echo "Failed to initialize database schema"
     exit 1
-fi 
+fi

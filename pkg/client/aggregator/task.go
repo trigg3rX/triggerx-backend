@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -79,19 +78,4 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		"response", response)
 
 	return true, nil
-}
-
-// SendTaskResultWithAggregatorResponse sends a task result and waits for aggregator response, handling Redis stream transitions.
-func (c *AggregatorClient) SendTaskResultWithAggregatorResponse(ctx context.Context, taskResult *types.BroadcastDataForValidators, taskData *redis.TaskStreamData, performerID int64) error {
-	success, err := c.SendTaskToValidators(ctx, taskResult)
-	if err != nil {
-		return err
-	}
-	if !success {
-		return fmt.Errorf("failed to send task result to validators")
-	}
-	if c.TaskStreamManager == nil {
-		return fmt.Errorf("TaskStreamManager is not set on AggregatorClient")
-	}
-	return redis.WaitForAggregatorResponse(c.TaskStreamManager, taskData, performerID)
 }

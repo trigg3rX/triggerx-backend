@@ -111,7 +111,7 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID, t.logger)
+			ipfsContent, err := FetchIPFSContent(config.GetPinataHost(), dataCID, t.logger)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue
@@ -184,7 +184,7 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 			dataCID := string(event.Data)
 			t.logger.Debugf("Decoded Data: %s", dataCID)
 
-			ipfsContent, err := FetchIPFSContent(config.GetIPFSHost(), dataCID, t.logger)
+			ipfsContent, err := FetchIPFSContent(config.GetPinataHost(), dataCID, t.logger)
 			if err != nil {
 				t.logger.Errorf("Failed to fetch IPFS content: %v", err)
 				continue

@@ -131,7 +131,7 @@ func TestMain(t *testing.T) {
 			RetryDelay:       2 * time.Second,
 			RequestTimeout:   10 * time.Second,
 		}
-		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, nil)
+		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
 		assert.NoError(t, err, "Aggregator client creation should not fail")
 		assert.NotNil(t, aggClient, "Aggregator client should not be nil")
 		logger.Info("Aggregator client created successfully")
@@ -155,7 +155,7 @@ func TestMain(t *testing.T) {
 			RetryDelay:       2 * time.Second,
 			RequestTimeout:   10 * time.Second,
 		}
-		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, nil)
+		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
 		assert.NoError(t, err, "Aggregator client creation should not fail")
 
 		// Create scheduler
@@ -194,7 +194,7 @@ func TestMain(t *testing.T) {
 			RetryDelay:       2 * time.Second,
 			RequestTimeout:   10 * time.Second,
 		}
-		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg, nil)
+		aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
 		assert.NoError(t, err, "Aggregator client creation should not fail")
 
 		// Create scheduler

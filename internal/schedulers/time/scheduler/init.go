@@ -46,7 +46,7 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		schedulerSigningAddress: config.GetSchedulerSigningAddress(),
 		pollingInterval:         config.GetPollingInterval(),
 		pollingLookAhead:        config.GetPollingLookAhead(),
-		jobBatchSize:            config.GetJobBatchSize(),
+		jobBatchSize:            config.GetTaskBatchSize(),
 		performerLockTTL:        config.GetPerformerLockTTL(),
 		taskCacheTTL:            config.GetTaskCacheTTL(),
 		duplicateTaskWindow:     config.GetDuplicateTaskWindow(),

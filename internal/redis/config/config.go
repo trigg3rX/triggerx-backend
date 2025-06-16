@@ -12,6 +12,9 @@ import (
 type Config struct {
 	devMode bool
 
+	// Redis RPC port
+	redisRPCPort string
+
 	// Primary: Cloud Redis (Upstash) settings
 	upstashURL   string
 	upstashToken string
@@ -36,9 +39,9 @@ type Config struct {
 	streamMaxLen  int
 	jobStreamTTL  time.Duration
 	taskStreamTTL time.Duration
+	cacheTTL 	  time.Duration
+	cleanupInterval time.Duration
 
-	// API settings
-	apiPort string
 }
 
 var cfg Config
@@ -49,6 +52,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:       env.GetEnvBool("DEV_MODE", false),
+		redisRPCPort:  env.GetEnv("REDIS_RPC_PORT", "9009"),
 		upstashURL:    env.GetEnv("UPSTASH_REDIS_URL", ""),
 		upstashToken:  env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 		localAddr:     env.GetEnv("REDIS_ADDR", "localhost:6379"),
@@ -57,15 +61,17 @@ func Init() error {
 		poolSize:      env.GetEnvInt("REDIS_POOL_SIZE", 10),
 		minIdleConns:  env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
 		maxRetries:    env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:   env.GetEnvDuration("REDIS_DIAL_TIMEOUT_SEC", 5*time.Second),
-		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT_SEC", 3*time.Second),
-		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT_SEC", 3*time.Second),
-		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT_SEC", 4*time.Second),
+		dialTimeout:   env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:   env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:  env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:   env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
 		streamMaxLen:  env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL_HOURS", 120*time.Hour),
-		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL_HOURS", 1*time.Hour),
-		apiPort:       env.GetEnv("REDIS_API_PORT", "9009"),
+		jobStreamTTL:  env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
+		taskStreamTTL: env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
+		cacheTTL: 	   env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
+		cleanupInterval: env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
 	}
+	
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -96,6 +102,10 @@ func GetRedisType() string {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetRedisRPCPort() string {
+	return cfg.redisRPCPort
 }
 
 func GetUpstashURL() string {
@@ -158,6 +168,10 @@ func GetPoolTimeout() time.Duration {
 	return cfg.poolTimeout
 }
 
-func GetRedisAPIPort() string {
-	return cfg.apiPort
+func GetCacheTTL() time.Duration {
+	return cfg.cacheTTL
+}
+
+func GetCleanupInterval() time.Duration {
+	return cfg.cleanupInterval
 }

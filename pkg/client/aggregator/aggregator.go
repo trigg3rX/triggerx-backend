@@ -7,7 +7,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
@@ -19,11 +18,10 @@ type AggregatorClient struct {
 	privateKey        *ecdsa.PrivateKey
 	publicKey         *ecdsa.PublicKey
 	httpClient        *retry.HTTPClient
-	TaskStreamManager *redis.TaskStreamManager
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient
-func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig, tsm *redis.TaskStreamManager) (*AggregatorClient, error) {
+func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*AggregatorClient, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
@@ -58,7 +56,6 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig, tsm 
 		privateKey:        privateKey,
 		publicKey:         publicKey,
 		httpClient:        httpClient,
-		TaskStreamManager: tsm,
 	}, nil
 }
 

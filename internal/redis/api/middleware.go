@@ -1,7 +1,6 @@
 package api
 
 import (
-	"runtime"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,41 +33,6 @@ func (h *MetricsHandler) Metrics(c *gin.Context) {
 // Start initializes the metrics collection (call this once during startup)
 func (h *MetricsHandler) Start() {
 	h.collector.Start()
-}
-
-// RedisMetricsMiddleware collects Redis system metrics for API requests
-func RedisMetricsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Process request
-		c.Next()
-
-		// Update system metrics after request
-		UpdateSystemMetrics()
-	}
-}
-
-// StartBackgroundMetricsCollection starts periodic metrics collection
-// This should only be called once during service initialization
-func StartBackgroundMetricsCollection() {
-	// Update system metrics every 30 seconds
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			UpdateSystemMetrics()
-		}
-	}()
-}
-
-// UpdateSystemMetrics updates system metrics (similar to keeper's middleware)
-func UpdateSystemMetrics() {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-	metrics.MemoryUsageBytes.Set(float64(memStats.Alloc))
-	metrics.CPUUsagePercent.Set(float64(memStats.Sys))
-	metrics.GoroutinesActive.Set(float64(runtime.NumGoroutine()))
-	metrics.GCDurationSeconds.Set(float64(memStats.PauseTotalNs) / 1e9)
 }
 
 // TraceMiddleware adds trace ID to requests

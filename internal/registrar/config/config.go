@@ -22,9 +22,6 @@ type Config struct {
 	baseRPCURL      string
 	pollingInterval time.Duration
 
-	// IPFS Host
-	ipfsHost string
-
 	// ScyllaDB Host and Port
 	databaseHostAddress string
 	databaseHostPort    string
@@ -49,7 +46,6 @@ func Init() error {
 		ethRPCURL:                env.GetEnv("L1_RPC", ""),
 		baseRPCURL:               env.GetEnv("L2_RPC", ""),
 		pollingInterval:          env.GetEnvDuration("REGISTRAR_POLLING_INTERVAL", 15*time.Minute),
-		ipfsHost:                 env.GetEnv("IPFS_HOST", ""),
 		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		lastRewardsUpdate:        env.GetEnv("LAST_REWARDS_UPDATE", ""),
@@ -67,19 +63,31 @@ func Init() error {
 
 func validateConfig() error {
 	if env.IsEmpty(cfg.ethRPCURL) {
-		return fmt.Errorf("invalid eth rpc url: %s", cfg.ethRPCURL)
+		return fmt.Errorf("empty Ethereum RPC URL")
 	}
 	if env.IsEmpty(cfg.baseRPCURL) {
-		return fmt.Errorf("invalid base rpc url: %s", cfg.baseRPCURL)
+		return fmt.Errorf("empty Base RPC URL")
 	}
-	if env.IsEmpty(cfg.ipfsHost) {
-		return fmt.Errorf("invalid ipfs host: %s", cfg.ipfsHost)
+	if !env.IsValidEthAddress(cfg.avsGovernanceAddress){
+		return fmt.Errorf("invalid AVS Governance Address: %s", cfg.avsGovernanceAddress)
+	}
+	if !env.IsValidEthAddress(cfg.attestationCenterAddress) {
+		return fmt.Errorf("invalid Attestation Address: %s", cfg.attestationCenterAddress)
+	}
+	if !env.IsValidIPAddress(cfg.databaseHostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.databaseHostAddress)
+	}
+	if !env.IsValidPort(cfg.databaseHostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
 	}
 	if env.IsEmpty(cfg.lastRewardsUpdate) {
 		cfg.lastRewardsUpdate = time.Now().AddDate(0, 0, -1).Format(time.RFC3339)
 	}
 	if env.IsEmpty(cfg.pinataJWT) {
-		return fmt.Errorf("invalid pinata jwt: %s", cfg.pinataJWT)
+		return fmt.Errorf("empty Pinata JWT field")
+	}
+	if env.IsEmpty(cfg.pinataHost) {
+		return fmt.Errorf("empty Pinata Host field")
 	}
 	return nil
 }
@@ -98,10 +106,6 @@ func GetEthRPCURL() string {
 
 func GetBaseRPCURL() string {
 	return cfg.baseRPCURL
-}
-
-func GetIPFSHost() string {
-	return cfg.ipfsHost
 }
 
 func GetDatabaseHostAddress() string {

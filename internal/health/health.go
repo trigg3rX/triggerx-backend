@@ -155,7 +155,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			"version", keeperHealth.Version,
 		)
 
-		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetIpfsHost(), config.GetPinataJWT())
+		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
 			h.logger.Error("Failed to encrypt message for keeper",

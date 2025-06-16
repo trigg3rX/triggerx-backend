@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/api/handler"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -92,7 +92,6 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
 	s.router.Use(TraceMiddleware())
-	s.router.Use(RedisMetricsMiddleware())
 	s.router.Use(StreamMetricsMiddleware())
 	s.router.Use(LoggerMiddleware(s.logger))
 	s.router.Use(ErrorMiddleware(s.logger))
