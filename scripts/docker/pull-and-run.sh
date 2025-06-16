@@ -82,14 +82,26 @@ else
     ENV_FILE="-v ./.env:/root/.env"
 fi
 
-# Run the container
-echo "Starting container triggerx-${DOCKER_NAME}..."
-docker run -d \
-    --name triggerx-${DOCKER_NAME} \
-    ${ENV_FILE} \
-    -p ${PORT}:${PORT} \
-    --restart unless-stopped \
-    trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+if [[ "$SERVICE" == "registrar" ]]; then
+    # Run the container
+    echo "Starting container triggerx-${DOCKER_NAME}..."
+    docker run -d \
+        --name triggerx-${DOCKER_NAME} \
+        ${ENV_FILE} \
+        -v ./pkg/bindings/abi:/root/pkg/bindings/abi \
+        -p ${PORT}:${PORT} \
+        --restart unless-stopped \
+        trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+else
+    # Run the container
+    echo "Starting container triggerx-${DOCKER_NAME}..."
+    docker run -d \
+        --name triggerx-${DOCKER_NAME} \
+        ${ENV_FILE} \
+        -p ${PORT}:${PORT} \
+        --restart unless-stopped \
+        trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+fi
 
 # Check if container started successfully
 if [ $? -eq 0 ]; then
