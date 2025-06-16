@@ -20,27 +20,36 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleCondi
 
 	// Check if job is already scheduled
 	if _, exists := s.workers[jobData.JobID]; exists {
+		metrics.TrackCriticalError("duplicate_job_schedule")
 		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
 	}
 
 	// Check if we've reached the maximum number of workers
 	if len(s.workers) >= s.maxWorkers {
+		metrics.TrackCriticalError("max_workers_exceeded")
 		return fmt.Errorf("maximum number of workers (%d) reached, cannot schedule job %d", s.maxWorkers, jobData.JobID)
 	}
 
 	// Validate condition type
 	if !isValidConditionType(jobData.ConditionType) {
+		metrics.TrackCriticalError("invalid_condition_type")
 		return fmt.Errorf("unsupported condition type: %s", jobData.ConditionType)
 	}
 
 	// Validate value source type
 	if !isValidSourceType(jobData.ValueSourceType) {
+		metrics.TrackCriticalError("invalid_source_type")
 		return fmt.Errorf("unsupported value source type: %s", jobData.ValueSourceType)
 	}
+
+	// Track condition by type and source
+	metrics.TrackConditionByType(jobData.ConditionType)
+	metrics.TrackConditionBySource(jobData.ValueSourceType)
 
 	// Create condition worker
 	worker, err := s.createConditionWorker(jobData)
 	if err != nil {
+		metrics.TrackCriticalError("worker_creation_failed")
 		return fmt.Errorf("failed to create condition worker: %w", err)
 	}
 
@@ -51,7 +60,8 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *commonTypes.ScheduleCondi
 	go worker.Start()
 
 	// Update metrics
-	metrics.JobsScheduled.Inc()
+	metrics.TrackJobScheduled()
+	metrics.UpdateActiveWorkers(len(s.workers))
 
 	duration := time.Since(startTime)
 
@@ -97,6 +107,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	worker, exists := s.workers[jobID]
 	if !exists {
+		metrics.TrackCriticalError("job_not_found")
 		return fmt.Errorf("job %d is not scheduled", jobID)
 	}
 
@@ -105,6 +116,12 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	// Remove from workers map
 	delete(s.workers, jobID)
+
+	// Update active workers count
+	metrics.UpdateActiveWorkers(len(s.workers))
+
+	// Track job completion
+	metrics.TrackJobCompleted("unscheduled")
 
 	s.logger.Info("Condition job unscheduled successfully", "job_id", jobID)
 	return nil

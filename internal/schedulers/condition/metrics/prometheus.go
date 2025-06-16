@@ -71,7 +71,7 @@ var (
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
 		Name:      "scheduler_jobs_completed",
-		Help:      "Total number of jobs completed successfully",
+		Help:      "Total number of jobs completed successfully or failed",
 	}, []string{"status"})
 
 	// Active workers
@@ -236,6 +236,21 @@ func StartMetricsCollection() {
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+			collectWorkerMetrics()
+			collectDatabaseMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
 		}
 	}()
 }
