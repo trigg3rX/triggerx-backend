@@ -42,7 +42,7 @@ func (d *Downloader) DownloadFile(ctx context.Context, url string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("failed to download file: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -53,7 +53,7 @@ func (d *Downloader) DownloadFile(ctx context.Context, url string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("failed to create local file: %w", err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
 
 type ClaimFundRequest struct {
@@ -39,10 +40,13 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
+	// Track database operation for checking wallet balance
+	trackDBOp := metrics.TrackDBOperation("read", "wallet_balance")
+
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
-		rpcURL = fmt.Sprintf("https://optimism-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+		rpcURL = fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "base_sepolia":
 		rpcURL = fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	default:
@@ -73,7 +77,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	}
 
 	if balance.Cmp(thresholdWei) >= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": "Wallet balance is above the threshold",
 		})
@@ -137,4 +141,6 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		Message:         "Funds sent successfully",
 		TransactionHash: signedTx.Hash().Hex(),
 	})
+
+	trackDBOp(nil) // No error if we reach this point
 }

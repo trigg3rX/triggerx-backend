@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 )
 
@@ -18,6 +19,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 		return 0, fmt.Errorf("missing IPFS URLs")
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "task_fees")
 	urlList := strings.Split(ipfsURLs, ",")
 	totalFee := 0.0
 	var mu sync.Mutex
@@ -29,6 +31,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 		Docker: h.docker,
 	}, h.logger)
 	if err != nil {
+		trackDBOp(err)
 		return 0, fmt.Errorf("failed to create code executor: %v", err)
 	}
 
@@ -72,6 +75,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 	}
 
 	wg.Wait()
+	trackDBOp(nil)
 	return totalFee, nil
 }
 

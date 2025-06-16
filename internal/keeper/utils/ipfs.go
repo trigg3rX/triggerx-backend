@@ -50,7 +50,12 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log the error but don't return it since we're in a defer
+			fmt.Printf("Error closing response body: %v\n", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to upload to IPFS: status code %d", resp.StatusCode)

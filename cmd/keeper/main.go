@@ -179,7 +179,9 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, c
 	logger.Info("[1/3] Process: Health client Closed")
 
 	// Close code executor
-	codeExecutor.Close()
+	if err := codeExecutor.Close(); err != nil {
+		logger.Error("Error closing code executor", "error", err)
+	}
 	logger.Info("[2/3] Process: Code executor Closed")
 
 	// Shutdown server gracefully

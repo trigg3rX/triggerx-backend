@@ -44,9 +44,6 @@ func NewValidator(logger logging.Logger) *Validator {
 
 func (v *Validator) GinMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get the request body
-		var jobDataArray []types.CreateJobData
-
 		// Read the request body first
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
@@ -65,12 +62,57 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		// Create a new reader with the body and restore it
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		// Try to bind the JSON
-		if err := c.ShouldBindJSON(&jobDataArray); err != nil {
-			v.logger.Errorf("Error binding JSON: %v", err)
+		// Validate based on the endpoint
+		var validationError error
+		switch c.Request.URL.Path {
+		case "/api/jobs":
+			var jobDataArray []types.CreateJobData
+			if err := c.ShouldBindJSON(&jobDataArray); err != nil {
+				validationError = err
+			} else {
+				for _, jobData := range jobDataArray {
+					if err := v.validate.Struct(jobData); err != nil {
+						validationError = err
+						break
+					}
+				}
+			}
+
+		case "/api/tasks":
+			var taskData types.CreateTaskDataRequest
+			if err := c.ShouldBindJSON(&taskData); err != nil {
+				validationError = err
+			} else {
+				validationError = v.validate.Struct(taskData)
+			}
+
+		case "/api/keepers":
+			var keeperData types.CreateKeeperData
+			if err := c.ShouldBindJSON(&keeperData); err != nil {
+				validationError = err
+			} else {
+				validationError = v.validate.Struct(keeperData)
+			}
+
+		case "/api/admin/api-keys":
+			var apiKeyData types.CreateApiKeyRequest
+			if err := c.ShouldBindJSON(&apiKeyData); err != nil {
+				validationError = err
+			} else {
+				validationError = v.validate.Struct(apiKeyData)
+			}
+
+		default:
+			// For unknown endpoints, just pass through
+			c.Next()
+			return
+		}
+
+		if validationError != nil {
+			v.logger.Errorf("Validation error: %v", validationError)
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Invalid JSON payload",
-				"details": err.Error(),
+				"error":   "Validation failed",
+				"details": validationError.Error(),
 			})
 			c.Abort()
 			return

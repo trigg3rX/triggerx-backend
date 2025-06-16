@@ -4,34 +4,52 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 func (h *Handler) CreateKeeperData(c *gin.Context) {
 	var keeperData types.CreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
-		h.logger.Errorf("Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.logger.Errorf("[CreateKeeperData] Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request format",
+			"code":  "INVALID_REQUEST",
+		})
 		return
 	}
 
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
 	existingKeeperID, err := h.keeperRepository.CheckKeeperExists(keeperData.KeeperAddress)
+	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("Error checking if keeper exists: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.logger.Errorf("[CreateKeeperData] Database error while checking keeper existence: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database error while checking keeper status",
+			"code":  "DB_ERROR",
+		})
 		return
 	}
 
 	if existingKeeperID != -1 {
-		h.logger.Infof(" Keeper already exists with ID: %d", existingKeeperID)
-		c.JSON(http.StatusOK, gin.H{"message": "Keeper already exists"})
+		h.logger.Infof("[CreateKeeperData] Keeper already exists with ID: %d", existingKeeperID)
+		c.JSON(http.StatusOK, gin.H{
+			"message":   "Keeper already exists",
+			"keeper_id": existingKeeperID,
+			"status":    "existing",
+		})
 		return
 	}
 
+	trackDBOp = metrics.TrackDBOperation("create", "keeper_data")
 	currentKeeperID, err := h.keeperRepository.CreateKeeper(keeperData)
+	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("Error creating keeper: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.logger.Errorf("[CreateKeeperData] Error creating keeper data: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create keeper",
+			"code":  "KEEPER_CREATION_ERROR",
+		})
 		return
 	}
 
@@ -60,7 +78,6 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	// 	h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
 	// }
 
-	h.logger.Infof(" Successfully created keeper with ID: %d", currentKeeperID)
-
-	c.JSON(http.StatusCreated, gin.H{"message": "Keeper created successfully"})
+	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
+	c.JSON(http.StatusCreated, gin.H{"keeper_id": currentKeeperID})
 }

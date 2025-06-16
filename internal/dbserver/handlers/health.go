@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
 
 // HealthCheck provides a health check endpoint for the database server
@@ -15,6 +16,9 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	dbStatus := "healthy"
 	dbError := ""
 
+	// Track database health check operation
+	trackDBOp := metrics.TrackDBOperation("read", "system_health")
+
 	// Use a simple system query to test the connection
 	query := h.db.Session().Query("SELECT now() FROM system.local")
 	var timestamp time.Time
@@ -22,6 +26,11 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 		dbStatus = "unhealthy"
 		dbError = err.Error()
 		h.logger.Errorf("Database health check failed: %v", err)
+		trackDBOp(err)
+		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc()
+	} else {
+		trackDBOp(nil)
+		metrics.HealthChecksTotal.WithLabelValues("healthy").Inc()
 	}
 
 	// Prepare response

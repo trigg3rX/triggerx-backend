@@ -5,27 +5,35 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
 
 func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 	userAddress := strings.ToLower(c.Param("address"))
 	if userAddress == "" {
 		h.logger.Errorf("[GetUserDataByAddress] Invalid user address: %v", userAddress)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user address",
+			"code":  "INVALID_ADDRESS",
+		})
 		return
 	}
 
 	h.logger.Infof("[GetUserDataByAddress] Retrieving user with address: %s", userAddress)
 
+	trackDBOp := metrics.TrackDBOperation("read", "user_data")
 	userID, userData, err := h.userRepository.GetUserDataByAddress(userAddress)
+	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetUserData] Error retrieving user with ID %d: %v", userID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "User not found",
+			"code":  "USER_NOT_FOUND",
+		})
 		return
 	}
 
 	h.logger.Infof("[GetUserData] Successfully retrieved user with ID: %d", userID)
-
 	c.JSON(http.StatusOK, userData)
 }
 
@@ -36,7 +44,9 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	var userPoints float64
 	var keeperPoints float64
 
+	trackDBOp := metrics.TrackDBOperation("read", "user_data")
 	userPoints, err := h.userRepository.GetUserPointsByAddress(walletAddress)
+	trackDBOp(err)
 	if err != nil {
 		userPoints = 0
 	}
@@ -46,7 +56,7 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	// 	keeperPoints = 0
 	// }
 
-	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %d + %d", walletAddress, userPoints, keeperPoints)
+	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %.2f + %.2f", walletAddress, userPoints, keeperPoints)
 
 	totalPoints := userPoints + keeperPoints
 
