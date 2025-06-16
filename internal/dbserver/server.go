@@ -188,6 +188,11 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
 	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
 	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
+
+	// Keeper routes
+	keeper := protected.Group("/keeper")
+	keeper.Use(s.apiKeyAuth.KeeperMiddleware())
+	// Keeper-specific routes will be added here later
 }
 
 func (s *Server) Start(port string) error {

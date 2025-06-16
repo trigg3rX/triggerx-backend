@@ -52,8 +52,7 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			// Log the error but don't return it since we're in a defer
-			fmt.Printf("Error closing response body: %v\n", err)
+			fmt.Printf("Warning: failed to close response body: %v\n", err)
 		}
 	}()
 

@@ -18,7 +18,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 	// Fetch the tx details from the action data
 	txHash := common.HexToHash(actionData.ActionTxHash)
 	receipt, err := client.TransactionReceipt(context.Background(), txHash)
-	if err != nil {
+	if err != nil || receipt == nil {
 		_, isPending, err := client.TransactionByHash(context.Background(), txHash)
 		if err != nil {
 			return false, fmt.Errorf("failed to get transaction: %v", err)

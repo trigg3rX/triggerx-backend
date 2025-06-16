@@ -85,8 +85,7 @@ func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			// Log the error but don't return it since we're in a defer
-			fmt.Printf("Error closing connection: %v\n", err)
+			fmt.Printf("Warning: failed to close connection: %v\n", err)
 		}
 	}()
 

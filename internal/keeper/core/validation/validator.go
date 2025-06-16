@@ -52,7 +52,7 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSDat
 		v.logger.Error("Trigger validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
 		return false, err
 	}
-	v.logger.Info("Trigger validation passed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID)
+	v.logger.Info("Trigger validation successful", "traceID", traceID)
 
 	// check if the action is valid
 	isActionTrue, err := v.ValidateAction(&ipfsData.TaskData.TargetData[0], &ipfsData.TaskData.TriggerData[0], ipfsData.ActionData, client, traceID)
@@ -76,7 +76,13 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSDat
 		v.logger.Error("Performer signature validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
 		return false, err
 	}
-	v.logger.Info("Performer signature validation passed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID)
+	v.logger.Info("Target validation successful", "traceID", traceID)
 
+	return true, nil
+}
+
+// ValidateTarget validates a target
+func (v *TaskValidator) ValidateTarget(targetData *types.TaskTargetData, traceID string) (bool, error) {
+	// TODO: Implement target validation
 	return true, nil
 }

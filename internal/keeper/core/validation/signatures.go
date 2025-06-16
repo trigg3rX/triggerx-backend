@@ -8,16 +8,21 @@ import (
 )
 
 func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
+	logger := v.logger.With("traceID", traceID)
+
 	// check if the scheduler signature is valid
 	if task.SchedulerSignature == nil {
+		logger.Error("Scheduler signature data is missing")
 		return false, fmt.Errorf("scheduler signature data is missing")
 	}
 
 	if task.SchedulerSignature.SchedulerSignature == "" {
+		logger.Error("Scheduler signature is empty")
 		return false, fmt.Errorf("scheduler signature is empty")
 	}
 
 	if task.SchedulerSignature.SchedulerSigningAddress == "" {
+		logger.Error("Scheduler signing address is empty")
 		return false, fmt.Errorf("scheduler signing address is empty")
 	}
 
@@ -41,22 +46,34 @@ func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKee
 		task.SchedulerSignature.SchedulerSigningAddress,
 	)
 	if err != nil {
+		logger.Error("Failed to verify scheduler signature", "error", err)
 		return false, fmt.Errorf("failed to verify scheduler signature: %w", err)
 	}
 
-	return isValid, nil
+	if !isValid {
+		logger.Error("Scheduler signature verification failed")
+		return false, fmt.Errorf("scheduler signature verification failed")
+	}
+
+	logger.Info("Scheduler signature verification successful")
+	return true, nil
 }
 
 func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, traceID string) (bool, error) {
+	logger := v.logger.With("traceID", traceID)
+
 	if ipfsData.PerformerSignature == nil {
+		logger.Error("Performer signature data is missing")
 		return false, fmt.Errorf("performer signature data is missing")
 	}
 
 	if ipfsData.PerformerSignature.PerformerSignature == "" {
+		logger.Error("Performer signature is empty")
 		return false, fmt.Errorf("performer signature is empty")
 	}
 
 	if ipfsData.PerformerSignature.PerformerSigningAddress == "" {
+		logger.Error("Performer signing address is empty")
 		return false, fmt.Errorf("performer signing address is empty")
 	}
 
@@ -85,8 +102,15 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		ipfsData.PerformerSignature.PerformerSigningAddress,
 	)
 	if err != nil {
+		logger.Error("Failed to verify performer signature", "error", err)
 		return false, fmt.Errorf("failed to verify performer signature: %w", err)
 	}
 
-	return isValid, nil
+	if !isValid {
+		logger.Error("Performer signature verification failed")
+		return false, fmt.Errorf("performer signature verification failed")
+	}
+
+	logger.Info("Performer signature verification successful")
+	return true, nil
 }

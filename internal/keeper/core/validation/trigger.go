@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )

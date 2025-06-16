@@ -31,6 +31,9 @@ func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (
 	if err != nil {
 		v.logger.Warn("Failed to establish TLS connection for validation", "trace_id", traceID, "error", err)
 	}
+	if connState == nil {
+		return false, fmt.Errorf("failed to establish TLS connection for validation")
+	}
 
 	// Verify the certificate hash matches what was recorded in the proof
 	if len(connState.PeerCertificates) == 0 {

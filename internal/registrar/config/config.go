@@ -31,8 +31,9 @@ type Config struct {
 
 	lastRewardsUpdate string
 
-	// Pinata JWT
-	pinataJWT string
+	// Pinata JWT and Host
+	pinataJWT  string
+	pinataHost string
 }
 
 var cfg Config
@@ -53,6 +54,7 @@ func Init() error {
 		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		lastRewardsUpdate:        env.GetEnv("LAST_REWARDS_UPDATE", ""),
 		pinataJWT:                env.GetEnv("PINATA_JWT", ""),
+		pinataHost:               env.GetEnv("PINATA_HOST", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -124,4 +126,8 @@ func IsDevMode() bool {
 
 func GetPinataJWT() string {
 	return cfg.pinataJWT
+}
+
+func GetPinataHost() string {
+	return cfg.pinataHost
 }

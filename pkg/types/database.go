@@ -168,6 +168,7 @@ type ApiKey struct {
 	Key          string    `json:"key"`
 	Owner        string    `json:"owner"`
 	IsActive     bool      `json:"is_active"`
+	IsKeeper     bool      `json:"is_keeper"`
 	RateLimit    int       `json:"rate_limit"`
 	SuccessCount int64     `json:"success_count"`
 	FailedCount  int64     `json:"failed_count"`

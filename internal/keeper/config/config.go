@@ -236,3 +236,8 @@ func GetTLSProofHost() string {
 func GetTLSProofPort() string {
 	return cfg.tlsProofPort
 }
+
+// SetKeeperAddress sets the keeper address in the config (for testing)
+func SetKeeperAddress(addr string) {
+	cfg.keeperAddress = addr
+}
