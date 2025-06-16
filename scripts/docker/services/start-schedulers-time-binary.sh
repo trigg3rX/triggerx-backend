@@ -6,4 +6,4 @@ if [ -f .env ]; then
 fi
 
 # Run the service
-exec /app/schedulers/time
+exec /root/schedulers-time
