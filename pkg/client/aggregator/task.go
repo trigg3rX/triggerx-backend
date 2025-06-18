@@ -2,6 +2,7 @@ package aggregator
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -24,6 +25,11 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		c.logger.Error("Failed to convert private key to ECDSA", "error", err)
 		return false, fmt.Errorf("failed to convert private key to ECDSA: %w", err)
 	}
+	publicKey, ok := privateKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		c.logger.Error("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+	}
+	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
 
 	// Prepare ABI arguments
 	arguments := abi.Arguments{
@@ -36,7 +42,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	encodedData, err := arguments.Pack(
 		taskResult.ProofOfTask,
 		taskResult.Data,
-		common.HexToAddress(taskResult.PerformerAddress),
+		common.HexToAddress(performerAddress),
 		big.NewInt(int64(taskResult.TaskDefinitionID)),
 	)
 	if err != nil {
@@ -61,8 +67,10 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		ProofOfTask:      taskResult.ProofOfTask,
 		Data:             "0x" + hex.EncodeToString(taskResult.Data),
 		TaskDefinitionID: taskResult.TaskDefinitionID,
-		PerformerAddress: taskResult.PerformerAddress,
+		PerformerAddress: performerAddress,
 		Signature:        serializedSignature,
+		SignatureType:    "ecdsa",
+		TargetChainID:    84532,
 	}
 
 	var response interface{}

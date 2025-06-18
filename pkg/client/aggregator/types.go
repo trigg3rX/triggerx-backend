@@ -29,4 +29,6 @@ type CallParams struct {
 	TaskDefinitionID int
 	PerformerAddress string
 	Signature        string
+	SignatureType    string
+	TargetChainID    int
 }
