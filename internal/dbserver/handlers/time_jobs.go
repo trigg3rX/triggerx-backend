@@ -5,32 +5,52 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) GetTimeBasedJobs(c *gin.Context) {
-	var pollInterval int64
-	if err := c.ShouldBindQuery(&pollInterval); err != nil {
-		h.logger.Errorf("[GetTimeBasedJobs] Error getting poll interval: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
+	pollLookAhead := config.GetPollingLookAhead()
+	lookAheadTime := time.Now().Add(time.Duration(pollLookAhead) * time.Second)
 
-	nextExecutionTimestamp := time.Now().Add(time.Duration(pollInterval) * time.Second)
+	var tasks []commonTypes.ScheduleTimeTaskData
+	var err error
 
-	var jobs []types.TimeJobData
-
-	jobs, err := h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(nextExecutionTimestamp)
+	trackDBOp := metrics.TrackDBOperation("read", "time_jobs")
+	tasks, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(lookAheadTime)
+	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTimeBasedJobs] Error retrieving time based jobs: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time based tasks: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve time based tasks",
+			"code":  "TIME_TASKS_FETCH_ERROR",
+			"tasks": tasks,
+		})
 		return
 	}
 
-	if jobs == nil {
-		jobs = []types.TimeJobData{}
+	for i := range tasks {
+		trackDBOp = metrics.TrackDBOperation("create", "task_data")
+		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
+			JobID:            tasks[i].TaskTargetData.JobID,
+			TaskDefinitionID: tasks[i].TaskDefinitionID,
+		})
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create task data",
+				"code":  "TASK_CREATION_ERROR",
+			})
+			continue
+		}
+		tasks[i].TaskID = taskID
 	}
 
-	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(jobs))
-	c.JSON(http.StatusOK, jobs)
+	h.logger.Infof("[GetTimeBasedJobs] Tasks: %v", tasks)
+
+	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
+	c.JSON(http.StatusOK, tasks)
 }

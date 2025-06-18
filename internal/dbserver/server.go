@@ -6,28 +6,30 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/redis"
 )
 
 type Server struct {
 	router             *gin.Engine
 	db                 *database.Connection
 	logger             logging.Logger
-	metricsServer      *metrics.MetricsServer
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
+	docker             docker.DockerConfig
 }
 
-func NewServer(db *database.Connection, processName logging.ProcessName) *Server {
+func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -35,7 +37,15 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	logger := logging.GetServiceLogger()
+	// Start metrics collection
+	metrics.StartMetricsCollection()
+	metrics.StartSystemMetricsCollection()
+	metrics.TrackDBConnections()
+
+	// Apply middleware in the correct order
+	router.Use(middleware.RecoveryMiddleware(logger))          // First, to catch panics
+	router.Use(middleware.TimeoutMiddleware(30 * time.Second)) // Set appropriate timeout
+	router.Use(middleware.MetricsMiddleware())                 // Track HTTP metrics
 
 	// Configure CORS
 	router.Use(func(c *gin.Context) {
@@ -66,52 +76,70 @@ func NewServer(db *database.Connection, processName logging.ProcessName) *Server
 		},
 	}
 
-	// Initialize metrics server
-	metricsServer := metrics.NewMetricsServer(db, logger)
-
-	// Initialize Redis client
-	redisClient, err := redis.NewClient(logger)
+	// Initialize Redis client with enhanced features
+	var redisClient *redis.Client
+	client, err := redis.NewClient(logger)
 	if err != nil {
 		logger.Errorf("Failed to initialize Redis client: %v", err)
+	} else {
+		redisClient = client
+		logger.Infof("Redis client initialized successfully")
 	}
 
 	// Initialize rate limiter
 	var rateLimiter *middleware.RateLimiter
 	if redisClient != nil {
+		var err error
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
 		if err != nil {
 			logger.Errorf("Failed to initialize rate limiter: %v", err)
+		} else {
+			logger.Info("Rate limiter initialized successfully")
 		}
+	} else {
+		logger.Warn("Rate limiter disabled - Redis client not available")
 	}
 
 	s := &Server{
-		router:        router,
-		db:            db,
-		logger:        logger,
-		metricsServer: metricsServer,
-		rateLimiter:   rateLimiter,
-		redisClient:   redisClient,
-		validator:     middleware.NewValidator(logger),
+		router:      router,
+		db:          db,
+		logger:      logger,
+		rateLimiter: rateLimiter,
+		redisClient: redisClient,
+		validator:   middleware.NewValidator(logger),
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),
 			BotToken:      config.GetBotToken(),
 		},
+		docker: docker.DockerConfig{
+			Image:          "golang:latest",
+			TimeoutSeconds: 600,
+			AutoCleanup:    true,
+			MemoryLimit:    "1024m",
+			CPULimit:       1.0,
+		},
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
 
-	// Apply middleware in the correct order
-	router.Use(middleware.RetryMiddleware(retryConfig)) // Retry middleware first
-	// Rate limiting is handled through the API key auth middleware
+	// Apply retry middleware only to API routes
+	apiGroup := router.Group("/api")
+	apiGroup.Use(middleware.RetryMiddleware(retryConfig, logger))
 
 	return s
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.docker)
+
+	// Register metrics endpoint at root level without middleware
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	api := router.Group("/api")
+
+	// Health check route - no authentication required
+	api.GET("/health", handler.HealthCheck)
 
 	// Public routes
 	api.GET("/users/:address", handler.GetUserDataByAddress)
@@ -122,7 +150,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	// Apply validation middleware to routes that need it
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
-	api.GET("/jobs/time", handler.GetTimeBasedJobs)
+	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
@@ -134,7 +162,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
 	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
 	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
-	api.GET("/tasks/job/:id", handler.GetTasksByJobID)
+	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
 	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.GET("/keepers/performers", handler.GetPerformers)
@@ -160,15 +188,22 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
 	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
 	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
+
+	// Keeper routes
+	keeper := protected.Group("/keeper")
+	keeper.Use(s.apiKeyAuth.KeeperMiddleware())
+	// Keeper-specific routes will be added here later
 }
 
 func (s *Server) Start(port string) error {
 	s.logger.Infof("Starting server on port %s", port)
 
-	s.metricsServer.Start()
-
 	if s.redisClient != nil {
-		defer s.redisClient.Close()
+		defer func() {
+			if err := s.redisClient.Close(); err != nil {
+				s.logger.Errorf("Failed to close Redis client: %v", err)
+			}
+		}()
 	}
 
 	return s.router.Run(fmt.Sprintf(":%s", port))

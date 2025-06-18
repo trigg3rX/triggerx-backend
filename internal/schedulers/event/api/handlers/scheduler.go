@@ -25,7 +25,7 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.EventBasedS
 
 // ScheduleJob schedules a new event-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
-	var req scheduler.JobScheduleRequest
+	var req types.ScheduleEventJobData
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -38,20 +38,16 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	}
 
 	// Convert request to EventJobData
-	jobData := &types.EventJobData{
-		JobID:                         req.JobID,
-		TimeFrame:                     req.TimeFrame,
-		Recurring:                     req.Recurring,
-		TriggerChainID:                req.TriggerChainID,
-		TriggerContractAddress:        req.TriggerContractAddress,
-		TriggerEvent:                  req.TriggerEvent,
-		TargetChainID:                 req.TargetChainID,
-		TargetContractAddress:         req.TargetContractAddress,
-		TargetFunction:                req.TargetFunction,
-		ABI:                           req.ABI,
-		ArgType:                       req.ArgType,
-		Arguments:                     req.Arguments,
-		DynamicArgumentsScriptIPFSUrl: req.DynamicArgumentsScriptIPFSUrl,
+	jobData := &types.ScheduleEventJobData{
+		JobID:                     req.JobID,
+		TaskDefinitionID:          req.TaskDefinitionID,
+		LastExecutedAt:            req.LastExecutedAt,
+		ExpirationTime:            req.ExpirationTime,
+		Recurring:                 req.Recurring,
+		TriggerChainID:            req.TriggerChainID,
+		TriggerContractAddress:    req.TriggerContractAddress,
+		TriggerEvent:              req.TriggerEvent,
+		TaskTargetData:            req.TaskTargetData,
 	}
 
 	// Schedule the job

@@ -58,12 +58,12 @@ CREATE TABLE IF NOT EXISTS job_data (
 -- Create Time_Job_data table
 CREATE TABLE IF NOT EXISTS time_job_data (
     job_id bigint,
-    time_frame bigint,
-    recurring boolean,
-    time_interval bigint,
+    task_definition_id int,
     schedule_type text,
+    time_interval bigint,
     cron_expression text,
     specific_schedule text,
+    timezone text,
     next_execution_timestamp timestamp,
     target_chain_id text,
     target_contract_address text,
@@ -77,14 +77,14 @@ CREATE TABLE IF NOT EXISTS time_job_data (
     created_at timestamp,
     updated_at timestamp,
     last_executed_at timestamp,
-    timezone text,
+    expiration_time timestamp,
     PRIMARY KEY (job_id)
 );
 
 -- Create Event_Job_data table
 CREATE TABLE IF NOT EXISTS event_job_data (
     job_id bigint,
-    time_frame bigint,
+    task_definition_id int,
     recurring boolean,
     trigger_chain_id text,
     trigger_contract_address text,
@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS event_job_data (
     created_at timestamp,
     updated_at timestamp,
     last_executed_at timestamp,
+    expiration_time timestamp,
     timezone text,
     PRIMARY KEY (job_id)
 );
@@ -108,7 +109,6 @@ CREATE TABLE IF NOT EXISTS event_job_data (
 -- Create Condition_Job_data table
 CREATE TABLE IF NOT EXISTS condition_job_data (
     job_id bigint,
-    time_frame bigint,
     recurring boolean,
     condition_type text,
     upper_limit double,
@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
     created_at timestamp,
     updated_at timestamp,
     last_executed_at timestamp,
+    expiration_time timestamp,
     timezone text,
     PRIMARY KEY (job_id)
 );
@@ -155,14 +156,14 @@ CREATE TABLE IF NOT EXISTS task_data (
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
     keeper_id bigint,
-    keeper_name text,
     keeper_address text,
+    keeper_name text,
     consensus_address text,
     registered_tx text,
-    operator_id text,
+    operator_id bigint,
     rewards_address text,
-    rewards_booster float,
-    voting_power text,
+    rewards_booster double,
+    voting_power bigint,
     keeper_points double,
     connection_address text,
     peer_id text,
@@ -202,6 +203,7 @@ DROP INDEX IF EXISTS triggerx.job_data_timezone_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_created_at_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_updated_at_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_last_executed_at_idx;
+DROP INDEX IF EXISTS triggerx.time_job_data_next_execution_timestamp_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_timezone_idx;
 
 DROP INDEX IF EXISTS triggerx.event_job_data_created_at_idx;
@@ -226,6 +228,7 @@ CREATE INDEX IF NOT EXISTS time_job_data_created_at_idx ON triggerx.time_job_dat
 CREATE INDEX IF NOT EXISTS time_job_data_updated_at_idx ON triggerx.time_job_data (updated_at);
 CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);
 CREATE INDEX IF NOT EXISTS time_job_data_timezone_idx ON triggerx.time_job_data (timezone);
+CREATE INDEX IF NOT EXISTS time_job_data_next_execution_timestamp_idx ON triggerx.time_job_data (next_execution_timestamp);
 
 -- Create indexes for event_job_data table
 CREATE INDEX IF NOT EXISTS event_job_data_created_at_idx ON triggerx.event_job_data (created_at);

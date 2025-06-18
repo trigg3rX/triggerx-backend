@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Helper functions
@@ -25,5 +26,29 @@ func GetEnvBool(key string, defaultValue bool) bool {
 		return boolValue
 	}
 	fmt.Printf("Environment variable %s not found, using default value: %t\n", key, defaultValue)
+	return defaultValue
+}
+
+func GetEnvInt(key string, defaultValue int) int {
+	if value, exists := os.LookupEnv(key); exists {
+		intValue, err := strconv.Atoi(value)
+		if err != nil {
+			return defaultValue
+		}
+		return intValue
+	}
+	fmt.Printf("Environment variable %s not found, using default value: %d\n", key, defaultValue)
+	return defaultValue
+}
+
+func GetEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value, exists := os.LookupEnv(key); exists {
+		duration, err := time.ParseDuration(value)
+		if err != nil {
+			return defaultValue
+		}
+		return duration
+	}
+	fmt.Printf("Environment variable %s not found, using default value: %v\n", key, defaultValue)
 	return defaultValue
 }

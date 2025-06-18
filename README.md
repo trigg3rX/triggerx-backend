@@ -4,10 +4,7 @@ The **TriggerX Keeper Backend** is a decentralized system designed to automate a
 
 ---
 
-<!-- ![Tests](https://github.com/trigg3rX/triggerx-backend/actions/workflows/tests.yml/badge.svg) -->
-![Build](https://github.com/trigg3rX/triggerx-backend/actions/workflows/build.yml/badge.svg)
-![Dependency](https://github.com/trigg3rX/triggerx-backend/actions/workflows/dependency.yml/badge.svg)
-![Lint](https://github.com/trigg3rX/triggerx-backend/actions/workflows/go_lint.yml/badge.svg)
+<p align="center"><img src="https://github.com/trigg3rX/triggerx-backend/actions/workflows/build.yml/badge.svg" alt="Build" /> <img src="https://github.com/trigg3rX/triggerx-backend/actions/workflows/go_lint.yml/badge.svg" alt="Lint" /></p>
 
 ---
 
@@ -20,6 +17,7 @@ The **TriggerX Keeper Backend** is a decentralized system designed to automate a
     - [Schedulers](#schedulers)
     - [Keepers](#keepers)
     - [Aggregator](#aggregator)
+      - [Developer Notes can be found here at devNotes.md](#developer-notes-can-be-found-here-at-devnotesmd)
   - [Steps to Run the Keeper Backend](#steps-to-run-the-keeper-backend)
 
 ---
@@ -67,6 +65,8 @@ The **Aggregator** ensures the consensus of tasks by:
 - Aggregating tasks from multiple Keepers.
 - Submitting the tasks to the blockchain.
 - Acting as a bootstrap for the p2p network.
+
+#### Developer Notes can be found here at [devNotes.md](docs/devNotes.md)
 
 ---
 

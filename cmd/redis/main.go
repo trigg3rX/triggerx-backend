@@ -8,86 +8,145 @@ import (
 	"syscall"
 	"time"
 
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/api"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+const shutdownTimeout = 10 * time.Second
+
 func main() {
+	// Initialize configuration
+	if err := config.Init(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
+	}
+
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
-		ProcessName:     logging.RedisProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		ProcessName:   logging.RedisProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
-		os.Exit(1)
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
-	logger.Info("Starting Redis service main...")
-	defer func() {
-		logger.Info("Shutting down Redis service main...")
-		if err := logging.Shutdown(); err != nil {
-			logger.Warnf("Logger shutdown error: %v", err)
+
+	logger.Info("Starting Redis service ...")
+
+	// Initialize metrics collector
+	collector := metrics.NewCollector()
+	logger.Info("Metrics collector Initialised")
+	collector.Start()
+
+	// Create Redis client and verify connection
+	client, err := redis.NewRedisClient(logger)
+	if err != nil {
+		logger.Fatal("Failed to create Redis client", "error", err)
+	}
+
+	// Test Redis connection
+	if err := client.Ping(); err != nil {
+		logger.Fatal("Redis is not reachable", "error", err)
+	}
+	logger.Info("Redis client Initialised")
+
+	// Initialize task stream manager
+	taskStreamMgr, err := redis.NewTaskStreamManager(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
+	}
+	logger.Info("Task stream manager Initialised")
+
+	// Initialize job stream manager
+	jobStreamMgr, err := redis.NewJobStreamManager(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
+	}
+	logger.Info("Job stream manager Initialised")
+
+	// Initialize API server
+	serverCfg := api.Config{
+		Port:           config.GetRedisRPCPort(),
+		ReadTimeout:    config.GetReadTimeout(),
+		WriteTimeout:   config.GetWriteTimeout(),
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	deps := api.Dependencies{
+		Logger:           logger,
+		TaskStreamMgr:    taskStreamMgr,
+		JobStreamMgr:     jobStreamMgr,
+		MetricsCollector: collector,
+	}
+
+	server := api.NewServer(serverCfg, deps)
+
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start server in a goroutine
+	go func() {
+		if err := server.Start(); err != nil {
+			logger.Fatal("Failed to start server", "error", err)
 		}
 	}()
+	logger.Info("API server Started")
 
-	// Handle SIGINT/SIGTERM for graceful shutdown
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	// Start metrics collector in a goroutine
 	go func() {
-		sig := <-sigs
-		logger.Infof("Received signal: %v, shutting down...", sig)
-		os.Exit(0)
+		collector.Start()
 	}()
 
-	// Ping Redis
-	if err := redisx.Ping(); err != nil {
-		logger.Errorf("Redis is not reachable: %v", err)
-		fmt.Fprintf(os.Stderr, "Redis is not reachable: %v\n", err)
-		os.Exit(1)
-	}
-	logger.Info("Redis ping successful.")
+	// Log Redis info
+	redisInfo := redis.GetRedisInfo()
+	logger.Info("Redis service is running", "config", redisInfo)
 
-	// Log Redis persistence config
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Wait for interrupt signal
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Block until signal is received
+	<-shutdown
+
+	// Perform graceful shutdown
+	performGracefulShutdown(ctx, client, server, logger)
+}
+
+func performGracefulShutdown(ctx context.Context, client *redis.Client, server *api.Server, logger logging.Logger) {
+	logger.Info("Initiating graceful shutdown...")
+
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
-	info, err := redisx.GetClient().Info(ctx, "persistence").Result()
-	if err != nil {
-		logger.Warnf("Failed to fetch Redis persistence info: %v", err)
+
+	// Close Redis client connection
+	logger.Info("Closing Redis client connection...")
+	if err := client.Close(); err != nil {
+		logger.Error("Error closing Redis client", "error", err)
 	} else {
-		logger.Infof("Redis persistence info:\n%s", info)
+		logger.Info("Redis client closed successfully")
 	}
 
-	// Add a test job to the jobs:ready stream
-	testJob := map[string]interface{}{
-		"type":      "test",
-		"timestamp": time.Now().Unix(),
-	}
-	if err := redisx.AddJobToStream(redisx.JobsReadyTimeStream, testJob); err != nil {
-		logger.Errorf("Failed to add test job to stream: %v", err)
+	// Shutdown server gracefully
+	logger.Info("Shutting down API server...")
+	if err := server.Stop(shutdownCtx); err != nil {
+		logger.Error("Server forced to shutdown", "error", err)
 	} else {
-		logger.Info("Test job added to jobs:ready stream.")
+		logger.Info("API server stopped successfully")
 	}
 
-	// Block forever
-	select {}
-}
+	logger.Info("Redis service shutdown complete")
 
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
+	// Ensure we exit cleanly
+	select {
+	case <-shutdownCtx.Done():
+		logger.Error("Shutdown timeout exceeded")
+		os.Exit(1)
+	default:
+		os.Exit(0)
 	}
-	return logging.Production
-}
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
 }

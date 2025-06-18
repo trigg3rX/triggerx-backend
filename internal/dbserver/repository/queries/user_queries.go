@@ -18,7 +18,7 @@ const (
 	UpdateUserBalanceQuery = `
 			UPDATE triggerx.user_data 
 			SET ether_balance = ?, token_balance = ?
-			WHERE user_id = ?`	
+			WHERE user_id = ?`
 
 	// Update User Job IDs on Job Creation
 	UpdateUserJobIDsQuery = `

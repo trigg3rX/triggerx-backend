@@ -27,28 +27,24 @@ func main() {
 	}
 
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
-		ProcessName:     logging.DatabaseProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		ProcessName:   logging.DatabaseProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting database server...",
-		"mode", getEnvironment(),
+		"mode", config.IsDevMode(),
 		"port", config.GetDatabaseRPCPort(),
 		"host", config.GetDatabaseHostAddress(),
 	)
 
 	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
 
-	conn, err := database.NewConnection(dbConfig)
+	conn, err := database.NewConnection(dbConfig, logger)
 	if err != nil || conn == nil {
 		logger.Fatalf("Failed to initialize main database connection: %v", err)
 	}
@@ -63,7 +59,7 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
-	dbServer := dbserver.NewServer(conn, logging.DatabaseProcess)
+	dbServer := dbserver.NewServer(conn, logger)
 
 	dbServer.RegisterRoutes(dbServer.GetRouter())
 
@@ -97,20 +93,6 @@ func main() {
 	performGracefulShutdown(srv, &wg, logger)
 }
 
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
-}
-
 func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
@@ -122,11 +104,6 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
-	}
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
 	wg.Wait()

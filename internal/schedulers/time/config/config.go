@@ -2,74 +2,127 @@ package config
 
 import (
 	"fmt"
-	"strconv"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
 type Config struct {
-	devMode          bool
-	databaseHost     string
-	databaseHostPort string
-	schedulerRPCPort string
-	dbServerURL      string
-	maxWorkers       int
+	devMode bool
+
+	// Scheduler RPC Port
+	timeSchedulerRPCPort string
+
+	// Database RPC URL
+	dbServerURL string
+	// Aggregator RPC URL
+	aggregatorRPCUrl string
+
+	// Scheduler Private Key and Address
+	timeSchedulerSigningKey     string
+	timeSchedulerSigningAddress string
+
+	// Time Durations
+	pollingInterval     time.Duration
+	pollingLookAhead    time.Duration
+	taskBatchSize        int
+	performerLockTTL    time.Duration
+	taskCacheTTL        time.Duration
+	duplicateTaskWindow time.Duration
 }
 
 var cfg Config
 
-// Init initializes the configuration
 func Init() error {
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-
-	maxWorkersStr := env.GetEnv("MAX_WORKERS", "10")
-	maxWorkers, err := strconv.Atoi(maxWorkersStr)
-	if err != nil {
-		maxWorkers = 10 // fallback to default
-	}
-
 	cfg = Config{
-		devMode:          env.GetEnvBool("DEV_MODE", false),
-		databaseHost:     env.GetEnv("DATABASE_HOST", "localhost"),
-		databaseHostPort: env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		schedulerRPCPort: env.GetEnv("SCHEDULER_RPC_PORT", "9004"),
-		dbServerURL:      env.GetEnv("DATABASE_RPC_URL", "http://localhost:9002"),
-		maxWorkers:       maxWorkers,
+		devMode:                 env.GetEnvBool("DEV_MODE", false),
+		timeSchedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
+		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
+		timeSchedulerSigningKey:     env.GetEnv("TIME_SCHEDULER_SIGNING_KEY", ""),
+		timeSchedulerSigningAddress: env.GetEnv("TIME_SCHEDULER_SIGNING_ADDRESS", ""),
+		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
+		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
+		taskBatchSize:            env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
+		performerLockTTL:        env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
+		taskCacheTTL:            env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
+		duplicateTaskWindow:     env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
 	}
-
+	if err := validateConfig(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	if !cfg.devMode {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	return nil
 }
 
-// IsDevMode returns whether the service is running in development mode
+func validateConfig() error {
+	if !env.IsValidPort(cfg.timeSchedulerRPCPort) {
+		return fmt.Errorf("invalid time scheduler RPC port: %s", cfg.timeSchedulerRPCPort)
+	}
+	if !env.IsValidURL(cfg.dbServerURL) {
+		return fmt.Errorf("invalid database server URL: %s", cfg.dbServerURL)
+	}
+	if !env.IsValidURL(cfg.aggregatorRPCUrl) {
+		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCUrl)
+	}
+	if !env.IsValidEthKeyPair(cfg.timeSchedulerSigningKey, cfg.timeSchedulerSigningAddress) {
+		return fmt.Errorf("invalid time scheduler signing key pair address: %s", cfg.timeSchedulerSigningAddress)
+	}
+	return nil
+}
+
 func IsDevMode() bool {
 	return cfg.devMode
 }
 
-// GetDatabaseHost returns the database host
-func GetDatabaseHost() string {
-	return cfg.databaseHost
-}
-
-// GetDatabaseHostPort returns the database host port
-func GetDatabaseHostPort() string {
-	return cfg.databaseHostPort
-}
-
-// GetSchedulerRPCPort returns the scheduler RPC port
 func GetSchedulerRPCPort() string {
-	return cfg.schedulerRPCPort
+	return cfg.timeSchedulerRPCPort
 }
 
-// GetDBServerURL returns the database server URL
 func GetDBServerURL() string {
 	return cfg.dbServerURL
 }
 
-// GetMaxWorkers returns the maximum number of workers
-func GetMaxWorkers() int {
-	return cfg.maxWorkers
+func GetAggregatorRPCUrl() string {
+	return cfg.aggregatorRPCUrl
+}
+
+func GetSchedulerSigningKey() string {
+	return cfg.timeSchedulerSigningKey
+}
+
+func GetSchedulerSigningAddress() string {
+	return cfg.timeSchedulerSigningAddress
+}
+
+func GetPollingInterval() time.Duration {
+	return cfg.pollingInterval
+}
+
+func GetPollingLookAhead() time.Duration {
+	return cfg.pollingLookAhead
+}
+
+func GetTaskBatchSize() int {
+	return cfg.taskBatchSize
+}
+
+func GetPerformerLockTTL() time.Duration {
+	return cfg.performerLockTTL
+}
+
+func GetTaskCacheTTL() time.Duration {
+	return cfg.taskCacheTTL
+}
+
+func GetDuplicateTaskWindow() time.Duration {
+	return cfg.duplicateTaskWindow
 }

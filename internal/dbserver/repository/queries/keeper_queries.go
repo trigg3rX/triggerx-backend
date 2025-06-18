@@ -1,7 +1,7 @@
 package queries
 
 // Create Queries
-const(
+const (
 	GetMaxKeeperIDQuery = `SELECT MAX(keeper_id) FROM triggerx.keeper_data`
 
 	CreateNewKeeperQuery = `
@@ -39,7 +39,7 @@ const (
 			SET consensus_address = ?, connection_address = ?, peer_id = ?, version = ?, 
 			last_checked_in = ? , online = ? 
 			WHERE keeper_id = ?`
-	
+
 	UpdateKeeperFromHealthCheckOutQuery = `
 			UPDATE triggerx.keeper_data 
 			SET online = false, last_checked_in = ? 
@@ -50,7 +50,6 @@ const (
 			SET no_executed_tasks = ? 
 			WHERE keeper_id = ?`
 )
-
 
 // Read Queries
 const (
@@ -98,7 +97,7 @@ const (
 			WHERE whitelisted = true AND registered = true ALLOW FILTERING`
 
 	GetKeeperTaskCountByIDQuery = `
-			SELECT no_executed_tasks, no_attested_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`
+			SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`
 
 	GetKeeperPointsByIDQuery = `
 			SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`

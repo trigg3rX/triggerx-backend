@@ -25,7 +25,7 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.ConditionBa
 
 // ScheduleJob schedules a new condition-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
-	var req scheduler.JobScheduleRequest
+	var req types.ScheduleConditionJobData
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -38,22 +38,18 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	}
 
 	// Convert request to ConditionJobData
-	jobData := &types.ConditionJobData{
-		JobID:                         req.JobID,
-		TimeFrame:                     req.TimeFrame,
-		Recurring:                     req.Recurring,
-		ConditionType:                 req.ConditionType,
-		UpperLimit:                    req.UpperLimit,
-		LowerLimit:                    req.LowerLimit,
-		ValueSourceType:               req.ValueSourceType,
-		ValueSourceUrl:                req.ValueSourceUrl,
-		TargetChainID:                 req.TargetChainID,
-		TargetContractAddress:         req.TargetContractAddress,
-		TargetFunction:                req.TargetFunction,
-		ABI:                           req.ABI,
-		ArgType:                       req.ArgType,
-		Arguments:                     req.Arguments,
-		DynamicArgumentsScriptIPFSUrl: req.DynamicArgumentsScriptIPFSUrl,
+	jobData := &types.ScheduleConditionJobData{
+		JobID:                     req.JobID,
+		TaskDefinitionID:          req.TaskDefinitionID,
+		LastExecutedAt:            req.LastExecutedAt,
+		ExpirationTime:            req.ExpirationTime,
+		Recurring:                 req.Recurring,
+		ConditionType:             req.ConditionType,
+		UpperLimit:                req.UpperLimit,
+		LowerLimit:                req.LowerLimit,
+		ValueSourceType:           req.ValueSourceType,
+		ValueSourceUrl:            req.ValueSourceUrl,
+		TaskTargetData:            req.TaskTargetData,
 	}
 
 	// Schedule the job

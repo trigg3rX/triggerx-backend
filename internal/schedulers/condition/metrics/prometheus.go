@@ -15,83 +15,242 @@ var (
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
 		Name:      "uptime_seconds",
-		Help:      "The uptime of the condition scheduler service in seconds",
+		Help:      "Time passed since Event Scheduler started in seconds",
 	})
 
-	// JobsScheduled tracks the total number of jobs scheduled
-	JobsScheduled = promauto.NewGauge(prometheus.GaugeOpts{
+	// Memory usage metrics
+	MemoryUsageBytes = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "jobs_scheduled",
+		Name:      "memory_usage_bytes",
+		Help:      "Total memory consumption",
+	})
+
+	// CPU usage metrics
+	CPUUsagePercent = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "cpu_usage_percent",
+		Help:      "CPU utilization percentage",
+	})
+
+	// Goroutines active metrics
+	GoroutinesActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "goroutines_active",
+		Help:      "Number of active goroutines",
+	})
+
+	// Garbage collection duration metrics
+	GCDurationSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "gc_duration_seconds",
+		Help:      "Garbage collection time",
+	})
+
+	// Events per minute by chain
+	EventsPerMinute = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "events_per_minute",
+		Help:      "Event detection rate per chain",
+	}, []string{"chain_id"})
+
+	// Jobs scheduled
+	JobsScheduled = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "scheduler_jobs_scheduled",
 		Help:      "Total number of jobs scheduled",
 	})
 
-	// JobsRunning tracks the number of jobs currently running
-	JobsRunning = promauto.NewGauge(prometheus.GaugeOpts{
+	// Jobs completed
+	JobsCompleted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "jobs_running",
-		Help:      "Total number of jobs currently running",
+		Name:      "scheduler_jobs_completed",
+		Help:      "Total number of jobs completed successfully or failed",
+	}, []string{"status"})
+
+	// Active workers
+	ActiveWorkers = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "active_workers",
+		Help:      "Number of active job workers currently running",
 	})
 
-	// JobsCompleted tracks the total number of jobs completed
-	JobsCompleted = promauto.NewGauge(prometheus.GaugeOpts{
+	// Condition evaluation duration
+	ConditionEvaluationDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "jobs_completed",
-		Help:      "Total number of jobs completed",
+		Name:      "condition_evaluation_duration_seconds",
+		Help:      "Time taken to evaluate conditions",
 	})
 
-	// JobsFailed tracks the total number of jobs failed
-	JobsFailed = promauto.NewGauge(prometheus.GaugeOpts{
+	// Conditions by type
+	ConditionsByTypeTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "jobs_failed",
-		Help:      "Total number of jobs failed",
+		Name:      "conditions_by_type_total",
+		Help:      "Conditions monitored by type",
+	}, []string{"condition_type"})
+
+	// Conditions by source
+	ConditionsBySourceTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "conditions_by_source_total",
+		Help:      "Conditions monitored by source type",
+	}, []string{"source_type"})
+
+	// API response status
+	APIResponseStatusTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "api_response_status_total",
+		Help:      "API response status codes",
+	}, []string{"source_url", "status_code"})
+
+	// Value parsing errors
+	ValueParsingErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "value_parsing_errors_total",
+		Help:      "Value parsing errors by source type",
+	}, []string{"source_type"})
+
+	// DB requests
+	DBRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "db_requests_total",
+		Help:      "Database client HTTP requests",
+	}, []string{"method", "endpoint", "status"})
+
+	// DB connection errors
+	DBConnectionErrorsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "db_connection_errors_total",
+		Help:      "Database connection failures",
 	})
 
-	// ConditionsChecked tracks the total number of condition checks performed
-	ConditionsChecked = promauto.NewCounter(prometheus.CounterOpts{
+	// DB retries
+	DBRetriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "conditions_checked_total",
-		Help:      "Total number of condition checks performed",
+		Name:      "db_retries_total",
+		Help:      "Database request retry attempts",
+	}, []string{"endpoint"})
+
+	// Action execution duration
+	ActionExecutionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "action_execution_duration_seconds",
+		Help:      "Time taken to execute actions",
+	}, []string{"job_id"})
+
+	// Worker uptime
+	WorkerUptimeSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "worker_uptime_seconds",
+		Help:      "Individual worker uptime",
+	}, []string{"job_id"})
+
+	// Worker memory usage
+	WorkerMemoryUsageBytes = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "worker_memory_usage_bytes",
+		Help:      "Memory usage per worker",
+	}, []string{"job_id"})
+
+	// HTTP requests
+	HTTPRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "http_requests_total",
+		Help:      "HTTP API requests received",
+	}, []string{"method", "endpoint", "status_code"})
+
+	// HTTP client connection errors
+	HTTPClientConnectionErrorsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "http_client_connection_errors_total",
+		Help:      "HTTP client connection errors",
 	})
 
-	// ConditionsSatisfied tracks the total number of conditions satisfied
-	ConditionsSatisfied = promauto.NewCounter(prometheus.CounterOpts{
+	// Duplicate condition window
+	DuplicateConditionWindowSeconds = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "conditions_satisfied_total",
-		Help:      "Total number of conditions satisfied",
+		Name:      "duplicate_condition_window_seconds",
+		Help:      "Duplicate condition detection window",
 	})
 
-	// ValueSourceRequests tracks the total number of value source API requests
-	ValueSourceRequests = promauto.NewCounter(prometheus.CounterOpts{
+	// Average condition check time
+	AverageConditionCheckTimeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "value_source_requests_total",
-		Help:      "Total number of value source API requests made",
+		Name:      "average_condition_check_time_seconds",
+		Help:      "Mean condition check time",
 	})
 
-	// ValueSourceErrors tracks the total number of value source request errors
-	ValueSourceErrors = promauto.NewCounter(prometheus.CounterOpts{
+	// Timeouts
+	TimeoutsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
-		Name:      "value_source_errors_total",
-		Help:      "Total number of value source request errors",
-	})
+		Name:      "timeouts_total",
+		Help:      "Operation timeouts",
+	}, []string{"operation"})
+
+	// Critical errors
+	CriticalErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "critical_errors_total",
+		Help:      "Critical system errors",
+	}, []string{"error_type"})
+
+	// Invalid values
+	InvalidValuesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "condition_scheduler",
+		Name:      "invalid_values_total",
+		Help:      "Invalid/unparseable values received",
+	}, []string{"source"})
 )
 
 // StartMetricsCollection starts collecting metrics
 func StartMetricsCollection() {
-	// Update uptime every 60 seconds
+	// Update uptime every 15 seconds
 	go func() {
-		ticker := time.NewTicker(60 * time.Second)
+		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+			collectWorkerMetrics()
+			collectDatabaseMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
 		}
 	}()
 }

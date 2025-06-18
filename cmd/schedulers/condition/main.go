@@ -9,8 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/cache"
-	redisx "github.com/trigg3rX/triggerx-backend/internal/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
@@ -32,73 +30,16 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
-		ProcessName:     logging.ConditionSchedulerProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		ProcessName:   logging.ConditionSchedulerProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting condition-based scheduler service...")
-
-	// Initialize Redis connection
-	logger.Info("Initializing Redis connection...")
-	if err := redisx.Ping(); err != nil {
-		logger.Warnf("Redis connection failed: %v", err)
-		logger.Info("Scheduler will continue without Redis condition streaming")
-	} else {
-		logger.Info("Redis connection established successfully")
-
-		// Add initial test job to verify Redis streams are working
-		testJob := map[string]interface{}{
-			"type":         "scheduler_startup",
-			"scheduler_id": fmt.Sprintf("condition-scheduler-%d", time.Now().Unix()),
-			"timestamp":    time.Now().Unix(),
-			"message":      "Condition scheduler service started",
-		}
-		if err := redisx.AddJobToStream(redisx.JobsReadyEventStream, testJob); err != nil {
-			logger.Warnf("Failed to add startup test job to Redis stream: %v", err)
-		} else {
-			logger.Info("Startup event added to Redis condition stream")
-		}
-	}
-
-	// Initialize cache
-	logger.Info("Initializing cache system...")
-	if err := cache.Init(); err != nil {
-		logger.Warnf("Cache initialization failed: %v", err)
-		logger.Info("Scheduler will continue without caching features")
-	} else {
-		cacheInstance, err := cache.GetCache()
-		if err != nil {
-			logger.Warnf("Failed to get cache instance: %v", err)
-		} else {
-			logger.Info("Cache system initialized successfully")
-
-			// Test cache functionality
-			testKey := "condition_scheduler_startup_test"
-			testValue := fmt.Sprintf("startup_%d", time.Now().Unix())
-			if err := cacheInstance.Set(testKey, testValue, 1*time.Minute); err != nil {
-				logger.Warnf("Cache test write failed: %v", err)
-			} else {
-				if retrieved, err := cacheInstance.Get(testKey); err == nil && retrieved == testValue {
-					logger.Info("Cache functionality verified")
-				} else {
-					logger.Warnf("Cache test read failed: %v", err)
-				}
-				// Clean up test key
-				if err := cacheInstance.Delete(testKey); err != nil {
-					logger.Warnf("Failed to delete test key: %v", err)
-				}
-			}
-		}
-	}
 
 	// Initialize database client
 	dbClientCfg := client.Config{
@@ -111,7 +52,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize database client", "error", err)
 	}
-	defer dbClient.Close()
+	defer func() {
+		if err := dbClient.Close(); err != nil {
+			logger.Warnf("Error closing database client: %v", err)
+		}
+	}()
 
 	// Perform initial health check
 	logger.Info("Performing initial health check...")
@@ -154,13 +99,20 @@ func main() {
 		}
 	}()
 
-	logger.Info("Condition-based scheduler service ready",
-		"manager_id", managerID,
-		"api_port", config.GetSchedulerRPCPort(),
-		"poll_interval", "1 second",
-		"supported_conditions", []string{"greater_than", "less_than", "between", "equals", "not_equals", "greater_equal", "less_equal"},
-		"supported_sources", []string{"api", "oracle", "static"},
-	)
+	// Log comprehensive service status
+	serviceStatus := map[string]interface{}{
+		"manager_id":           managerID,
+		"api_port":             config.GetSchedulerRPCPort(),
+		"max_workers":          config.GetMaxWorkers(),
+		"poll_interval":        "1s",
+		"supported_conditions": []string{"greater_than", "less_than", "between", "equals", "not_equals", "greater_equal", "less_equal"},
+		"supported_sources":    []string{"api", "oracle", "static"},
+		"request_timeout":      "10s",
+		"value_cache_ttl":      "30s",
+		"condition_state_ttl":  "5m",
+	}
+
+	logger.Info("Condition-based scheduler service ready", "status", serviceStatus)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -171,21 +123,8 @@ func main() {
 	performGracefulShutdown(cancel, srv, conditionScheduler, logger)
 }
 
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
-}
-
 func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditionScheduler *scheduler.ConditionBasedScheduler, logger logging.Logger) {
+	shutdownStart := time.Now()
 	logger.Info("Initiating graceful shutdown...")
 
 	// Cancel context to stop scheduler
@@ -203,11 +142,8 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditi
 		logger.Error("Server forced to shutdown", "error", err)
 	}
 
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
-	}
+	shutdownDuration := time.Since(shutdownStart)
 
-	logger.Info("Condition-based scheduler shutdown complete")
+	logger.Info("Condition-based scheduler shutdown complete", "duration", shutdownDuration)
 	os.Exit(0)
 }

@@ -44,6 +44,9 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 		},
 	}
 
+	// Setup middleware
+	srv.setupMiddleware(deps)
+
 	// Setup routes
 	srv.setupRoutes(deps)
 
@@ -63,6 +66,15 @@ func (s *Server) Start() error {
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("Stopping API server")
 	return s.httpServer.Shutdown(ctx)
+}
+
+// setupMiddleware sets up the middleware for the server
+func (s *Server) setupMiddleware(deps Dependencies) {
+	s.router.Use(gin.Recovery())
+	s.router.Use(TraceMiddleware())
+	s.router.Use(MetricsMiddleware())
+	s.router.Use(LoggerMiddleware(deps.Logger))
+	s.router.Use(ErrorMiddleware(deps.Logger))
 }
 
 // setupRoutes sets up the routes for the server

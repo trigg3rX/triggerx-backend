@@ -13,20 +13,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func init() {
-	// Initialize logger for all tests
-	config := logging.NewDefaultConfig(logging.DatabaseProcess)
-	config.UseColors = false // Disable colors in tests
-	err := logging.InitServiceLogger(config)
-	if err != nil {
-		panic("failed to initialize logger: " + err.Error())
-	}
-}
-
 func setupTestRouter() (*gin.Engine, *Validator) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	logger := logging.GetServiceLogger()
+
+	loggerConfig := logging.LoggerConfig{
+		ProcessName:   logging.DatabaseProcess,
+		IsDevelopment: true,
+	}
+	logger, err := logging.NewZapLogger(loggerConfig)
+	if err != nil {
+		panic("failed to initialize logger: " + err.Error())
+	}
 	validator := NewValidator(logger)
 	return router, validator
 }

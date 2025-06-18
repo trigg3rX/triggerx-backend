@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gin-gonic/gin"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Handler encapsulates the dependencies for health handlers
@@ -26,14 +26,14 @@ type Handler struct {
 // NewHandler creates a new instance of Handler
 func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handler {
 	return &Handler{
-		logger:       logger.With("component", "health_handler"),
+		logger:       logger,
 		stateManager: stateManager,
 	}
 }
 
 // LoggerMiddleware creates a gin middleware for logging
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
-	middlewareLogger := logger.With("component", "http_middleware")
+	middlewareLogger := logger
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -43,6 +43,11 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
+
+		// Record HTTP metrics
+		statusCode := fmt.Sprintf("%d", status)
+		metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
 
 		if status >= 500 {
 			middlewareLogger.Error("HTTP Request",
@@ -73,13 +78,18 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 }
 
 // RegisterRoutes registers all HTTP routes for the health service
-func RegisterRoutes(router *gin.Engine) {
-	handler := NewHandler(logging.GetServiceLogger(), keeper.GetStateManager())
+func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
+	handler := NewHandler(logger, keeper.GetStateManager())
+
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector()
+	metricsCollector.Start()
 
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
 	router.GET("/status", handler.GetKeeperStatus)
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
+	router.GET("/metrics", gin.WrapH(metricsCollector.Handler()))
 }
 
 func (h *Handler) handleRoot(c *gin.Context) {
@@ -91,12 +101,15 @@ func (h *Handler) handleRoot(c *gin.Context) {
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth types.KeeperHealthCheckIn
+	var keeperHealth commonTypes.KeeperHealthCheckIn
+	var response commonTypes.KeeperHealthCheckInResponse
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
 		h.logger.Error("Failed to parse keeper health check-in request",
 			"error", err,
 		)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Status = false
+		response.Data = err.Error()
+		c.JSON(http.StatusBadRequest, response)
 		return
 	}
 
@@ -106,30 +119,11 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		"peer_id", keeperHealth.PeerID,
 	)
 
-	if keeperHealth.Version == "0.0.7" || keeperHealth.Version == "0.0.6" || keeperHealth.Version == "0.0.5" || keeperHealth.Version == "" {
-		h.logger.Warn("Rejecting obsolete keeper version",
-			"keeper", keeperHealth.KeeperAddress,
-			"version", keeperHealth.Version,
-		)
-		c.JSON(http.StatusPreconditionFailed, gin.H{
-			"error": "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.2",
-		})
-		return
-	}
+	// Record check-in by version metric
+	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
-	if keeperHealth.Version == "0.1.0" || keeperHealth.Version == "0.1.1" {
-		h.logger.Warn("Older keeper version detected",
-			"keeper", keeperHealth.KeeperAddress,
-			"version", keeperHealth.Version,
-		)
-		c.JSON(http.StatusOK, gin.H{
-			"message": "OLDER VERSION of Keeper, UPGRADE TO v0.1.2",
-		})
-		return
-	}
-
-	if keeperHealth.Version == "0.1.2" {
-		ok, err := VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+	if keeperHealth.Version == "0.1.3" {
+		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 		if !ok {
 			h.logger.Error("Invalid keeper signature",
 				"keeper", keeperHealth.KeeperAddress,
@@ -175,49 +169,42 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			"version", keeperHealth.Version,
 		)
 
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Keeper health check-in received",
-			"active":  true,
-		})
+		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
+		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
+		if err != nil {
+			h.logger.Error("Failed to encrypt message for keeper",
+				"error", err,
+			)
+			response.Status = false
+			response.Data = err.Error()
+			c.JSON(http.StatusInternalServerError, response)
+			return
+		}
+
+		response.Status = true
+		response.Data = msgData
+
+		c.JSON(http.StatusOK, response)
+	} else {
+		h.logger.Warn("Rejecting obsolete keeper version",
+			"keeper", keeperHealth.KeeperAddress,
+			"version", keeperHealth.Version,
+		)
+		response.Status = false
+		response.Data = "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.3"
+		c.JSON(http.StatusPreconditionFailed, response)
+		return
 	}
-}
-
-func VerifySignature(message string, signatureHex string, expectedAddress string) (bool, error) {
-	signature, err := hexutil.Decode(signatureHex)
-	if err != nil {
-		return false, fmt.Errorf("invalid signature: %w", err)
-	}
-
-	if len(signature) != 65 {
-		return false, fmt.Errorf("invalid signature length")
-	}
-
-	if signature[64] >= 27 {
-		signature[64] -= 27
-	}
-
-	messageHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
-
-	pubKeyRaw, err := crypto.Ecrecover(messageHash.Bytes(), signature)
-	if err != nil {
-		return false, fmt.Errorf("failed to recover public key: %w", err)
-	}
-
-	pubKey, err := crypto.UnmarshalPubkey(pubKeyRaw)
-	if err != nil {
-		return false, fmt.Errorf("failed to unmarshal public key: %w", err)
-	}
-
-	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
-
-	checksumAddr := common.HexToAddress(expectedAddress)
-
-	return checksumAddr == recoveredAddr, nil
 }
 
 func (h *Handler) GetKeeperStatus(c *gin.Context) {
 	total, active := h.stateManager.GetKeeperCount()
 	activeKeepers := h.stateManager.GetAllActiveKeepers()
+
+	// Update keeper metrics
+	metrics.KeepersTotal.Set(float64(total))
+	metrics.KeepersActiveTotal.Set(float64(active))
+	metrics.KeepersInactiveTotal.Set(float64(total - active))
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":      total,
@@ -229,6 +216,11 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	total, active := h.stateManager.GetKeeperCount()
 	detailedInfo := h.stateManager.GetDetailedKeeperInfo()
+
+	// Update keeper metrics
+	metrics.KeepersTotal.Set(float64(total))
+	metrics.KeepersActiveTotal.Set(float64(active))
+	metrics.KeepersInactiveTotal.Set(float64(total - active))
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":  total,

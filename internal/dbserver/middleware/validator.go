@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type Validator struct {
@@ -44,9 +44,6 @@ func NewValidator(logger logging.Logger) *Validator {
 
 func (v *Validator) GinMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get the request body
-		var jobDataArray []types.CreateJobData
-
 		// Read the request body first
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
@@ -65,12 +62,57 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		// Create a new reader with the body and restore it
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		// Try to bind the JSON
-		if err := c.ShouldBindJSON(&jobDataArray); err != nil {
-			v.logger.Errorf("Error binding JSON: %v", err)
+		// Validate based on the endpoint
+		var validationError error
+		switch c.Request.URL.Path {
+		case "/api/jobs":
+			var jobDataArray []types.CreateJobData
+			if err := c.ShouldBindJSON(&jobDataArray); err != nil {
+				validationError = err
+			} else {
+				for _, jobData := range jobDataArray {
+					if err := v.validate.Struct(jobData); err != nil {
+						validationError = err
+						break
+					}
+				}
+			}
+
+		case "/api/tasks":
+			var taskData types.CreateTaskDataRequest
+			if err := c.ShouldBindJSON(&taskData); err != nil {
+				validationError = err
+			} else {
+				validationError = v.validate.Struct(taskData)
+			}
+
+		case "/api/keepers":
+			var keeperData types.CreateKeeperData
+			if err := c.ShouldBindJSON(&keeperData); err != nil {
+				validationError = err
+			} else {
+				validationError = v.validate.Struct(keeperData)
+			}
+
+		case "/api/admin/api-keys":
+			var apiKeyData types.CreateApiKeyRequest
+			if err := c.ShouldBindJSON(&apiKeyData); err != nil {
+				validationError = err
+			} else {
+				validationError = v.validate.Struct(apiKeyData)
+			}
+
+		default:
+			// For unknown endpoints, just pass through
+			c.Next()
+			return
+		}
+
+		if validationError != nil {
+			v.logger.Errorf("Validation error: %v", validationError)
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Invalid JSON payload",
-				"details": err.Error(),
+				"error":   "Validation failed",
+				"details": validationError.Error(),
 			})
 			c.Abort()
 			return
@@ -121,53 +163,53 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 // 		return err
 // 	}
 
-	// Determine job type based on TaskDefinitionID
-	// switch {
-	// case jobData.TaskDefinitionID >= types.TaskDefTimeBasedStart && jobData.TaskDefinitionID <= types.TaskDefTimeBasedEnd:
-		// Time-based job validation
-		// if jobData.TimeInterval <= 0 {
-		// 	return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// Time jobs don't need trigger or condition fields
-		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
-		// 	return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
-		// 	return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
+// Determine job type based on TaskDefinitionID
+// switch {
+// case jobData.TaskDefinitionID >= types.TaskDefTimeBasedStart && jobData.TaskDefinitionID <= types.TaskDefTimeBasedEnd:
+// Time-based job validation
+// if jobData.TimeInterval <= 0 {
+// 	return fmt.Errorf("time_interval is required for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// Time jobs don't need trigger or condition fields
+// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
+// 	return fmt.Errorf("trigger fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
+// 	return fmt.Errorf("condition fields should not be set for time-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
 
-	// case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
-	// 	// Event-based job validation
-	// 	if jobData.TriggerChainID == "" || jobData.TriggerContractAddress == "" || jobData.TriggerEvent == "" {
-	// 		return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-	// 	}
-		// Event jobs don't need time interval or condition fields
-		// if jobData.TimeInterval != 0 {
-		// 	return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
-		// 	return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
+// case jobData.TaskDefinitionID >= types.TaskDefEventBasedStart && jobData.TaskDefinitionID <= types.TaskDefEventBasedEnd:
+// 	// Event-based job validation
+// 	if jobData.TriggerChainID == "" || jobData.TriggerContractAddress == "" || jobData.TriggerEvent == "" {
+// 		return fmt.Errorf("trigger fields are required for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// 	}
+// Event jobs don't need time interval or condition fields
+// if jobData.TimeInterval != 0 {
+// 	return fmt.Errorf("time_interval should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// if jobData.ConditionType != "" || jobData.UpperLimit != 0 || jobData.LowerLimit != 0 {
+// 	return fmt.Errorf("condition fields should not be set for event-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
 
-	// case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
-	// 	// Condition-based job validation
-	// 	if jobData.ConditionType == "" || jobData.UpperLimit == 0 || jobData.LowerLimit == 0 {
-	// 		return fmt.Errorf("condition fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-	// 	}
-	// 	if jobData.ValueSourceType == "" || jobData.ValueSourceUrl == "" {
-	// 		return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-	// 	}
-		// Condition jobs don't need time interval or trigger fields
-		// if jobData.TimeInterval != 0 {
-		// 	return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
-		// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
-		// 	return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
-		// }
+// case jobData.TaskDefinitionID >= types.TaskDefConditionBasedStart && jobData.TaskDefinitionID <= types.TaskDefConditionBasedEnd:
+// 	// Condition-based job validation
+// 	if jobData.ConditionType == "" || jobData.UpperLimit == 0 || jobData.LowerLimit == 0 {
+// 		return fmt.Errorf("condition fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// 	}
+// 	if jobData.ValueSourceType == "" || jobData.ValueSourceUrl == "" {
+// 		return fmt.Errorf("value source fields are required for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// 	}
+// Condition jobs don't need time interval or trigger fields
+// if jobData.TimeInterval != 0 {
+// 	return fmt.Errorf("time_interval should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
+// if jobData.TriggerChainID != "" || jobData.TriggerContractAddress != "" || jobData.TriggerEvent != "" {
+// 	return fmt.Errorf("trigger fields should not be set for condition-based jobs (TaskDefinitionID: %d)", jobData.TaskDefinitionID)
+// }
 
-	// default:
-	// 	return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)
-	// }
+// default:
+// 	return fmt.Errorf("invalid TaskDefinitionID: %d", jobData.TaskDefinitionID)
+// }
 
 // 	return nil
 // }
@@ -200,7 +242,18 @@ func validateEthereumAddress(fl validator.FieldLevel) bool {
 
 func validateIPFSURL(fl validator.FieldLevel) bool {
 	url := fl.Field().String()
-	return strings.HasPrefix(url, "ipfs://") || strings.HasPrefix(url, "https://ipfs.io/ipfs/")
+
+	// Check for native IPFS protocol
+	if strings.HasPrefix(url, "ipfs://") {
+		return true
+	}
+
+	// Check for HTTPS URLs that contain "/ipfs/" path (covers various gateways)
+	if strings.HasPrefix(url, "https://") && strings.Contains(url, "/ipfs/") {
+		return true
+	}
+
+	return false
 }
 
 func validateChainID(fl validator.FieldLevel) bool {

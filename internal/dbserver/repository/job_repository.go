@@ -36,9 +36,9 @@ func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
 	if err == gocql.ErrNotFound {
 		return -1, nil
 	}
-	
+
 	err = r.db.Session().Query(queries.CreateJobDataQuery,
-		lastJobID + 1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
+		lastJobID+1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
 		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone).Exec()
 
 	if err != nil {
@@ -63,7 +63,7 @@ func (r *jobRepository) UpdateJobLastExecutedAt(jobID int64, taskID int64, jobCo
 	if err != nil {
 		return errors.New("failed to get task ids by job id")
 	}
-	
+
 	existingTaskIDs = append(existingTaskIDs, taskID)
 	err = r.db.Session().Query(queries.UpdateJobDataLastExecutedAtQuery,
 		existingTaskIDs, jobCostActual, lastExecutedAt).Exec()
@@ -84,9 +84,12 @@ func (r *jobRepository) UpdateJobStatus(jobID int64, status string) error {
 
 func (r *jobRepository) GetJobByID(jobID int64) (*types.JobData, error) {
 	var jobData types.JobData
-	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
+	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
+		&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
 		&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
-		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.TaskIDs)
+		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.JobCostActual,
+		&jobData.TaskIDs, &jobData.CreatedAt, &jobData.UpdatedAt, &jobData.LastExecutedAt,
+		&jobData.Timezone)
 
 	if err != nil {
 		return nil, err

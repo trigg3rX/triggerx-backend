@@ -7,13 +7,17 @@ const (
 	// Schedulers will Create Task Data in DB before Passing the task to the Performer
 	CreateTaskDataQuery = `
         INSERT INTO triggerx.task_data (
-            task_id, job_id, task_definition_id,
-            task_performer_id, created_at
-        ) VALUES (?, ?, ?, ?, ?)`
+            task_id, job_id, task_definition_id, created_at
+        ) VALUES (?, ?, ?, ?)`
 )
 
 // Update Queries
 const (
+	AddTaskPerformerIDQuery = `
+		UPDATE triggerx.task_data
+		SET task_performer_id = ?
+		WHERE task_id = ?`
+
 	UpdateTaskExecutionDataQuery = `
 		UPDATE triggerx.task_data
 		SET execution_timestamp = ?, execution_tx_hash = ?, proof_of_task = ?, task_opx_cost = ?

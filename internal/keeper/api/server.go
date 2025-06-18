@@ -38,10 +38,10 @@ type Dependencies struct {
 // NewServer creates a new API server
 func NewServer(cfg Config, deps Dependencies) *Server {
 	if cfg.ReadTimeout == 0 {
-		cfg.ReadTimeout = 10 * time.Second
+		cfg.ReadTimeout = 30 * time.Second
 	}
 	if cfg.WriteTimeout == 0 {
-		cfg.WriteTimeout = 10 * time.Second
+		cfg.WriteTimeout = 30 * time.Second
 	}
 	if cfg.MaxHeaderBytes == 0 {
 		cfg.MaxHeaderBytes = 1 << 20 // 1MB
@@ -90,7 +90,12 @@ func (s *Server) Stop(ctx context.Context) error {
 // setupMiddleware sets up the middleware for the server
 func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
+	s.router.Use(TraceMiddleware())
+	s.router.Use(MetricsMiddleware())
+	s.router.Use(TaskMetricsMiddleware())
+	s.router.Use(RestartTrackingMiddleware())
 	s.router.Use(LoggerMiddleware(s.logger))
+	s.router.Use(ErrorMiddleware(s.logger))
 }
 
 // setupRoutes sets up the routes for the server

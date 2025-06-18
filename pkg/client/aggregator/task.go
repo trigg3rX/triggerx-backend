@@ -4,48 +4,78 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// TaskResult represents the data to be sent to the aggregator
-type TaskResult struct {
-	ProofOfTask      string
-	Data             string
-	TaskDefinitionID int
-	PerformerAddress string
-}
+// SendTaskToValidators sends a task result to the validators
+func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult *types.BroadcastDataForValidators) (bool, error) {
+	c.logger.Debug("Sending task result to aggregator",
+		"taskDefinitionId", taskResult.TaskDefinitionID,
+		"proofOfTask", taskResult.ProofOfTask)
 
-// SendTaskResult sends a task result to the aggregator
-func (c *AggregatorClient) SendTaskResult(ctx context.Context, result *TaskResult) error {
-	// Sign the task data
-	signature, err := c.signMessage([]byte(result.Data))
+	privateKey, err := crypto.HexToECDSA(c.config.SenderPrivateKey)
 	if err != nil {
-		return fmt.Errorf("failed to sign task data: %w", err)
+		c.logger.Error("Failed to convert private key to ECDSA", "error", err)
+		return false, fmt.Errorf("failed to convert private key to ECDSA: %w", err)
 	}
 
-	// Prepare parameters
-	params := struct {
-		ProofOfTask      string `json:"proofOfTask"`
-		Data             string `json:"data"`
-		TaskDefinitionID int    `json:"taskDefinitionId"`
-		PerformerAddress string `json:"performerAddress"`
-		Signature        string `json:"signature"`
-	}{
-		ProofOfTask:      result.ProofOfTask,
-		Data:             "0x" + hex.EncodeToString([]byte(result.Data)),
-		TaskDefinitionID: result.TaskDefinitionID,
-		PerformerAddress: result.PerformerAddress,
-		Signature:        signature,
+	// Prepare ABI arguments
+	arguments := abi.Arguments{
+		{Type: abi.Type{T: abi.StringTy}},
+		{Type: abi.Type{T: abi.BytesTy}},
+		{Type: abi.Type{T: abi.AddressTy}},
+		{Type: abi.Type{T: abi.UintTy}},
+	}
+
+	encodedData, err := arguments.Pack(
+		taskResult.ProofOfTask,
+		taskResult.Data,
+		common.HexToAddress(taskResult.PerformerAddress),
+		big.NewInt(int64(taskResult.TaskDefinitionID)),
+	)
+	if err != nil {
+		c.logger.Error("Failed to encode task data", "error", err)
+		return false, fmt.Errorf("failed to encode task data: %w", err)
+	}
+	messageHash := crypto.Keccak256(encodedData)
+
+	// Sign the task data
+	sig, err := crypto.Sign(messageHash, privateKey)
+	if err != nil {
+		c.logger.Error("Failed to sign task data", "error", err)
+		return false, fmt.Errorf("failed to sign task data: %w", err)
+	}
+	sig[64] += 27
+	serializedSignature := hexutil.Encode(sig)
+
+	c.logger.Debug("Task data signed successfully", "signature", sig)
+
+	// Prepare parameters using consistent structure
+	params := CallParams{
+		ProofOfTask:      taskResult.ProofOfTask,
+		Data:             "0x" + hex.EncodeToString(taskResult.Data),
+		TaskDefinitionID: taskResult.TaskDefinitionID,
+		PerformerAddress: taskResult.PerformerAddress,
+		Signature:        serializedSignature,
 	}
 
 	var response interface{}
 	err = c.executeWithRetry(ctx, "sendTask", &response, params)
 	if err != nil {
-		return fmt.Errorf("failed to send task result: %w", err)
+		c.logger.Error("Failed to send task result", "error", err)
+		return false, fmt.Errorf("failed to send task result: %w", err)
 	}
 
 	c.logger.Info("Successfully sent task result to aggregator",
-		"taskDefinitionId", result.TaskDefinitionID,
-		"proofOfTask", result.ProofOfTask)
+		"taskDefinitionId", taskResult.TaskDefinitionID,
+		"proofOfTask", taskResult.ProofOfTask,
+		"response", response)
 
-	return nil
+	return true, nil
 }

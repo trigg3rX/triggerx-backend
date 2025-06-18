@@ -31,18 +31,14 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		LogDir:          logging.BaseDataDir,
-		ProcessName:     logging.HealthProcess,
-		Environment:     getEnvironment(),
-		UseColors:       true,
-		MinStdoutLevel:  getLogLevel(),
-		MinFileLogLevel: getLogLevel(),
+		ProcessName:   logging.HealthProcess,
+		IsDevelopment: config.IsDevMode(),
 	}
 
-	if err := logging.InitServiceLogger(logConfig); err != nil {
+	logger, err := logging.NewZapLogger(logConfig)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-	logger := logging.GetServiceLogger()
 
 	logger.Info("Starting health service...")
 
@@ -53,10 +49,10 @@ func main() {
 
 	// Initialize database connection
 	dbConfig := &database.Config{
-		Hosts:    []string{config.GetDatabaseHost() + ":" + config.GetDatabaseHostPort()},
+		Hosts:    []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace: "triggerx",
 	}
-	dbConn, err := database.NewConnection(dbConfig)
+	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize database connection: %v", err))
 	}
@@ -111,20 +107,6 @@ func main() {
 	performGracefulShutdown(srv, &wg, logger)
 }
 
-func getEnvironment() logging.LogLevel {
-	if config.IsDevMode() {
-		return logging.Development
-	}
-	return logging.Production
-}
-
-func getLogLevel() logging.Level {
-	if config.IsDevMode() {
-		return logging.DebugLevel
-	}
-	return logging.InfoLevel
-}
-
 func setupHTTPServer(logger logging.Logger) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
@@ -135,7 +117,7 @@ func setupHTTPServer(logger logging.Logger) *http.Server {
 	router.Use(health.LoggerMiddleware(logger))
 
 	// Register routes
-	health.RegisterRoutes(router)
+	health.RegisterRoutes(router, logger)
 
 	return &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),
@@ -160,11 +142,6 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
 		}
-	}
-
-	// Ensure logger is properly shutdown
-	if err := logging.Shutdown(); err != nil {
-		fmt.Printf("Error shutting down logger: %v\n", err)
 	}
 
 	wg.Wait()

@@ -1,8 +1,9 @@
 package repository
 
 import (
-	"errors"
+	"fmt"
 	"sort"
+
 	// "time"
 
 	"github.com/gocql/gocql"
@@ -18,7 +19,7 @@ type KeeperRepository interface {
 	GetKeeperDataByID(id int64) (types.KeeperData, error)
 	IncrementKeeperTaskCount(id int64) (int64, error)
 	GetKeeperTaskCount(id int64) (int64, error)
-	UpdateKeeperPoints(id int64, taskFee int64) (float64, error)
+	UpdateKeeperPoints(id int64, taskFee float64) (float64, error)
 	UpdateKeeperChatID(address string, chatID int64) error
 	GetKeeperPointsByIDInDB(id int64) (float64, error)
 	GetKeeperCommunicationInfo(id int64) (types.KeeperCommunicationInfo, error)
@@ -39,11 +40,14 @@ func NewKeeperRepository(db *database.Connection) KeeperRepository {
 func (r *keeperRepository) CreateKeeper(keeperData types.CreateKeeperData) (int64, error) {
 	var maxKeeperID int64
 	err := r.db.Session().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
-	if err != nil {
-		return -1, err
+	if err == gocql.ErrNotFound {
+		// If no keeper exists yet, start with ID 1
+		maxKeeperID = 0
+	} else if err != nil {
+		return -1, fmt.Errorf("error getting max keeper ID: %v", err)
 	}
 
-	err = r.db.Session().Query(queries.CreateNewKeeperQuery, maxKeeperID + 1, keeperData.KeeperName, keeperData.KeeperAddress, 1, 0.0, true, keeperData.EmailID).Exec()
+	err = r.db.Session().Query(queries.CreateNewKeeperQuery, maxKeeperID+1, keeperData.KeeperName, keeperData.KeeperAddress, 1.0, 0.0, true, keeperData.EmailID).Exec()
 	if err != nil {
 		return -1, err
 	}
@@ -70,7 +74,30 @@ func (r *keeperRepository) GetKeeperAsPerformer() ([]types.GetPerformerData, err
 
 func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error) {
 	var keeperData types.KeeperData
-	err := r.db.Session().Query(queries.GetKeeperDataByIDQuery, id).Scan(&keeperData.KeeperID, &keeperData.KeeperName, &keeperData.KeeperAddress, &keeperData.RegisteredTx, &keeperData.OperatorID, &keeperData.RewardsAddress, &keeperData.RewardsBooster, &keeperData.VotingPower, &keeperData.KeeperPoints, &keeperData.ConnectionAddress, &keeperData.Strategies, &keeperData.Whitelisted, &keeperData.Registered, &keeperData.Online, &keeperData.Version, &keeperData.NoExecutedTasks, &keeperData.NoAttestedTasks, &keeperData.ChatID, &keeperData.EmailID, &keeperData.LastCheckedIn)
+	err := r.db.Session().Query(queries.GetKeeperDataByIDQuery, id).Scan(
+		&keeperData.KeeperID,
+		&keeperData.KeeperName,
+		&keeperData.KeeperAddress,
+		&keeperData.ConsensusAddress,
+		&keeperData.RegisteredTx,
+		&keeperData.OperatorID,
+		&keeperData.RewardsAddress,
+		&keeperData.RewardsBooster,
+		&keeperData.VotingPower,
+		&keeperData.KeeperPoints,
+		&keeperData.ConnectionAddress,
+		&keeperData.PeerID,
+		&keeperData.Strategies,
+		&keeperData.Whitelisted,
+		&keeperData.Registered,
+		&keeperData.Online,
+		&keeperData.Version,
+		&keeperData.NoExecutedTasks,
+		&keeperData.NoAttestedTasks,
+		&keeperData.ChatID,
+		&keeperData.EmailID,
+		&keeperData.LastCheckedIn,
+	)
 	if err != nil {
 		return types.KeeperData{}, err
 	}
@@ -81,7 +108,7 @@ func (r *keeperRepository) CheckKeeperExists(address string) (int64, error) {
 	var id int64
 	err := r.db.Session().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
 	if err == gocql.ErrNotFound {
-		return -1, errors.New("keeper not found")
+		return -1, nil
 	}
 	if err != nil {
 		return -1, err
@@ -139,7 +166,7 @@ func (r *keeperRepository) GetKeeperPointsByIDInDB(id int64) (float64, error) {
 	return points, nil
 }
 
-func (r *keeperRepository) UpdateKeeperPoints(id int64, taskFee int64) (float64, error) {
+func (r *keeperRepository) UpdateKeeperPoints(id int64, taskFee float64) (float64, error) {
 	var existingPoints float64
 	err := r.db.Session().Query(queries.GetKeeperPointsByIDQuery, id).Scan(&existingPoints)
 	if err == gocql.ErrNotFound {
@@ -149,7 +176,7 @@ func (r *keeperRepository) UpdateKeeperPoints(id int64, taskFee int64) (float64,
 		return 0, err
 	}
 
-	newPoints := existingPoints + float64(taskFee)
+	newPoints := existingPoints + taskFee
 
 	err = r.db.Session().Query(queries.UpdateKeeperPointsQuery, newPoints, id).Exec()
 	if err != nil {
