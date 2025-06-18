@@ -31,11 +31,11 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		return
 	}
 
-	for _, task := range tasks {
+	for i := range tasks {
 		trackDBOp = metrics.TrackDBOperation("create", "task_data")
 		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
-			JobID:            task.TaskTargetData.JobID,
-			TaskDefinitionID: task.TaskDefinitionID,
+			JobID:            tasks[i].TaskTargetData.JobID,
+			TaskDefinitionID: tasks[i].TaskDefinitionID,
 		})
 		trackDBOp(err)
 		if err != nil {
@@ -46,8 +46,10 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 			})
 			continue
 		}
-		task.TaskID = taskID
+		tasks[i].TaskID = taskID
 	}
+
+	h.logger.Infof("[GetTimeBasedJobs] Tasks: %v", tasks)
 
 	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
 	c.JSON(http.StatusOK, tasks)
