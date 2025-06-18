@@ -64,6 +64,11 @@ if [[ "$SERVICE" == "all" ]]; then
             --build-arg DOCKER_NAME=${DOCKER_NAME} \
             -t triggerx-${DOCKER_NAME}:${VERSION} .
     done
+elif [[ "$SERVICE" == "keeper" ]]; then
+    echo "Building $SERVICE..."
+    docker build --no-cache \
+        -f Dockerfile.keeper \
+        -t triggerx-keeper:${VERSION} .
 else
     echo "Building $SERVICE..."
     # Convert service name to Docker-compatible name
