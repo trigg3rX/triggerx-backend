@@ -1,10 +1,12 @@
 package metrics
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/shirou/gopsutil/v3/cpu"
 )
 
 var (
@@ -158,6 +160,30 @@ func StartMetricsCollection() {
 
 		for range ticker.C {
 			UptimeSeconds.Set(time.Since(startTime).Seconds())
+		}
+	}()
+
+	// Update system metrics every 30 seconds
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			// Memory metrics
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			MemoryUsageBytes.Set(float64(m.Alloc))
+			GoroutinesActive.Set(float64(runtime.NumGoroutine()))
+			GCDurationSeconds.Set(float64(m.PauseTotalNs) / 1e9) // Convert nanoseconds to seconds
+
+			// CPU usage metrics
+			cpuPercentages, err := cpu.Percent(0, false)
+			if err == nil && len(cpuPercentages) > 0 {
+				CPUUsagePercent.Set(cpuPercentages[0])
+			} else {
+				// Fallback to 0.0 if CPU monitoring fails
+				CPUUsagePercent.Set(0.0)
+			}
 		}
 	}()
 }

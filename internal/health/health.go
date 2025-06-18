@@ -11,6 +11,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -42,6 +43,11 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
+
+		// Record HTTP metrics
+		statusCode := fmt.Sprintf("%d", status)
+		metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
 
 		if status >= 500 {
 			middlewareLogger.Error("HTTP Request",
@@ -75,10 +81,15 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
 	handler := NewHandler(logger, keeper.GetStateManager())
 
+	// Initialize metrics collector
+	metricsCollector := metrics.NewCollector()
+	metricsCollector.Start()
+
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
 	router.GET("/status", handler.GetKeeperStatus)
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
+	router.GET("/metrics", gin.WrapH(metricsCollector.Handler()))
 }
 
 func (h *Handler) handleRoot(c *gin.Context) {
@@ -107,6 +118,9 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		"version", keeperHealth.Version,
 		"peer_id", keeperHealth.PeerID,
 	)
+
+	// Record check-in by version metric
+	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
 	if keeperHealth.Version == "0.1.3" {
 		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
@@ -187,6 +201,11 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 	total, active := h.stateManager.GetKeeperCount()
 	activeKeepers := h.stateManager.GetAllActiveKeepers()
 
+	// Update keeper metrics
+	metrics.KeepersTotal.Set(float64(total))
+	metrics.KeepersActiveTotal.Set(float64(active))
+	metrics.KeepersInactiveTotal.Set(float64(total - active))
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":      total,
 		"active_keepers":     active,
@@ -197,6 +216,11 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	total, active := h.stateManager.GetKeeperCount()
 	detailedInfo := h.stateManager.GetDetailedKeeperInfo()
+
+	// Update keeper metrics
+	metrics.KeepersTotal.Set(float64(total))
+	metrics.KeepersActiveTotal.Set(float64(active))
+	metrics.KeepersInactiveTotal.Set(float64(total - active))
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":  total,

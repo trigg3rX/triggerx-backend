@@ -242,7 +242,18 @@ func validateEthereumAddress(fl validator.FieldLevel) bool {
 
 func validateIPFSURL(fl validator.FieldLevel) bool {
 	url := fl.Field().String()
-	return strings.HasPrefix(url, "ipfs://") || strings.HasPrefix(url, "https://ipfs.io/ipfs/")
+
+	// Check for native IPFS protocol
+	if strings.HasPrefix(url, "ipfs://") {
+		return true
+	}
+
+	// Check for HTTPS URLs that contain "/ipfs/" path (covers various gateways)
+	if strings.HasPrefix(url, "https://") && strings.Contains(url, "/ipfs/") {
+		return true
+	}
+
+	return false
 }
 
 func validateChainID(fl validator.FieldLevel) bool {
