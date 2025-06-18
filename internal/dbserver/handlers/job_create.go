@@ -73,11 +73,11 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUserID, tempJobs[0].UserAddress)
+		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUser.UserID, existingUser.UserAddress)
 	}
 
 	createdJobs := types.CreateJobResponse{
-		UserID:            existingUserID,
+		UserID:            existingUser.UserID,
 		AccountBalance:    existingUser.EtherBalance,
 		TokenBalance:      existingUser.TokenBalance,
 		JobIDs:            make([]int64, len(tempJobs)),
@@ -99,7 +99,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		jobData := &types.JobData{
 			JobTitle:          tempJobs[i].JobTitle,
 			TaskDefinitionID:  tempJobs[i].TaskDefinitionID,
-			UserID:            existingUserID,
+			UserID:            existingUser.UserID,
 			LinkJobID:         linkJobID,
 			ChainStatus:       chainStatus,
 			Custom:            tempJobs[i].Custom,
@@ -143,7 +143,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				ExpirationTime:            expirationTime,
 				// Recurring:                 tempJobs[i].Recurring,
 				TimeInterval:              tempJobs[i].TimeInterval,
-				ScheduleType:              tempJobs[i].ScheduleType,
+				ScheduleType:              "interval",
 				CronExpression:            tempJobs[i].CronExpression,
 				SpecificSchedule:          tempJobs[i].SpecificSchedule,
 				NextExecutionTimestamp:    nextExecutionTimestamp,
@@ -253,9 +253,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		var currentPoints = existingUser.UserPoints
 		newPoints := currentPoints + pointsToAdd
 		trackDBOp = metrics.TrackDBOperation("update", "users")
-		if err := h.userRepository.UpdateUserTasksAndPoints(existingUserID, 0, newPoints); err != nil {
+		if err := h.userRepository.UpdateUserTasksAndPoints(existingUser.UserID, 0, newPoints); err != nil {
 			trackDBOp(err)
-			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
+			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUser.UserID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user points: " + err.Error()})
 			return
 		}
@@ -269,14 +269,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	// Update user's job_ids
 	allJobIDs := append(existingUser.JobIDs, createdJobs.JobIDs...)
 	trackDBOp = metrics.TrackDBOperation("update", "users")
-	if err := h.userRepository.UpdateUserJobIDs(existingUserID, allJobIDs); err != nil {
+	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, allJobIDs); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUserID, err)
+		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUser.UserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user job IDs: " + err.Error()})
 		return
 	}
 	trackDBOp(nil)
-	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUserID, len(allJobIDs))
+	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUser.UserID, len(allJobIDs))
 
 	// Track total operation duration
 	trackDBOp = metrics.TrackDBOperation("create", "jobs")
@@ -284,5 +284,5 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	c.JSON(http.StatusOK, createdJobs)
 	h.logger.Infof("[CreateJobData] Successfully completed job creation for user %d with %d new jobs",
-		existingUserID, len(tempJobs))
+		existingUser.UserID, len(tempJobs))
 }
