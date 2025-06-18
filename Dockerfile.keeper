@@ -35,7 +35,7 @@ WORKDIR /root/
 COPY --from=builder /app/triggerx-keeper .
 
 # Copy the startup script
-COPY ./scripts/services/start-keeper.sh /root/start-keeper.sh
+COPY ./scripts/docker/services/start-keeper.sh /root/start-keeper.sh
 RUN mkdir -p /root/data/peerstore/attester
 RUN touch .env
 

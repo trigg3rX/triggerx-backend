@@ -58,7 +58,7 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 
 	// Log health check
 	duration := time.Since(startTime)
-	h.logger.Infof("Health check completed: status=%s, db_status=%s, duration=%v",
+	h.logger.Debugf("Health check completed: status=%s, db_status=%s, duration=%v",
 		response["status"], dbStatus, duration)
 
 	c.JSON(httpStatus, response)

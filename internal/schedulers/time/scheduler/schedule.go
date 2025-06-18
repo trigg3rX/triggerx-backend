@@ -27,36 +27,36 @@ func (s *TimeBasedScheduler) Start(ctx context.Context) {
 			s.logger.Info("Scheduler stopped")
 			return
 		case <-ticker.C:
-			s.pollAndScheduleJobs()
+			s.pollAndScheduleTasks()
 		}
 	}
 }
 
-// pollAndScheduleJobs fetches jobs from database and schedules them for execution
-func (s *TimeBasedScheduler) pollAndScheduleJobs() {
-	jobs, err := s.dbClient.GetTimeBasedJobs()
+// pollAndScheduleTasks fetches tasks from database and schedules them for execution
+func (s *TimeBasedScheduler) pollAndScheduleTasks() {
+	tasks, err := s.dbClient.GetTimeBasedJobs()
 	if err != nil {
-		s.logger.Errorf("Failed to fetch time-based jobs: %v", err)
+		s.logger.Errorf("Failed to fetch time-based tasks: %v", err)
 		metrics.TrackDBConnectionError()
 		return
 	}
 
-	if len(jobs) == 0 {
+	if len(tasks) == 0 {
 		s.logger.Debug("No tasks found for execution")
 		return
 	}
 
-	s.logger.Infof("Found %d tasks to process", len(jobs))
-	metrics.TasksScheduled.Set(float64(len(jobs)))
-	metrics.JobBatchSize.Set(float64(s.jobBatchSize))
+	s.logger.Infof("Found %d tasks to process", len(tasks))
+	metrics.TasksScheduled.Set(float64(len(tasks)))
+	metrics.TaskBatchSize.Set(float64(s.taskBatchSize))
 
-	for i := 0; i < len(jobs); i += s.jobBatchSize {
-		end := i + s.jobBatchSize
-		if end > len(jobs) {
-			end = len(jobs)
+	for i := 0; i < len(tasks); i += s.taskBatchSize {
+		end := i + s.taskBatchSize
+		if end > len(tasks) {
+			end = len(tasks)
 		}
 
-		batch := jobs[i:end]
+		batch := tasks[i:end]
 		s.processBatch(batch)
 	}
 }
@@ -113,8 +113,10 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	}
 	triggerData := types.TaskTriggerData{
 		TaskID:                  task.TaskID,
+		TaskDefinitionID:        task.TaskDefinitionID,
 		ExpirationTime:          task.ExpirationTime,
 		CurrentTriggerTimestamp: time.Now(),
+		NextTriggerTimestamp:    task.NextExecutionTimestamp,
 		TimeScheduleType:        task.ScheduleType,
 		TimeCronExpression:      task.CronExpression,
 		TimeSpecificSchedule:    task.SpecificSchedule,

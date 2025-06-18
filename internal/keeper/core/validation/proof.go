@@ -66,7 +66,7 @@ func (v *TaskValidator) validateProofHash(ipfsData types.IPFSData, traceID strin
 	}
 	ipfsDataForValidation.ProofData.TaskID = ipfsData.TaskData.TaskID
 	ipfsDataForValidation.PerformerSignature.TaskID = ipfsData.TaskData.TaskID
-	ipfsDataForValidation.PerformerSignature.PerformerSigningAddress = config.GetConsensusAddress()
+	ipfsDataForValidation.PerformerSignature.PerformerSigningAddress = ipfsData.PerformerSignature.PerformerSigningAddress
 
 	// Regenerate the proof hash
 	dataStr, err := proof.StringifyIPFSData(ipfsDataForValidation)

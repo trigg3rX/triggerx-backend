@@ -54,7 +54,7 @@ func main() {
 	aggregatorCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
 		SenderPrivateKey: config.GetPrivateKeyConsensus(),
-		SenderAddress:    config.GetConsensusAddress(),
+		SenderAddress:    config.GetKeeperAddress(),
 	}
 	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
 	if err != nil {

@@ -38,13 +38,7 @@ func main() {
 	}
 
 	// Initialize database client
-	dbClientCfg := client.Config{
-		DBServerURL:    config.GetDBServerURL(),
-		RequestTimeout: 10 * time.Second,
-		MaxRetries:     3,
-		RetryDelay:     1 * time.Second,
-	}
-	dbClient, err := client.NewDBServerClient(logger, dbClientCfg)
+	dbClient, err := client.NewDBServerClient(logger, config.GetDBServerURL())
 	if err != nil {
 		logger.Fatal("Failed to initialize database client", "error", err)
 	}
@@ -117,7 +111,7 @@ func main() {
 		"duplicate_task_window": config.GetDuplicateTaskWindow(),
 	}
 
-	logger.Info("Time-based scheduler service ready", serviceStatus)
+	logger.Info("Time-based scheduler service ready", "status", serviceStatus)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)

@@ -39,7 +39,7 @@ func collectSystemMetrics() {
 // Collects configuration-based metrics
 func collectConfigurationMetrics() {
 	// Set job batch size from configuration
-	JobBatchSize.Set(float64(getJobBatchSize()))
+	TaskBatchSize.Set(float64(getTaskBatchSize()))
 
 	// Set duplicate task window from configuration
 	DuplicateTaskWindowSeconds.Set(getDuplicateTaskWindowSeconds())
@@ -109,7 +109,7 @@ func resetDailyMetrics() {
 }
 
 // Helper functions to get configuration values
-func getJobBatchSize() int {
+func getTaskBatchSize() int {
 	return config.GetTaskBatchSize()
 }
 

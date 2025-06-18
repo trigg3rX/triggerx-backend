@@ -70,9 +70,16 @@ if docker ps -a | grep -q "triggerx-${DOCKER_NAME}"; then
     docker rm triggerx-${DOCKER_NAME} 2>/dev/null
 fi
 
-# Pull the image
-echo "Pulling trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}..."
-docker pull trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+# Check if local image exists
+if ! docker images --filter reference="triggerx-${DOCKER_NAME}:${VERSION}" | grep "triggerx-${DOCKER_NAME}"; then
+    echo "Local image triggerx-${DOCKER_NAME}:${VERSION} does not exist" 1>&2
+    IMAGE_NAME="trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}"
+    echo "Pulling ${IMAGE_NAME}..."
+    docker pull ${IMAGE_NAME}
+else
+    echo "Using local image triggerx-${DOCKER_NAME}:${VERSION}"
+    IMAGE_NAME="triggerx-${DOCKER_NAME}:${VERSION}"
+fi
 
 # Check if .env file exists
 if [ ! -f .env ]; then
@@ -91,16 +98,16 @@ if [[ "$SERVICE" == "registrar" ]]; then
         -v ./pkg/bindings/abi:/root/pkg/bindings/abi \
         -p ${PORT}:${PORT} \
         --restart unless-stopped \
-        trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        ${IMAGE_NAME}
 else
     # Run the container
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
         ${ENV_FILE} \
-        -p ${PORT}:${PORT} \
+        --network host \
         --restart unless-stopped \
-        trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
+        ${IMAGE_NAME}
 fi
 
 # Check if container started successfully
