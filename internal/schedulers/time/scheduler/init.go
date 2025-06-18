@@ -24,7 +24,7 @@ type TimeBasedScheduler struct {
 	schedulerSigningAddress string
 	pollingInterval         time.Duration
 	pollingLookAhead        time.Duration
-	jobBatchSize            int
+	taskBatchSize            int
 	performerLockTTL        time.Duration
 	taskCacheTTL            time.Duration
 	duplicateTaskWindow     time.Duration
@@ -46,7 +46,7 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *cl
 		schedulerSigningAddress: config.GetSchedulerSigningAddress(),
 		pollingInterval:         config.GetPollingInterval(),
 		pollingLookAhead:        config.GetPollingLookAhead(),
-		jobBatchSize:            config.GetTaskBatchSize(),
+		taskBatchSize:            config.GetTaskBatchSize(),
 		performerLockTTL:        config.GetPerformerLockTTL(),
 		taskCacheTTL:            config.GetTaskCacheTTL(),
 		duplicateTaskWindow:     config.GetDuplicateTaskWindow(),

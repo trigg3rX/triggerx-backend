@@ -116,8 +116,8 @@ var (
 		Help:      "Tasks that expired before execution",
 	})
 
-	// Job batch size
-	JobBatchSize = promauto.NewGauge(prometheus.GaugeOpts{
+	// Task batch size
+	TaskBatchSize = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "time_scheduler",
 		Name:      "job_batch_size",
