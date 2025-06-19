@@ -2,6 +2,17 @@ package types
 
 import "time"
 
+// Task status constants
+type TaskStatus string
+
+const (
+	TaskStatusPending   TaskStatus = "pending"
+	TaskStatusSubmitted TaskStatus = "submitted"
+	TaskStatusRejected  TaskStatus = "rejected"
+	TaskStatusCompleted TaskStatus = "completed"
+	TaskStatusFailed    TaskStatus = "failed"
+)
+
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
@@ -18,6 +29,7 @@ type TaskData struct {
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
 	IsSuccessful         bool      `json:"is_successful"`
+	TaskStatus           string    `json:"task_status"`
 }
 
 type CreateTaskDataRequest struct {
@@ -52,4 +64,5 @@ type TasksByJobIDResponse struct {
 	TaskPerformerID    int64     `json:"task_performer_id"`
 	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
 	IsSuccessful       bool      `json:"is_successful"`
+	TaskStatus         string    `json:"task_status"`
 }
