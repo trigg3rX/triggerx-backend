@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"time"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,5 +22,12 @@ func NewStatusHandler(logger logging.Logger) *StatusHandler {
 
 // Status handles status endpoint requests
 func (h *StatusHandler) Status(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	response := gin.H{
+		"status":    "healthy",
+		"service":   "condition-scheduler",
+		"timestamp": time.Now().UTC(),
+		"uptime":    time.Since(time.Now()).String(), // This would be calculated from startup time
+	}
+
+	c.JSON(http.StatusOK, response)
 }

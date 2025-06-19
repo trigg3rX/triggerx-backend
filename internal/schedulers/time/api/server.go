@@ -92,7 +92,5 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	api := s.router.Group("/api/v1")
 	{
 		api.GET("/scheduler/stats", schedulerHandler.GetStats)
-		api.POST("/scheduler/stop", schedulerHandler.Stop)
-		api.POST("/scheduler/start", schedulerHandler.Start)
 	}
 }
