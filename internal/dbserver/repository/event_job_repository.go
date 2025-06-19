@@ -59,6 +59,11 @@ func (r *eventJobRepository) CompleteEventJob(jobID int64) error {
 		return errors.New("failed to complete event job")
 	}
 
+	err = r.db.Session().Query(queries.UpdateJobDataToCompletedQuery, jobID).Exec()
+	if err != nil {
+		return errors.New("failed to update job_data status to completed")
+	}
+
 	return nil
 }
 

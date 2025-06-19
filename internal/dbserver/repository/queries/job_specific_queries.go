@@ -65,6 +65,11 @@ const (
 			UPDATE triggerx.time_job_data
 			SET next_execution_timestamp = ?
 			WHERE job_id = ?`
+
+	UpdateJobDataToCompletedQuery = `
+			UPDATE triggerx.job_data 
+			SET status = 'completed'
+			WHERE job_id = ?`
 )
 
 // Read Queries

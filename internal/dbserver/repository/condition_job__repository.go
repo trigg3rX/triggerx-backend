@@ -60,6 +60,11 @@ func (r *conditionJobRepository) CompleteConditionJob(jobID int64) error {
 		return errors.New("failed to complete condition job")
 	}
 
+	err = r.db.Session().Query(queries.UpdateJobDataToCompletedQuery, jobID).Exec()
+	if err != nil {
+		return errors.New("failed to update job_data status to completed")
+	}
+
 	return nil
 }
 
