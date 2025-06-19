@@ -81,8 +81,6 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
 			{TaskSubmittedEventSignature()},
-			nil,
-			nil,
 		},
 	}
 
@@ -123,8 +121,22 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TaskData.TriggerData[0].TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
+			// Update task number and status to "submitted" in database
+			taskID := int(ipfsData.TaskData.TriggerData[0].TaskID)
+			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), "submitted", event.Raw.TxHash.Hex()); err != nil {
+				t.logger.Errorf("Failed to update task number and status in database: %v", err)
+				continue
+			}
+
+			// Update points for performers and attesters
+			if err := client.UpdatePointsInDatabase(taskID, event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
+				continue
+			}
+
+			// Update job status to "running"
+			if err := client.UpdateJobStatus(ipfsData.TaskData.TriggerData[0].TaskID, "running"); err != nil {
+				t.logger.Errorf("Failed to update job status: %v", err)
 				continue
 			}
 
@@ -196,8 +208,22 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TaskData.TriggerData[0].TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
+			// Update task number and status to "rejected" in database
+			taskID := int(ipfsData.TaskData.TriggerData[0].TaskID)
+			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), "rejected", event.Raw.TxHash.Hex()); err != nil {
+				t.logger.Errorf("Failed to update task number and status in database: %v", err)
+				continue
+			}
+
+			// Update points for performers and attesters (with rejection penalty)
+			if err := client.UpdatePointsInDatabase(taskID, event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
+				continue
+			}
+
+			// Update job status to "failed" for rejected tasks
+			if err := client.UpdateJobStatus(ipfsData.TaskData.TriggerData[0].TaskID, "failed"); err != nil {
+				t.logger.Errorf("Failed to update job status: %v", err)
 				continue
 			}
 

@@ -377,6 +377,50 @@ func (dm *DatabaseManager) UpdateOperatorDetails(operatorAddress string, operato
 	return nil
 }
 
+// UpdateTaskNumberAndStatus updates task number and status in database
+func (dm *DatabaseManager) UpdateTaskNumberAndStatus(taskID int, taskNumber int64, status string, txHash string) error {
+	dm.logger.Infof("Updating task %d with number %d and status %s", taskID, taskNumber, status)
+
+	if err := dm.db.Session().Query(`
+		UPDATE triggerx.task_data 
+		SET task_number = ?, task_status = ?, task_submission_tx_hash = ?
+		WHERE task_id = ?`,
+		taskNumber, status, txHash, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task number and status for task ID %d: %v", taskID, err)
+		return err
+	}
+
+	dm.logger.Infof("Successfully updated task %d with number %d and status %s", taskID, taskNumber, status)
+	return nil
+}
+
+// UpdateJobStatus updates job status in database
+func (dm *DatabaseManager) UpdateJobStatus(taskID int64, status string) error {
+	dm.logger.Infof("Updating job status to %s for task %d", status, taskID)
+
+	// First get the job ID from task ID
+	var jobID int64
+	if err := dm.db.Session().Query(`
+		SELECT job_id FROM triggerx.task_data WHERE task_id = ?`,
+		taskID).Scan(&jobID); err != nil {
+		dm.logger.Errorf("Failed to get job ID for task ID %d: %v", taskID, err)
+		return err
+	}
+
+	// Update job status
+	if err := dm.db.Session().Query(`
+		UPDATE triggerx.job_data 
+		SET status = ?
+		WHERE job_id = ?`,
+		status, jobID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating job status for job ID %d: %v", jobID, err)
+		return err
+	}
+
+	dm.logger.Infof("Successfully updated job %d status to %s", jobID, status)
+	return nil
+}
+
 // Public wrapper functions
 func KeeperRegistered(operatorAddress string, txHash string) error {
 	return GetInstance().KeeperRegistered(operatorAddress, txHash)
@@ -396,4 +440,12 @@ func DailyRewardsPoints() error {
 
 func UpdateOperatorDetails(operatorAddress string, operatorId string, votingPower string, rewardsReceiver string, strategies []string) error {
 	return GetInstance().UpdateOperatorDetails(operatorAddress, operatorId, votingPower, rewardsReceiver, strategies)
+}
+
+func UpdateTaskNumberAndStatus(taskID int, taskNumber int64, status string, txHash string) error {
+	return GetInstance().UpdateTaskNumberAndStatus(taskID, taskNumber, status, txHash)
+}
+
+func UpdateJobStatus(taskID int64, status string) error {
+	return GetInstance().UpdateJobStatus(taskID, status)
 }

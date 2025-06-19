@@ -60,7 +60,7 @@ start-keeper: ## Start the Keeper
 
 install-tools: ## Install the tools for GitHub Actions
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
-	go install github.com/psampaz/go-mod-outdated@latest
+	
 
 format-go: ## Format the Go code (active)
 	@which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
