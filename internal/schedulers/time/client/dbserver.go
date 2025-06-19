@@ -44,18 +44,18 @@ func NewDBServerClient(logger logging.Logger, baseURL string) (*DBServerClient, 
 	}, nil
 }
 
-// GetTimeBasedJobs fetches jobs that need to be executed in the next window
-func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeTaskData, error) {
+// GetTimeBasedTasks fetches tasks that need to be executed in the next window
+func (c *DBServerClient) GetTimeBasedTasks() ([]types.ScheduleTimeTaskData, error) {
 	url := fmt.Sprintf("%s/api/jobs/time", c.baseURL)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch time-based jobs: %v", err)
+		return nil, fmt.Errorf("failed to fetch time-based tasks: %v", err)
 	}
 
 	resp, err := c.httpClient.DoWithRetry(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch time-based jobs: %v", err)
+		return nil, fmt.Errorf("failed to fetch time-based tasks: %v", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -64,46 +64,19 @@ func (c *DBServerClient) GetTimeBasedJobs() ([]types.ScheduleTimeTaskData, error
 	}
 	defer resp.Body.Close()
 
-	var jobs []types.ScheduleTimeTaskData
-	err = json.Unmarshal(body, &jobs)
+	var tasks []types.ScheduleTimeTaskData
+	err = json.Unmarshal(body, &tasks)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
 	}
 
-	c.logger.Debugf("Fetched %d time-based jobs", len(jobs))
-	return jobs, nil
+	c.logger.Debugf("Fetched %d time-based tasks", len(tasks))
+	return tasks, nil
 }
 
-// UpdateJobNextExecution updates the next execution timestamp for a job
-func (c *DBServerClient) UpdateJobNextExecution(jobID int64, nextExecution time.Time) error {
-	url := fmt.Sprintf("%s/api/jobs/%d/lastexecuted", c.baseURL, jobID)
-
-	payload := map[string]string{
-		"next_execution_timestamp": nextExecution.Format(time.RFC3339),
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-
-	_, err = c.httpClient.DoWithRetry(req)
-	if err != nil {
-		return fmt.Errorf("failed to update job %d next execution: %v", jobID, err)
-	}
-
-	c.logger.Debugf("Updated job %d next execution to %v", jobID, nextExecution)
-	return nil
-}
-
-// UpdateJobStatus updates the status of a job
-func (c *DBServerClient) UpdateJobStatus(jobID int64, status bool) error {
-	url := fmt.Sprintf("%s/api/jobs/%d/status/%t", c.baseURL, jobID, status)
+// UpdateTaskStatus updates the status of a task
+func (c *DBServerClient) UpdateTaskStatus(taskID int64, status bool) error {
+	url := fmt.Sprintf("%s/api/tasks/%d/status/%t", c.baseURL, taskID, status)
 
 	payload := map[string]bool{
 		"status": status,
@@ -121,10 +94,10 @@ func (c *DBServerClient) UpdateJobStatus(jobID int64, status bool) error {
 
 	_, err = c.httpClient.DoWithRetry(req)
 	if err != nil {
-		return fmt.Errorf("failed to update job %d status: %v", jobID, err)
+		return fmt.Errorf("failed to update task %d status: %v", taskID, err)
 	}
 
-	c.logger.Debugf("Updated job %d status to %v", jobID, status)
+	c.logger.Debugf("Updated task %d status to %v", taskID, status)
 	return nil
 }
 
