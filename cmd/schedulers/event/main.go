@@ -102,7 +102,7 @@ func main() {
 		"supported_chains": []string{"OP Sepolia (11155420)", "Base Sepolia (84532)", "Ethereum Sepolia (11155111)"},
 	}
 
-	logger.Info("Event-based scheduler service ready", serviceStatus)
+	logger.Info("Event-based scheduler service ready", "status", serviceStatus)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
