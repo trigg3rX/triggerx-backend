@@ -8,22 +8,23 @@
 # arg_type: 0, 1, 2
 
 echo "Creating Time-based Job..."
-curl -X POST http://localhost:9002/api/jobs \
+# curl -X POST http://192.168.1.56:9002/api/jobs \
+curl -X POST https://data.triggerx.network/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
-      \"user_address\": \"0x6D9f7A4E3B2C1a8F5e0D6B9c4A3E8d2F1B5c7D9D\",
+      \"user_address\": \"0x7Db951c0E6D8906687B459427eA3F3F2b456473B\",
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
       \"job_title\": \"Wind's Howling\",
       \"task_definition_id\": 1,
       \"custom\": true,
-      \"time_frame\": 16,
+      \"time_frame\": 35,
       \"recurring\": false,
       \"job_cost_prediction\": 0.1,
       \"timezone\": \"IST\",
       \"schedule_type\": \"interval\",
-      \"time_interval\": 15,
+      \"time_interval\": 30,
       \"cron_expression\": \"0 0 * * *\",
       \"specific_schedule\": \"2025-01-01 00:00:00\",
       \"trigger_chain_id\": \"11155420\",
@@ -36,7 +37,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"value_source_url\": \"https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd\",
       \"target_chain_id\": \"11155420\",
       \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-      \"target_function\": \"incrementBy(uint256 amount)\",
+      \"target_function\": \"incrementBy\",
       \"abi\": \"[{\\\"anonymous\\\":false,\\\"inputs\\\":[{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"previousValue\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"newValue\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"incrementAmount\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"CounterIncremented\\\",\\\"type\\\":\\\"event\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getCount\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"increment\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"amount\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"incrementBy\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
       \"arg_type\": 1,
       \"arguments\": [\"3\"],
