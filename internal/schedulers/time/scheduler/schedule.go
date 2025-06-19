@@ -63,27 +63,6 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 
 // processBatch processes a batch of jobs
 func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
-	for _, task := range tasks {
-		s.executeTask(&task)
-	}
-}
-
-// executeTask executes a single task and updates its next execution time
-func (s *TimeBasedScheduler) executeTask(task *types.ScheduleTimeTaskData) {
-	startTime := time.Now()
-
-	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.TaskTargetData.JobID)
-
-	// Check if ExpirationTime of the job has passed or not
-	if task.ExpirationTime.Before(time.Now()) {
-		s.logger.Infof("Task ID %d has expired, skipping execution", task.TaskID)
-		metrics.TrackTaskExpired()
-		return
-	}
-
-	// Track task by schedule type
-	metrics.TrackTaskByScheduleType(task.ScheduleType)
-
 	// Get the performer data
 	// TODO: Get the performer data from redis service, which gets it from online keepers list from health service, and sets the performerLock in redis
 	// For now, I fixed the performer
@@ -92,64 +71,110 @@ func (s *TimeBasedScheduler) executeTask(task *types.ScheduleTimeTaskData) {
 		KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 	}
 
-	// Generate the task data to send to the performer
-	targetData := types.TaskTargetData{
-		TaskID:                    task.TaskID,
-		TaskDefinitionID:          task.TaskDefinitionID,
-		TargetChainID:             task.TaskTargetData.TargetChainID,
-		TargetContractAddress:     task.TaskTargetData.TargetContractAddress,
-		TargetFunction:            task.TaskTargetData.TargetFunction,
-		ABI:                       task.TaskTargetData.ABI,
-		ArgType:                   task.TaskTargetData.ArgType,
-		Arguments:                 task.TaskTargetData.Arguments,
-		DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
+	var targetDataList []types.TaskTargetData
+	var triggerDataList []types.TaskTriggerData
+	var validTaskIDs []int64
+
+	for _, task := range tasks {
+		// Check if ExpirationTime of the job has passed or not
+		if task.ExpirationTime.Before(time.Now()) {
+			s.logger.Infof("Task ID %d has expired, skipping execution", task.TaskID)
+			metrics.TrackTaskExpired()
+			continue
+		}
+
+		// Track task by schedule type
+		metrics.TrackTaskByScheduleType(task.ScheduleType)
+
+		// Generate the task data to send to the performer
+		targetData := types.TaskTargetData{
+			JobID:                     task.TaskTargetData.JobID,
+			TaskID:                    task.TaskID,
+			TaskDefinitionID:          task.TaskDefinitionID,
+			TargetChainID:             task.TaskTargetData.TargetChainID,
+			TargetContractAddress:     task.TaskTargetData.TargetContractAddress,
+			TargetFunction:            task.TaskTargetData.TargetFunction,
+			ABI:                       task.TaskTargetData.ABI,
+			ArgType:                   task.TaskTargetData.ArgType,
+			Arguments:                 task.TaskTargetData.Arguments,
+			DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
+		}
+		triggerData := types.TaskTriggerData{
+			TaskID:                  task.TaskID,
+			TaskDefinitionID:        task.TaskDefinitionID,
+			ExpirationTime:          task.ExpirationTime,
+			CurrentTriggerTimestamp: task.LastExecutedAt,
+			NextTriggerTimestamp:    task.NextExecutionTimestamp,
+			TimeScheduleType:        task.ScheduleType,
+			TimeCronExpression:      task.CronExpression,
+			TimeSpecificSchedule:    task.SpecificSchedule,
+			TimeInterval:            task.TimeInterval,
+		}
+
+		targetDataList = append(targetDataList, targetData)
+		triggerDataList = append(triggerDataList, triggerData)
+		validTaskIDs = append(validTaskIDs, task.TaskID)
 	}
-	triggerData := types.TaskTriggerData{
-		TaskID:                  task.TaskID,
-		TaskDefinitionID:        task.TaskDefinitionID,
-		ExpirationTime:          task.ExpirationTime,
-		CurrentTriggerTimestamp: time.Now(),
-		NextTriggerTimestamp:    task.NextExecutionTimestamp,
-		TimeScheduleType:        task.ScheduleType,
-		TimeCronExpression:      task.CronExpression,
-		TimeSpecificSchedule:    task.SpecificSchedule,
-		TimeInterval:            task.TimeInterval,
+
+	// If no valid tasks, return early
+	if len(validTaskIDs) == 0 {
+		s.logger.Debug("No valid tasks in batch after filtering expired tasks")
+		return
 	}
+
+	// Use the first task ID as the primary task ID for the batch
+	primaryTaskID := validTaskIDs[0]
+
+	s.logger.Infof("Processing batch of %d tasks, primary task ID: %d", len(validTaskIDs), primaryTaskID)
+
+	// Create scheduler signature data
 	schedulerSignatureData := types.SchedulerSignatureData{
-		TaskID:                  task.TaskID,
+		TaskID:                  primaryTaskID,
 		SchedulerSigningAddress: s.schedulerSigningAddress,
 	}
+
+	// Create the batch task data
 	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:             task.TaskID,
+		TaskID:             primaryTaskID,
 		PerformerData:      performerData,
-		TargetData:         []types.TaskTargetData{targetData},
-		TriggerData:        []types.TaskTriggerData{triggerData},
+		TargetData:         targetDataList,
+		TriggerData:        triggerDataList,
 		SchedulerSignature: &schedulerSignatureData,
 	}
+
+	// Execute the batch
+	s.executeTaskBatch(sendTaskData, validTaskIDs)
+}
+
+// executeTaskBatch executes a batch of tasks and updates their next execution time
+func (s *TimeBasedScheduler) executeTaskBatch(sendTaskData types.SendTaskDataToKeeper, taskIDs []int64) {
+	startTime := time.Now()
+
+	s.logger.Infof("Executing batch of %d time-based tasks", len(taskIDs))
 
 	// Sign the task data
 	signature, err := cryptography.SignJSONMessage(sendTaskData, config.GetSchedulerSigningKey())
 	if err != nil {
-		s.logger.Errorf("Failed to sign task data: %v", err)
+		s.logger.Errorf("Failed to sign batch task data: %v", err)
 		return
 	}
 	sendTaskData.SchedulerSignature.SchedulerSignature = signature
 
 	jsonData, err := json.Marshal(sendTaskData)
 	if err != nil {
-		s.logger.Errorf("Failed to marshal task data: %v", err)
+		s.logger.Errorf("Failed to marshal batch task data: %v", err)
 		return
 	}
 	dataBytes := []byte(jsonData)
 
 	broadcastDataForPerformer := types.BroadcastDataForPerformer{
-		TaskID:           task.TaskID,
-		TaskDefinitionID: task.TaskDefinitionID,
-		PerformerAddress: performerData.KeeperAddress,
+		TaskID:           sendTaskData.TaskID,
+		TaskDefinitionID: sendTaskData.TargetData[0].TaskDefinitionID, // Use first task's definition ID
+		PerformerAddress: sendTaskData.PerformerData.KeeperAddress,
 		Data:             dataBytes,
 	}
 
-	// Execute the actual job
+	// Execute the actual batch job
 	executionSuccess := s.performTaskExecution(broadcastDataForPerformer)
 
 	// Track task completion with timing and success status
@@ -157,9 +182,9 @@ func (s *TimeBasedScheduler) executeTask(task *types.ScheduleTimeTaskData) {
 	metrics.TrackTaskCompletion(executionSuccess, executionDuration)
 
 	if executionSuccess {
-		s.logger.Infof("Executed task ID %d in %v", task.TaskID, executionDuration)
+		s.logger.Infof("Executed batch of %d tasks (IDs: %v) in %v", len(taskIDs), taskIDs, executionDuration)
 	} else {
-		s.logger.Errorf("Failed to execute task %d after %v", task.TaskID, executionDuration)
+		s.logger.Errorf("Failed to execute batch of %d tasks (IDs: %v) after %v", len(taskIDs), taskIDs, executionDuration)
 	}
 }
 
