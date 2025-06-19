@@ -15,6 +15,11 @@ type Config struct {
 	// Scheduler RPC Port
 	conditionSchedulerRPCPort string
 
+	// Database RPC URL
+	dbServerURL string
+	// Aggregator RPC URL
+	aggregatorRPCURL string
+
 	// Scheduler Private Key and Address
 	conditionSchedulerSigningKey     string
 	conditionSchedulerSigningAddress string
@@ -22,14 +27,16 @@ type Config struct {
 	// Maximum number of workers
 	maxWorkers int
 
-	// Database RPC URL
-	dbServerURL string
-
-	// Aggregator RPC URL
-	aggregatorRPCURL string
+	// API Keys for Alchemy
+	alchemyAPIKey string
 }
 
 var cfg Config
+
+// Helper to detect test environment
+func isTestEnv() bool {
+	return env.GetEnv("APP_ENV", "") == "test"
+}
 
 // Init initializes the configuration
 func Init() error {
@@ -37,13 +44,14 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                 env.GetEnvBool("DEV_MODE", false),
+		devMode:                          env.GetEnvBool("DEV_MODE", false),
 		conditionSchedulerRPCPort:        env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"),
-		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
+		dbServerURL:                      env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCURL:                 env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 		conditionSchedulerSigningKey:     env.GetEnv("CONDITION_SCHEDULER_SIGNING_KEY", ""),
 		conditionSchedulerSigningAddress: env.GetEnv("CONDITION_SCHEDULER_SIGNING_ADDRESS", ""),
-		maxWorkers:              env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
-		aggregatorRPCURL:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		maxWorkers:                       env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
+		alchemyAPIKey:                    env.GetEnv("ALCHEMY_API_KEY", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -101,4 +109,36 @@ func GetSchedulerSigningKey() string {
 
 func GetSchedulerSigningAddress() string {
 	return cfg.conditionSchedulerSigningAddress
+}
+
+// GetChainRPCUrlsTest returns local/test chain RPC URLs
+func GetChainRPCUrlsTest() map[string]string {
+	local := "http://127.0.0.1:8545"
+	return map[string]string{
+		"11155420": local,
+		"84532":    local,
+		"11155111": local,
+	}
+}
+
+// GetChainRPCUrls returns chain RPC URLs for production or test
+func GetChainRPCUrls() map[string]string {
+	if isTestEnv() {
+		return GetChainRPCUrlsTest()
+	}
+
+	if cfg.alchemyAPIKey == "" {
+		// Fallback to public endpoints if no Alchemy key
+		return map[string]string{
+			"11155420": "https://sepolia.optimism.io",
+			"84532":    "https://sepolia.base.org",
+			"11155111": "https://ethereum-sepolia.publicnode.com",
+		}
+	}
+
+	return map[string]string{
+		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // OP Sepolia
+		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
+		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
+	}
 }
