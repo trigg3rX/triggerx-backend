@@ -35,6 +35,12 @@ func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handl
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 	middlewareLogger := logger
 	return func(c *gin.Context) {
+		// Skip logging for metrics endpoint
+		if c.Request.URL.Path == "/metrics" {
+			c.Next()
+			return
+		}
+
 		start := time.Now()
 		path := c.Request.URL.Path
 		method := c.Request.Method
