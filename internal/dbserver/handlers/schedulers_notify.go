@@ -15,7 +15,7 @@ import (
 
 // notifyEventScheduler sends a notification to the event scheduler
 func (h *Handler) notifyEventScheduler(jobID int64, job types.EventJobData) (bool, error) {
-	success, err := h.sendDataToScheduler("/job/schedule", job, "event scheduler")
+	success, err := h.sendDataToScheduler("/api/v1/job/schedule", job, "event scheduler")
 	if err != nil {
 		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", jobID, err)
 		return false, err
@@ -29,7 +29,7 @@ func (h *Handler) notifyEventScheduler(jobID int64, job types.EventJobData) (boo
 
 // notifyConditionScheduler sends a notification to the condition scheduler
 func (h *Handler) notifyConditionScheduler(jobID int64, job types.ConditionJobData) (bool, error) {
-	success, err := h.sendDataToScheduler("/job/schedule", job, "condition scheduler")
+	success, err := h.sendDataToScheduler("/api/v1/job/schedule", job, "condition scheduler")
 	if err != nil {
 		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", jobID, err)
 		return false, err
@@ -86,6 +86,7 @@ func (h *Handler) sendDataToScheduler(route string, data interface{}, schedulerN
 	default:
 		return false, fmt.Errorf("invalid scheduler name: %s", schedulerName)
 	}
+	h.logger.Infof("Sending data to %s: %s", schedulerName, apiURL)
 
 	// Create a client with aggressive timeouts and connection pooling
 	httpConfig := &retry.HTTPRetryConfig{

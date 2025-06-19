@@ -19,7 +19,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
       \"job_title\": \"Wind's Howling\",
-      \"task_definition_id\": 1,
+      \"task_definition_id\": 3,
       \"custom\": true,
       \"time_frame\": 35,
       \"recurring\": false,
