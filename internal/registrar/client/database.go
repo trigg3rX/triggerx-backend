@@ -378,7 +378,7 @@ func (dm *DatabaseManager) UpdateOperatorDetails(operatorAddress string, operato
 }
 
 // UpdateTaskNumberAndIsSuccessful updates task number, success status and execution details in database
-func (dm *DatabaseManager) UpdateTaskNumberAndIsSuccessful(taskID int, taskNumber int64, isSuccessful bool, txHash string, performerAddress string, attesterIds []string, executionTxHash string, executionTimestamp time.Time) error {
+func (dm *DatabaseManager) UpdateTaskNumberAndIsSuccessful(taskID int, taskNumber int64, isSuccessful bool, txHash string, performerAddress string, attesterIds []string, executionTxHash string, executionTimestamp time.Time, proofOfTask string) error {
 	dm.logger.Infof("Updating task %d with number %d and success status %t", taskID, taskNumber, isSuccessful)
 
 	// Get performer ID from address
@@ -420,9 +420,9 @@ func (dm *DatabaseManager) UpdateTaskNumberAndIsSuccessful(taskID int, taskNumbe
 	if err := dm.db.Session().Query(`
 		UPDATE triggerx.task_data 
 		SET task_number = ?, is_successful = ?, task_submission_tx_hash = ?, 
-		    task_performer_id = ?, task_attester_ids = ?, execution_tx_hash = ?, execution_timestamp = ?
+		    task_performer_id = ?, task_attester_ids = ?, execution_tx_hash = ?, execution_timestamp = ?, proof_of_task = ?
 		WHERE task_id = ?`,
-		taskNumber, isSuccessful, txHash, performerID, attesterBigIntIds, executionTxHash, executionTimestamp, taskID).Exec(); err != nil {
+		taskNumber, isSuccessful, txHash, performerID, attesterBigIntIds, executionTxHash, executionTimestamp, proofOfTask, taskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", taskID, err)
 		return err
 	}
@@ -508,8 +508,8 @@ func UpdateOperatorDetails(operatorAddress string, operatorId string, votingPowe
 	return GetInstance().UpdateOperatorDetails(operatorAddress, operatorId, votingPower, rewardsReceiver, strategies)
 }
 
-func UpdateTaskNumberAndStatus(taskID int, taskNumber int64, isSuccessful bool, txHash string, performerAddress string, attesterIds []string, executionTxHash string, executionTimestamp time.Time) error {
-	return GetInstance().UpdateTaskNumberAndIsSuccessful(taskID, taskNumber, isSuccessful, txHash, performerAddress, attesterIds, executionTxHash, executionTimestamp)
+func UpdateTaskNumberAndStatus(taskID int, taskNumber int64, isSuccessful bool, txHash string, performerAddress string, attesterIds []string, executionTxHash string, executionTimestamp time.Time, proofOfTask string) error {
+	return GetInstance().UpdateTaskNumberAndIsSuccessful(taskID, taskNumber, isSuccessful, txHash, performerAddress, attesterIds, executionTxHash, executionTimestamp, proofOfTask)
 }
 
 func UpdateJobStatus(taskID int64, status string) error {
