@@ -3,9 +3,11 @@ package types
 import "time"
 
 type TimeJobData struct {
-	JobID          int64     `json:"job_id"`
-	LastExecutedAt time.Time `json:"last_executed_at"`
-	ExpirationTime time.Time `json:"expiration_time"`
+	JobID            		  int64     `json:"job_id"`
+	TaskDefinitionID          int       `json:"task_definition_id"`
+	ExpirationTime            time.Time `json:"expiration_time"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 	// Recurring                 bool      `json:"recurring"`
 	TimeInterval              int64     `json:"time_interval"`
 	ScheduleType              string    `json:"schedule_type"`
@@ -26,7 +28,10 @@ type TimeJobData struct {
 
 type EventJobData struct {
 	JobID                     int64     `json:"job_id"`
+	TaskDefinitionID          int       `json:"task_definition_id"`
 	ExpirationTime            time.Time `json:"expiration_time"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 	Recurring                 bool      `json:"recurring"`
 	TriggerChainID            string    `json:"trigger_chain_id"`
 	TriggerContractAddress    string    `json:"trigger_contract_address"`
@@ -44,7 +49,10 @@ type EventJobData struct {
 
 type ConditionJobData struct {
 	JobID                     int64     `json:"job_id"`
+	TaskDefinitionID          int       `json:"task_definition_id"`
 	ExpirationTime            time.Time `json:"expiration_time"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 	Recurring                 bool      `json:"recurring"`
 	ConditionType             string    `json:"condition_type"`
 	UpperLimit                float64   `json:"upper_limit"`

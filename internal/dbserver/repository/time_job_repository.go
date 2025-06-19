@@ -33,11 +33,11 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
-		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
-		timeJob.SpecificSchedule, timeJob.Timezone, timeJob.TargetChainID,
-		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType,
-		timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl, false, true).Exec()
+		timeJob.JobID, timeJob.TaskDefinitionID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
+		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule,
+		timeJob.Timezone, timeJob.TargetChainID, timeJob.TargetContractAddress, timeJob.TargetFunction,
+		timeJob.ABI, timeJob.ArgType, timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl,
+		timeJob.IsCompleted, timeJob.IsActive, time.Now(), time.Now()).Exec()
 
 	if err != nil {
 		return err

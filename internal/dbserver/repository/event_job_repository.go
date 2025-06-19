@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
@@ -27,9 +28,11 @@ func NewEventJobRepository(db *database.Connection) EventJobRepository {
 
 func (r *eventJobRepository) CreateEventJob(eventJob *types.EventJobData) error {
 	err := r.db.Session().Query(queries.CreateEventJobDataQuery,
-		eventJob.JobID, eventJob.ExpirationTime, eventJob.Recurring, eventJob.TriggerChainID, eventJob.TriggerContractAddress, eventJob.TriggerEvent,
-		eventJob.TargetChainID, eventJob.TargetContractAddress, eventJob.TargetFunction, eventJob.ABI, eventJob.ArgType, eventJob.Arguments,
-		eventJob.DynamicArgumentsScriptUrl, false, true).Exec()
+		eventJob.JobID, eventJob.TaskDefinitionID, eventJob.ExpirationTime, eventJob.Recurring,
+		eventJob.TriggerChainID, eventJob.TriggerContractAddress, eventJob.TriggerEvent,
+		eventJob.TargetChainID, eventJob.TargetContractAddress, eventJob.TargetFunction,
+		eventJob.ABI, eventJob.ArgType, eventJob.Arguments, eventJob.DynamicArgumentsScriptUrl,
+		eventJob.IsCompleted, eventJob.IsActive, time.Now(), time.Now()).Exec()
 
 	if err != nil {
 		return err

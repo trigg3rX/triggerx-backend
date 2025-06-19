@@ -139,8 +139,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 
 			timeJobData := types.TimeJobData{
-				JobID:                     jobID,
-				ExpirationTime:            expirationTime,
+				JobID:            jobID,
+				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
+				ExpirationTime:   expirationTime,
 				// Recurring:                 tempJobs[i].Recurring,
 				TimeInterval:              tempJobs[i].TimeInterval,
 				ScheduleType:              "interval",
@@ -174,6 +175,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Event-based job
 			eventJobData := types.EventJobData{
 				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
 				TriggerChainID:            tempJobs[i].TriggerChainID,
@@ -208,6 +210,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Condition-based job
 			conditionJobData := types.ConditionJobData{
 				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
 				ConditionType:             tempJobs[i].ConditionType,

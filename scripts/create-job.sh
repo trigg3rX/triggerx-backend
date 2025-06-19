@@ -10,7 +10,8 @@
 
 echo "Creating Time-based Job..."
 # curl -X POST http://192.168.1.56:9002/api/jobs \
-curl -X POST https://data.triggerx.network/api/jobs \
+# curl -X POST https://data.triggerx.network/api/jobs \
+curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
