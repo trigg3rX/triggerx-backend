@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -38,11 +38,10 @@ func main() {
 	}
 
 	// Initialize database client
-	dbClient, err := client.NewDBServerClient(logger, config.GetDBServerURL())
+	dbClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerURL())
 	if err != nil {
 		logger.Fatal("Failed to initialize database client", "error", err)
 	}
-	defer dbClient.Close()
 
 	// Initialize aggregator client
 	aggClientCfg := aggregator.AggregatorClientConfig{
@@ -119,10 +118,10 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(cancel, srv, timeScheduler, logger)
+	performGracefulShutdown(cancel, srv, timeScheduler, dbClient, aggClient, logger)
 }
 
-func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, logger logging.Logger) {
+func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, dbClient *dbserver.DBServerClient, aggClient *aggregator.AggregatorClient, logger logging.Logger) {
 	shutdownStart := time.Now()
 	logger.Info("Initiating graceful shutdown...")
 
@@ -135,6 +134,9 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeSch
 
 	// Stop scheduler gracefully
 	timeScheduler.Stop()
+
+	dbClient.Close()
+	aggClient.Close()
 
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {

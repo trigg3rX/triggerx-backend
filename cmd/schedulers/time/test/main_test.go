@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -160,7 +160,7 @@ func TestMain(t *testing.T) {
 
 		// Create scheduler
 		managerID := "test-time-scheduler"
-		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, &client.DBServerClient{}, aggClient)
+		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, &dbserver.DBServerClient{}, aggClient)
 		assert.NoError(t, err, "Scheduler creation should not fail")
 		assert.NotNil(t, timeScheduler, "Scheduler should not be nil")
 		logger.Info("Time scheduler created successfully")
@@ -199,7 +199,7 @@ func TestMain(t *testing.T) {
 
 		// Create scheduler
 		managerID := "test-time-scheduler"
-		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, &client.DBServerClient{}, aggClient)
+		timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, &dbserver.DBServerClient{}, aggClient)
 		assert.NoError(t, err, "Scheduler creation should not fail")
 
 		// Create server

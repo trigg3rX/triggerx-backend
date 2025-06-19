@@ -94,3 +94,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 
 	return err
 }
+
+func (c *AggregatorClient) Close() {
+	c.httpClient.Close()
+}
