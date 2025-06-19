@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 
@@ -10,27 +9,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-// Start begins the scheduler's main polling and execution loop
-func (s *TimeBasedScheduler) Start(ctx context.Context) {
-	s.logger.Info("Starting time-based scheduler", "scheduler_signing_address", s.schedulerSigningAddress)
-
-	ticker := time.NewTicker(s.pollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Info("Scheduler context cancelled, stopping")
-			return
-		case <-s.ctx.Done():
-			s.logger.Info("Scheduler stopped")
-			return
-		case <-ticker.C:
-			s.pollAndScheduleTasks()
-		}
-	}
-}
 
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleTasks() {
@@ -202,23 +180,4 @@ func (s *TimeBasedScheduler) performTaskExecution(broadcastDataForPerformer type
 	return success
 }
 
-// Stop gracefully stops the scheduler
-func (s *TimeBasedScheduler) Stop() {
-	startTime := time.Now()
-	s.logger.Info("Stopping time-based scheduler")
 
-	// Capture statistics before shutdown
-	activeTasksCount := len(s.activeTasks)
-
-	s.cancel()
-
-	duration := time.Since(startTime)
-
-	s.logger.Info("Time-based scheduler stopped",
-		"duration", duration,
-		"active_tasks_stopped", activeTasksCount,
-		"performer_lock_ttl", s.performerLockTTL,
-		"task_cache_ttl", s.taskCacheTTL,
-		"duplicate_task_window", s.duplicateTaskWindow,
-	)
-}
