@@ -1,3 +1,3 @@
 package scheduler
 
-// TODO: Implement the job execution check from redis streams
+// TODO: Implement the task execution check from redis streams

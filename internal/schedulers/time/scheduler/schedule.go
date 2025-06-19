@@ -34,7 +34,7 @@ func (s *TimeBasedScheduler) Start(ctx context.Context) {
 
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleTasks() {
-	tasks, err := s.dbClient.GetTimeBasedJobs()
+	tasks, err := s.dbClient.GetTimeBasedTasks()
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based tasks: %v", err)
 		metrics.TrackDBConnectionError()
@@ -64,26 +64,19 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 // processBatch processes a batch of jobs
 func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	for _, task := range tasks {
-		// Add job to execution queue
-		select {
-		case s.taskQueue <- &task:
-			s.executeJob(&task)
-			s.logger.Debugf("Queued task %d for execution", task.TaskID)
-		default:
-			s.logger.Warnf("Task queue is full, skipping task %d", task.TaskID)
-		}
+		s.executeTask(&task)
 	}
 }
 
-// executeJob executes a single job and updates its next execution time
-func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
+// executeTask executes a single task and updates its next execution time
+func (s *TimeBasedScheduler) executeTask(task *types.ScheduleTimeTaskData) {
 	startTime := time.Now()
 
 	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.TaskTargetData.JobID)
 
 	// Check if ExpirationTime of the job has passed or not
 	if task.ExpirationTime.Before(time.Now()) {
-		s.logger.Infof("Job for this task ID %d has expired, skipping execution", task.TaskID)
+		s.logger.Infof("Task ID %d has expired, skipping execution", task.TaskID)
 		metrics.TrackTaskExpired()
 		return
 	}
@@ -157,21 +150,21 @@ func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
 	}
 
 	// Execute the actual job
-	executionSuccess := s.performJobExecution(broadcastDataForPerformer)
+	executionSuccess := s.performTaskExecution(broadcastDataForPerformer)
 
 	// Track task completion with timing and success status
 	executionDuration := time.Since(startTime)
 	metrics.TrackTaskCompletion(executionSuccess, executionDuration)
 
 	if executionSuccess {
-		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.TaskTargetData.JobID, executionDuration)
+		s.logger.Infof("Executed task ID %d in %v", task.TaskID, executionDuration)
 	} else {
-		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.TaskTargetData.JobID, executionDuration)
+		s.logger.Errorf("Failed to execute task %d after %v", task.TaskID, executionDuration)
 	}
 }
 
-// performJobExecution handles the actual job execution logic
-func (s *TimeBasedScheduler) performJobExecution(broadcastDataForPerformer types.BroadcastDataForPerformer) bool {
+// performTaskExecution handles the actual task execution logic
+func (s *TimeBasedScheduler) performTaskExecution(broadcastDataForPerformer types.BroadcastDataForPerformer) bool {
 	success, err := s.aggClient.SendTaskToPerformer(s.ctx, &broadcastDataForPerformer)
 
 	if err != nil {
@@ -191,19 +184,14 @@ func (s *TimeBasedScheduler) Stop() {
 
 	// Capture statistics before shutdown
 	activeTasksCount := len(s.activeTasks)
-	queueLength := len(s.taskQueue)
 
 	s.cancel()
-
-	// Close job queue
-	close(s.taskQueue)
 
 	duration := time.Since(startTime)
 
 	s.logger.Info("Time-based scheduler stopped",
 		"duration", duration,
 		"active_tasks_stopped", activeTasksCount,
-		"queue_length", queueLength,
 		"performer_lock_ttl", s.performerLockTTL,
 		"task_cache_ttl", s.taskCacheTTL,
 		"duplicate_task_window", s.duplicateTaskWindow,
