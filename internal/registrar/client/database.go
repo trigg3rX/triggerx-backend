@@ -377,20 +377,58 @@ func (dm *DatabaseManager) UpdateOperatorDetails(operatorAddress string, operato
 	return nil
 }
 
-// UpdateTaskNumberAndStatus updates task number and status in database
-func (dm *DatabaseManager) UpdateTaskNumberAndStatus(taskID int, taskNumber int64, status string, txHash string) error {
-	dm.logger.Infof("Updating task %d with number %d and status %s", taskID, taskNumber, status)
+// UpdateTaskNumberAndIsSuccessful updates task number, success status and execution details in database
+func (dm *DatabaseManager) UpdateTaskNumberAndIsSuccessful(taskID int, taskNumber int64, isSuccessful bool, txHash string, performerAddress string, attesterIds []string, executionTxHash string, executionTimestamp time.Time) error {
+	dm.logger.Infof("Updating task %d with number %d and success status %t", taskID, taskNumber, isSuccessful)
+
+	// Get performer ID from address
+	var performerID int64
+	performerAddress = strings.ToLower(performerAddress)
+	if performerAddress != "" {
+		if err := dm.db.Session().Query(`
+			SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+			performerAddress).Scan(&performerID); err != nil {
+			dm.logger.Warnf("Could not find performer ID for address %s: %v", performerAddress, err)
+			performerID = 0
+		}
+	}
+
+	// Convert attester string IDs to bigint list
+	var attesterBigIntIds []int64
+	var missingOperatorIds []string
+	for _, attesterIdStr := range attesterIds {
+		if attesterIdStr != "" {
+			// Get keeper ID from operator ID
+			var keeperID int64
+			if err := dm.db.Session().Query(`
+				SELECT keeper_id FROM triggerx.keeper_data WHERE operator_id = ? ALLOW FILTERING`,
+				attesterIdStr).Scan(&keeperID); err != nil {
+				dm.logger.Warnf("Could not find keeper ID for operator ID %s: %v", attesterIdStr, err)
+				missingOperatorIds = append(missingOperatorIds, attesterIdStr)
+				continue
+			}
+			attesterBigIntIds = append(attesterBigIntIds, keeperID)
+		}
+	}
+
+	// Log summary of missing operator IDs
+	if len(missingOperatorIds) > 0 {
+		dm.logger.Warnf("Task %d: %d operator IDs not found in database: %v. These operators may not have been registered yet or their details haven't been fetched.",
+			taskID, len(missingOperatorIds), missingOperatorIds)
+	}
 
 	if err := dm.db.Session().Query(`
 		UPDATE triggerx.task_data 
-		SET task_number = ?, task_status = ?, task_submission_tx_hash = ?
+		SET task_number = ?, is_successful = ?, task_submission_tx_hash = ?, 
+		    task_performer_id = ?, task_attester_ids = ?, execution_tx_hash = ?, execution_timestamp = ?
 		WHERE task_id = ?`,
-		taskNumber, status, txHash, taskID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating task number and status for task ID %d: %v", taskID, err)
+		taskNumber, isSuccessful, txHash, performerID, attesterBigIntIds, executionTxHash, executionTimestamp, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", taskID, err)
 		return err
 	}
 
-	dm.logger.Infof("Successfully updated task %d with number %d and status %s", taskID, taskNumber, status)
+	dm.logger.Infof("Successfully updated task %d with execution details (mapped %d of %d attesters)",
+		taskID, len(attesterBigIntIds), len(attesterIds))
 	return nil
 }
 
@@ -421,6 +459,34 @@ func (dm *DatabaseManager) UpdateJobStatus(taskID int64, status string) error {
 	return nil
 }
 
+// ResolveMissingOperatorMappings attempts to resolve operator IDs that couldn't be mapped initially
+func (dm *DatabaseManager) ResolveMissingOperatorMappings() error {
+	dm.logger.Info("Starting resolution of missing operator ID mappings")
+
+	// Find tasks with null or empty attester IDs that might need resolution
+	iter := dm.db.Session().Query(`
+		SELECT task_id FROM triggerx.task_data 
+		WHERE task_attester_ids = [] OR task_attester_ids = null ALLOW FILTERING`).Iter()
+
+	var taskID int
+	resolvedCount := 0
+
+	for iter.Scan(&taskID) {
+		dm.logger.Debugf("Checking task %d for missing operator mappings", taskID)
+
+		// For now, we'll skip the resolution logic since we don't have the original operator IDs stored
+		// This function can be enhanced later if needed
+	}
+
+	if err := iter.Close(); err != nil {
+		dm.logger.Errorf("Error during missing operator mapping resolution: %v", err)
+		return err
+	}
+
+	dm.logger.Infof("Completed missing operator mapping resolution. Resolved %d tasks", resolvedCount)
+	return nil
+}
+
 // Public wrapper functions
 func KeeperRegistered(operatorAddress string, txHash string) error {
 	return GetInstance().KeeperRegistered(operatorAddress, txHash)
@@ -442,10 +508,14 @@ func UpdateOperatorDetails(operatorAddress string, operatorId string, votingPowe
 	return GetInstance().UpdateOperatorDetails(operatorAddress, operatorId, votingPower, rewardsReceiver, strategies)
 }
 
-func UpdateTaskNumberAndStatus(taskID int, taskNumber int64, status string, txHash string) error {
-	return GetInstance().UpdateTaskNumberAndStatus(taskID, taskNumber, status, txHash)
+func UpdateTaskNumberAndStatus(taskID int, taskNumber int64, isSuccessful bool, txHash string, performerAddress string, attesterIds []string, executionTxHash string, executionTimestamp time.Time) error {
+	return GetInstance().UpdateTaskNumberAndIsSuccessful(taskID, taskNumber, isSuccessful, txHash, performerAddress, attesterIds, executionTxHash, executionTimestamp)
 }
 
 func UpdateJobStatus(taskID int64, status string) error {
 	return GetInstance().UpdateJobStatus(taskID, status)
+}
+
+func ResolveMissingOperatorMappings() error {
+	return GetInstance().ResolveMissingOperatorMappings()
 }

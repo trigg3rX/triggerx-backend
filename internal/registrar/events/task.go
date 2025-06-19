@@ -121,10 +121,22 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 				continue
 			}
 
-			// Update task number and status to "submitted" in database
+			// Get execution timestamp from IPFS data
+			var executionTimestamp time.Time
+			if ipfsData.ActionData != nil && !ipfsData.ActionData.ExecutionTimestamp.IsZero() {
+				executionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+				t.logger.Debugf("Using execution timestamp from IPFS data: %v", executionTimestamp)
+			} else {
+				// Fallback to current time if not available in IPFS data
+				executionTimestamp = time.Now()
+				t.logger.Warnf("No execution timestamp found in IPFS data, using current time")
+			}
+
+			// Update task number and success status to true (submitted) in database
 			taskID := int(ipfsData.TaskData.TriggerData[0].TaskID)
-			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), "submitted", event.Raw.TxHash.Hex()); err != nil {
-				t.logger.Errorf("Failed to update task number and status in database: %v", err)
+			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), true, event.Raw.TxHash.Hex(),
+				event.Operator.Hex(), ConvertBigIntToStrings(event.AttestersIds), event.Raw.TxHash.Hex(), executionTimestamp); err != nil {
+				t.logger.Errorf("Failed to update task execution details in database: %v", err)
 				continue
 			}
 
@@ -208,10 +220,22 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 				continue
 			}
 
-			// Update task number and status to "rejected" in database
+			// Get execution timestamp from IPFS data
+			var executionTimestamp time.Time
+			if ipfsData.ActionData != nil && !ipfsData.ActionData.ExecutionTimestamp.IsZero() {
+				executionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+				t.logger.Debugf("Using execution timestamp from IPFS data: %v", executionTimestamp)
+			} else {
+				// Fallback to current time if not available in IPFS data
+				executionTimestamp = time.Now()
+				t.logger.Warnf("No execution timestamp found in IPFS data, using current time")
+			}
+
+			// Update task number and success status to false (rejected) in database
 			taskID := int(ipfsData.TaskData.TriggerData[0].TaskID)
-			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), "rejected", event.Raw.TxHash.Hex()); err != nil {
-				t.logger.Errorf("Failed to update task number and status in database: %v", err)
+			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), false, event.Raw.TxHash.Hex(),
+				event.Operator.Hex(), ConvertBigIntToStrings(event.AttestersIds), event.Raw.TxHash.Hex(), executionTimestamp); err != nil {
+				t.logger.Errorf("Failed to update task execution details in database: %v", err)
 				continue
 			}
 
