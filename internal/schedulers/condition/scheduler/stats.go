@@ -70,13 +70,6 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 	var totalActions, successfulActions int64
 	var workerCount int64
 
-	// Try to get metrics if they exist, otherwise use defaults
-	defer func() {
-		if r := recover(); r != nil {
-			// If metrics functions don't exist, use default values
-		}
-	}()
-
 	// These may not exist yet, so we'll use safe defaults
 	totalEvents = 0
 	successfulEvents = 0
@@ -87,7 +80,6 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 
 	return map[string]interface{}{
 		"scheduler_info": map[string]interface{}{
-			"scheduler_signing_address": s.schedulerSigningAddress,
 			"max_workers":               s.maxWorkers,
 			"supported_chains":          []string{"11155420", "84532", "11155111"}, // OP Sepolia, Base Sepolia, Ethereum Sepolia
 		},

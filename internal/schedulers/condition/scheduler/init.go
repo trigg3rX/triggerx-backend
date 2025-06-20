@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -11,10 +12,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ConditionBasedScheduler manages individual job workers for condition monitoring and event watching
@@ -22,21 +23,33 @@ type ConditionBasedScheduler struct {
 	ctx                     context.Context
 	cancel                  context.CancelFunc
 	logger                  logging.Logger
-	conditionWorkers        map[int64]*worker.ConditionWorker // jobID -> condition worker
-	eventWorkers            map[int64]*worker.EventWorker     // jobID -> event worker
+	conditionWorkers        map[int64]*worker.ConditionWorker         // jobID -> condition worker
+	eventWorkers            map[int64]*worker.EventWorker             // jobID -> event worker
+	jobDataStore            map[int64]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	workersMutex            sync.RWMutex
 	chainClients            map[string]*ethclient.Client // chainID -> client
 	HTTPClient              *retry.HTTPClient
 	dbClient                *dbserver.DBServerClient
-	aggClient               *aggregator.AggregatorClient
+	httpClient              *http.Client // For Redis API calls
+	redisAPIURL             string
 	metrics                 *metrics.Collector
 	maxWorkers              int
-	schedulerSigningAddress string
+	schedulerID             int
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClient *dbserver.DBServerClient, aggClient *aggregator.AggregatorClient) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Initialize HTTP client for Redis API calls
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     30 * time.Second,
+		},
+	}
 
 	scheduler := &ConditionBasedScheduler{
 		ctx:                     ctx,
@@ -44,12 +57,14 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		logger:                  logger,
 		conditionWorkers:        make(map[int64]*worker.ConditionWorker),
 		eventWorkers:            make(map[int64]*worker.EventWorker),
+		jobDataStore:            make(map[int64]*types.ScheduleConditionJobData),
 		chainClients:            make(map[string]*ethclient.Client),
 		dbClient:                dbClient,
-		aggClient:               aggClient,
+		httpClient:              httpClient,
+		redisAPIURL:             config.GetRedisRPCUrl(),
 		metrics:                 metrics.NewCollector(),
 		maxWorkers:              config.GetMaxWorkers(),
-		schedulerSigningAddress: config.GetSchedulerSigningAddress(),
+		schedulerID:             config.GetSchedulerID(),
 	}
 
 	// Initialize chain clients for event workers
@@ -66,12 +81,10 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 	// Start metrics collection
 	scheduler.metrics.Start()
 
-	// Set up health checker for database monitoring
-	metrics.SetHealthChecker(dbClient)
-
 	scheduler.logger.Info("Condition-based scheduler initialized",
 		"max_workers", scheduler.maxWorkers,
-		"scheduler_signing_address", scheduler.schedulerSigningAddress,
+		"scheduler_id", scheduler.schedulerID,
+		"redis_api_url", scheduler.redisAPIURL,
 		"connected_chains", len(scheduler.chainClients),
 	)
 
@@ -80,7 +93,8 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 
 // Start begins the scheduler's main loop (for compatibility)
 func (s *ConditionBasedScheduler) Start(ctx context.Context) {
-	s.logger.Info("Condition-based scheduler ready for job scheduling", "scheduler_signing_address", s.schedulerSigningAddress)
+	s.logger.Info("Condition-based scheduler ready for job scheduling",
+		"scheduler_id", s.schedulerID,)
 
 	// Keep the service alive
 	<-ctx.Done()
@@ -115,6 +129,7 @@ func (s *ConditionBasedScheduler) Stop() {
 	}
 	s.conditionWorkers = make(map[int64]*worker.ConditionWorker)
 	s.eventWorkers = make(map[int64]*worker.EventWorker)
+	s.jobDataStore = make(map[int64]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
 
 	// Close chain clients
