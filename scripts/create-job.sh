@@ -8,9 +8,9 @@
 # arg_type: 0, 1, 2
 # Price Oracle Script:https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la
 
-echo "Creating Time-based Job..."
-# curl -X POST http://192.168.1.56:9002/api/jobs \
+# echo "Creating Time-based Job..."
 # curl -X POST https://data.triggerx.network/api/jobs \
+# curl -X POST http://192.168.1.56:9002/api/jobs \
 curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
