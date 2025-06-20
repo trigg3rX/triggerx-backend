@@ -7,11 +7,11 @@
 # condition_type: price, volume
 # arg_type: 0, 1, 2
 # Price Oracle Script:https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la
+# Dynamic Price API: ttps://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=us
 
-# echo "Creating Time-based Job..."
+echo "Creating Time-based Job..."
 # curl -X POST https://data.triggerx.network/api/jobs \
-# curl -X POST http://192.168.1.56:9002/api/jobs \
-curl -X POST http://localhost:9002/api/jobs \
+curl -X POST http://192.168.1.56:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
@@ -31,12 +31,12 @@ curl -X POST http://localhost:9002/api/jobs \
       \"specific_schedule\": \"2025-01-01 00:00:00\",
       \"trigger_chain_id\": \"11155420\",
       \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-      \"trigger_event\": \"CounterIncremented(uint256 previousValue,uint256 newValue,uint256 incrementAmount)\",
-      \"condition_type\": \"price\",
-      \"upper_limit\": 2600,
-      \"lower_limit\": 2400,
+      \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
+      \"condition_type\": \"less_than\",
+      \"upper_limit\": 92,
+      \"lower_limit\": 89,
       \"value_source_type\": \"api\",
-      \"value_source_url\": \"https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd\",
+      \"value_source_url\": \"http://localhost:8080/price\",
       \"target_chain_id\": \"11155420\",
       \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
       \"target_function\": \"incrementBy\",

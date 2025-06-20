@@ -1,12 +1,15 @@
-package types
+package worker
 
 import "time"
 
 const (
-	ValueCacheTTL            = 30 * time.Second // Cache TTL for API values
 	PerformerLockTTL         = 15 * time.Minute // Lock duration for condition monitoring
 	DuplicateConditionWindow = 10 * time.Second // Window to prevent duplicate condition processing
-	ConditionStateCacheTTL   = 5 * time.Minute  // Cache TTL for condition state
+
+	// Event-specific constants
+	ConditionPollInterval = 1 * time.Second // Poll every 1 second as requested
+	EventPollInterval    = 2 * time.Second  // Poll every 2 seconds for new blocks
+	DuplicateEventWindow = 30 * time.Second // Window to prevent duplicate event processing
 )
 
 // Supported condition types
@@ -37,3 +40,15 @@ type ValueResponse struct {
 	Data      float64 `json:"data"`      // Generic data field
 	Timestamp int64   `json:"timestamp"` // Optional timestamp
 }
+
+// ConditionTriggerNotification represents a notification from a worker when a condition is satisfied
+type TriggerNotification struct {
+	JobID           int64     `json:"job_id"`
+	TriggerTxHash   string    `json:"trigger_tx_hash"`
+	TriggerValue    float64   `json:"trigger_value"`
+	TriggeredAt     time.Time `json:"triggered_at"`
+}
+
+// WorkerTriggerCallback is the interface that workers use to notify the scheduler
+type WorkerTriggerCallback func(notification *TriggerNotification) error
+

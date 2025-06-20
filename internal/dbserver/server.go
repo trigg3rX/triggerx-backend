@@ -160,9 +160,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
 	api.GET("/tasks/:id", handler.GetTaskDataByID)
-	api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
-	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
-	api.PUT("/tasks/:id/execution", handler.UpdateTaskExecutionData)
+	// api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
+	// api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
+	api.PUT("/tasks/execution/:id", handler.UpdateTaskExecutionData)
 	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
 	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)

@@ -8,7 +8,7 @@ func (s *TimeBasedScheduler) GetStats() map[string]interface{} {
 	totalTasks, successfulTasks, avgTime := metrics.GetTaskStats()
 
 	return map[string]interface{}{
-		"scheduler_signing_address": s.schedulerSigningAddress,
+		"scheduler_id": s.schedulerID,
 		"active_tasks":              len(s.activeTasks),
 		"performer_lock_ttl":        s.performerLockTTL,
 		"task_cache_ttl":            s.taskCacheTTL,

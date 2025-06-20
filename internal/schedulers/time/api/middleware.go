@@ -42,24 +42,24 @@ func MetricsMiddleware() gin.HandlerFunc {
 	}
 }
 
-// LoggerMiddleware creates a gin middleware for logging requests
+// LoggerMiddleware creates a gin middleware for logging API group requests only
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Skip logging for metrics endpoint
-		if c.Request.URL.Path == "/metrics" {
+		// Only log requests under the /api/ path
+		if len(c.Request.URL.Path) < 5 || c.Request.URL.Path[:5] != "/api/" {
 			c.Next()
 			return
 		}
 
-		start := time.Now()
+		startTime := time.Now()
 		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
+		rawQuery := c.Request.URL.RawQuery
 		traceID, _ := c.Get(TraceIDKey)
 
 		// Process request
 		c.Next()
 
-		duration := time.Since(start)
+		duration := time.Since(startTime)
 		statusCode := c.Writer.Status()
 
 		logger.Info("Request processed",
@@ -67,7 +67,7 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 			"status", statusCode,
 			"method", c.Request.Method,
 			"path", path,
-			"query", raw,
+			"query", rawQuery,
 			"ip", c.ClientIP(),
 			"latency", duration,
 			"user-agent", c.Request.UserAgent(),

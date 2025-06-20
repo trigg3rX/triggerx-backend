@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+	commonTypes"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
@@ -126,6 +127,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		createdJobs.JobIDs[i] = jobID
 		expirationTime := time.Now().Add(time.Duration(tempJobs[i].TimeFrame) * time.Second)
+		var scheduleConditionJobData commonTypes.ScheduleConditionJobData
 
 		switch tempJobs[i].TaskDefinitionID {
 		case 1, 2:
@@ -197,11 +199,27 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting event job data: " + err.Error()})
 				return
 			}
-			success, err := h.notifyEventScheduler(jobID, eventJobData)
-			if !success {
-				h.logger.Errorf("[CreateJobData] Error notifying event scheduler for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying event scheduler: " + err.Error()})
-				return
+			scheduleConditionJobData.JobID = jobID
+			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
+			scheduleConditionJobData.LastExecutedAt = time.Now()
+			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
+				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
+				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
+			}
+			scheduleConditionJobData.EventWorkerData = commonTypes.EventWorkerData{
+				JobID:                     jobID,
+				ExpirationTime:            expirationTime,
+				Recurring:                 tempJobs[i].Recurring,
+				TriggerChainID:            tempJobs[i].TriggerChainID,
+				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
+				TriggerEvent:              tempJobs[i].TriggerEvent,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
 				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
@@ -234,17 +252,42 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting condition job data: " + err.Error()})
 				return
 			}
-			success, err := h.notifyConditionScheduler(jobID, conditionJobData)
-			if !success {
-				h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying condition scheduler: " + err.Error()})
-				return
+			scheduleConditionJobData.JobID = jobID
+			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
+			scheduleConditionJobData.LastExecutedAt = time.Now()
+			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
+				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
+				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
+			}
+			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
+				JobID:                     jobID,
+				ExpirationTime:            expirationTime,
+				Recurring:                 tempJobs[i].Recurring,
+				ConditionType:             tempJobs[i].ConditionType,
+				UpperLimit:                tempJobs[i].UpperLimit,
+				LowerLimit:                tempJobs[i].LowerLimit,
+				ValueSourceType:           tempJobs[i].ValueSourceType,
+				ValueSourceUrl:            tempJobs[i].ValueSourceUrl,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
 		default:
 			h.logger.Errorf("[CreateJobData] Invalid task definition ID %d for job %d", tempJobs[i].TaskDefinitionID, i)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
+			return
+		}
+
+		success, err := h.notifyConditionScheduler(jobID, scheduleConditionJobData)
+		if !success {
+			h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying condition scheduler: " + err.Error()})
 			return
 		}
 

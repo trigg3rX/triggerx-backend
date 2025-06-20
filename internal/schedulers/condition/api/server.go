@@ -83,12 +83,12 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	api := s.router.Group("/api/v1")
 	{
 		api.GET("/scheduler/stats", schedulerHandler.GetStats)
-		api.POST("/scheduler/stop", schedulerHandler.Stop)
-		api.POST("/scheduler/start", schedulerHandler.Start)
 
 		// Job management endpoints
 		api.POST("/job/schedule", schedulerHandler.ScheduleJob)
 		api.DELETE("/job/:job_id", schedulerHandler.UnscheduleJob)
-		api.GET("/job/:job_id/stats", schedulerHandler.GetJobStats)
+		api.GET("/job/stats/:job_id", schedulerHandler.GetJobStats)
+
+		api.PUT("/job/task/:job_id/:task_id", schedulerHandler.UpdateJobsTask)
 	}
 }

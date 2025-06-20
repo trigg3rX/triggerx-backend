@@ -74,7 +74,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 			return
 		}
 
-		_, err = h.notifyPauseToEventScheduler(jobIDInt)
+		_, err = h.notifyPauseToConditionScheduler(jobIDInt)
 		if err != nil {
 			h.logger.Errorf("[DeleteJobData] Error sending pause to event scheduler for jobID %s: %v", jobID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to event scheduler: " + err.Error()})

@@ -6,22 +6,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/stream"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Handler encapsulates the dependencies for Redis handlers
-type Handler struct {
+type handler struct {
 	logger           logging.Logger
-	taskStreamMgr    *redis.TaskStreamManager
-	jobStreamMgr     *redis.JobStreamManager
+	taskStreamMgr    *stream.TaskStreamManager
+	jobStreamMgr     *stream.JobStreamManager
 	metricsCollector *metrics.Collector
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger, taskStreamMgr *redis.TaskStreamManager, jobStreamMgr *redis.JobStreamManager, metricsCollector *metrics.Collector) *Handler {
-	return &Handler{
+func NewHandler(logger logging.Logger, taskStreamMgr *stream.TaskStreamManager, jobStreamMgr *stream.JobStreamManager, metricsCollector *metrics.Collector) *handler {
+	return &handler{
 		logger:           logger,
 		taskStreamMgr:    taskStreamMgr,
 		jobStreamMgr:     jobStreamMgr,
@@ -30,7 +31,7 @@ func NewHandler(logger logging.Logger, taskStreamMgr *redis.TaskStreamManager, j
 }
 
 // HandleRoot provides basic service information
-func (h *Handler) HandleRoot(c *gin.Context) {
+func (h *handler) HandleRoot(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"service":   "TriggerX Redis Service",
 		"status":    "running",
@@ -39,6 +40,7 @@ func (h *Handler) HandleRoot(c *gin.Context) {
 		"endpoints": []string{
 			"GET /health - Service health check",
 			"GET /metrics - Prometheus metrics",
+			"POST /scheduler/submit-task - Submit task from scheduler",
 			"POST /task/validate - Task validation",
 			"POST /p2p/message - P2P message handling",
 			"GET /streams/info - Stream information",
@@ -47,13 +49,13 @@ func (h *Handler) HandleRoot(c *gin.Context) {
 }
 
 // HandleHealth provides detailed health information
-func (h *Handler) HandleHealth(c *gin.Context) {
+func (h *handler) HandleHealth(c *gin.Context) {
 	// Get Redis info
 	redisInfo := redis.GetRedisInfo()
 
 	// Get stream info
 	taskStreamInfo := h.taskStreamMgr.GetStreamInfo()
-	jobStreamInfo := h.jobStreamMgr.GetStreamInfo()
+	jobStreamInfo := h.jobStreamMgr.GetJobStreamInfo()
 
 	healthData := gin.H{
 		"service":        "TriggerX Redis Service",
@@ -69,14 +71,14 @@ func (h *Handler) HandleHealth(c *gin.Context) {
 }
 
 // HandleMetrics exposes Prometheus metrics
-func (h *Handler) HandleMetrics(c *gin.Context) {
+func (h *handler) HandleMetrics(c *gin.Context) {
 	h.metricsCollector.Handler().ServeHTTP(c.Writer, c.Request)
 }
 
 // GetStreamsInfo provides detailed stream information
-func (h *Handler) GetStreamsInfo(c *gin.Context) {
+func (h *handler) GetStreamsInfo(c *gin.Context) {
 	taskStreamInfo := h.taskStreamMgr.GetStreamInfo()
-	jobStreamInfo := h.jobStreamMgr.GetStreamInfo()
+	jobStreamInfo := h.jobStreamMgr.GetJobStreamInfo()
 
 	streamInfo := gin.H{
 		"timestamp":    time.Now().UTC().Format(time.RFC3339),
@@ -86,4 +88,52 @@ func (h *Handler) GetStreamsInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, streamInfo)
+}
+
+// SubmitTaskFromScheduler handles task submissions from schedulers
+func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
+	var request stream.SchedulerTaskRequest
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		h.logger.Error("Failed to bind scheduler task request", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request format",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Received task submission from scheduler",
+		"task_id", request.SendTaskDataToKeeper.TaskID,
+		"scheduler_id", request.SchedulerID,
+		"source", request.Source)
+
+	// Submit task to Redis orchestrator
+	performerData, err := h.taskStreamMgr.ReceiveTaskFromScheduler(&request)
+	if err != nil {
+		h.logger.Error("Failed to process scheduler task submission",
+			"task_id", request.SendTaskDataToKeeper.TaskID,
+			"scheduler_id", request.SchedulerID,
+			"error", err)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to process task",
+			"task_id": request.SendTaskDataToKeeper.TaskID,
+			"details": err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Task submitted successfully",
+		"task_id", request.SendTaskDataToKeeper.TaskID,
+		"performer_id", performerData.KeeperID,
+		"performer_address", performerData.KeeperAddress)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":   true,
+		"task_id":   request.SendTaskDataToKeeper.TaskID,
+		"message":   "Task submitted successfully",
+		"performer": performerData,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	})
 }

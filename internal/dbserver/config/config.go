@@ -14,11 +14,10 @@ type Config struct {
 
 	// Scheduler RPC URLs
 	timeSchedulerRPCUrl      string
-	eventSchedulerRPCUrl     string
 	conditionSchedulerRPCUrl string
 
 	// Database RPC Port
-	databaseRPCPort string
+	dbserverRPCPort string
 
 	// ScyllaDB Host and Port
 	databaseHostAddress string
@@ -51,10 +50,9 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		timeSchedulerRPCUrl:      env.GetEnv("TIME_SCHEDULER_RPC_URL", "http://localhost:9004"),
-		eventSchedulerRPCUrl:     env.GetEnv("EVENT_SCHEDULER_RPC_URL", "http://localhost:9004"),
-		conditionSchedulerRPCUrl: env.GetEnv("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9005"),
-		databaseRPCPort:          env.GetEnv("DATABASE_RPC_PORT", "9002"),
+		timeSchedulerRPCUrl:      env.GetEnv("TIME_SCHEDULER_RPC_URL", "http://localhost:9005"),
+		conditionSchedulerRPCUrl: env.GetEnv("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9006"),
+		dbserverRPCPort:          env.GetEnv("DBSERVER_RPC_PORT", "9002"),
 		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
 		emailUser:                env.GetEnv("EMAIL_USER", ""),
@@ -81,14 +79,11 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidURL(cfg.timeSchedulerRPCUrl) {
 		return fmt.Errorf("invalid time scheduler RPC URL: %s", cfg.timeSchedulerRPCUrl)
 	}
-	if !env.IsValidURL(cfg.eventSchedulerRPCUrl) {
-		return fmt.Errorf("invalid event scheduler RPC URL: %s", cfg.eventSchedulerRPCUrl)
-	}
 	if !env.IsValidURL(cfg.conditionSchedulerRPCUrl) {
 		return fmt.Errorf("invalid condition scheduler RPC URL: %s", cfg.conditionSchedulerRPCUrl)
 	}
-	if !env.IsValidPort(cfg.databaseRPCPort) {
-		return fmt.Errorf("invalid database RPC port: %s", cfg.databaseRPCPort)
+	if !env.IsValidPort(cfg.dbserverRPCPort) {
+		return fmt.Errorf("invalid database RPC port: %s", cfg.dbserverRPCPort)
 	}
 	if !env.IsValidIPAddress(cfg.databaseHostAddress) {
 		return fmt.Errorf("invalid database host address: %s", cfg.databaseHostAddress)
@@ -126,16 +121,12 @@ func GetTimeSchedulerRPCUrl() string {
 	return cfg.timeSchedulerRPCUrl
 }
 
-func GetEventSchedulerRPCUrl() string {
-	return cfg.eventSchedulerRPCUrl
-}
-
 func GetConditionSchedulerRPCUrl() string {
 	return cfg.conditionSchedulerRPCUrl
 }
 
-func GetDatabaseRPCPort() string {
-	return cfg.databaseRPCPort
+func GetDBServerRPCPort() string {
+	return cfg.dbserverRPCPort
 }
 
 func GetDatabaseHostAddress() string {
