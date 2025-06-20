@@ -10,11 +10,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 )
 
 // Client represents a Redis client with logging capabilities
 type Client struct {
 	redisClient *redis.Client
+	dbserverClient *dbserver.DBServerClient
 	logger      logging.Logger
 	mu          sync.Mutex
 }
@@ -65,9 +67,17 @@ func NewRedisClient(logger logging.Logger) (*Client, error) {
 		return nil, fmt.Errorf("no valid Redis configuration found")
 	}
 
+	// Initialize dbserver client
+	dbserverClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerRPCUrl())
+	if err != nil {
+		logger.Fatal("Failed to initialize dbserver client", "error", err)
+	}
+	logger.Info("DBServer client Initialised")
+
 	client := redis.NewClient(opt)
 	redisClient := &Client{
 		redisClient: client,
+		dbserverClient: dbserverClient,
 		logger:      logger,
 	}
 
@@ -267,5 +277,6 @@ func (c *Client) XAck(ctx context.Context, stream, group, id string) error {
 }
 
 func (c *Client) Close() error {
+	c.dbserverClient.Close()
 	return c.redisClient.Close()
 }

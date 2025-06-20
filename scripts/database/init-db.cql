@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS event_job_data (
 -- Create Condition_Job_data table
 CREATE TABLE IF NOT EXISTS condition_job_data (
     job_id bigint,
+    task_definition_id int,
     recurring boolean,
     condition_type text,
     upper_limit double,
