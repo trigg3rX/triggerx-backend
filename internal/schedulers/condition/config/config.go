@@ -19,10 +19,11 @@ type Config struct {
 	dbServerURL string
 	// Aggregator RPC URL
 	aggregatorRPCURL string
+	// Redis API URL
+	redisRPCUrl string
 
-	// Scheduler Private Key and Address
-	conditionSchedulerSigningKey     string
-	conditionSchedulerSigningAddress string
+	// Scheduler ID for consumer groups
+	conditionSchedulerID int
 
 	// Maximum number of workers
 	maxWorkers int
@@ -48,8 +49,8 @@ func Init() error {
 		conditionSchedulerRPCPort:        env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"),
 		dbServerURL:                      env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
 		aggregatorRPCURL:                 env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		conditionSchedulerSigningKey:     env.GetEnv("CONDITION_SCHEDULER_SIGNING_KEY", ""),
-		conditionSchedulerSigningAddress: env.GetEnv("CONDITION_SCHEDULER_SIGNING_ADDRESS", ""),
+		redisRPCUrl:                      env.GetEnv("REDIS_RPC_URL", "http://localhost:9003"),
+		conditionSchedulerID:             env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
 		maxWorkers:                       env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
 		alchemyAPIKey:                    env.GetEnv("ALCHEMY_API_KEY", ""),
 	}
@@ -72,8 +73,8 @@ func validateConfig() error {
 	if !env.IsValidURL(cfg.aggregatorRPCURL) {
 		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCURL)
 	}
-	if !env.IsValidEthKeyPair(cfg.conditionSchedulerSigningKey, cfg.conditionSchedulerSigningAddress) {
-		return fmt.Errorf("invalid condition scheduler signing key pair address: %s", cfg.conditionSchedulerSigningAddress)
+	if !env.IsValidURL(cfg.redisRPCUrl) {
+		return fmt.Errorf("invalid Redis API URL: %s", cfg.redisRPCUrl)
 	}
 	return nil
 }
@@ -98,17 +99,18 @@ func GetAggregatorRPCURL() string {
 	return cfg.aggregatorRPCURL
 }
 
+// GetRedisRPCUrl returns the Redis API URL
+func GetRedisRPCUrl() string {
+	return cfg.redisRPCUrl
+}
+
 // GetMaxWorkers returns the maximum number of concurrent workers allowed
 func GetMaxWorkers() int {
 	return cfg.maxWorkers
 }
 
-func GetSchedulerSigningKey() string {
-	return cfg.conditionSchedulerSigningKey
-}
-
-func GetSchedulerSigningAddress() string {
-	return cfg.conditionSchedulerSigningAddress
+func GetSchedulerID() int {
+	return cfg.conditionSchedulerID
 }
 
 // GetChainRPCUrlsTest returns local/test chain RPC URLs
