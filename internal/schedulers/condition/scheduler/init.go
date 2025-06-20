@@ -2,51 +2,65 @@ package scheduler
 
 import (
 	"context"
-	"net/http"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
+	"github.com/ethereum/go-ethereum/ethclient"
+
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-// ConditionBasedScheduler manages individual job workers for condition monitoring
+// ConditionBasedScheduler manages individual job workers for condition monitoring and event watching
 type ConditionBasedScheduler struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	logger       logging.Logger
-	workers      map[int64]*worker.ConditionWorker // jobID -> worker
-	workersMutex sync.RWMutex
-	dbClient     *client.DBServerClient
-	metrics      *metrics.Collector
-	managerID    string
-	httpClient   *http.Client
-	maxWorkers   int
+	ctx                     context.Context
+	cancel                  context.CancelFunc
+	logger                  logging.Logger
+	conditionWorkers        map[int64]*worker.ConditionWorker // jobID -> condition worker
+	eventWorkers            map[int64]*worker.EventWorker     // jobID -> event worker
+	workersMutex            sync.RWMutex
+	chainClients            map[string]*ethclient.Client // chainID -> client
+	HTTPClient              *retry.HTTPClient
+	dbClient                *dbserver.DBServerClient
+	aggClient               *aggregator.AggregatorClient
+	metrics                 *metrics.Collector
+	maxWorkers              int
+	schedulerSigningAddress string
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClient *client.DBServerClient) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClient *dbserver.DBServerClient, aggClient *aggregator.AggregatorClient) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	maxWorkers := config.GetMaxWorkers()
-
 	scheduler := &ConditionBasedScheduler{
-		ctx:       ctx,
-		cancel:    cancel,
-		logger:    logger,
-		workers:   make(map[int64]*worker.ConditionWorker),
-		dbClient:  dbClient,
-		metrics:   metrics.NewCollector(),
-		managerID: managerID,
-		httpClient: &http.Client{
-			Timeout: schedulerTypes.RequestTimeout,
-		},
-		maxWorkers: maxWorkers,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		logger:                  logger,
+		conditionWorkers:        make(map[int64]*worker.ConditionWorker),
+		eventWorkers:            make(map[int64]*worker.EventWorker),
+		chainClients:            make(map[string]*ethclient.Client),
+		dbClient:                dbClient,
+		aggClient:               aggClient,
+		metrics:                 metrics.NewCollector(),
+		maxWorkers:              config.GetMaxWorkers(),
+		schedulerSigningAddress: config.GetSchedulerSigningAddress(),
+	}
+
+	// Initialize chain clients for event workers
+	if err := scheduler.initChainClients(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize chain clients: %w", err)
+	}
+
+	if err := scheduler.initRetryClient(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize retry client: %w", err)
 	}
 
 	// Start metrics collection
@@ -56,10 +70,9 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 	metrics.SetHealthChecker(dbClient)
 
 	scheduler.logger.Info("Condition-based scheduler initialized",
-		"max_workers", maxWorkers,
-		"manager_id", managerID,
-		"poll_interval", schedulerTypes.PollInterval,
-		"request_timeout", schedulerTypes.RequestTimeout,
+		"max_workers", scheduler.maxWorkers,
+		"scheduler_signing_address", scheduler.schedulerSigningAddress,
+		"connected_chains", len(scheduler.chainClients),
 	)
 
 	return scheduler, nil
@@ -67,7 +80,7 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 
 // Start begins the scheduler's main loop (for compatibility)
 func (s *ConditionBasedScheduler) Start(ctx context.Context) {
-	s.logger.Info("Condition-based scheduler ready for job scheduling", "manager_id", s.managerID)
+	s.logger.Info("Condition-based scheduler ready for job scheduling", "scheduler_signing_address", s.schedulerSigningAddress)
 
 	// Keep the service alive
 	<-ctx.Done()
@@ -82,44 +95,41 @@ func (s *ConditionBasedScheduler) Stop() {
 
 	// Capture statistics before shutdown
 	s.workersMutex.RLock()
-	totalWorkers := len(s.workers)
-	runningWorkers := 0
-	// workerDetails := make([]map[string]interface{}, 0, totalWorkers)
-
-	// for jobID, worker := range s.workers {
-	// 	isRunning := worker.IsRunning()
-	// 	if isRunning {
-	// 		runningWorkers++
-	// 	}
-
-	// 	workerDetails = append(workerDetails, map[string]interface{}{
-	// 		"job_id":            jobID,
-	// 		"is_running":        isRunning,
-	// 		"condition_type":    worker.Job.ConditionType,
-	// 		"value_source_type": worker.Job.ValueSourceType,
-	// 		"value_source_url":  worker.Job.ValueSourceUrl,
-	// 		"last_value":        worker.LastValue,
-	// 		"condition_met":     worker.ConditionMet,
-	// 	})
-	// }
+	totalConditionWorkers := len(s.conditionWorkers)
+	totalEventWorkers := len(s.eventWorkers)
 	s.workersMutex.RUnlock()
+
+	connectedChains := len(s.chainClients)
 
 	s.cancel()
 
 	// Stop all workers
 	s.workersMutex.Lock()
-	for jobID, worker := range s.workers {
+	for jobID, worker := range s.conditionWorkers {
 		worker.Stop()
-		s.logger.Info("Stopped worker", "job_id", jobID)
+		s.logger.Info("Stopped condition worker", "job_id", jobID)
 	}
-	s.workers = make(map[int64]*worker.ConditionWorker)
+	for jobID, worker := range s.eventWorkers {
+		worker.Stop()
+		s.logger.Info("Stopped event worker", "job_id", jobID)
+	}
+	s.conditionWorkers = make(map[int64]*worker.ConditionWorker)
+	s.eventWorkers = make(map[int64]*worker.EventWorker)
 	s.workersMutex.Unlock()
+
+	// Close chain clients
+	for chainID, client := range s.chainClients {
+		client.Close()
+		s.logger.Info("Closed chain client", "chain_id", chainID)
+	}
+	s.chainClients = make(map[string]*ethclient.Client)
 
 	duration := time.Since(startTime)
 
 	s.logger.Info("Condition-based scheduler stopped",
 		"duration", duration,
-		"total_workers_stopped", totalWorkers,
-		"running_workers_stopped", runningWorkers,
+		"total_condition_workers_stopped", totalConditionWorkers,
+		"total_event_workers_stopped", totalEventWorkers,
+		"chains_disconnected", connectedChains,
 	)
 }

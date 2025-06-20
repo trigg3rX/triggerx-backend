@@ -25,8 +25,8 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.ConditionBa
 
 // ScheduleJob schedules a new condition-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
-	var req types.ScheduleConditionJobData
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var jobData types.ScheduleConditionJobData
+	if err := c.ShouldBindJSON(&jobData); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
@@ -37,24 +37,9 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		return
 	}
 
-	// Convert request to ConditionJobData
-	jobData := &types.ScheduleConditionJobData{
-		JobID:                     req.JobID,
-		TaskDefinitionID:          req.TaskDefinitionID,
-		LastExecutedAt:            req.LastExecutedAt,
-		ExpirationTime:            req.ExpirationTime,
-		Recurring:                 req.Recurring,
-		ConditionType:             req.ConditionType,
-		UpperLimit:                req.UpperLimit,
-		LowerLimit:                req.LowerLimit,
-		ValueSourceType:           req.ValueSourceType,
-		ValueSourceUrl:            req.ValueSourceUrl,
-		TaskTargetData:            req.TaskTargetData,
-	}
-
 	// Schedule the job
-	if err := h.scheduler.ScheduleJob(jobData); err != nil {
-		h.logger.Error("Failed to schedule condition job", "job_id", req.JobID, "error", err)
+	if err := h.scheduler.ScheduleJob(&jobData); err != nil {
+		h.logger.Error("Failed to schedule condition job", "job_id", jobData.JobID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":    "error",
 			"message":   "Failed to schedule condition job",
@@ -64,12 +49,12 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Condition job scheduled successfully", "job_id", req.JobID)
+	h.logger.Info("Condition job scheduled successfully", "job_id", jobData.JobID)
 
 	response := gin.H{
 		"status":    "success",
 		"message":   "Condition job scheduled successfully",
-		"job_id":    req.JobID,
+		"job_id":    jobData.JobID,
 		"timestamp": time.Now().UTC(),
 	}
 
@@ -130,7 +115,7 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 		return
 	}
 
-	stats, err := h.scheduler.GetJobWorkerStats(jobID)
+	stats := h.scheduler.GetStats()
 	if err != nil {
 		h.logger.Error("Failed to get condition job stats", "job_id", jobID, "error", err)
 		c.JSON(http.StatusNotFound, gin.H{
