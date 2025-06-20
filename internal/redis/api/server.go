@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/api/handler"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/stream"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -31,8 +31,8 @@ type Config struct {
 // Dependencies holds the server dependencies
 type Dependencies struct {
 	Logger           logging.Logger
-	TaskStreamMgr    *redis.TaskStreamManager
-	JobStreamMgr     *redis.JobStreamManager
+	TaskStreamMgr    *stream.TaskStreamManager
+	JobStreamMgr     *stream.JobStreamManager
 	MetricsCollector *metrics.Collector
 }
 
@@ -108,9 +108,12 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	s.router.GET("/metrics", redisHandler.HandleMetrics)
 
 	// Task stream routes
-	s.router.POST("/task/validate", redisHandler.ValidateTask)
 	s.router.GET("/streams/info", redisHandler.GetStreamsInfo)
 
+	// Scheduler routes
+	s.router.POST("/scheduler/submit-task", redisHandler.SubmitTaskFromScheduler)
+
 	// P2P message handling (similar to keeper)
+	s.router.POST("/task/validate", redisHandler.HandleValidateRequest)
 	s.router.POST("/p2p/message", redisHandler.HandleP2PMessage)
 }
