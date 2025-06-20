@@ -4,17 +4,15 @@ import (
 	"runtime"
 	"sync"
 	"time"
-
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/types"
 )
 
-type HealthChecker interface {
-	HealthCheck() error
-}
+const (
+	// DuplicateEventWindow is the window to prevent duplicate event processing
+	// This matches the value in scheduler/worker package to avoid circular import
+	DuplicateEventWindow = 30 * time.Second
+)
 
 var (
-	dbChecker HealthChecker
-
 	// Internal tracking variables for performance calculations
 	conditionStatsLock       sync.RWMutex
 	conditionCheckTimes      []float64
@@ -39,11 +37,6 @@ func init() {
 	actionExecutionTimes = make(map[string][]float64)
 	lastMinuteReset = time.Now()
 	lastConfigUpdate = time.Now()
-}
-
-// SetHealthChecker sets the health checker for database status monitoring
-func SetHealthChecker(checker HealthChecker) {
-	dbChecker = checker
 }
 
 // Collects system resource metrics
@@ -133,17 +126,6 @@ func collectWorkerMetrics() {
 	}
 }
 
-// Collects database health metrics
-func collectDatabaseMetrics() {
-	if dbChecker != nil {
-		err := dbChecker.HealthCheck()
-		if err != nil {
-			// Database is unhealthy
-			TrackDBConnectionError()
-		}
-	}
-}
-
 // Resets metrics that should be reset daily
 func resetDailyMetrics() {
 	conditionStatsLock.Lock()
@@ -169,8 +151,8 @@ func resetDailyMetrics() {
 
 // Helper functions to get configuration values
 func getDuplicateConditionWindowSeconds() float64 {
-	// Use the constant from scheduler types instead of hardcoded value
-	return schedulerTypes.DuplicateEventWindow.Seconds()
+	// Use the local constant to avoid circular import
+	return DuplicateEventWindow.Seconds()
 }
 
 // HTTP and API tracking functions
@@ -427,12 +409,6 @@ func init() {
 	workerMemoryUsage = make(map[string]int64)
 	lastMinuteReset = time.Now()
 	lastConfigUpdate = time.Now()
-}
-
-// Helper functions to get configuration values
-func getDuplicateEventWindowSeconds() float64 {
-	// Use the constant from scheduler types instead of hardcoded value
-	return schedulerTypes.DuplicateEventWindow.Seconds()
 }
 
 // Blockchain and RPC tracking functions
