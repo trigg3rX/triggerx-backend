@@ -52,7 +52,7 @@ func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) err
 }
 
 func (r *taskRepository) UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error {
-	err := r.db.Session().Query(queries.UpdateTaskExecutionDataQuery, task.ExecutionTimestamp, task.ExecutionTxHash, task.ProofOfTask, task.TaskOpXCost, task.TaskID).Exec()
+	err := r.db.Session().Query(queries.UpdateTaskExecutionDataQuery, task.TaskPerformerID, task.ExecutionTimestamp, task.ExecutionTxHash, task.ProofOfTask, task.TaskOpXCost, task.TaskID).Exec()
 	if err != nil {
 		return errors.New("error updating task execution data")
 	}

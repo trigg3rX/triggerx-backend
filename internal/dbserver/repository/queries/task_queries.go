@@ -20,7 +20,7 @@ const (
 
 	UpdateTaskExecutionDataQuery = `
 		UPDATE triggerx.task_data
-		SET execution_timestamp = ?, execution_tx_hash = ?, proof_of_task = ?, task_opx_cost = ?
+		SET task_performer_id = ?, execution_timestamp = ?, execution_tx_hash = ?, proof_of_task = ?, task_opx_cost = ?
 		WHERE task_id = ?`
 
 	UpdateTaskAttestationDataQuery = `

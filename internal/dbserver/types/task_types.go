@@ -27,6 +27,7 @@ type CreateTaskDataRequest struct {
 
 type UpdateTaskExecutionDataRequest struct {
 	TaskID             int64     `json:"task_id" validate:"required"`
+	TaskPerformerID    int64     `json:"task_performer_id" validate:"required"`
 	ExecutionTimestamp time.Time `json:"execution_timestamp" validate:"required"`
 	ExecutionTxHash    string    `json:"execution_tx_hash" validate:"required"`
 	ProofOfTask        string    `json:"proof_of_task" validate:"required"`
