@@ -13,7 +13,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -40,26 +39,12 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting condition-based scheduler service...")
+	logger.Info("Starting Condition-based Scheduler with Redis integration...")
 
 	// Initialize database client
 	dbClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerURL())
 	if err != nil {
 		logger.Fatal("Failed to initialize database client", "error", err)
-	}
-
-	// Initialize aggregator client
-	aggClientCfg := aggregator.AggregatorClientConfig{
-		AggregatorRPCUrl: config.GetAggregatorRPCURL(),
-		SenderPrivateKey: config.GetSchedulerSigningKey(),
-		SenderAddress:    config.GetSchedulerSigningAddress(),
-		RetryAttempts:    3,
-		RetryDelay:       2 * time.Second,
-		RequestTimeout:   10 * time.Second,
-	}
-	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
-	if err != nil {
-		logger.Fatal("Failed to initialize aggregator client", "error", err)
 	}
 
 	// Perform initial health check
@@ -71,12 +56,13 @@ func main() {
 		logger.Info("Database server health check passed")
 	}
 
-	// Initialize condition-based scheduler
+	// Initialize condition-based scheduler with Redis integration
 	managerID := fmt.Sprintf("condition-scheduler-%d", time.Now().Unix())
-	conditionScheduler, err := scheduler.NewConditionBasedScheduler(managerID, logger, dbClient, aggClient)
+	conditionScheduler, err := scheduler.NewConditionBasedScheduler(managerID, logger, dbClient)
 	if err != nil {
 		logger.Fatal("Failed to initialize condition-based scheduler", "error", err)
 	}
+	logger.Info("Condition-based scheduler initialized successfully")
 
 	// Setup HTTP server with scheduler integration
 	srv := api.NewServer(api.Config{
@@ -91,7 +77,7 @@ func main() {
 
 	// Start scheduler in background
 	go func() {
-		logger.Info("Starting condition-based scheduler worker management...")
+		logger.Info("Starting condition monitoring and Redis job creation...")
 		conditionScheduler.Start(ctx)
 	}()
 
@@ -114,7 +100,10 @@ func main() {
 		"request_timeout":      "10s",
 		"value_cache_ttl":      "30s",
 		"condition_state_ttl":  "5m",
-		"aggregator_rpc_url":   config.GetAggregatorRPCURL(),
+		"redis_integration":    "enabled",
+		"orchestration_mode":   "redis_job_streams",
+		"trigger_mechanism":    "condition_monitoring",
+		"task_creation":        "automatic_via_redis",
 	}
 
 	logger.Info("Condition-based scheduler service ready", "status", serviceStatus)
@@ -125,10 +114,10 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(cancel, srv, conditionScheduler, dbClient, aggClient, logger)
+	performGracefulShutdown(cancel, srv, conditionScheduler, dbClient, logger)
 }
 
-func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditionScheduler *scheduler.ConditionBasedScheduler, dbClient *dbserver.DBServerClient, aggClient *aggregator.AggregatorClient, logger logging.Logger) {
+func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditionScheduler *scheduler.ConditionBasedScheduler, dbClient *dbserver.DBServerClient, logger logging.Logger) {
 	shutdownStart := time.Now()
 	logger.Info("Initiating graceful shutdown...")
 
@@ -142,8 +131,8 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditi
 	// Stop scheduler gracefully (this will stop all condition workers)
 	conditionScheduler.Stop()
 
+	// Close database client
 	dbClient.Close()
-	aggClient.Close()
 
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {
@@ -152,6 +141,8 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, conditi
 
 	shutdownDuration := time.Since(shutdownStart)
 
-	logger.Info("Condition-based scheduler shutdown complete", "duration", shutdownDuration)
+	logger.Info("Condition-based scheduler shutdown complete",
+		"duration", shutdownDuration,
+		"redis_integration", "disconnected")
 	os.Exit(0)
 }
