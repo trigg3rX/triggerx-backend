@@ -15,6 +15,17 @@ type Config struct {
 	// Redis RPC port
 	redisRPCPort string
 
+	// DBServer RPC URL
+	dbServerRPCUrl string
+	// Health RPC URL
+	healthRPCUrl string
+	// Aggregator RPC URL
+	aggregatorRPCUrl string
+
+	// Redis signing key
+	redisSigningKey string
+	redisSigningAddress string
+
 	// Primary: Cloud Redis (Upstash) settings
 	upstashURL   string
 	upstashToken string
@@ -51,7 +62,12 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:         env.GetEnvBool("DEV_MODE", false),
-		redisRPCPort:    env.GetEnv("REDIS_RPC_PORT", "9009"),
+		redisRPCPort:    env.GetEnv("REDIS_RPC_PORT", "9003"),
+		healthRPCUrl:    env.GetEnv("HEALTH_RPC_URL", "http://localhost:9004"),
+		dbServerRPCUrl:  env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl: env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		redisSigningKey: env.GetEnv("REDIS_SIGNING_KEY", ""),
+		redisSigningAddress: env.GetEnv("REDIS_SIGNING_ADDRESS", ""),
 		upstashURL:      env.GetEnv("UPSTASH_REDIS_URL", ""),
 		upstashToken:    env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
 		localAddr:       env.GetEnv("REDIS_ADDR", "localhost:6379"),
@@ -103,8 +119,28 @@ func IsDevMode() bool {
 	return cfg.devMode
 }
 
+func GetHealthRPCUrl() string {
+	return cfg.healthRPCUrl
+}
+
 func GetRedisRPCPort() string {
 	return cfg.redisRPCPort
+}
+
+func GetDBServerRPCUrl() string {
+	return cfg.dbServerRPCUrl
+}
+
+func GetAggregatorRPCUrl() string {
+	return cfg.aggregatorRPCUrl
+}
+
+func GetRedisSigningKey() string {
+	return cfg.redisSigningKey
+}
+
+func GetRedisSigningAddress() string {
+	return cfg.redisSigningAddress
 }
 
 func GetUpstashURL() string {
