@@ -17,6 +17,26 @@ type TaskTargetData struct {
 	DynamicArgumentsScriptUrl string    `json:"dynamic_arguments_script_url"`
 }
 
+// Monitoring Data for even and condition workers
+type EventWorkerData struct {
+	JobID                     int64     `json:"job_id"`
+	ExpirationTime            time.Time `json:"expiration_time"`
+	Recurring                 bool      `json:"recurring"`
+	TriggerChainID            string    `json:"trigger_chain_id"`
+	TriggerContractAddress    string    `json:"trigger_contract_address"`
+	TriggerEvent              string    `json:"trigger_event"`
+}
+type ConditionWorkerData struct {
+	JobID                     int64     `json:"job_id"`
+	ExpirationTime            time.Time `json:"expiration_time"`
+	Recurring                 bool      `json:"recurring"`
+	ConditionType             string    `json:"condition_type"`
+	UpperLimit                float64   `json:"upper_limit"`
+	LowerLimit                float64   `json:"lower_limit"`
+	ValueSourceType           string    `json:"value_source_type"`
+	ValueSourceUrl            string    `json:"value_source_url"`
+}
+
 // Data to pass to time scheduler
 type ScheduleTimeTaskData struct {
 	TaskID                    int64     `json:"task_id"`
@@ -31,32 +51,14 @@ type ScheduleTimeTaskData struct {
 	TaskTargetData            TaskTargetData `json:"task_target_data"`
 }
 
-// Data to pass to event scheduler
-type ScheduleEventJobData struct {
-	JobID                     int64     `json:"job_id"`
-	TaskDefinitionID          int       `json:"task_definition_id"`
-	LastExecutedAt            time.Time `json:"last_executed_at"`
-	ExpirationTime            time.Time `json:"expiration_time"`
-	Recurring                 bool      `json:"recurring"`
-	TriggerChainID            string    `json:"trigger_chain_id"`
-	TriggerContractAddress    string    `json:"trigger_contract_address"`
-	TriggerEvent              string    `json:"trigger_event"`
-	TaskTargetData            TaskTargetData `json:"task_target_data"`
-}
-
 // Data to pass to condition scheduler
 type ScheduleConditionJobData struct {
 	JobID                     int64     `json:"job_id"`
 	TaskDefinitionID          int       `json:"task_definition_id"`
 	LastExecutedAt            time.Time `json:"last_executed_at"`
-	ExpirationTime            time.Time `json:"expiration_time"`
-	Recurring                 bool      `json:"recurring"`
-	ConditionType             string    `json:"condition_type"`
-	UpperLimit                float64   `json:"upper_limit"`
-	LowerLimit                float64   `json:"lower_limit"`
-	ValueSourceType           string    `json:"value_source_type"`
-	ValueSourceUrl            string    `json:"value_source_url"`
 	TaskTargetData            TaskTargetData `json:"task_target_data"`
+	EventWorkerData           EventWorkerData `json:"event_worker_data"`
+	ConditionWorkerData       ConditionWorkerData `json:"condition_worker_data"`
 }
 
 // Trigger data from schedulers to keepers for validation
