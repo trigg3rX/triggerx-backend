@@ -38,7 +38,7 @@ func main() {
 
 	logger.Info("Starting database server...",
 		"mode", config.IsDevMode(),
-		"port", config.GetDatabaseRPCPort(),
+		"port", config.GetDBServerRPCPort(),
 		"host", config.GetDatabaseHostAddress(),
 	)
 
@@ -64,7 +64,7 @@ func main() {
 	dbServer.RegisterRoutes(dbServer.GetRouter())
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetDatabaseRPCPort()),
+		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
 		Handler: dbServer.GetRouter(),
 	}
 
@@ -78,7 +78,7 @@ func main() {
 	}()
 
 	close(ready)
-	logger.Infof("Database Server initialized, starting on port %s...", config.GetDatabaseRPCPort())
+	logger.Infof("Database Server initialized, starting on port %s...", config.GetDBServerRPCPort())
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
