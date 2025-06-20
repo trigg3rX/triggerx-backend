@@ -125,6 +125,11 @@ func (m *MockTaskRepository) AddTaskPerformerID(taskID int64, performerID int64)
 	return args.Error(0)
 }
 
+func (m *MockTaskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error {
+	args := m.Called(taskID, taskNumber, status, txHash)
+	return args.Error(0)
+}
+
 // Test setup helper
 func setupTestKeeperHandler() (*Handler, *MockKeeperRepository, *MockTaskRepository) {
 	mockKeeperRepo := new(MockKeeperRepository)

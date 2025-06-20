@@ -75,7 +75,7 @@ func (r *jobRepository) UpdateJobLastExecutedAt(jobID int64, taskID int64, jobCo
 
 func (r *jobRepository) UpdateJobStatus(jobID int64, status string) error {
 	err := r.db.Session().Query(queries.UpdateJobDataStatusQuery,
-		status, time.Now()).Exec()
+		status, time.Now(), jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job status")
 	}

@@ -81,8 +81,6 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 		Addresses: []common.Address{contractAddress},
 		Topics: [][]common.Hash{
 			{TaskSubmittedEventSignature()},
-			nil,
-			nil,
 		},
 	}
 
@@ -123,8 +121,54 @@ func (t *TaskProcessor) processTaskSubmittedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TaskData.TriggerData[0].TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
+			// Get execution timestamp from IPFS data
+			var executionTimestamp time.Time
+			if ipfsData.ActionData != nil && !ipfsData.ActionData.ExecutionTimestamp.IsZero() {
+				executionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+				t.logger.Debugf("Using execution timestamp from IPFS data: %v", executionTimestamp)
+			} else {
+				// Fallback to current time if not available in IPFS data
+				executionTimestamp = time.Now()
+				t.logger.Warnf("No execution timestamp found in IPFS data, using current time")
+			}
+
+			// Get execution transaction hash from IPFS data
+			var executionTxHash string
+			if ipfsData.ActionData != nil && ipfsData.ActionData.ActionTxHash != "" {
+				executionTxHash = ipfsData.ActionData.ActionTxHash
+				t.logger.Debugf("Using execution tx hash from IPFS data: %s", executionTxHash)
+			} else {
+				// Fallback to event transaction hash if not available in IPFS data
+				executionTxHash = event.Raw.TxHash.Hex()
+				t.logger.Warnf("No execution tx hash found in IPFS data, using event tx hash")
+			}
+
+			// Get proof of task from IPFS data
+			var proofOfTask string
+			if ipfsData.ProofData != nil && ipfsData.ProofData.ProofOfTask != "" {
+				proofOfTask = ipfsData.ProofData.ProofOfTask
+				t.logger.Debugf("Using proof of task from IPFS data: %s", proofOfTask[:min(50, len(proofOfTask))]+"...")
+			} else {
+				t.logger.Warnf("No proof of task found in IPFS data")
+			}
+
+			// Update task number and success status to true (submitted) in database
+			taskID := int(ipfsData.TaskData.TriggerData[0].TaskID)
+			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), true, event.Raw.TxHash.Hex(),
+				event.Operator.Hex(), ConvertBigIntToStrings(event.AttestersIds), executionTxHash, executionTimestamp, proofOfTask); err != nil {
+				t.logger.Errorf("Failed to update task execution details in database: %v", err)
+				continue
+			}
+
+			// Update points for performers and attesters
+			if err := client.UpdatePointsInDatabase(taskID, event.Operator, ConvertBigIntToStrings(event.AttestersIds), true); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
+				continue
+			}
+
+			// Update job status to "running"
+			if err := client.UpdateJobStatus(ipfsData.TaskData.TriggerData[0].TaskID, "running"); err != nil {
+				t.logger.Errorf("Failed to update job status: %v", err)
 				continue
 			}
 
@@ -196,8 +240,54 @@ func (t *TaskProcessor) processTaskRejectedBatch(
 				continue
 			}
 
-			if err := client.UpdatePointsInDatabase(int(ipfsData.TaskData.TriggerData[0].TaskID), event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
+			// Get execution timestamp from IPFS data
+			var executionTimestamp time.Time
+			if ipfsData.ActionData != nil && !ipfsData.ActionData.ExecutionTimestamp.IsZero() {
+				executionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+				t.logger.Debugf("Using execution timestamp from IPFS data: %v", executionTimestamp)
+			} else {
+				// Fallback to current time if not available in IPFS data
+				executionTimestamp = time.Now()
+				t.logger.Warnf("No execution timestamp found in IPFS data, using current time")
+			}
+
+			// Get execution transaction hash from IPFS data
+			var executionTxHash string
+			if ipfsData.ActionData != nil && ipfsData.ActionData.ActionTxHash != "" {
+				executionTxHash = ipfsData.ActionData.ActionTxHash
+				t.logger.Debugf("Using execution tx hash from IPFS data: %s", executionTxHash)
+			} else {
+				// Fallback to event transaction hash if not available in IPFS data
+				executionTxHash = event.Raw.TxHash.Hex()
+				t.logger.Warnf("No execution tx hash found in IPFS data, using event tx hash")
+			}
+
+			// Get proof of task from IPFS data
+			var proofOfTask string
+			if ipfsData.ProofData != nil && ipfsData.ProofData.ProofOfTask != "" {
+				proofOfTask = ipfsData.ProofData.ProofOfTask
+				t.logger.Debugf("Using proof of task from IPFS data: %s", proofOfTask[:min(50, len(proofOfTask))]+"...")
+			} else {
+				t.logger.Warnf("No proof of task found in IPFS data")
+			}
+
+			// Update task number and success status to false (rejected) in database
+			taskID := int(ipfsData.TaskData.TriggerData[0].TaskID)
+			if err := client.UpdateTaskNumberAndStatus(taskID, int64(event.TaskNumber), false, event.Raw.TxHash.Hex(),
+				event.Operator.Hex(), ConvertBigIntToStrings(event.AttestersIds), executionTxHash, executionTimestamp, proofOfTask); err != nil {
+				t.logger.Errorf("Failed to update task execution details in database: %v", err)
+				continue
+			}
+
+			// Update points for performers and attesters (with rejection penalty)
+			if err := client.UpdatePointsInDatabase(taskID, event.Operator, ConvertBigIntToStrings(event.AttestersIds), false); err != nil {
 				t.logger.Errorf("Failed to update points in database: %v", err)
+				continue
+			}
+
+			// Update job status to "failed" for rejected tasks
+			if err := client.UpdateJobStatus(ipfsData.TaskData.TriggerData[0].TaskID, "failed"); err != nil {
+				t.logger.Errorf("Failed to update job status: %v", err)
 				continue
 			}
 

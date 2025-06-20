@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     arg_type int,
     arguments list<text>,
     script_target_function text,
-    status boolean,
+    status text,
     job_cost_prediction double,
     created_at timestamp,
     last_executed_at timestamp,
@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     ta_signature blob,
     task_submission_tx_hash text,
     is_successful boolean,
+    task_status text,
     PRIMARY KEY ((partition_key), created_at, task_id)
 ) WITH CLUSTERING ORDER BY (created_at DESC, task_id ASC);
 
