@@ -13,9 +13,15 @@ func main() {
 		price := getPrice()
 		log.Printf("Price: %s", price)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(price))
+		_, err := w.Write([]byte(price))
+		if err != nil {
+			log.Printf("Error writing price: %v", err)
+		}
 	})
-	http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Printf("Error starting server: %v", err)
+	}
 }
 
 func getPrice() string {
