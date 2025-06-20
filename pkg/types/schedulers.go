@@ -91,6 +91,7 @@ type TaskTriggerData struct {
 
 type SchedulerSignatureData struct {
 	TaskID                  int64  `json:"task_id"`
+	SchedulerID             int    `json:"scheduler_id"`
 	SchedulerSigningAddress string `json:"scheduler_signing_address"`
 	SchedulerSignature      string `json:"scheduler_signature"`
 }
