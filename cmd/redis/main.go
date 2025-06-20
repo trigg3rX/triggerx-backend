@@ -8,10 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/api"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/stream"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -34,7 +35,7 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting Redis service ...")
+	logger.Info("Starting Redis Orchestrator service ...")
 
 	// Initialize metrics collector
 	collector := metrics.NewCollector()
@@ -53,19 +54,28 @@ func main() {
 	}
 	logger.Info("Redis client Initialised")
 
-	// Initialize task stream manager
-	taskStreamMgr, err := redis.NewTaskStreamManager(logger)
+	// Initialize job stream manager for orchestration
+	jobStreamMgr, err := stream.NewJobStreamManager(logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
+	}
+	logger.Info("Job stream manager Initialised")
+
+	// Initialize task stream manager for orchestration
+	taskStreamMgr, err := stream.NewTaskStreamManager(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
 	}
 	logger.Info("Task stream manager Initialised")
 
-	// Initialize job stream manager
-	jobStreamMgr, err := redis.NewJobStreamManager(logger)
-	if err != nil {
-		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
+	// Initialize stream managers
+	if err := jobStreamMgr.Initialize(); err != nil {
+		logger.Fatal("Failed to initialize job streams", "error", err)
 	}
-	logger.Info("Job stream manager Initialised")
+	if err := taskStreamMgr.Initialize(); err != nil {
+		logger.Fatal("Failed to initialize task streams", "error", err)
+	}
+	logger.Info("Redis streams initialized successfully")
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -88,7 +98,26 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start server in a goroutine
+	// Start orchestration workers in background
+	logger.Info("Starting Redis orchestration workers...")
+
+	// Task Processor Workers - multiple instances for scaling
+	consumerName := fmt.Sprintf("redis-worker-%d", time.Now().Unix())
+	go taskStreamMgr.StartTaskProcessor(ctx, consumerName)
+	logger.Info("Started task processor worker", "consumer_name", consumerName)
+
+	// Timeout Worker - monitors processing timeouts
+	go taskStreamMgr.StartTimeoutWorker(ctx)
+	logger.Info("Started task timeout worker")
+
+	// Retry Worker - processes retry streams
+	go taskStreamMgr.StartRetryWorker(ctx)
+	logger.Info("Started task retry worker")
+
+	// Stream Health Monitor - monitors stream health
+	go startStreamHealthMonitor(ctx, jobStreamMgr, taskStreamMgr, logger)
+
+	// Start API server in a goroutine
 	go func() {
 		if err := server.Start(); err != nil {
 			logger.Fatal("Failed to start server", "error", err)
@@ -103,7 +132,7 @@ func main() {
 
 	// Log Redis info
 	redisInfo := redis.GetRedisInfo()
-	logger.Info("Redis service is running", "config", redisInfo)
+	logger.Info("Redis Orchestrator service is running", "config", redisInfo)
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -114,6 +143,51 @@ func main() {
 
 	// Perform graceful shutdown
 	performGracefulShutdown(ctx, client, server, logger)
+}
+
+// startStreamHealthMonitor monitors the health of Redis streams
+func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *stream.JobStreamManager, taskStreamMgr *stream.TaskStreamManager, logger logging.Logger) {
+	logger.Info("Starting stream health monitor")
+
+	ticker := time.NewTicker(30 * time.Second) // Check health every 30 seconds
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("Stream health monitor shutting down")
+			return
+		case <-ticker.C:
+			// Get stream information
+			jobInfo := jobStreamMgr.GetJobStreamInfo()
+			taskInfo := taskStreamMgr.GetStreamInfo()
+
+			logger.Info("Stream health status",
+				"job_streams", jobInfo,
+				"task_streams", taskInfo)
+
+			// Log warnings for high stream lengths
+			if jobLengths, ok := jobInfo["stream_lengths"].(map[string]int64); ok {
+				for stream, length := range jobLengths {
+					if length > 100 { // Warn if more than 100 pending jobs
+						logger.Warn("High job stream length detected",
+							"stream", stream,
+							"length", length)
+					}
+				}
+			}
+
+			if taskLengths, ok := taskInfo["stream_lengths"].(map[string]int64); ok {
+				for stream, length := range taskLengths {
+					if length > 50 { // Warn if more than 50 tasks in any stream
+						logger.Warn("High task stream length detected",
+							"stream", stream,
+							"length", length)
+					}
+				}
+			}
+		}
+	}
 }
 
 func performGracefulShutdown(ctx context.Context, client *redis.Client, server *api.Server, logger logging.Logger) {
@@ -139,7 +213,7 @@ func performGracefulShutdown(ctx context.Context, client *redis.Client, server *
 		logger.Info("API server stopped successfully")
 	}
 
-	logger.Info("Redis service shutdown complete")
+	logger.Info("Redis Orchestrator service shutdown complete")
 
 	// Ensure we exit cleanly
 	select {
