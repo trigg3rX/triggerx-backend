@@ -43,9 +43,10 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                 env.GetEnvBool("DEV_MODE", false),
-		timeSchedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
+		timeSchedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9005"),
+		redisRPCUrl:             env.GetEnv("REDIS_RPC_URL", "http://localhost:9003"),
 		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
+		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
 		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
 		taskBatchSize:            env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
