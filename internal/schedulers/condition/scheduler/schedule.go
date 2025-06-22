@@ -319,6 +319,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 		TaskID:                  notification.JobID,
 		TaskDefinitionID:        jobData.TaskDefinitionID,
 		CurrentTriggerTimestamp: notification.TriggeredAt,
+		ExpirationTime:          jobData.EventWorkerData.ExpirationTime,
 	}
 
 	switch jobData.TaskDefinitionID {
@@ -327,6 +328,8 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 		baseTriggerData.ConditionType = jobData.ConditionWorkerData.ConditionType
 		baseTriggerData.ConditionSourceType = jobData.ConditionWorkerData.ValueSourceType
 		baseTriggerData.ConditionSourceUrl = jobData.ConditionWorkerData.ValueSourceUrl
+		baseTriggerData.ConditionUpperLimit = int(jobData.ConditionWorkerData.UpperLimit)
+		baseTriggerData.ConditionLowerLimit = int(jobData.ConditionWorkerData.LowerLimit)
 
 	case 3, 4: // Event-based
 		baseTriggerData.EventTxHash = notification.TriggerTxHash
