@@ -3,12 +3,11 @@ package validation
 import (
 	"context"
 	"fmt"
-	// "time"
-
+	
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
 	"github.com/ethereum/go-ethereum/common"
-	// ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -38,24 +37,24 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 	// check if the tx was made to correct target contract
 	// fetch the AA contract address and the transaction from there to complete the flow
 
-	// TODO: Investigate this err: transaction type not supported
-	// check if the task was time, if yes, check if it was executed within the time interval + tolerance
-	// if targetData.TaskDefinitionID == 1 || targetData.TaskDefinitionID == 2 {
-	// 	const timeTolerance = 1100 * time.Millisecond
-	// 	var block *ethTypes.Block
-	// 	block, err = client.BlockByHash(context.Background(), receipt.BlockHash)
-	// 	if err != nil {
-	// 		return false, fmt.Errorf("failed to get block: %v", err)
-	// 	}
-	// 	txTimestamp := time.Unix(int64(block.Time()), 0)
+	txTimestamp, err := v.getBlockTimestamp(receipt, utils.GetChainRpcUrl(targetData.TargetChainID))
+	if err != nil {
+		return false, fmt.Errorf("failed to get block timestamp: %v", err)
+	}
 
-	// 	if txTimestamp.After(triggerData.NextTriggerTimestamp.Add(timeTolerance)) {
-	// 		return false, fmt.Errorf("transaction was made after the next execution timestamp")
-	// 	}
-	// 	if txTimestamp.Before(triggerData.NextTriggerTimestamp.Add(-timeTolerance)) {
-	// 		return false, fmt.Errorf("transaction was made before the next execution timestamp")
-	// 	}
-	// 	return true, nil
-	// }
+	// check if the tx was made within expiration time + the time tolerance
+	if triggerData.ExpirationTime.Before(txTimestamp.Add(timeTolerance)) {
+		return false, fmt.Errorf("transaction was made after the expiration time")
+	}
+
+	// check if the task was time, if yes, check if it was executed within the time interval + tolerance
+	if targetData.TaskDefinitionID == 1 || targetData.TaskDefinitionID == 2 {
+		if txTimestamp.After(triggerData.NextTriggerTimestamp.Add(timeTolerance)) {
+			return false, fmt.Errorf("transaction was made after the next execution timestamp")
+		}
+		if txTimestamp.Before(triggerData.NextTriggerTimestamp.Add(-timeTolerance)) {
+			return false, fmt.Errorf("transaction was made before the next execution timestamp")
+		}
+	}
 	return true, nil
 }

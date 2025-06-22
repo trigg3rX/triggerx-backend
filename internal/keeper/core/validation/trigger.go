@@ -1,18 +1,12 @@
 package validation
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -113,85 +107,11 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 		return false, fmt.Errorf("transaction was not made to correct target contract")
 	}
 
-	// Check if the event name (topic hash) exists in any of the logs' topics
-	eventFound := false
-	eventHash := crypto.Keccak256Hash([]byte(triggerData.EventTriggerName))
-	for _, log := range receipt.Logs {
-		for _, topic := range log.Topics {
-			if topic == eventHash {
-				eventFound = true
-				break
-			}
-		}
-		if eventFound {
-			break
-		}
-	}
-	if !eventFound {
-		return false, fmt.Errorf("event name is not correct")
-	}
-
-	// check if the tx was made within expiration time + the time tolerance
-	const timeTolerance = 1100 * time.Millisecond
-
-	blockNumberHex := fmt.Sprintf("0x%x", receipt.BlockNumber)
-	reqBody := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "eth_getBlockByNumber",
-		"params": []interface{}{
-			blockNumberHex,
-			false,
-		},
-		"id": 1,
-	}
-	reqBytes, err := json.Marshal(reqBody)
+	txTimestamp, err := v.getBlockTimestamp(receipt, rpcURL)
 	if err != nil {
-		return false, fmt.Errorf("failed to marshal eth_getBlockReceipts request: %v", err)
+		return false, fmt.Errorf("failed to get block timestamp: %v", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", rpcURL, bytes.NewBuffer(reqBytes))
-	if err != nil {
-		return false, fmt.Errorf("failed to create eth_getBlockReceipts request: %v", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	resp, err := httpClient.Do(httpReq)
-	if err != nil {
-		return false, fmt.Errorf("failed to call eth_getBlockReceipts: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return false, fmt.Errorf("eth_getBlockReceipts returned status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var rpcResp struct {
-		Result json.RawMessage `json:"result"`
-		Error  interface{}     `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-		return false, fmt.Errorf("failed to decode eth_getBlockReceipts response: %v", err)
-	}
-	if rpcResp.Error != nil {
-		return false, fmt.Errorf("eth_getBlockReceipts error: %v", rpcResp.Error)
-	}
-
-	var block map[string]interface{}
-	if err := json.Unmarshal(rpcResp.Result, &block); err != nil {
-		return false, fmt.Errorf("failed to unmarshal block: %v", err)
-	}
-
-	timestampHex, ok := block["timestamp"].(string)
-	if !ok {
-		return false, fmt.Errorf("block timestamp is not a string")
-	}
-	timestampInt, err := strconv.ParseInt(timestampHex, 0, 64)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse block timestamp hex: %v", err)
-	}
-	txTimestamp := time.Unix(timestampInt, 0).UTC()
 	expirationTime := triggerData.ExpirationTime.UTC()
 
 	if txTimestamp.After(expirationTime.Add(timeTolerance)) {
@@ -208,27 +128,29 @@ func (v *TaskValidator) IsValidConditionBasedTrigger(triggerData *types.TaskTrig
 	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
 	}
+	// v.logger.Infof("trigger data: %+v", triggerData)
+	v.logger.Infof("value: %v | upper limit: %v | lower limit: %v", triggerData.ConditionSatisfiedValue, triggerData.ConditionUpperLimit, triggerData.ConditionLowerLimit)
 
 	// check if the condition was satisfied by the value
-	if triggerData.ConditionSourceType == ConditionEquals {
+	if triggerData.ConditionType == ConditionEquals {
 		return triggerData.ConditionSatisfiedValue == triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionNotEquals {
+	if triggerData.ConditionType == ConditionNotEquals {
 		return triggerData.ConditionSatisfiedValue != triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionGreaterThan {
+	if triggerData.ConditionType == ConditionGreaterThan {
 		return triggerData.ConditionSatisfiedValue > triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionLessThan {
+	if triggerData.ConditionType == ConditionLessThan {
 		return triggerData.ConditionSatisfiedValue < triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionGreaterEqual {
+	if triggerData.ConditionType == ConditionGreaterEqual {
 		return triggerData.ConditionSatisfiedValue >= triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionLessEqual {
+	if triggerData.ConditionType == ConditionLessEqual {
 		return triggerData.ConditionSatisfiedValue <= triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionBetween {
+	if triggerData.ConditionType == ConditionBetween {
 		return triggerData.ConditionSatisfiedValue >= triggerData.ConditionLowerLimit && triggerData.ConditionSatisfiedValue <= triggerData.ConditionUpperLimit, nil
 	}
 

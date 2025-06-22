@@ -50,12 +50,18 @@ func main() {
 	collector := metrics.NewCollector()
 	logger.Info("[1/5] Dependency: Metrics collector Initialised")
 
-	// Initialize clients
+	// Initialize clients: ECDSA
 	aggregatorCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetPrivateKeyConsensus(),
+		SenderPrivateKey: config.GetPrivateKeyController(),
 		SenderAddress:    config.GetKeeperAddress(),
 	}
+	// Initialize clients: BLS
+	// aggregatorCfg := aggregator.AggregatorClientConfig{
+	// 	AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+	// 	SenderPrivateKey: config.GetPrivateKeyConsensus(),
+	// 	SenderAddress:    config.GetKeeperAddress(),
+	// }
 	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
 	if err != nil {
 		logger.Fatal("Failed to initialize aggregator client", "error", err)
