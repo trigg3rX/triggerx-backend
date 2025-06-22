@@ -208,7 +208,7 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return "0.1.3"
+	return "0.1.5"
 }
 
 // IPFS configuration
