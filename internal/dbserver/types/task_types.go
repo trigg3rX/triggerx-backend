@@ -2,17 +2,6 @@ package types
 
 import "time"
 
-// Task status constants
-type TaskStatus string
-
-const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusSubmitted TaskStatus = "submitted"
-	TaskStatusRejected  TaskStatus = "rejected"
-	TaskStatusCompleted TaskStatus = "completed"
-	TaskStatusFailed    TaskStatus = "failed"
-)
-
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
