@@ -1,15 +1,83 @@
 package validation
 
-// import (
-// 	"encoding/json"
-// 	"fmt"
-// 	"io"
-// 	"net/http"
-// 	"os"
-// )
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"time"
+
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+)
+
+const timeTolerance = 1100 * time.Millisecond
+
+func (v *TaskValidator) getBlockTimestamp(receipt *ethtypes.Receipt, rpcURL string) (time.Time, error) {
+	blockNumberHex := fmt.Sprintf("0x%x", receipt.BlockNumber)
+	reqBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_getBlockByNumber",
+		"params": []interface{}{
+			blockNumberHex,
+			false,
+		},
+		"id": 1,
+	}
+	reqBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to marshal eth_getBlockReceipts request: %v", err)
+	}
+
+	httpReq, err := http.NewRequest("POST", rpcURL, bytes.NewBuffer(reqBytes))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to create eth_getBlockReceipts request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to call eth_getBlockReceipts: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return time.Time{}, fmt.Errorf("eth_getBlockReceipts returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var rpcResp struct {
+		Result json.RawMessage `json:"result"`
+		Error  interface{}     `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		return time.Time{}, fmt.Errorf("failed to decode eth_getBlockReceipts response: %v", err)
+	}
+	if rpcResp.Error != nil {
+		return time.Time{}, fmt.Errorf("eth_getBlockReceipts error: %v", rpcResp.Error)
+	}
+
+	var block map[string]interface{}
+	if err := json.Unmarshal(rpcResp.Result, &block); err != nil {
+		return time.Time{}, fmt.Errorf("failed to unmarshal block: %v", err)
+	}
+
+	timestampHex, ok := block["timestamp"].(string)
+	if !ok {
+		return time.Time{}, fmt.Errorf("block timestamp is not a string")
+	}
+	timestampInt, err := strconv.ParseInt(timestampHex, 0, 64)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse block timestamp hex: %v", err)
+	}
+	txTimestamp := time.Unix(timestampInt, 0).UTC()
+
+	return txTimestamp, nil
+}
 
 // func (v *TaskValidator) fetchContractABI(contractAddress string) (string, error) {
-// 	// First try using Blockscout API for Optimism Sepolia network
 // 	blockscoutUrl := fmt.Sprintf(
 // 		"https://optimism-sepolia.blockscout.com/api?module=contract&action=getabi&address=%s",
 // 		contractAddress)
@@ -34,14 +102,9 @@ package validation
 // 			}
 // 		}
 // 	}
-// 	OptimismAPIKey := os.Getenv("OPTIMISM_API_KEY")
-// 	if OptimismAPIKey == "" {
-// 		return "", fmt.Errorf("OPTIMISM environment variable not set")
-// 	}
-// 	// If we reach here, Blockscout API failed, try Etherscan API as fallback
 // 	etherscanUrl := fmt.Sprintf(
 // 		"https://api-sepolia-optimism.etherscan.io/api?module=contract&action=getabi&address=%s&apikey=%s",
-// 		contractAddress, OptimismAPIKey)
+// 		contractAddress, v.etherscanAPIKey)
 
 // 	resp, err = http.Get(etherscanUrl)
 // 	if err != nil {

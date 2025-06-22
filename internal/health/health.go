@@ -128,7 +128,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// Record check-in by version metric
 	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
-	if keeperHealth.Version == "0.1.3" {
+	if keeperHealth.Version == "0.1.5" || keeperHealth.Version == "0.1.3" {
 		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 		if !ok {
 			h.logger.Error("Invalid keeper signature",
@@ -197,7 +197,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			"version", keeperHealth.Version,
 		)
 		response.Status = false
-		response.Data = "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.3"
+		response.Data = "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.5"
 		c.JSON(http.StatusPreconditionFailed, response)
 		return
 	}

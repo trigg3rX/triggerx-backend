@@ -75,6 +75,7 @@ func Init() error {
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
 		ethRPCUrl:                env.GetEnv("L1_RPC", ""),
 		baseRPCUrl:               env.GetEnv("L2_RPC", ""),
+		alchemyAPIKey:           env.GetEnv("ALCHEMY_API_KEY", ""),
 		privateKeyConsensus:      env.GetEnv("PRIVATE_KEY", ""),
 		privateKeyController:     env.GetEnv("OPERATOR_PRIVATE_KEY", ""),
 		keeperAddress:            env.GetEnv("OPERATOR_ADDRESS", ""),
@@ -139,7 +140,11 @@ func GetBaseRPCUrl() string {
 	return cfg.baseRPCUrl
 }
 
+// Only sets it if there was no key in env file
 func SetAlchemyAPIKey(key string) {
+	if !env.IsEmpty(cfg.alchemyAPIKey) {
+		return
+	}
 	cfg.alchemyAPIKey = key
 }
 
@@ -208,7 +213,7 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return "0.1.3"
+	return "0.1.5"
 }
 
 // IPFS configuration

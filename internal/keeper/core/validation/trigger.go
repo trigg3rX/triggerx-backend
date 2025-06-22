@@ -8,7 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -104,43 +103,21 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 	}
 
 	// check if the tx was made to correct target contract
-	if receipt.ContractAddress != common.HexToAddress(triggerData.EventTriggerContractAddress) {
+	if receipt.Logs[0].Address != common.HexToAddress(triggerData.EventTriggerContractAddress) {
 		return false, fmt.Errorf("transaction was not made to correct target contract")
 	}
 
-	// Check if the event name (topic hash) exists in any of the logs' topics
-	eventFound := false
-	eventHash := common.HexToHash(triggerData.EventTriggerName)
-	for _, log := range receipt.Logs {
-		for _, topic := range log.Topics {
-			if topic == eventHash {
-				eventFound = true
-				break
-			}
-		}
-		if eventFound {
-			break
-		}
-	}
-	if !eventFound {
-		return false, fmt.Errorf("event name is not correct")
-	}
-
-	// check if the tx was made within expiration time + the time tolerance
-	const timeTolerance = 1100 * time.Millisecond
-	var block *ethTypes.Block
-	if receipt.BlockNumber == nil {
-		block, err = client.BlockByNumber(context.Background(), receipt.BlockNumber)
-	} else {
-		block, err = client.BlockByHash(context.Background(), receipt.BlockHash)
-	}
+	txTimestamp, err := v.getBlockTimestamp(receipt, rpcURL)
 	if err != nil {
-		return false, fmt.Errorf("failed to get block: %v", err)
+		return false, fmt.Errorf("failed to get block timestamp: %v", err)
 	}
-	txTimestamp := time.Unix(int64(block.Time()), 0)
 
-	if txTimestamp.After(triggerData.ExpirationTime.Add(timeTolerance)) {
-		return false, fmt.Errorf("transaction was made after the expiration time")
+	expirationTime := triggerData.ExpirationTime.UTC()
+
+	if txTimestamp.After(expirationTime.Add(timeTolerance)) {
+		return false, fmt.Errorf("transaction was made after the expiration time (tx: %v, exp+tolerance: %v)",
+			txTimestamp.Format(time.RFC3339),
+			expirationTime.Add(timeTolerance).Format(time.RFC3339))
 	}
 
 	return true, nil
@@ -151,27 +128,29 @@ func (v *TaskValidator) IsValidConditionBasedTrigger(triggerData *types.TaskTrig
 	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
 	}
-	
+	// v.logger.Infof("trigger data: %+v", triggerData)
+	v.logger.Infof("value: %v | upper limit: %v | lower limit: %v", triggerData.ConditionSatisfiedValue, triggerData.ConditionUpperLimit, triggerData.ConditionLowerLimit)
+
 	// check if the condition was satisfied by the value
-	if triggerData.ConditionSourceType == ConditionEquals {
+	if triggerData.ConditionType == ConditionEquals {
 		return triggerData.ConditionSatisfiedValue == triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionNotEquals {
+	if triggerData.ConditionType == ConditionNotEquals {
 		return triggerData.ConditionSatisfiedValue != triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionGreaterThan {
+	if triggerData.ConditionType == ConditionGreaterThan {
 		return triggerData.ConditionSatisfiedValue > triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionLessThan {
+	if triggerData.ConditionType == ConditionLessThan {
 		return triggerData.ConditionSatisfiedValue < triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionGreaterEqual {
+	if triggerData.ConditionType == ConditionGreaterEqual {
 		return triggerData.ConditionSatisfiedValue >= triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionLessEqual {
+	if triggerData.ConditionType == ConditionLessEqual {
 		return triggerData.ConditionSatisfiedValue <= triggerData.ConditionUpperLimit, nil
 	}
-	if triggerData.ConditionSourceType == ConditionBetween {
+	if triggerData.ConditionType == ConditionBetween {
 		return triggerData.ConditionSatisfiedValue >= triggerData.ConditionLowerLimit && triggerData.ConditionSatisfiedValue <= triggerData.ConditionUpperLimit, nil
 	}
 
