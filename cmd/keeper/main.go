@@ -53,7 +53,7 @@ func main() {
 	// Initialize clients: ECDSA
 	aggregatorCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetPrivateKeyController(),
+		SenderPrivateKey: config.GetPrivateKeyConsensus(),
 		SenderAddress:    config.GetKeeperAddress(),
 	}
 	// Initialize clients: BLS
