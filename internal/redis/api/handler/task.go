@@ -7,7 +7,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -95,7 +96,7 @@ func (h *handler) HandleValidateRequest(c *gin.Context) {
 	decodedData = string(dataBytes)
 	h.logger.Infof("Decoded Data CID: %s", decodedData)
 
-	ipfsData, err := utils.FetchIPFSContent(decodedData)
+	ipfsData, err := ipfs.FetchIPFSContent(config.GetPinataHost(), decodedData)
 	if err != nil {
 		h.logger.Errorf("Failed to fetch IPFS content: %v", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{

@@ -30,6 +30,9 @@ type Config struct {
 	upstashURL   string
 	upstashToken string
 
+	// Pinata Host
+	pinataHost string
+
 	// Fallback: Local Redis settings (optional)
 	localAddr     string
 	localPassword string
@@ -85,6 +88,7 @@ func Init() error {
 		taskStreamTTL:   env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
 		cacheTTL:        env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
 		cleanupInterval: env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
+		pinataHost:        env.GetEnv("PINATA_HOST", ""),
 	}
 
 	if !cfg.devMode {
@@ -117,6 +121,10 @@ func GetRedisType() string {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetPinataHost() string {
+	return cfg.pinataHost
 }
 
 func GetHealthRPCUrl() string {

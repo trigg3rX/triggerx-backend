@@ -41,6 +41,7 @@ func (tsm *TaskStreamManager) UpdateDatabase(ipfsData types.IPFSData) {
 		ProofOfTask: ipfsData.ProofData.ProofOfTask,
 		TaskOpXCost: ipfsData.ActionData.TotalFee,
 	}
+	tsm.logger.Infof("UpdateTaskExecutionDataRequest: %+v", updateTaskExecutionData)
 
 	success, err := tsm.dbClient.UpdateTaskExecutionData(updateTaskExecutionData)
 	if err != nil {
