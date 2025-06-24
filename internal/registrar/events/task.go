@@ -675,7 +675,7 @@ func StartWeeklyPinataCleanup(logger logging.Logger) {
 				continue
 			}
 
-			cutoff := time.Now().Add(-24 * time.Hour)
+			cutoff := time.Now().Add(-1 * time.Hour) //1 hour to avoid deleting files that are being used convert 24 to 1
 			deletedCount := 0
 
 			for _, file := range files {
