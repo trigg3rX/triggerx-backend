@@ -44,10 +44,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database error while retrieving user",
-			"code":  "DB_ERROR",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -67,10 +64,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create new user",
-				"code":  "USER_CREATION_ERROR",
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
@@ -118,10 +112,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating job: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create job",
-				"code":  "JOB_CREATION_ERROR",
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
@@ -166,7 +157,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
 				trackDBOp(err)
 				h.logger.Errorf("[CreateJobData] Error inserting time job data for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting time job data: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
@@ -196,7 +187,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 			if err := h.eventJobRepository.CreateEventJob(&eventJobData); err != nil {
 				h.logger.Errorf("[CreateJobData] Error inserting event job data for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting event job data: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			scheduleConditionJobData.JobID = jobID
@@ -249,7 +240,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
 				h.logger.Errorf("[CreateJobData] Error inserting condition job data for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting condition job data: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			scheduleConditionJobData.JobID = jobID
@@ -306,7 +297,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		if err := h.userRepository.UpdateUserTasksAndPoints(existingUser.UserID, 0, newPoints); err != nil {
 			trackDBOp(err)
 			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUser.UserID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user points: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 		trackDBOp(nil)
@@ -322,7 +313,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, allJobIDs); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUser.UserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user job IDs: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	trackDBOp(nil)
