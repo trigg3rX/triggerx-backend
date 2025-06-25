@@ -64,9 +64,9 @@ func main() {
 	// Start services
 	registrarService.Start()
 
-	// // Initialize and start rewards service
-	// rewardsService := rewards.NewRewardsService(logger)
-	// go rewardsService.StartDailyRewardsPoints()
+	// Initialize and start rewards service
+	rewardsService := rewards.NewRewardsService(logger)
+	go rewardsService.StartDailyRewardsPoints()
 
 	logger.Info("All services started successfully")
 
