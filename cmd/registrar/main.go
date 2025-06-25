@@ -11,7 +11,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
 
-	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
