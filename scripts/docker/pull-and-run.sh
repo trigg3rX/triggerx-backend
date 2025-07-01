@@ -112,6 +112,10 @@ if [ -n "$PROMTAIL_GID" ]; then
     }
     # User can read/write, group (promtail) can read
     chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    
+    # Set user mapping for docker container to run with promtail group
+    USER_MAPPING="--user 1000:${PROMTAIL_GID}"
+    echo "Container will run as UID 1000, GID ${PROMTAIL_GID} (promtail group)"
 else
     # No promtail group, just ensure container user can write
     echo "No promtail group found. Setting ownership to UID 1000..."
@@ -120,6 +124,19 @@ else
         chmod 777 "./data/logs/${DOCKER_NAME}" 2>/dev/null
     }
     chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    USER_MAPPING=""
+fi
+
+# Fix permissions on any existing log files
+if [ "$(ls -A "./data/logs/${DOCKER_NAME}" 2>/dev/null)" ]; then
+    echo "Fixing permissions on existing log files..."
+    if [ -n "$PROMTAIL_GID" ]; then
+        sudo chown 1000:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+        chmod 664 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+    else
+        sudo chown 1000:1000 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+        chmod 644 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+    fi
 fi
 
 echo "Log directory permissions set successfully."
@@ -129,6 +146,7 @@ if [[ "$SERVICE" == "registrar" ]]; then
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
+        ${USER_MAPPING} \
         ${ENV_FILE} \
         -v ./pkg/bindings/abi:/home/appuser/pkg/bindings/abi \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
@@ -140,6 +158,7 @@ else
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
+        ${USER_MAPPING} \
         ${ENV_FILE} \
         --network host \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \

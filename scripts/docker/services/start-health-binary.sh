@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Set umask to ensure log files are group-readable (664 instead of 600)
+umask 002
+
 # Load environment variables from mounted .env file
 if [ -f /home/appuser/.env ]; then
     echo "Loading environment variables from .env file..."
