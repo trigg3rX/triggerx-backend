@@ -29,8 +29,12 @@ FROM golang:1.24.2-alpine
 # Install ca-certificates
 RUN apk --no-cache add ca-certificates
 
+# Create a non-root user with specific UID/GID for log file permissions
+RUN addgroup -g 1000 appgroup && \
+    adduser -D -u 1000 -G appgroup appuser
+
 # Set working directory
-WORKDIR /root/
+WORKDIR /home/appuser/
 
 # Create a placeholder env file
 RUN touch .env
@@ -39,8 +43,14 @@ RUN touch .env
 ARG DOCKER_NAME
 COPY --from=builder /app/${DOCKER_NAME} .
 
-COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /root/start.sh
-RUN chmod +x /root/start.sh
+COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /home/appuser/start.sh
+RUN chmod +x /home/appuser/start.sh
+
+# Change ownership of all files to appuser
+RUN chown -R appuser:appgroup /home/appuser/
+
+# Switch to non-root user
+USER appuser
 
 # Default command: run the binary
 CMD ["sh", "./start.sh"]

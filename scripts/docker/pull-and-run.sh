@@ -86,17 +86,22 @@ if [ ! -f .env ]; then
     echo "Warning: .env file not found. Container will run without environment variables."
     ENV_FILE=""
 else
-    ENV_FILE="-v ./.env:/root/.env"
+    ENV_FILE="-v ./.env:/home/appuser/.env"
 fi
+
+# Get the promtail group ID (if it exists)
+PROMTAIL_GID=$(getent group promtail | cut -d: -f3 2>/dev/null || echo "1000")
+USER_MAPPING="--user 1000:${PROMTAIL_GID}"
 
 if [[ "$SERVICE" == "registrar" ]]; then
     # Run the container
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
+        ${USER_MAPPING} \
         ${ENV_FILE} \
-        -v ./pkg/bindings/abi:/root/pkg/bindings/abi \
-        -v ./data/logs/${DOCKER_NAME}:/root/data/logs/${DOCKER_NAME} \
+        -v ./pkg/bindings/abi:/home/appuser/pkg/bindings/abi \
+        -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
         -p ${PORT}:${PORT} \
         --restart unless-stopped \
         ${IMAGE_NAME}
@@ -105,9 +110,10 @@ else
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
+        ${USER_MAPPING} \
         ${ENV_FILE} \
         --network host \
-        -v ./data/logs/${DOCKER_NAME}:/root/data/logs/${DOCKER_NAME} \
+        -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
         --restart unless-stopped \
         ${IMAGE_NAME}
 fi
