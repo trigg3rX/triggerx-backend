@@ -91,13 +91,38 @@ else
     ENV_FILE=""
 fi
 
-# Ensure the log directory exists and has proper permissions for promtail
+# Ensure the log directory exists and has proper permissions
+echo "Setting up log directory: ./data/logs/${DOCKER_NAME}"
 mkdir -p "./data/logs/${DOCKER_NAME}"
+
+# Get promtail group ID if it exists
+PROMTAIL_GID=""
 if command -v getent >/dev/null 2>&1 && getent group promtail >/dev/null 2>&1; then
-    echo "Setting log directory permissions for promtail group..."
-    sudo chgrp promtail "./data/logs/${DOCKER_NAME}" 2>/dev/null || echo "Warning: Could not set promtail group ownership"
-    chmod g+w "./data/logs/${DOCKER_NAME}" 2>/dev/null || echo "Warning: Could not set group write permissions"
+    PROMTAIL_GID=$(getent group promtail | cut -d: -f3)
+    echo "Found promtail group with GID: ${PROMTAIL_GID}"
 fi
+
+# Set appropriate ownership and permissions
+if [ -n "$PROMTAIL_GID" ]; then
+    # Set owner to container user (1000) and group to promtail for log reading
+    echo "Setting ownership to UID 1000 (container) and GID ${PROMTAIL_GID} (promtail)..."
+    sudo chown 1000:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+        echo "Warning: Could not set specific ownership. Using fallback permissions..."
+        chmod 755 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    }
+    # User can read/write, group (promtail) can read
+    chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+else
+    # No promtail group, just ensure container user can write
+    echo "No promtail group found. Setting ownership to UID 1000..."
+    sudo chown 1000:1000 "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+        echo "Warning: Could not set ownership. Using world-writable fallback..."
+        chmod 777 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    }
+    chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+fi
+
+echo "Log directory permissions set successfully."
 
 if [[ "$SERVICE" == "registrar" ]]; then
     # Run the container
