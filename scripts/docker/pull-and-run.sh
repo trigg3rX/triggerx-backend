@@ -96,6 +96,7 @@ if [[ "$SERVICE" == "registrar" ]]; then
         --name triggerx-${DOCKER_NAME} \
         ${ENV_FILE} \
         -v ./pkg/bindings/abi:/root/pkg/bindings/abi \
+        -v ./data/logs/${DOCKER_NAME}:/root/data/logs/${DOCKER_NAME} \
         -p ${PORT}:${PORT} \
         --restart unless-stopped \
         ${IMAGE_NAME}
@@ -106,6 +107,7 @@ else
         --name triggerx-${DOCKER_NAME} \
         ${ENV_FILE} \
         --network host \
+        -v ./data/logs/${DOCKER_NAME}:/root/data/logs/${DOCKER_NAME} \
         --restart unless-stopped \
         ${IMAGE_NAME}
 fi
