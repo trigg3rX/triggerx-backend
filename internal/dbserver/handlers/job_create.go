@@ -10,7 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
-	commonTypes"github.com/trigg3rX/triggerx-backend/pkg/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
@@ -103,6 +103,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			Status:            "pending",
 			JobCostPrediction: tempJobs[i].JobCostPrediction,
 			Timezone:          tempJobs[i].Timezone,
+			IsImua:            tempJobs[i].IsImua,
 		}
 
 		// Track job creation
@@ -205,12 +206,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.EventWorkerData = commonTypes.EventWorkerData{
-				JobID:                     jobID,
-				ExpirationTime:            expirationTime,
-				Recurring:                 tempJobs[i].Recurring,
-				TriggerChainID:            tempJobs[i].TriggerChainID,
-				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
-				TriggerEvent:              tempJobs[i].TriggerEvent,
+				JobID:                  jobID,
+				ExpirationTime:         expirationTime,
+				Recurring:              tempJobs[i].Recurring,
+				TriggerChainID:         tempJobs[i].TriggerChainID,
+				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
+				TriggerEvent:           tempJobs[i].TriggerEvent,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
 				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
@@ -258,14 +259,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
-				JobID:                     jobID,
-				ExpirationTime:            expirationTime,
-				Recurring:                 tempJobs[i].Recurring,
-				ConditionType:             tempJobs[i].ConditionType,
-				UpperLimit:                tempJobs[i].UpperLimit,
-				LowerLimit:                tempJobs[i].LowerLimit,
-				ValueSourceType:           tempJobs[i].ValueSourceType,
-				ValueSourceUrl:            tempJobs[i].ValueSourceUrl,
+				JobID:           jobID,
+				ExpirationTime:  expirationTime,
+				Recurring:       tempJobs[i].Recurring,
+				ConditionType:   tempJobs[i].ConditionType,
+				UpperLimit:      tempJobs[i].UpperLimit,
+				LowerLimit:      tempJobs[i].LowerLimit,
+				ValueSourceType: tempJobs[i].ValueSourceType,
+				ValueSourceUrl:  tempJobs[i].ValueSourceUrl,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)

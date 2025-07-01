@@ -39,7 +39,7 @@ func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
 
 	err = r.db.Session().Query(queries.CreateJobDataQuery,
 		lastJobID+1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
-		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone).Exec()
+		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua).Exec()
 
 	if err != nil {
 		return -1, err
@@ -89,7 +89,7 @@ func (r *jobRepository) GetJobByID(jobID int64) (*types.JobData, error) {
 		&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
 		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.JobCostActual,
 		&jobData.TaskIDs, &jobData.CreatedAt, &jobData.UpdatedAt, &jobData.LastExecutedAt,
-		&jobData.Timezone)
+		&jobData.Timezone, &jobData.IsImua)
 
 	if err != nil {
 		return nil, err

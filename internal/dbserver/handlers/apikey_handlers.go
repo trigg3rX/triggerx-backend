@@ -34,7 +34,7 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
 	existingKey, err := h.apiKeysRepository.GetApiKeyDataByOwner(req.Owner)
 	trackDBOp(err)
-	if err != nil {
+	if err != nil && err.Error() != "owner not found" {
 		h.logger.Errorf("[CreateApiKey] Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
