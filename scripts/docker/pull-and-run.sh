@@ -81,24 +81,29 @@ else
     IMAGE_NAME="triggerx-${DOCKER_NAME}:${VERSION}"
 fi
 
-# Check if .env file exists
-if [ ! -f .env ]; then
-    echo "Warning: .env file not found. Container will run without environment variables."
-    ENV_FILE=""
+# Check if .env file exists and set up volume mount
+if [ -f .env ]; then
+    echo "Found .env file, mounting it to container..."
+    ENV_FILE="-v $(pwd)/.env:/home/appuser/.env"
 else
-    ENV_FILE="-v ./.env:/home/appuser/.env"
+    echo "Warning: .env file not found in current directory. Container will run without environment variables."
+    echo "To use environment variables, create a .env file in: $(pwd)/.env"
+    ENV_FILE=""
 fi
 
-# Get the promtail group ID (if it exists)
-PROMTAIL_GID=$(getent group promtail | cut -d: -f3 2>/dev/null || echo "1000")
-USER_MAPPING="--user 1000:${PROMTAIL_GID}"
+# Ensure the log directory exists and has proper permissions for promtail
+mkdir -p "./data/logs/${DOCKER_NAME}"
+if command -v getent >/dev/null 2>&1 && getent group promtail >/dev/null 2>&1; then
+    echo "Setting log directory permissions for promtail group..."
+    sudo chgrp promtail "./data/logs/${DOCKER_NAME}" 2>/dev/null || echo "Warning: Could not set promtail group ownership"
+    chmod g+w "./data/logs/${DOCKER_NAME}" 2>/dev/null || echo "Warning: Could not set group write permissions"
+fi
 
 if [[ "$SERVICE" == "registrar" ]]; then
     # Run the container
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
-        ${USER_MAPPING} \
         ${ENV_FILE} \
         -v ./pkg/bindings/abi:/home/appuser/pkg/bindings/abi \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
@@ -110,7 +115,6 @@ else
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
-        ${USER_MAPPING} \
         ${ENV_FILE} \
         --network host \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \

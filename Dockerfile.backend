@@ -30,24 +30,22 @@ FROM golang:1.24.2-alpine
 RUN apk --no-cache add ca-certificates
 
 # Create a non-root user with specific UID/GID for log file permissions
+# Use GID 1000 as default, but this will be overridden at runtime if needed
 RUN addgroup -g 1000 appgroup && \
     adduser -D -u 1000 -G appgroup appuser
 
 # Set working directory
 WORKDIR /home/appuser/
 
-# Create a placeholder env file
-RUN touch .env
-
 # Copy the built binary
 ARG DOCKER_NAME
 COPY --from=builder /app/${DOCKER_NAME} .
 
 COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /home/appuser/start.sh
-RUN chmod +x /home/appuser/start.sh
 
-# Change ownership of all files to appuser
-RUN chown -R appuser:appgroup /home/appuser/
+# Make sure the script is executable by everyone and set proper ownership
+RUN chmod 755 /home/appuser/start.sh && \
+    chown -R appuser:appgroup /home/appuser/
 
 # Switch to non-root user
 USER appuser
