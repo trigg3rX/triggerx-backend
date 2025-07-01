@@ -10,14 +10,13 @@ const (
 type ProcessName string
 
 const (
-	DatabaseProcess           ProcessName = "database"
+	DatabaseProcess           ProcessName = "dbserver"
 	KeeperProcess             ProcessName = "keeper"
 	RegistrarProcess          ProcessName = "registrar"
 	HealthProcess             ProcessName = "health"
 	RedisProcess              ProcessName = "redis"
-	TimeSchedulerProcess      ProcessName = "time-scheduler"
-	EventSchedulerProcess     ProcessName = "event-scheduler"
-	ConditionSchedulerProcess ProcessName = "condition-scheduler"
+	TimeSchedulerProcess      ProcessName = "scheduler-time"
+	ConditionSchedulerProcess ProcessName = "scheduler-condition"
 	TestProcess               ProcessName = "test"
 )
 
