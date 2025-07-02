@@ -17,6 +17,8 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability/tracing"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -34,6 +36,21 @@ func main() {
 	logger, err := logging.NewZapLogger(logConfig)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+
+	// Initialize OpenTelemetry tracing
+	tracingConfig := tracing.LoadConfig("triggerx-dbserver")
+	tracerProvider, err := tracing.InitTracer(tracingConfig)
+	if err != nil {
+		logger.Error("Failed to initialize OpenTelemetry tracer", "error", err)
+		// Continue without tracing rather than failing
+	} else {
+		logger.Info("OpenTelemetry tracing initialized successfully",
+			"service", tracingConfig.ServiceName,
+			"endpoint", tracingConfig.OTLPEndpoint,
+			"enabled", tracingConfig.TracingEnabled,
+			"sample_rate", tracingConfig.SampleRate,
+		)
 	}
 
 	logger.Info("Starting database server...",
@@ -90,14 +107,24 @@ func main() {
 		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(srv, &wg, logger)
+	performGracefulShutdown(srv, &wg, logger, tracerProvider)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, tracerProvider interface{}) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+
+	// Shutdown tracer provider first
+	if tracerProvider != nil {
+		logger.Info("Shutting down OpenTelemetry tracer provider...")
+		if err := tracing.Shutdown(tracerProvider.(*trace.TracerProvider), 10*time.Second); err != nil {
+			logger.Error("Failed to shutdown tracer provider", "error", err)
+		} else {
+			logger.Info("OpenTelemetry tracer provider shutdown successfully")
+		}
+	}
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("HTTP server shutdown error", "error", err)
