@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,23 @@ func (m *ProofValidatorMockLogger) Fatalf(template string, args ...interface{}) 
 func (m *ProofValidatorMockLogger) With(tags ...interface{}) logging.Logger {
 	args := m.Called(tags)
 	return args.Get(0).(logging.Logger)
+}
+
+// Trace correlation methods (mock implementations for testing)
+func (m *ProofValidatorMockLogger) DebugWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *ProofValidatorMockLogger) InfoWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *ProofValidatorMockLogger) WarnWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *ProofValidatorMockLogger) ErrorWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
 }
 
 func TestTaskValidator_ValidateProof(t *testing.T) {

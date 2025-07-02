@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -61,6 +62,23 @@ func (m *ComprehensiveMockLogger) Fatalf(template string, args ...interface{}) {
 func (m *ComprehensiveMockLogger) With(tags ...any) logging.Logger {
 	args := m.Called(tags)
 	return args.Get(0).(logging.Logger)
+}
+
+// Trace correlation methods (mock implementations for testing)
+func (m *ComprehensiveMockLogger) DebugWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *ComprehensiveMockLogger) InfoWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *ComprehensiveMockLogger) WarnWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *ComprehensiveMockLogger) ErrorWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
 }
 
 // ===============================

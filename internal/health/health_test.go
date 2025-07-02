@@ -2,6 +2,7 @@ package health
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,6 +78,23 @@ func (m *MockLogger) Fatalf(format string, args ...interface{}) {
 func (m *MockLogger) With(keysAndValues ...interface{}) logging.Logger {
 	args := m.Called(keysAndValues)
 	return args.Get(0).(logging.Logger)
+}
+
+// Trace correlation methods (mock implementations for testing)
+func (m *MockLogger) DebugWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *MockLogger) InfoWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *MockLogger) WarnWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
+}
+
+func (m *MockLogger) ErrorWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	m.Called(ctx, msg, keysAndValues)
 }
 
 // MockStateManager is a mock implementation of StateManagerInterface
