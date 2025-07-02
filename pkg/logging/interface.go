@@ -1,5 +1,7 @@
 package logging
 
+import "context"
+
 type Logger interface {
 	Debug(msg string, keysAndValues ...interface{})
 	Info(msg string, keysAndValues ...interface{})
@@ -14,4 +16,9 @@ type Logger interface {
 	Fatalf(template string, args ...interface{})
 
 	With(tags ...any) Logger
+
+	DebugWithTrace(ctx context.Context, msg string, keysAndValues ...interface{})
+	InfoWithTrace(ctx context.Context, msg string, keysAndValues ...interface{})
+	WarnWithTrace(ctx context.Context, msg string, keysAndValues ...interface{})
+	ErrorWithTrace(ctx context.Context, msg string, keysAndValues ...interface{})
 }

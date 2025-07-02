@@ -1,11 +1,13 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/observability/tracing"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -21,8 +23,8 @@ func NewZapLogger(config LoggerConfig) (*zapLogger, error) {
 	// File writer with rotation, compression and no colors
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
 		Filename: filepath.Join(BaseDataDir, LogsDir, string(config.ProcessName), fileName),
-		MaxSize:  30,   // MB
-		MaxAge:   30,   // Days
+		MaxSize:  30,    // MB
+		MaxAge:   30,    // Days
 		Compress: false, // Compress old logs (disabled for now for Loki compatibility)
 	})
 
@@ -176,4 +178,35 @@ func (z *zapLogger) With(tags ...any) Logger {
 	return &zapLogger{
 		sugarLogger: z.sugarLogger.With(tags...),
 	}
+}
+
+func (z *zapLogger) DebugWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	z.withTraceContext(ctx).Debugw(msg, keysAndValues...)
+}
+
+func (z *zapLogger) InfoWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	z.withTraceContext(ctx).Infow(msg, keysAndValues...)
+}
+
+func (z *zapLogger) WarnWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	z.withTraceContext(ctx).Warnw(msg, keysAndValues...)
+}
+
+func (z *zapLogger) ErrorWithTrace(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	z.withTraceContext(ctx).Errorw(msg, keysAndValues...)
+}
+
+// Helper method to add trace context to logger
+func (z *zapLogger) withTraceContext(ctx context.Context) *zap.SugaredLogger {
+	traceID := tracing.TraceIDFromContext(ctx)
+	spanID := tracing.SpanIDFromContext(ctx)
+
+	if traceID != "" && spanID != "" {
+		return z.sugarLogger.With(
+			"trace_id", traceID,
+			"span_id", spanID,
+		)
+	}
+
+	return z.sugarLogger
 }
