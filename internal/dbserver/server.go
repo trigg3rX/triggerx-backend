@@ -15,6 +15,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability/tracing"
 )
 
 type Server struct {
@@ -44,6 +45,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	// Apply middleware in the correct order
 	router.Use(middleware.RecoveryMiddleware(logger))          // First, to catch panics
+	router.Use(tracing.GinMiddleware("triggerx-dbserver"))     // Early tracing for all requests
 	router.Use(middleware.TimeoutMiddleware(30 * time.Second)) // Set appropriate timeout
 	router.Use(middleware.MetricsMiddleware())                 // Track HTTP metrics
 

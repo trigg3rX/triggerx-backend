@@ -9,13 +9,24 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability/tracing"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
-	commonTypes"github.com/trigg3rX/triggerx-backend/pkg/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
+	// Start main business operation span
+	tracer := otel.Tracer("triggerx-dbserver")
+	ctx := c.Request.Context()
+	ctx, span := tracer.Start(ctx, "job.create_batch")
+	defer span.End()
+
 	var tempJobs []types.CreateJobData
 	if err := c.ShouldBindJSON(&tempJobs); err != nil {
+		span.RecordError(err)
+		span.SetAttributes(attribute.String("error.type", "invalid_request"))
 		h.logger.Errorf("[CreateJobData] Error decoding request body: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
@@ -25,6 +36,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	}
 
 	if len(tempJobs) == 0 {
+		span.SetAttributes(attribute.String("error.type", "empty_request"))
 		h.logger.Error("[CreateJobData] No jobs provided in request")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No jobs provided",
@@ -33,42 +45,107 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		return
 	}
 
+	// Add business context to main span
+	span.SetAttributes(
+		attribute.String(tracing.TriggerXAttributes.UserAddress, strings.ToLower(tempJobs[0].UserAddress)),
+		attribute.Int("job.batch_size", len(tempJobs)),
+		attribute.String("operation.type", "create_job_batch"),
+	)
+
+	// Use trace-aware logging
+	h.logger.InfoWithTrace(ctx, "Starting job creation batch",
+		"user_address", strings.ToLower(tempJobs[0].UserAddress),
+		"batch_size", len(tempJobs),
+		"operation", "create_job_batch",
+	)
+
 	var existingUserID int64
 	var existingUser types.UserData
 	var err error
 
-	// Track user lookup
+	// Track user lookup with both metrics and tracing
 	trackDBOp := metrics.TrackDBOperation("read", "users")
-	existingUserID, existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
+	dbTracer := tracing.NewDatabaseTracer("triggerx-dbserver")
+	userAddress := strings.ToLower(tempJobs[0].UserAddress)
+	traceDBOp := dbTracer.TraceDBOperation(ctx, "SELECT", "users", "GetUserDataByAddress")
+	existingUserID, existingUser, err = h.userRepository.GetUserDataByAddress(userAddress)
 	trackDBOp(err)
+	traceDBOp(err)
 
 	if err != nil && err != gocql.ErrNotFound {
-		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
+		span.RecordError(err)
+		span.SetAttributes(attribute.String("error.type", "user_lookup_failed"))
+		h.logger.ErrorWithTrace(ctx, "Error getting user ID for address",
+			"user_address", tempJobs[0].UserAddress,
+			"error", err.Error(),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
+	}
+
+	// Add user context to span
+	if err != gocql.ErrNotFound {
+		span.SetAttributes(
+			attribute.Int64(tracing.TriggerXAttributes.UserID, existingUserID),
+			attribute.String("user.status", "existing"),
+		)
+		h.logger.InfoWithTrace(ctx, "Found existing user",
+			"user_id", existingUserID,
+			"user_address", userAddress,
+		)
 	}
 
 	h.logger.Infof("[CreateJobData] existingUserID: %d", existingUserID)
 
 	if err == gocql.ErrNotFound {
+		// Create new user span
+		_, userSpan := tracer.Start(ctx, "user.create")
+		userSpan.SetAttributes(
+			attribute.String(tracing.TriggerXAttributes.UserAddress, userAddress),
+			attribute.String("user.status", "new"),
+		)
+
 		var newUser types.CreateUserDataRequest
-		newUser.UserAddress = strings.ToLower(tempJobs[0].UserAddress)
+		newUser.UserAddress = userAddress
 		newUser.EtherBalance = tempJobs[0].EtherBalance
 		newUser.TokenBalance = tempJobs[0].TokenBalance
 		newUser.UserPoints = 0.0
 
 		// Track user creation
 		trackDBOp = metrics.TrackDBOperation("create", "users")
+		traceDBOp = dbTracer.TraceDBOperation(ctx, "INSERT", "users", "CreateNewUser")
 		existingUser, err = h.userRepository.CreateNewUser(&newUser)
 		trackDBOp(err)
+		traceDBOp(err)
 
 		if err != nil {
+			userSpan.RecordError(err)
+			userSpan.End()
+			span.RecordError(err)
+			span.SetAttributes(attribute.String("error.type", "user_creation_failed"))
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUser.UserID, existingUser.UserAddress)
+		userSpan.SetAttributes(
+			attribute.Int64(tracing.TriggerXAttributes.UserID, existingUser.UserID),
+			attribute.String("user.ether_balance", existingUser.EtherBalance.String()),
+			attribute.String("user.token_balance", existingUser.TokenBalance.String()),
+		)
+		userSpan.End()
+
+		span.SetAttributes(
+			attribute.Int64(tracing.TriggerXAttributes.UserID, existingUser.UserID),
+			attribute.String("user.status", "created"),
+		)
+
+		h.logger.InfoWithTrace(ctx, "Created new user successfully",
+			"user_id", existingUser.UserID,
+			"user_address", existingUser.UserAddress,
+			"ether_balance", existingUser.EtherBalance.String(),
+			"token_balance", existingUser.TokenBalance.String(),
+		)
 	}
 
 	createdJobs := types.CreateJobResponse{
@@ -80,7 +157,24 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		TimeFrames:        make([]int64, len(tempJobs)),
 	}
 
+	// Add final user context to main span
+	span.SetAttributes(
+		attribute.Int64(tracing.TriggerXAttributes.UserID, existingUser.UserID),
+		attribute.String("user.account_balance", existingUser.EtherBalance.String()),
+		attribute.String("user.token_balance", existingUser.TokenBalance.String()),
+	)
+
 	for i := len(tempJobs) - 1; i >= 0; i-- {
+		// Create individual job span
+		_, jobSpan := tracer.Start(ctx, "job.create_single")
+		jobSpan.SetAttributes(
+			attribute.Int64(tracing.TriggerXAttributes.UserID, existingUser.UserID),
+			attribute.String(tracing.TriggerXAttributes.UserAddress, existingUser.UserAddress),
+			attribute.Int(tracing.TriggerXAttributes.TaskDefID, tempJobs[i].TaskDefinitionID),
+			attribute.String("job.title", tempJobs[i].JobTitle),
+			attribute.Int("job.batch_index", i),
+		)
+
 		chainStatus := 1
 		var linkJobID int64 = -1
 
@@ -89,6 +183,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 		if i < len(tempJobs)-1 {
 			linkJobID = createdJobs.JobIDs[i+1]
+			jobSpan.SetAttributes(attribute.Int64("job.link_job_id", linkJobID))
 		}
 
 		jobData := &types.JobData{
@@ -107,22 +202,40 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		// Track job creation
 		trackDBOp = metrics.TrackDBOperation("create", "jobs")
+		traceDBOp = dbTracer.TraceDBOperation(ctx, "INSERT", "jobs", "CreateNewJob")
 		jobID, err := h.jobRepository.CreateNewJob(jobData)
 		trackDBOp(err)
+		traceDBOp(err)
 
 		if err != nil {
+			jobSpan.RecordError(err)
+			jobSpan.End()
+			span.RecordError(err)
 			h.logger.Errorf("[CreateJobData] Error creating job: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
+		// Add job ID to span now that it's created
+		jobSpan.SetAttributes(
+			attribute.Int64(tracing.TriggerXAttributes.JobID, jobID),
+			attribute.String("job.status", "pending"),
+			attribute.Int("job.chain_status", chainStatus),
+		)
+
 		createdJobs.JobIDs[i] = jobID
 		expirationTime := time.Now().Add(time.Duration(tempJobs[i].TimeFrame) * time.Second)
 		var scheduleConditionJobData commonTypes.ScheduleConditionJobData
 
+		// Determine job type and add specific attributes
 		switch tempJobs[i].TaskDefinitionID {
 		case 1, 2:
 			// Time-based job
+			jobSpan.SetAttributes(
+				attribute.String(tracing.TriggerXAttributes.JobType, "time_based"),
+				attribute.Int64("time.interval", tempJobs[i].TimeInterval),
+				attribute.String("time.schedule_type", "interval"),
+			)
 
 			var nextExecutionTimestamp time.Time
 			nextExecutionTimestamp, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, tempJobs[i].CronExpression, tempJobs[i].SpecificSchedule)
@@ -166,6 +279,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		case 3, 4:
 			// Event-based job
+			jobSpan.SetAttributes(
+				attribute.String(tracing.TriggerXAttributes.JobType, "event_based"),
+				attribute.String(tracing.TriggerXAttributes.BlockchainNetwork, tempJobs[i].TriggerChainID),
+				attribute.String("trigger.contract_address", tempJobs[i].TriggerContractAddress),
+				attribute.String("trigger.event", tempJobs[i].TriggerEvent),
+			)
+
 			eventJobData := types.EventJobData{
 				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
@@ -205,18 +325,22 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.EventWorkerData = commonTypes.EventWorkerData{
-				JobID:                     jobID,
-				ExpirationTime:            expirationTime,
-				Recurring:                 tempJobs[i].Recurring,
-				TriggerChainID:            tempJobs[i].TriggerChainID,
-				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
-				TriggerEvent:              tempJobs[i].TriggerEvent,
+				JobID:                  jobID,
+				ExpirationTime:         expirationTime,
+				Recurring:              tempJobs[i].Recurring,
+				TriggerChainID:         tempJobs[i].TriggerChainID,
+				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
+				TriggerEvent:           tempJobs[i].TriggerEvent,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
 				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
 
 		case 5, 6:
 			// Condition-based job
+			jobSpan.SetAttributes(
+				attribute.String(tracing.TriggerXAttributes.JobType, "condition_based"),
+			)
+
 			conditionJobData := types.ConditionJobData{
 				JobID:                     jobID,
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
@@ -258,14 +382,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
-				JobID:                     jobID,
-				ExpirationTime:            expirationTime,
-				Recurring:                 tempJobs[i].Recurring,
-				ConditionType:             tempJobs[i].ConditionType,
-				UpperLimit:                tempJobs[i].UpperLimit,
-				LowerLimit:                tempJobs[i].LowerLimit,
-				ValueSourceType:           tempJobs[i].ValueSourceType,
-				ValueSourceUrl:            tempJobs[i].ValueSourceUrl,
+				JobID:           jobID,
+				ExpirationTime:  expirationTime,
+				Recurring:       tempJobs[i].Recurring,
+				ConditionType:   tempJobs[i].ConditionType,
+				UpperLimit:      tempJobs[i].UpperLimit,
+				LowerLimit:      tempJobs[i].LowerLimit,
+				ValueSourceType: tempJobs[i].ValueSourceType,
+				ValueSourceUrl:  tempJobs[i].ValueSourceUrl,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
@@ -305,6 +429,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		createdJobs.JobIDs[i] = jobID
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
 		createdJobs.TimeFrames[i] = tempJobs[i].TimeFrame
+
+		jobSpan.End()
 	}
 
 	// Update user's job_ids

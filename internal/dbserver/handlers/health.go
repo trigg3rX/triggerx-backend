@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability/tracing"
 )
 
 // HealthCheck provides a health check endpoint for the database server
@@ -19,17 +20,24 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	// Track database health check operation
 	trackDBOp := metrics.TrackDBOperation("read", "system_health")
 
+	// Add OpenTelemetry database tracing
+	dbTracer := tracing.NewDatabaseTracer("triggerx-dbserver")
+	query := "SELECT now() FROM system.local"
+	traceDBOp := dbTracer.TraceDBOperation(c.Request.Context(), "SELECT", "system_health", query)
+
 	// Use a simple system query to test the connection
-	query := h.db.Session().Query("SELECT now() FROM system.local")
+	queryObj := h.db.Session().Query(query)
 	var timestamp time.Time
-	if err := query.Scan(&timestamp); err != nil {
+	if err := queryObj.Scan(&timestamp); err != nil {
 		dbStatus = "unhealthy"
 		dbError = err.Error()
 		h.logger.Errorf("Database health check failed: %v", err)
 		trackDBOp(err)
+		traceDBOp(err)
 		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc()
 	} else {
 		trackDBOp(nil)
+		traceDBOp(nil)
 		metrics.HealthChecksTotal.WithLabelValues("healthy").Inc()
 	}
 
