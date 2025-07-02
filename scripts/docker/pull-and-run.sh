@@ -95,6 +95,12 @@ fi
 echo "Setting up log directory: ./data/logs/${DOCKER_NAME}"
 mkdir -p "./data/logs/${DOCKER_NAME}"
 
+# Get current user and group IDs
+CURRENT_UID=$(id -u)
+CURRENT_GID=$(id -g)
+CURRENT_USER=$(id -un)
+CURRENT_GROUP=$(id -gn)
+
 # Get promtail group ID if it exists
 PROMTAIL_GID=""
 if command -v getent >/dev/null 2>&1 && getent group promtail >/dev/null 2>&1; then
@@ -104,38 +110,40 @@ fi
 
 # Set appropriate ownership and permissions
 if [ -n "$PROMTAIL_GID" ]; then
-    # Set owner to container user (1000) and group to promtail for log reading
-    echo "Setting ownership to UID 1000 (container) and GID ${PROMTAIL_GID} (promtail)..."
-    sudo chown 1000:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+    # Set owner to current user and group to promtail for log reading
+    echo "Setting ownership to UID ${CURRENT_UID} (${CURRENT_USER}) and GID ${PROMTAIL_GID} (promtail)..."
+    sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
         echo "Warning: Could not set specific ownership. Using fallback permissions..."
-        chmod 755 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+        chmod 775 "./data/logs/${DOCKER_NAME}" 2>/dev/null
     }
-    # User can read/write, group (promtail) can read
-    chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    # User can read/write, group (promtail) can read/write, others can read
+    # Set setgid bit (s) so new files automatically inherit the directory's group ownership
+    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
     
     # Set user mapping for docker container to run with promtail group
-    USER_MAPPING="--user 1000:${PROMTAIL_GID}"
-    echo "Container will run as UID 1000, GID ${PROMTAIL_GID} (promtail group)"
+    USER_MAPPING="--user ${CURRENT_UID}:${PROMTAIL_GID}"
+    echo "Container will run as UID ${CURRENT_UID} (${CURRENT_USER}), GID ${PROMTAIL_GID} (promtail group)"
 else
-    # No promtail group, just ensure container user can write
-    echo "No promtail group found. Setting ownership to UID 1000..."
-    sudo chown 1000:1000 "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+    # No promtail group, set to current user's group
+    echo "No promtail group found. Setting ownership to UID ${CURRENT_UID} (${CURRENT_USER})..."
+    sudo chown ${CURRENT_UID}:${CURRENT_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
         echo "Warning: Could not set ownership. Using world-writable fallback..."
         chmod 777 "./data/logs/${DOCKER_NAME}" 2>/dev/null
     }
-    chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
-    USER_MAPPING=""
+    # Set setgid bit so new files inherit group ownership
+    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    USER_MAPPING="--user ${CURRENT_UID}:${CURRENT_GID}"
 fi
 
 # Fix permissions on any existing log files
 if [ "$(ls -A "./data/logs/${DOCKER_NAME}" 2>/dev/null)" ]; then
     echo "Fixing permissions on existing log files..."
     if [ -n "$PROMTAIL_GID" ]; then
-        sudo chown 1000:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+        sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
         chmod 664 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
     else
-        sudo chown 1000:1000 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
-        chmod 644 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+        sudo chown ${CURRENT_UID}:${CURRENT_GID} "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+        chmod 664 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
     fi
 fi
 
