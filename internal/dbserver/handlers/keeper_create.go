@@ -103,16 +103,14 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 	}
 
 	var status string
-	var keeperID int64
 	if existingKeeperID != 0 {
 		status = "existing"
-		keeperID = existingKeeperID
 	} else {
 		status = "created"
 	}
 
 	trackDBOp = metrics.TrackDBOperation("create", "keeper_data")
-	keeperID, err = h.keeperRepository.CreateOrUpdateKeeperFromGoogleForm(keeperData)
+	keeperID, err := h.keeperRepository.CreateOrUpdateKeeperFromGoogleForm(keeperData)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error creating/updating keeper data: %v", err)
