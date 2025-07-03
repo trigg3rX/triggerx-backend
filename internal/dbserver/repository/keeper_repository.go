@@ -25,6 +25,8 @@ type KeeperRepository interface {
 	GetKeeperCommunicationInfo(id int64) (types.KeeperCommunicationInfo, error)
 	GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntry, error)
 	GetKeeperLeaderboardByIdentifierInDB(address string, name string) (types.KeeperLeaderboardEntry, error)
+	CheckKeeperExistsByAddress(address string) (int64, error)
+	CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error)
 }
 
 type keeperRepository struct {
@@ -255,4 +257,59 @@ func (r *keeperRepository) GetKeeperLeaderboardByIdentifierInDB(address string, 
 	}
 
 	return keeperEntry, nil
+}
+
+func (r *keeperRepository) CheckKeeperExistsByAddress(address string) (int64, error) {
+	var id int64
+	err := r.db.Session().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
+	if err == gocql.ErrNotFound {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (r *keeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error) {
+	existingKeeperID, err := r.CheckKeeperExistsByAddress(keeperData.KeeperAddress)
+	if err != nil {
+		return 0, err
+	}
+	if existingKeeperID != 0 {
+		err = r.db.Session().Query(
+			queries.UpdateKeeperFromGoogleFormQuery,
+			keeperData.KeeperName,
+			keeperData.KeeperAddress,
+			keeperData.RewardsAddress,
+			keeperData.EmailID,
+			keeperData.OnImua,
+			existingKeeperID,
+		).Exec()
+		if err != nil {
+			return 0, err
+		}
+		return existingKeeperID, nil
+	}
+	var maxKeeperID int64
+	err = r.db.Session().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
+	if err == gocql.ErrNotFound {
+		maxKeeperID = 0
+	} else if err != nil {
+		return 0, err
+	}
+	currentKeeperID := maxKeeperID + 1
+	err = r.db.Session().Query(
+		queries.CreateNewKeeperFromGoogleFormQuery,
+		currentKeeperID,
+		keeperData.KeeperName,
+		keeperData.KeeperAddress,
+		keeperData.RewardsAddress,
+		keeperData.EmailID,
+		keeperData.OnImua,
+	).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return currentKeeperID, nil
 }

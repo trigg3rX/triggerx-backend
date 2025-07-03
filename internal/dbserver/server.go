@@ -166,6 +166,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
 	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
+	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
 	api.GET("/keepers/performers", handler.GetPerformers)
 	api.GET("/keepers/:id", handler.GetKeeperData)
 	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
