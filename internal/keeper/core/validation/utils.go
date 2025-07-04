@@ -41,7 +41,7 @@ func (v *TaskValidator) getBlockTimestamp(receipt *ethtypes.Receipt, rpcURL stri
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to call eth_getBlockReceipts: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)

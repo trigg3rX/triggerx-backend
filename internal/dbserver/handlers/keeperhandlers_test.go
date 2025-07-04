@@ -136,7 +136,7 @@ func setupTestKeeperHandler() (*Handler, *MockKeeperRepository, *MockTaskReposit
 	mockTaskRepo := new(MockTaskRepository)
 
 	handler := &Handler{
-		keeperRepository: mockKeeperRepo,
+		keeperRepository: mockKeeperRepo, // This will cause a compile error if MockKeeperRepository does not implement all methods of KeeperRepository
 		taskRepository:   mockTaskRepo,
 		logger:           &MockLogger{},
 	}
@@ -675,4 +675,23 @@ func TestGetKeeperCommunicationInfo(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Add missing methods to MockKeeperRepository
+func (m *MockKeeperRepository) CheckKeeperExistsByAddress(address string) (int64, error) {
+	args := m.Called(address)
+	var defaultReturnInt64 int64 = 0
+	if args.Get(0) == nil {
+		return defaultReturnInt64, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockKeeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error) {
+	args := m.Called(keeperData)
+	var defaultReturnInt64 int64 = 0
+	if args.Get(0) == nil {
+		return defaultReturnInt64, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
 }

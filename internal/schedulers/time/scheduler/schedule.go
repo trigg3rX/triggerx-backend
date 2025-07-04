@@ -188,7 +188,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 			"error", err)
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Parse response
 	var apiResponse RedisAPIResponse

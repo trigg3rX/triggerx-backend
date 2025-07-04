@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     chat_id bigint,
     email_id text,
     last_checked_in timestamp,
+    on_imua boolean,
     PRIMARY KEY (keeper_id)
 );
 

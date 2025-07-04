@@ -376,7 +376,7 @@ func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequ
 			"error", err)
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Parse response
 	var apiResponse RedisAPIResponse

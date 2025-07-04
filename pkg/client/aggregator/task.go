@@ -143,8 +143,8 @@ func (c *AggregatorClient) SendTaskToValidatorsBLS(ctx context.Context, taskResu
 	}
 
 	// Extract x,y coordinates from G1Point (like JavaScript g1ToHex)
-	xBig := signature.G1Point.X.BigInt(new(big.Int))
-	yBig := signature.G1Point.Y.BigInt(new(big.Int))
+	xBig := signature.X.BigInt(new(big.Int))
+	yBig := signature.Y.BigInt(new(big.Int))
 
 	// Convert to hex with proper formatting (32 bytes each for BN254)
 	xBytes := make([]byte, 32)

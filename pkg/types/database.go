@@ -164,6 +164,7 @@ type KeeperData struct {
 	ChatID            int64     `json:"chat_id"`
 	EmailID           string    `json:"email_id"`
 	LastCheckedIn     time.Time `json:"last_checked_in"`
+	OnImua            bool      `json:"on_imua"`
 }
 
 type ApiKey struct {
