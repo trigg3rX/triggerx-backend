@@ -10,12 +10,16 @@ import (
 )
 
 func main() {
+	err := config.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	app := cli.NewApp()
 	app.Name = "triggerx"
 	app.Usage = "CLI for IMUA TRIGGERX AVS operator registration"
 	app.Version = "1.0.0"
 
-	app.Flags = []cli.Flag{config.FileFlag}
 	app.Commands = []cli.Command{
 		{
 			Name:    "register-operator-with-chain",
@@ -31,7 +35,7 @@ func main() {
 		},
 	}
 
-	err := app.Run(os.Args)
+	err = app.Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
 	}
