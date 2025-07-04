@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -130,4 +131,37 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"jobs": jobs,
 	})
+}
+
+// GetTaskFeesByJobID handles GET /jobs/:job_id/task-fees
+func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
+	jobIDParam := c.Param("job_id")
+	if jobIDParam == "" {
+		h.logger.Error("[GetTaskFeesByJobID] job_id param missing")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id param missing"})
+		return
+	}
+
+	jobID, err := parseInt64(jobIDParam)
+	if err != nil {
+		h.logger.Errorf("[GetTaskFeesByJobID] invalid job_id: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
+		return
+	}
+
+	taskFees, err := h.jobRepository.GetTaskFeesByJobID(jobID)
+	if err != nil {
+		h.logger.Errorf("[GetTaskFeesByJobID] failed to get task fees: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get task fees"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"task_fees": taskFees})
+}
+
+// parseInt64 is a helper to parse int64 from string
+func parseInt64(s string) (int64, error) {
+	var i int64
+	_, err := fmt.Sscan(s, &i)
+	return i, err
 }

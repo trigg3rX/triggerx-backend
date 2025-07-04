@@ -17,6 +17,7 @@ type JobRepository interface {
 	UpdateJobStatus(jobID int64, status string) error
 	GetJobByID(jobID int64) (*types.JobData, error)
 	GetTaskDefinitionIDByJobID(jobID int64) (int, error)
+	GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error)
 }
 
 type jobRepository struct {
@@ -104,4 +105,23 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID int64) (int, error) {
 		return 0, errors.New("failed to get task definition id by job id")
 	}
 	return taskDefinitionID, nil
+}
+
+func (r *jobRepository) GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error) {
+	session := r.db.Session()
+	iter := session.Query(queries.GetTaskFeesByJobIDQuery, jobID).Iter()
+
+	var results []types.TaskFeeResponse
+	var taskID int64
+	var taskOpxCost float64
+	for iter.Scan(&taskID, &taskOpxCost) {
+		results = append(results, types.TaskFeeResponse{
+			TaskID:      taskID,
+			TaskOpxCost: taskOpxCost,
+		})
+	}
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }

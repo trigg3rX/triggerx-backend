@@ -157,6 +157,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
+	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
 	api.GET("/tasks/:id", handler.GetTaskDataByID)
@@ -195,6 +196,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	keeper := protected.Group("/keeper")
 	keeper.Use(s.apiKeyAuth.KeeperMiddleware())
 	// Keeper-specific routes will be added here later
+
 }
 
 func (s *Server) Start(port string) error {

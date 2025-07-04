@@ -48,4 +48,9 @@ const (
 	GetTaskIDsByJobIDQuery = `
 			SELECT task_ids FROM triggerx.job_data 
 			WHERE job_id = ?`
+
+	// New query to get task_id and fee for all tasks of a job
+	GetTaskFeesByJobIDQuery = `
+			SELECT task_id, task_opx_cost FROM triggerx.task_data
+			WHERE job_id = ? ALLOW FILTERING`
 )
