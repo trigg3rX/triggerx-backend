@@ -37,7 +37,7 @@ func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (
 	if err != nil {
 		return -1, errors.New("error getting max task ID")
 	}
-	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID+1, task.JobID, task.TaskDefinitionID, time.Now()).Exec()
+	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID+1, task.JobID, task.TaskDefinitionID, time.Now(), task.IsImua).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
 	}
@@ -78,7 +78,7 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int6
 
 func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
 	var task types.TaskData
-	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &task.JobID, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpXCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsSuccessful, &task.TaskStatus)
+	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &task.JobID, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpXCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsSuccessful, &task.TaskStatus, &task.IsImua)
 	if err != nil {
 		return types.TaskData{}, errors.New("error getting task data by ID")
 	}

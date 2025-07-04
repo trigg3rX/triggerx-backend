@@ -42,6 +42,7 @@ type JobData struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 	LastExecutedAt time.Time `json:"last_executed_at"`
 	Timezone       string    `json:"timezone"`
+	IsImua         bool      `json:"is_imua"`
 }
 
 type TimeJobData struct {
@@ -138,6 +139,7 @@ type TaskData struct {
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
 	IsSuccessful         bool      `json:"is_successful"`
+	IsImua               bool      `json:"is_imua"`
 }
 
 type KeeperData struct {

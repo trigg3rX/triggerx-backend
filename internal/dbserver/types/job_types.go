@@ -23,6 +23,7 @@ type JobData struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	Timezone          string    `json:"timezone"`
+	IsImua            bool      `json:"is_imua"`
 }
 
 // JobResponse is a unified type for different job types to be sent to the frontend
@@ -95,6 +96,8 @@ type CreateJobData struct {
 	ArgType                   int      `json:"arg_type" validate:"required"`
 	Arguments                 []string `json:"arguments" validate:"omitempty"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,ipfs_url"`
+
+	IsImua bool `json:"is_imua"`
 }
 
 type CreateJobResponse struct {

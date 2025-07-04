@@ -50,6 +50,7 @@ type CreateJobRequest struct {
 	ArgType                   int      `json:"arg_type" validate:"required"`
 	Arguments                 []string `json:"arguments" validate:"required"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,url"`
+	IsImua                    bool     `json:"is_imua"`
 }
 
 type CreateJobResponse struct {

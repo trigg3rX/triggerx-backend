@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     updated_at timestamp,
     last_executed_at timestamp,
     timezone text,
+    is_imua boolean,
     PRIMARY KEY (job_id)
 );
 
@@ -151,6 +152,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     ta_signature blob,
     task_submission_tx_hash text,
     is_successful boolean,
+    is_imua boolean,
     PRIMARY KEY (task_id)
 );
 
