@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"time"
+
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -27,6 +28,25 @@ type RedisClientInterface interface {
 	XLen(ctx context.Context, stream string) (int64, error)
 	XReadGroup(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error)
 	XAck(ctx context.Context, stream, group, id string) error
+
+	// TTL management
+	RefreshTTL(ctx context.Context, key string, ttl time.Duration) error
+	RefreshStreamTTL(ctx context.Context, stream string, ttl time.Duration) error
+	SetTTL(ctx context.Context, key string, ttl time.Duration) error
+	GetTTLStatus(ctx context.Context, key string) (time.Duration, bool, error)
+
+	// Health and monitoring
+	GetHealthStatus(ctx context.Context) *HealthStatus
+	IsHealthy(ctx context.Context) bool
+	PerformHealthCheck(ctx context.Context) (map[string]interface{}, error)
+	GetConnectionStatus() map[string]interface{}
+	GetOperationMetrics() map[string]*OperationMetrics
+	ResetOperationMetrics()
+
+	// Configuration and monitoring
+	SetMonitoringHooks(hooks *MonitoringHooks)
+	SetRetryConfig(config *RetryConfig)
+	SetConnectionRecoveryConfig(config *ConnectionRecoveryConfig)
 
 	// Utility methods
 	GetRedisInfo() map[string]interface{}

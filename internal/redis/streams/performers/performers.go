@@ -1,4 +1,4 @@
-package stream
+package performers
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"time"
 
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/redis/redis"
+	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -30,13 +30,13 @@ func GetPerformerData() types.PerformerData {
 
 // PerformerManager handles performer lifecycle and assignment
 type PerformerManager struct {
-	client     *redisClient.Client
+	client     redisClient.RedisClientInterface
 	logger     logging.Logger
 	performers map[int64]*types.PerformerData
 }
 
 // NewPerformerManager creates a new performer manager
-func NewPerformerManager(client *redisClient.Client, logger logging.Logger) *PerformerManager {
+func NewPerformerManager(client redisClient.RedisClientInterface, logger logging.Logger) *PerformerManager {
 	return &PerformerManager{
 		client:     client,
 		logger:     logger,
@@ -52,7 +52,7 @@ func (pm *PerformerManager) AcquirePerformer(ctx context.Context) (*types.Perfor
 	// Create lock key
 	lockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, performer.KeeperID)
 
-	// Try to acquire lock (TODO: implement proper locking mechanism)
+	// Try to acquire lock
 	locked, err := pm.client.SetNX(ctx, lockKey, "locked", 5*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire performer lock: %w", err)

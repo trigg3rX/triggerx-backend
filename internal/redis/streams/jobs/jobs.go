@@ -1,4 +1,4 @@
-package stream
+package jobs
 
 import (
 	"context"
@@ -7,33 +7,19 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/redis/redis"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type JobStreamManager struct {
-	client         *redisClient.Client
+	client         redisClient.RedisClientInterface
 	logger         logging.Logger
 	consumerGroups map[string]bool
 }
 
-func NewJobStreamManager(logger logging.Logger) (*JobStreamManager, error) {
+func NewJobStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*JobStreamManager, error) {
 	logger.Info("Initializing JobStreamManager for condition scheduler...")
-
-	if !config.IsRedisAvailable() {
-		logger.Error("Redis not available for JobStreamManager initialization")
-		metrics.ServiceStatus.WithLabelValues("job_stream_manager").Set(0)
-		return nil, fmt.Errorf("redis not available")
-	}
-
-	client, err := redisClient.NewRedisClient(logger)
-	if err != nil {
-		logger.Error("Failed to create Redis client for JobStreamManager", "error", err)
-		metrics.ServiceStatus.WithLabelValues("job_stream_manager").Set(0)
-		return nil, fmt.Errorf("failed to create redis client: %w", err)
-	}
 
 	jsm := &JobStreamManager{
 		client:         client,
@@ -60,7 +46,7 @@ func (jsm *JobStreamManager) Initialize() error {
 	}
 
 	// Initialize jobs:completed stream (24 hour expiration)
-	jsm.logger.Debug("Creating jobs:completed stream") 
+	jsm.logger.Debug("Creating jobs:completed stream")
 	if err := jsm.client.CreateStreamIfNotExists(ctx, JobsCompletedStream, JobsCompletedTTL); err != nil {
 		jsm.logger.Error("Failed to initialize jobs:completed stream", "error", err)
 		return fmt.Errorf("failed to initialize jobs:completed stream: %w", err)
@@ -118,7 +104,7 @@ func (jsm *JobStreamManager) AddJobToRunningStream(jobData *JobStreamData, sched
 // ReadJobsFromRunningStream reads jobs from running stream for a specific scheduler
 func (jsm *JobStreamManager) ReadJobsFromRunningStream(schedulerID int, consumerName string, count int64) ([]JobStreamData, []string, error) {
 	consumerGroup := fmt.Sprintf("scheduler-%d", schedulerID)
-	
+
 	jsm.logger.Debug("Reading jobs from running stream",
 		"scheduler_id", schedulerID,
 		"consumer_group", consumerGroup,
@@ -223,7 +209,7 @@ func (jsm *JobStreamManager) readJobsFromStream(stream, consumerGroup, consumerN
 
 	var jobs []JobStreamData
 	var messageIDs []string
-	
+
 	for _, stream := range streams {
 		for _, message := range stream.Messages {
 			jobJSON, exists := message.Values["job"].(string)
@@ -245,7 +231,7 @@ func (jsm *JobStreamManager) readJobsFromStream(stream, consumerGroup, consumerN
 
 			jobs = append(jobs, job)
 			messageIDs = append(messageIDs, message.ID)
-			
+
 			jsm.logger.Debug("Job read from stream",
 				"job_id", job.JobID,
 				"stream", stream.Stream,
@@ -344,11 +330,11 @@ func (jsm *JobStreamManager) GetJobStreamInfo() map[string]interface{} {
 	}
 
 	info := map[string]interface{}{
-		"available":              config.IsRedisAvailable(),
-		"jobs_completed_ttl":     JobsCompletedTTL.String(),
-		"stream_lengths":         streamLengths,
-		"consumer_groups":        len(jsm.consumerGroups),
-		"max_stream_length":      config.GetStreamMaxLen(),
+		"available":          jsm.client != nil,
+		"jobs_completed_ttl": JobsCompletedTTL.String(),
+		"stream_lengths":     streamLengths,
+		"consumer_groups":    len(jsm.consumerGroups),
+		"max_stream_length":  10000, // Default value, can be made configurable
 	}
 
 	jsm.logger.Debug("Job stream information retrieved", "info", info)

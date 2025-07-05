@@ -1,4 +1,4 @@
-package stream
+package tasks
 
 import (
 	"context"
@@ -10,13 +10,14 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/performers"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Ready to be sent to the performer
 func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.PerformerData, error) {
-	performerData := GetPerformerData()
+	performerData := performers.GetPerformerData()
 	if performerData.KeeperID == 0 {
 		tsm.logger.Error("No performers available for task", "task_id", task.SendTaskDataToKeeper.TaskID)
 		return types.PerformerData{}, fmt.Errorf("no performers available")

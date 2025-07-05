@@ -9,7 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/api/handler"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/stream"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -31,8 +32,8 @@ type Config struct {
 // Dependencies holds the server dependencies
 type Dependencies struct {
 	Logger           logging.Logger
-	TaskStreamMgr    *stream.TaskStreamManager
-	JobStreamMgr     *stream.JobStreamManager
+	TaskStreamMgr    *tasks.TaskStreamManager
+	JobStreamMgr     *jobs.JobStreamManager
 	MetricsCollector *metrics.Collector
 }
 

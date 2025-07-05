@@ -1,4 +1,4 @@
-package stream
+package tasks
 
 import (
 	"time"
@@ -7,10 +7,6 @@ import (
 )
 
 const (
-	// Job Lifecycle Streams (Condition Scheduler Only)
-	JobsRunningStream   = "jobs:running"   // Active jobs - NO EXPIRATION
-	JobsCompletedStream = "jobs:completed" // Completed jobs - EXPIRE IN 24 HOURS
-
 	// Task Lifecycle Streams (Redis Managed Internally)
 	TasksReadyStream      = "tasks:ready"      // Ready tasks - NO EXPIRATION until moved
 	TasksProcessingStream = "tasks:processing" // Processing tasks - 1 HOUR timeout → auto-move to failed
@@ -18,12 +14,7 @@ const (
 	TasksFailedStream     = "tasks:failed"     // Failed tasks - managed by retry rules
 	TasksRetryStream      = "tasks:retry"      // Retry tasks - managed by retry rules
 
-	// Performer Management
-	PerformerLockPrefix = "performer:lock:"      // Redis key prefix for performer locks
-	PerformerListKey    = "performers:available" // List of available performers
-
 	// Expiration Configuration
-	JobsCompletedTTL   = 24 * time.Hour     // 24 hours for completed jobs
 	TasksProcessingTTL = 1 * time.Hour      // 1 hour timeout for processing tasks
 	TasksCompletedTTL  = 1 * time.Hour      // 1 hour for completed tasks
 	TasksFailedTTL     = 7 * 24 * time.Hour // 7 days for failed tasks (debugging)
@@ -33,28 +24,6 @@ const (
 	MaxRetryAttempts = 3
 	RetryBackoffBase = 5 * time.Second
 )
-
-// JobStreamData represents job information for condition scheduler streams
-type JobStreamData struct {
-	JobID            int64      `json:"job_id"`
-	TaskDefinitionID int        `json:"task_definition_id"`
-	CreatedAt        time.Time  `json:"created_at"`
-	ExpirationTime   time.Time  `json:"expiration_time"`
-	LastExecutedAt   *time.Time `json:"last_executed_at,omitempty"`
-	Recurring        bool       `json:"recurring"`
-	IsActive         bool       `json:"is_active"`
-
-	// Task generation data
-	TaskTargetData types.TaskTargetData `json:"task_target_data"`
-
-	// Type-specific trigger data (only one will be populated)
-	EventData     *types.EventWorkerData     `json:"event_data,omitempty"`
-	ConditionData *types.ConditionWorkerData `json:"condition_data,omitempty"`
-
-	// Execution tracking
-	TriggerCount int    `json:"trigger_count"`
-	LastError    string `json:"last_error,omitempty"`
-}
 
 // TaskStreamData represents task information for Redis-managed task streams
 type TaskStreamData struct {

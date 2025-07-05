@@ -1,4 +1,4 @@
-package stream
+package tasks
 
 import (
 	"context"
@@ -9,37 +9,25 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/redis/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
+	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TaskStreamManager struct {
-	client         *redisClient.Client
+	client         redisClient.RedisClientInterface
 	aggClient      *aggregator.AggregatorClient
 	dbClient       *dbserver.DBServerClient
 	logger         logging.Logger
 	consumerGroups map[string]bool
 }
 
-func NewTaskStreamManager(logger logging.Logger) (*TaskStreamManager, error) {
+func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*TaskStreamManager, error) {
 	logger.Info("Initializing TaskStreamManager...")
 
-	if !config.IsRedisAvailable() {
-		logger.Error("Redis not available for TaskStreamManager initialization")
-		metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(0)
-		return nil, fmt.Errorf("redis not available")
-	}
-
-	client, err := redisClient.NewRedisClient(logger)
-	if err != nil {
-		logger.Error("Failed to create Redis client for TaskStreamManager", "error", err)
-		metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(0)
-		return nil, fmt.Errorf("failed to create redis client: %w", err)
-	}
-
+	// Initialize aggregator client
 	aggClientCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
 		SenderPrivateKey: config.GetRedisSigningKey(),
@@ -53,6 +41,7 @@ func NewTaskStreamManager(logger logging.Logger) (*TaskStreamManager, error) {
 		logger.Fatal("Failed to initialize aggregator client", "error", err)
 	}
 
+	// Initialize dbserver client
 	dbserverClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerRPCUrl())
 	if err != nil {
 		logger.Error("Failed to create DBServer client for TaskStreamManager", "error", err)
@@ -68,10 +57,7 @@ func NewTaskStreamManager(logger logging.Logger) (*TaskStreamManager, error) {
 		consumerGroups: make(map[string]bool),
 	}
 
-	logger.Info("TaskStreamManager initialized successfully",
-		"redis_type", config.GetRedisType(),
-		"max_stream_length", config.GetStreamMaxLen())
-
+	logger.Info("TaskStreamManager initialized successfully")
 	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
 	return tsm, nil
 }
@@ -573,8 +559,8 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 	}
 
 	info := map[string]interface{}{
-		"available":            config.IsRedisAvailable(),
-		"max_length":           config.GetStreamMaxLen(),
+		"available":            tsm.client != nil,
+		"max_length":           10000, // Default value, can be made configurable
 		"tasks_processing_ttl": TasksProcessingTTL.String(),
 		"tasks_completed_ttl":  TasksCompletedTTL.String(),
 		"tasks_failed_ttl":     TasksFailedTTL.String(),
