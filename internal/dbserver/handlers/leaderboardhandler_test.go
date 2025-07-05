@@ -30,12 +30,14 @@ func TestGetKeeperLeaderboard(t *testing.T) {
 
 	tests := []struct {
 		name          string
+		host          string
 		setupMocks    func()
 		expectedCode  int
 		expectedError string
 	}{
 		{
-			name: "Success - Get Keeper Leaderboard",
+			name: "Success - Default Domain (All Keepers)",
+			host: "localhost:9002",
 			setupMocks: func() {
 				mockKeeperRepo.On("GetKeeperLeaderboard").Return([]types.KeeperLeaderboardEntry{
 					{KeeperID: 1, KeeperAddress: "0x123", KeeperName: "Keeper 1", NoExecutedTasks: 5, KeeperPoints: 100},
@@ -45,12 +47,51 @@ func TestGetKeeperLeaderboard(t *testing.T) {
 			expectedCode: http.StatusOK,
 		},
 		{
-			name: "Error - Database Error",
+			name: "Success - App Domain (on_imua = false)",
+			host: "app.triggerx.network",
+			setupMocks: func() {
+				mockKeeperRepo.On("GetKeeperLeaderboardByOnImua", false).Return([]types.KeeperLeaderboardEntry{
+					{KeeperID: 1, KeeperAddress: "0x123", KeeperName: "Keeper 1", NoExecutedTasks: 5, KeeperPoints: 100},
+				}, nil)
+			},
+			expectedCode: http.StatusOK,
+		},
+		{
+			name: "Success - Imua Domain (on_imua = true)",
+			host: "imua.triggerx.network",
+			setupMocks: func() {
+				mockKeeperRepo.On("GetKeeperLeaderboardByOnImua", true).Return([]types.KeeperLeaderboardEntry{
+					{KeeperID: 2, KeeperAddress: "0x456", KeeperName: "Keeper 2", NoExecutedTasks: 3, KeeperPoints: 50},
+				}, nil)
+			},
+			expectedCode: http.StatusOK,
+		},
+		{
+			name: "Error - Database Error (Default Domain)",
+			host: "localhost:9002",
 			setupMocks: func() {
 				mockKeeperRepo.On("GetKeeperLeaderboard").Return([]types.KeeperLeaderboardEntry{}, assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,
-			expectedError: assert.AnError.Error(),
+			expectedError: "LEADERBOARD_FETCH_ERROR",
+		},
+		{
+			name: "Error - Database Error (App Domain)",
+			host: "app.triggerx.network",
+			setupMocks: func() {
+				mockKeeperRepo.On("GetKeeperLeaderboardByOnImua", false).Return([]types.KeeperLeaderboardEntry{}, assert.AnError)
+			},
+			expectedCode:  http.StatusInternalServerError,
+			expectedError: "LEADERBOARD_FETCH_ERROR",
+		},
+		{
+			name: "Error - Database Error (Imua Domain)",
+			host: "imua.triggerx.network",
+			setupMocks: func() {
+				mockKeeperRepo.On("GetKeeperLeaderboardByOnImua", true).Return([]types.KeeperLeaderboardEntry{}, assert.AnError)
+			},
+			expectedCode:  http.StatusInternalServerError,
+			expectedError: "LEADERBOARD_FETCH_ERROR",
 		},
 	}
 
@@ -64,6 +105,11 @@ func TestGetKeeperLeaderboard(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 
+			// Create request with specific host
+			req := httptest.NewRequest("GET", "/leaderboard/keepers", nil)
+			req.Host = tt.host
+			c.Request = req
+
 			// Setup mocks
 			tt.setupMocks()
 
@@ -76,12 +122,12 @@ func TestGetKeeperLeaderboard(t *testing.T) {
 				var response map[string]string
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
-				assert.Contains(t, response["error"], tt.expectedError)
+				assert.Equal(t, tt.expectedError, response["code"])
 			} else {
 				var response []types.KeeperLeaderboardEntry
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
-				assert.Len(t, response, 2)
+				assert.NotEmpty(t, response)
 			}
 		})
 	}

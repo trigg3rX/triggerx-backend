@@ -5,14 +5,38 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	h.logger.Info("[GetKeeperLeaderboard] Fetching keeper leaderboard data")
 
-	trackDBOp := metrics.TrackDBOperation("read", "keeper_leaderboard")
-	keeperLeaderboard, err := h.keeperRepository.GetKeeperLeaderboard()
-	trackDBOp(err)
+	// Get the domain from the request
+	host := c.Request.Host
+	h.logger.Infof("[GetKeeperLeaderboard] Request from domain: %s", host)
+
+	var keeperLeaderboard []types.KeeperLeaderboardEntry
+	var err error
+
+	// Determine which data to return based on domain
+	switch host {
+	case "app.triggerx.network":
+		h.logger.Info("[GetKeeperLeaderboard] Filtering for app.triggerx.network - showing keepers with on_imua = false")
+		trackDBOp := metrics.TrackDBOperation("read", "keeper_leaderboard_app")
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardByOnImua(false)
+		trackDBOp(err)
+	case "imua.triggerx.network":
+		h.logger.Info("[GetKeeperLeaderboard] Filtering for imua.triggerx.network - showing keepers with on_imua = true")
+		trackDBOp := metrics.TrackDBOperation("read", "keeper_leaderboard_imua")
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboardByOnImua(true)
+		trackDBOp(err)
+	default:
+		h.logger.Info("[GetKeeperLeaderboard] Default domain - showing all keepers")
+		trackDBOp := metrics.TrackDBOperation("read", "keeper_leaderboard_all")
+		keeperLeaderboard, err = h.keeperRepository.GetKeeperLeaderboard()
+		trackDBOp(err)
+	}
+
 	if err != nil {
 		h.logger.Errorf("[GetKeeperLeaderboard] Error fetching keeper leaderboard data: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{

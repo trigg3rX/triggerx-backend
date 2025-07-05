@@ -62,6 +62,7 @@ type KeeperLeaderboardEntry struct {
 	NoExecutedTasks int64   `json:"no_executed_tasks"`
 	NoAttestedTasks int64   `json:"no_attested_tasks"`
 	KeeperPoints    float64 `json:"keeper_points"`
+	OnImua          bool    `json:"on_imua"`
 }
 
 ///////////////////////////////////////////////////

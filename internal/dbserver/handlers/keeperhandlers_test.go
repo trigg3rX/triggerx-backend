@@ -79,6 +79,11 @@ func (m *MockKeeperRepository) GetKeeperLeaderboard() ([]types.KeeperLeaderboard
 	return args.Get(0).([]types.KeeperLeaderboardEntry), args.Error(1)
 }
 
+func (m *MockKeeperRepository) GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error) {
+	args := m.Called(onImua)
+	return args.Get(0).([]types.KeeperLeaderboardEntry), args.Error(1)
+}
+
 func (m *MockKeeperRepository) GetKeeperLeaderboardByIdentifierInDB(address string, name string) (types.KeeperLeaderboardEntry, error) {
 	args := m.Called(address, name)
 	return args.Get(0).(types.KeeperLeaderboardEntry), args.Error(1)
