@@ -13,6 +13,7 @@ type Connection struct {
 
 func NewConnection(config *Config, logger logging.Logger) (*Connection, error) {
 	cluster := gocql.NewCluster(config.Hosts...)
+	cluster.Keyspace = config.Keyspace
 	cluster.Timeout = config.Timeout
 	cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: config.Retries}
 	cluster.ConnectTimeout = config.ConnectWait
