@@ -144,7 +144,6 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	// Public routes
 	api.GET("/users/:address", handler.GetUserDataByAddress)
 	api.GET("/wallet/points/:address", handler.GetWalletPoints)
-	api.GET("/condition", handler.CreateCondition)
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
