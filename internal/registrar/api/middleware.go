@@ -7,7 +7,7 @@ import (
 
 func LoggingMiddleware(logger logging.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger.Infof("HTTP Request: %s %s", c.Request.Method, c.Request.URL.Path)
+		logger.Debugf("HTTP Request: %s %s", c.Request.Method, c.Request.URL.Path)
 		c.Next()
 	}
 }
