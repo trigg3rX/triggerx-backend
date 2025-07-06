@@ -5,14 +5,32 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+
+	// Contract bindings
+	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/AVSGovernanceLogic"
+	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
+	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/AvsGovernance"
+	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/OBLS"
+)
+
+// ContractType represents the type of contract
+type ContractType string
+
+const (
+	ContractTypeAttestationCenter  ContractType = "attestation_center"
+	ContractTypeAvsGovernance      ContractType = "avs_governance"
+	ContractTypeAVSGovernanceLogic ContractType = "avs_governance_logic"
+	ContractTypeOBLS               ContractType = "obls"
 )
 
 // SubscriptionManager manages WebSocket event subscriptions for a chain
@@ -20,6 +38,7 @@ type SubscriptionManager struct {
 	chainID       string
 	subscriptions map[string]*EventSubscription
 	eventFilters  map[string][]common.Hash // event name -> topic hashes
+	contractABIs  map[ContractType]abi.ABI
 	logger        logging.Logger
 	mu            sync.RWMutex
 }
@@ -29,6 +48,7 @@ type EventSubscription struct {
 	ID           string
 	ChainID      string
 	ContractAddr common.Address
+	ContractType ContractType
 	EventName    string
 	EventSig     common.Hash
 	FilterQuery  ethereum.FilterQuery
@@ -77,17 +97,122 @@ type LogsSubscription struct {
 	Topics  [][]string `json:"topics,omitempty"`
 }
 
+// ContractEventData represents parsed contract event data
+type ContractEventData struct {
+	EventType    string                 `json:"event_type"`
+	ContractType ContractType           `json:"contract_type"`
+	ParsedData   map[string]interface{} `json:"parsed_data"`
+	RawData      []byte                 `json:"raw_data"`
+	Topics       []string               `json:"topics"`
+	BlockNumber  uint64                 `json:"block_number"`
+	TxHash       string                 `json:"tx_hash"`
+	LogIndex     uint                   `json:"log_index"`
+}
+
 // NewSubscriptionManager creates a new subscription manager
 func NewSubscriptionManager(chainID string, logger logging.Logger) *SubscriptionManager {
-	return &SubscriptionManager{
+	sm := &SubscriptionManager{
 		chainID:       chainID,
 		subscriptions: make(map[string]*EventSubscription),
 		eventFilters:  make(map[string][]common.Hash),
+		contractABIs:  make(map[ContractType]abi.ABI),
 		logger:        logger,
+	}
+
+	// Initialize contract ABIs
+	sm.initializeContractABIs()
+
+	return sm
+}
+
+// initializeContractABIs initializes the contract ABIs
+func (sm *SubscriptionManager) initializeContractABIs() {
+	// Initialize AttestationCenter ABI
+	if attestationCenterABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi(); err == nil {
+		sm.contractABIs[ContractTypeAttestationCenter] = *attestationCenterABI
+		sm.logger.Infof("Initialized AttestationCenter ABI")
+	} else {
+		sm.logger.Errorf("Failed to initialize AttestationCenter ABI: %v", err)
+	}
+
+	// Initialize AvsGovernance ABI
+	if avsGovernanceABI, err := contractAvsGovernance.ContractAvsGovernanceMetaData.GetAbi(); err == nil {
+		sm.contractABIs[ContractTypeAvsGovernance] = *avsGovernanceABI
+		sm.logger.Infof("Initialized AvsGovernance ABI")
+	} else {
+		sm.logger.Errorf("Failed to initialize AvsGovernance ABI: %v", err)
+	}
+
+	// Initialize AVSGovernanceLogic ABI
+	if avsGovernanceLogicABI, err := contractAVSGovernanceLogic.ContractAVSGovernanceLogicMetaData.GetAbi(); err == nil {
+		sm.contractABIs[ContractTypeAVSGovernanceLogic] = *avsGovernanceLogicABI
+		sm.logger.Infof("Initialized AVSGovernanceLogic ABI")
+	} else {
+		sm.logger.Errorf("Failed to initialize AVSGovernanceLogic ABI: %v", err)
+	}
+
+	// Initialize OBLS ABI
+	if oblsABI, err := contractOBLS.ContractOBLSMetaData.GetAbi(); err == nil {
+		sm.contractABIs[ContractTypeOBLS] = *oblsABI
+		sm.logger.Infof("Initialized OBLS ABI")
+	} else {
+		sm.logger.Errorf("Failed to initialize OBLS ABI: %v", err)
 	}
 }
 
-// AddEventSubscription adds a new event subscription
+// AddContractSubscription adds a new contract event subscription
+func (sm *SubscriptionManager) AddContractSubscription(contractAddr string, contractType ContractType, eventName string) (*EventSubscription, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Get the ABI for the contract
+	contractABI, exists := sm.contractABIs[contractType]
+	if !exists {
+		return nil, fmt.Errorf("contract type %s not found", contractType)
+	}
+
+	// Get the event from the ABI
+	event, exists := contractABI.Events[eventName]
+	if !exists {
+		return nil, fmt.Errorf("event %s not found in contract %s", eventName, contractType)
+	}
+
+	// Generate unique subscription ID
+	subID := sm.generateSubscriptionID()
+
+	addr := common.HexToAddress(contractAddr)
+	eventSig := event.ID
+
+	subscription := &EventSubscription{
+		ID:           subID,
+		ChainID:      sm.chainID,
+		ContractAddr: addr,
+		ContractType: contractType,
+		EventName:    eventName,
+		EventSig:     eventSig,
+		FilterQuery: ethereum.FilterQuery{
+			Addresses: []common.Address{addr},
+			Topics:    [][]common.Hash{{eventSig}},
+		},
+		Active:    true,
+		CreatedAt: time.Now(),
+	}
+
+	sm.subscriptions[subID] = subscription
+
+	// Add to event filters
+	if sm.eventFilters[eventName] == nil {
+		sm.eventFilters[eventName] = make([]common.Hash, 0)
+	}
+	sm.eventFilters[eventName] = append(sm.eventFilters[eventName], eventSig)
+
+	sm.logger.Infof("Added subscription %s for %s.%s events from %s on chain %s",
+		subID, contractType, eventName, contractAddr, sm.chainID)
+
+	return subscription, nil
+}
+
+// AddEventSubscription adds a new event subscription (legacy method)
 func (sm *SubscriptionManager) AddEventSubscription(contractAddr string, eventName string, eventSig string) (*EventSubscription, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -298,9 +423,14 @@ func (sm *SubscriptionManager) processLogEntry(log types.Log, eventChan chan<- *
 	return nil
 }
 
-// parseEventData parses event data based on the event type
+// parseEventData parses event data based on the contract type and event
 func (sm *SubscriptionManager) parseEventData(sub *EventSubscription, log types.Log) interface{} {
-	// Basic parsing - you can enhance this based on your specific event types
+	// Check if we have a contract type for proper parsing
+	if sub.ContractType != "" {
+		return sm.parseContractEventData(sub, log)
+	}
+
+	// Fallback to basic parsing for legacy subscriptions
 	eventData := map[string]interface{}{
 		"event_signature": sub.EventSig.Hex(),
 		"topics":          make([]string, len(log.Topics)),
@@ -314,64 +444,134 @@ func (sm *SubscriptionManager) parseEventData(sub *EventSubscription, log types.
 		eventData["topics"].([]string)[i] = topic.Hex()
 	}
 
-	// Add specific parsing for known events
-	switch sub.EventName {
-	case "OperatorRegistered":
-		return sm.parseOperatorRegisteredEvent(log)
-	case "OperatorUnregistered":
-		return sm.parseOperatorUnregisteredEvent(log)
-	case "TaskSubmitted":
-		return sm.parseTaskSubmittedEvent(log)
-	case "TaskRejected":
-		return sm.parseTaskRejectedEvent(log)
+	return eventData
+}
+
+// parseContractEventData parses contract event data using the proper ABI
+func (sm *SubscriptionManager) parseContractEventData(sub *EventSubscription, log types.Log) interface{} {
+	contractABI, exists := sm.contractABIs[sub.ContractType]
+	if !exists {
+		sm.logger.Errorf("Contract ABI not found for type %s", sub.ContractType)
+		return sm.parseBasicEventData(sub, log)
+	}
+
+	event, exists := contractABI.Events[sub.EventName]
+	if !exists {
+		sm.logger.Errorf("Event %s not found in contract %s ABI", sub.EventName, sub.ContractType)
+		return sm.parseBasicEventData(sub, log)
+	}
+
+	// Parse the event data
+	parsedData := make(map[string]interface{})
+
+	// Parse indexed parameters from topics
+	topicIndex := 1 // Skip the event signature (topics[0])
+	for _, input := range event.Inputs {
+		if input.Indexed {
+			if topicIndex < len(log.Topics) {
+				parsedData[input.Name] = sm.parseTopicData(input, log.Topics[topicIndex])
+				topicIndex++
+			}
+		}
+	}
+
+	// Parse non-indexed parameters from data
+	if len(log.Data) > 0 {
+		nonIndexedInputs := make([]abi.Argument, 0)
+		for _, input := range event.Inputs {
+			if !input.Indexed {
+				nonIndexedInputs = append(nonIndexedInputs, input)
+			}
+		}
+
+		if len(nonIndexedInputs) > 0 {
+			values, err := contractABI.Unpack(sub.EventName, log.Data)
+			if err != nil {
+				sm.logger.Errorf("Failed to unpack event data for %s: %v", sub.EventName, err)
+			} else {
+				for i, input := range nonIndexedInputs {
+					if i < len(values) {
+						parsedData[input.Name] = sm.formatValue(values[i])
+					}
+				}
+			}
+		}
+	}
+
+	return &ContractEventData{
+		EventType:    sub.EventName,
+		ContractType: sub.ContractType,
+		ParsedData:   parsedData,
+		RawData:      log.Data,
+		Topics:       sm.formatTopics(log.Topics),
+		BlockNumber:  log.BlockNumber,
+		TxHash:       log.TxHash.Hex(),
+		LogIndex:     log.Index,
+	}
+}
+
+// parseBasicEventData provides basic event data parsing as fallback
+func (sm *SubscriptionManager) parseBasicEventData(sub *EventSubscription, log types.Log) interface{} {
+	return map[string]interface{}{
+		"event_type":      sub.EventName,
+		"contract_type":   sub.ContractType,
+		"event_signature": sub.EventSig.Hex(),
+		"topics":          sm.formatTopics(log.Topics),
+		"data":            hex.EncodeToString(log.Data),
+		"block_number":    log.BlockNumber,
+		"tx_hash":         log.TxHash.Hex(),
+		"log_index":       log.Index,
+	}
+}
+
+// parseTopicData parses topic data based on the input type
+func (sm *SubscriptionManager) parseTopicData(input abi.Argument, topic common.Hash) interface{} {
+	switch input.Type.String() {
+	case "address":
+		return common.HexToAddress(topic.Hex()).Hex()
+	case "uint256", "uint128", "uint64", "uint32", "uint16", "uint8":
+		return new(big.Int).SetBytes(topic.Bytes()).String()
+	case "int256", "int128", "int64", "int32", "int16", "int8":
+		// For signed integers, we need to handle two's complement
+		value := new(big.Int).SetBytes(topic.Bytes())
+		if value.Bit(255) == 1 { // Check if the sign bit is set
+			// Convert from two's complement
+			max := new(big.Int).Lsh(big.NewInt(1), 256)
+			value.Sub(value, max)
+		}
+		return value.String()
+	case "bytes32":
+		return topic.Hex()
+	case "bool":
+		return topic.Big().Cmp(big.NewInt(0)) != 0
 	default:
-		return eventData
+		return topic.Hex()
 	}
 }
 
-// parseOperatorRegisteredEvent parses OperatorRegistered events
-func (sm *SubscriptionManager) parseOperatorRegisteredEvent(log types.Log) interface{} {
-	// Implement specific parsing for OperatorRegistered events
-	return map[string]interface{}{
-		"event_type": "OperatorRegistered",
-		"operator":   log.Topics[1].Hex(), // Assuming operator is first indexed parameter
-		"raw_data":   log.Data,
-		"block":      log.BlockNumber,
-		"tx_hash":    log.TxHash.Hex(),
+// formatValue formats values for JSON serialization
+func (sm *SubscriptionManager) formatValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case *big.Int:
+		return v.String()
+	case common.Address:
+		return v.Hex()
+	case common.Hash:
+		return v.Hex()
+	case []byte:
+		return hex.EncodeToString(v)
+	default:
+		return v
 	}
 }
 
-// parseOperatorUnregisteredEvent parses OperatorUnregistered events
-func (sm *SubscriptionManager) parseOperatorUnregisteredEvent(log types.Log) interface{} {
-	return map[string]interface{}{
-		"event_type": "OperatorUnregistered",
-		"operator":   log.Topics[1].Hex(),
-		"raw_data":   log.Data,
-		"block":      log.BlockNumber,
-		"tx_hash":    log.TxHash.Hex(),
+// formatTopics formats topic slice for JSON serialization
+func (sm *SubscriptionManager) formatTopics(topics []common.Hash) []string {
+	result := make([]string, len(topics))
+	for i, topic := range topics {
+		result[i] = topic.Hex()
 	}
-}
-
-// parseTaskSubmittedEvent parses TaskSubmitted events
-func (sm *SubscriptionManager) parseTaskSubmittedEvent(log types.Log) interface{} {
-	return map[string]interface{}{
-		"event_type": "TaskSubmitted",
-		"task_id":    log.Topics[1].Hex(), // Assuming task ID is first indexed parameter
-		"raw_data":   log.Data,
-		"block":      log.BlockNumber,
-		"tx_hash":    log.TxHash.Hex(),
-	}
-}
-
-// parseTaskRejectedEvent parses TaskRejected events
-func (sm *SubscriptionManager) parseTaskRejectedEvent(log types.Log) interface{} {
-	return map[string]interface{}{
-		"event_type": "TaskRejected",
-		"task_id":    log.Topics[1].Hex(),
-		"raw_data":   log.Data,
-		"block":      log.BlockNumber,
-		"tx_hash":    log.TxHash.Hex(),
-	}
+	return result
 }
 
 // updateSubscriptionStats updates statistics for a subscription
@@ -440,4 +640,34 @@ func (sm *SubscriptionManager) GetSubscriptionStats() map[string]interface{} {
 
 	stats["active_subscriptions"] = activeCount
 	return stats
+}
+
+// Specific event parsing methods for known contract events
+func (sm *SubscriptionManager) parseOperatorRegisteredEvent(log types.Log) interface{} {
+	// This should be handled by the contract-specific parsing now
+	return sm.parseBasicEventData(&EventSubscription{
+		EventName: "OperatorRegistered",
+		EventSig:  log.Topics[0],
+	}, log)
+}
+
+func (sm *SubscriptionManager) parseOperatorUnregisteredEvent(log types.Log) interface{} {
+	return sm.parseBasicEventData(&EventSubscription{
+		EventName: "OperatorUnregistered",
+		EventSig:  log.Topics[0],
+	}, log)
+}
+
+func (sm *SubscriptionManager) parseTaskSubmittedEvent(log types.Log) interface{} {
+	return sm.parseBasicEventData(&EventSubscription{
+		EventName: "TaskSubmitted",
+		EventSig:  log.Topics[0],
+	}, log)
+}
+
+func (sm *SubscriptionManager) parseTaskRejectedEvent(log types.Log) interface{} {
+	return sm.parseBasicEventData(&EventSubscription{
+		EventName: "TaskRejected",
+		EventSig:  log.Topics[0],
+	}, log)
 }

@@ -25,9 +25,10 @@ type ChainConfig struct {
 
 // ContractConfig represents a contract to monitor
 type ContractConfig struct {
-	Address string
-	ABI     string
-	Events  []string // Event names to monitor
+	Address      string
+	ContractType ContractType
+	ABI          string
+	Events       []string // Event names to monitor
 }
 
 // Client manages WebSocket connections to multiple blockchains
@@ -48,6 +49,7 @@ type ChainConnection struct {
 	ethClient     *ethclient.Client
 	wsConn        *websocket.Conn
 	subscriptions map[string]*Subscription
+	subManager    *SubscriptionManager
 	reconnectMgr  *ReconnectManager
 	eventChan     chan *ChainEvent
 	logger        logging.Logger
@@ -61,6 +63,7 @@ type Subscription struct {
 	ID           string
 	ChainID      string
 	ContractAddr common.Address
+	ContractType ContractType
 	EventName    string
 	Query        ethereum.FilterQuery
 	Active       bool
@@ -69,16 +72,17 @@ type Subscription struct {
 
 // ChainEvent represents an event from any blockchain
 type ChainEvent struct {
-	ChainID      string      `json:"chain_id"`
-	ChainName    string      `json:"chain_name"`
-	ContractAddr string      `json:"contract_address"`
-	EventName    string      `json:"event_name"`
-	BlockNumber  uint64      `json:"block_number"`
-	TxHash       string      `json:"tx_hash"`
-	LogIndex     uint        `json:"log_index"`
-	Data         interface{} `json:"data"`
-	RawLog       types.Log   `json:"raw_log"`
-	ProcessedAt  time.Time   `json:"processed_at"`
+	ChainID      string       `json:"chain_id"`
+	ChainName    string       `json:"chain_name"`
+	ContractAddr string       `json:"contract_address"`
+	ContractType ContractType `json:"contract_type"`
+	EventName    string       `json:"event_name"`
+	BlockNumber  uint64       `json:"block_number"`
+	TxHash       string       `json:"tx_hash"`
+	LogIndex     uint         `json:"log_index"`
+	Data         interface{}  `json:"data"`
+	RawLog       types.Log    `json:"raw_log"`
+	ProcessedAt  time.Time    `json:"processed_at"`
 }
 
 // NewClient creates a new multi-chain WebSocket client
@@ -109,12 +113,16 @@ func (c *Client) AddChain(config ChainConfig) error {
 		return fmt.Errorf("failed to connect to %s RPC: %w", config.Name, err)
 	}
 
+	// Create subscription manager
+	subManager := NewSubscriptionManager(config.ChainID, c.logger)
+
 	// Create chain connection
 	chainConn := &ChainConnection{
 		chainID:       config.ChainID,
 		chainName:     config.Name,
 		ethClient:     ethClient,
 		subscriptions: make(map[string]*Subscription),
+		subManager:    subManager,
 		reconnectMgr:  NewReconnectManager(config.WebSocketURL, c.logger),
 		eventChan:     c.eventChan,
 		logger:        c.logger,
@@ -122,8 +130,17 @@ func (c *Client) AddChain(config ChainConfig) error {
 	}
 
 	c.chains[config.ChainID] = chainConn
-	c.logger.Infof("Added chain %s (%s) for monitoring", config.Name, config.ChainID)
 
+	// Auto-subscribe to contracts if specified in config
+	if len(config.Contracts) > 0 {
+		for _, contractConfig := range config.Contracts {
+			if err := chainConn.subscribeToContractEvents(contractConfig); err != nil {
+				c.logger.Warnf("Failed to subscribe to contract %s: %v", contractConfig.Address, err)
+			}
+		}
+	}
+
+	c.logger.Infof("Added chain %s (%s) for monitoring", config.Name, config.ChainID)
 	return nil
 }
 
@@ -161,8 +178,21 @@ func (c *Client) Stop() error {
 	return nil
 }
 
-// SubscribeToContract subscribes to events from a specific contract
-func (c *Client) SubscribeToContract(chainID string, contractAddr string, events []string) error {
+// SubscribeToContract subscribes to events from a specific contract using contract type
+func (c *Client) SubscribeToContract(chainID string, contractAddr string, contractType ContractType, events []string) error {
+	c.mu.RLock()
+	chainConn, exists := c.chains[chainID]
+	c.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("chain %s not found", chainID)
+	}
+
+	return chainConn.subscribeToContractWithType(contractAddr, contractType, events)
+}
+
+// SubscribeToContractLegacy subscribes to events from a specific contract (legacy method)
+func (c *Client) SubscribeToContractLegacy(chainID string, contractAddr string, events []string) error {
 	c.mu.RLock()
 	chainConn, exists := c.chains[chainID]
 	c.mu.RUnlock()
@@ -213,6 +243,9 @@ func (c *Client) startChainConnection(chainID string, chainConn *ChainConnection
 		return chainConn.connect()
 	})
 
+	// Start processing events from the subscription manager
+	go chainConn.processEvents(c.ctx)
+
 	// Keep the connection alive
 	for {
 		select {
@@ -225,6 +258,20 @@ func (c *Client) startChainConnection(chainID string, chainConn *ChainConnection
 					chainConn.markDisconnected()
 				}
 			}
+		}
+	}
+}
+
+// processEvents processes events from the subscription manager
+func (cc *ChainConnection) processEvents(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			// Process WebSocket messages and events
+			// This is a placeholder - you'll need to implement the actual WebSocket message processing
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
@@ -245,7 +292,49 @@ func (cc *ChainConnection) connect() error {
 	return cc.reestablishSubscriptions()
 }
 
-// subscribeToContract subscribes to events from a contract
+// subscribeToContractEvents subscribes to events from a contract using ContractConfig
+func (cc *ChainConnection) subscribeToContractEvents(contractConfig ContractConfig) error {
+	if contractConfig.ContractType != "" {
+		return cc.subscribeToContractWithType(contractConfig.Address, contractConfig.ContractType, contractConfig.Events)
+	}
+	return cc.subscribeToContract(contractConfig.Address, contractConfig.Events)
+}
+
+// subscribeToContractWithType subscribes to events from a contract using contract type
+func (cc *ChainConnection) subscribeToContractWithType(contractAddr string, contractType ContractType, events []string) error {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	for _, eventName := range events {
+		// Add subscription using the subscription manager
+		_, err := cc.subManager.AddContractSubscription(contractAddr, contractType, eventName)
+		if err != nil {
+			cc.logger.Errorf("Failed to add contract subscription for %s.%s: %v", contractType, eventName, err)
+			continue
+		}
+
+		// Also add to local subscriptions for tracking
+		subID := fmt.Sprintf("%s_%s_%s_%s", cc.chainID, contractAddr, contractType, eventName)
+		addr := common.HexToAddress(contractAddr)
+
+		subscription := &Subscription{
+			ID:           subID,
+			ChainID:      cc.chainID,
+			ContractAddr: addr,
+			ContractType: contractType,
+			EventName:    eventName,
+			Active:       true,
+			CreatedAt:    time.Now(),
+		}
+
+		cc.subscriptions[subID] = subscription
+		cc.logger.Infof("Subscribed to %s.%s events from %s on chain %s", contractType, eventName, contractAddr, cc.chainID)
+	}
+
+	return nil
+}
+
+// subscribeToContract subscribes to events from a contract (legacy method)
 func (cc *ChainConnection) subscribeToContract(contractAddr string, events []string) error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -346,4 +435,30 @@ func (cc *ChainConnection) close() error {
 	}
 
 	return nil
+}
+
+// GetSubscriptionStats returns statistics for all subscriptions on a chain
+func (c *Client) GetSubscriptionStats(chainID string) (map[string]interface{}, error) {
+	c.mu.RLock()
+	chainConn, exists := c.chains[chainID]
+	c.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("chain %s not found", chainID)
+	}
+
+	return chainConn.subManager.GetSubscriptionStats(), nil
+}
+
+// GetAllSubscriptionStats returns statistics for all chains
+func (c *Client) GetAllSubscriptionStats() map[string]interface{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	stats := make(map[string]interface{})
+	for chainID, chainConn := range c.chains {
+		stats[chainID] = chainConn.subManager.GetSubscriptionStats()
+	}
+
+	return stats
 }
