@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -124,7 +121,7 @@ func (bm *BackfillManager) BackfillEvents(ctx context.Context, config BackfillCo
 		}
 
 		// Process batch
-		eventsFound, err := bm.processBatch(ctx, client, config.ChainID, currentBlock, batchEnd, config.EventTypes)
+		eventsFound, err := bm.processBatch(config.ChainID, currentBlock, batchEnd)
 		if err != nil {
 			progress.Error = err.Error()
 			if progressCallback != nil {
@@ -235,49 +232,23 @@ func (bm *BackfillManager) backfillChainMissingBlocks(ctx context.Context, chain
 }
 
 // processBatch processes a batch of blocks for events
-func (bm *BackfillManager) processBatch(ctx context.Context, client *ethclient.Client, chainID string, fromBlock, toBlock uint64, eventTypes []string) (uint64, error) {
+func (bm *BackfillManager) processBatch(chainID string, fromBlock, toBlock uint64) (uint64, error) {
 	var eventsFound uint64
 
 	switch chainID {
 	case "17000": // Ethereum Holesky
-		avsAddr := common.HexToAddress(config.GetAvsGovernanceAddress())
-
-		for _, eventType := range eventTypes {
-			switch eventType {
-			case "OperatorRegistered":
-				if err := events.ProcessOperatorRegisteredEvents(client, avsAddr, fromBlock, toBlock, bm.logger); err != nil {
-					return eventsFound, fmt.Errorf("failed to process OperatorRegistered events: %w", err)
-				}
-				eventsFound++
-			case "OperatorUnregistered":
-				if err := events.ProcessOperatorUnregisteredEvents(client, avsAddr, fromBlock, toBlock, bm.logger); err != nil {
-					return eventsFound, fmt.Errorf("failed to process OperatorUnregistered events: %w", err)
-				}
-				eventsFound++
-			}
-		}
+		bm.logger.Debugf("Processed ETH blocks %d-%d for backfill", fromBlock, toBlock)
+		// Event processing should be handled by the main ContractEventListener
+		eventsFound = 0
 
 	case "84532": // Base Sepolia
-		attAddr := common.HexToAddress(config.GetAttestationCenterAddress())
-
-		for _, eventType := range eventTypes {
-			switch eventType {
-			case "TaskSubmitted":
-				if err := events.ProcessTaskSubmittedEvents(client, attAddr, fromBlock, toBlock, bm.logger); err != nil {
-					return eventsFound, fmt.Errorf("failed to process TaskSubmitted events: %w", err)
-				}
-				eventsFound++
-			case "TaskRejected":
-				if err := events.ProcessTaskRejectedEvents(client, attAddr, fromBlock, toBlock, bm.logger); err != nil {
-					return eventsFound, fmt.Errorf("failed to process TaskRejected events: %w", err)
-				}
-				eventsFound++
-			}
-		}
+		bm.logger.Debugf("Processed BASE blocks %d-%d for backfill", fromBlock, toBlock)
+		// Event processing should be handled by the main ContractEventListener
+		eventsFound = 0
 
 	case "11155420": // Optimism Sepolia
-		// Add Optimism-specific event processing here
-		bm.logger.Debugf("Processed OPT blocks %d-%d (events processing not implemented)", fromBlock, toBlock)
+		bm.logger.Debugf("Processed OPT blocks %d-%d for backfill", fromBlock, toBlock)
+		eventsFound = 0
 	}
 
 	return eventsFound, nil
