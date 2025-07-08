@@ -28,10 +28,14 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	userID, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Failed to retrieve user data",
-			"code":  "USER_DATA_ERROR",
+		if err.Error() == "user address not found" {
+			h.logger.Infof("[GetJobsByUserAddress] No user found for address %s", userAddress)
+		} else {
+			h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No jobs found for this user",
+			"jobs":    []types.JobResponse{},
 		})
 		return
 	}
