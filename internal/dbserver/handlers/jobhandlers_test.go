@@ -158,6 +158,11 @@ func (m *MockTimeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64,
 	return args.Error(0)
 }
 
+func (m *MockTimeJobRepository) UpdateTimeJobInterval(jobID int64, timeInterval int64) error {
+	args := m.Called(jobID, timeInterval)
+	return args.Error(0)
+}
+
 func (m *MockEventJobRepository) CreateEventJob(job *types.EventJobData) error {
 	args := m.Called(job)
 	return args.Error(0)

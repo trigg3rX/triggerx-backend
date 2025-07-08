@@ -157,7 +157,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	// Apply validation middleware to routes that need it
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)         
 	api.GET("/jobs/time", handler.GetTimeBasedTasks)
-	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
+	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)

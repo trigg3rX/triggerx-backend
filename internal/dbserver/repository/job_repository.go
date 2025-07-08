@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -32,26 +31,26 @@ func NewJobRepository(db *database.Connection) JobRepository {
 }
 
 func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
-	var lastJobID int64
-	err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
-	if err == gocql.ErrNotFound {
-		return -1, nil
-	}
+	// var lastJobID int64
+	// err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
+	// if err == gocql.ErrNotFound {
+	// 	return -1, nil
+	// }
 
-	err = r.db.Session().Query(queries.CreateJobDataQuery,
-		lastJobID+1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
+	err := r.db.Session().Query(queries.CreateJobDataQuery,
+		job.JobID, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
 		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua).Exec()
 
 	if err != nil {
 		return -1, err
 	}
 
-	return lastJobID + 1, nil
+	return job.JobID, nil
 }
 
 func (r *jobRepository) UpdateJobFromUserInDB(job *types.UpdateJobDataFromUserRequest) error {
 	err := r.db.Session().Query(queries.UpdateJobDataFromUserQuery,
-		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now()).Exec()
+		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), job.JobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job from user")
 	}

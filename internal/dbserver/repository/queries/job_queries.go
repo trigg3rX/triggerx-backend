@@ -30,6 +30,11 @@ const (
 			UPDATE triggerx.job_data 
 			SET status = ?, updated_at = ?
 			WHERE job_id = ?`
+
+	UpdateTimeJobIntervalQuery = `
+		UPDATE triggerx.time_job_data
+		SET time_interval = ?
+		WHERE job_id = ?`
 )
 
 // Read Queries

@@ -92,6 +92,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 
 		jobData := &types.JobData{
+			JobID:             tempJobs[i].JobID,
 			JobTitle:          tempJobs[i].JobTitle,
 			TaskDefinitionID:  tempJobs[i].TaskDefinitionID,
 			UserID:            existingUser.UserID,

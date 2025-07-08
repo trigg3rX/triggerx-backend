@@ -19,6 +19,7 @@ type TimeJobRepository interface {
 	UpdateTimeJobStatus(jobID int64, isActive bool) error
 	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error)
 	UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error
+	UpdateTimeJobInterval(jobID int64, timeInterval int64) error
 }
 
 type timeJobRepository struct {
@@ -143,5 +144,13 @@ func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nex
 		return errors.New("failed to update time job next execution timestamp")
 	}
 
+	return nil
+}
+
+func (r *timeJobRepository) UpdateTimeJobInterval(jobID int64, timeInterval int64) error {
+	err := r.db.Session().Query(queries.UpdateTimeJobIntervalQuery, timeInterval, jobID).Exec()
+	if err != nil {
+		return errors.New("failed to update time_interval in time_job_data")
+	}
 	return nil
 }
