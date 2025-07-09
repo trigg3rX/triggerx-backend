@@ -10,6 +10,7 @@ const (
 type ProcessName string
 
 const (
+	AggregatorProcess         ProcessName = "aggregator"
 	DatabaseProcess           ProcessName = "database"
 	KeeperProcess             ProcessName = "keeper"
 	RegistrarProcess          ProcessName = "registrar"
