@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
@@ -80,4 +81,43 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 
 	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
 	c.JSON(http.StatusCreated, gin.H{"keeper_id": currentKeeperID})
+}
+
+func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
+	var keeperData types.GoogleFormCreateKeeperData
+	if err := c.ShouldBindJSON(&keeperData); err != nil {
+		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error decoding request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format", "code": "INVALID_REQUEST"})
+		return
+	}
+
+	keeperData.KeeperAddress = strings.ToLower(keeperData.KeeperAddress)
+
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
+	existingKeeperID, err := h.keeperRepository.CheckKeeperExistsByAddress(keeperData.KeeperAddress)
+	trackDBOp(err)
+	if err != nil {
+		h.logger.Errorf("[CreateKeeperDataGoogleForm] Database error while checking keeper existence: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error while checking keeper status", "code": "DB_ERROR"})
+		return
+	}
+
+	var status string
+	if existingKeeperID != 0 {
+		status = "existing"
+	} else {
+		status = "created"
+	}
+
+	trackDBOp = metrics.TrackDBOperation("create", "keeper_data")
+	keeperID, err := h.keeperRepository.CreateOrUpdateKeeperFromGoogleForm(keeperData)
+	trackDBOp(err)
+	if err != nil {
+		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error creating/updating keeper data: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create/update keeper", "code": "KEEPER_CREATION_ERROR"})
+		return
+	}
+
+	h.logger.Infof("[CreateKeeperDataGoogleForm] Successfully processed keeper with ID: %d", keeperID)
+	c.JSON(http.StatusCreated, gin.H{"keeper_id": keeperID, "status": status})
 }

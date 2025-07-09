@@ -27,7 +27,7 @@ func (c *DBServerClient) GetTimeBasedTasks() ([]types.ScheduleTimeTaskData, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var tasks []types.ScheduleTimeTaskData
 	err = json.Unmarshal(body, &tasks)

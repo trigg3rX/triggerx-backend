@@ -68,8 +68,8 @@ case $TASK_DEFINITION_ID in
     ;;
 esac
 
-# curl -X POST https://data.triggerx.network/api/jobs \
-curl -X POST http://192.168.1.56:9002/api/jobs \
+# curl -X POST https://data.triggerx.network/api/jobs \ 192.168.1.56
+curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -d "[
     {
@@ -100,6 +100,7 @@ curl -X POST http://192.168.1.56:9002/api/jobs \
       \"target_function\": \"incrementBy\",
       \"abi\": \"[{\\\"anonymous\\\":false,\\\"inputs\\\":[{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"previousValue\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"newValue\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"incrementAmount\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"CounterIncremented\\\",\\\"type\\\":\\\"event\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getCount\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"increment\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"amount\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"incrementBy\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
       \"arg_type\": $ARG_TYPE,
+      \"is_imua\": true,
       \"arguments\": [\"3\"],
       \"dynamic_arguments_script_url\": \"$DYNAMIC_ARGUMENTS_SCRIPT_URL\"
     }

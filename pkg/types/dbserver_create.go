@@ -50,6 +50,7 @@ type CreateJobRequest struct {
 	ArgType                   int      `json:"arg_type" validate:"required"`
 	Arguments                 []string `json:"arguments" validate:"required"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,url"`
+	IsImua                    bool     `json:"is_imua"`
 }
 
 type CreateJobResponse struct {
@@ -89,6 +90,7 @@ type GoogleFormCreateKeeperData struct {
 	RewardsAddress string `json:"rewards_address" validate:"required,ethereum_address"`
 	KeeperName     string `json:"keeper_name" validate:"required,min=3,max=50"`
 	EmailID        string `json:"email_id" validate:"required,email"`
+	OnImua         bool   `json:"on_imua"`
 }
 
 // Create New API Key (SDK)

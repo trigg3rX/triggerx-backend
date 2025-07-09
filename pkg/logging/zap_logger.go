@@ -8,7 +8,6 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type zapLogger struct {
@@ -17,14 +16,17 @@ type zapLogger struct {
 
 func NewZapLogger(config LoggerConfig) (*zapLogger, error) {
 	fileName := fmt.Sprintf("%s.log", time.Now().Format("2006-01-02"))
+	fullPath := filepath.Join(BaseDataDir, LogsDir, string(config.ProcessName), fileName)
 
-	// File writer with rotation, compression and no colors
-	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename: filepath.Join(BaseDataDir, LogsDir, string(config.ProcessName), fileName),
-		MaxSize:  30,   // MB
-		MaxAge:   30,   // Days
-		Compress: false, // Compress old logs (disabled for now for Loki compatibility)
-	})
+	// File writer with sequential rotation and no colors
+	rotator := NewSequentialRotator(
+		fullPath,
+		50,    // MaxSize in MB
+		30,    // MaxAge in days
+		1000,  // MaxBackups (number of old files to keep)
+		false, // Compress (disabled for now for Loki compatibility)
+	)
+	fileWriter := zapcore.AddSync(rotator)
 
 	// Console output (with colors)
 	consoleWriter := zapcore.AddSync(os.Stdout)

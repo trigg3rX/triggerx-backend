@@ -19,11 +19,13 @@ type TaskData struct {
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
 	IsSuccessful         bool      `json:"is_successful"`
 	TaskStatus           string    `json:"task_status"`
+	IsImua               bool      `json:"is_imua"`
 }
 
 type CreateTaskDataRequest struct {
 	JobID            int64 `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
+	IsImua           bool  `json:"is_imua"`
 }
 
 type UpdateTaskExecutionDataRequest struct {
