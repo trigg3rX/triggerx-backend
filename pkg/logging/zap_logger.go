@@ -23,7 +23,7 @@ func NewZapLogger(config LoggerConfig) (*zapLogger, error) {
 		Filename: filepath.Join(BaseDataDir, LogsDir, string(config.ProcessName), fileName),
 		MaxSize:  30,   // MB
 		MaxAge:   30,   // Days
-		Compress: true, // Compress old logs
+		Compress: false, // Compress old logs (disabled for now for Loki compatibility)
 	})
 
 	// Console output (with colors)

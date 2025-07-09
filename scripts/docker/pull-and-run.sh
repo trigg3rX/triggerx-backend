@@ -81,13 +81,48 @@ else
     IMAGE_NAME="triggerx-${DOCKER_NAME}:${VERSION}"
 fi
 
-# Check if .env file exists
-if [ ! -f .env ]; then
-    echo "Warning: .env file not found. Container will run without environment variables."
-    ENV_FILE=""
+# Check if .env file exists and set up volume mount
+if [ -f .env ]; then
+    echo "Found .env file, mounting it to container..."
+    ENV_FILE="-v $(pwd)/.env:/home/appuser/.env"
 else
-    ENV_FILE="-v ./.env:/root/.env"
+    echo "Warning: .env file not found in current directory. Container will run without environment variables."
+    echo "To use environment variables, create a .env file in: $(pwd)/.env"
+    ENV_FILE=""
 fi
+
+# Ensure the log directory exists and has proper permissions
+echo "Setting up log directory: ./data/logs/${DOCKER_NAME}"
+mkdir -p "./data/logs/${DOCKER_NAME}"
+
+# Get promtail group ID if it exists
+PROMTAIL_GID=""
+if command -v getent >/dev/null 2>&1 && getent group promtail >/dev/null 2>&1; then
+    PROMTAIL_GID=$(getent group promtail | cut -d: -f3)
+    echo "Found promtail group with GID: ${PROMTAIL_GID}"
+fi
+
+# Set appropriate ownership and permissions
+if [ -n "$PROMTAIL_GID" ]; then
+    # Set owner to container user (1000) and group to promtail for log reading
+    echo "Setting ownership to UID 1000 (container) and GID ${PROMTAIL_GID} (promtail)..."
+    sudo chown 1000:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+        echo "Warning: Could not set specific ownership. Using fallback permissions..."
+        chmod 755 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    }
+    # User can read/write, group (promtail) can read
+    chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+else
+    # No promtail group, just ensure container user can write
+    echo "No promtail group found. Setting ownership to UID 1000..."
+    sudo chown 1000:1000 "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+        echo "Warning: Could not set ownership. Using world-writable fallback..."
+        chmod 777 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    }
+    chmod u+rw,g+r,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+fi
+
+echo "Log directory permissions set successfully."
 
 if [[ "$SERVICE" == "registrar" ]]; then
     # Run the container
@@ -95,7 +130,8 @@ if [[ "$SERVICE" == "registrar" ]]; then
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
         ${ENV_FILE} \
-        -v ./pkg/bindings/abi:/root/pkg/bindings/abi \
+        -v ./pkg/bindings/abi:/home/appuser/pkg/bindings/abi \
+        -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
         -p ${PORT}:${PORT} \
         --restart unless-stopped \
         ${IMAGE_NAME}
@@ -106,6 +142,7 @@ else
         --name triggerx-${DOCKER_NAME} \
         ${ENV_FILE} \
         --network host \
+        -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
         --restart unless-stopped \
         ${IMAGE_NAME}
 fi
