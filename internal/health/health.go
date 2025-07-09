@@ -55,31 +55,13 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 		metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
 		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
 
-		if status >= 500 {
-			middlewareLogger.Error("HTTP Request",
-				"method", method,
-				"path", path,
-				"status", status,
-				"duration_ms", duration.Milliseconds(),
-				"ip", c.ClientIP(),
-			)
-		} else if status >= 400 {
-			middlewareLogger.Warn("HTTP Request",
-				"method", method,
-				"path", path,
-				"status", status,
-				"duration_ms", duration.Milliseconds(),
-				"ip", c.ClientIP(),
-			)
-		} else {
-			middlewareLogger.Info("HTTP Request",
-				"method", method,
-				"path", path,
-				"status", status,
-				"duration_ms", duration.Milliseconds(),
-				"ip", c.ClientIP(),
-			)
-		}
+		middlewareLogger.Debug("HTTP Request",
+			"method", method,
+			"path", path,
+			"status", status,
+			"duration_ms", duration.Milliseconds(),
+			"ip", c.ClientIP(),
+		)
 	}
 }
 
@@ -128,7 +110,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// Record check-in by version metric
 	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
-	if keeperHealth.Version == "0.1.5" || keeperHealth.Version == "0.1.3" {
+	if keeperHealth.Version == "0.1.5" || keeperHealth.Version == "0.1.4" || keeperHealth.Version == "0.1.3" {
 		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 		if !ok {
 			h.logger.Error("Invalid keeper signature",
@@ -170,10 +152,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			return
 		}
 
-		h.logger.Info("Successfully processed keeper health check-in",
-			"keeper", keeperHealth.KeeperAddress,
-			"version", keeperHealth.Version,
-		)
+		h.logger.Infof("CheckIn Successful: %s | %s", keeperHealth.KeeperAddress, keeperHealth.Version)
 
 		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
