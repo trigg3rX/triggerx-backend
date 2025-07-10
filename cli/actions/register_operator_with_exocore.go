@@ -34,14 +34,17 @@ func RegisterOperatorWithChain(ctx *cli.Context) error {
 	}
 
 	log.Printf("Config loaded - Operator Address: %s", nodeConfig.OperatorAddress)
+	log.Printf("Config loaded - AVS Address: %s", nodeConfig.AVSAddress)
 
 	o, err := operator.NewOperatorFromConfig(nodeConfig)
 	if err != nil {
 		return err
 	}
 
+	log.Println("Starting chain registration process...")
 	err = o.RegisterOperatorWithChain()
 	if err != nil {
+		log.Printf("Failed to register operator with chain: %v", err)
 		return err
 	}
 

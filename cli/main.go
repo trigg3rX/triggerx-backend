@@ -17,26 +17,28 @@ func main() {
 
 	app := cli.NewApp()
 	app.Name = "triggerx"
-	app.Usage = "CLI for IMUA TRIGGERX AVS operator registration"
-	app.Version = "1.0.0"
+	app.Usage = "TriggerX Operator CLI"
 
 	app.Commands = []cli.Command{
 		{
-			Name:    "register-operator-with-chain",
-			Aliases: []string{"chain"},
-			Usage:   "registers operator with chain",
-			Action:  actions.RegisterOperatorWithChain,
+			Name:   "generate-keys",
+			Usage:  "Generate BLS and ECDSA keystore files",
+			Action: actions.GenerateKeys,
 		},
 		{
-			Name:    "register-operator-with-avs",
-			Aliases: []string{"avs"},
-			Usage:   "registers operator with AVS (opt-in to AVS)",
-			Action:  actions.RegisterOperatorWithAvs,
+			Name:   "register-operator-with-chain",
+			Usage:  "Register operator with the chain",
+			Action: actions.RegisterOperatorWithChain,
+		},
+		{
+			Name:   "register-operator-with-avs",
+			Usage:  "Register operator with AVS",
+			Action: actions.RegisterOperatorWithAvs,
 		},
 	}
 
 	err = app.Run(os.Args)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }

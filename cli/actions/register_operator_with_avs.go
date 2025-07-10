@@ -34,6 +34,7 @@ func RegisterOperatorWithAvs(ctx *cli.Context) error {
 	}
 
 	log.Printf("Config loaded - Operator Address: %s", nodeConfig.OperatorAddress)
+	log.Printf("Config loaded - AVS Address: %s", nodeConfig.AVSAddress)
 
 	o, err := operator.NewOperatorFromConfig(nodeConfig)
 	if err != nil {
@@ -47,8 +48,10 @@ func RegisterOperatorWithAvs(ctx *cli.Context) error {
 	}
 	log.Printf("Using ECDSA private key: %s", operatorEcdsaPrivKey.D.String())
 
+	log.Println("Starting AVS registration process...")
 	err = o.RegisterOperatorWithAvs()
 	if err != nil {
+		log.Printf("Failed to register operator with AVS: %v", err)
 		return err
 	}
 

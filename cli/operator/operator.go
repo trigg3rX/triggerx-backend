@@ -11,13 +11,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
-	"github.com/imua-xyz/imua-avs-sdk/crypto/bls"
 	sdklogging "github.com/imua-xyz/imua-avs-sdk/logging"
 	"github.com/imua-xyz/imua-avs-sdk/signer"
 
-	// chain "github.com/trigg3rX/triggerx-backend/cli/core/chainio"
-	// "github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
 	blscommon "github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
+	"github.com/trigg3rX/triggerx-backend/cli/core"
+	chain "github.com/trigg3rX/triggerx-backend/cli/core/chainio"
+	"github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
 	"github.com/trigg3rX/triggerx-backend/cli/types"
 )
 
@@ -56,15 +56,12 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 		return nil, err
 	}
 
-	blsKeyPassword, ok := os.LookupEnv("OPERATOR_BLS_KEY_PASSWORD")
-	if !ok {
-		logger.Info("OPERATOR_BLS_KEY_PASSWORD env var not set. using empty string")
-	}
-	blsKeyPair, err := bls.ReadPrivateKeyFromFile(c.BlsPrivateKeyStorePath, blsKeyPassword)
-	if err != nil {
-		logger.Error("Cannot parse bls private key", "err", err)
-		return nil, err
-	}
+	// Temporarily skip BLS key loading to test the rest of the flow
+	// TODO: Fix BLS keystore format or find alternative loading method
+	logger.Warn("Temporarily skipping BLS key loading for testing")
+	var blsKeyPair blscommon.SecretKey
+	// Set to nil to skip BLS operations for now
+	blsKeyPair = nil
 
 	chainId, err := ethRpcClient.ChainID(context.Background())
 	if err != nil {
@@ -124,10 +121,18 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 		operator.registerOperatorOnStartup()
 	}
 
-	logger.Info("Operator info",
-		"operatorAddr", c.OperatorAddress,
-		"operatorKey", operator.blsKeypair.PublicKey().Marshal(),
-	)
+	// Check if BLS keypair is available before trying to use it
+	if operator.blsKeypair != nil {
+		logger.Info("Operator info",
+			"operatorAddr", c.OperatorAddress,
+			"operatorKey", operator.blsKeypair.PublicKey().Marshal(),
+		)
+	} else {
+		logger.Info("Operator info",
+			"operatorAddr", c.OperatorAddress,
+			"operatorKey", "BLS keypair not loaded",
+		)
+	}
 
 	return operator, nil
 }

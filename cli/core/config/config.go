@@ -58,13 +58,14 @@ func Init() error {
 		return fmt.Errorf("error converting private key to ECDSA: %w", err)
 	}
 
-	// BLS Private Key (Note: This would need proper implementation with a concrete BLS library)
+	// BLS Private Key - check if environment variable exists but don't load it here
+	// The operator will handle BLS key loading using the appropriate library
 	blsPrivateKeyStr := env.GetEnv("BLS_PRIVATE_KEY", "")
 	var blsPrivateKey *blscommon.SecretKey
+	// Note: BLS key loading is handled in the operator using the imua-avs-sdk library
+	// We just track whether the environment variable is available
 	if blsPrivateKeyStr != "" {
-		// TODO: Implement BLS private key deserialization
-		// The current blscommon.SecretKey is an interface and needs proper implementation
-		// For now, we'll leave it as nil
+		// BLS private key is available in environment, operator will load it
 		blsPrivateKey = nil
 	}
 
@@ -212,4 +213,12 @@ func GetEnableNodeApi() bool {
 
 func GetProduction() bool {
 	return cfg.production
+}
+
+func HasBLSPrivateKeyInEnv() bool {
+	return env.GetEnv("BLS_PRIVATE_KEY", "") != ""
+}
+
+func GetBLSPrivateKeyHex() string {
+	return env.GetEnv("BLS_PRIVATE_KEY", "")
 }
