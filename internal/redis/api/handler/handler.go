@@ -7,21 +7,21 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/stream"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Handler encapsulates the dependencies for Redis handlers
 type handler struct {
 	logger           logging.Logger
-	taskStreamMgr    *stream.TaskStreamManager
-	jobStreamMgr     *stream.JobStreamManager
+	taskStreamMgr    *tasks.TaskStreamManager
+	jobStreamMgr     *jobs.JobStreamManager
 	metricsCollector *metrics.Collector
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger, taskStreamMgr *stream.TaskStreamManager, jobStreamMgr *stream.JobStreamManager, metricsCollector *metrics.Collector) *handler {
+func NewHandler(logger logging.Logger, taskStreamMgr *tasks.TaskStreamManager, jobStreamMgr *jobs.JobStreamManager, metricsCollector *metrics.Collector) *handler {
 	return &handler{
 		logger:           logger,
 		taskStreamMgr:    taskStreamMgr,
@@ -50,8 +50,6 @@ func (h *handler) HandleRoot(c *gin.Context) {
 
 // HandleHealth provides detailed health information
 func (h *handler) HandleHealth(c *gin.Context) {
-	// Get Redis info
-	redisInfo := redis.GetRedisInfo()
 
 	// Get stream info
 	taskStreamInfo := h.taskStreamMgr.GetStreamInfo()
@@ -61,7 +59,6 @@ func (h *handler) HandleHealth(c *gin.Context) {
 		"service":        "TriggerX Redis Service",
 		"status":         "healthy",
 		"timestamp":      time.Now().UTC().Format(time.RFC3339),
-		"redis":          redisInfo,
 		"task_streams":   taskStreamInfo,
 		"job_streams":    jobStreamInfo,
 		"uptime_seconds": time.Since(time.Now().Add(-time.Hour)).Seconds(), // This would be calculated from actual start time
@@ -84,7 +81,6 @@ func (h *handler) GetStreamsInfo(c *gin.Context) {
 		"timestamp":    time.Now().UTC().Format(time.RFC3339),
 		"task_streams": taskStreamInfo,
 		"job_streams":  jobStreamInfo,
-		"redis_info":   redis.GetRedisInfo(),
 	}
 
 	c.JSON(http.StatusOK, streamInfo)
@@ -92,7 +88,7 @@ func (h *handler) GetStreamsInfo(c *gin.Context) {
 
 // SubmitTaskFromScheduler handles task submissions from schedulers
 func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
-	var request stream.SchedulerTaskRequest
+	var request tasks.SchedulerTaskRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		h.logger.Error("Failed to bind scheduler task request", "error", err)

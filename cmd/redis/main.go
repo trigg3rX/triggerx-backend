@@ -11,8 +11,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/redis/api"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/redis"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/stream"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
+	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -43,10 +44,15 @@ func main() {
 	collector.Start()
 
 	// Create Redis client and verify connection
-	client, err := redis.NewRedisClient(logger)
+	redisConfig := config.GetRedisClientConfig()
+	client, err := redisClient.NewRedisClient(logger, redisConfig)
 	if err != nil {
 		logger.Fatal("Failed to create Redis client", "error", err)
 	}
+
+	// Set up monitoring hooks for metrics integration
+	monitoringHooks := metrics.CreateRedisMonitoringHooks()
+	client.SetMonitoringHooks(monitoringHooks)
 
 	// Test Redis connection
 	if err := client.Ping(); err != nil {
@@ -55,14 +61,14 @@ func main() {
 	logger.Info("Redis client Initialised")
 
 	// Initialize job stream manager for orchestration
-	jobStreamMgr, err := stream.NewJobStreamManager(logger)
+	jobStreamMgr, err := jobs.NewJobStreamManager(logger, client)
 	if err != nil {
 		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
 	}
 	logger.Info("Job stream manager Initialised")
 
 	// Initialize task stream manager for orchestration
-	taskStreamMgr, err := stream.NewTaskStreamManager(logger)
+	taskStreamMgr, err := tasks.NewTaskStreamManager(logger, client)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
 	}
@@ -131,8 +137,9 @@ func main() {
 	}()
 
 	// Log Redis info
-	redisInfo := redis.GetRedisInfo()
-	logger.Info("Redis Orchestrator service is running", "config", redisInfo)
+	logger.Info("Redis Orchestrator service is running",
+		"redis_available", config.IsRedisAvailable(),
+		"redis_type", config.GetRedisType())
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -146,7 +153,7 @@ func main() {
 }
 
 // startStreamHealthMonitor monitors the health of Redis streams
-func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *stream.JobStreamManager, taskStreamMgr *stream.TaskStreamManager, logger logging.Logger) {
+func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *jobs.JobStreamManager, taskStreamMgr *tasks.TaskStreamManager, logger logging.Logger) {
 	logger.Info("Starting stream health monitor")
 
 	ticker := time.NewTicker(30 * time.Second) // Check health every 30 seconds
@@ -190,7 +197,7 @@ func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *stream.JobStrea
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, client *redis.Client, server *api.Server, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, client redisClient.RedisClientInterface, server *api.Server, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout

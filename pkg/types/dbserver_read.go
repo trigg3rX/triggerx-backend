@@ -12,12 +12,6 @@ type PerformerData struct {
 	KeeperAddress string `json:"keeper_address"`
 }
 
-type DailyRewardsPoints struct {
-	KeeperID       int64   `json:"keeper_id"`
-	RewardsBooster float32 `json:"rewards_booster"`
-	KeeperPoints   float64 `json:"keeper_points"`
-}
-
 type KeeperLeaderboardEntry struct {
 	KeeperID      int64   `json:"keeper_id"`
 	KeeperAddress string  `json:"keeper_address"`

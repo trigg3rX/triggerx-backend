@@ -28,6 +28,9 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	if cfg.AggregatorRPCUrl == "" {
 		return nil, fmt.Errorf("RPC address cannot be empty")
 	}
+	if cfg.SenderPrivateKey == "" {
+		return nil, fmt.Errorf("sender private key cannot be empty")
+	}
 
 	privateKey, err := crypto.HexToECDSA(cfg.SenderPrivateKey)
 	if err != nil {

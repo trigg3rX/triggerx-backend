@@ -23,14 +23,6 @@ func TestMain(t *testing.T) {
 	cwd, _ := os.Getwd()
 	fmt.Println("[DEBUG] Current working directory:", cwd)
 
-	// Debug: check for ABI file existence
-	abiPath := filepath.Join("pkg", "bindings", "abi", "AvsGovernance.json")
-	if _, err := os.Stat(abiPath); err == nil {
-		fmt.Println("[DEBUG] ABI file found at:", abiPath)
-	} else {
-		fmt.Println("[DEBUG] ABI file NOT found at:", abiPath, "error:", err)
-	}
-
 	// Set environment variables for testing
 	if err := os.Setenv("ENV", "development"); err != nil {
 		t.Fatalf("Failed to set ENV: %v", err)
@@ -81,20 +73,53 @@ func TestMain(t *testing.T) {
 		assert.NoError(t, err, "Logger initialization should not fail")
 	})
 
-	// Test event processor initialization
-	t.Run("Event Processor", func(t *testing.T) {
-		processor := events.NewEventProcessor(logger)
-		assert.NotNil(t, processor, "Event processor should be created successfully")
-		logger.Info("Event processor created successfully")
+	// Test event listener functionality
+	t.Run("Event Listener", func(t *testing.T) {
+		// Test default configuration creation
+		t.Run("Default Config Creation", func(t *testing.T) {
+			defaultConfig := events.GetDefaultConfig()
+			assert.NotNil(t, defaultConfig, "Default config should not be nil")
+			assert.NotEmpty(t, defaultConfig.Chains, "Default config should have chains")
+			assert.Greater(t, defaultConfig.ProcessingWorkers, 0, "Should have processing workers")
+			assert.Greater(t, defaultConfig.EventBufferSize, 0, "Should have event buffer size")
+			logger.Info("Default config created successfully")
+		})
 
-		// Test ABI loading
-		t.Run("ABI Loading", func(t *testing.T) {
-			// Test ABI methods
-			methods := events.AvsGovernanceABI.Methods
-			assert.NotEmpty(t, methods, "AvsGovernance ABI should have methods")
+		// Test event listener creation
+		t.Run("Event Listener Creation", func(t *testing.T) {
+			defaultConfig := events.GetDefaultConfig()
+			listener := events.NewContractEventListener(logger, defaultConfig)
+			assert.NotNil(t, listener, "Event listener should be created successfully")
+			logger.Info("Event listener created successfully")
 
-			methods = events.AttestationCenterABI.Methods
-			assert.NotEmpty(t, methods, "AttestationCenter ABI should have methods")
+			// Test getting status without starting
+			status := listener.GetStatus()
+			assert.NotNil(t, status, "Status should not be nil")
+			assert.Contains(t, status, "running", "Status should contain running field")
+			assert.Contains(t, status, "processing_workers", "Status should contain processing_workers field")
+			assert.Contains(t, status, "event_buffer_size", "Status should contain event_buffer_size field")
+			assert.Equal(t, false, status["running"], "Listener should not be running initially")
+			logger.Info("Event listener status retrieved successfully")
+		})
+
+		// Test configuration validation
+		t.Run("Configuration Validation", func(t *testing.T) {
+			defaultConfig := events.GetDefaultConfig()
+
+			// Validate chain configurations
+			assert.NotEmpty(t, defaultConfig.Chains, "Should have chain configurations")
+			for _, chain := range defaultConfig.Chains {
+				assert.NotEmpty(t, chain.ChainID, "Chain should have ID")
+				assert.NotEmpty(t, chain.Name, "Chain should have name")
+			}
+
+			// Validate reconnect config
+			assert.Greater(t, defaultConfig.ReconnectConfig.MaxRetries, 0, "Should have max retries")
+			assert.Greater(t, defaultConfig.ReconnectConfig.BaseDelay.Nanoseconds(), int64(0), "Should have base delay")
+
+			// Validate contract addresses
+			assert.NotEmpty(t, defaultConfig.ContractAddresses, "Should have contract addresses")
+			logger.Info("Configuration validation completed successfully")
 		})
 	})
 }
