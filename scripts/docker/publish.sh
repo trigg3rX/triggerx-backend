@@ -40,8 +40,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition|all)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/event, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/condition|all)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 
@@ -56,7 +56,7 @@ docker login
 
 if [[ "$SERVICE" == "all" ]]; then
     # Push all services
-    for service in dbserver registrar health redis schedulers/time schedulers/event schedulers/condition; do
+    for service in dbserver registrar health redis schedulers/time schedulers/condition; do
         # Convert service name to Docker-compatible name
         DOCKER_NAME=$(echo $service | sed 's/\//-/g')
 

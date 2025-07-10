@@ -46,9 +46,6 @@ start-redis: ## Start the Redis
 start-time-scheduler: ## Start the Time Scheduler
 	./scripts/services/start-time-scheduler.sh
 
-start-event-schedulers: ## Start the Event Schedulers
-	./scripts/services/start-event-schedulers.sh
-
 start-condition-scheduler: ## Start the Condition Scheduler
 	./scripts/services/start-condition-scheduler.sh
 

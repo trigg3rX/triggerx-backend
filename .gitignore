@@ -28,4 +28,6 @@ data/logs/*/*.log
 # peerstore
 peerstore/
 
+reference/
+
 .log

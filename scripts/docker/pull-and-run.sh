@@ -49,8 +49,8 @@ if [ -z "$PORT" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(dbserver|registrar|health|redis|schedulers/time|schedulers/event|schedulers/condition)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: dbserver, registrar, health, redis, schedulers/time, schedulers/event, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(dbserver|registrar|health|redis|schedulers/time|schedulers/condition)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: dbserver, registrar, health, redis, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 

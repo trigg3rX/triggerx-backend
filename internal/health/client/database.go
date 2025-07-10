@@ -297,11 +297,6 @@ func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error
 	return nil
 }
 
-// Public wrapper functions
-func UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
-	return GetInstance().UpdateKeeperHealth(keeperHealth, isActive)
-}
-
 // GetVerifiedKeepers retrieves only verified keepers from the database
 func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 	var keepers []types.KeeperInfo
