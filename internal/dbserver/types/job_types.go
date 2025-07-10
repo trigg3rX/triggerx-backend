@@ -58,6 +58,7 @@ const (
 
 type CreateJobData struct {
 	// Common fields for all job types
+	JobID        int64    `json:"job_id" validate:"required"`
 	UserAddress  string   `json:"user_address" validate:"required,ethereum_address"`
 	EtherBalance *big.Int `json:"ether_balance" validate:"required"`
 	TokenBalance *big.Int `json:"token_balance" validate:"required"`
@@ -117,6 +118,7 @@ type UpdateJobDataFromUserRequest struct {
 	TimeFrame         int64   `json:"time_frame"`
 	JobCostPrediction float64 `json:"job_cost_prediction"`
 	Timezone          string  `json:"timezone"`
+	TimeInterval      int64   `json:"time_interval"`
 }
 
 type UpdateJobLastExecutedAtRequest struct {
@@ -124,4 +126,11 @@ type UpdateJobLastExecutedAtRequest struct {
 	TaskIDs        int64     `json:"task_ids"`
 	JobCostActual  float64   `json:"job_cost_actual"`
 	LastExecutedAt time.Time `json:"last_executed_at"`
+}
+
+// TaskFeeResponse represents the response structure for task fees by job
+// TaskOpxCost corresponds to the task_opx_cost field in the database
+type TaskFeeResponse struct {
+	TaskID      int64   `json:"task_id"`
+	TaskOpxCost float64 `json:"task_opx_cost"`
 }

@@ -124,6 +124,23 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		return
 	}
 
+	// Fetch the job to get its task_definition_id
+	job, err := h.jobRepository.GetJobByID(updateData.JobID)
+	if err == nil && (job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2) {
+		// For time-based jobs, update time_interval and next_execution_timestamp
+		err = h.timeJobRepository.UpdateTimeJobInterval(updateData.JobID, updateData.TimeInterval)
+		if err != nil {
+			h.logger.Errorf("[UpdateJobData] Error updating time_interval for jobID %d: %v", updateData.JobID, err)
+		}
+		updatedAt := job.UpdatedAt
+		nextExecution := updatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
+		err = h.timeJobRepository.UpdateTimeJobNextExecutionTimestamp(updateData.JobID, nextExecution)
+		if err != nil {
+			h.logger.Errorf("[UpdateJobData] Error updating next_execution_timestamp for jobID %d: %v", updateData.JobID, err)
+			// Not returning error to client, just logging
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "Job updated successfully",
 		"job_id":     updateData.JobID,

@@ -54,6 +54,11 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
 
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
 		c.Next()
 	})
 
@@ -149,13 +154,14 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
 	// Apply validation middleware to routes that need it
-	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)         
 	api.GET("/jobs/time", handler.GetTimeBasedTasks)
-	api.PUT("/jobs/:id", handler.UpdateJobDataFromUser)
+	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
+	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
 	api.GET("/tasks/:id", handler.GetTaskDataByID)
@@ -194,6 +200,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	keeper := protected.Group("/keeper")
 	keeper.Use(s.apiKeyAuth.KeeperMiddleware())
 	// Keeper-specific routes will be added here later
+
 }
 
 func (s *Server) Start(port string) error {

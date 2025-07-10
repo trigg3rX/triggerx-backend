@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -17,6 +16,7 @@ type JobRepository interface {
 	UpdateJobStatus(jobID int64, status string) error
 	GetJobByID(jobID int64) (*types.JobData, error)
 	GetTaskDefinitionIDByJobID(jobID int64) (int, error)
+	GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error)
 }
 
 type jobRepository struct {
@@ -31,26 +31,26 @@ func NewJobRepository(db *database.Connection) JobRepository {
 }
 
 func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
-	var lastJobID int64
-	err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
-	if err == gocql.ErrNotFound {
-		return -1, nil
-	}
+	// var lastJobID int64
+	// err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
+	// if err == gocql.ErrNotFound {
+	// 	return -1, nil
+	// }
 
-	err = r.db.Session().Query(queries.CreateJobDataQuery,
-		lastJobID+1, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
+	err := r.db.Session().Query(queries.CreateJobDataQuery,
+		job.JobID, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
 		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua).Exec()
 
 	if err != nil {
 		return -1, err
 	}
 
-	return lastJobID + 1, nil
+	return job.JobID, nil
 }
 
 func (r *jobRepository) UpdateJobFromUserInDB(job *types.UpdateJobDataFromUserRequest) error {
 	err := r.db.Session().Query(queries.UpdateJobDataFromUserQuery,
-		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now()).Exec()
+		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), job.JobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job from user")
 	}
@@ -104,4 +104,23 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID int64) (int, error) {
 		return 0, errors.New("failed to get task definition id by job id")
 	}
 	return taskDefinitionID, nil
+}
+
+func (r *jobRepository) GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error) {
+	session := r.db.Session()
+	iter := session.Query(queries.GetTaskFeesByJobIDQuery, jobID).Iter()
+
+	var results []types.TaskFeeResponse
+	var taskID int64
+	var taskOpxCost float64
+	for iter.Scan(&taskID, &taskOpxCost) {
+		results = append(results, types.TaskFeeResponse{
+			TaskID:      taskID,
+			TaskOpxCost: taskOpxCost,
+		})
+	}
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }

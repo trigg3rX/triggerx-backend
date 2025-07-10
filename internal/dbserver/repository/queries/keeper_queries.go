@@ -88,7 +88,7 @@ const (
 		WHERE keeper_name = ? ALLOW FILTERING`
 
 	GetKeeperLeaderboardQuery = `
-		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
+		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points, on_imua
 		FROM triggerx.keeper_data 
 		WHERE registered = true AND whitelisted = true ALLOW FILTERING`
 
@@ -101,6 +101,11 @@ const (
 		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
 		FROM triggerx.keeper_data 
 		WHERE registered = true AND keeper_name = ? ALLOW FILTERING`
+
+	GetKeeperLeaderboardByOnImuaQuery = `
+		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points, on_imua
+		FROM triggerx.keeper_data 
+		WHERE registered = true AND whitelisted = true AND on_imua = ? ALLOW FILTERING`
 
 	GetKeeperAsPerformersQuery = `
 		SELECT keeper_id, keeper_address 

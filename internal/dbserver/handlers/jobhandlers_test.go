@@ -123,6 +123,11 @@ func (m *MockJobRepository) GetTaskDefinitionIDByJobID(jobID int64) (int, error)
 	return args.Get(0).(int), args.Error(1)
 }
 
+func (m *MockJobRepository) GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error) {
+	args := m.Called(jobID)
+	return args.Get(0).([]types.TaskFeeResponse), args.Error(1)
+}
+
 func (m *MockTimeJobRepository) CreateTimeJob(job *types.TimeJobData) error {
 	args := m.Called(job)
 	return args.Error(0)
@@ -150,6 +155,11 @@ func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp ti
 
 func (m *MockTimeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error {
 	args := m.Called(jobID, nextExecutionTimestamp)
+	return args.Error(0)
+}
+
+func (m *MockTimeJobRepository) UpdateTimeJobInterval(jobID int64, timeInterval int64) error {
+	args := m.Called(jobID, timeInterval)
 	return args.Error(0)
 }
 

@@ -181,6 +181,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     email_id text,
     last_checked_in timestamp,
     on_imua boolean,
+    uptime bigint,
     PRIMARY KEY (keeper_id)
 );
 

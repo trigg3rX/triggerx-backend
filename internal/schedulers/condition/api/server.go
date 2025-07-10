@@ -86,7 +86,7 @@ func (s *Server) setupRoutes(deps Dependencies) {
 
 		// Job management endpoints
 		api.POST("/job/schedule", schedulerHandler.ScheduleJob)
-		api.DELETE("/job/:job_id", schedulerHandler.UnscheduleJob)
+		api.POST("/job/pause", schedulerHandler.UnscheduleJob)
 		api.GET("/job/stats/:job_id", schedulerHandler.GetJobStats)
 
 		api.PUT("/job/task/:job_id/:task_id", schedulerHandler.UpdateJobsTask)

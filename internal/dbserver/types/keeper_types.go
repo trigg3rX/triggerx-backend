@@ -26,6 +26,7 @@ type KeeperData struct {
 	EmailID           string    `json:"email_id"`
 	LastCheckedIn     time.Time `json:"last_checked_in"`
 	OnImua            bool      `json:"on_imua"`
+	Uptime            int64     `json:"uptime"`
 }
 
 type CreateKeeperData struct {
@@ -61,6 +62,7 @@ type KeeperLeaderboardEntry struct {
 	NoExecutedTasks int64   `json:"no_executed_tasks"`
 	NoAttestedTasks int64   `json:"no_attested_tasks"`
 	KeeperPoints    float64 `json:"keeper_points"`
+	OnImua          bool    `json:"on_imua"`
 }
 
 ///////////////////////////////////////////////////
