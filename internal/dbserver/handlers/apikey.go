@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +10,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
+
+// MaskApiKey masks the API key except for the first 4 and last 4 characters
+func MaskApiKey(key string) string {
+	if len(key) <= 8 {
+		return key
+	}
+	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
+}
 
 func (h *Handler) CreateApiKey(c *gin.Context) {
 	var req types.CreateApiKeyRequest
@@ -29,25 +38,10 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		req.RateLimit = 60
 	}
 
-	h.logger.Infof("[CreateApiKey] Checking for existing API key for owner: %s", req.Owner)
-
-	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
-	existingKey, err := h.apiKeysRepository.GetApiKeyDataByOwner(req.Owner)
-	trackDBOp(err)
-	if err != nil && err.Error() != "owner not found" {
-		h.logger.Errorf("[CreateApiKey] Database error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-
-	if existingKey != nil {
-		h.logger.Warnf("[CreateApiKey] API key already exists for owner %s", req.Owner)
-		c.JSON(http.StatusConflict, gin.H{"error": "API key already exists for this owner"})
-		return
-	}
+	// No longer check for existing API key for this owner; allow multiple API keys per owner
 
 	apiKey := types.ApiKeyData{
-		Key:       uuid.New().String(),
+		Key:       "TGRX-" + uuid.New().String(),
 		Owner:     req.Owner,
 		IsActive:  true,
 		RateLimit: req.RateLimit,
@@ -55,7 +49,7 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		CreatedAt: time.Now().UTC(),
 	}
 
-	trackDBOp = metrics.TrackDBOperation("create", "apikey_data")
+	trackDBOp := metrics.TrackDBOperation("create", "apikey_data")
 	if err := h.apiKeysRepository.CreateApiKey(&apiKey); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[CreateApiKey] Failed to insert API key: %v", err)
@@ -120,4 +114,39 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 	trackDBOp(nil)
 
 	c.Status(http.StatusNoContent)
+}
+
+// GetApiKeysByOwner returns all API keys for a given owner
+func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
+	owner := c.Param("owner")
+	if owner == "" {
+		h.logger.Warnf("[GetApiKeysByOwner] Owner is required")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Owner is required"})
+		return
+	}
+
+	h.logger.Infof("[GetApiKeysByOwner] Fetching API keys for owner: %s", owner)
+	apiKeys, err := h.apiKeysRepository.GetApiKeyDataByOwner(owner)
+	if err != nil {
+		h.logger.Warnf("[GetApiKeysByOwner] No API keys found for owner %s: %v", owner, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "No API keys found for this owner"})
+		return
+	}
+
+	// Mask the API keys before returning
+	masked := make([]map[string]interface{}, 0, len(apiKeys))
+	for _, k := range apiKeys {
+		masked = append(masked, map[string]interface{}{
+			"key":           MaskApiKey(k.Key),
+			"owner":         k.Owner,
+			"is_active":     k.IsActive,
+			"rate_limit":    k.RateLimit,
+			"success_count": k.SuccessCount,
+			"failed_count":  k.FailedCount,
+			"last_used":     k.LastUsed,
+			"created_at":    k.CreatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, masked)
 }

@@ -33,12 +33,12 @@ func setupApiKeyTestRouter() (*gin.Engine, *MockApiKeysRepository) {
 	return router, mockRepo
 }
 
-func (m *MockApiKeysRepository) GetApiKeyDataByOwner(owner string) (*types.ApiKeyData, error) {
+func (m *MockApiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyData, error) {
 	args := m.Called(owner)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.ApiKeyData), args.Error(1)
+	return args.Get(0).([]*types.ApiKeyData), args.Error(1)
 }
 
 func (m *MockApiKeysRepository) GetApiKeyDataByKey(key string) (*types.ApiKeyData, error) {
@@ -104,7 +104,7 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return(nil, nil)
+				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*types.ApiKeyData{}, nil)
 				mockRepo.On("CreateApiKey", mock.AnythingOfType("*types.ApiKeyData")).Return(nil)
 			},
 			expectedStatus: http.StatusCreated,
@@ -122,7 +122,7 @@ func TestCreateApiKey(t *testing.T) {
 				Owner: "test-owner",
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return(nil, nil)
+				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*types.ApiKeyData{}, nil)
 				mockRepo.On("CreateApiKey", mock.AnythingOfType("*types.ApiKeyData")).Return(nil)
 			},
 			expectedStatus: http.StatusCreated,
@@ -169,7 +169,7 @@ func TestCreateApiKey(t *testing.T) {
 					LastUsed:  time.Now().UTC(),
 					CreatedAt: time.Now().UTC(),
 				}
-				mockRepo.On("GetApiKeyDataByOwner", "existing-owner").Return(existingKey, nil)
+				mockRepo.On("GetApiKeyDataByOwner", "existing-owner").Return([]*types.ApiKeyData{existingKey}, nil)
 			},
 			expectedStatus: http.StatusConflict,
 			expectedBody: map[string]interface{}{
@@ -197,7 +197,7 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return(nil, nil)
+				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*types.ApiKeyData{}, nil)
 				mockRepo.On("CreateApiKey", mock.AnythingOfType("*types.ApiKeyData")).Return(assert.AnError)
 			},
 			expectedStatus: http.StatusInternalServerError,
