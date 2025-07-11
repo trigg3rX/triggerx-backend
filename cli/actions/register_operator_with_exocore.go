@@ -1,42 +1,53 @@
 package actions
 
 import (
-	"encoding/json"
-	"github.com/urfave/cli"
 	"log"
 
-	sdkutils "github.com/imua-xyz/imua-avs-sdk/utils"
-	"github.com/trigg3rX/triggerx-backend/core/config"
+	"github.com/trigg3rX/triggerx-backend/cli/core/config"
 	"github.com/trigg3rX/triggerx-backend/cli/operator"
 	"github.com/trigg3rX/triggerx-backend/cli/types"
+	"github.com/urfave/cli"
 )
 
 func RegisterOperatorWithChain(ctx *cli.Context) error {
+	log.Println("Registering operator with chain...")
 
-	configPath := ctx.GlobalString(config.FileFlag.Name)
-	nodeConfig := types.NodeConfig{}
-	err := sdkutils.ReadYamlConfig(configPath, &nodeConfig)
+	// Initialize config from environment variables
+	err := config.Init()
 	if err != nil {
 		return err
 	}
-	// need to make sure we don't register the operator on startup
-	// when using the cli commands to register the operator.
-	nodeConfig.RegisterOperatorOnStartup = false
-	configJson, err := json.MarshalIndent(nodeConfig, "", "  ")
-	if err != nil {
-		log.Fatalf(err.Error())
+
+	// Create a NodeConfig from our environment config
+	nodeConfig := types.NodeConfig{
+		Production:                       config.GetProduction(),
+		AVSOwnerAddress:                  config.GetAvsOwnerAddress().Hex(),
+		OperatorAddress:                  config.GetOperatorAddress().Hex(),
+		AVSAddress:                       config.GetAvsAddress().Hex(),
+		EthRpcUrl:                        config.GetEthHttpRpcUrl(),
+		EthWsUrl:                         config.GetEthWsRpcUrl(),
+		BlsPrivateKeyStorePath:           config.GetBlsPrivateKeyStorePath(),
+		OperatorEcdsaPrivateKeyStorePath: config.GetEcdsaPrivateKeyStorePath(),
+		RegisterOperatorOnStartup:        false, // We don't want to register on startup when using CLI
+		NodeApiIpPortAddress:             config.GetNodeApiIpPortAddress(),
+		EnableNodeApi:                    config.GetEnableNodeApi(),
 	}
-	log.Println("Config:", string(configJson))
+
+	log.Printf("Config loaded - Operator Address: %s", nodeConfig.OperatorAddress)
+	log.Printf("Config loaded - AVS Address: %s", nodeConfig.AVSAddress)
 
 	o, err := operator.NewOperatorFromConfig(nodeConfig)
 	if err != nil {
 		return err
 	}
 
+	log.Println("Starting chain registration process...")
 	err = o.RegisterOperatorWithChain()
 	if err != nil {
+		log.Printf("Failed to register operator with chain: %v", err)
 		return err
 	}
 
+	log.Println("Successfully registered operator with chain")
 	return nil
 }

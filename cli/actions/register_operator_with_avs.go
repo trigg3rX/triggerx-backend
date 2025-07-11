@@ -1,57 +1,60 @@
 package actions
 
 import (
-	"encoding/json"
 	"log"
-	"os"
 
-	sdkecdsa "github.com/imua-xyz/imua-avs-sdk/crypto/ecdsa"
-	sdkutils "github.com/imua-xyz/imua-avs-sdk/utils"
-	"github.com/trigg3rX/triggerx-backend/core/config"
-	"github.com/trigg3rX/triggerx-backend/operator"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/cli/core/config"
+	"github.com/trigg3rX/triggerx-backend/cli/operator"
+	"github.com/trigg3rX/triggerx-backend/cli/types"
 	"github.com/urfave/cli"
 )
 
 func RegisterOperatorWithAvs(ctx *cli.Context) error {
+	log.Println("Registering operator with AVS...")
 
-	configPath := ctx.GlobalString(config.FileFlag.Name)
-	nodeConfig := types.NodeConfig{}
-	err := sdkutils.ReadYamlConfig(configPath, &nodeConfig)
+	// Initialize config from environment variables
+	err := config.Init()
 	if err != nil {
 		return err
 	}
-	// need to make sure we don't register the operator on startup
-	// when using the cli commands to register the operator.
-	nodeConfig.RegisterOperatorOnStartup = false
-	configJson, err := json.MarshalIndent(nodeConfig, "", "  ")
-	if err != nil {
-		log.Fatalf(err.Error())
+
+	// Create a NodeConfig from our environment config
+	nodeConfig := types.NodeConfig{
+		Production:                       config.GetProduction(),
+		AVSOwnerAddress:                  config.GetAvsOwnerAddress().Hex(),
+		OperatorAddress:                  config.GetOperatorAddress().Hex(),
+		AVSAddress:                       config.GetAvsAddress().Hex(),
+		EthRpcUrl:                        config.GetEthHttpRpcUrl(),
+		EthWsUrl:                         config.GetEthWsRpcUrl(),
+		BlsPrivateKeyStorePath:           config.GetBlsPrivateKeyStorePath(),
+		OperatorEcdsaPrivateKeyStorePath: config.GetEcdsaPrivateKeyStorePath(),
+		RegisterOperatorOnStartup:        false, // We don't want to register on startup when using CLI
+		NodeApiIpPortAddress:             config.GetNodeApiIpPortAddress(),
+		EnableNodeApi:                    config.GetEnableNodeApi(),
 	}
-	log.Println("Config:", string(configJson))
+
+	log.Printf("Config loaded - Operator Address: %s", nodeConfig.OperatorAddress)
+	log.Printf("Config loaded - AVS Address: %s", nodeConfig.AVSAddress)
 
 	o, err := operator.NewOperatorFromConfig(nodeConfig)
 	if err != nil {
 		return err
 	}
 
-	ecdsaKeyPassword, ok := os.LookupEnv("OPERATOR_ECDSA_KEY_PASSWORD")
-	if !ok {
-		log.Printf("OPERATOR_ECDSA_KEY_PASSWORD env var not set. using empty string")
+	// Use the private key directly from config instead of reading from file
+	operatorEcdsaPrivKey := config.GetEcdsaPrivateKey()
+	if operatorEcdsaPrivKey == nil {
+		log.Fatal("ECDSA private key not available from config")
 	}
-	operatorEcdsaPrivKey, err := sdkecdsa.ReadKey(
-		nodeConfig.OperatorEcdsaPrivateKeyStorePath,
-		ecdsaKeyPassword,
-	)
-	if err != nil {
-		return err
-	}
-	log.Printf(operatorEcdsaPrivKey.D.String())
+	log.Printf("Using ECDSA private key: %s", operatorEcdsaPrivKey.D.String())
 
+	log.Println("Starting AVS registration process...")
 	err = o.RegisterOperatorWithAvs()
 	if err != nil {
+		log.Printf("Failed to register operator with AVS: %v", err)
 		return err
 	}
 
+	log.Println("Successfully registered operator with AVS")
 	return nil
 }
