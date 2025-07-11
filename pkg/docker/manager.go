@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -118,7 +119,7 @@ func (m *Manager) CleanupContainer(ctx context.Context, containerID string) erro
 	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
-func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (*container.InspectResponse, error) {
+func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (*types.ContainerJSON, error) {
 	info, err := m.Cli.ContainerInspect(ctx, containerID)
 	if err != nil {
 		m.logger.Errorf("failed to get container info: %v", err)
