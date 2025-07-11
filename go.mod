@@ -11,10 +11,8 @@ require (
 exclude google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 
 require (
-	cosmossdk.io/math v1.5.3
 	github.com/Layr-Labs/eigensdk-go v0.3.0
 	github.com/consensys/gnark-crypto v0.18.0
-	github.com/cosmos/btcutil v1.0.5
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/ethereum/go-ethereum v1.16.1
@@ -25,46 +23,53 @@ require (
 	github.com/gocql/gocql v1.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/imua-xyz/imua-avs-sdk v0.0.1
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.42.0
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/prysmaticlabs/prysm/v5 v5.3.3
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/stretchr/testify v1.10.0
-	github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250709111423-6db7c5b348e3
 	github.com/trigg3rX/triggerx-contracts v0.0.0-20250630112304-0df78d214171
-	github.com/urfave/cli v1.22.17
 	go.uber.org/zap v1.27.0
 )
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
+	github.com/cespare/cp v1.1.1 // indirect
 	github.com/cockroachdb/errors v1.12.0 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506 // indirect
 	github.com/cockroachdb/redact v1.1.6 // indirect
+	github.com/deepmap/oapi-codegen v1.8.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/ferranbt/fastssz v0.1.3 // indirect
+	github.com/gballet/go-libpcsclite v0.0.0-20191108122812-4678299bea08 // indirect
 	github.com/getsentry/sentry-go v0.32.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/influxdata/line-protocol v0.0.0-20210311194329-9aa0e372d097 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
+	github.com/opentracing/opentracing-go v1.2.0 // indirect
+	github.com/peterh/liner v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.59.0 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.34.0 // indirect
 	go.opentelemetry.io/otel/metric v1.34.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	google.golang.org/grpc v1.71.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
@@ -200,6 +205,6 @@ require (
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
