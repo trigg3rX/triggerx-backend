@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // ExecuteTask handles task execution requests

@@ -15,10 +15,10 @@ import (
 	"github.com/imua-xyz/imua-avs-sdk/signer"
 
 	blscommon "github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
-	"github.com/trigg3rX/triggerx-backend/cli/core"
-	chain "github.com/trigg3rX/triggerx-backend/cli/core/chainio"
-	"github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
-	"github.com/trigg3rX/triggerx-backend/cli/types"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/core"
+	chain "github.com/trigg3rX/triggerx-backend-imua/cli/core/chainio"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/core/chainio/eth"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/types"
 )
 
 const (

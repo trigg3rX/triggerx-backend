@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // LoadVerifiedKeepers loads only verified keepers from the database

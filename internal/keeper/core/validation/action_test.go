@@ -8,7 +8,7 @@ package validation
 // 	"github.com/ethereum/go-ethereum/common"
 // 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 // 	"github.com/stretchr/testify/mock"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // func TestValidateAction(t *testing.T) {

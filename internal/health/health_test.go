@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	commonTypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // StateManagerInterface defines the interface for StateManager

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // Aggregator manages tasks, operators, and response aggregation

@@ -4,7 +4,7 @@ package validation
 // 	"testing"
 
 // 	"github.com/stretchr/testify/mock"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // // MockCryptography is a mock for the cryptography package

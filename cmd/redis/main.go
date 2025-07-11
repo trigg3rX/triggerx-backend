@@ -8,13 +8,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/api"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/api"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/tasks"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const shutdownTimeout = 10 * time.Second

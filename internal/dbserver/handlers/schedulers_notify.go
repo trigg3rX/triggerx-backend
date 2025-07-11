@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // notifyConditionScheduler sends a notification to the condition scheduler

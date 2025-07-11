@@ -6,9 +6,9 @@ import (
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // Client wraps the pkg Redis client for registrar-specific usage

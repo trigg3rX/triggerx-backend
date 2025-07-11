@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // ReconnectManager handles WebSocket reconnection logic

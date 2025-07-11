@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/internal/registrar/clients/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const (

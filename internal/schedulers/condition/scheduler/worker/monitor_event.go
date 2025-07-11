@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/metrics"
 )
 
 // checkForEvents checks for new events since the last processed block

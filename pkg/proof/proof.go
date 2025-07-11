@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // TLSProofConfig holds configuration for TLS proof generation

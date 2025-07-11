@@ -9,12 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	commonTypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // Handler encapsulates the dependencies for health handlers

@@ -6,7 +6,7 @@ import (
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/imua-xyz/imua-avs-sdk/logging"
 	avs "github.com/trigg3rX/imua-contracts/bindings/contracts/TriggerXAvs"
-	"github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/core/chainio/eth"
 )
 
 type AvsReader interface {

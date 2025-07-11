@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // Common RPC errors

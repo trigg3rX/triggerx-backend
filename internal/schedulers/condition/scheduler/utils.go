@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/scheduler/worker"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/retry"
 )
 
 // Helper functions

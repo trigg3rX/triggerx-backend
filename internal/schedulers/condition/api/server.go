@@ -8,9 +8,9 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api/handlers"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/api/handlers"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/scheduler"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"

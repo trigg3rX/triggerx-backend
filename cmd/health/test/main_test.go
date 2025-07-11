@@ -9,11 +9,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/internal/health"
-	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/mocks"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/mocks"
 )
 
 func TestMain(t *testing.T) {

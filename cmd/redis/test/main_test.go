@@ -11,9 +11,9 @@ package test
 
 // 	redisclient "github.com/redis/go-redis/v9"
 // 	"github.com/stretchr/testify/assert"
-// 	redisx "github.com/trigg3rX/triggerx-backend/internal/redis/redis"
-// 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+// 	redisx "github.com/trigg3rX/triggerx-backend-imua/internal/redis/redis"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/config"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 // )
 
 // func TestMain(t *testing.T) {

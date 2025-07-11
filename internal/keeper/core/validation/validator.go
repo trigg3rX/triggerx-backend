@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type TaskValidator struct {

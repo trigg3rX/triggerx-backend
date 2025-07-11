@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
 )
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {

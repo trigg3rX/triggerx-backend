@@ -6,9 +6,9 @@ import (
 	"math/rand"
 	"time"
 
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // TODO: This is a temporary implementation. In the future, this should:

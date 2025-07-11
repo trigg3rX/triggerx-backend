@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // GetTimeBasedTasks fetches tasks that need to be executed in the next window

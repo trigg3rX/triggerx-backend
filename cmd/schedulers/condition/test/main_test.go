@@ -7,10 +7,10 @@ package test
 // 	"time"
 
 // 	"github.com/stretchr/testify/assert"
-// 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api"
-// 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
-// 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/api"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/client"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/scheduler"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 // )
 
 // func TestConditionSchedulerInitialization(t *testing.T) {

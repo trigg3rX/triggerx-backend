@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 func TestUploadToIPFS_Success(t *testing.T) {

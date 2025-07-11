@@ -4,8 +4,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/trigg3rX/triggerx-backend/cli/actions"
-	"github.com/trigg3rX/triggerx-backend/cli/core/config"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/actions"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/core/config"
 	"github.com/urfave/cli"
 )
 

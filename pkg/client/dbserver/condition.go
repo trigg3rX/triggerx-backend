@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskRequest) (types.CreateTaskResponse, error) {

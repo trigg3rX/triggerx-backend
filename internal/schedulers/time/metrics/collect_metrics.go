@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/config"
 )
 
 // Collects system resource metrics

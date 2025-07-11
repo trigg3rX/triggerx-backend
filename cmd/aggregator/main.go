@@ -12,12 +12,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/api"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/config"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/rpc"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/api"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/rpc"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const shutdownTimeout = 30 * time.Second

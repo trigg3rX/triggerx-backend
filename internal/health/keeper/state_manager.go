@@ -3,9 +3,9 @@ package keeper
 import (
 	"sync"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/client"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/client"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // StateManager manages the state of all keepers

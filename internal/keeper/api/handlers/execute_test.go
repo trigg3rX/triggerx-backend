@@ -15,11 +15,11 @@ package handlers
 // 	"github.com/stretchr/testify/assert"
 // 	"github.com/stretchr/testify/mock"
 
-// 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-// 	execution "github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
-// 	validation "github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+// 	execution "github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/execution"
+// 	validation "github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/validation"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // // MockLogger is a mock implementation of the Logger interface

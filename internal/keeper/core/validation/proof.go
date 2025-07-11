@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/proof"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/proof"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (bool, error) {

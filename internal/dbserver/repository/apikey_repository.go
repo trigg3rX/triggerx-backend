@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/repository/queries"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
 )
 
 type ApiKeysRepository interface {

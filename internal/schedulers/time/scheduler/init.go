@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/dbserver"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type TimeBasedScheduler struct {

@@ -17,11 +17,11 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client) (types.PerformerActionData, error) {

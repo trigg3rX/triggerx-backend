@@ -5,7 +5,7 @@ import (
 
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
 )
 
 // MetricsMiddleware tracks HTTP metrics for all requests
