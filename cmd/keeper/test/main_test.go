@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/api"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/client/health"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 func TestMain(t *testing.T) {

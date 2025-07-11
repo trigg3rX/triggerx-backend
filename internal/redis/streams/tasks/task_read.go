@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/metrics"
 )
 
 func (tsm *TaskStreamManager) getTaskStreamData(taskID int64) (*TaskStreamData, error) {

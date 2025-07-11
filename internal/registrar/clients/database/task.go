@@ -1,7 +1,7 @@
 package database
 
 import (
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/types"
 )
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database

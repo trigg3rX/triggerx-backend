@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api/handlers"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/api/handlers"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/scheduler"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // Server represents the API server

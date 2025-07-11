@@ -10,8 +10,8 @@ package validation
 // 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 // 	"github.com/stretchr/testify/assert"
 // 	"github.com/stretchr/testify/mock"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // // MockLogger is a mock implementation of logging.Logger

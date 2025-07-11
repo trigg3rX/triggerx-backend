@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type ApiKeyAuth struct {

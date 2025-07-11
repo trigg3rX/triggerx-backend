@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/metrics"
 )
 
 // checkCondition fetches the current value and checks if condition is satisfied

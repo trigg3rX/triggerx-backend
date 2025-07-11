@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type Client struct {

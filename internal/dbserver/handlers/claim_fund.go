@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
 )
 
 type ClaimFundRequest struct {

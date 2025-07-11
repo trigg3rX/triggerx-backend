@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	pkgtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/types"
+	pkgtypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // Mock repositories

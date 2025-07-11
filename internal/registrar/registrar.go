@@ -8,13 +8,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/redis"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
-	syncMgr "github.com/trigg3rX/triggerx-backend/internal/registrar/sync"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/clients/database"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/internal/registrar/clients/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/events"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/rewards"
+	syncMgr "github.com/trigg3rX/triggerx-backend-imua/internal/registrar/sync"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const (

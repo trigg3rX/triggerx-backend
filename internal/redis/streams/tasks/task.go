@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/dbserver"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type TaskStreamManager struct {

@@ -3,8 +3,8 @@ package validation
 import (
 	"fmt"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKeeper, traceID string) (bool, error) {

@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/ipfs"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type TaskValidationRequest struct {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
 )
 
 // TimeoutMiddleware creates a new middleware that tracks request timeouts

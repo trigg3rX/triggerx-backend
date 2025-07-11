@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/performers"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/performers"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/tasks"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // TaskManager orchestrates all Redis-based task management components

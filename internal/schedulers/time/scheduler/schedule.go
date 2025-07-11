@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // SchedulerTaskRequest represents the request format for Redis API

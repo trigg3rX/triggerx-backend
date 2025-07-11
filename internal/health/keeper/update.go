@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 const (

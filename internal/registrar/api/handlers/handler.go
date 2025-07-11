@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type Handler struct {

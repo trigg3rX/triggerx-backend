@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/events"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 func TestMain(t *testing.T) {

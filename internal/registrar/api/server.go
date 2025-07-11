@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/api/handlers"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/api/handlers"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type Server struct {

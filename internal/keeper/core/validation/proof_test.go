@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type ProofValidatorMockLogger struct {

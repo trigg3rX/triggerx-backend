@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {

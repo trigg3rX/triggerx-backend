@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // ConditionWorker represents an individual worker monitoring a specific condition

@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type Validator struct {

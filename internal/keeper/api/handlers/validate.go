@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/utils"
 )
 
 type TaskValidationRequest struct {

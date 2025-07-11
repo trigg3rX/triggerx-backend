@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 func FetchDataFromUrl(url string, logger logging.Logger) (string, error) {

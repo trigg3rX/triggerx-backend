@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/sync"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/clients/database"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/sync"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type RewardsService struct {

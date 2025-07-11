@@ -7,7 +7,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/types"
 )
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)

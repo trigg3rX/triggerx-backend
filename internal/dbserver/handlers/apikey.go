@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/types"
 )
 
 // MaskApiKey masks the API key except for the first 4 and last 4 characters

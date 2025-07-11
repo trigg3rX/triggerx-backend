@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/go-gomail/gomail"
-	"github.com/trigg3rX/triggerx-backend/internal/health/config"
-	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/telegram"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	commonTypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // DatabaseManager handles database operations

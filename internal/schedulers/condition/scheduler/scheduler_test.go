@@ -7,10 +7,10 @@ package scheduler
 // 	"testing"
 // 	"time"
 
-// 	// "github.com/trigg3rX/triggerx-backend/internal/cache"
-// 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-// 	schedulerTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	// "github.com/trigg3rX/triggerx-backend-imua/internal/cache"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/client"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+// 	schedulerTypes "github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // func init() {

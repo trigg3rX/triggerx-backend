@@ -2,7 +2,7 @@ package database
 
 import (
 	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type Connection struct {

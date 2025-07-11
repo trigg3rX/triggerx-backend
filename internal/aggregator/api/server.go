@@ -8,9 +8,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator"
-	"github.com/trigg3rX/triggerx-backend/internal/aggregator/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/aggregator/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // APIHandlers contains the aggregator instance and provides HTTP handlers

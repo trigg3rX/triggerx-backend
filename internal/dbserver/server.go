@@ -7,14 +7,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/handlers"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/redis"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 type Server struct {

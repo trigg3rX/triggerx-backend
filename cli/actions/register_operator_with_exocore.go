@@ -3,9 +3,9 @@ package actions
 import (
 	"log"
 
-	"github.com/trigg3rX/triggerx-backend/cli/core/config"
-	"github.com/trigg3rX/triggerx-backend/cli/operator"
-	"github.com/trigg3rX/triggerx-backend/cli/types"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/core/config"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/operator"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/types"
 	"github.com/urfave/cli"
 )
 

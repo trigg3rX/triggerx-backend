@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/env"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/env"
 )
 
 type Config struct {

@@ -8,11 +8,11 @@ package execution
 
 // 	"github.com/stretchr/testify/assert"
 // 	"github.com/stretchr/testify/mock"
-// 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/validation"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/aggregator"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // // Simple mocks for unit testing

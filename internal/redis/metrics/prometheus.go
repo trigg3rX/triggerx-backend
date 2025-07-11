@@ -5,7 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	redisClient "github.com/trigg3rX/triggerx-backend-imua/pkg/client/redis"
 )
 
 var (

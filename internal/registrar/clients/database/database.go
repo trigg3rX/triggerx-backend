@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // DatabaseClient handles database operations

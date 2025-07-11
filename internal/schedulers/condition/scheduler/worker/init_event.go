@@ -9,9 +9,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 type EventWorker struct {

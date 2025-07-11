@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
 )
 
 func GetChainRpcUrl(chainID string) string {

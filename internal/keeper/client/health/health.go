@@ -13,12 +13,12 @@ import (
 	"time"
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/retry"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // Custom error types

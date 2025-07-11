@@ -2,9 +2,9 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/execution"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/validation"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const TraceIDKey = "trace_id"

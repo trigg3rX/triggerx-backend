@@ -7,7 +7,7 @@ import (
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // Client represents a Redis client with logging capabilities

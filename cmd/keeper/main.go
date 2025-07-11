@@ -9,16 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/api"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/client/health"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/execution"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/validation"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/client/aggregator"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const shutdownTimeout = 10 * time.Second

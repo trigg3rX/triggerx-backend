@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/performers"
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/config"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/performers"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 // Ready to be sent to the performer

@@ -1,6 +1,6 @@
 package scheduler
 
-import "github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
+import "github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/metrics"
 
 // GetStats returns current scheduler statistics
 func (s *TimeBasedScheduler) GetStats() map[string]interface{} {

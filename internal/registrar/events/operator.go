@@ -3,7 +3,7 @@ package events
 import (
 	"context"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/events/websocket"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/events/websocket"
 )
 
 // ProcessOperatorEvent processes operator-related events

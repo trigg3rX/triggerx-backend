@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"

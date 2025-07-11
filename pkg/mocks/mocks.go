@@ -2,10 +2,10 @@ package mocks
 
 import (
 	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/internal/health/client"
-	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/client"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/health/telegram"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // MockDatabaseManager is a mock implementation of the database manager

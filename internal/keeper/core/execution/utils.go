@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 )
 
 func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {

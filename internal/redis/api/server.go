@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/api/handler"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/api/handler"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/redis/streams/tasks"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // Server represents the API server

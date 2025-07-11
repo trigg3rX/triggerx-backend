@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/registrar/config"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 const shutdownTimeout = 30 * time.Second

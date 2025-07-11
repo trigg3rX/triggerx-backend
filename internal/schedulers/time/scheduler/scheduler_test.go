@@ -21,10 +21,10 @@ package scheduler
 // 	"github.com/stretchr/testify/assert"
 // 	"github.com/stretchr/testify/mock"
 
-// 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+// 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/client"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/parser"
+// 	"github.com/trigg3rX/triggerx-backend-imua/pkg/types"
 // )
 
 // // In a shared package, or at the top of scheduler.go or scheduler_test.go:

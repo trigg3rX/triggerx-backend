@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/metrics"
+	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
 // MetricsHandler handles metrics endpoint requests
