@@ -11,6 +11,8 @@ import (
 )
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetJobsByUserAddress] trace_id=%s - Retrieving jobs by user address", traceID)
 	userAddress := strings.ToLower(c.Param("user_address"))
 	if userAddress == "" {
 		h.logger.Error("[GetJobsByUserAddress] Invalid user address")
@@ -139,6 +141,9 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 // GetTaskFeesByJobID handles GET /jobs/:job_id/task-fees
 func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetTaskFeesByJobID] trace_id=%s - Getting task fees by job ID", traceID)
+
 	jobIDParam := c.Param("job_id")
 	if jobIDParam == "" {
 		h.logger.Error("[GetTaskFeesByJobID] job_id param missing")
