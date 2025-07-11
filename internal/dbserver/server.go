@@ -154,7 +154,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
 	// Apply validation middleware to routes that need it
-	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)         
+	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
@@ -195,6 +195,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
 	admin.PUT("/api-keys/:key", handler.UpdateApiKey)
 	admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
+	admin.GET("/api-keys/:owner", handler.GetApiKeysByOwner)
 
 	// Keeper routes
 	keeper := protected.Group("/keeper")
