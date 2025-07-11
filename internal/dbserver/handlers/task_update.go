@@ -13,6 +13,9 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	taskID := c.Param("id")
 	h.logger.Infof("[UpdateTaskExecutionData] Updating task execution data for task with ID: %s", taskID)
 
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateTaskExecutionData] trace_id=%s - Updating task execution data", traceID)
+
 	var taskData types.UpdateTaskExecutionDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[UpdateTaskExecutionData] Error decoding request body: %v", err)
@@ -50,6 +53,8 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 }
 
 func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateTaskAttestationData] trace_id=%s - Updating task attestation data", traceID)
 	taskID := c.Param("id")
 	h.logger.Infof("[UpdateTaskAttestationData] Updating task attestation data for task with ID: %s", taskID)
 
@@ -90,6 +95,8 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 }
 
 func (h *Handler) UpdateTaskFee(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateTaskFee] trace_id=%s - Updating task fee", traceID)
 	taskID := c.Param("id")
 	h.logger.Infof("[UpdateTaskFee] Updating task fee for task with ID: %s", taskID)
 

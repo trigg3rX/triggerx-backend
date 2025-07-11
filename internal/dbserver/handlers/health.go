@@ -10,6 +10,8 @@ import (
 
 // HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[HealthCheck] trace_id=%s - Health check requested", traceID)
 	startTime := time.Now()
 
 	// Check database connection by executing a simple query

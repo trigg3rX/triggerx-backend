@@ -11,6 +11,9 @@ import (
 )
 
 func (h *Handler) DeleteJobData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[DeleteJobData] trace_id=%s - Deleting job data", traceID)
+
 	jobID := c.Param("id")
 	if jobID == "" {
 		h.logger.Error("[DeleteJobData] No job ID provided")
@@ -102,6 +105,9 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 }
 
 func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateJobData] trace_id=%s - Updating job data from user", traceID)
+
 	var updateData types.UpdateJobDataFromUserRequest
 	if err := c.ShouldBindJSON(&updateData); err != nil {
 		h.logger.Errorf("[UpdateJobData] Error decoding request body: %v", err)
@@ -149,6 +155,9 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 }
 
 func (h *Handler) UpdateJobStatus(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateJobStatus] trace_id=%s - Updating job status", traceID)
+
 	jobID := c.Param("job_id")
 	status := c.Param("status")
 
@@ -197,6 +206,9 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 }
 
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateJobLastExecutedAt] trace_id=%s - Updating job last executed at", traceID)
+
 	var updateData types.UpdateJobLastExecutedAtRequest
 	if err := c.ShouldBindJSON(&updateData); err != nil {
 		h.logger.Errorf("[UpdateJobLastExecutedAt] Error decoding request body: %v", err)

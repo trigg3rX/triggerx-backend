@@ -87,6 +87,11 @@ func (m *MockApiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool)
 	return args.Error(0)
 }
 
+func (m *MockApiKeysRepository) DeleteApiKey(key string) error {
+	args := m.Called(key)
+	return args.Error(0)
+}
+
 func TestCreateApiKey(t *testing.T) {
 	router, mockRepo := setupApiKeyTestRouter()
 
