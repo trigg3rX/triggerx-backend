@@ -1,4 +1,4 @@
-module github.com/trigg3rX/triggerx-backend
+module github.com/trigg3rX/triggerx-backend-imua
 
 go 1.24.2
 
