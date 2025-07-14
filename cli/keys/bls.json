@@ -4,7 +4,7 @@
     "cipherparams": {
       "iv": "00000000000000000000000000000000"
     },
-    "ciphertext": "ec407207ff2c00885caf1d76dfd0a5125cf777679878490b7486131caeaab047",
+    "ciphertext": "e7fe89b3d54fe857c0472c01d3de0b4094e533580f178778947ced11f9b56ef8",
     "kdf": "pbkdf2",
     "kdfparams": {
       "c": 1,
@@ -15,7 +15,7 @@
     "mac": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   "path": "m/12381/3600/0/0",
-  "pubkey": "37441a0d7f0ff81a697debb7bfeac47376bd0149ccd1897113e784b9cfd6efd737441a0d7f0ff81a697debb7bfeac473",
-  "uuid": "a8f520bf-f393-41ad-b13c-6d98234dd298",
+  "pubkey": "e7fe89b3d54fe857c0472c01d3de0b4094e533580f178778947ced11f9b56ef8e7fe89b3d54fe857c0472c01d3de0b40",
+  "uuid": "6c35aeea-2bb6-4ce8-964d-3c5aec233439",
   "version": 4
 }
