@@ -35,6 +35,16 @@ func main() {
 			Usage:  "Register operator with AVS",
 			Action: actions.RegisterOperatorWithAvs,
 		},
+		{
+			Name:   "complete-registration",
+			Usage:  "Generate keystores from existing keys and complete entire registration process",
+			Action: actions.CompleteRegistration,
+		},
+		{
+			Name:   "verify-address",
+			Usage:  "Verify the operator address derived from the private key in environment",
+			Action: actions.VerifyAddress,
+		},
 	}
 
 	err = app.Run(os.Args)

@@ -2,9 +2,11 @@ package operator
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -12,9 +14,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
 	sdklogging "github.com/imua-xyz/imua-avs-sdk/logging"
-	"github.com/imua-xyz/imua-avs-sdk/signer"
 
-	blscommon "github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
+	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
+	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/trigg3rX/triggerx-backend/cli/core"
 	chain "github.com/trigg3rX/triggerx-backend/cli/core/chainio"
 	"github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
@@ -26,13 +29,35 @@ const (
 	retryDelay = 1 * time.Second
 )
 
+// getKeyPair creates a BLS keypair from a hex private key (same as aggregator implementation)
+func getKeyPair(privateKey string) (*bls.KeyPair, error) {
+	// Add 0x prefix if not present
+	var prefixedPrivateKey string
+	if len(privateKey) >= 2 && privateKey[:2] == "0x" {
+		prefixedPrivateKey = privateKey
+	} else {
+		prefixedPrivateKey = "0x" + privateKey
+	}
+
+	// Create Fr element from hashed private key
+	frElement := new(fr.Element)
+	hasher := sha256.New()
+	hasher.Write([]byte(prefixedPrivateKey))
+	frElement.SetBytes(hasher.Sum(nil))
+
+	// Create KeyPair from Fr element
+	keyPair := bls.NewKeyPair(frElement)
+
+	return keyPair, nil
+}
+
 type Operator struct {
 	config       types.NodeConfig
 	logger       sdklogging.Logger
 	ethClient    eth.EthClient
 	avsWriter    chain.AvsWriter
 	avsReader    chain.ChainReader
-	blsKeypair   blscommon.SecretKey
+	blsKeypair   *bls.KeyPair
 	operatorAddr common.Address
 	avsAddr      common.Address
 }
@@ -56,12 +81,27 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 		return nil, err
 	}
 
-	// Temporarily skip BLS key loading to test the rest of the flow
-	// TODO: Fix BLS keystore format or find alternative loading method
-	logger.Warn("Temporarily skipping BLS key loading for testing")
-	var blsKeyPair blscommon.SecretKey
-	// Set to nil to skip BLS operations for now
-	blsKeyPair = nil
+	// Load BLS private key from environment variable
+	blsPrivateKeyHex := os.Getenv("BLS_PRIVATE_KEY")
+	var blsKeyPair *bls.KeyPair
+	if blsPrivateKeyHex != "" {
+		logger.Info("Loading BLS private key from environment")
+		// Remove 0x prefix if present
+		if len(blsPrivateKeyHex) >= 2 && blsPrivateKeyHex[:2] == "0x" {
+			blsPrivateKeyHex = blsPrivateKeyHex[2:]
+		}
+
+		// Create a new BLS secret key and set from hex string
+		blsKeyPair, err = getKeyPair(blsPrivateKeyHex)
+		if err != nil {
+			logger.Error("Failed to create BLS secret key from hex", "err", err)
+			return nil, err
+		}
+		logger.Info("Successfully loaded BLS private key from environment")
+	} else {
+		logger.Error("BLS_PRIVATE_KEY environment variable not set")
+		return nil, fmt.Errorf("BLS_PRIVATE_KEY environment variable not set")
+	}
 
 	chainId, err := ethRpcClient.ChainID(context.Background())
 	if err != nil {
@@ -69,31 +109,96 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 		return nil, err
 	}
 
-	ecdsaKeyPassword, ok := os.LookupEnv("OPERATOR_ECDSA_KEY_PASSWORD")
-	if !ok {
-		logger.Info("OPERATOR_ECDSA_KEY_PASSWORD env var not set. using empty string")
+	// Load ECDSA private key from environment variable instead of keystore file
+	operatorPrivateKeyHex := os.Getenv("OPERATOR_PRIVATE_KEY")
+	if operatorPrivateKeyHex == "" {
+		logger.Error("OPERATOR_PRIVATE_KEY environment variable not set")
+		return nil, fmt.Errorf("OPERATOR_PRIVATE_KEY environment variable not set")
 	}
 
-	signer, operatorSender, err := signer.SignerFromConfig(signer.Config{
-		KeystorePath: c.OperatorEcdsaPrivateKeyStorePath,
-		Password:     ecdsaKeyPassword,
-	}, chainId)
-	if err != nil {
-		panic(err)
+	// Remove 0x prefix if present
+	if len(operatorPrivateKeyHex) >= 2 && operatorPrivateKeyHex[:2] == "0x" {
+		operatorPrivateKeyHex = operatorPrivateKeyHex[2:]
 	}
+
+	// Convert hex private key to ECDSA private key
+	ecdsaPrivateKey, err := crypto.HexToECDSA(operatorPrivateKeyHex)
+	if err != nil {
+		logger.Error("Failed to convert private key to ECDSA", "err", err)
+		return nil, fmt.Errorf("failed to convert private key to ECDSA: %w", err)
+	}
+
+	// Derive operator address from private key
+	operatorSender := crypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
 	logger.Info("operatorSender:", "operatorSender", operatorSender.String())
+
+	// Create a signer function from the ECDSA private key
+	signerFn := func(ctx context.Context, address common.Address) (bind.SignerFn, error) {
+		if address != operatorSender {
+			return nil, fmt.Errorf("signer address mismatch: expected %s, got %s", operatorSender.Hex(), address.Hex())
+		}
+
+		// Return a bind.SignerFn that signs transactions using legacy format like the faucet
+		return func(signer common.Address, tx *ethtypes.Transaction) (*ethtypes.Transaction, error) {
+			if signer != operatorSender {
+				return nil, fmt.Errorf("signer address mismatch: expected %s, got %s", operatorSender.Hex(), signer.Hex())
+			}
+
+			// Get transaction details
+			to := tx.To()
+			value := tx.Value()
+			data := tx.Data()
+			gasLimit := tx.Gas()
+
+			// Get current nonce and gas price for creating a new legacy transaction
+			nonce, err := ethRpcClient.PendingNonceAt(ctx, operatorSender)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get nonce: %w", err)
+			}
+
+			gasPrice, err := ethRpcClient.SuggestGasPrice(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get gas price: %w", err)
+			}
+
+			// Create a new legacy transaction (like the faucet does)
+			var newTx *ethtypes.Transaction
+			if to != nil {
+				newTx = ethtypes.NewTransaction(nonce, *to, value, gasLimit, gasPrice, data)
+			} else {
+				// Contract creation transaction
+				newTx = ethtypes.NewContractCreation(nonce, value, gasLimit, gasPrice, data)
+			}
+
+			// Sign the new transaction with EIP155Signer (like the faucet does)
+			signedTx, err := ethtypes.SignTx(newTx, ethtypes.NewEIP155Signer(chainId), ecdsaPrivateKey)
+			if err != nil {
+				return nil, fmt.Errorf("failed to sign transaction: %w", err)
+			}
+			return signedTx, nil
+		}, nil
+	}
 
 	balance, err := ethRpcClient.BalanceAt(context.Background(), operatorSender, nil)
 	if err != nil {
 		logger.Error("Cannot get Balance", "err", err)
 	}
 	if balance.Cmp(big.NewInt(0)) != 1 {
-		logger.Error("operatorSender has not enough Balance")
+		logger.Warn("Operator has low or zero balance - you may need testnet funds for transactions", "balance", balance.String())
+	} else {
+		logger.Info("Operator balance check passed", "balance", balance.String())
 	}
-	if c.OperatorAddress != operatorSender.String() {
-		logger.Error("operatorSender is not equal OperatorAddress")
+
+	// Check if addresses match (case-insensitive)
+	if strings.ToLower(c.OperatorAddress) != strings.ToLower(operatorSender.String()) {
+		logger.Warn("Configured operator address differs from keystore address",
+			"configured", c.OperatorAddress,
+			"keystore", operatorSender.String())
+		logger.Info("Using keystore address as operator address", "address", operatorSender.String())
+		// Update the config to use the keystore address
+		c.OperatorAddress = operatorSender.String()
 	}
-	txMgr := txmgr.NewSimpleTxManager(ethRpcClient, logger, signer, common.HexToAddress(c.OperatorAddress))
+	txMgr := txmgr.NewSimpleTxManager(ethRpcClient, logger, signerFn, common.HexToAddress(c.OperatorAddress))
 
 	avsReader, _ := chain.BuildChainReader(
 		common.HexToAddress(c.AVSAddress),
@@ -125,7 +230,7 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 	if operator.blsKeypair != nil {
 		logger.Info("Operator info",
 			"operatorAddr", c.OperatorAddress,
-			"operatorKey", operator.blsKeypair.PublicKey().Marshal(),
+			"operatorKey", operator.blsKeypair.GetPubKeyG2().Marshal(),
 		)
 	} else {
 		logger.Info("Operator info",
@@ -137,52 +242,79 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 	return operator, nil
 }
 
-// func (o *Operator) registerOperatorOnStartup() {
-// 	// Register operator to chain
-// 	operatorAddress, err := core.SwitchEthAddressToImAddress(o.operatorAddr.String())
-// 	if err != nil {
-// 		o.logger.Error("Cannot switch eth address to im address", "err", err)
-// 		panic(err)
-// 	}
+func (o *Operator) registerOperatorOnStartup() {
+	err := o.RegisterOperatorWithChain()
+	if err != nil {
+		// This error might only be that the operator was already registered with chain, so we don't want to fatal
+		o.logger.Error("Error registering operator with chain", "err", err)
+	} else {
+		o.logger.Infof("Registered operator with chain")
+	}
 
-// 	// Check if operator is already registered
-// 	flag, err := o.avsReader.IsOperator(&bind.CallOpts{}, o.operatorAddr.String())
-// 	if err != nil {
-// 		o.logger.Error("Cannot exec IsOperator", "err", err)
-// 		panic(err)
-// 	}
-// 	if !flag {
-// 		o.logger.Error("Operator is not registered.", "err", err)
-// 		panic(fmt.Sprintf("Operator is not registered: %s", operatorAddress))
-// 	}
+	err = o.RegisterOperatorWithAvs()
+	if err != nil {
+		o.logger.Fatal("Error registering operator with avs", "err", err)
+	}
 
-// 	// Register BLS Public Key if not already registered
-// 	pubKey, err := o.avsReader.GetRegisteredPubkey(&bind.CallOpts{}, o.operatorAddr.String(), o.avsAddr.String())
-// 	if err != nil {
-// 		o.logger.Error("Cannot exec GetRegisteredPubKey", "err", err)
-// 		panic(err)
-// 	}
+	// Register BLS Public Key if BLS keypair is available
+	if o.blsKeypair != nil {
+		err = o.RegisterBLSPublicKey()
+		if err != nil {
+			o.logger.Error("Error registering BLS public key", "err", err)
+		}
+	}
+}
 
-// 	if len(pubKey) == 0 {
-// 		// Register BLS Public Key via EVM transaction
-// 		msg := fmt.Sprintf(core.BLSMessageToSign,
-// 			core.ChainIDWithoutRevision("imuachainlocalnet_232"), operatorAddress)
-// 		hashedMsg := crypto.Keccak256Hash([]byte(msg))
-// 		sig := o.blsKeypair.Sign(hashedMsg.Bytes())
+func (o *Operator) RegisterBLSPublicKey() error {
+	if o.blsKeypair == nil {
+		return fmt.Errorf("BLS keypair not available")
+	}
 
-// 		_, err = o.avsWriter.RegisterBLSPublicKey(
-// 			context.Background(),
-// 			o.avsAddr.String(),
-// 			o.blsKeypair.PublicKey().Marshal(),
-// 			sig.Marshal())
+	// Check if BLS Public Key is already registered
+	pubKey, err := o.avsReader.GetRegisteredPubkey(&bind.CallOpts{}, o.operatorAddr.String(), o.avsAddr.String())
+	if err != nil {
+		o.logger.Error("Cannot exec GetRegisteredPubKey", "err", err)
+		return err
+	}
 
-// 		if err != nil {
-// 			o.logger.Error("operator failed to registerBLSPublicKey", "err", err)
-// 			panic(err)
-// 		}
-// 		o.logger.Info("BLS Public Key registered successfully")
-// 	}
-// }
+	if len(pubKey) == 0 {
+		o.logger.Info("Registering BLS Public Key...")
+
+		// Convert Ethereum address to IM address
+		operatorAddress, err := core.SwitchEthAddressToImAddress(o.operatorAddr.String())
+		if err != nil {
+			o.logger.Error("Cannot switch eth address to im address", "err", err)
+			return err
+		}
+
+		// Create BLS message to sign
+		msg := fmt.Sprintf(core.BLSMessageToSign,
+			core.ChainIDWithoutRevision("imuachainlocalnet_232"), operatorAddress)
+		hashedMsg := crypto.Keccak256Hash([]byte(msg))
+
+		// Sign the message with BLS private key (convert to [32]byte array)
+		var messageArray [32]byte
+		copy(messageArray[:], hashedMsg.Bytes())
+		sig := o.blsKeypair.SignMessage(messageArray)
+
+		// Register BLS Public Key via EVM transaction
+		_, err = o.avsWriter.RegisterBLSPublicKey(
+			context.Background(),
+			o.avsAddr.String(),
+			o.blsKeypair.GetPubKeyG2().Marshal(),
+			sig.Marshal())
+
+		if err != nil {
+			o.logger.Error("operator failed to registerBLSPublicKey", "err", err)
+			return err
+		}
+		o.logger.Info("BLS Public Key registered successfully")
+	} else {
+		o.logger.Info("BLS Public Key already registered")
+	}
+
+	return nil
+}
 
 func (o *Operator) RegisterOperator() error {
 	operatorAddress, err := core.SwitchEthAddressToImAddress(o.operatorAddr.String())
@@ -212,12 +344,16 @@ func (o *Operator) RegisterOperator() error {
 		msg := fmt.Sprintf(core.BLSMessageToSign,
 			core.ChainIDWithoutRevision("imuachainlocalnet_232"), operatorAddress)
 		hashedMsg := crypto.Keccak256Hash([]byte(msg))
-		sig := o.blsKeypair.Sign(hashedMsg.Bytes())
+
+		// Sign the message with BLS private key (convert to [32]byte array)
+		var messageArray [32]byte
+		copy(messageArray[:], hashedMsg.Bytes())
+		sig := o.blsKeypair.SignMessage(messageArray)
 
 		_, err = o.avsWriter.RegisterBLSPublicKey(
 			context.Background(),
 			o.avsAddr.String(),
-			o.blsKeypair.PublicKey().Marshal(),
+			o.blsKeypair.GetPubKeyG2().Marshal(),
 			sig.Marshal())
 
 		if err != nil {
