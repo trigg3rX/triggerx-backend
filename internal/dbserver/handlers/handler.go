@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
@@ -53,4 +54,12 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 
 func (h *Handler) defaultScanNowQuery(timestamp *time.Time) error {
 	return h.db.Session().Query("SELECT now() FROM system.local").Scan(timestamp)
+}
+
+func (h *Handler) getTraceID(c *gin.Context) string {
+	traceID, exists := c.Get("trace_id")
+	if !exists {
+		return ""
+	}
+	return traceID.(string)
 }

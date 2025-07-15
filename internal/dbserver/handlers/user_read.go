@@ -9,6 +9,8 @@ import (
 )
 
 func (h *Handler) GetUserDataByAddress(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetUserDataByAddress] trace_id=%s - Retrieving user data by address", traceID)
 	userAddress := strings.ToLower(c.Param("address"))
 	if userAddress == "" {
 		h.logger.Errorf("[GetUserDataByAddress] Invalid user address: %v", userAddress)
@@ -38,6 +40,8 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 }
 
 func (h *Handler) GetWalletPoints(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetWalletPoints] trace_id=%s - Retrieving wallet points", traceID)
 	walletAddress := strings.ToLower(c.Param("address"))
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 

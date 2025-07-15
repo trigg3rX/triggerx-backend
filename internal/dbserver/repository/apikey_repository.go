@@ -20,6 +20,7 @@ type ApiKeysRepository interface {
 	UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error
 	UpdateApiKeyStatus(apiKey *types.UpdateApiKeyStatusRequest) error
 	UpdateApiKeyLastUsed(key string, isSuccess bool) error
+	DeleteApiKey(key string) error
 }
 
 type apiKeysRepository struct {
@@ -126,7 +127,7 @@ func (r *apiKeysRepository) UpdateApiKey(apiKey *types.UpdateApiKeyRequest) erro
 }
 
 func (r *apiKeysRepository) UpdateApiKeyStatus(apiKey *types.UpdateApiKeyStatusRequest) error {
-	err := r.db.Session().Query(queries.UpdateApiKeyStatusQuery, apiKey.Key, apiKey.IsActive).Exec()
+	err := r.db.Session().Query(queries.UpdateApiKeyStatusQuery, apiKey.IsActive, apiKey.Key).Exec()
 	if err != nil {
 		return err
 	}
@@ -144,6 +145,15 @@ func (r *apiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool) err
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// DeleteApiKey physically deletes an API key from the apikeys table
+func (r *apiKeysRepository) DeleteApiKey(key string) error {
+	err := r.db.Session().Query(queries.DeleteApiKeyQuery, key).Exec()
+	if err != nil {
+		return err
 	}
 	return nil
 }

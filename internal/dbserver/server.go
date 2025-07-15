@@ -1,11 +1,13 @@
 package dbserver
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
@@ -15,7 +17,39 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	gootel "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
+
+const TraceIDHeader = "X-Trace-ID"
+const TraceIDKey = "trace_id"
+
+// InitTracer sets up OpenTelemetry tracing with Jaeger exporter
+func InitTracer() (func(context.Context) error, error) {
+	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint("http://localhost:14268/api/traces")))
+	if err != nil {
+		return nil, err
+	}
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(exp),
+	)
+	gootel.SetTracerProvider(tp)
+	return tp.Shutdown, nil
+}
+
+// TraceMiddleware injects a trace ID into the Gin context and response headers
+func TraceMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		traceID := c.GetHeader(TraceIDHeader)
+		if traceID == "" {
+			traceID = uuid.New().String()
+		}
+		c.Set(TraceIDKey, traceID)
+		c.Header(TraceIDHeader, traceID)
+		c.Next()
+	}
+}
 
 type Server struct {
 	router             *gin.Engine
@@ -34,8 +68,17 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Initialize OpenTelemetry tracer
+	_, err := InitTracer()
+	if err != nil {
+		logger.Errorf("Failed to initialize OpenTelemetry tracer: %v", err)
+	}
+
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Add tracing middleware before all others
+	router.Use(TraceMiddleware())
 
 	// Start metrics collection
 	metrics.StartMetricsCollection()

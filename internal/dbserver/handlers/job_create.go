@@ -14,6 +14,8 @@ import (
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateJobData] trace_id=%s - Creating job data", traceID)
 	var tempJobs []types.CreateJobData
 	if err := c.ShouldBindJSON(&tempJobs); err != nil {
 		h.logger.Errorf("[CreateJobData] Error decoding request body: %v", err)

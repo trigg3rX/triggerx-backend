@@ -80,6 +80,8 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 }
 
 func (h *Handler) GetTaskFees(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetTaskFees] trace_id=%s - Getting task fees", traceID)
 	ipfsURLs := c.Query("ipfs_url")
 
 	totalFee, err := h.CalculateTaskFees(ipfsURLs)
