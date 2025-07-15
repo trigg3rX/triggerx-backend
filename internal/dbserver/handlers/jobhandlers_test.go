@@ -93,6 +93,11 @@ func (m *MockUserRepository) UpdateUserBalance(updateData *types.UpdateUserBalan
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) UpdateUserEmail(address, email string) error {
+	args := m.Called(address, email)
+	return args.Error(0)
+}
+
 func (m *MockJobRepository) CreateNewJob(job *types.JobData) (int64, error) {
 	args := m.Called(job)
 	return args.Get(0).(int64), args.Error(1)

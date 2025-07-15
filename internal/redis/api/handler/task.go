@@ -25,9 +25,10 @@ type ValidationResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-
-// Listen for Custom P2P Messages, and 
+// Listen for Custom P2P Messages, and
 func (h *handler) HandleP2PMessage(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[HandleP2PMessage] Handling P2P message", "trace_id", traceID)
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
 			"error": "Invalid method",
@@ -65,12 +66,14 @@ func (h *handler) HandleP2PMessage(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Task data Broadcast successfull", "task_id", requestData.TaskID)
+	h.logger.Info("[HandleP2PMessage] Task data Broadcast successfull", "trace_id", traceID, "task_id", requestData.TaskID)
 	c.JSON(http.StatusOK, gin.H{"success": "P2P message received"})
 }
 
 // ValidateTask updates the appropriate stream after performer broadcast
 func (h *handler) HandleValidateRequest(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[HandleValidateRequest] Validating task", "trace_id", traceID)
 	var taskRequest TaskValidationRequest
 	if err := c.ShouldBindJSON(&taskRequest); err != nil {
 		c.JSON(http.StatusBadRequest, ValidationResponse{
@@ -85,7 +88,7 @@ func (h *handler) HandleValidateRequest(c *gin.Context) {
 	var decodedData string
 	dataBytes, err := hex.DecodeString(taskRequest.Data[2:]) // Remove "0x" prefix before decoding
 	if err != nil {
-		h.logger.Errorf("Failed to hex-decode data: %v", err)
+		h.logger.Error("[HandleValidateRequest] Failed to hex-decode data", "trace_id", traceID, "error", err)
 		c.JSON(http.StatusBadRequest, ValidationResponse{
 			Data:    false,
 			Error:   true,
@@ -94,11 +97,11 @@ func (h *handler) HandleValidateRequest(c *gin.Context) {
 		return
 	}
 	decodedData = string(dataBytes)
-	h.logger.Infof("Decoded Data CID: %s", decodedData)
+	h.logger.Info("[HandleValidateRequest] Decoded Data CID", "trace_id", traceID, "cid", decodedData)
 
 	ipfsData, err := ipfs.FetchIPFSContent(config.GetPinataHost(), decodedData)
 	if err != nil {
-		h.logger.Errorf("Failed to fetch IPFS content: %v", err)
+		h.logger.Error("[HandleValidateRequest] Failed to fetch IPFS content", "trace_id", traceID, "error", err)
 		c.JSON(http.StatusInternalServerError, ValidationResponse{
 			Data:    false,
 			Error:   true,
@@ -107,11 +110,11 @@ func (h *handler) HandleValidateRequest(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Updating task stream and database ...")
+	h.logger.Info("[HandleValidateRequest] Updating task stream and database ...", "trace_id", traceID)
 
 	h.taskStreamMgr.UpdateDatabase(ipfsData)
 
-	h.logger.Info("Task validation completed")
+	h.logger.Info("[HandleValidateRequest] Task validation completed", "trace_id", traceID)
 	c.JSON(http.StatusOK, ValidationResponse{
 		Data:    true,
 		Error:   false,

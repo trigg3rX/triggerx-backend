@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,21 +19,35 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	gootel "go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 const TraceIDHeader = "X-Trace-ID"
 const TraceIDKey = "trace_id"
 
-// InitTracer sets up OpenTelemetry tracing with Jaeger exporter
+// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
+// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
 func InitTracer() (func(context.Context) error, error) {
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint("http://localhost:14268/api/traces")))
+	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4318" // default to local Tempo
+	}
+	exporter, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
 		return nil, err
 	}
 	tp := trace.NewTracerProvider(
-		trace.WithBatcher(exp),
+		trace.WithBatcher(exporter),
+		trace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("triggerx-backend"),
+		)),
 	)
 	gootel.SetTracerProvider(tp)
 	return tp.Shutdown, nil
@@ -92,16 +107,20 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	// Configure CORS
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-
 		c.Next()
 	})
 
@@ -191,6 +210,8 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	// Public routes
 	api.GET("/users/:address", handler.GetUserDataByAddress)
+	api.POST("/users/email", handler.StoreUserEmail)
+
 	api.GET("/wallet/points/:address", handler.GetWalletPoints)
 
 	protected := api.Group("")

@@ -91,7 +91,7 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 	var request tasks.SchedulerTaskRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		h.logger.Error("Failed to bind scheduler task request", "error", err)
+		h.logger.Error("[SubmitTaskFromScheduler] Failed to bind scheduler task request", "trace_id", getTraceID(c), "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request format",
 			"details": err.Error(),
@@ -99,7 +99,8 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Received task submission from scheduler",
+	traceID := getTraceID(c)
+	h.logger.Info("[SubmitTaskFromScheduler] Received task submission from scheduler", "trace_id", traceID,
 		"task_id", request.SendTaskDataToKeeper.TaskID,
 		"scheduler_id", request.SchedulerID,
 		"source", request.Source)
@@ -107,7 +108,7 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 	// Submit task to Redis orchestrator
 	performerData, err := h.taskStreamMgr.ReceiveTaskFromScheduler(&request)
 	if err != nil {
-		h.logger.Error("Failed to process scheduler task submission",
+		h.logger.Error("[SubmitTaskFromScheduler] Failed to process scheduler task submission", "trace_id", traceID,
 			"task_id", request.SendTaskDataToKeeper.TaskID,
 			"scheduler_id", request.SchedulerID,
 			"error", err)
@@ -120,7 +121,7 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Task submitted successfully",
+	h.logger.Info("[SubmitTaskFromScheduler] Task submitted successfully", "trace_id", traceID,
 		"task_id", request.SendTaskDataToKeeper.TaskID,
 		"performer_id", performerData.KeeperID,
 		"performer_address", performerData.KeeperAddress)
@@ -132,4 +133,13 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 		"performer": performerData,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// getTraceID retrieves the trace ID from the Gin context
+func getTraceID(c *gin.Context) string {
+	traceID, exists := c.Get("trace_id")
+	if !exists {
+		return ""
+	}
+	return traceID.(string)
 }
