@@ -136,12 +136,12 @@ func (r *apiKeysRepository) UpdateApiKeyStatus(apiKey *types.UpdateApiKeyStatusR
 
 func (r *apiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool) error {
 	if isSuccess {
-		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery, key, time.Now(), 1, 0).Exec()
+		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery, time.Now(), 1, 0, key).Exec()
 		if err != nil {
 			return err
 		}
 	} else {
-		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery, key, time.Now(), 0, 1).Exec()
+		err := r.db.Session().Query(queries.UpdateApiKeyLastUsedQuery, time.Now(), 0, 1, key).Exec()
 		if err != nil {
 			return err
 		}
