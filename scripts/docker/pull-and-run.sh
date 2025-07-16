@@ -161,6 +161,17 @@ if [[ "$SERVICE" == "registrar" ]]; then
         -p ${PORT}:${PORT} \
         --restart unless-stopped \
         ${IMAGE_NAME}
+elif [[ "$SERVICE" == "dbserver" ]]; then
+    # Run the container
+    echo "Starting container triggerx-${DOCKER_NAME}..."
+    docker run -d \
+        --name triggerx-${DOCKER_NAME} \
+        ${USER_MAPPING} \
+        ${ENV_FILE} \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
+        -p ${PORT}:${PORT} \
+        ${IMAGE_NAME}
 else
     # Run the container
     echo "Starting container triggerx-${DOCKER_NAME}..."
