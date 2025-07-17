@@ -206,10 +206,8 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		}, fmt.Errorf("invalid response format: expected host:token")
 	}
 
-	config.SetEtherscanAPIKey(parts[0])
-	config.SetAlchemyAPIKey(parts[1])
-	config.SetIpfsHost(parts[2])
-	config.SetPinataJWT(parts[3])
+	config.SetIPFSConfig(parts[0], parts[1])
+	config.SetTLSProofConfig(parts[2], parts[3])
 
 	return types.KeeperHealthCheckInResponse{
 		Status: true,

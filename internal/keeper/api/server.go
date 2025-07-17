@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/api/handlers"
-	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/execution"
-	"github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/validation"
+	// "github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/execution"
+	// "github.com/trigg3rX/triggerx-backend-imua/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
 )
 
@@ -31,8 +31,8 @@ type Config struct {
 // Dependencies holds the server dependencies
 type Dependencies struct {
 	Logger    logging.Logger
-	Executor  execution.TaskExecutor
-	Validator validation.TaskValidator
+	// Executor  execution.TaskExecutor
+	// Validator validation.TaskValidator
 }
 
 // NewServer creates a new API server
@@ -92,7 +92,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(gin.Recovery())
 	s.router.Use(TraceMiddleware())
 	s.router.Use(MetricsMiddleware())
-	s.router.Use(TaskMetricsMiddleware())
+	// s.router.Use(TaskMetricsMiddleware())
 	s.router.Use(RestartTrackingMiddleware())
 	s.router.Use(LoggerMiddleware(s.logger))
 	s.router.Use(ErrorMiddleware(s.logger))
@@ -101,12 +101,12 @@ func (s *Server) setupMiddleware() {
 // setupRoutes sets up the routes for the server
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
-	taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
+	// taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
 
 	// Task routes
-	s.router.POST("/p2p/message", taskHandler.ExecuteTask)
-	s.router.POST("/task/validate", taskHandler.ValidateTask)
+	// s.router.POST("/p2p/message", taskHandler.ExecuteTask)
+	// s.router.POST("/task/validate", taskHandler.ValidateTask)
 
 	// Health and metrics routes
 	s.router.GET("/metrics", metricsHandler.Metrics)
