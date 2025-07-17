@@ -26,8 +26,8 @@ type Config struct {
 	databaseHostPort    string
 
 	// IPFS configuration
-	pinataHost  string
-	pinataJWT string
+	pinataHost string
+	pinataJWT  string
 
 	// Etherscan API Key
 	etherscanAPIKey string
@@ -44,16 +44,16 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:             env.GetEnvBool("DEV_MODE", false),
-		healthRPCPort:       env.GetEnv("HEALTH_RPC_PORT", "9003"),
-		botToken:            env.GetEnv("BOT_TOKEN", ""),
-		emailUser:           env.GetEnv("EMAIL_USER", ""),
-		emailPassword:       env.GetEnv("EMAIL_PASS", ""),
-		databaseHostAddress: env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:    env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		pinataHost:            env.GetEnv("PINATA_HOST", ""),
-		pinataJWT:           env.GetEnv("PINATA_JWT", ""),
-		etherscanAPIKey:     env.GetEnv("ETHERSCAN_API_KEY", ""),
-		alchemyAPIKey:       env.GetEnv("ALCHEMY_API_KEY", ""),
+		healthRPCPort:       env.GetEnvString("HEALTH_RPC_PORT", "9003"),
+		botToken:            env.GetEnvString("BOT_TOKEN", ""),
+		emailUser:           env.GetEnvString("EMAIL_USER", ""),
+		emailPassword:       env.GetEnvString("EMAIL_PASS", ""),
+		databaseHostAddress: env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:    env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		pinataHost:          env.GetEnvString("PINATA_HOST", ""),
+		pinataJWT:           env.GetEnvString("PINATA_JWT", ""),
+		etherscanAPIKey:     env.GetEnvString("ETHERSCAN_API_KEY", ""),
+		alchemyAPIKey:       env.GetEnvString("ALCHEMY_API_KEY", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
