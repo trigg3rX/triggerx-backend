@@ -42,17 +42,17 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                 env.GetEnvBool("DEV_MODE", false),
-		timeSchedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9005"),
-		redisRPCUrl:             env.GetEnv("REDIS_RPC_URL", "http://localhost:9003"),
-		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
-		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
-		taskBatchSize:            env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
-		performerLockTTL:        env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
-		taskCacheTTL:            env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
-		duplicateTaskWindow:     env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		timeSchedulerRPCPort: env.GetEnvString("TIME_SCHEDULER_RPC_PORT", "9005"),
+		redisRPCUrl:          env.GetEnvString("REDIS_RPC_URL", "http://localhost:9003"),
+		dbServerURL:          env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:     env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		pollingInterval:      env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
+		pollingLookAhead:     env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
+		taskBatchSize:        env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
+		performerLockTTL:     env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
+		taskCacheTTL:         env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
+		duplicateTaskWindow:  env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)

@@ -36,7 +36,7 @@ var cfg Config
 
 // Helper to detect test environment
 func isTestEnv() bool {
-	return env.GetEnv("APP_ENV", "") == "test"
+	return env.GetEnvString("APP_ENV", "") == "test"
 }
 
 // Init initializes the configuration
@@ -45,14 +45,14 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                          env.GetEnvBool("DEV_MODE", false),
-		conditionSchedulerRPCPort:        env.GetEnv("CONDITION_SCHEDULER_RPC_PORT", "9006"),
-		dbServerURL:                      env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCURL:                 env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		redisRPCUrl:                      env.GetEnv("REDIS_RPC_URL", "http://localhost:9003"),
-		conditionSchedulerID:             env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
-		maxWorkers:                       env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
-		alchemyAPIKey:                    env.GetEnv("ALCHEMY_API_KEY", ""),
+		devMode:                   env.GetEnvBool("DEV_MODE", false),
+		conditionSchedulerRPCPort: env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
+		dbServerURL:               env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCURL:          env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		redisRPCUrl:               env.GetEnvString("REDIS_RPC_URL", "http://localhost:9003"),
+		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
+		maxWorkers:                env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
+		alchemyAPIKey:             env.GetEnvString("ALCHEMY_API_KEY", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
