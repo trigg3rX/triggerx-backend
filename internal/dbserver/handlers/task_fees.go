@@ -27,9 +27,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 
 	ctx := context.Background()
 
-	executor, err := docker.NewCodeExecutor(ctx, docker.ExecutorConfig{
-		Docker: h.docker,
-	}, h.logger)
+	executor, err := docker.NewCodeExecutor(ctx, h.executor, h.logger)
 	if err != nil {
 		trackDBOp(err)
 		return 0, fmt.Errorf("failed to create code executor: %v", err)
@@ -53,14 +51,16 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 				}
 			}()
 
-			containerID, err := executor.DockerManager.CreateContainer(ctx, codePath)
+			containerID, err := executor.DockerManager.CreateContainer(ctx, filepath.Dir(codePath))
 			if err != nil {
 				h.logger.Errorf("Error creating container: %v", err)
 				return
 			}
-			if err := executor.DockerManager.CleanupContainer(ctx, containerID); err != nil {
-				h.logger.Errorf("Error removing container: %v", err)
-			}
+			defer func(id string) {
+				if err := executor.DockerManager.CleanupContainer(ctx, id); err != nil {
+					h.logger.Errorf("Error removing container: %v", err)
+				}
+			}(containerID)
 
 			result, err := executor.MonitorExecution(ctx, executor.DockerManager.Cli, containerID, 10)
 			if err != nil {

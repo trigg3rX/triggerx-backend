@@ -75,7 +75,7 @@ type Server struct {
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
-	docker             docker.DockerConfig
+	executor           docker.ExecutorConfig
 }
 
 func NewServer(db *database.Connection, logger logging.Logger) *Server {
@@ -102,7 +102,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	// Apply middleware in the correct order
 	router.Use(middleware.RecoveryMiddleware(logger))          // First, to catch panics
-	router.Use(middleware.TimeoutMiddleware(30 * time.Second)) // Set appropriate timeout
+	router.Use(middleware.TimeoutMiddleware(60 * time.Second)) // Set appropriate timeout
 	router.Use(middleware.MetricsMiddleware())                 // Track HTTP metrics
 
 	// Configure CORS
@@ -179,13 +179,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 			EmailPassword: config.GetEmailPassword(),
 			BotToken:      config.GetBotToken(),
 		},
-		docker: docker.DockerConfig{
-			Image:          "golang:latest",
-			TimeoutSeconds: 600,
-			AutoCleanup:    true,
-			MemoryLimit:    "1024m",
-			CPULimit:       1.0,
-		},
+		executor: docker.DefaultConfig(),
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
@@ -198,7 +192,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.docker)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.executor)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
