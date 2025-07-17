@@ -73,7 +73,11 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	setupScriptPath := filepath.Join(filepath.Dir(absPath), "setup.sh")
+	m.logger.Infof("Creating container with code directory: %s", absPath)
+
+	setupScriptPath := filepath.Join(absPath, "setup.sh")
+	m.logger.Infof("Writing setup script to: %s", setupScriptPath)
+
 	if err := os.WriteFile(setupScriptPath, []byte(SetupScript), 0755); err != nil {
 		m.logger.Errorf("failed to write setup script: %v", err)
 		return "", fmt.Errorf("failed to write setup script: %w", err)
@@ -82,6 +86,21 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 	if err := os.Chmod(setupScriptPath, 0755); err != nil {
 		m.logger.Errorf("failed to set permissions for setup script: %v", err)
 		return "", fmt.Errorf("failed to set permissions for setup script: %w", err)
+	}
+
+	// Verify setup script exists and is readable
+	if _, err := os.Stat(setupScriptPath); err != nil {
+		m.logger.Errorf("setup script verification failed: %v", err)
+		return "", fmt.Errorf("setup script verification failed: %w", err)
+	}
+	// m.logger.Infof("Setup script created and verified at: %s", setupScriptPath)
+
+	// List directory contents for debugging
+	if entries, err := os.ReadDir(absPath); err == nil {
+		m.logger.Infof("Directory contents of %s:", absPath)
+		for _, entry := range entries {
+			m.logger.Infof("  - %s (dir: %v)", entry.Name(), entry.IsDir())
+		}
 	}
 
 	config := &container.Config{
