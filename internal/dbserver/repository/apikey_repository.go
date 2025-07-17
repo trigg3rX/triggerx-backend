@@ -72,7 +72,10 @@ func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyD
 
 func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*types.ApiKeyData, error) {
 	apiKey := &types.ApiKeyData{}
-	err := r.db.Session().Query(queries.GetApiKeyDataByApiKeyQuery, key).Scan(&apiKey.Key, &apiKey.Owner, &apiKey.IsActive, &apiKey.RateLimit, &apiKey.LastUsed, &apiKey.CreatedAt)
+	var successCount, failedCount int64
+	err := r.db.Session().Query(queries.GetApiKeyDataByApiKeyQuery, key).Scan(&apiKey.Key, &apiKey.Owner, &apiKey.IsActive, &apiKey.RateLimit, &successCount, &failedCount, &apiKey.LastUsed, &apiKey.CreatedAt)
+	apiKey.SuccessCount = successCount
+	apiKey.FailedCount = failedCount
 	if err == gocql.ErrNotFound {
 		return nil, errors.New("api key not found")
 	}

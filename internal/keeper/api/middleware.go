@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 const TraceIDHeader = "X-Trace-ID"
@@ -15,14 +17,31 @@ const TraceIDKey = "trace_id"
 
 func TraceMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		tracer := otel.Tracer("triggerx-backend")
+		ctx, span := tracer.Start(c.Request.Context(), c.Request.URL.Path)
+		defer span.End()
+
+		span.SetAttributes(
+			semconv.HTTPMethodKey.String(c.Request.Method),
+			semconv.HTTPURLKey.String(c.Request.URL.String()),
+			semconv.HTTPUserAgentKey.String(c.Request.UserAgent()),
+		)
+
 		traceID := c.GetHeader(TraceIDHeader)
 		if traceID == "" {
-			traceID = uuid.New().String()
+			spanContext := span.SpanContext()
+			if spanContext.HasTraceID() {
+				traceID = spanContext.TraceID().String()
+			} else {
+				traceID = uuid.New().String()
+			}
 		}
 
 		c.Set(TraceIDKey, traceID)
 		c.Header(TraceIDHeader, traceID)
+		c.Request = c.Request.WithContext(ctx)
 		c.Next()
+		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(c.Writer.Status()))
 	}
 }
 

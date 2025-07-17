@@ -56,13 +56,44 @@ func InitTracer() (func(context.Context) error, error) {
 // TraceMiddleware injects a trace ID into the Gin context and response headers
 func TraceMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Get the global tracer
+		tracer := gootel.Tracer("triggerx-backend")
+
+		// Start a new span for this request
+		ctx, span := tracer.Start(c.Request.Context(), c.Request.URL.Path)
+		defer span.End()
+
+		// Set span attributes
+		span.SetAttributes(
+			semconv.HTTPMethodKey.String(c.Request.Method),
+			semconv.HTTPURLKey.String(c.Request.URL.String()),
+			semconv.HTTPUserAgentKey.String(c.Request.UserAgent()),
+		)
+
+		// Get or generate trace ID
 		traceID := c.GetHeader(TraceIDHeader)
 		if traceID == "" {
-			traceID = uuid.New().String()
+			// Extract trace ID from span context
+			spanContext := span.SpanContext()
+			if spanContext.HasTraceID() {
+				traceID = spanContext.TraceID().String()
+			} else {
+				traceID = uuid.New().String()
+			}
 		}
+
+		// Store in context
 		c.Set(TraceIDKey, traceID)
 		c.Header(TraceIDHeader, traceID)
+
+		// Update request context with span context
+		c.Request = c.Request.WithContext(ctx)
+
+		// Process request
 		c.Next()
+
+		// Set response status on span
+		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(c.Writer.Status()))
 	}
 }
 
@@ -212,7 +243,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
 	// Apply validation middleware to routes that need it
-	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	protected.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
 	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
