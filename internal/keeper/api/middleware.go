@@ -123,40 +123,40 @@ func ErrorMiddleware(logger logging.Logger) gin.HandlerFunc {
 }
 
 // TaskMetricsMiddleware tracks task-related metrics
-func TaskMetricsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.Request.URL.Path
+// func TaskMetricsMiddleware() gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		start := time.Now()
+// 		path := c.Request.URL.Path
 
-		// Track incoming tasks
-		if path == "/p2p/message" && c.Request.Method == "POST" {
-			metrics.TasksReceivedTotal.Inc()
-		}
+// 		// Track incoming tasks
+// 		if path == "/p2p/message" && c.Request.Method == "POST" {
+// 			metrics.TasksReceivedTotal.Inc()
+// 		}
 
-		c.Next()
+// 		c.Next()
 
-		duration := time.Since(start)
-		statusCode := c.Writer.Status()
+// 		duration := time.Since(start)
+// 		statusCode := c.Writer.Status()
 
-		// Track completed tasks based on endpoint and status
-		if statusCode >= 200 && statusCode < 300 {
-			switch path {
-			case "/p2p/message":
-				// Task execution endpoint
-				metrics.TasksPerDay.WithLabelValues("executed").Inc()
-				metrics.TasksCompletedTotal.WithLabelValues("executed").Inc()
-				metrics.TaskDurationSeconds.WithLabelValues("executed").Observe(duration.Seconds())
-				// metrics.AverageTaskCompletionTimeSeconds.WithLabelValues("executed").Set(duration.Seconds())
-			case "/task/validate":
-				// Task validation endpoint
-				metrics.TasksPerDay.WithLabelValues("validated").Inc()
-				metrics.TasksCompletedTotal.WithLabelValues("validated").Inc()
-				metrics.TaskDurationSeconds.WithLabelValues("validated").Observe(duration.Seconds())
-				// metrics.AverageTaskCompletionTimeSeconds.WithLabelValues("validated").Set(duration.Seconds())
-			}
-		}
-	}
-}
+// 		// Track completed tasks based on endpoint and status
+// 		if statusCode >= 200 && statusCode < 300 {
+// 			switch path {
+// 			case "/p2p/message":
+// 				// Task execution endpoint
+// 				metrics.TasksPerDay.WithLabelValues("executed").Inc()
+// 				metrics.TasksCompletedTotal.WithLabelValues("executed").Inc()
+// 				metrics.TaskDurationSeconds.WithLabelValues("executed").Observe(duration.Seconds())
+// 				// metrics.AverageTaskCompletionTimeSeconds.WithLabelValues("executed").Set(duration.Seconds())
+// 			case "/task/validate":
+// 				// Task validation endpoint
+// 				metrics.TasksPerDay.WithLabelValues("validated").Inc()
+// 				metrics.TasksCompletedTotal.WithLabelValues("validated").Inc()
+// 				metrics.TaskDurationSeconds.WithLabelValues("validated").Observe(duration.Seconds())
+// 				// metrics.AverageTaskCompletionTimeSeconds.WithLabelValues("validated").Set(duration.Seconds())
+// 			}
+// 		}
+// 	}
+// }
 
 // RestartTrackingMiddleware tracks service restarts
 func RestartTrackingMiddleware() gin.HandlerFunc {
