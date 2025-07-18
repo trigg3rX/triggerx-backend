@@ -52,7 +52,7 @@ func Init() error {
 	}
 
 	// ECDSA Private Key
-	ecdsaPrivateKeyStr := env.GetEnv("OPERATOR_PRIVATE_KEY", "")
+	ecdsaPrivateKeyStr := env.GetEnvString("OPERATOR_PRIVATE_KEY", "")
 	ecdsaPrivateKey, err := crypto.HexToECDSA(ecdsaPrivateKeyStr)
 	if err != nil {
 		return fmt.Errorf("error converting private key to ECDSA: %w", err)
@@ -60,7 +60,7 @@ func Init() error {
 
 	// BLS Private Key - check if environment variable exists but don't load it here
 	// The operator will handle BLS key loading using the appropriate library
-	blsPrivateKeyStr := env.GetEnv("BLS_PRIVATE_KEY", "")
+	blsPrivateKeyStr := env.GetEnvString("BLS_PRIVATE_KEY", "")
 	var blsPrivateKey *blscommon.SecretKey
 	// Note: BLS key loading is handled in the operator using the imua-avs-sdk library
 	// We just track whether the environment variable is available
@@ -70,39 +70,39 @@ func Init() error {
 	}
 
 	// ECDSA Private Key Store Path
-	ecdsaPrivateKeyStorePath := env.GetEnv("ECDSA_PRIVATE_KEY_STORE_PATH", "")
+	ecdsaPrivateKeyStorePath := env.GetEnvString("ECDSA_PRIVATE_KEY_STORE_PATH", "")
 
 	// BLS Private Key Store Path
-	blsPrivateKeyStorePath := env.GetEnv("BLS_PRIVATE_KEY_STORE_PATH", "")
+	blsPrivateKeyStorePath := env.GetEnvString("BLS_PRIVATE_KEY_STORE_PATH", "")
 
 	// RPC URLs
-	ethHttpRpcUrl := env.GetEnv("ETH_HTTP_RPC_URL", "")
-	ethWsRpcUrl := env.GetEnv("ETH_WS_RPC_URL", "")
+	ethHttpRpcUrl := env.GetEnvString("ETH_HTTP_RPC_URL", "")
+	ethWsRpcUrl := env.GetEnvString("ETH_WS_RPC_URL", "")
 
 	// Contract Addresses
-	operatorStateRetrieverAddrStr := env.GetEnv("OPERATOR_STATE_RETRIEVER_ADDR", "")
+	operatorStateRetrieverAddrStr := env.GetEnvString("OPERATOR_STATE_RETRIEVER_ADDR", "")
 	var operatorStateRetrieverAddr common.Address
 	if operatorStateRetrieverAddrStr != "" {
 		operatorStateRetrieverAddr = common.HexToAddress(operatorStateRetrieverAddrStr)
 	}
 
-	avsRegistryCoordinatorAddrStr := env.GetEnv("AVS_REGISTRY_COORDINATOR_ADDR", "")
+	avsRegistryCoordinatorAddrStr := env.GetEnvString("AVS_REGISTRY_COORDINATOR_ADDR", "")
 	var avsRegistryCoordinatorAddr common.Address
 	if avsRegistryCoordinatorAddrStr != "" {
 		avsRegistryCoordinatorAddr = common.HexToAddress(avsRegistryCoordinatorAddrStr)
 	}
 
 	// Aggregator
-	aggregatorServerIpPortAddr := env.GetEnv("AGGREGATOR_SERVER_IP_PORT_ADDR", "")
+	aggregatorServerIpPortAddr := env.GetEnvString("AGGREGATOR_SERVER_IP_PORT_ADDR", "")
 
-	aggregatorAddressStr := env.GetEnv("AGGREGATOR_ADDRESS", "")
+	aggregatorAddressStr := env.GetEnvString("AGGREGATOR_ADDRESS", "")
 	var aggregatorAddress common.Address
 	if aggregatorAddressStr != "" {
 		aggregatorAddress = common.HexToAddress(aggregatorAddressStr)
 	}
 
 	// Operator and AVS Configuration
-	operatorAddressStr := env.GetEnv("OPERATOR_ADDRESS", "")
+	operatorAddressStr := env.GetEnvString("OPERATOR_ADDRESS", "")
 	var operatorAddress common.Address
 	if operatorAddressStr != "" {
 		operatorAddress = common.HexToAddress(operatorAddressStr)
@@ -111,24 +111,24 @@ func Init() error {
 		operatorAddress = crypto.PubkeyToAddress(ecdsaPrivateKey.PublicKey)
 	}
 
-	avsOwnerAddressStr := env.GetEnv("AVS_OWNER_ADDRESS", "")
+	avsOwnerAddressStr := env.GetEnvString("AVS_OWNER_ADDRESS", "")
 	var avsOwnerAddress common.Address
 	if avsOwnerAddressStr != "" {
 		avsOwnerAddress = common.HexToAddress(avsOwnerAddressStr)
 	}
 
-	avsAddressStr := env.GetEnv("AVS_ADDRESS", "")
+	avsAddressStr := env.GetEnvString("AVS_ADDRESS", "")
 	var avsAddress common.Address
 	if avsAddressStr != "" {
 		avsAddress = common.HexToAddress(avsAddressStr)
 	}
 
 	// API Configuration
-	nodeApiIpPortAddress := env.GetEnv("NODE_API_IP_PORT_ADDRESS", "")
-	enableNodeApi := env.GetEnv("ENABLE_NODE_API", "false") == "true"
+	nodeApiIpPortAddress := env.GetEnvString("NODE_API_IP_PORT_ADDRESS", "")
+	enableNodeApi := env.GetEnvString("ENABLE_NODE_API", "false") == "true"
 
 	// Other Configuration
-	production := env.GetEnv("PRODUCTION", "false") == "true"
+	production := env.GetEnvString("PRODUCTION", "false") == "true"
 
 	cfg = Config{
 		ecdsaPrivateKey:            ecdsaPrivateKey,
@@ -216,9 +216,9 @@ func GetProduction() bool {
 }
 
 func HasBLSPrivateKeyInEnv() bool {
-	return env.GetEnv("BLS_PRIVATE_KEY", "") != ""
+	return env.GetEnvString("BLS_PRIVATE_KEY", "") != ""
 }
 
 func GetBLSPrivateKeyHex() string {
-	return env.GetEnv("BLS_PRIVATE_KEY", "")
+	return env.GetEnvString("BLS_PRIVATE_KEY", "")
 }

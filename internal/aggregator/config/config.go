@@ -48,30 +48,30 @@ func Init() error {
 	}
 
 	// Parse duration values
-	defaultTaskTimeout, err := parseDurationWithDefault(env.GetEnv("AGGREGATOR_DEFAULT_TASK_TIMEOUT", "5m"), 5*time.Minute)
+	defaultTaskTimeout, err := parseDurationWithDefault(env.GetEnvString("AGGREGATOR_DEFAULT_TASK_TIMEOUT", "5m"), 5*time.Minute)
 	if err != nil {
 		return fmt.Errorf("invalid AGGREGATOR_DEFAULT_TASK_TIMEOUT: %w", err)
 	}
 
-	taskCleanupInterval, err := parseDurationWithDefault(env.GetEnv("AGGREGATOR_TASK_CLEANUP_INTERVAL", "1h"), 1*time.Hour)
+	taskCleanupInterval, err := parseDurationWithDefault(env.GetEnvString("AGGREGATOR_TASK_CLEANUP_INTERVAL", "1h"), 1*time.Hour)
 	if err != nil {
 		return fmt.Errorf("invalid AGGREGATOR_TASK_CLEANUP_INTERVAL: %w", err)
 	}
 
-	operatorTimeoutDuration, err := parseDurationWithDefault(env.GetEnv("AGGREGATOR_OPERATOR_TIMEOUT", "30s"), 30*time.Second)
+	operatorTimeoutDuration, err := parseDurationWithDefault(env.GetEnvString("AGGREGATOR_OPERATOR_TIMEOUT", "30s"), 30*time.Second)
 	if err != nil {
 		return fmt.Errorf("invalid AGGREGATOR_OPERATOR_TIMEOUT: %w", err)
 	}
 
-	requestTimeout, err := parseDurationWithDefault(env.GetEnv("AGGREGATOR_REQUEST_TIMEOUT", "30s"), 30*time.Second)
+	requestTimeout, err := parseDurationWithDefault(env.GetEnvString("AGGREGATOR_REQUEST_TIMEOUT", "30s"), 30*time.Second)
 	if err != nil {
 		return fmt.Errorf("invalid AGGREGATOR_REQUEST_TIMEOUT: %w", err)
 	}
 
 	cfg = Config{
 		devMode:           env.GetEnvBool("DEV_MODE", false),
-		aggregatorRPCPort: env.GetEnv("AGGREGATOR_RPC_PORT", "9007"),
-		aggregatorP2PPort: env.GetEnv("AGGREGATOR_P2P_PORT", "9008"),
+		aggregatorRPCPort: env.GetEnvString("AGGREGATOR_RPC_PORT", "9007"),
+		aggregatorP2PPort: env.GetEnvString("AGGREGATOR_P2P_PORT", "9008"),
 
 		// Task management
 		maxConcurrentTasks:  env.GetEnvInt("AGGREGATOR_MAX_CONCURRENT_TASKS", 100),
@@ -88,7 +88,7 @@ func Init() error {
 		maxRetryAttempts: env.GetEnvInt("AGGREGATOR_MAX_RETRY_ATTEMPTS", 3),
 
 		// Blockchain configuration
-		ethRPCURL: env.GetEnv("ETH_RPC_URL", ""),
+		ethRPCURL: env.GetEnvString("ETH_RPC_URL", ""),
 		chainID:   int64(env.GetEnvInt("CHAIN_ID", 1)),
 
 		// Security configuration
