@@ -3,7 +3,7 @@ package actions
 import (
 	"log"
 
-	"github.com/trigg3rX/triggerx-backend/cli/core/config"
+	"github.com/trigg3rX/triggerx-backend-imua/cli/core/config"
 	"github.com/urfave/cli"
 )
 
