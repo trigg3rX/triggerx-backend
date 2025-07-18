@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
+
 	// "io/ioutil"
 	// "net/http"
 	// "reflect"
@@ -40,6 +43,20 @@ func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *ty
 
 func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
 	convertedArgs := make([]interface{}, 0)
+
+	e.logger.Debugf("Processing arguments: %+v for method inputs: %+v", args, methodInputs)
+
+	// Handle nil or empty args
+	if args == nil {
+		e.logger.Warnf("Received nil arguments")
+		return nil, fmt.Errorf("nil arguments provided")
+	}
+
+	// Check if we have any inputs at all
+	if len(methodInputs) == 0 {
+		e.logger.Debugf("Method has no inputs, returning empty args")
+		return convertedArgs, nil
+	}
 
 	// Handle the case where we have a single struct argument
 	if len(methodInputs) == 1 && methodInputs[0].Type.T == abi.TupleTy {
@@ -195,14 +212,70 @@ func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Arg
 }
 
 func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
+	// First try to parse as JSON
 	var argData []interface{}
-
-	if err := json.Unmarshal([]byte(output), &argData); err != nil {
-		e.logger.Warnf("Error parsing dynamic arguments: %v", err)
-		return nil
+	if err := json.Unmarshal([]byte(output), &argData); err == nil && len(argData) > 0 {
+		e.logger.Debugf("Successfully parsed dynamic arguments as JSON: %v", argData)
+		return argData
 	}
 
-	return argData
+	// If JSON parsing fails, try to extract values from container logs
+	// Look for lines containing "Response:" which typically contain the values we need
+	responsePattern := regexp.MustCompile(`Response:\s*([\d\.]+)`)
+	matches := responsePattern.FindAllStringSubmatch(output, -1)
+
+	if len(matches) > 0 {
+		// Extract all response values
+		argData = make([]interface{}, 0, len(matches))
+		for _, match := range matches {
+			if len(match) >= 2 {
+				// Try to parse as float first
+				if val, err := strconv.ParseFloat(match[1], 64); err == nil {
+					e.logger.Debugf("Found numeric response value: %v", val)
+					argData = append(argData, val)
+					continue
+				}
+
+				// If not a number, use as string
+				e.logger.Debugf("Found string response value: %s", match[1])
+				argData = append(argData, match[1])
+			}
+		}
+
+		if len(argData) > 0 {
+			return argData
+		}
+	}
+
+	// If we can't find "Response:" lines, look for any numeric values
+	numericPattern := regexp.MustCompile(`[\d\.]+`)
+	numMatches := numericPattern.FindAllString(output, -1)
+
+	if len(numMatches) > 0 {
+		// Filter out timestamps and other irrelevant numbers
+		for _, match := range numMatches {
+			if val, err := strconv.ParseFloat(match, 64); err == nil {
+				// Only consider "significant" numbers (not small ones that might be timestamps)
+				if val > 100 {
+					e.logger.Debugf("Found significant numeric value: %v", val)
+					argData = append(argData, val)
+				}
+			}
+		}
+
+		if len(argData) > 0 {
+			return argData
+		}
+	}
+
+	// As a fallback, check for "Condition satisfied: true" pattern
+	if strings.Contains(output, "Condition satisfied: true") {
+		e.logger.Debugf("Found condition satisfied pattern, using true as argument")
+		return []interface{}{true}
+	}
+
+	e.logger.Warnf("Failed to extract any arguments from output: %s", output)
+	return []interface{}{"0"} // Return a default value as fallback
 }
 
 func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {

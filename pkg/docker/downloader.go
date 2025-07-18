@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,13 +26,19 @@ func NewDownloader(logger logging.Logger) (*Downloader, error) {
 	}, nil
 }
 
-func (d *Downloader) DownloadFile(ctx context.Context, url string, logger logging.Logger) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "ipfs-code")
+func (d *Downloader) DownloadFile(url string, logger logging.Logger) (string, error) {
+	// Always use /tmp directory for Docker-in-Docker compatibility
+	tmpDir, err := os.MkdirTemp("/tmp", "ipfs-code")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	// Set directory permissions to be accessible from Docker-in-Docker
+	if err := os.Chmod(tmpDir, 0777); err != nil {
+		logger.Warnf("Failed to set directory permissions: %v", err)
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -66,6 +71,20 @@ func (d *Downloader) DownloadFile(ctx context.Context, url string, logger loggin
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to save file: %w", err)
+	}
+
+	// Set file permissions to be accessible from Docker-in-Docker
+	if err := os.Chmod(filePath, 0666); err != nil {
+		logger.Warnf("Failed to set file permissions: %v", err)
+	}
+
+	logger.Infof("Downloaded code to: %s with permissions 0666", filePath)
+
+	// Verify the file exists and has correct permissions
+	if info, err := os.Stat(filePath); err == nil {
+		logger.Infof("File %s exists with mode: %v", filePath, info.Mode())
+	} else {
+		logger.Warnf("Could not verify file: %v", err)
 	}
 
 	return filePath, nil

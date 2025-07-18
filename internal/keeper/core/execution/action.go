@@ -5,8 +5,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -56,35 +54,18 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	var result *docker.ExecutionResult
 	switch targetData.TaskDefinitionID {
 	case 2, 4, 6:
-		codePath, err := e.codeExecutor.Downloader.DownloadFile(context.Background(), targetData.DynamicArgumentsScriptUrl, e.logger)
-		if err != nil {
-			return types.PerformerActionData{}, fmt.Errorf("failed to download dynamic arguments script: %v", err)
-		}
-		defer func() { _ = os.RemoveAll(filepath.Dir(codePath)) }()
-
-		containerID, err := e.codeExecutor.DockerManager.CreateContainer(context.Background(), codePath)
-		if err != nil {
-			return types.PerformerActionData{}, fmt.Errorf("failed to create container: %v", err)
-		}
-		defer func() {
-			if err := e.codeExecutor.DockerManager.CleanupContainer(context.Background(), containerID); err != nil {
-				e.logger.Errorf("failed to cleanup container %s: %v", containerID, err)
-			}
-		}()
-		metrics.DockerContainersCreatedTotal.WithLabelValues("golang").Inc()
-
-		start := time.Now()
-		result, err := e.codeExecutor.MonitorExecution(context.Background(), e.codeExecutor.DockerManager.Cli, containerID, 1)
-		if err != nil {
-			return types.PerformerActionData{}, fmt.Errorf("failed to monitor execution: %v", err)
+		var execErr error
+		result, execErr = e.codeExecutor.Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, 1)
+		if execErr != nil {
+			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", execErr)
 		}
 
 		if !result.Success {
 			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", result.Error)
 		}
-		metrics.DockerContainerDurationSeconds.WithLabelValues("golang").Set(time.Since(start).Seconds())
 
 		argData = e.parseDynamicArgs(result.Output)
+		e.logger.Debugf("Parsed dynamic arguments: %+v", argData)
 	case 1, 3, 5:
 		argData = e.parseStaticArgs(targetData.Arguments)
 		result = &docker.ExecutionResult{

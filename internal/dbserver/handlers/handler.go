@@ -20,7 +20,7 @@ type Handler struct {
 	db                     *database.Connection
 	logger                 logging.Logger
 	config                 NotificationConfig
-	docker                 docker.DockerConfig
+	executor               docker.ExecutorConfig
 	jobRepository          repository.JobRepository
 	timeJobRepository      repository.TimeJobRepository
 	eventJobRepository     repository.EventJobRepository
@@ -33,12 +33,12 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, docker docker.DockerConfig) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, executor docker.ExecutorConfig) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
 		config:                 config,
-		docker:                 docker,
+		executor:               executor,
 		jobRepository:          repository.NewJobRepository(db),
 		timeJobRepository:      repository.NewTimeJobRepository(db),
 		eventJobRepository:     repository.NewEventJobRepository(db),

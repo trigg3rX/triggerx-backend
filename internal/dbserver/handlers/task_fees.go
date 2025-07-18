@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -27,9 +25,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 
 	ctx := context.Background()
 
-	executor, err := docker.NewCodeExecutor(ctx, docker.ExecutorConfig{
-		Docker: h.docker,
-	}, h.logger)
+	executor, err := docker.NewCodeExecutor(ctx, h.executor, h.logger)
 	if err != nil {
 		trackDBOp(err)
 		return 0, fmt.Errorf("failed to create code executor: %v", err)
@@ -42,29 +38,15 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 		go func(url string) {
 			defer wg.Done()
 
-			codePath, err := executor.Downloader.DownloadFile(ctx, url, h.logger)
+			// Use the Execute method directly which handles all the Docker-in-Docker compatibility
+			result, err := executor.Execute(ctx, url, 10)
 			if err != nil {
-				h.logger.Errorf("Error downloading IPFS file: %v", err)
+				h.logger.Errorf("Error executing code: %v", err)
 				return
 			}
-			defer func() {
-				if err := os.RemoveAll(filepath.Dir(codePath)); err != nil {
-					h.logger.Errorf("Error removing temporary directory: %v", err)
-				}
-			}()
 
-			containerID, err := executor.DockerManager.CreateContainer(ctx, codePath)
-			if err != nil {
-				h.logger.Errorf("Error creating container: %v", err)
-				return
-			}
-			if err := executor.DockerManager.CleanupContainer(ctx, containerID); err != nil {
-				h.logger.Errorf("Error removing container: %v", err)
-			}
-
-			result, err := executor.MonitorExecution(ctx, executor.DockerManager.Cli, containerID, 10)
-			if err != nil {
-				h.logger.Errorf("Error monitoring resources: %v", err)
+			if !result.Success {
+				h.logger.Errorf("Code execution failed: %v", result.Error)
 				return
 			}
 
