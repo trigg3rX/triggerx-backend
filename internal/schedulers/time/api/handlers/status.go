@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"time"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
@@ -22,6 +22,8 @@ func NewStatusHandler(logger logging.Logger) *StatusHandler {
 
 // Status handles status endpoint requests
 func (h *StatusHandler) Status(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[Status] trace_id=" + traceID + " - Checking service health")
 	response := gin.H{
 		"status":    "healthy",
 		"service":   "condition-scheduler",

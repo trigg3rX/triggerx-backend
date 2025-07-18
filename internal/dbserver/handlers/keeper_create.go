@@ -10,6 +10,8 @@ import (
 )
 
 func (h *Handler) CreateKeeperData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateKeeperData] trace_id=%s - Creating keeper data", traceID)
 	var keeperData types.CreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error decoding request body: %v", err)
@@ -84,6 +86,8 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 }
 
 func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateKeeperDataGoogleForm] trace_id=%s - Creating keeper data from Google Form", traceID)
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
 		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error decoding request body: %v", err)

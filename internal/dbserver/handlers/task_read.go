@@ -9,6 +9,8 @@ import (
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetTaskDataByID] trace_id=%s - Retrieving task data", traceID)
 	taskID := c.Param("id")
 	if taskID == "" {
 		h.logger.Error("[GetTaskDataByID] No task ID provided")
@@ -48,6 +50,8 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 }
 
 func (h *Handler) GetTasksByJobID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetTasksByJobID] trace_id=%s - Retrieving tasks for job", traceID)
 	jobID := c.Param("job_id")
 	if jobID == "" {
 		h.logger.Error("[GetTasksByJobID] No job ID provided")

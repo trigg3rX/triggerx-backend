@@ -9,6 +9,8 @@ import (
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateTaskData] trace_id=%s - Creating task", traceID)
 	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)

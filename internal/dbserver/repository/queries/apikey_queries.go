@@ -23,6 +23,10 @@ const (
 			UPDATE triggerx.apikeys 
 			SET last_used = ?, success_count = ?, failed_count = ? 
 			WHERE key = ?`
+
+	// Delete Queries
+	DeleteApiKeyQuery = `
+	DELETE FROM triggerx.apikeys WHERE key = ?`
 )
 
 // Read Queries

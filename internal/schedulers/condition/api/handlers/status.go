@@ -20,6 +20,9 @@ func NewStatusHandler(logger logging.Logger) *StatusHandler {
 
 // Status returns the health status of the condition scheduler service
 func (h *StatusHandler) Status(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[Status] trace_id=" + traceID + " - Checking service health")
+
 	response := gin.H{
 		"status":    "healthy",
 		"service":   "condition-scheduler",

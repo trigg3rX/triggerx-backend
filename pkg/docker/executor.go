@@ -234,7 +234,25 @@ func (e *CodeExecutor) MonitorExecution(ctx context.Context, cli *client.Client,
 	if lastStats.CPUStats.SystemUsage != 0 {
 		cpuDelta := float64(lastStats.CPUStats.CPUUsage.TotalUsage)
 		systemDelta := float64(lastStats.CPUStats.SystemUsage)
-		result.Stats.CPUPercentage = (cpuDelta / systemDelta) * float64(len(lastStats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+		// Fix: Use 1 as default CPU count if PercpuUsage is empty
+		cpuCount := len(lastStats.CPUStats.CPUUsage.PercpuUsage)
+		if cpuCount == 0 {
+			cpuCount = 1 // Default to 1 CPU if we can't determine the count
+		}
+		result.Stats.CPUPercentage = (cpuDelta / systemDelta) * float64(cpuCount) * 100.0
+	} else {
+		// Fallback calculation if SystemUsage is 0
+		if len(lastStats.CPUStats.CPUUsage.PercpuUsage) > 0 {
+			// Use a simpler calculation based on total CPU usage
+			result.Stats.CPUPercentage = float64(lastStats.CPUStats.CPUUsage.TotalUsage) / 1e9 * 100.0
+		} else {
+			// Final fallback: calculate based on total usage and execution time
+			if codeExecutionTime > 0 {
+				// Convert nanoseconds to seconds and calculate percentage
+				cpuSeconds := float64(lastStats.CPUStats.CPUUsage.TotalUsage) / 1e9
+				result.Stats.CPUPercentage = (cpuSeconds / codeExecutionTime.Seconds()) * 100.0
+			}
+		}
 	}
 
 	result.Stats.MemoryUsage = lastStats.MemoryStats.Usage

@@ -20,6 +20,7 @@ func NewMetricsHandler(logger logging.Logger) *MetricsHandler {
 
 // Metrics exposes Prometheus metrics
 func (h *MetricsHandler) Metrics(c *gin.Context) {
-	h.logger.Debug("Serving metrics endpoint")
+	traceID := getTraceID(c)
+	h.logger.Info("[Metrics] trace_id=" + traceID + " - Serving metrics")
 	promhttp.Handler().ServeHTTP(c.Writer, c.Request)
 }

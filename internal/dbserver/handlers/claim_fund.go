@@ -29,6 +29,8 @@ type ClaimFundResponse struct {
 }
 
 func (h *Handler) ClaimFund(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[ClaimFund] trace_id=%s - Claim fund request received", traceID)
 	var req ClaimFundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})

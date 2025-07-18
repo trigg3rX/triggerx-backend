@@ -5,10 +5,17 @@ import (
 	"fmt"
 	"net/http"
 
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/api/handlers"
 	"github.com/trigg3rX/triggerx-backend-imua/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	gootel "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 // Server represents the API server
@@ -33,6 +40,12 @@ type Dependencies struct {
 func NewServer(cfg Config, deps Dependencies) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
+
+	// Initialize OpenTelemetry tracer
+	_, err := InitTracer()
+	if err != nil {
+		deps.Logger.Error("Failed to initialize OpenTelemetry tracer", "error", err)
+	}
 
 	// Create server instance
 	srv := &Server{
@@ -93,4 +106,29 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	{
 		api.GET("/scheduler/stats", schedulerHandler.GetStats)
 	}
+}
+
+// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
+// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
+func InitTracer() (func(context.Context) error, error) {
+	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4318" // default to local Tempo
+	}
+	exporter, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(exporter),
+		trace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("triggerx-scheduler-time"),
+		)),
+	)
+	gootel.SetTracerProvider(tp)
+	return tp.Shutdown, nil
 }

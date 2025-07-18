@@ -1,11 +1,14 @@
 package dbserver
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend-imua/internal/dbserver/handlers"
@@ -15,7 +18,53 @@ import (
 	"github.com/trigg3rX/triggerx-backend-imua/pkg/database"
 	"github.com/trigg3rX/triggerx-backend-imua/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend-imua/pkg/logging"
+	gootel "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
+
+const TraceIDHeader = "X-Trace-ID"
+const TraceIDKey = "trace_id"
+
+// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
+// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
+func InitTracer() (func(context.Context) error, error) {
+	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4318" // default to local Tempo
+	}
+	exporter, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(exporter),
+		trace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("triggerx-backend"),
+		)),
+	)
+	gootel.SetTracerProvider(tp)
+	return tp.Shutdown, nil
+}
+
+// TraceMiddleware injects a trace ID into the Gin context and response headers
+func TraceMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		traceID := c.GetHeader(TraceIDHeader)
+		if traceID == "" {
+			traceID = uuid.New().String()
+		}
+		c.Set(TraceIDKey, traceID)
+		c.Header(TraceIDHeader, traceID)
+		c.Next()
+	}
+}
 
 type Server struct {
 	router             *gin.Engine
@@ -26,7 +75,7 @@ type Server struct {
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
-	docker             docker.DockerConfig
+	executor           docker.ExecutorConfig
 }
 
 func NewServer(db *database.Connection, logger logging.Logger) *Server {
@@ -34,8 +83,17 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Initialize OpenTelemetry tracer
+	_, err := InitTracer()
+	if err != nil {
+		logger.Errorf("Failed to initialize OpenTelemetry tracer: %v", err)
+	}
+
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Add tracing middleware before all others
+	router.Use(TraceMiddleware())
 
 	// Start metrics collection
 	metrics.StartMetricsCollection()
@@ -44,21 +102,25 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	// Apply middleware in the correct order
 	router.Use(middleware.RecoveryMiddleware(logger))          // First, to catch panics
-	router.Use(middleware.TimeoutMiddleware(30 * time.Second)) // Set appropriate timeout
+	router.Use(middleware.TimeoutMiddleware(60 * time.Second)) // Set appropriate timeout
 	router.Use(middleware.MetricsMiddleware())                 // Track HTTP metrics
 
 	// Configure CORS
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Content-Length, Accept-Encoding, Origin, X-Requested-With, X-CSRF-Token, X-Auth-Token, X-Api-Key")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "false")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-
 		c.Next()
 	})
 
@@ -117,13 +179,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 			EmailPassword: config.GetEmailPassword(),
 			BotToken:      config.GetBotToken(),
 		},
-		docker: docker.DockerConfig{
-			Image:          "golang:latest",
-			TimeoutSeconds: 600,
-			AutoCleanup:    true,
-			MemoryLimit:    "1024m",
-			CPULimit:       1.0,
-		},
+		executor: docker.DefaultConfig(),
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
@@ -136,7 +192,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.docker)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.executor)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
@@ -148,6 +204,8 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 
 	// Public routes
 	api.GET("/users/:address", handler.GetUserDataByAddress)
+	api.POST("/users/email", handler.StoreUserEmail)
+
 	api.GET("/wallet/points/:address", handler.GetWalletPoints)
 
 	protected := api.Group("")

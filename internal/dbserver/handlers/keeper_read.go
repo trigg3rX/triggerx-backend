@@ -10,6 +10,8 @@ import (
 )
 
 func (h *Handler) GetPerformers(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetPerformers] trace_id=%s - Retrieving performers", traceID)
 	trackDBOp := metrics.TrackDBOperation("read", "keepers")
 	performers, err := h.keeperRepository.GetKeeperAsPerformer()
 	trackDBOp(err)
@@ -28,6 +30,8 @@ func (h *Handler) GetPerformers(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetKeeperData] trace_id=%s - Retrieving keeper data", traceID)
 	keeperID := c.Param("id")
 	h.logger.Infof("[GetKeeperData] Retrieving keeper with ID: %s", keeperID)
 
@@ -58,6 +62,8 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetKeeperTaskCount] trace_id=%s - Retrieving keeper task count", traceID)
 	keeperID := c.Param("id")
 	h.logger.Infof("[GetKeeperTaskCount] Retrieving task count for keeper with ID: %s", keeperID)
 
@@ -85,6 +91,8 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperPoints(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetKeeperPoints] trace_id=%s - Retrieving points for keeper", traceID)
 	keeperID := c.Param("id")
 	h.logger.Infof("[GetKeeperPoints] Retrieving points for keeper with ID: %s", keeperID)
 
@@ -109,6 +117,8 @@ func (h *Handler) GetKeeperPoints(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperCommunicationInfo(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetKeeperCommunicationInfo] trace_id=%s - Retrieving communication info for keeper", traceID)
 	keeperID := c.Param("id")
 	h.logger.Infof("[GetKeeperChatInfo] Retrieving chat ID, keeper name, and email for keeper with ID: %s", keeperID)
 

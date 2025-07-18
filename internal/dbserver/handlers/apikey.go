@@ -20,6 +20,8 @@ func MaskApiKey(key string) string {
 }
 
 func (h *Handler) CreateApiKey(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateApiKey] trace_id=%s - Creating API key", traceID)
 	var req types.CreateApiKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Errorf("[CreateApiKey] Error decoding request body: %v", err)
@@ -63,6 +65,8 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 }
 
 func (h *Handler) UpdateApiKey(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateApiKey] trace_id=%s - Updating API key", traceID)
 	keyID := c.Param("key")
 
 	var req types.UpdateApiKeyRequest
@@ -102,10 +106,38 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 }
 
 func (h *Handler) DeleteApiKey(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[DeleteApiKey] trace_id=%s - Deleting API key", traceID)
 	keyID := c.Param("key")
 
+	// If the keyID is masked, resolve the real key
+	if strings.Contains(keyID, "*") {
+		owner := c.Query("owner") // require owner as query param for disambiguation
+		if owner == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Owner is required when deleting by masked key"})
+			return
+		}
+		apiKeys, err := h.apiKeysRepository.GetApiKeyDataByOwner(owner)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No API keys found for this owner"})
+			return
+		}
+		found := false
+		for _, k := range apiKeys {
+			if MaskApiKey(k.Key) == keyID {
+				keyID = k.Key
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "API key not found for this owner"})
+			return
+		}
+	}
+
 	trackDBOp := metrics.TrackDBOperation("update", "apikey_data")
-	if err := h.apiKeysRepository.UpdateApiKeyStatus(&types.UpdateApiKeyStatusRequest{Key: keyID, IsActive: false}); err != nil {
+	if err := h.apiKeysRepository.DeleteApiKey(keyID); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("Failed to delete API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
@@ -113,11 +145,14 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
+	h.logger.Infof("[DeleteApiKey] Successfully deleted API key: %s", keyID)
 	c.Status(http.StatusNoContent)
 }
 
 // GetApiKeysByOwner returns all API keys for a given owner
 func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetApiKeysByOwner] trace_id=%s - Getting API keys by owner", traceID)
 	owner := c.Param("owner")
 	if owner == "" {
 		h.logger.Warnf("[GetApiKeysByOwner] Owner is required")

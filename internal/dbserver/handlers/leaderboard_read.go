@@ -9,7 +9,8 @@ import (
 )
 
 func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
-	h.logger.Info("[GetKeeperLeaderboard] Fetching keeper leaderboard data")
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetKeeperLeaderboard] trace_id=%s - Fetching keeper leaderboard data", traceID)
 
 	// Get the domain from the request
 	host := c.Request.Host
@@ -52,6 +53,8 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 }
 
 func (h *Handler) GetUserLeaderboard(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetUserLeaderboard] trace_id=%s - Fetching user leaderboard data", traceID)
 	h.logger.Info("[GetUserLeaderboard] Fetching user leaderboard data")
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_leaderboard")
@@ -71,6 +74,8 @@ func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetKeeperByIdentifier] trace_id=%s - Fetching keeper data by identifier", traceID)
 	h.logger.Info("[GetKeeperByIdentifier] Fetching keeper data by identifier")
 
 	keeperAddress := c.Query("keeper_address")
@@ -101,6 +106,8 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 }
 
 func (h *Handler) GetUserLeaderboardByAddress(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetUserLeaderboardByAddress] trace_id=%s - Fetching user data by address", traceID)
 	h.logger.Info("[GetUserLeaderboardByAddress] Fetching user data by address")
 
 	userAddress := c.Query("user_address")
