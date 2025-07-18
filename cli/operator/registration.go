@@ -2,25 +2,11 @@ package operator
 
 import (
 	"context"
-	// "encoding/json"
 	"fmt"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
-func (o *Operator) registerOperatorOnStartup() {
-	err := o.RegisterOperatorWithChain()
-	if err != nil {
-		// This error might only be that the operator was already registered with chain, so we don't want to fatal
-		o.logger.Error("Error registering operator with chain", "err", err)
-	} else {
-		o.logger.Infof("Registered operator with chain")
-	}
-
-	err = o.RegisterOperatorWithAvs()
-	if err != nil {
-		o.logger.Fatal("Error registering operator with avs", "err", err)
-	}
-}
 func (o *Operator) RegisterOperatorWithChain() error {
 	flag, err := o.avsReader.IsOperator(&bind.CallOpts{}, o.operatorAddr.String())
 	if err != nil {
@@ -28,10 +14,11 @@ func (o *Operator) RegisterOperatorWithChain() error {
 		return err
 	}
 	if !flag {
-		o.logger.Info("Operator is not registered.")
-		panic(fmt.Sprintf("Operator is not registered: %s", o.operatorAddr.String()))
-
+		o.logger.Info("Operator is not registered with chain.")
+		return fmt.Errorf("operator is not registered with chain: %s. Please register your operator with the chain first", o.operatorAddr.String())
 	}
+
+	o.logger.Info("Operator is already registered with chain", "operatorAddr", o.operatorAddr.String())
 	return nil
 }
 
@@ -63,4 +50,3 @@ func (o *Operator) RegisterOperatorWithAvs() error {
 
 	return nil
 }
-
