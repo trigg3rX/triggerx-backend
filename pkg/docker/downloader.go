@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,7 +26,7 @@ func NewDownloader(logger logging.Logger) (*Downloader, error) {
 	}, nil
 }
 
-func (d *Downloader) DownloadFile(ctx context.Context, url string, logger logging.Logger) (string, error) {
+func (d *Downloader) DownloadFile(url string, logger logging.Logger) (string, error) {
 	// Always use /tmp directory for Docker-in-Docker compatibility
 	tmpDir, err := os.MkdirTemp("/tmp", "ipfs-code")
 	if err != nil {
@@ -39,7 +38,7 @@ func (d *Downloader) DownloadFile(ctx context.Context, url string, logger loggin
 		logger.Warnf("Failed to set directory permissions: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
