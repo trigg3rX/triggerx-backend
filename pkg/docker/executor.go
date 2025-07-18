@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
 	"context"
@@ -32,11 +33,30 @@ func NewCodeExecutor(ctx context.Context, cfg ExecutorConfig, logger logging.Log
 
 	manager := NewManager(cli, cfg.Docker, logger)
 
-	// if err := manager.PullImage(ctx, cfg.Docker.Image); err != nil {
-	// 	return nil, fmt.Errorf("failed to pull image: %w", err)
-	// }
+	// Ensure the Docker image is available
+	logger.Infof("Checking for Docker image: %s", cfg.Docker.Image)
 
-	// logger.Infof("pulled image: %s", cfg.Docker.Image)
+	// Pull the image with retry logic for Docker-in-Docker reliability
+	var pullErr error
+	for attempts := 1; attempts <= 3; attempts++ {
+		logger.Infof("Attempt %d/3: Pulling Docker image %s", attempts, cfg.Docker.Image)
+		if err := manager.PullImage(ctx, cfg.Docker.Image); err != nil {
+			pullErr = err
+			logger.Warnf("Failed to pull image (attempt %d/3): %v", attempts, err)
+			time.Sleep(time.Duration(attempts) * time.Second)
+			continue
+		}
+		pullErr = nil
+		break
+	}
+
+	// Log success or warning
+	if pullErr != nil {
+		logger.Warnf("Could not pull image %s after 3 attempts. Will try to use local image if available: %v",
+			cfg.Docker.Image, pullErr)
+	} else {
+		logger.Infof("Successfully pulled image: %s", cfg.Docker.Image)
+	}
 
 	downloader, err := NewDownloader(logger)
 	if err != nil {
@@ -61,6 +81,16 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 		}, nil
 	}
 
+	// Always prepare code for Docker-in-Docker execution
+	e.logger.Infof("Original code path: %s", codePath)
+	codePath, err = e.ensureDinDCompatiblePath(ctx, codePath)
+	if err != nil {
+		return &ExecutionResult{
+			Success: false,
+			Error:   fmt.Errorf("failed to prepare code for Docker-in-Docker: %w", err),
+		}, nil
+	}
+
 	// 2. Create and setup container
 	containerID, err := e.DockerManager.CreateContainer(ctx, filepath.Dir(codePath))
 	if err != nil {
@@ -75,6 +105,14 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 		}
 	}()
 
+	// Copy the file directly into the container
+	if err := e.CopyFileToContainer(ctx, e.DockerManager.Cli, containerID, codePath); err != nil {
+		return &ExecutionResult{
+			Success: false,
+			Error:   fmt.Errorf("failed to copy file to container: %w", err),
+		}, nil
+	}
+
 	result, err := e.MonitorExecution(ctx, e.DockerManager.Cli, containerID, noOfAttesters)
 	if err != nil {
 		return &ExecutionResult{
@@ -84,6 +122,88 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 	}
 
 	return result, nil
+}
+
+// ensureDinDCompatiblePath ensures the code is in a location accessible by Docker-in-Docker
+// If the path is not in /tmp, it copies the code to /tmp
+func (e *CodeExecutor) ensureDinDCompatiblePath(ctx context.Context, codePath string) (string, error) {
+	// Always move to /tmp for Docker-in-Docker compatibility
+	e.logger.Infof("Preparing code from %s for Docker-in-Docker execution", codePath)
+
+	// Create a new temporary directory in /tmp with world-readable permissions
+	tmpDir, err := os.MkdirTemp("/tmp", "ipfs-code-dind")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp directory in /tmp: %w", err)
+	}
+
+	// Set permissions to ensure accessibility from any Docker container
+	if err := os.Chmod(tmpDir, 0777); err != nil {
+		e.logger.Warnf("Failed to set permissions on %s: %v", tmpDir, err)
+	}
+
+	// Copy the code file
+	srcFile, err := os.Open(codePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source code file: %w", err)
+	}
+	defer srcFile.Close()
+
+	// Use a standard filename that will be explicitly referenced in the container
+	destPath := filepath.Join(tmpDir, "code.go")
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return "", fmt.Errorf("failed to copy code file: %w", err)
+	}
+
+	// Verify the file was copied correctly by reading it back
+	fileContent, err := os.ReadFile(destPath)
+	if err != nil {
+		e.logger.Warnf("Failed to read back copied file: %v", err)
+	} else {
+		e.logger.Infof("Successfully copied %d bytes to %s", len(fileContent), destPath)
+	}
+
+	// Set permissions on the new file to be world-readable/writable
+	if err := os.Chmod(destPath, 0666); err != nil {
+		e.logger.Warnf("Failed to set permissions on %s: %v", destPath, err)
+	}
+
+	// Create setup script in the new location with executable permissions
+	setupScriptPath := filepath.Join(tmpDir, "setup.sh")
+	if err := os.WriteFile(setupScriptPath, []byte(SetupScript), 0777); err != nil {
+		return "", fmt.Errorf("failed to write setup script: %w", err)
+	}
+
+	// Verify the files exist and have correct permissions
+	e.logger.Infof("Verifying files in %s:", tmpDir)
+	if entries, err := os.ReadDir(tmpDir); err == nil {
+		for _, entry := range entries {
+			if info, err := os.Stat(filepath.Join(tmpDir, entry.Name())); err == nil {
+				e.logger.Infof("  - %s (mode: %v)", entry.Name(), info.Mode())
+
+				// Read first few bytes of the file to verify it's not empty
+				if !entry.IsDir() {
+					filePath := filepath.Join(tmpDir, entry.Name())
+					fileContent, err := os.ReadFile(filePath)
+					if err == nil {
+						preview := string(fileContent)
+						if len(preview) > 50 {
+							preview = preview[:50] + "..."
+						}
+						e.logger.Infof("    - content preview: %s", preview)
+					}
+				}
+			}
+		}
+	}
+
+	e.logger.Infof("Code successfully prepared for Docker-in-Docker execution: %s", destPath)
+	return destPath, nil
 }
 
 func (e *CodeExecutor) MonitorExecution(ctx context.Context, cli *client.Client, containerID string, noOfAttesters int) (*ExecutionResult, error) {
@@ -293,6 +413,44 @@ func (e *CodeExecutor) MonitorExecution(ctx context.Context, cli *client.Client,
 	result.Success = executionStarted && codeExecutionTime > 0
 
 	return result, nil
+}
+
+func (e *CodeExecutor) CopyFileToContainer(ctx context.Context, cli *client.Client, containerID, sourcePath string) error {
+	// Read the file content
+	content, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to read source file: %w", err)
+	}
+
+	// Create a tar archive containing the file
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	// Add file to tar archive
+	hdr := &tar.Header{
+		Name: "code.go",
+		Mode: 0644,
+		Size: int64(len(content)),
+	}
+
+	if err := tw.WriteHeader(hdr); err != nil {
+		return fmt.Errorf("failed to write tar header: %w", err)
+	}
+
+	if _, err := tw.Write(content); err != nil {
+		return fmt.Errorf("failed to write file to tar: %w", err)
+	}
+
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	// Copy the tar archive to the container
+	if err := cli.CopyToContainer(ctx, containerID, "/code", &buf, container.CopyToContainerOptions{}); err != nil {
+		return fmt.Errorf("failed to copy to container: %w", err)
+	}
+
+	return nil
 }
 
 func (e *CodeExecutor) calculateFees(content []byte, stats *ResourceStats, executionTime time.Duration) float64 {
