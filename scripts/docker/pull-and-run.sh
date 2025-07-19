@@ -108,8 +108,24 @@ if command -v getent >/dev/null 2>&1 && getent group promtail >/dev/null 2>&1; t
     echo "Found promtail group with GID: ${PROMTAIL_GID}"
 fi
 
+# Get docker group ID for services that need docker socket access
+DOCKER_GID=""
+if command -v getent >/dev/null 2>&1 && getent group docker >/dev/null 2>&1; then
+    DOCKER_GID=$(getent group docker | cut -d: -f3)
+    echo "Found docker group with GID: ${DOCKER_GID}"
+fi
+
 # Set appropriate ownership and permissions
-if [ -n "$PROMTAIL_GID" ]; then
+# For dbserver, use docker group if available for socket access
+if [[ "$SERVICE" == "dbserver" && -n "$DOCKER_GID" ]]; then
+    echo "Setting ownership for dbserver to UID ${CURRENT_UID} (${CURRENT_USER}) and GID ${DOCKER_GID} (docker group)..."
+    sudo chown ${CURRENT_UID}:${DOCKER_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+        echo "Warning: Could not set docker group ownership. Using fallback permissions..."
+        chmod 775 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    }
+    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    USER_MAPPING="--user ${CURRENT_UID}:${DOCKER_GID}"
+elif [ -n "$PROMTAIL_GID" ]; then
     # Set owner to current user and group to promtail for log reading
     echo "Setting ownership to UID ${CURRENT_UID} (${CURRENT_USER}) and GID ${PROMTAIL_GID} (promtail)..."
     sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
@@ -138,7 +154,10 @@ fi
 # Fix permissions on any existing log files
 if [ "$(ls -A "./data/logs/${DOCKER_NAME}" 2>/dev/null)" ]; then
     echo "Fixing permissions on existing log files..."
-    if [ -n "$PROMTAIL_GID" ]; then
+    if [[ "$SERVICE" == "dbserver" && -n "$DOCKER_GID" ]]; then
+        sudo chown ${CURRENT_UID}:${DOCKER_GID} "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+        chmod 664 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
+    elif [ -n "$PROMTAIL_GID" ]; then
         sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
         chmod 664 "./data/logs/${DOCKER_NAME}"/* 2>/dev/null
     else
@@ -162,11 +181,20 @@ if [[ "$SERVICE" == "registrar" ]]; then
         --restart unless-stopped \
         ${IMAGE_NAME}
 elif [[ "$SERVICE" == "dbserver" ]]; then
+    # Special handling for dbserver which needs docker socket access
+    if [ -n "$DOCKER_GID" ]; then
+        DBSERVER_USER_MAPPING="--user ${CURRENT_UID}:${DOCKER_GID}"
+        echo "Container will run as UID ${CURRENT_UID} (${CURRENT_USER}), GID ${DOCKER_GID} (docker group) for socket access"
+    else
+        echo "Warning: Docker group not found. Container may not be able to access Docker socket."
+        DBSERVER_USER_MAPPING="${USER_MAPPING}"
+    fi
+    
     # Run the container
     echo "Starting container triggerx-${DOCKER_NAME}..."
     docker run -d \
         --name triggerx-${DOCKER_NAME} \
-        ${USER_MAPPING} \
+        ${DBSERVER_USER_MAPPING} \
         ${ENV_FILE} \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
