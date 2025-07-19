@@ -8,11 +8,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
+	// "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
 	redisClient "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
+	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	syncMgr "github.com/trigg3rX/triggerx-backend/internal/registrar/sync"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -38,7 +38,7 @@ type RegistrarService struct {
 	eventListener *events.ContractEventListener
 
 	// Clients
-	databaseClient *database.DatabaseClient
+	// databaseClient *database.DatabaseClient
 
 	// State management
 	stateManager      *syncMgr.StateManager
@@ -46,11 +46,11 @@ type RegistrarService struct {
 	backfillManager   *syncMgr.BackfillManager
 
 	// Rewards service
-	rewardsService *rewards.RewardsService
+	// rewardsService *rewards.RewardsService
 
 	// Event handlers
-	operatorHandler *events.OperatorEventHandler
-	taskHandler     *events.TaskEventHandler
+	// operatorHandler *events.OperatorEventHandler
+	// taskHandler     *events.TaskEventHandler
 
 	// Lifecycle management
 	ctx      context.Context

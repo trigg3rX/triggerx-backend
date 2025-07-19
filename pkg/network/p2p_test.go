@@ -476,7 +476,10 @@ func createTestPrivateKeysForBench(b *testing.B) {
 
 	serviceKeysPath := filepath.Join(registryDir, "services_privKeys.json")
 	serviceKeysData, _ := json.Marshal(services)
-	os.WriteFile(serviceKeysPath, serviceKeysData, 0644)
+	err := os.WriteFile(serviceKeysPath, serviceKeysData, 0644)
+	if err != nil {
+		b.Fatalf("Failed to write service keys: %v", err)
+	}
 
 	keeperIdentity := PeerIdentity{
 		PrivKey: []byte{8, 1, 18, 64, 169, 238, 118, 1, 146, 136, 244, 181, 91, 101, 108, 52, 183, 143, 207, 194, 58, 152, 99, 93, 10, 238, 238, 39, 49, 169, 60, 97, 173, 108, 241, 221, 8, 165, 37, 46, 84, 30, 238, 141, 76, 98, 70, 42, 60, 100, 184, 85, 213, 74, 2, 226, 33, 34, 174, 202, 156, 199, 218, 83, 6, 106, 249, 28},
@@ -484,5 +487,8 @@ func createTestPrivateKeysForBench(b *testing.B) {
 
 	keeperIdentityPath := filepath.Join(registryDir, "keeper_identity.json")
 	keeperIdentityData, _ := json.Marshal(keeperIdentity)
-	os.WriteFile(keeperIdentityPath, keeperIdentityData, 0644)
+	err = os.WriteFile(keeperIdentityPath, keeperIdentityData, 0644)
+	if err != nil {
+		b.Fatalf("Failed to write keeper identity: %v", err)
+	}
 }

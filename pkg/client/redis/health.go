@@ -132,7 +132,10 @@ func (c *Client) PerformHealthCheck(ctx context.Context) (map[string]interface{}
 		}
 
 		// Cleanup
-		c.Del(ctx, testKey)
+		err := c.Del(ctx, testKey)
+		if err != nil {
+			results["cleanup"].(map[string]interface{})["error"] = err.Error()
+		}
 	}
 
 	// Test 4: Connection pool status

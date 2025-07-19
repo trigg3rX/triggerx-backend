@@ -338,6 +338,9 @@ func BenchmarkConnectToPeer(b *testing.B) {
 		}
 
 		// Disconnect to reset for next iteration
-		host1.Network().ClosePeer(host2.ID())
+		err = host1.Network().ClosePeer(host2.ID())
+		if err != nil {
+			b.Fatalf("Failed to close peer: %v", err)
+		}
 	}
 }

@@ -588,7 +588,11 @@ func (sm *SubscriptionManager) updateSubscriptionStats(subID string) {
 // generateSubscriptionID generates a unique subscription ID
 func (sm *SubscriptionManager) generateSubscriptionID() string {
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		sm.logger.Errorf("Failed to generate subscription ID: %v", err)
+		return ""
+	}
 	return fmt.Sprintf("%s_%s", sm.chainID, hex.EncodeToString(bytes))
 }
 
@@ -643,31 +647,31 @@ func (sm *SubscriptionManager) GetSubscriptionStats() map[string]interface{} {
 }
 
 // Specific event parsing methods for known contract events
-func (sm *SubscriptionManager) parseOperatorRegisteredEvent(log types.Log) interface{} {
-	// This should be handled by the contract-specific parsing now
-	return sm.parseBasicEventData(&EventSubscription{
-		EventName: "OperatorRegistered",
-		EventSig:  log.Topics[0],
-	}, log)
-}
+// func (sm *SubscriptionManager) parseOperatorRegisteredEvent(log types.Log) interface{} {
+// 	// This should be handled by the contract-specific parsing now
+// 	return sm.parseBasicEventData(&EventSubscription{
+// 		EventName: "OperatorRegistered",
+// 		EventSig:  log.Topics[0],
+// 	}, log)
+// }
 
-func (sm *SubscriptionManager) parseOperatorUnregisteredEvent(log types.Log) interface{} {
-	return sm.parseBasicEventData(&EventSubscription{
-		EventName: "OperatorUnregistered",
-		EventSig:  log.Topics[0],
-	}, log)
-}
+// func (sm *SubscriptionManager) parseOperatorUnregisteredEvent(log types.Log) interface{} {
+// 	return sm.parseBasicEventData(&EventSubscription{
+// 		EventName: "OperatorUnregistered",
+// 		EventSig:  log.Topics[0],
+// 	}, log)
+// }
 
-func (sm *SubscriptionManager) parseTaskSubmittedEvent(log types.Log) interface{} {
-	return sm.parseBasicEventData(&EventSubscription{
-		EventName: "TaskSubmitted",
-		EventSig:  log.Topics[0],
-	}, log)
-}
+// func (sm *SubscriptionManager) parseTaskSubmittedEvent(log types.Log) interface{} {
+// 	return sm.parseBasicEventData(&EventSubscription{
+// 		EventName: "TaskSubmitted",
+// 		EventSig:  log.Topics[0],
+// 	}, log)
+// }
 
-func (sm *SubscriptionManager) parseTaskRejectedEvent(log types.Log) interface{} {
-	return sm.parseBasicEventData(&EventSubscription{
-		EventName: "TaskRejected",
-		EventSig:  log.Topics[0],
-	}, log)
-}
+// func (sm *SubscriptionManager) parseTaskRejectedEvent(log types.Log) interface{} {
+// 	return sm.parseBasicEventData(&EventSubscription{
+// 		EventName: "TaskRejected",
+// 		EventSig:  log.Topics[0],
+// 	}, log)
+// }

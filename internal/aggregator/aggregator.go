@@ -2,7 +2,7 @@ package aggregator
 
 import (
 	"context"
-	"crypto/rand"
+	// "crypto/rand"
 	"fmt"
 	"sync"
 	"time"
@@ -469,9 +469,13 @@ func (a *Aggregator) updateStats() {
 }
 
 // generateTaskID generates a unique task ID (simplified)
-func (a *Aggregator) generateTaskID() string {
-	// Generate a random task ID
-	randomBytes := make([]byte, 8)
-	rand.Read(randomBytes)
-	return fmt.Sprintf("task_%x", randomBytes)
-}
+// func (a *Aggregator) generateTaskID() string {
+// 	// Generate a random task ID
+// 	randomBytes := make([]byte, 8)
+// 	_, err := rand.Read(randomBytes)
+// 	if err != nil {
+// 		a.logger.Errorf("Failed to generate task ID: %v", err)
+// 		return ""
+// 	}
+// 	return fmt.Sprintf("task_%x", randomBytes)
+// }

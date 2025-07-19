@@ -37,7 +37,7 @@ func (m *MockQuery) Scan(dest ...interface{}) error {
 // MockSession is a mock implementation of gocql.Session
 type MockSession struct {
 	execFunc  func(query string, values ...interface{}) error
-	scanFunc  func(query string, dest ...interface{}) error
+	// scanFunc  func(query string, dest ...interface{}) error
 	batchFunc func(batch *gocql.Batch) error
 	query     *MockQuery
 }

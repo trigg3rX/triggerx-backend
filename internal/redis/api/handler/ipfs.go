@@ -179,18 +179,18 @@ func listPinataFiles(logger logging.Logger) ([]PinataFile, error) {
 }
 
 // Schedule a 24h delayed deletion for a CID
-func scheduleCIDDeletion(cid string, logger logging.Logger) {
-	go func() {
-		logger.Infof("Scheduled deletion for CID %s in 24h", cid)
-		time.Sleep(24 * time.Hour)
+// func scheduleCIDDeletion(cid string, logger logging.Logger) {
+// 	go func() {
+// 		logger.Infof("Scheduled deletion for CID %s in 24h", cid)
+// 		time.Sleep(24 * time.Hour)
 
-		if err := DeletePinataCID(cid, logger); err != nil {
-			logger.Errorf("Failed to delete CID %s after 24h: %v", cid, err)
-		} else {
-			logger.Infof("Successfully deleted CID %s after 24h delay", cid)
-		}
-	}()
-}
+// 		if err := DeletePinataCID(cid, logger); err != nil {
+// 			logger.Errorf("Failed to delete CID %s after 24h: %v", cid, err)
+// 		} else {
+// 			logger.Infof("Successfully deleted CID %s after 24h delay", cid)
+// 		}
+// 	}()
+// }
 
 // Weekly cleanup: delete files older than 1 day every Sunday
 func StartWeeklyPinataCleanup(logger logging.Logger) {

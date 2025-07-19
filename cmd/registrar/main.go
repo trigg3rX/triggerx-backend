@@ -46,7 +46,10 @@ func main() {
 	}
 
 	// Start services
-	registrarService.Start()
+	err = registrarService.Start()
+	if err != nil {
+		logger.Fatal("Failed to start registrar service", "error", err)
+	}
 
 	logger.Info("All services started successfully")
 
@@ -69,7 +72,10 @@ func performGracefulShutdown(registrarService *registrar.RegistrarService, logge
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	registrarService.Stop()
+	err := registrarService.Stop()
+	if err != nil {
+		logger.Fatal("Failed to stop registrar service", "error", err)
+	}
 
 	// Wait for context timeout or manual cancellation
 	<-ctx.Done()
