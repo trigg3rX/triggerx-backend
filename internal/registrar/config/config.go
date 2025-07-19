@@ -20,7 +20,7 @@ type Config struct {
 	avsGovernanceAddress      string
 	avsGovernanceLogicAddress string
 	attestationCenterAddress  string
-	oblsAddress                string
+	oblsAddress               string
 	triggerGasRegistryAddress string
 
 	// RPC URLs for Ethereum and Base
@@ -55,21 +55,21 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                   env.GetEnvBool("DEV_MODE", false),
-		registrarPort:             env.GetEnv("REGISTRAR_PORT", "9007"),
-		avsGovernanceAddress:      env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
-		avsGovernanceLogicAddress: env.GetEnv("AVS_GOVERNANCE_LOGIC_ADDRESS", "0xACB667202C6F9b84D91dA1D66c82f30c66738299"),
-		attestationCenterAddress:  env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
-		oblsAddress:                env.GetEnv("OBLS_ADDRESS", "0x68853222A6Fc1DAE25Dd58FB184dc4470C98F73C"),
-		triggerGasRegistryAddress: env.GetEnv("TRIGGER_GAS_REGISTRY_ADDRESS", "0x85ea3eB894105bD7e7e2A8D34cf66C8E8163CD2a"),
-		rpcProvider:               env.GetEnv("RPC_PROVIDER", ""),
-		rpcAPIKey:                 env.GetEnv("RPC_API_KEY", ""),
+		registrarPort:             env.GetEnvString("REGISTRAR_PORT", "9007"),
+		avsGovernanceAddress:      env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
+		avsGovernanceLogicAddress: env.GetEnvString("AVS_GOVERNANCE_LOGIC_ADDRESS", "0xACB667202C6F9b84D91dA1D66c82f30c66738299"),
+		attestationCenterAddress:  env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
+		oblsAddress:               env.GetEnvString("OBLS_ADDRESS", "0x68853222A6Fc1DAE25Dd58FB184dc4470C98F73C"),
+		triggerGasRegistryAddress: env.GetEnvString("TRIGGER_GAS_REGISTRY_ADDRESS", "0x85ea3eB894105bD7e7e2A8D34cf66C8E8163CD2a"),
+		rpcProvider:               env.GetEnvString("RPC_PROVIDER", ""),
+		rpcAPIKey:                 env.GetEnvString("RPC_API_KEY", ""),
 		pollingInterval:           env.GetEnvDuration("REGISTRAR_POLLING_INTERVAL", 5*time.Minute),
-		databaseHostAddress:       env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:          env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		upstashRedisUrl:           env.GetEnv("UPSTASH_REDIS_URL", ""),
-		upstashRedisRestToken:     env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
-		pinataJWT:                 env.GetEnv("PINATA_JWT", ""),
-		pinataHost:                env.GetEnv("PINATA_HOST", ""),
+		databaseHostAddress:       env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:          env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		upstashRedisUrl:           env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:     env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		pinataJWT:                 env.GetEnvString("PINATA_JWT", ""),
+		pinataHost:                env.GetEnvString("PINATA_HOST", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)

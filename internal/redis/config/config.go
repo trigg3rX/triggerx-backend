@@ -66,16 +66,16 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:             env.GetEnvBool("DEV_MODE", false),
-		redisRPCPort:        env.GetEnv("REDIS_RPC_PORT", "9003"),
-		healthRPCUrl:        env.GetEnv("HEALTH_RPC_URL", "http://localhost:9004"),
-		dbServerRPCUrl:      env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:    env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		redisSigningKey:     env.GetEnv("REDIS_SIGNING_KEY", ""),
-		redisSigningAddress: env.GetEnv("REDIS_SIGNING_ADDRESS", ""),
-		upstashURL:          env.GetEnv("UPSTASH_REDIS_URL", ""),
-		upstashToken:        env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
-		localAddr:           env.GetEnv("REDIS_ADDR", "localhost:6379"),
-		localPassword:       env.GetEnv("REDIS_PASSWORD", ""),
+		redisRPCPort:        env.GetEnvString("REDIS_RPC_PORT", "9003"),
+		healthRPCUrl:        env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
+		dbServerRPCUrl:      env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:    env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		redisSigningKey:     env.GetEnvString("REDIS_SIGNING_KEY", ""),
+		redisSigningAddress: env.GetEnvString("REDIS_SIGNING_ADDRESS", ""),
+		upstashURL:          env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashToken:        env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		localAddr:           env.GetEnvString("REDIS_ADDR", "localhost:6379"),
+		localPassword:       env.GetEnvString("REDIS_PASSWORD", ""),
 		db:                  0,
 		poolSize:            env.GetEnvInt("REDIS_POOL_SIZE", 10),
 		minIdleConns:        env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
@@ -89,7 +89,7 @@ func Init() error {
 		taskStreamTTL:       env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
 		cacheTTL:            env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
 		cleanupInterval:     env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
-		pinataHost:          env.GetEnv("PINATA_HOST", ""),
+		pinataHost:          env.GetEnvString("PINATA_HOST", ""),
 	}
 
 	if !cfg.devMode {
