@@ -6,12 +6,19 @@ import (
 	"net/http"
 	"time"
 
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/api/handler"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
 	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	gootel "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 // Server represents the API server
@@ -47,6 +54,12 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 	}
 	if cfg.MaxHeaderBytes == 0 {
 		cfg.MaxHeaderBytes = 1 << 20 // 1MB
+	}
+
+	// Initialize OpenTelemetry tracer
+	_, err := InitTracer()
+	if err != nil {
+		deps.Logger.Error("Failed to initialize OpenTelemetry tracer", "error", err)
 	}
 
 	gin.SetMode(gin.ReleaseMode)
@@ -117,4 +130,29 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	// P2P message handling (similar to keeper)
 	s.router.POST("/task/validate", redisHandler.HandleValidateRequest)
 	s.router.POST("/p2p/message", redisHandler.HandleP2PMessage)
+}
+
+// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
+// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
+func InitTracer() (func(context.Context) error, error) {
+	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4318" // default to local Tempo
+	}
+	exporter, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(exporter),
+		trace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("triggerx-redis"),
+		)),
+	)
+	gootel.SetTracerProvider(tp)
+	return tp.Shutdown, nil
 }

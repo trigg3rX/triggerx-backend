@@ -168,6 +168,36 @@ func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"task_fees": taskFees})
 }
 
+// GetJobsByApiKey handles GET /jobs/by-apikey
+func (h *Handler) GetJobsByApiKey(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetJobsByApiKey] trace_id=%s - Retrieving jobs by API key", traceID)
+	apiKey := c.GetHeader("X-Api-Key")
+	if apiKey == "" {
+		h.logger.Error("[GetJobsByApiKey] Missing X-Api-Key header")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing X-Api-Key header"})
+		return
+	}
+
+	apiKeyData, err := h.apiKeysRepository.GetApiKeyDataByKey(apiKey)
+	if err != nil {
+		h.logger.Errorf("[GetJobsByApiKey] Invalid API key: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
+		return
+	}
+
+	userAddress := apiKeyData.Owner
+	if userAddress == "" {
+		h.logger.Error("[GetJobsByApiKey] No owner found for API key")
+		c.JSON(http.StatusNotFound, gin.H{"error": "No owner found for API key"})
+		return
+	}
+
+	// Reuse the logic from GetJobsByUserAddress
+	c.Params = append(c.Params, gin.Param{Key: "user_address", Value: userAddress})
+	h.GetJobsByUserAddress(c)
+}
+
 // parseInt64 is a helper to parse int64 from string
 func parseInt64(s string) (int64, error) {
 	var i int64

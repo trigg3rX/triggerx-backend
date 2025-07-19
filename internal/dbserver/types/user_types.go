@@ -16,6 +16,7 @@ type UserData struct {
 	TotalTasks    int64     `json:"total_tasks"`
 	CreatedAt     time.Time `json:"created_at"`
 	LastUpdatedAt time.Time `json:"last_updated_at"`
+	Email         string    `json:"email_id"`
 }
 
 type CreateUserDataRequest struct {

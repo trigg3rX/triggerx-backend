@@ -31,6 +31,16 @@ const (
 			UPDATE triggerx.user_data 
 			SET total_tasks = ?, user_points = ?
 			WHERE user_id = ?`
+
+	UpdateUserEmailByAddressQuery = `
+		UPDATE triggerx.user_data
+		SET email_id = ?
+		WHERE user_address = ? ALLOW FILTERING`
+
+	UpdateUserEmailByIDQuery = `
+		UPDATE triggerx.user_data
+		SET email_id = ?
+		WHERE user_id = ?`
 )
 
 // Read Queries

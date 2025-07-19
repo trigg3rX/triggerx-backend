@@ -148,7 +148,7 @@ func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
 }
 
 func (a *ApiKeyAuth) updateLastUsed(key string) {
-	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ? ALLOW FILTERING`
+	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ?`
 
 	if err := a.db.Session().Query(query, time.Now().UTC(), key).Exec(); err != nil {
 		a.logger.Errorf("Failed to update last used timestamp: %v", err)

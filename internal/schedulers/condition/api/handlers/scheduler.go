@@ -23,8 +23,20 @@ func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.ConditionBa
 	}
 }
 
+// getTraceID retrieves the trace ID from the Gin context
+func getTraceID(c *gin.Context) string {
+	traceID, exists := c.Get("trace_id")
+	if !exists {
+		return ""
+	}
+	return traceID.(string)
+}
+
 // ScheduleJob schedules a new condition-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[ScheduleJob] trace_id=" + traceID + " - Scheduling job")
+
 	var jobData types.ScheduleConditionJobData
 	if err := c.ShouldBindJSON(&jobData); err != nil {
 		h.logger.Error("Invalid request payload", "error", err)
@@ -63,6 +75,9 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 
 // UnscheduleJob unschedules a condition-based job
 func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[UnscheduleJob] trace_id=" + traceID + " - Unscheduling job")
+
 	jobIDStr := c.Param("job_id")
 	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
 	if err != nil {
@@ -102,6 +117,9 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 
 // GetJobStats returns statistics for a specific condition job
 func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[GetJobStats] trace_id=" + traceID + " - Getting job stats")
+
 	jobIDStr := c.Param("job_id")
 	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
 	if err != nil {
@@ -138,6 +156,9 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 
 // UpdateJobsTask updates the task for a condition job
 func (h *SchedulerHandler) UpdateJobsTask(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[UpdateJobsTask] trace_id=" + traceID + " - Updating job's task")
+
 	jobIDStr := c.Param("job_id")
 	taskIDStr := c.Param("task_id")
 
@@ -192,6 +213,9 @@ func (h *SchedulerHandler) UpdateJobsTask(c *gin.Context) {
 
 // GetStats returns current scheduler statistics
 func (h *SchedulerHandler) GetStats(c *gin.Context) {
+	traceID := getTraceID(c)
+	h.logger.Info("[GetStats] trace_id=" + traceID + " - Getting scheduler stats")
+
 	stats := h.scheduler.GetStats()
 
 	response := gin.H{

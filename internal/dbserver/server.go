@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,21 +19,35 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	gootel "go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 const TraceIDHeader = "X-Trace-ID"
 const TraceIDKey = "trace_id"
 
-// InitTracer sets up OpenTelemetry tracing with Jaeger exporter
+// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
+// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
 func InitTracer() (func(context.Context) error, error) {
-	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint("http://localhost:14268/api/traces")))
+	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4318" // default to local Tempo
+	}
+	exporter, err := otlptracehttp.New(context.Background(),
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
 	if err != nil {
 		return nil, err
 	}
 	tp := trace.NewTracerProvider(
-		trace.WithBatcher(exp),
+		trace.WithBatcher(exporter),
+		trace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("triggerx-backend"),
+		)),
 	)
 	gootel.SetTracerProvider(tp)
 	return tp.Shutdown, nil
@@ -41,13 +56,44 @@ func InitTracer() (func(context.Context) error, error) {
 // TraceMiddleware injects a trace ID into the Gin context and response headers
 func TraceMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Get the global tracer
+		tracer := gootel.Tracer("triggerx-backend")
+
+		// Start a new span for this request
+		ctx, span := tracer.Start(c.Request.Context(), c.Request.URL.Path)
+		defer span.End()
+
+		// Set span attributes
+		span.SetAttributes(
+			semconv.HTTPMethodKey.String(c.Request.Method),
+			semconv.HTTPURLKey.String(c.Request.URL.String()),
+			semconv.HTTPUserAgentKey.String(c.Request.UserAgent()),
+		)
+
+		// Get or generate trace ID
 		traceID := c.GetHeader(TraceIDHeader)
 		if traceID == "" {
-			traceID = uuid.New().String()
+			// Extract trace ID from span context
+			spanContext := span.SpanContext()
+			if spanContext.HasTraceID() {
+				traceID = spanContext.TraceID().String()
+			} else {
+				traceID = uuid.New().String()
+			}
 		}
+
+		// Store in context
 		c.Set(TraceIDKey, traceID)
 		c.Header(TraceIDHeader, traceID)
+
+		// Update request context with span context
+		c.Request = c.Request.WithContext(ctx)
+
+		// Process request
 		c.Next()
+
+		// Set response status on span
+		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(c.Writer.Status()))
 	}
 }
 
@@ -188,21 +234,23 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	// Health check route - no authentication required
 	api.GET("/health", handler.HealthCheck)
 
-	// Public routes
-	api.GET("/users/:address", handler.GetUserDataByAddress)
-	api.GET("/wallet/points/:address", handler.GetWalletPoints)
-
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
+	// Public routes
+	protected.GET("/users/:address", handler.GetUserDataByAddress)
+	protected.POST("/users/email", handler.StoreUserEmail)
+
 	// Apply validation middleware to routes that need it
-	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	protected.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
 	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
-	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
-	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
+	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
@@ -221,9 +269,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
 	api.GET("/keepers/:id/points", handler.GetKeeperPoints)
 
-	api.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
-	api.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	api.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
+	protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
+	protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
+	protected.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
 	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)

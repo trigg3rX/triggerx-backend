@@ -23,6 +23,7 @@ type UserRepository interface {
 	GetUserJobIDsByAddress(address string) (int64, []int64, error)
 	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
 	GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error)
+	UpdateUserEmail(address string, email string) error
 }
 
 type userRepository struct {
@@ -84,6 +85,19 @@ func (r *userRepository) UpdateUserJobIDs(userID int64, jobIDs []int64) error {
 
 func (r *userRepository) UpdateUserTasksAndPoints(userID int64, tasksCompleted int64, userPoints float64) error {
 	err := r.db.Session().Query(queries.UpdateUserTasksAndPointsQuery, tasksCompleted, userPoints, userID).Exec()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *userRepository) UpdateUserEmail(address string, email string) error {
+	var userID int64
+	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
+	if err != nil {
+		return err
+	}
+	err = r.db.Session().Query(queries.UpdateUserEmailByIDQuery, email, userID).Exec()
 	if err != nil {
 		return err
 	}
