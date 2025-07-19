@@ -233,14 +233,16 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	// Health check route - no authentication required
 	api.GET("/health", handler.HealthCheck)
 
-	// Public routes
-	api.GET("/users/:address", handler.GetUserDataByAddress)
-	api.POST("/users/email", handler.StoreUserEmail)
+	
 
 	api.GET("/wallet/points/:address", handler.GetWalletPoints)
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
+
+	// Public routes
+	protected.GET("/users/:address", handler.GetUserDataByAddress)
+	protected.POST("/users/email", handler.StoreUserEmail)
 
 	// Apply validation middleware to routes that need it
 	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
@@ -250,8 +252,8 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
-	api.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
-	api.PUT("/jobs/delete/:id", handler.DeleteJobData)
+	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
@@ -270,9 +272,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine) {
 	api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
 	api.GET("/keepers/:id/points", handler.GetKeeperPoints)
 
-	api.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
-	api.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	api.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
+	protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
+	protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
+	protected.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
 	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)
