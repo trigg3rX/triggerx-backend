@@ -123,12 +123,20 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 
 	// Pack the execution contract's executeFunction call
-	executionABI, err := abi.JSON(strings.NewReader(`[{"inputs":[{"name":"target","type":"address"},{"name":"data","type":"bytes"}],"name":"executeFunction","outputs":[],"stateMutability":"payable","type":"function"}]`))
+	executionABI, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"uint256","name":"jobId","type":"uint256"},{"internalType":"uint256","name":"tgAmount","type":"uint256"},{"internalType":"address","name":"target","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"executeFunction","outputs":[],"stateMutability":"payable","type":"function"}]`))
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to parse execution contract ABI: %v", err)
 	}
 
-	executionInput, err := executionABI.Pack("executeFunction", taregtContractAddress, callData)
+	// According to the ABI, the function signature is:
+	// executeFunction(uint256 jobId, uint256 tgAmount, address target, bytes data)
+	// We use jobId from targetData.JobID, and tgAmount is determined by the execution result's total cost.
+	var tgAmountBigInt *big.Int = big.NewInt(0)
+	if result != nil {
+		// Assuming TotalCost is in float64 and needs to be converted to wei (1e18 multiplier) if it's in ETH
+		tgAmountBigInt = new(big.Int).SetInt64(int64(result.Stats.TotalCost * 1e18))
+	}
+	executionInput, err := executionABI.Pack("executeFunction",big.NewInt(targetData.JobID), tgAmountBigInt, taregtContractAddress, callData,)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
