@@ -14,7 +14,7 @@ import (
 
 type CodeExecutor struct {
 	pipeline *ExecutionPipeline
-	// monitor  *ExecutionMonitor
+	monitor  *ExecutionMonitor
 	config   config.ExecutorConfig
 	logger   logging.Logger
 }
@@ -47,11 +47,11 @@ func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, logger logg
 	pipeline := NewExecutionPipeline(cfg, fileMgr, containerMgr, logger)
 
 	// Create execution monitor
-	// monitor := NewExecutionMonitor(pipeline, cfg, logger)
+	monitor := NewExecutionMonitor(pipeline, cfg, logger)
 
 	return &CodeExecutor{
 		pipeline: pipeline,
-		// monitor:  monitor,
+		monitor:  monitor,
 		config:   cfg,
 		logger:   logger,
 	}, nil
@@ -71,9 +71,9 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttester
 	return result, nil
 }
 
-// func (e *CodeExecutor) GetHealthStatus() *HealthStatus {
-// 	return e.monitor.GetHealthStatus()
-// }
+func (e *CodeExecutor) GetHealthStatus() *HealthStatus {
+	return e.monitor.GetHealthStatus()
+}
 
 func (e *CodeExecutor) GetStats() *types.PerformanceMetrics {
 	return e.pipeline.GetStats()
@@ -85,45 +85,48 @@ func (e *CodeExecutor) GetPoolStats() *types.PoolStats {
 	return &types.PoolStats{}
 }
 
-// func (e *CodeExecutor) GetActiveExecutions() []*types.ExecutionContext {
-// 	return e.monitor.GetActiveExecutions()
-// }
+func (e *CodeExecutor) GetActiveExecutions() []*types.ExecutionContext {
+	return e.monitor.GetActiveExecutions()
+}
 
-// func (e *CodeExecutor) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
-// 	return e.monitor.GetExecutionByID(executionID)
-// }
+func (e *CodeExecutor) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
+	return e.monitor.GetExecutionByID(executionID)
+}
 
-// func (e *CodeExecutor) CancelExecution(executionID string) error {
-// 	return e.monitor.CancelExecution(executionID)
-// }
+func (e *CodeExecutor) CancelExecution(executionID string) error {
+	return e.monitor.CancelExecution(executionID)
+}
 
-// func (e *CodeExecutor) GetAlerts(severity string, limit int) []Alert {
-// 	return e.monitor.GetAlerts(severity, limit)
-// }
+func (e *CodeExecutor) GetAlerts(severity string, limit int) []Alert {
+	return e.monitor.GetAlerts(severity, limit)
+}
 
-// func (e *CodeExecutor) ClearAlerts() {
-// 	e.monitor.ClearAlerts()
-// }
+func (e *CodeExecutor) ClearAlerts() {
+	e.monitor.ClearAlerts()
+}
 
 func (e *CodeExecutor) Close() error {
 	e.logger.Info("Closing code executor")
 
 	// Close monitor
-	// if e.monitor != nil {
-	// 	if err := e.monitor.Close(); err != nil {
-	// 		e.logger.Warnf("Failed to close monitor: %v", err)
-	// 	}
-	// }
+	if e.monitor != nil {
+		if err := e.monitor.Close(); err != nil {
+			e.logger.Warnf("Failed to close monitor: %v", err)
+		}
+	}
+
+	if e.pipeline.fileManager != nil {
+		if err := e.pipeline.fileManager.Close(); err != nil {
+			e.logger.Warnf("Failed to close file manager: %v", err)
+		}
+	}
+
+	if e.pipeline.containerMgr != nil {
+		if err := e.pipeline.containerMgr.Close(); err != nil {
+			e.logger.Warnf("Failed to close container manager: %v", err)
+		}
+	}
 
 	e.logger.Info("Code executor closed")
 	return nil
-}
-
-// Legacy compatibility method
-func (e *CodeExecutor) ExecuteLegacy(ctx context.Context, fileURL string, noOfAttesters int) (*types.ExecutionResult, error) {
-	e.logger.Warnf("Using legacy execution method for: %s", fileURL)
-
-	// This maintains backward compatibility with the old execution method
-	// In a real implementation, you might want to gradually migrate away from this
-	return e.Execute(ctx, fileURL, noOfAttesters)
 }

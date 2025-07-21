@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	// "time"
+	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/execution"
@@ -87,22 +87,22 @@ func (dm *DockerManager) Execute(ctx context.Context, fileURL string, noOfAttest
 }
 
 // GetHealthStatus returns the current health status of the Docker manager
-// func (dm *DockerManager) GetHealthStatus() *execution.HealthStatus {
-// 	dm.mutex.RLock()
-// 	defer dm.mutex.RUnlock()
+func (dm *DockerManager) GetHealthStatus() *execution.HealthStatus {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
 
-// 	if !dm.initialized || dm.closed {
-// 		return &execution.HealthStatus{
-// 			Status:    "unavailable",
-// 			Score:     0.0,
-// 			LastCheck: time.Now(),
-// 			Alerts:    []execution.Alert{},
-// 			Metrics:   &types.PerformanceMetrics{},
-// 		}
-// 	}
+	if !dm.initialized || dm.closed {
+		return &execution.HealthStatus{
+			Status:    "unavailable",
+			Score:     0.0,
+			LastCheck: time.Now(),
+			Alerts:    []execution.Alert{},
+			Metrics:   &types.PerformanceMetrics{},
+		}
+	}
 
-// 	return dm.executor.GetHealthStatus()
-// }
+	return dm.executor.GetHealthStatus()
+}
 
 // GetStats returns performance metrics for the Docker manager
 func (dm *DockerManager) GetStats() *types.PerformanceMetrics {
@@ -129,67 +129,67 @@ func (dm *DockerManager) GetPoolStats() *types.PoolStats {
 }
 
 // GetActiveExecutions returns all currently active executions
-// func (dm *DockerManager) GetActiveExecutions() []*types.ExecutionContext {
-// 	dm.mutex.RLock()
-// 	defer dm.mutex.RUnlock()
+func (dm *DockerManager) GetActiveExecutions() []*types.ExecutionContext {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
 
-// 	if !dm.initialized || dm.closed {
-// 		return []*types.ExecutionContext{}
-// 	}
+	if !dm.initialized || dm.closed {
+		return []*types.ExecutionContext{}
+	}
 
-// 	return dm.executor.GetActiveExecutions()
-// }
+	return dm.executor.GetActiveExecutions()
+}
 
 // GetExecutionByID returns a specific execution by its ID
-// func (dm *DockerManager) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
-// 	dm.mutex.RLock()
-// 	defer dm.mutex.RUnlock()
+func (dm *DockerManager) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
 
-// 	if !dm.initialized || dm.closed {
-// 		return nil, false
-// 	}
+	if !dm.initialized || dm.closed {
+		return nil, false
+	}
 
-// 	return dm.executor.GetExecutionByID(executionID)
-// }
+	return dm.executor.GetExecutionByID(executionID)
+}
 
 // CancelExecution cancels a running execution
-// func (dm *DockerManager) CancelExecution(executionID string) error {
-// 	dm.mutex.RLock()
-// 	defer dm.mutex.RUnlock()
+func (dm *DockerManager) CancelExecution(executionID string) error {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
 
-// 	if !dm.initialized {
-// 		return fmt.Errorf("docker manager not initialized")
-// 	}
-// 	if dm.closed {
-// 		return fmt.Errorf("docker manager is closed")
-// 	}
+	if !dm.initialized {
+		return fmt.Errorf("docker manager not initialized")
+	}
+	if dm.closed {
+		return fmt.Errorf("docker manager is closed")
+	}
 
-// 	return dm.executor.CancelExecution(executionID)
-// }
+	return dm.executor.CancelExecution(executionID)
+}
 
 // GetAlerts returns alerts from the monitoring system
-// func (dm *DockerManager) GetAlerts(severity string, limit int) []execution.Alert {
-// 	dm.mutex.RLock()
-// 	defer dm.mutex.RUnlock()
+func (dm *DockerManager) GetAlerts(severity string, limit int) []execution.Alert {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
 
-// 	if !dm.initialized || dm.closed {
-// 		return []execution.Alert{}
-// 	}
+	if !dm.initialized || dm.closed {
+		return []execution.Alert{}
+	}
 
-// 	return dm.executor.GetAlerts(severity, limit)
-// }
+	return dm.executor.GetAlerts(severity, limit)
+}
 
 // ClearAlerts clears all alerts from the monitoring system
-// func (dm *DockerManager) ClearAlerts() {
-// 	dm.mutex.RLock()
-// 	defer dm.mutex.RUnlock()
+func (dm *DockerManager) ClearAlerts() {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
 
-// 	if !dm.initialized || dm.closed {
-// 		return
-// 	}
+	if !dm.initialized || dm.closed {
+		return
+	}
 
-// 	dm.executor.ClearAlerts()
-// }
+	dm.executor.ClearAlerts()
+}
 
 // IsInitialized returns whether the Docker manager is initialized
 func (dm *DockerManager) IsInitialized() bool {
