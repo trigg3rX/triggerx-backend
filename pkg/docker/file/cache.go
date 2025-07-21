@@ -169,7 +169,7 @@ func (c *FileCache) storeFile(key string, content []byte) (string, error) {
 	c.stats.Size += fileInfo.Size()
 	c.mutex.Unlock()
 
-	c.logger.Infof("Stored file in cache: %s (size: %d bytes)", key, fileInfo.Size())
+	c.logger.Infof("Stored file in cache (size: %d bytes)", fileInfo.Size())
 	return filePath, nil
 }
 

@@ -59,7 +59,7 @@ func NewFileManager(cfg config.ExecutorConfig, logger logging.Logger) (*FileMana
 
 func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string) (*types.ExecutionContext, error) {
 	startTime := time.Now()
-	fm.logger.Infof("Processing file: %s", fileURL)
+	fm.logger.Debugf("Processing file: %s", fileURL)
 
 	// Download and validate file
 	result, err := fm.downloader.DownloadFile(fileURL, fileURL)
@@ -99,8 +99,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string) (*type
 	// Update statistics
 	fm.updateStats(true, time.Since(startTime), result.Validation.Complexity)
 
-	fm.logger.Infof("File processed successfully: %s (cached: %v, size: %d bytes)",
-		fileURL, result.IsCached, result.Size)
+	fm.logger.Debugf("File processed successfully (cached: %v, size: %d bytes)", result.IsCached, result.Size)
 
 	return execCtx, nil
 }

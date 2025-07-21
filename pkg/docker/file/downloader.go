@@ -138,7 +138,8 @@ func (d *Downloader) downloadContent(url string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	d.logger.Infof("Downloaded %d bytes from %s", len(content), url)
+	// d.logger.Infof("Downloaded %d bytes from %s", len(content), url)
+	d.logger.Debugf("Downloaded %d bytes", len(content))
 	return content, nil
 }
 
