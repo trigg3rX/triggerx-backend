@@ -18,7 +18,6 @@ type CachedFile struct {
 	Hash         string    `json:"hash"`
 	LastAccessed time.Time `json:"last_accessed"`
 	Size         int64     `json:"size"`
-	IsValid      bool      `json:"is_valid"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -58,7 +57,7 @@ func NewFileCache(cfg config.CacheConfig, logger logging.Logger) (*FileCache, er
 		},
 	}
 
-	cache.startCleanupRoutine()
+	// cache.startCleanupRoutine()
 
 	if err := cache.loadExistingFiles(); err != nil {
 		logger.Warnf("Failed to load existing cached files: %v", err)
@@ -122,16 +121,6 @@ func (c *FileCache) accessCachedFile(cachedFile *CachedFile) (string, error) {
 	}
 
 	cachedFile.LastAccessed = time.Now()
-
-	// Check if file is still valid (within TTL)
-	if time.Since(cachedFile.LastAccessed) > c.config.CacheTTL {
-		cachedFile.IsValid = false
-	}
-
-	if !cachedFile.IsValid {
-		return "", fmt.Errorf("cached file is expired: %s", cachedFile.Path)
-	}
-
 	return cachedFile.Path, nil
 }
 
@@ -159,7 +148,6 @@ func (c *FileCache) storeFile(key string, content []byte) (string, error) {
 		Hash:         key,
 		LastAccessed: time.Now(),
 		Size:         fileInfo.Size(),
-		IsValid:      true,
 		CreatedAt:    time.Now(),
 	}
 
@@ -228,59 +216,36 @@ func (c *FileCache) ensureSpace(requiredSize int64) error {
 		c.logger.Debugf("Evicted cached file: %s (size: %d bytes)", entry.hash, entry.file.Size)
 	}
 
+	c.logger.Infof("Evicted %d bytes (%d files) from cache", evictedSize, c.stats.EvictionCount)
 	return nil
 }
 
-func (c *FileCache) startCleanupRoutine() {
-	c.cleanupTicker = time.NewTicker(c.config.CleanupInterval)
+// func (c *FileCache) startCleanupRoutine() {
+// 	c.cleanupTicker = time.NewTicker(c.config.CleanupInterval)
 
-	go func() {
-		for {
-			select {
-			case <-c.cleanupTicker.C:
-				c.cleanup()
-			case <-c.stopCleanup:
-				c.cleanupTicker.Stop()
-				return
-			}
-		}
-	}()
-}
+// 	go func() {
+// 		for {
+// 			select {
+// 			case <-c.cleanupTicker.C:
+// 				c.cleanup()
+// 			case <-c.stopCleanup:
+// 				c.cleanupTicker.Stop()
+// 				return
+// 			}
+// 		}
+// 	}()
+// }
 
-func (c *FileCache) cleanup() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+// func (c *FileCache) cleanup() {
+// 	c.mutex.Lock()
+// 	defer c.mutex.Unlock()
 
-	now := time.Now()
-	expiredFiles := make([]string, 0)
+// 	now := time.Now()
 
-	// Find expired files
-	for hash, file := range c.fileCache {
-		if now.Sub(file.LastAccessed) > c.config.CacheTTL {
-			expiredFiles = append(expiredFiles, hash)
-		}
-	}
-
-	// Remove expired files
-	for _, hash := range expiredFiles {
-		file := c.fileCache[hash]
-		if err := os.Remove(file.Path); err != nil {
-			c.logger.Warnf("Failed to remove expired file: %v", err)
-			continue
-		}
-
-		delete(c.fileCache, hash)
-		c.stats.ItemCount--
-		c.stats.Size -= file.Size
-		c.stats.EvictionCount++
-	}
-
-	if len(expiredFiles) > 0 {
-		c.logger.Infof("Cleaned up %d expired files from cache", len(expiredFiles))
-	}
-
-	c.stats.LastCleanup = now
-}
+// 	// No TTL-based cleanup - files are only evicted when cache size limit is reached
+// 	// This function now just updates the last cleanup time for stats
+// 	c.stats.LastCleanup = now
+// }
 
 func (c *FileCache) loadExistingFiles() error {
 	entries, err := os.ReadDir(c.cacheDir)
@@ -308,7 +273,6 @@ func (c *FileCache) loadExistingFiles() error {
 			Hash:         key,
 			LastAccessed: fileInfo.ModTime(),
 			Size:         fileInfo.Size(),
-			IsValid:      true,
 			CreatedAt:    fileInfo.ModTime(),
 		}
 

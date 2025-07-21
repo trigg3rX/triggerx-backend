@@ -34,7 +34,7 @@ type PoolConfig struct {
 
 type CacheConfig struct {
 	MaxCacheSize      int64         `json:"max_cache_size"`
-	CacheTTL          time.Duration `json:"cache_ttl"`
+	EvictionSize      int64         `json:"eviction_size"`
 	CleanupInterval   time.Duration `json:"cleanup_interval"`
 	EnableCompression bool          `json:"enable_compression"`
 	MaxFileSize       int64         `json:"max_file_size"`

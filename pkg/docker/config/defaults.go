@@ -68,17 +68,16 @@ func DefaultPoolConfig() PoolConfig {
 func DefaultCacheConfig() CacheConfig {
 	return CacheConfig{
 		MaxCacheSize:      100 * 1024 * 1024, // 100MB
-		CacheTTL:          1 * time.Hour,
 		CleanupInterval:   10 * time.Minute,
 		EnableCompression: true,
-		MaxFileSize:       10 * 1024 * 1024, // 10MB
+		MaxFileSize:       1 * 1024 * 1024, // 1MB
 	}
 }
 
 func DefaultValidationConfig() ValidationConfig {
 	return ValidationConfig{
 		EnableCodeValidation: true,
-		MaxFileSize:          10 * 1024 * 1024, // 10MB
+		MaxFileSize:          1 * 1024 * 1024, // 1MB
 		AllowedExtensions:    []string{".go", ".py", ".js", ".ts"},
 		BlockedPatterns: []string{
 			"os.RemoveAll",
@@ -103,7 +102,6 @@ func OptimizedConfig(lang string) ExecutorConfig {
 
 	// Optimize cache settings
 	cfg.Cache.MaxCacheSize = 500 * 1024 * 1024 // 500MB
-	cfg.Cache.CacheTTL = 2 * time.Hour
 
 	// Optimize Docker settings
 	cfg.Docker.MemoryLimit = "2048m"
@@ -123,7 +121,6 @@ func DevelopmentConfig(lang string) ExecutorConfig {
 
 	// Shorter timeouts for faster feedback
 	cfg.Pool.IdleTimeout = 2 * time.Minute
-	cfg.Cache.CacheTTL = 30 * time.Minute
 
 	return cfg
 }
