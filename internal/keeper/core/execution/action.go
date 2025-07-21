@@ -18,7 +18,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -51,11 +51,12 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 
 	var argData []interface{}
-	var result *docker.ExecutionResult
+	var result *dockertypes.ExecutionResult
 	switch targetData.TaskDefinitionID {
 	case 2, 4, 6:
 		var execErr error
-		result, execErr = e.codeExecutor.Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, 1)
+		// Use the DockerManager from the validator to execute the code
+		result, execErr = e.validator.GetDockerManager().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, 1)
 		if execErr != nil {
 			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", execErr)
 		}
@@ -68,8 +69,8 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		e.logger.Debugf("Parsed dynamic arguments: %+v", argData)
 	case 1, 3, 5:
 		argData = e.parseStaticArgs(targetData.Arguments)
-		result = &docker.ExecutionResult{
-			Stats: docker.ResourceStats{
+		result = &dockertypes.ExecutionResult{
+			Stats: dockertypes.DockerResourceStats{
 				TotalCost: 0.1,
 			},
 		}
