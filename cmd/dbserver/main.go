@@ -16,6 +16,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -59,9 +61,14 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
+	dockerManager, err := docker.NewDockerManager(dockerconfig.DefaultConfig("go"), logger)
+	if err != nil {
+		logger.Errorf("Failed to initialize Docker manager: %v", err)
+	}
+
 	dbServer := dbserver.NewServer(conn, logger)
 
-	dbServer.RegisterRoutes(dbServer.GetRouter())
+	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerManager)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
@@ -90,10 +97,10 @@ func main() {
 		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(srv, &wg, logger)
+	performGracefulShutdown(srv, &wg, logger, dockerManager)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerManager *docker.DockerManager) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -103,6 +110,12 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
+		}
+	}
+
+	if dockerManager != nil {
+		if err := dockerManager.Close(); err != nil {
+			logger.Error("Failed to close Docker manager", "error", err)
 		}
 	}
 
