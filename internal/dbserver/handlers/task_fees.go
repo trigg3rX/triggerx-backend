@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 )
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
@@ -25,12 +24,6 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 
 	ctx := context.Background()
 
-	executor, err := docker.NewCodeExecutor(ctx, h.executor, h.logger)
-	if err != nil {
-		trackDBOp(err)
-		return 0, fmt.Errorf("failed to create code executor: %v", err)
-	}
-
 	for _, ipfsURL := range urlList {
 		ipfsURL = strings.TrimSpace(ipfsURL)
 		wg.Add(1)
@@ -39,7 +32,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 			defer wg.Done()
 
 			// Use the Execute method directly which handles all the Docker-in-Docker compatibility
-			result, err := executor.Execute(ctx, url, 10)
+				result, err := h.dockerManager.Execute(ctx, url, 10)
 			if err != nil {
 				h.logger.Errorf("Error executing code: %v", err)
 				return

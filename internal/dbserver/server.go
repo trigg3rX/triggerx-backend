@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -29,14 +29,9 @@ const TraceIDHeader = "X-Trace-ID"
 const TraceIDKey = "trace_id"
 
 // InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
-// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
 func InitTracer() (func(context.Context) error, error) {
-	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4318" // default to local Tempo
-	}
 	exporter, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithEndpoint(config.GetOTTempoEndpoint()),
 		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
@@ -106,7 +101,7 @@ type Server struct {
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
-	executor           docker.ExecutorConfig
+	dockerManager      *docker.DockerManager
 }
 
 func NewServer(db *database.Connection, logger logging.Logger) *Server {
@@ -199,6 +194,11 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 		logger.Warn("Rate limiter disabled - Redis client not available")
 	}
 
+	dockerManager, err := docker.NewDockerManager(dockerconfig.DefaultConfig("go"), logger)
+	if err != nil {
+		logger.Errorf("Failed to initialize Docker manager: %v", err)
+	}
+
 	s := &Server{
 		router:      router,
 		db:          db,
@@ -211,7 +211,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 			EmailPassword: config.GetEmailPassword(),
 			BotToken:      config.GetBotToken(),
 		},
-		executor: docker.DefaultConfig(),
+		dockerManager: dockerManager,
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
@@ -224,7 +224,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 }
 
 func (s *Server) RegisterRoutes(router *gin.Engine) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.executor)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.dockerManager)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
