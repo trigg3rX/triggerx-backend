@@ -1,6 +1,7 @@
 package container
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -216,7 +217,7 @@ func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string,
 	config := &container.Config{
 		Image:      m.config.Image,
 		Cmd:        []string{"sh", "-c", keepAliveCommand},
-		Tty:        false, // Don't allocate TTY for keep-alive
+		Tty:        true, // Don't allocate TTY for keep-alive
 		WorkingDir: "/code",
 	}
 
@@ -431,6 +432,13 @@ func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, f
 }
 
 func (m *Manager) executeCode(ctx context.Context, containerID string) (*types.ExecutionResult, error) {
+	result := &types.ExecutionResult{}
+	var executionStartTime time.Time
+	var executionEndTime time.Time
+	var codeExecutionTime time.Duration
+	executionStarted := false
+	var outputBuffer bytes.Buffer
+
 	execCmd := []string{"sh", "-c", SetupScript}
 
 	execConfig := &container.ExecOptions{
@@ -444,36 +452,63 @@ func (m *Manager) executeCode(ctx context.Context, containerID string) (*types.E
 		return nil, fmt.Errorf("failed to create exec: %w", err)
 	}
 
+	execAttachResp, err := m.Cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach to exec: %w", err)
+	}
+	defer execAttachResp.Close()
+	scanner := bufio.NewScanner(execAttachResp.Reader)
+
 	// Execute the command
 	err = m.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to start exec: %w", err)
 	}
 
-	// Wait for completion and capture output
-	var output bytes.Buffer
+	for scanner.Scan() {
+		line := scanner.Text()
+		// m.logger.Debugf("Container Log: %s\n", line)
+
+		if strings.Contains(line, "START_EXECUTION") {
+			executionStartTime = time.Now().UTC()
+			executionStarted = true
+		} else if strings.Contains(line, "END_EXECUTION") && executionStarted {
+			executionEndTime = time.Now().UTC()
+			codeExecutionTime = executionEndTime.Sub(executionStartTime)
+			// m.logger.Debugf("Code execution completed in: %v\n", codeExecutionTime)
+			break
+		} else if executionStarted {
+			outputBuffer.WriteString(line)
+			m.logger.Debugf("Container Log: %s\n", line)
+		}
+	}
+
+	// Wait for exec to finish (in case END_EXECUTION is not printed)
 	for {
 		inspectResp, err := m.Cli.ContainerExecInspect(ctx, execResp.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to inspect exec: %w", err)
 		}
-
 		if !inspectResp.Running {
-			result := &types.ExecutionResult{
-				Success: inspectResp.ExitCode == 0,
-				Output:  output.String(),
-				Error:   nil,
+			if !executionStarted || codeExecutionTime == 0 {
+				codeExecutionTime = time.Since(executionStartTime)
+				m.logger.Debugf("Warning: Could not determine precise code execution time, using container execution time instead")
 			}
-
+			result.Success = inspectResp.ExitCode == 0
 			if inspectResp.ExitCode != 0 {
 				result.Error = fmt.Errorf("execution failed with exit code: %d", inspectResp.ExitCode)
 			}
-
-			return result, nil
+			break
 		}
-
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	result.Output = outputBuffer.String()
+	result.Stats.ExecutionTime = codeExecutionTime
+	return result, nil
 }
 
 func (m *Manager) GetPoolStats() *types.PoolStats {

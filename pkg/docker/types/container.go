@@ -40,8 +40,8 @@ type ContainerConfig struct {
 }
 
 type ContainerInfo struct {
-	ID      string           `json:"id"`
-	Config  *ContainerConfig `json:"config"`
-	Stats   *ResourceStats   `json:"stats,omitempty"`
-	Created time.Time        `json:"created"`
+	ID      string               `json:"id"`
+	Config  *ContainerConfig     `json:"config"`
+	Stats   *DockerResourceStats `json:"stats,omitempty"`
+	Created time.Time            `json:"created"`
 }

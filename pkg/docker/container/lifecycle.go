@@ -142,7 +142,7 @@ func (cl *ContainerLifecycle) GetContainerInfo(ctx context.Context, containerID 
 	return containerInfo, nil
 }
 
-func (cl *ContainerLifecycle) GetContainerStats(ctx context.Context, containerID string) (*types.ResourceStats, error) {
+func (cl *ContainerLifecycle) GetContainerStats(ctx context.Context, containerID string) (*types.DockerResourceStats, error) {
 	stats, err := cl.manager.Cli.ContainerStats(ctx, containerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container stats: %w", err)
@@ -173,7 +173,7 @@ func (cl *ContainerLifecycle) GetContainerStats(ctx context.Context, containerID
 		}
 	}
 
-	resourceStats := &types.ResourceStats{
+	resourceStats := &types.DockerResourceStats{
 		MemoryUsage:   dockerStats.MemoryStats.Usage,
 		CPUPercentage: cpuPercent,
 		NetworkRx:     rxBytes,

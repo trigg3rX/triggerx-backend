@@ -15,6 +15,13 @@ type DockerConfig struct {
 	Binds          []string `json:"binds"`
 }
 
+type FeeConfig struct {
+	PricePerTG            float64 `json:"price_per_tg"`
+	FixedCost             float64 `json:"fixed_cost"`
+	TransactionSimulation float64 `json:"transaction_simulation"`
+	OverheadCost          float64 `json:"overhead_cost"`
+}
+
 type PoolConfig struct {
 	MaxContainers       int           `json:"max_containers"`
 	MinContainers       int           `json:"min_containers"`

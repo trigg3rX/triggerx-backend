@@ -171,14 +171,22 @@ func (fm *FileManager) updateStats(success bool, duration time.Duration, complex
 	}
 
 	// Calculate average execution time
-	totalDuration := fm.stats.AverageExecutionTime * time.Duration(fm.stats.SuccessfulExecutions-1)
-	totalDuration += duration
-	fm.stats.AverageExecutionTime = totalDuration / time.Duration(fm.stats.SuccessfulExecutions)
+	if fm.stats.SuccessfulExecutions > 0 {
+		totalDuration := fm.stats.AverageExecutionTime * time.Duration(fm.stats.SuccessfulExecutions-1)
+		totalDuration += duration
+		fm.stats.AverageExecutionTime = totalDuration / time.Duration(fm.stats.SuccessfulExecutions)
+	} else {
+		fm.stats.AverageExecutionTime = duration
+	}
 
 	// Update cost statistics (basic calculation)
 	cost := fm.calculateCost(duration, complexity)
 	fm.stats.TotalCost += cost
-	fm.stats.AverageCost = fm.stats.TotalCost / float64(fm.stats.SuccessfulExecutions)
+	if fm.stats.SuccessfulExecutions > 0 {
+		fm.stats.AverageCost = fm.stats.TotalCost / float64(fm.stats.SuccessfulExecutions)
+	} else {
+		fm.stats.AverageCost = cost
+	}
 }
 
 func (fm *FileManager) calculateCost(duration time.Duration, complexity float64) float64 {

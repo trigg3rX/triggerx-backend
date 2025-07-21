@@ -7,6 +7,43 @@ import (
 	"github.com/docker/go-units"
 )
 
+func DefaultConfig(lang string) ExecutorConfig {
+	return ExecutorConfig{
+		Docker:     DefaultDockerConfig(lang),
+		Fees:       DefaultFeeConfig(),
+		Pool:       DefaultPoolConfig(),
+		Cache:      DefaultCacheConfig(),
+		Validation: DefaultValidationConfig(),
+	}
+}
+
+func DefaultDockerConfig(lang string) DockerConfig {
+	var imageName string
+	switch lang {
+	case "go":
+		imageName = "golang:latest"
+	case "py":
+		imageName = "python:latest"
+	case "node":
+		imageName = "node:latest"
+	default:
+		imageName = "golang:latest"
+	}
+
+	return DockerConfig{
+		Image:          imageName,
+		TimeoutSeconds: 600,
+		AutoCleanup:    true,
+		MemoryLimit:    "1024m",
+		CPULimit:       1.0,
+		NetworkMode:    "bridge",
+		SecurityOpt:    []string{"no-new-privileges"},
+		ReadOnlyRootFS: false,
+		Environment:    []string{"GODEBUG=http2client=0"},
+		Binds:          []string{"/var/run/docker.sock:/var/run/docker.sock"},
+	}
+}
+
 func DefaultFeeConfig() FeeConfig {
 	return FeeConfig{
 		PricePerTG:            0.0001,
@@ -48,11 +85,47 @@ func DefaultValidationConfig() ValidationConfig {
 			"exec.Command",
 			"syscall",
 			"runtime.GC",
-			"os.Exit",
 			"panic(",
 		},
 		TimeoutSeconds: 30,
 	}
+}
+
+// OptimizedConfig returns a configuration optimized for high-performance execution
+func OptimizedConfig(lang string) ExecutorConfig {
+	cfg := DefaultConfig(lang)
+
+	// Optimize pool settings for high throughput
+	cfg.Pool.MaxContainers = 10
+	cfg.Pool.MinContainers = 5
+	cfg.Pool.PreWarmCount = 8
+	cfg.Pool.IdleTimeout = 5 * time.Minute
+
+	// Optimize cache settings
+	cfg.Cache.MaxCacheSize = 500 * 1024 * 1024 // 500MB
+	cfg.Cache.CacheTTL = 2 * time.Hour
+
+	// Optimize Docker settings
+	cfg.Docker.MemoryLimit = "2048m"
+	cfg.Docker.CPULimit = 2.0
+
+	return cfg
+}
+
+// DevelopmentConfig returns a configuration optimized for development
+func DevelopmentConfig(lang string) ExecutorConfig {
+	cfg := DefaultConfig(lang)
+
+	// Reduce resource usage for development
+	cfg.Pool.MaxContainers = 2
+	cfg.Pool.MinContainers = 1
+	cfg.Pool.PreWarmCount = 1
+
+	// Shorter timeouts for faster feedback
+	cfg.Pool.IdleTimeout = 2 * time.Minute
+	cfg.Cache.CacheTTL = 30 * time.Minute
+
+	return cfg
 }
 
 func (c *DockerConfig) MemoryLimitBytes() uint64 {
