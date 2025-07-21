@@ -17,6 +17,8 @@ noun=$(shuf -n 1 scripts/nouns.txt)
 
 JOB_TITLE="$adj $noun"
 
+JOB_ID=$(date +%s)
+
 case $TASK_DEFINITION_ID in
   1)
     TASK_DEFINITION_ID=1 # Time Based, Static Args
@@ -71,11 +73,13 @@ esac
 # curl -X POST https://data.triggerx.network/api/jobs \ 192.168.1.56
 curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
+  -H "X-API-KEY: admin-1234-xyz" \
   -d "[
     {
       \"user_address\": \"0x7Db951c0E6D8906687B459427eA3F3F2b456473B\",
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
+      \"job_id\": $JOB_ID,
       \"job_title\": \"$JOB_TITLE\",
       \"task_definition_id\": $TASK_DEFINITION_ID,
       \"custom\": true,
