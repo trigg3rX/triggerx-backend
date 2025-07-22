@@ -38,6 +38,7 @@ type Config struct {
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
+	otTempoEndpoint       string
 
 	// Polling Look Ahead
 	timeSchedulerPollingLookAhead int
@@ -63,6 +64,7 @@ func Init() error {
 		faucetFundAmount:              env.GetEnvString("FAUCET_FUND_AMOUNT", "30000000000000000"),
 		upstashRedisUrl:               env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		otTempoEndpoint:               env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 		devMode:                       env.GetEnvBool("DEV_MODE", false),
 		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
 	}
@@ -97,12 +99,15 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidPrivateKey(cfg.faucetPrivateKey) {
 		return fmt.Errorf("invalid faucet private key: %s", cfg.faucetPrivateKey)
 	}
-	if env.IsEmpty(cfg.upstashRedisUrl) {
-		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	if env.IsEmpty(cfg.otTempoEndpoint) {
+		return fmt.Errorf("invalid tempo otlp endpoint: %s", cfg.otTempoEndpoint)
 	}
-	if env.IsEmpty(cfg.upstashRedisRestToken) {
-		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
-	}
+	// if env.IsEmpty(cfg.upstashRedisUrl) {
+	// 	return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	// }
+	// if env.IsEmpty(cfg.upstashRedisRestToken) {
+	// 	return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
+	// }
 	if !cfg.devMode {
 		if !env.IsValidEmail(cfg.emailUser) {
 			return fmt.Errorf("invalid email user: %s", cfg.emailUser)
@@ -167,6 +172,10 @@ func GetUpstashRedisUrl() string {
 
 func GetUpstashRedisRestToken() string {
 	return cfg.upstashRedisRestToken
+}
+
+func GetOTTempoEndpoint() string {
+	return cfg.otTempoEndpoint
 }
 
 func IsDevMode() bool {

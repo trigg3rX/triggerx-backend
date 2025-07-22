@@ -14,7 +14,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -23,7 +22,6 @@ import (
 // TaskExecutor is the default implementation of TaskExecutor
 type TaskExecutor struct {
 	alchemyAPIKey    string
-	codeExecutor     *docker.CodeExecutor
 	argConverter     *ArgumentConverter
 	validator        *validation.TaskValidator
 	aggregatorClient *aggregator.AggregatorClient
@@ -33,13 +31,11 @@ type TaskExecutor struct {
 // NewTaskExecutor creates a new instance of TaskExecutor
 func NewTaskExecutor(
 	alchemyAPIKey string,
-	codeExecutor *docker.CodeExecutor,
 	validator *validation.TaskValidator,
 	aggregatorClient *aggregator.AggregatorClient,
 	logger logging.Logger) *TaskExecutor {
 	return &TaskExecutor{
 		alchemyAPIKey:    alchemyAPIKey,
-		codeExecutor:     codeExecutor,
 		argConverter:     &ArgumentConverter{},
 		validator:        validator,
 		aggregatorClient: aggregatorClient,

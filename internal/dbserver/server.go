@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,14 +28,9 @@ const TraceIDHeader = "X-Trace-ID"
 const TraceIDKey = "trace_id"
 
 // InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
-// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
 func InitTracer() (func(context.Context) error, error) {
-	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4318" // default to local Tempo
-	}
 	exporter, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithEndpoint(config.GetOTTempoEndpoint()),
 		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
@@ -106,7 +100,6 @@ type Server struct {
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
-	executor           docker.ExecutorConfig
 }
 
 func NewServer(db *database.Connection, logger logging.Logger) *Server {
@@ -211,7 +204,6 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 			EmailPassword: config.GetEmailPassword(),
 			BotToken:      config.GetBotToken(),
 		},
-		executor: docker.DefaultConfig(),
 	}
 
 	s.apiKeyAuth = middleware.NewApiKeyAuth(db, rateLimiter, logger)
@@ -223,8 +215,8 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	return s
 }
 
-func (s *Server) RegisterRoutes(router *gin.Engine) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, s.executor)
+func (s *Server) RegisterRoutes(router *gin.Engine, dockerManager *docker.DockerManager) {
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerManager)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
