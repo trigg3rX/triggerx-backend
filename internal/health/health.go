@@ -110,7 +110,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// Record check-in by version metric
 	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
-	if keeperHealth.Version == "0.1.5" || keeperHealth.Version == "0.1.4" || keeperHealth.Version == "0.1.3" {
+	if keeperHealth.Version == "0.1.6" || keeperHealth.Version == "0.1.5" || keeperHealth.Version == "0.1.4" || keeperHealth.Version == "0.1.3" {
 		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 		if !ok {
 			h.logger.Error("Invalid keeper signature",
