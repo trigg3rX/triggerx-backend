@@ -74,25 +74,14 @@ if [[ "$SERVICE" == "all" ]]; then
             return 1
         fi
         
-        if ! docker tag triggerx-${docker_name}:${version} trigg3rx/triggerx-${docker_name}:latest >> "publish_${docker_name}.log" 2>&1; then
-            echo "[$(date '+%H:%M:%S')] ❌ Failed to tag $service for latest"
-            return 1
-        fi
-        
         # Push images
         if ! docker push trigg3rx/triggerx-${docker_name}:${version} >> "publish_${docker_name}.log" 2>&1; then
             echo "[$(date '+%H:%M:%S')] ❌ Failed to push $service version ${version}"
             return 1
         fi
         
-        if ! docker push trigg3rx/triggerx-${docker_name}:latest >> "publish_${docker_name}.log" 2>&1; then
-            echo "[$(date '+%H:%M:%S')] ❌ Failed to push $service latest"
-            return 1
-        fi
-        
         # Clean up remote tags
         docker rmi trigg3rx/triggerx-${docker_name}:${version} >> "publish_${docker_name}.log" 2>&1
-        docker rmi trigg3rx/triggerx-${docker_name}:latest >> "publish_${docker_name}.log" 2>&1
         
         echo "[$(date '+%H:%M:%S')] ✅ Successfully published $service"
         return 0
@@ -142,18 +131,15 @@ else
 
     # Tag images with version and latest
     docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
-    docker tag triggerx-${DOCKER_NAME}:${VERSION} trigg3rx/triggerx-${DOCKER_NAME}:latest
 
     echo "Pushing $SERVICE..."
     docker push trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
-    docker push trigg3rx/triggerx-${DOCKER_NAME}:latest
 
     docker rmi trigg3rx/triggerx-${DOCKER_NAME}:${VERSION}
-    docker rmi trigg3rx/triggerx-${DOCKER_NAME}:latest
 fi
 
 if [[ "$SERVICE" == "all" ]]; then
-    echo "All services published successfully with version ${VERSION} and latest tags"
+    echo "All services published successfully with version ${VERSION}"
 else
-    echo "Successfully tagged and pushed: triggerx-${SERVICE}:${VERSION} and latest tag"
+    echo "Successfully tagged and pushed: triggerx-${SERVICE}:${VERSION}"
 fi
