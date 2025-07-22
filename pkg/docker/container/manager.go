@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
@@ -20,27 +21,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-const (
-	SetupScript = `#!/bin/sh
-cd /code
-go mod init code
-go mod tidy
-echo "START_EXECUTION"
-go run code.go 2>&1 || {
-    echo "Error executing Go program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
-`
-)
-
 type Manager struct {
 	Cli        *client.Client
 	config     config.DockerConfig
 	logger     logging.Logger
-	pool       *ContainerPool
+	pools      map[types.Language]*ContainerPool
 	lifecycle  *ContainerLifecycle
-	poolConfig config.PoolConfig
+	mutex      sync.RWMutex
+	initialized bool
 }
 
 func NewManager(cli *client.Client, cfg config.ExecutorConfig, logger logging.Logger) (*Manager, error) {
@@ -48,14 +36,11 @@ func NewManager(cli *client.Client, cfg config.ExecutorConfig, logger logging.Lo
 		Cli:        cli,
 		config:     cfg.Docker,
 		logger:     logger,
-		poolConfig: cfg.Pool,
+		pools:      make(map[types.Language]*ContainerPool),
 	}
 
 	// Create lifecycle manager
 	manager.lifecycle = NewContainerLifecycle(manager, logger)
-
-	// Create container pool
-	manager.pool = NewContainerPool(cfg.Pool, manager, logger)
 
 	return manager, nil
 }
@@ -68,25 +53,124 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to pull base image: %w", err)
 	}
 
-	// Initialize container pool
-	if err := m.pool.Initialize(ctx); err != nil {
-		return fmt.Errorf("failed to initialize container pool: %w", err)
-	}
-
 	m.logger.Info("Docker manager initialized successfully")
 	return nil
 }
 
-func (m *Manager) GetContainer(ctx context.Context) (*types.PooledContainer, error) {
-	return m.pool.GetContainer(ctx)
+// InitializeLanguagePools initializes language-specific container pools
+func (m *Manager) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.initialized {
+		return fmt.Errorf("docker manager already initialized")
+	}
+
+	m.logger.Info("Initializing language-specific container pools")
+
+	for _, lang := range languages {
+		poolConfig := config.GetLanguagePoolConfig(lang)
+		pool := NewContainerPool(poolConfig, m, m.logger)
+
+		if err := pool.Initialize(ctx); err != nil {
+			m.logger.Warnf("Failed to initialize pool for language %s: %v", lang, err)
+			continue
+		}
+
+		m.pools[lang] = pool
+		m.logger.Infof("Initialized pool for language: %s", lang)
+	}
+
+	m.initialized = true
+	m.logger.Infof("Language-specific container pools initialized with %d pools", len(m.pools))
+	return nil
 }
 
+// GetContainer returns a container for the specified language
+func (m *Manager) GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if !m.initialized {
+		return nil, fmt.Errorf("docker manager not initialized")
+	}
+
+	pool, exists := m.pools[language]
+	if !exists {
+		return nil, fmt.Errorf("no pool available for language: %s", language)
+	}
+
+	return pool.GetContainer(ctx)
+}
+
+// ReturnContainer returns a container to its language-specific pool
 func (m *Manager) ReturnContainer(container *types.PooledContainer) error {
-	return m.pool.ReturnContainer(container)
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if !m.initialized {
+		return fmt.Errorf("docker manager not initialized")
+	}
+
+	pool, exists := m.pools[container.Language]
+	if !exists {
+		return fmt.Errorf("no pool available for language: %s", container.Language)
+	}
+
+	return pool.ReturnContainer(container)
 }
 
-func (m *Manager) ExecuteInContainer(ctx context.Context, containerID string, filePath string) (*types.ExecutionResult, error) {
-	m.logger.Infof("Executing file %s in container %s", filePath, containerID)
+// GetPoolStats returns statistics for all language pools
+func (m *Manager) GetPoolStats() map[types.Language]*types.PoolStats {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	stats := make(map[types.Language]*types.PoolStats)
+	for lang, pool := range m.pools {
+		stats[lang] = pool.GetStats()
+	}
+
+	return stats
+}
+
+// GetLanguageStats returns statistics for a specific language pool
+func (m *Manager) GetLanguageStats(language types.Language) (*types.PoolStats, bool) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	pool, exists := m.pools[language]
+	if !exists {
+		return nil, false
+	}
+
+	return pool.GetStats(), true
+}
+
+// GetSupportedLanguages returns all languages with active pools
+func (m *Manager) GetSupportedLanguages() []types.Language {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	languages := make([]types.Language, 0, len(m.pools))
+	for lang := range m.pools {
+		languages = append(languages, lang)
+	}
+
+	return languages
+}
+
+// IsLanguageSupported checks if a language is supported
+func (m *Manager) IsLanguageSupported(language types.Language) bool {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	_, exists := m.pools[language]
+	return exists
+}
+
+// ExecuteInContainerWithLanguage executes code in a container using language-specific setup
+func (m *Manager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, error) {
+	m.logger.Infof("Executing file %s in container %s with language %s", filePath, containerID, language)
 
 	// Verify container is running before execution
 	inspect, err := m.Cli.ContainerInspect(ctx, containerID)
@@ -108,7 +192,7 @@ func (m *Manager) ExecuteInContainer(ctx context.Context, containerID string, fi
 
 	// Execute the code
 	m.logger.Debugf("Starting code execution in container %s", containerID)
-	result, err := m.executeCode(ctx, containerID)
+	result, err := m.executeCode(ctx, containerID, language)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute code: %w", err)
 	}
@@ -431,7 +515,7 @@ func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, f
 	return nil
 }
 
-func (m *Manager) executeCode(ctx context.Context, containerID string) (*types.ExecutionResult, error) {
+func (m *Manager) executeCode(ctx context.Context, containerID string, language types.Language) (*types.ExecutionResult, error) {
 	result := &types.ExecutionResult{}
 	var executionStartTime time.Time
 	var executionEndTime time.Time
@@ -439,7 +523,9 @@ func (m *Manager) executeCode(ctx context.Context, containerID string) (*types.E
 	executionStarted := false
 	var outputBuffer bytes.Buffer
 
-	execCmd := []string{"sh", "-c", SetupScript}
+	// Get language-specific setup script
+	langConfig := config.GetLanguageConfig(language)
+	execCmd := []string{"sh", "-c", langConfig.SetupScript}
 
 	execConfig := &container.ExecOptions{
 		Cmd:          execCmd,
@@ -511,17 +597,14 @@ func (m *Manager) executeCode(ctx context.Context, containerID string) (*types.E
 	return result, nil
 }
 
-func (m *Manager) GetPoolStats() *types.PoolStats {
-	return m.pool.GetStats()
-}
-
 func (m *Manager) Close() error {
-	// m.logger.Info("Closing Docker manager")
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
-	// Close container pool
-	if m.pool != nil {
-		if err := m.pool.Close(); err != nil {
-			m.logger.Warnf("Failed to close container pool: %v", err)
+	// Close all language pools
+	for lang, pool := range m.pools {
+		if err := pool.Close(); err != nil {
+			m.logger.Warnf("Failed to close pool for language %s: %v", lang, err)
 		}
 	}
 

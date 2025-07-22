@@ -79,10 +79,23 @@ func (e *CodeExecutor) GetStats() *types.PerformanceMetrics {
 	return e.pipeline.GetStats()
 }
 
-func (e *CodeExecutor) GetPoolStats() *types.PoolStats {
-	// Get container pool stats from the container manager
-	// This would require exposing the pool stats through the pipeline
-	return &types.PoolStats{}
+func (e *CodeExecutor) GetPoolStats() map[types.Language]*types.PoolStats {
+	return e.pipeline.containerMgr.GetPoolStats()
+}
+
+// InitializeLanguagePools initializes language-specific container pools
+func (e *CodeExecutor) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
+	return e.pipeline.containerMgr.InitializeLanguagePools(ctx, languages)
+}
+
+// GetSupportedLanguages returns all languages with active pools
+func (e *CodeExecutor) GetSupportedLanguages() []types.Language {
+	return e.pipeline.containerMgr.GetSupportedLanguages()
+}
+
+// IsLanguageSupported checks if a language is supported
+func (e *CodeExecutor) IsLanguageSupported(language types.Language) bool {
+	return e.pipeline.containerMgr.IsLanguageSupported(language)
 }
 
 func (e *CodeExecutor) GetActiveExecutions() []*types.ExecutionContext {

@@ -4,19 +4,22 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type ContainerPool struct {
+	language      types.Language
 	containers    map[string]*types.PooledContainer
 	mutex         sync.RWMutex
-	config        config.PoolConfig
+	config        config.LanguagePoolConfig
 	logger        logging.Logger
 	manager       *Manager
 	cleanupTicker *time.Ticker
@@ -26,8 +29,9 @@ type ContainerPool struct {
 	waitQueue     chan struct{}
 }
 
-func NewContainerPool(cfg config.PoolConfig, manager *Manager, logger logging.Logger) *ContainerPool {
+func NewContainerPool(cfg config.LanguagePoolConfig, manager *Manager, logger logging.Logger) *ContainerPool {
 	pool := &ContainerPool{
+		language:    cfg.Language,
 		containers:  make(map[string]*types.PooledContainer),
 		config:      cfg,
 		logger:      logger,
@@ -35,6 +39,7 @@ func NewContainerPool(cfg config.PoolConfig, manager *Manager, logger logging.Lo
 		stopCleanup: make(chan struct{}),
 		waitQueue:   make(chan struct{}, cfg.MaxContainers),
 		stats: &types.PoolStats{
+			Language:          cfg.Language,
 			TotalContainers:   0,
 			ReadyContainers:   0,
 			BusyContainers:    0,
@@ -59,23 +64,26 @@ func NewContainerPool(cfg config.PoolConfig, manager *Manager, logger logging.Lo
 }
 
 func (p *ContainerPool) Initialize(ctx context.Context) error {
-	// p.logger.Infof("Initializing container pool with %d pre-warmed containers", p.config.PreWarmCount)
+	// p.logger.Infof("Initializing %s language pool with %d pre-warmed containers", p.language, p.config.PreWarmCount)
+
+	// Pull the language-specific image
+	if err := p.pullImage(ctx, p.config.Config.ImageName); err != nil {
+		return fmt.Errorf("failed to pull image for language %s: %w", p.language, err)
+	}
 
 	// Pre-warm containers
 	for i := 0; i < p.config.PreWarmCount; i++ {
 		if _, err := p.createPreparedContainer(ctx); err != nil {
-			p.logger.Warnf("Failed to create pre-warmed container %d: %v", i, err)
+			p.logger.Warnf("Failed to create pre-warmed container %d for language %s: %v", i, p.language, err)
 			continue
 		}
 	}
 
-	p.logger.Infof("Container pool initialized with %d containers", p.getReadyContainerCount())
+	p.logger.Infof("%s language pool initialized with %d containers", p.language, p.getReadyContainerCount())
 	return nil
 }
 
 func (p *ContainerPool) GetContainer(ctx context.Context) (*types.PooledContainer, error) {
-	// p.logger.Debugf("Getting container from pool, total containers: %d", len(p.containers))
-
 	// Try to get a ready container
 	p.mutex.Lock()
 	for _, container := range p.containers {
@@ -116,7 +124,7 @@ func (p *ContainerPool) GetContainer(ctx context.Context) (*types.PooledContaine
 	if p.getTotalContainerCount() < p.config.MaxContainers {
 		container, err := p.createPreparedContainer(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create container: %w", err)
+			return nil, fmt.Errorf("failed to create container for language %s: %w", p.language, err)
 		}
 		container.Status = types.ContainerStatusRunning
 		container.LastUsed = time.Now()
@@ -131,12 +139,12 @@ func (p *ContainerPool) GetContainer(ctx context.Context) (*types.PooledContaine
 	case <-ctx.Done():
 		return nil, fmt.Errorf("timeout waiting for container: %w", ctx.Err())
 	case <-time.After(p.config.MaxWaitTime):
-		return nil, fmt.Errorf("timeout waiting for container after %v", p.config.MaxWaitTime)
+		return nil, fmt.Errorf("timeout waiting for container in language pool %s", p.language)
 	}
 }
 
 func (p *ContainerPool) ReturnContainer(container *types.PooledContainer) error {
-	p.logger.Debugf("Returning container %s to pool", container.ID)
+	p.logger.Debugf("Returning container %s to %s language pool", container.ID, p.language)
 
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -176,9 +184,9 @@ func (p *ContainerPool) ReturnContainer(container *types.PooledContainer) error 
 			// Channel is full, no one is waiting
 		}
 
-		p.logger.Debugf("Returned container %s to pool", container.ID)
+		p.logger.Debugf("Returned container %s to %s language pool", container.ID, p.language)
 	} else {
-		p.logger.Warnf("Container %s not found in pool", container.ID)
+		p.logger.Warnf("Container %s not found in %s language pool", container.ID, p.language)
 	}
 
 	return nil
@@ -191,8 +199,8 @@ func (p *ContainerPool) createPreparedContainer(ctx context.Context) (*types.Poo
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	// Create container
-	containerID, err := p.manager.CreateContainer(ctx, tmpDir)
+	// Create container using the language-specific configuration
+	containerID, err := p.createContainer(ctx, tmpDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
@@ -204,7 +212,8 @@ func (p *ContainerPool) createPreparedContainer(ctx context.Context) (*types.Poo
 		LastUsed:   time.Now(),
 		IsReady:    true,
 		WorkingDir: tmpDir,
-		ImageName:  p.manager.config.Image,
+		ImageName:  p.config.Config.ImageName,
+		Language:   p.language,
 		CreatedAt:  time.Now(),
 	}
 
@@ -214,8 +223,121 @@ func (p *ContainerPool) createPreparedContainer(ctx context.Context) (*types.Poo
 	p.updateStats()
 	p.mutex.Unlock()
 
-	p.logger.Infof("Created prepared container: %s", containerID)
+	p.logger.Infof("Created prepared container for language %s: %s", p.language, containerID)
 	return pooledContainer, nil
+}
+
+func (p *ContainerPool) createTempDirectory() (string, error) {
+	tmpDir := fmt.Sprintf("/tmp/docker-container-%s-%d", p.language, time.Now().UnixNano())
+	if err := os.MkdirAll(tmpDir, 0777); err != nil {
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	return tmpDir, nil
+}
+
+func (p *ContainerPool) pullImage(ctx context.Context, imageName string) error {
+	// Check if image already exists locally
+	images, err := p.manager.Cli.ImageList(ctx, image.ListOptions{})
+	if err != nil {
+		p.logger.Warnf("Failed to list images: %v", err)
+	} else {
+		for _, img := range images {
+			for _, tag := range img.RepoTags {
+				if tag == imageName || tag == imageName+":latest" {
+					p.logger.Debugf("Image %s already exists locally, skipping pull", imageName)
+					return nil
+				}
+			}
+		}
+	}
+
+	// Image doesn't exist locally, pull it
+	reader, err := p.manager.Cli.ImagePull(ctx, imageName, image.PullOptions{})
+	if err != nil {
+		p.logger.Errorf("Failed to pull image: %v", err)
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer reader.Close()
+
+	p.logger.Infof("Successfully pulled image: %s", imageName)
+	return nil
+}
+
+func (p *ContainerPool) createContainer(ctx context.Context, codePath string) (string, error) {
+	absPath, err := filepath.Abs(codePath)
+	if err != nil {
+		p.logger.Errorf("failed to get absolute path: %v", err)
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	p.logger.Debugf("Creating container with code directory: %s", absPath)
+
+	// For Docker-in-Docker, make sure the mount path is absolute and exists on the host
+	hostMountPath := absPath
+	if !filepath.IsAbs(hostMountPath) {
+		hostMountPath, _ = filepath.Abs(hostMountPath)
+	}
+
+	// Create a simple keep-alive command that keeps the container running
+	keepAliveCommand := `tail -f /dev/null`
+
+	config := &container.Config{
+		Image:      p.config.Config.ImageName,
+		Cmd:        []string{"sh", "-c", keepAliveCommand},
+		Tty:        true,
+		WorkingDir: "/code",
+	}
+
+	hostConfig := &container.HostConfig{
+		Binds: []string{
+			fmt.Sprintf("%s:/code:rw", hostMountPath),
+			"/var/run/docker.sock:/var/run/docker.sock",
+		},
+		Resources: container.Resources{
+			Memory:   1024 * 1024 * 1024, // 1GB default
+			NanoCPUs: 1e9,                // 1 CPU default
+		},
+		Privileged: true,
+	}
+
+	resp, err := p.manager.Cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	if err != nil {
+		p.logger.Errorf("failed to create container: %v", err)
+		return "", fmt.Errorf("failed to create container: %w", err)
+	}
+
+	containerID := resp.ID
+	p.logger.Infof("Container created with ID: %s", containerID)
+
+	// Start the container
+	err = p.manager.Cli.ContainerStart(ctx, containerID, container.StartOptions{})
+	if err != nil {
+		p.logger.Errorf("failed to start container: %v", err)
+		// Try to cleanup the created container
+		if cleanupErr := p.manager.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); cleanupErr != nil {
+			p.logger.Warnf("Failed to cleanup container after start failure: %v", cleanupErr)
+		}
+		return "", fmt.Errorf("failed to start container: %w", err)
+	}
+
+	// Wait for container to be running
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		inspect, err := p.manager.Cli.ContainerInspect(ctx, containerID)
+		if err != nil {
+			return "", fmt.Errorf("failed to inspect container after start: %w", err)
+		}
+
+		if inspect.State.Running {
+			p.logger.Infof("Container %s is running", containerID)
+			return containerID, nil
+		}
+
+		p.logger.Debugf("Container %s not running yet (attempt %d/%d), status: %s", containerID, i+1, maxRetries, inspect.State.Status)
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return "", fmt.Errorf("container %s failed to start properly", containerID)
 }
 
 func (p *ContainerPool) resetContainer(containerID string) error {
@@ -258,18 +380,6 @@ func (p *ContainerPool) resetContainer(containerID string) error {
 	}
 
 	return fmt.Errorf("container %s failed to start properly after reset", containerID)
-}
-
-func (p *ContainerPool) createTempDirectory() (string, error) {
-	// Create a temporary directory with proper permissions
-	tmpDir := fmt.Sprintf("/tmp/docker-container-%d", time.Now().UnixNano())
-
-	// Create directory with world-readable permissions for Docker-in-Docker
-	if err := os.MkdirAll(tmpDir, 0777); err != nil {
-		return "", fmt.Errorf("failed to create temp directory: %w", err)
-	}
-
-	return tmpDir, nil
 }
 
 func (p *ContainerPool) startCleanupRoutine() {
@@ -337,7 +447,7 @@ func (p *ContainerPool) cleanup() {
 	}
 
 	if len(containersToRemove) > 0 {
-		p.logger.Infof("Cleaned up %d idle containers", len(containersToRemove))
+		p.logger.Infof("Cleaned up %d idle containers from %s language pool", len(containersToRemove), p.language)
 	}
 
 	p.stats.LastCleanup = now
@@ -418,6 +528,10 @@ func (p *ContainerPool) GetStats() *types.PoolStats {
 	return &stats
 }
 
+func (p *ContainerPool) GetLanguage() types.Language {
+	return p.language
+}
+
 func (p *ContainerPool) Close() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -435,6 +549,6 @@ func (p *ContainerPool) Close() error {
 	}
 
 	p.containers = make(map[string]*types.PooledContainer)
-	p.logger.Info("Container pool closed")
+	p.logger.Infof("Closed %s language pool", p.language)
 	return nil
 }

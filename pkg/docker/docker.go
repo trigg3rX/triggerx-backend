@@ -38,7 +38,7 @@ func NewDockerManager(cfg config.ExecutorConfig, logger logging.Logger) (*Docker
 }
 
 // Initialize sets up the Docker manager and all its components
-func (dm *DockerManager) Initialize(ctx context.Context) error {
+func (dm *DockerManager) Initialize(ctx context.Context, languages []types.Language) error {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -54,10 +54,15 @@ func (dm *DockerManager) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to create code executor: %w", err)
 	}
 
+	// Initialize language-specific container pools
+	if err := executor.InitializeLanguagePools(ctx, languages); err != nil {
+		return fmt.Errorf("failed to initialize language pools: %w", err)
+	}
+
 	dm.executor = executor
 	dm.initialized = true
 
-	dm.logger.Info("Docker manager initialized successfully")
+	dm.logger.Infof("Docker manager initialized successfully with %d language pools", len(languages))
 	return nil
 }
 
@@ -116,16 +121,75 @@ func (dm *DockerManager) GetStats() *types.PerformanceMetrics {
 	return dm.executor.GetStats()
 }
 
-// GetPoolStats returns container pool statistics
-func (dm *DockerManager) GetPoolStats() *types.PoolStats {
+// GetPoolStats returns statistics for all language pools
+func (dm *DockerManager) GetAllPoolStats() map[types.Language]*types.PoolStats {
 	dm.mutex.RLock()
 	defer dm.mutex.RUnlock()
 
 	if !dm.initialized || dm.closed {
-		return &types.PoolStats{}
+		return make(map[types.Language]*types.PoolStats)
 	}
 
 	return dm.executor.GetPoolStats()
+}
+
+// GetLanguageStats returns statistics for a specific language pool
+func (dm *DockerManager) GetPoolStats(language types.Language) *types.PoolStats {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
+	if !dm.initialized || dm.closed {
+		return nil
+	}
+
+	stats := dm.executor.GetPoolStats()
+	if stats == nil {
+		return nil
+	}
+
+	return stats[language]
+}
+
+// GetLanguageStats returns statistics for a specific language pool
+func (dm *DockerManager) GetLanguageStats(language types.Language) (*types.PoolStats, bool) {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
+	if !dm.initialized || dm.closed {
+		return nil, false
+	}
+
+	stats := dm.executor.GetPoolStats()
+	if stats == nil {
+		return nil, false
+	}
+
+	poolStats, exists := stats[language]
+	return poolStats, exists
+}
+
+// GetSupportedLanguages returns all languages with active pools
+func (dm *DockerManager) GetSupportedLanguages() []types.Language {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
+	if !dm.initialized || dm.closed {
+		return []types.Language{}
+	}
+
+	return dm.executor.GetSupportedLanguages()
+}
+
+// IsLanguageSupported checks if a language is supported
+func (dm *DockerManager) IsLanguageSupported(language types.Language) bool {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
+	if !dm.initialized || dm.closed {
+		return false
+	}
+
+	return dm.executor.IsLanguageSupported(language)
 }
 
 // GetActiveExecutions returns all currently active executions

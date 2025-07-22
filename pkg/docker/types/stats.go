@@ -14,6 +14,7 @@ type CacheStats struct {
 }
 
 type PoolStats struct {
+	Language          Language      `json:"language"`
 	TotalContainers   int           `json:"total_containers"`
 	ReadyContainers   int           `json:"ready_containers"`
 	BusyContainers    int           `json:"busy_containers"`

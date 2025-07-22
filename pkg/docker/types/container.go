@@ -1,13 +1,23 @@
 package types
 
 import (
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 )
 
-type ContainerStatus string
+type Language string
+const (
+	LanguageGo   Language = "go"
+	LanguagePy   Language = "py"
+	LanguageJS   Language = "js"
+	LanguageTS   Language = "ts"
+	LanguageNode Language = "node"
+)
 
+type ContainerStatus string
 const (
 	ContainerStatusPending ContainerStatus = "pending"
 	ContainerStatusRunning ContainerStatus = "running"
@@ -23,8 +33,37 @@ type PooledContainer struct {
 	IsReady    bool            `json:"is_ready"`
 	WorkingDir string          `json:"working_dir"`
 	ImageName  string          `json:"image_name"`
+	Language   Language        `json:"language"`
 	CreatedAt  time.Time       `json:"created_at"`
 	Error      error           `json:"error,omitempty"`
+}
+
+// GetLanguageFromFile returns the language based on file extension
+func GetLanguageFromFile(filePath string) Language {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".go":
+		return LanguageGo
+	case ".py":
+		return LanguagePy
+	case ".js":
+		return LanguageJS
+	case ".ts":
+		return LanguageTS
+	case ".mjs", ".cjs":
+		return LanguageNode
+	default:
+		return LanguageGo // Default to Go
+	}
+}
+
+// GetLanguageFromExtension returns the language based on file extension string
+func GetLanguageFromExtension(extension string) Language {
+	ext := strings.ToLower(extension)
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	return GetLanguageFromFile("dummy" + ext)
 }
 
 type ContainerConfig struct {

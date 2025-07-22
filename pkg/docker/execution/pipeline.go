@@ -109,11 +109,22 @@ func (ep *ExecutionPipeline) executeStages(ctx context.Context, execCtx *types.E
 
 	// Stage 2: Get Container
 	ep.logger.Debugf("Stage 2: Getting container from pool")
-	container, err := ep.containerMgr.GetContainer(ctx)
+
+	// Determine language from file extension
+	filePath := fileCtx.Metadata["file_path"]
+	if filePath == "" {
+		return nil, fmt.Errorf("file path not found in execution context")
+	}
+
+	language := types.GetLanguageFromFile(filePath)
+	ep.logger.Debugf("Detected language: %s for file: %s", language, filePath)
+
+	container, err := ep.containerMgr.GetContainer(ctx, language)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container: %w", err)
 	}
-	ep.logger.Debugf("Got container %s from pool", container.ID)
+
+	ep.logger.Debugf("Got container %s from %s pool", container.ID, container.Language)
 
 	// Return container to pool asynchronously
 	defer func() {
@@ -127,14 +138,7 @@ func (ep *ExecutionPipeline) executeStages(ctx context.Context, execCtx *types.E
 
 	// Stage 3: Execute Code
 	ep.logger.Debugf("Stage 3: Executing code in container %s", container.ID)
-	// Get file path from metadata
-	filePath := fileCtx.Metadata["file_path"]
-	if filePath == "" {
-		return nil, fmt.Errorf("file path not found in execution context")
-	}
-	ep.logger.Debugf("File path from metadata: %s", filePath)
-
-	result, err := ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath)
+	result, err := ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute code: %w", err)
 	}
