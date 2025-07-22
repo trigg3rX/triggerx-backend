@@ -1,6 +1,7 @@
 package file
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,9 +35,15 @@ type FileCache struct {
 }
 
 func NewFileCache(cfg config.CacheConfig, logger logging.Logger) (*FileCache, error) {
-	cacheDir := filepath.Join("/tmp", "docker-file-cache")
+	// Use configured cache directory or fallback to persistent location
+	cacheDir := cfg.CacheDir
+	if cacheDir == "" {
+		cacheDir = "/var/lib/triggerx/cache"
+	}
+
+	// Ensure the cache directory exists with proper permissions
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create cache directory: %w", err)
+		return nil, fmt.Errorf("failed to create cache directory %s: %w", cacheDir, err)
 	}
 
 	cache := &FileCache{
@@ -116,11 +123,25 @@ func (c *FileCache) accessCachedFile(cachedFile *CachedFile) (string, error) {
 		// File was deleted, remove from cache
 		c.mutex.Lock()
 		delete(c.fileCache, cachedFile.Hash)
+		c.stats.ItemCount--
+		c.stats.Size -= cachedFile.Size
 		c.mutex.Unlock()
+
+		// Save updated metadata
+		if saveErr := c.saveMetadata(); saveErr != nil {
+			c.logger.Warnf("Failed to save cache metadata after removal: %v", saveErr)
+		}
+
 		return "", fmt.Errorf("cached file not found on disk: %s", cachedFile.Path)
 	}
 
 	cachedFile.LastAccessed = time.Now()
+
+	// Save metadata to persist access time
+	if err := c.saveMetadata(); err != nil {
+		c.logger.Warnf("Failed to save cache metadata after access: %v", err)
+	}
+
 	return cachedFile.Path, nil
 }
 
@@ -156,6 +177,11 @@ func (c *FileCache) storeFile(key string, content []byte) (string, error) {
 	c.stats.ItemCount++
 	c.stats.Size += fileInfo.Size()
 	c.mutex.Unlock()
+
+	// Save metadata to persist cache information
+	if err := c.saveMetadata(); err != nil {
+		c.logger.Warnf("Failed to save cache metadata: %v", err)
+	}
 
 	c.logger.Infof("Stored file in cache (size: %d bytes)", fileInfo.Size())
 	return filePath, nil
@@ -217,6 +243,12 @@ func (c *FileCache) ensureSpace(requiredSize int64) error {
 	}
 
 	c.logger.Infof("Evicted %d bytes (%d files) from cache", evictedSize, c.stats.EvictionCount)
+
+	// Save updated metadata after eviction
+	if err := c.saveMetadata(); err != nil {
+		c.logger.Warnf("Failed to save cache metadata after eviction: %v", err)
+	}
+
 	return nil
 }
 
@@ -248,19 +280,33 @@ func (c *FileCache) ensureSpace(requiredSize int64) error {
 // }
 
 func (c *FileCache) loadExistingFiles() error {
+	// Load metadata file if it exists
+	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
+	if _, err := os.Stat(metadataPath); err == nil {
+		if err := c.loadMetadata(metadataPath); err != nil {
+			c.logger.Warnf("Failed to load cache metadata: %v", err)
+		}
+	}
+
+	// Also scan directory for any files not in metadata
 	entries, err := os.ReadDir(c.cacheDir)
 	if err != nil {
 		return err
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || entry.Name() == "cache_metadata.json" {
 			continue
 		}
 
 		// Extract hash from filename
 		key := strings.TrimSuffix(entry.Name(), ".go")
 		filePath := filepath.Join(c.cacheDir, entry.Name())
+
+		// Skip if already loaded from metadata
+		if _, exists := c.fileCache[key]; exists {
+			continue
+		}
 
 		fileInfo, err := os.Stat(filePath)
 		if err != nil {
@@ -283,6 +329,39 @@ func (c *FileCache) loadExistingFiles() error {
 
 	c.logger.Infof("Loaded %d existing cached files", len(c.fileCache))
 	return nil
+}
+
+func (c *FileCache) loadMetadata(metadataPath string) error {
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		return err
+	}
+
+	var metadata map[string]*CachedFile
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return err
+	}
+
+	for key, cachedFile := range metadata {
+		// Verify file still exists
+		if _, err := os.Stat(cachedFile.Path); err == nil {
+			c.fileCache[key] = cachedFile
+			c.stats.ItemCount++
+			c.stats.Size += cachedFile.Size
+		}
+	}
+
+	return nil
+}
+
+func (c *FileCache) saveMetadata() error {
+	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
+	data, err := json.MarshalIndent(c.fileCache, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(metadataPath, data, 0644)
 }
 
 func (c *FileCache) updateHitRate() {

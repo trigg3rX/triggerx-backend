@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/scripts"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -71,15 +72,38 @@ func (p *ContainerPool) Initialize(ctx context.Context) error {
 		return fmt.Errorf("failed to pull image for language %s: %w", p.language, err)
 	}
 
-	// Pre-warm containers
+	// Pre-warm containers in parallel for faster initialization
+	containerChan := make(chan *types.PooledContainer, p.config.PreWarmCount)
+	errorChan := make(chan error, p.config.PreWarmCount)
+
+	// Start parallel container creation
 	for i := 0; i < p.config.PreWarmCount; i++ {
-		if _, err := p.createPreparedContainer(ctx); err != nil {
-			p.logger.Warnf("Failed to create pre-warmed container %d for language %s: %v", i, p.language, err)
-			continue
+		go func(index int) {
+			container, err := p.createPreparedContainer(ctx)
+			if err != nil {
+				p.logger.Warnf("Failed to create pre-warmed container %d for language %s: %v", index, p.language, err)
+				errorChan <- err
+				return
+			}
+			containerChan <- container
+		}(i)
+	}
+
+	// Collect results
+	successCount := 0
+	for i := 0; i < p.config.PreWarmCount; i++ {
+		select {
+		case container := <-containerChan:
+			successCount++
+			p.logger.Debugf("Successfully created pre-warmed container %d: %s", successCount, container.ID)
+		case err := <-errorChan:
+			p.logger.Warnf("Container creation failed: %v", err)
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled during container initialization: %w", ctx.Err())
 		}
 	}
 
-	p.logger.Infof("%s language pool initialized with %d containers", p.language, p.getReadyContainerCount())
+	p.logger.Infof("%s language pool initialized with %d containers", p.language, successCount)
 	return nil
 }
 
@@ -205,6 +229,15 @@ func (p *ContainerPool) createPreparedContainer(ctx context.Context) (*types.Poo
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
 
+	// Initialize the container with /code folder and basic setup
+	if err := p.initializeContainer(ctx, containerID); err != nil {
+		// Cleanup container if initialization fails
+		if cleanupErr := p.manager.CleanupContainer(ctx, containerID); cleanupErr != nil {
+			p.logger.Warnf("Failed to cleanup container %s after initialization failure: %v", containerID, cleanupErr)
+		}
+		return nil, fmt.Errorf("failed to initialize container: %w", err)
+	}
+
 	// Create pooled container
 	pooledContainer := &types.PooledContainer{
 		ID:         containerID,
@@ -233,6 +266,130 @@ func (p *ContainerPool) createTempDirectory() (string, error) {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	return tmpDir, nil
+}
+
+// initializeContainer sets up the container with /code folder and basic initialization
+func (p *ContainerPool) initializeContainer(ctx context.Context, containerID string) error {
+	p.logger.Debugf("Initializing container %s with /code folder setup", containerID)
+
+	// Create /code directory and initialize basic files
+	initScript := scripts.GetInitializationScript(p.language)
+
+	execConfig := &container.ExecOptions{
+		Cmd:          []string{"sh", "-c", initScript},
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execResp, err := p.manager.Cli.ContainerExecCreate(ctx, containerID, *execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create initialization exec: %w", err)
+	}
+
+	execAttachResp, err := p.manager.Cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach to initialization exec: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Execute the initialization command
+	if err := p.manager.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("failed to start initialization exec: %w", err)
+	}
+
+	// Wait for initialization to complete
+	for {
+		inspectResp, err := p.manager.Cli.ContainerExecInspect(ctx, execResp.ID)
+		if err != nil {
+			return fmt.Errorf("failed to inspect initialization exec: %w", err)
+		}
+		if !inspectResp.Running {
+			if inspectResp.ExitCode != 0 {
+				return fmt.Errorf("container initialization failed with exit code: %d", inspectResp.ExitCode)
+			}
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	p.logger.Debugf("Container %s initialized successfully", containerID)
+
+	// Verify container is ready by running a quick test
+	if err := p.verifyContainerReady(ctx, containerID); err != nil {
+		return fmt.Errorf("container verification failed: %w", err)
+	}
+
+	return nil
+}
+
+// verifyContainerReady runs a quick test to ensure the container is fully ready
+func (p *ContainerPool) verifyContainerReady(ctx context.Context, containerID string) error {
+	p.logger.Debugf("Verifying container %s is ready", containerID)
+
+	// Run a simple test command based on language
+	var testCmd string
+	switch p.language {
+	case types.LanguageGo:
+		testCmd = "cd /code && go version"
+	case types.LanguagePy:
+		testCmd = "cd /code && python --version"
+	case types.LanguageJS, types.LanguageNode:
+		testCmd = "cd /code && node --version"
+	case types.LanguageTS:
+		testCmd = "cd /code && tsc --version"
+	default:
+		testCmd = "cd /code && echo 'ready'"
+	}
+
+	execConfig := &container.ExecOptions{
+		Cmd:          []string{"sh", "-c", testCmd},
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execResp, err := p.manager.Cli.ContainerExecCreate(ctx, containerID, *execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create verification exec: %w", err)
+	}
+
+	execAttachResp, err := p.manager.Cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach to verification exec: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Execute the verification command
+	if err := p.manager.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("failed to start verification exec: %w", err)
+	}
+
+	// Wait for verification to complete with timeout
+	timeout := time.After(10 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("container verification timed out")
+		default:
+			inspectResp, err := p.manager.Cli.ContainerExecInspect(ctx, execResp.ID)
+			if err != nil {
+				return fmt.Errorf("failed to inspect verification exec: %w", err)
+			}
+			if !inspectResp.Running {
+				if inspectResp.ExitCode != 0 {
+					return fmt.Errorf("container verification failed with exit code: %d", inspectResp.ExitCode)
+				}
+				p.logger.Debugf("Container %s verified as ready", containerID)
+				return nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }
 
 func (p *ContainerPool) pullImage(ctx context.Context, imageName string) error {
@@ -343,43 +500,101 @@ func (p *ContainerPool) createContainer(ctx context.Context, codePath string) (s
 func (p *ContainerPool) resetContainer(containerID string) error {
 	p.logger.Debugf("Resetting container %s", containerID)
 
-	// Stop the container
-	timeout := 10
-	// p.logger.Debugf("Stopping container %s", containerID)
-	err := p.manager.Cli.ContainerStop(context.Background(), containerID, container.StopOptions{Timeout: &timeout})
-	if err != nil {
-		return fmt.Errorf("failed to stop container: %w", err)
-	}
-	// p.logger.Debugf("Container %s stopped successfully", containerID)
+	// Instead of full restart, just clean up the code files
+	resetScript := p.getResetScript()
 
-	// Start the container again
-	// p.logger.Debugf("Starting container %s", containerID)
-	err = p.manager.Cli.ContainerStart(context.Background(), containerID, container.StartOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+	execConfig := &container.ExecOptions{
+		Cmd:          []string{"sh", "-c", resetScript},
+		AttachStdout: true,
+		AttachStderr: true,
 	}
-	// p.logger.Debugf("Container %s start command sent", containerID)
 
-	// Wait for container to be running and verify its state
-	maxRetries := 10
-	for i := 0; i < maxRetries; i++ {
-		inspect, err := p.manager.Cli.ContainerInspect(context.Background(), containerID)
+	execResp, err := p.manager.Cli.ContainerExecCreate(context.Background(), containerID, *execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create reset exec: %w", err)
+	}
+
+	execAttachResp, err := p.manager.Cli.ContainerExecAttach(context.Background(), execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach to reset exec: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Execute the reset command
+	if err := p.manager.Cli.ContainerExecStart(context.Background(), execResp.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("failed to start reset exec: %w", err)
+	}
+
+	// Wait for reset to complete
+	for {
+		inspectResp, err := p.manager.Cli.ContainerExecInspect(context.Background(), execResp.ID)
 		if err != nil {
-			return fmt.Errorf("failed to inspect container after restart: %w", err)
+			return fmt.Errorf("failed to inspect reset exec: %w", err)
 		}
-
-		// p.logger.Debugf("Container %s inspect attempt %d: status=%s, running=%v", containerID, i+1, inspect.State.Status, inspect.State.Running)
-
-		if inspect.State.Running {
-			// p.logger.Debugf("Container %s is running after reset", containerID)
-			return nil
+		if !inspectResp.Running {
+			if inspectResp.ExitCode != 0 {
+				return fmt.Errorf("container reset failed with exit code: %d", inspectResp.ExitCode)
+			}
+			break
 		}
-
-		// Wait a bit before retrying
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 
-	return fmt.Errorf("container %s failed to start properly after reset", containerID)
+	p.logger.Debugf("Container %s reset successfully", containerID)
+	return nil
+}
+
+// getResetScript returns the script to reset a container
+func (p *ContainerPool) getResetScript() string {
+	switch p.language {
+	case types.LanguageGo:
+		return `#!/bin/sh
+set -e
+cd /code
+rm -f code.go
+echo 'package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello, World!")
+}' > code.go
+echo "Container reset successfully"
+`
+	case types.LanguagePy:
+		return `#!/bin/sh
+set -e
+cd /code
+rm -f code.py
+echo 'print("Hello, World!")' > code.py
+echo "Container reset successfully"
+`
+	case types.LanguageJS, types.LanguageNode:
+		return `#!/bin/sh
+set -e
+cd /code
+rm -f code.js
+echo 'console.log("Hello, World!");' > code.js
+echo "Container reset successfully"
+`
+	case types.LanguageTS:
+		return `#!/bin/sh
+set -e
+cd /code
+rm -f code.ts
+echo 'console.log("Hello, World!");' > code.ts
+echo "Container reset successfully"
+`
+	default:
+		return `#!/bin/sh
+set -e
+cd /code
+echo "Container reset successfully"
+`
+	}
 }
 
 func (p *ContainerPool) startCleanupRoutine() {

@@ -52,6 +52,7 @@ type LanguagePoolConfig struct {
 	Config         LanguageConfig `json:"config"`
 }
 type CacheConfig struct {
+	CacheDir          string        `json:"cache_dir"`
 	MaxCacheSize      int64         `json:"max_cache_size"`
 	EvictionSize      int64         `json:"eviction_size"`
 	CleanupInterval   time.Duration `json:"cleanup_interval"`

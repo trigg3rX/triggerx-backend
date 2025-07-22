@@ -5,6 +5,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-units"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/scripts"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 )
 
@@ -22,26 +23,33 @@ func DefaultDockerConfig(lang string) DockerConfig {
 	var imageName string
 	switch lang {
 	case "go":
-		imageName = "golang:latest"
+		imageName = "golang:1.21-alpine" // Use Alpine for faster startup
 	case "py":
-		imageName = "python:latest"
+		imageName = "python:3.12-alpine" // Use Alpine for faster startup
 	case "js", "ts", "node":
-		imageName = "node:latest"
+		imageName = "node:22-alpine" // Use Alpine for faster startup
 	default:
-		imageName = "golang:latest"
+		imageName = "golang:1.21-alpine"
 	}
 
 	return DockerConfig{
 		Image:          imageName,
-		TimeoutSeconds: 600,
+		TimeoutSeconds: 300, // Reduced timeout
 		AutoCleanup:    true,
 		MemoryLimit:    "1024m",
 		CPULimit:       1.0,
 		NetworkMode:    "bridge",
 		SecurityOpt:    []string{"no-new-privileges"},
 		ReadOnlyRootFS: false,
-		Environment:    []string{"GODEBUG=http2client=0"},
-		Binds:          []string{"/var/run/docker.sock:/var/run/docker.sock"},
+		Environment: []string{
+			"GODEBUG=http2client=0",
+			"GOCACHE=/tmp/go-cache", // Enable Go module cache
+			"GOPROXY=direct",        // Faster dependency resolution
+		},
+		Binds: []string{
+			"/var/run/docker.sock:/var/run/docker.sock",
+			"/tmp/go-cache:/tmp/go-cache", // Persist Go cache
+		},
 	}
 }
 
@@ -51,48 +59,48 @@ func GetLanguageConfig(lang types.Language) LanguageConfig {
 	case types.LanguageGo:
 		return LanguageConfig{
 			Language:    types.LanguageGo,
-			ImageName:   "golang:latest",
-			SetupScript: getGoSetupScript(),
+			ImageName:   "golang:1.21-alpine",
+			SetupScript: scripts.GetGoSetupScript(),
 			RunCommand:  "go run code.go",
 			Extensions:  []string{".go"},
 		}
 	case types.LanguagePy:
 		return LanguageConfig{
 			Language:    types.LanguagePy,
-			ImageName:   "python:latest",
-			SetupScript: getPythonSetupScript(),
+			ImageName:   "python:3.12-alpine",
+			SetupScript: scripts.GetPythonSetupScript(),
 			RunCommand:  "python code.py",
 			Extensions:  []string{".py"},
 		}
 	case types.LanguageJS:
 		return LanguageConfig{
 			Language:    types.LanguageJS,
-			ImageName:   "node:latest",
-			SetupScript: getJavaScriptSetupScript(),
+			ImageName:   "node:22-alpine",
+			SetupScript: scripts.GetJavaScriptSetupScript(),
 			RunCommand:  "node code.js",
 			Extensions:  []string{".js"},
 		}
 	case types.LanguageTS:
 		return LanguageConfig{
 			Language:    types.LanguageTS,
-			ImageName:   "node:latest",
-			SetupScript: getTypeScriptSetupScript(),
+			ImageName:   "node:22-alpine",
+			SetupScript: scripts.GetTypeScriptSetupScript(),
 			RunCommand:  "node code.js",
 			Extensions:  []string{".ts"},
 		}
 	case types.LanguageNode:
 		return LanguageConfig{
 			Language:    types.LanguageNode,
-			ImageName:   "node:latest",
-			SetupScript: getNodeSetupScript(),
+			ImageName:   "node:22-alpine",
+			SetupScript: scripts.GetNodeSetupScript(),
 			RunCommand:  "node code.js",
 			Extensions:  []string{".js", ".mjs", ".cjs"},
 		}
 	default:
 		return LanguageConfig{
 			Language:    types.LanguageGo,
-			ImageName:   "golang:latest",
-			SetupScript: getGoSetupScript(),
+			ImageName:   "golang:1.21-alpine",
+			SetupScript: scripts.GetGoSetupScript(),
 			RunCommand:  "go run code.go",
 			Extensions:  []string{".go"},
 		}
@@ -103,9 +111,9 @@ func GetLanguageConfig(lang types.Language) LanguageConfig {
 func GetLanguagePoolConfig(lang types.Language) LanguagePoolConfig {
 	baseConfig := DefaultBasePoolConfig()
 	return LanguagePoolConfig{
-		Language:      lang,
+		Language:       lang,
 		BasePoolConfig: baseConfig,
-		Config:        GetLanguageConfig(lang),
+		Config:         GetLanguageConfig(lang),
 	}
 }
 
@@ -120,69 +128,6 @@ func GetSupportedLanguages() []types.Language {
 	}
 }
 
-func getGoSetupScript() string {
-	return `#!/bin/sh
-cd /code
-go mod init code
-go mod tidy
-echo "START_EXECUTION"
-go run code.go 2>&1 || {
-    echo "Error executing Go program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
-`
-}
-
-func getPythonSetupScript() string {
-	return `#!/bin/sh
-cd /code
-echo "START_EXECUTION"
-python code.py 2>&1 || {
-    echo "Error executing Python program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
-`
-}
-
-func getJavaScriptSetupScript() string {
-	return `#!/bin/sh
-cd /code
-echo "START_EXECUTION"
-node code.js 2>&1 || {
-    echo "Error executing JavaScript program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
-`
-}
-
-func getTypeScriptSetupScript() string {
-	return `#!/bin/sh
-cd /code
-npm install -g typescript
-echo "START_EXECUTION"
-tsc code.ts && node code.js 2>&1 || {
-    echo "Error executing TypeScript program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
-`
-}
-
-func getNodeSetupScript() string {
-	return `#!/bin/sh
-cd /code
-echo "START_EXECUTION"
-node code.js 2>&1 || {
-    echo "Error executing Node.js program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
-`
-}
-
 func DefaultFeeConfig() FeeConfig {
 	return FeeConfig{
 		PricePerTG:            0.0001,
@@ -194,19 +139,20 @@ func DefaultFeeConfig() FeeConfig {
 
 func DefaultBasePoolConfig() BasePoolConfig {
 	return BasePoolConfig{
-		MaxContainers:       2,
-		MinContainers:       1,
-		IdleTimeout:         50 * time.Minute,
-		PreWarmCount:        2,
-		MaxWaitTime:         100 * time.Second,
-		CleanupInterval:     50 * time.Minute,
-		HealthCheckInterval: 1 * time.Minute,
+		MaxContainers:       5,
+		MinContainers:       2,
+		IdleTimeout:         30 * time.Minute,
+		PreWarmCount:        3,
+		MaxWaitTime:         60 * time.Second,
+		CleanupInterval:     30 * time.Minute,
+		HealthCheckInterval: 30 * time.Second,
 	}
 }
 
 func DefaultCacheConfig() CacheConfig {
 	return CacheConfig{
-		MaxCacheSize:      100 * 1024 * 1024, // 100MB
+		CacheDir:          "/var/lib/triggerx/cache", // Persistent cache directory
+		MaxCacheSize:      100 * 1024 * 1024,         // 100MB
 		CleanupInterval:   10 * time.Minute,
 		EnableCompression: true,
 		MaxFileSize:       1 * 1024 * 1024, // 1MB
@@ -240,7 +186,8 @@ func OptimizedConfig(lang string) ExecutorConfig {
 	cfg.BasePool.IdleTimeout = 5 * time.Minute
 
 	// Optimize cache settings
-	cfg.Cache.MaxCacheSize = 500 * 1024 * 1024 // 500MB
+	cfg.Cache.CacheDir = "/var/lib/triggerx/cache" // Persistent cache directory
+	cfg.Cache.MaxCacheSize = 500 * 1024 * 1024     // 500MB
 
 	// Optimize Docker settings
 	cfg.Docker.MemoryLimit = "2048m"

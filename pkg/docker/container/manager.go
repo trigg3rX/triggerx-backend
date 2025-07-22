@@ -183,10 +183,9 @@ func (m *Manager) ExecuteInContainer(ctx context.Context, containerID string, fi
 		return nil, fmt.Errorf("container %s is not running (status: %s)", containerID, inspect.State.Status)
 	}
 
-	// Copy the file to the container
-	// m.logger.Debugf("Starting file copy to container %s", containerID)
-	if err := m.copyFileToContainer(ctx, containerID, filePath); err != nil {
-		return nil, fmt.Errorf("failed to copy file to container: %w", err)
+	// Replace the code file in the container
+	if err := m.replaceCodeFile(ctx, containerID, filePath, language); err != nil {
+		return nil, fmt.Errorf("failed to replace code file: %w", err)
 	}
 	m.logger.Debugf("File copy completed for container %s", containerID)
 
@@ -378,7 +377,70 @@ func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (*do
 	return &info, nil
 }
 
-func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, filePath string) error {
+func (m *Manager) replaceCodeFile(ctx context.Context, containerID string, filePath string, language types.Language) error {
+	// First, copy the file to the container
+	if err := m.copyFileToContainer(ctx, containerID, filePath, language); err != nil {
+		return fmt.Errorf("failed to copy file to container: %w", err)
+	}
+
+	// For Go language, run go mod tidy after replacing the file
+	if language == types.LanguageGo {
+		if err := m.runGoModTidy(ctx, containerID); err != nil {
+			return fmt.Errorf("failed to run go mod tidy: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) runGoModTidy(ctx context.Context, containerID string) error {
+	m.logger.Debugf("Running go mod tidy in container %s", containerID)
+
+	execConfig := &container.ExecOptions{
+		Cmd:          []string{"sh", "-c", "cd /code && go mod tidy -e"},
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execResp, err := m.Cli.ContainerExecCreate(ctx, containerID, *execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create go mod tidy exec: %w", err)
+	}
+
+	execAttachResp, err := m.Cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to attach to go mod tidy exec: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Execute the go mod tidy command
+	if err := m.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("failed to start go mod tidy exec: %w", err)
+	}
+
+	// Wait for go mod tidy to complete
+	for {
+		inspectResp, err := m.Cli.ContainerExecInspect(ctx, execResp.ID)
+		if err != nil {
+			return fmt.Errorf("failed to inspect go mod tidy exec: %w", err)
+		}
+		if !inspectResp.Running {
+			if inspectResp.ExitCode != 0 {
+				return fmt.Errorf("go mod tidy failed with exit code: %d", inspectResp.ExitCode)
+			}
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	m.logger.Debugf("Go mod tidy completed successfully in container %s", containerID)
+	return nil
+}
+
+func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, filePath string, language types.Language) error {
 	// m.logger.Debugf("Copying file %s to container %s", filePath, containerID)
 
 	// Read the file content
@@ -431,7 +493,23 @@ func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, f
 	// Now copy the file using a simpler approach
 	// Escape the content properly for shell
 	escapedContent := strings.ReplaceAll(string(content), "'", "'\"'\"'")
-	copyCmd := []string{"sh", "-c", fmt.Sprintf("echo '%s' > /code/code.go", escapedContent)}
+
+	// Determine the target filename based on language
+	var targetFile string
+	switch language {
+	case types.LanguageGo:
+		targetFile = "/code/code.go"
+	case types.LanguagePy:
+		targetFile = "/code/code.py"
+	case types.LanguageJS, types.LanguageNode:
+		targetFile = "/code/code.js"
+	case types.LanguageTS:
+		targetFile = "/code/code.ts"
+	default:
+		targetFile = "/code/code.go"
+	}
+
+	copyCmd := []string{"sh", "-c", fmt.Sprintf("echo '%s' > %s", escapedContent, targetFile)}
 	// m.logger.Debugf("Copy command for container %s: %v", containerID, copyCmd)
 
 	execConfig := &container.ExecOptions{
@@ -475,7 +553,7 @@ func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, f
 	}
 
 	// Verify the file was copied
-	verifyCmd := []string{"sh", "-c", "ls -la /code/code.go && wc -l /code/code.go"}
+	verifyCmd := []string{"sh", "-c", fmt.Sprintf("ls -la %s && wc -l %s", targetFile, targetFile)}
 	// m.logger.Debugf("Verify command for container %s: %v", containerID, verifyCmd)
 
 	verifyExecConfig := &container.ExecOptions{
@@ -568,7 +646,7 @@ func (m *Manager) executeCode(ctx context.Context, containerID string, language 
 			break
 		} else if executionStarted {
 			outputBuffer.WriteString(line)
-			m.logger.Debugf("Container Log: %s\n", line)
+			// m.logger.Debugf("Container Log: %s\n", line)
 		}
 	}
 
