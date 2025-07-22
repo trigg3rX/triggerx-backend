@@ -27,7 +27,7 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.RedisProcess,
+		ProcessName:   logging.TaskManagerProcess,
 		IsDevelopment: config.IsDevMode(),
 	}
 

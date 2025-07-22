@@ -3,6 +3,7 @@ package taskmanager
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
@@ -24,6 +25,8 @@ type TaskManager struct {
 	metricsUpdateTicker *time.Ticker
 	ctx                 context.Context
 	cancel              context.CancelFunc
+	shutdownWg          sync.WaitGroup
+	startTime           time.Time
 }
 
 // NewTaskManager creates a new TaskManager instance
@@ -37,10 +40,14 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		return nil, fmt.Errorf("redis not available")
 	}
 
+	// Create context for managing background workers
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// Create Redis client with monitoring
 	redisConfig := config.GetRedisClientConfig()
 	client, err := redisClient.NewRedisClient(logger, redisConfig)
 	if err != nil {
+		cancel() // Clean up context on error
 		logger.Error("Failed to create Redis client for TaskManager", "error", err)
 		metrics.ServiceStatus.WithLabelValues("task_manager").Set(0)
 		return nil, fmt.Errorf("failed to create redis client: %w", err)
@@ -50,20 +57,28 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	monitoringHooks := metrics.CreateRedisMonitoringHooks()
 	client.SetMonitoringHooks(monitoringHooks)
 
-	// Create context for managing background workers
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Initialize stream managers
+	// Initialize stream managers with proper error handling
 	taskStreamManager, err := tasks.NewTaskStreamManager(logger, client)
 	if err != nil {
+		// Clean up resources on error
 		cancel()
+		if closeErr := client.Close(); closeErr != nil {
+			logger.Error("Failed to close Redis client during error cleanup", "error", closeErr)
+		}
 		logger.Error("Failed to create TaskStreamManager", "error", err)
 		return nil, fmt.Errorf("failed to create task stream manager: %w", err)
 	}
 
 	jobStreamManager, err := jobs.NewJobStreamManager(logger, client)
 	if err != nil {
+		// Clean up resources on error
 		cancel()
+		if closeErr := client.Close(); closeErr != nil {
+			logger.Error("Failed to close Redis client during error cleanup", "error", closeErr)
+		}
+		if closeErr := taskStreamManager.Close(); closeErr != nil {
+			logger.Error("Failed to close TaskStreamManager during error cleanup", "error", closeErr)
+		}
 		logger.Error("Failed to create JobStreamManager", "error", err)
 		return nil, fmt.Errorf("failed to create job stream manager: %w", err)
 	}
@@ -76,13 +91,15 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		taskStreamManager:   taskStreamManager,
 		jobStreamManager:    jobStreamManager,
 		performerManager:    performerManager,
-		metricsUpdateTicker: time.NewTicker(30 * time.Second), // Update metrics every 30 seconds
+		metricsUpdateTicker: time.NewTicker(config.GetMetricsUpdateInterval()),
 		ctx:                 ctx,
 		cancel:              cancel,
+		startTime:           time.Now(),
 	}
 
 	logger.Info("TaskManager initialized successfully",
-		"redis_type", config.GetRedisType())
+		"redis_type", config.GetRedisType(),
+		"metrics_update_interval", config.GetMetricsUpdateInterval())
 
 	metrics.ServiceStatus.WithLabelValues("task_manager").Set(1)
 	return tm, nil
@@ -102,11 +119,28 @@ func (tm *TaskManager) Initialize() error {
 		return fmt.Errorf("failed to initialize job stream manager: %w", err)
 	}
 
-	// Start background workers
-	go tm.startMetricsUpdateWorker()
-	go tm.taskStreamManager.StartTaskProcessor(tm.ctx, "taskmanager-processor")
-	go tm.taskStreamManager.StartTimeoutWorker(tm.ctx)
-	go tm.taskStreamManager.StartRetryWorker(tm.ctx)
+	// Start background workers with proper synchronization
+	tm.shutdownWg.Add(4) // Track all background goroutines
+
+	go func() {
+		defer tm.shutdownWg.Done()
+		tm.startMetricsUpdateWorker()
+	}()
+
+	go func() {
+		defer tm.shutdownWg.Done()
+		tm.taskStreamManager.StartTaskProcessor(tm.ctx, "taskmanager-processor")
+	}()
+
+	go func() {
+		defer tm.shutdownWg.Done()
+		tm.taskStreamManager.StartTimeoutWorker(tm.ctx)
+	}()
+
+	go func() {
+		defer tm.shutdownWg.Done()
+		tm.taskStreamManager.StartRetryWorker(tm.ctx)
+	}()
 
 	tm.logger.Info("TaskManager initialization completed successfully")
 	return nil
@@ -129,6 +163,12 @@ func (tm *TaskManager) startMetricsUpdateWorker() {
 
 // updateMetrics updates Prometheus metrics from Redis client
 func (tm *TaskManager) updateMetrics() {
+	defer func() {
+		if r := recover(); r != nil {
+			tm.logger.Error("Panic in metrics update", "panic", r)
+		}
+	}()
+
 	// Update Redis client metrics
 	operationMetrics := tm.redisClient.GetOperationMetrics()
 	metrics.UpdateRedisClientMetrics(operationMetrics)
@@ -202,6 +242,8 @@ func (tm *TaskManager) HealthCheck() map[string]interface{} {
 		"redis_available": config.IsRedisAvailable(),
 		"redis_type":      config.GetRedisType(),
 		"timestamp":       time.Now(),
+		"uptime_seconds":  time.Since(tm.startTime).Seconds(),
+		"start_time":      tm.startTime.Format(time.RFC3339),
 	}
 
 	// Check Redis connection
@@ -237,6 +279,23 @@ func (tm *TaskManager) Close() error {
 		tm.cancel()
 	}
 
+	// Wait for background workers to finish with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		tm.shutdownWg.Wait()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-shutdownDone:
+		tm.logger.Info("All background workers stopped successfully")
+	case <-shutdownCtx.Done():
+		tm.logger.Warn("Timeout waiting for background workers to stop")
+	}
+
 	// Stop metrics ticker
 	if tm.metricsUpdateTicker != nil {
 		tm.metricsUpdateTicker.Stop()
@@ -248,14 +307,14 @@ func (tm *TaskManager) Close() error {
 	if tm.taskStreamManager != nil {
 		if err := tm.taskStreamManager.Close(); err != nil {
 			tm.logger.Error("Failed to close TaskStreamManager", "error", err)
-			errors = append(errors, err)
+			errors = append(errors, fmt.Errorf("task stream manager: %w", err))
 		}
 	}
 
 	if tm.jobStreamManager != nil {
 		if err := tm.jobStreamManager.Close(); err != nil {
 			tm.logger.Error("Failed to close JobStreamManager", "error", err)
-			errors = append(errors, err)
+			errors = append(errors, fmt.Errorf("job stream manager: %w", err))
 		}
 	}
 
@@ -263,7 +322,7 @@ func (tm *TaskManager) Close() error {
 	if tm.redisClient != nil {
 		if err := tm.redisClient.Close(); err != nil {
 			tm.logger.Error("Failed to close Redis client", "error", err)
-			errors = append(errors, err)
+			errors = append(errors, fmt.Errorf("redis client: %w", err))
 		}
 	}
 

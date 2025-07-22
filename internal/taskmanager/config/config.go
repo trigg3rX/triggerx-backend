@@ -37,6 +37,7 @@ type Config struct {
 	// Fallback: Local Redis settings (optional)
 	localAddr     string
 	localPassword string
+	ottempoEndpoint string
 
 	// Common settings
 	db           int
@@ -56,6 +57,16 @@ type Config struct {
 	taskStreamTTL   time.Duration
 	cacheTTL        time.Duration
 	cleanupInterval time.Duration
+
+	// Metrics settings
+	metricsUpdateInterval time.Duration
+
+	// Timeout and retry settings
+	retryDelay            time.Duration
+	requestTimeout        time.Duration
+	initializationTimeout time.Duration
+	maxRetryBackoff       time.Duration
+	streamOperationTimeout time.Duration
 }
 
 var cfg Config
@@ -89,7 +100,14 @@ func Init() error {
 		taskStreamTTL:       env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
 		cacheTTL:            env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
 		cleanupInterval:     env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
+		metricsUpdateInterval: env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
+		retryDelay:          env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
+		requestTimeout:      env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
+		initializationTimeout: env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
+		maxRetryBackoff:     env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
+		streamOperationTimeout: env.GetEnvDuration("REDIS_STREAM_OPERATION_TIMEOUT", 5*time.Second),
 		pinataHost:          env.GetEnvString("PINATA_HOST", ""),
+		ottempoEndpoint:     env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 	}
 
 	if !cfg.devMode {
@@ -218,6 +236,34 @@ func GetCacheTTL() time.Duration {
 
 func GetCleanupInterval() time.Duration {
 	return cfg.cleanupInterval
+}
+
+func GetMetricsUpdateInterval() time.Duration {
+	return cfg.metricsUpdateInterval
+}
+
+func GetRetryDelay() time.Duration {
+	return cfg.retryDelay
+}
+
+func GetRequestTimeout() time.Duration {
+	return cfg.requestTimeout
+}
+
+func GetInitializationTimeout() time.Duration {
+	return cfg.initializationTimeout
+}
+
+func GetMaxRetryBackoff() time.Duration {
+	return cfg.maxRetryBackoff
+}
+
+func GetStreamOperationTimeout() time.Duration {
+	return cfg.streamOperationTimeout
+}
+
+func GetOTTempoEndpoint() string {
+	return cfg.ottempoEndpoint
 }
 
 // GetRedisClientConfig returns a RedisConfig for the new Redis client

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -22,6 +23,8 @@ type TaskStreamManager struct {
 	dbClient       *dbserver.DBServerClient
 	logger         logging.Logger
 	consumerGroups map[string]bool
+	mu             sync.RWMutex
+	startTime      time.Time
 }
 
 func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*TaskStreamManager, error) {
@@ -32,13 +35,14 @@ func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientI
 		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
 		SenderPrivateKey: config.GetRedisSigningKey(),
 		SenderAddress:    config.GetRedisSigningAddress(),
-		RetryAttempts:    3,
-		RetryDelay:       2 * time.Second,
-		RequestTimeout:   10 * time.Second,
+		RetryAttempts:    config.GetMaxRetries(),
+		RetryDelay:       config.GetRetryDelay(),
+		RequestTimeout:   config.GetRequestTimeout(),
 	}
 	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
 	if err != nil {
-		logger.Fatal("Failed to initialize aggregator client", "error", err)
+		logger.Error("Failed to initialize aggregator client", "error", err)
+		return nil, fmt.Errorf("failed to initialize aggregator client: %w", err)
 	}
 
 	// Initialize dbserver client
@@ -55,6 +59,7 @@ func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientI
 		dbClient:       dbserverClient,
 		logger:         logger,
 		consumerGroups: make(map[string]bool),
+		startTime:      time.Now(),
 	}
 
 	logger.Info("TaskStreamManager initialized successfully")
@@ -65,7 +70,7 @@ func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientI
 func (tsm *TaskStreamManager) Initialize() error {
 	tsm.logger.Info("Initializing task streams...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.GetInitializationTimeout())
 	defer cancel()
 
 	// Initialize task streams with specific expiration rules
@@ -472,6 +477,9 @@ func (tsm *TaskStreamManager) findTaskInProcessing(taskID int64) (*TaskStreamDat
 
 // RegisterConsumerGroup registers a consumer group for a stream
 func (tsm *TaskStreamManager) RegisterConsumerGroup(stream string, group string) error {
+	tsm.mu.Lock()
+	defer tsm.mu.Unlock()
+
 	key := fmt.Sprintf("%s:%s", stream, group)
 	if _, exists := tsm.consumerGroups[key]; exists {
 		// tsm.logger.Debug("Consumer group already exists", "stream", stream, "group", group)

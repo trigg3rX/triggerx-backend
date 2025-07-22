@@ -7,14 +7,17 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
 )
 
 func (tsm *TaskStreamManager) getTaskStreamData(taskID int64) (*TaskStreamData, error) {
-	taskStreamData, err := tsm.readTasksFromStream(TasksReadyStream, "task_stream_manager", "task_stream_manager", 1)
+	taskStreamData, err := tsm.readTasksFromStream(TasksReadyStream, "task_stream_manager", "task_stream_manager", 10)
 	if err != nil {
-		tsm.logger.Error("Failed to read task stream data", "error", err)
-		return nil, err
+		tsm.logger.Error("Failed to read task stream data",
+			"task_id", taskID,
+			"error", err)
+		return nil, fmt.Errorf("failed to read task stream data: %w", err)
 	}
 
 	for _, task := range taskStreamData {
@@ -23,7 +26,7 @@ func (tsm *TaskStreamManager) getTaskStreamData(taskID int64) (*TaskStreamData, 
 		}
 	}
 
-	return nil, fmt.Errorf("task not found")
+	return nil, fmt.Errorf("task not found: %d", taskID)
 }
 
 func (tsm *TaskStreamManager) ReadTasksFromRetryStream(consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
@@ -37,11 +40,15 @@ func (tsm *TaskStreamManager) ReadTasksFromRetryStream(consumerGroup, consumerNa
 		tsm.logger.Error("Failed to read from retry stream",
 			"consumer_group", consumerGroup,
 			"error", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to read from retry stream: %w", err)
 	}
 
 	now := time.Now()
 	var readyTasks []TaskStreamData
+
+	// Pre-allocate slice for better performance
+	readyTasks = make([]TaskStreamData, 0, len(tasks))
+
 	for _, task := range tasks {
 		if task.ScheduledFor == nil || task.ScheduledFor.Before(now) {
 			readyTasks = append(readyTasks, task)
@@ -67,11 +74,11 @@ func (tsm *TaskStreamManager) ReadTasksFromRetryStream(consumerGroup, consumerNa
 
 func (tsm *TaskStreamManager) readTasksFromStream(stream, consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
 	if err := tsm.RegisterConsumerGroup(stream, consumerGroup); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to register consumer group: %w", err)
 	}
 
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.GetStreamOperationTimeout())
 	defer cancel()
 
 	streams, err := tsm.client.XReadGroup(ctx, &redis.XReadGroupArgs{
@@ -103,7 +110,14 @@ func (tsm *TaskStreamManager) readTasksFromStream(stream, consumerGroup, consume
 
 	metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "success").Inc()
 
+	// Pre-allocate slice for better performance
 	var tasks []TaskStreamData
+	totalMessages := 0
+	for _, stream := range streams {
+		totalMessages += len(stream.Messages)
+	}
+	tasks = make([]TaskStreamData, 0, totalMessages)
+
 	for _, stream := range streams {
 		for _, message := range stream.Messages {
 			taskJSON, exists := message.Values["task"].(string)

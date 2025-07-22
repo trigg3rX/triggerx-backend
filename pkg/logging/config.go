@@ -15,7 +15,7 @@ const (
 	KeeperProcess             ProcessName = "keeper"
 	RegistrarProcess          ProcessName = "registrar"
 	HealthProcess             ProcessName = "health"
-	RedisProcess              ProcessName = "redis"
+	TaskManagerProcess        ProcessName = "taskmanager"
 	TimeSchedulerProcess      ProcessName = "schedulers-time"
 	ConditionSchedulerProcess ProcessName = "schedulers-condition"
 	TestProcess               ProcessName = "test"

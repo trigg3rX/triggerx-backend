@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"os"
-
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/api/handler"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
@@ -89,16 +88,16 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 
 // Start starts the server
 func (s *Server) Start() error {
-	s.logger.Info("Starting Redis API server", "addr", s.httpServer.Addr)
+	s.logger.Info("Starting Task Manager API server", "addr", s.httpServer.Addr)
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("failed to start Redis server: %w", err)
+		return fmt.Errorf("failed to start Task Manager server: %w", err)
 	}
 	return nil
 }
 
 // Stop gracefully stops the server
 func (s *Server) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping Redis API server")
+	s.logger.Info("Stopping Task Manager API server")
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -116,7 +115,7 @@ func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
 	redisHandler := handler.NewHandler(deps.Logger, deps.TaskStreamMgr, deps.JobStreamMgr, deps.MetricsCollector)
 
-	// Redis service routes
+	// Task Manager service routes
 	s.router.GET("/", redisHandler.HandleRoot)
 	s.router.GET("/health", redisHandler.HandleHealth)
 	s.router.GET("/metrics", redisHandler.HandleMetrics)
@@ -133,14 +132,9 @@ func (s *Server) setupRoutes(deps Dependencies) {
 }
 
 // InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
-// Set TEMPO_OTLP_ENDPOINT env var to override the default (localhost:4318)
 func InitTracer() (func(context.Context) error, error) {
-	endpoint := os.Getenv("TEMPO_OTLP_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "localhost:4318" // default to local Tempo
-	}
 	exporter, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithEndpoint(config.GetOTTempoEndpoint()),
 		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
@@ -150,7 +144,7 @@ func InitTracer() (func(context.Context) error, error) {
 		trace.WithBatcher(exporter),
 		trace.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("triggerx-redis"),
+			semconv.ServiceNameKey.String("triggerx-taskmanager"),
 		)),
 	)
 	gootel.SetTracerProvider(tp)

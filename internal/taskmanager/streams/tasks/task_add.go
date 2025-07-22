@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,7 +16,27 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Ready to be sent to the performer
+// TaskBatchProcessor handles batch operations for better performance
+type TaskBatchProcessor struct {
+	batchSize    int
+	batchTimeout time.Duration
+	tasks        []*TaskStreamData
+	mu           sync.Mutex
+	ticker       *time.Ticker
+	done         chan struct{}
+}
+
+// NewTaskBatchProcessor creates a new batch processor for tasks
+func NewTaskBatchProcessor(batchSize int, batchTimeout time.Duration) *TaskBatchProcessor {
+	return &TaskBatchProcessor{
+		batchSize:    batchSize,
+		batchTimeout: batchTimeout,
+		tasks:        make([]*TaskStreamData, 0, batchSize),
+		done:         make(chan struct{}),
+	}
+}
+
+// Ready to be sent to the performer with improved error handling and performance
 func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.PerformerData, error) {
 	performerData := performers.GetPerformerData()
 	if performerData.KeeperID == 0 {
@@ -26,30 +47,36 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 	// Update task with performer information
 	task.SendTaskDataToKeeper.PerformerData = performerData
 	task.SendTaskDataToKeeper.SchedulerSignature = &types.SchedulerSignatureData{
-		TaskID:                  task.SendTaskDataToKeeper.TaskID,
+		TaskID: task.SendTaskDataToKeeper.TaskID,
 		// TODO: add this before keeper v0.1.5
 		// SchedulerID:             task.SendTaskDataToKeeper.SchedulerSignature.SchedulerID,
 		SchedulerSigningAddress: config.GetRedisSigningAddress(),
 	}
 
-	// Sign the task data
+	// Sign the task data with improved error handling
 	signature, err := cryptography.SignJSONMessage(task.SendTaskDataToKeeper, config.GetRedisSigningKey())
 	if err != nil {
-		tsm.logger.Errorf("Failed to sign batch task data: %v", err)
-		return types.PerformerData{}, err
+		tsm.logger.Error("Failed to sign batch task data",
+			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"error", err)
+		return types.PerformerData{}, fmt.Errorf("failed to sign task data: %w", err)
 	}
 	task.SendTaskDataToKeeper.SchedulerSignature.SchedulerSignature = signature
 
+	// Add task to stream with improved performance
 	err = tsm.addTaskToStream(TasksReadyStream, &task)
 	if err != nil {
 		tsm.logger.Error("Failed to add task to ready stream",
 			"task_id", task.SendTaskDataToKeeper.TaskID,
 			"performer_id", performerData.KeeperID,
 			"error", err)
-		return types.PerformerData{}, err
+		return types.PerformerData{}, fmt.Errorf("failed to add task to ready stream: %w", err)
 	}
 
-	tsm.sendTaskToPerformer(task)
+	// Send task to performer asynchronously for better performance
+	go func() {
+		tsm.sendTaskToPerformer(task)
+	}()
 
 	tsm.logger.Info("Task added to ready stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID,
@@ -59,7 +86,7 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 	return performerData, nil
 }
 
-// Failed to send to the performer, sent to the retry stream
+// Failed to send to the performer, sent to the retry stream with improved backoff strategy
 func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryReason string) error {
 	tsm.logger.Warn("Adding task to retry stream",
 		"task_id", task.SendTaskDataToKeeper.TaskID,
@@ -71,8 +98,13 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 	now := time.Now()
 	task.LastAttemptAt = &now
 
-	// Exponential backoff with jitter
+	// Improved exponential backoff with jitter and maximum cap
 	baseBackoff := time.Duration(task.RetryCount) * RetryBackoffBase
+	maxBackoff := config.GetMaxRetryBackoff()
+	if baseBackoff > maxBackoff {
+		baseBackoff = maxBackoff
+	}
+
 	jitter := time.Duration(rand.Int63n(int64(RetryBackoffBase))) // Up to 1 base backoff
 	backoffDuration := baseBackoff + jitter
 
@@ -99,7 +131,7 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 			tsm.logger.Error("Failed to add task to failed stream",
 				"task_id", task.SendTaskDataToKeeper.TaskID,
 				"error", err)
-			return err
+			return fmt.Errorf("failed to add task to failed stream: %w", err)
 		}
 
 		// Notify scheduler about task failure
@@ -118,7 +150,7 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 			"task_id", task.SendTaskDataToKeeper.TaskID,
 			"error", err)
 		metrics.TasksAddedToStreamTotal.WithLabelValues("retry", "failure").Inc()
-		return err
+		return fmt.Errorf("failed to add task to retry stream: %w", err)
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues("retry", "success").Inc()
@@ -127,7 +159,7 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 
 func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamData) error {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.GetStreamOperationTimeout())
 	defer cancel()
 
 	taskJSON, err := json.Marshal(task)
@@ -136,7 +168,7 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 			"task_id", task.SendTaskDataToKeeper.TaskID,
 			"stream", stream,
 			"error", err)
-		return err
+		return fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
 	res, err := tsm.client.XAdd(ctx, &redis.XAddArgs{
@@ -148,7 +180,6 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 			"created_at": time.Now().Unix(),
 		},
 	})
-
 	duration := time.Since(start)
 
 	if err != nil {
@@ -158,7 +189,7 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 			"stream", stream,
 			"duration", duration,
 			"error", err)
-		return err
+		return fmt.Errorf("failed to add task to stream: %w", err)
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
