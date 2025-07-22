@@ -20,6 +20,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -84,17 +85,25 @@ func main() {
 	logger.Info("[3/5] Dependency: Health client Initialised")
 
 	dockerCfg := dockerconfig.DefaultConfig("go")
+	supportedLanguages := []types.Language{
+		types.LanguageGo,
+		// types.LanguagePy,
+		// types.LanguageJS,
+		// types.LanguageTS,
+		// types.LanguageNode,
+	}
+
 	dockerManager, err := docker.NewDockerManager(dockerCfg, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize code executor", "error", err)
 	}
 
-	// Initialize the Docker manager
+	// Initialize the Docker manager with language-specific pools
 	ctx := context.Background()
-	if err := dockerManager.Initialize(ctx); err != nil {
+	if err := dockerManager.Initialize(ctx, supportedLanguages); err != nil {
 		logger.Fatal("Failed to initialize Docker manager", "error", err)
 	}
-	logger.Info("[4/5] Dependency: Code executor Initialised")
+	logger.Infof("[4/5] Dependency: Code executor Initialised with %d language pools", len(supportedLanguages))
 
 	// Initialize task executor and validator
 	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger)

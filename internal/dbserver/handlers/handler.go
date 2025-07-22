@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,9 +50,17 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
 
-	err := h.dockerManager.Initialize(context.Background())
-	if err != nil {
-		h.logger.Errorf("Failed to initialize Docker manager: %v", err)
+	// Log Docker manager status
+	if dockerManager != nil {
+		if dockerManager.IsInitialized() {
+			logger.Info("Docker manager is initialized and ready")
+			supportedLanguages := dockerManager.GetSupportedLanguages()
+			logger.Infof("Supported languages: %v", supportedLanguages)
+		} else {
+			logger.Warn("Docker manager is not initialized")
+		}
+	} else {
+		logger.Warn("Docker manager is nil")
 	}
 
 	return h

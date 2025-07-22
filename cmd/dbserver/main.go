@@ -18,6 +18,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -61,9 +62,26 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
-	dockerManager, err := docker.NewDockerManager(dockerconfig.DefaultConfig("go"), logger)
+	// Initialize Docker manager with language support
+	dockerConfig := dockerconfig.DefaultConfig("go")
+	supportedLanguages := []types.Language{
+		types.LanguageGo,
+		// types.LanguagePy,
+		// types.LanguageJS,
+		// types.LanguageTS,
+		// types.LanguageNode,
+	}
+
+	dockerManager, err := docker.NewDockerManager(dockerConfig, logger)
 	if err != nil {
-		logger.Errorf("Failed to initialize Docker manager: %v", err)
+		logger.Errorf("Failed to create Docker manager: %v", err)
+	} else {
+		// Initialize Docker manager with language-specific pools
+		if err := dockerManager.Initialize(context.Background(), supportedLanguages); err != nil {
+			logger.Errorf("Failed to initialize Docker manager: %v", err)
+		} else {
+			logger.Infof("Docker manager initialized successfully with %d language pools", len(supportedLanguages))
+		}
 	}
 
 	dbServer := dbserver.NewServer(conn, logger)
