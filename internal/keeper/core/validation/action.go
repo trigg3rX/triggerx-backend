@@ -3,13 +3,15 @@ package validation
 import (
 	"context"
 	"fmt"
-	
+	"time"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
+
+const timeTolerance = 1100 * time.Millisecond
 
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
 	v.logger.Infof("txHash: %s", actionData.ActionTxHash)

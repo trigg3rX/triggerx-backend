@@ -12,8 +12,6 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-const timeTolerance = 1100 * time.Millisecond
-
 func (v *TaskValidator) getBlockTimestamp(receipt *ethtypes.Receipt, rpcURL string) (time.Time, error) {
 	blockNumberHex := fmt.Sprintf("0x%x", receipt.BlockNumber)
 	reqBody := map[string]interface{}{

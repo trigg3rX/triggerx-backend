@@ -35,7 +35,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		timeToNextTrigger = timeToNextTrigger - 2*time.Second
 	case 2:
 		timeToNextTrigger = time.Until(triggerData.NextTriggerTimestamp)
-		timeToNextTrigger = timeToNextTrigger - 10*time.Second
+		timeToNextTrigger = timeToNextTrigger - 4*time.Second
 		if timeToNextTrigger < 0 {
 			timeToNextTrigger = 0
 		}
