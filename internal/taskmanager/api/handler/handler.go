@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 

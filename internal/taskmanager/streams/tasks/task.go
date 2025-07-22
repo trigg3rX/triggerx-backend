@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"

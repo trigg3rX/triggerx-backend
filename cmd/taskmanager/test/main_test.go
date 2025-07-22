@@ -9,10 +9,10 @@ package test
 // 	"testing"
 // 	"time"
 
-// 	redisclient "github.com/redis/go-redis/v9"
+// 	redisclient "github.com/taskmanager/go-redis/v9"
 // 	"github.com/stretchr/testify/assert"
-// 	redisx "github.com/trigg3rX/triggerx-backend/internal/redis/redis"
-// 	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
+// 	redisx "github.com/trigg3rX/triggerx-backend/internal/taskmanager/redis"
+// 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 // 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 // )
 

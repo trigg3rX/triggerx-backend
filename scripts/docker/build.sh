@@ -40,8 +40,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|redis|schedulers/time|schedulers/condition|all)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, redis, schedulers/time, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|taskmanager|schedulers/time|schedulers/condition|all)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, taskmanager, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 
@@ -53,7 +53,7 @@ fi
 
 if [[ "$SERVICE" == "all" ]]; then
     # Build all services in parallel
-    services=(dbserver registrar health redis schedulers/time schedulers/condition)
+    services=(dbserver registrar health taskmanager schedulers/time schedulers/condition)
     build_pids=()
     failed_services=()
     
