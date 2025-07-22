@@ -151,8 +151,8 @@ func DefaultBasePoolConfig() BasePoolConfig {
 
 func DefaultCacheConfig() CacheConfig {
 	return CacheConfig{
-		CacheDir:          "/var/lib/triggerx/cache", // Persistent cache directory
-		MaxCacheSize:      100 * 1024 * 1024,         // 100MB
+		CacheDir:          "data/cache",
+		MaxCacheSize:      100 * 1024 * 1024,   // 100MB
 		CleanupInterval:   10 * time.Minute,
 		EnableCompression: true,
 		MaxFileSize:       1 * 1024 * 1024, // 1MB
@@ -186,8 +186,8 @@ func OptimizedConfig(lang string) ExecutorConfig {
 	cfg.BasePool.IdleTimeout = 5 * time.Minute
 
 	// Optimize cache settings
-	cfg.Cache.CacheDir = "/var/lib/triggerx/cache" // Persistent cache directory
-	cfg.Cache.MaxCacheSize = 500 * 1024 * 1024     // 500MB
+	cfg.Cache.CacheDir = "data/cache"
+	cfg.Cache.MaxCacheSize = 500 * 1024 * 1024 // 500MB
 
 	// Optimize Docker settings
 	cfg.Docker.MemoryLimit = "2048m"
