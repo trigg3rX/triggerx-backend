@@ -34,6 +34,16 @@ RUN apk --no-cache add ca-certificates
 RUN addgroup -g 1000 appgroup && \
     adduser -D -u 1000 -G appgroup appuser
 
+# Create necessary directories for the application
+RUN mkdir -p /home/appuser/data/cache && \
+    mkdir -p /home/appuser/data/logs && \
+    mkdir -p /home/appuser/data/logs/dbserver && \
+    mkdir -p /home/appuser/data/logs/schedulers-time && \
+    mkdir -p /home/appuser/data/logs/schedulers-condition && \
+    mkdir -p /home/appuser/data/logs/health && \
+    mkdir -p /home/appuser/data/logs/registrar && \
+    mkdir -p /home/appuser/data/logs/taskmanager
+
 # Set working directory
 WORKDIR /home/appuser/
 
