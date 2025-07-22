@@ -24,15 +24,154 @@ type TaskBatchProcessor struct {
 	mu           sync.Mutex
 	ticker       *time.Ticker
 	done         chan struct{}
+	streamMgr    *TaskStreamManager
 }
 
 // NewTaskBatchProcessor creates a new batch processor for tasks
-func NewTaskBatchProcessor(batchSize int, batchTimeout time.Duration) *TaskBatchProcessor {
+func NewTaskBatchProcessor(batchSize int, batchTimeout time.Duration, streamMgr *TaskStreamManager) *TaskBatchProcessor {
 	return &TaskBatchProcessor{
 		batchSize:    batchSize,
 		batchTimeout: batchTimeout,
 		tasks:        make([]*TaskStreamData, 0, batchSize),
 		done:         make(chan struct{}),
+		streamMgr:    streamMgr,
+	}
+}
+
+// Start begins the batch processing loop
+func (bp *TaskBatchProcessor) Start() {
+	bp.mu.Lock()
+	bp.ticker = time.NewTicker(bp.batchTimeout)
+	bp.mu.Unlock()
+
+	go bp.processLoop()
+}
+
+// Stop gracefully stops the batch processor
+func (bp *TaskBatchProcessor) Stop() {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+
+	if bp.ticker != nil {
+		bp.ticker.Stop()
+	}
+	close(bp.done)
+}
+
+// AddTask adds a task to the batch processor
+func (bp *TaskBatchProcessor) AddTask(task *TaskStreamData) error {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+
+	bp.tasks = append(bp.tasks, task)
+
+	// Process batch immediately if it reaches the batch size
+	if len(bp.tasks) >= bp.batchSize {
+		return bp.processBatch()
+	}
+
+	return nil
+}
+
+// processLoop runs the main processing loop
+func (bp *TaskBatchProcessor) processLoop() {
+	for {
+		select {
+		case <-bp.done:
+			bp.streamMgr.logger.Info("Batch processor stopping")
+			// Process any remaining tasks before stopping
+			bp.mu.Lock()
+			if len(bp.tasks) > 0 {
+				if err := bp.processBatch(); err != nil {
+					bp.streamMgr.logger.Error("Failed to process final batch", "error", err)
+				}
+			}
+			bp.mu.Unlock()
+			return
+		case <-bp.ticker.C:
+			bp.mu.Lock()
+			if len(bp.tasks) > 0 {
+				if err := bp.processBatch(); err != nil {
+					bp.streamMgr.logger.Error("Failed to process batch", "error", err)
+				}
+			}
+			bp.mu.Unlock()
+		}
+	}
+}
+
+// processBatch processes the current batch of tasks
+func (bp *TaskBatchProcessor) processBatch() error {
+	if len(bp.tasks) == 0 {
+		return nil
+	}
+
+	bp.streamMgr.logger.Info("Processing batch of tasks",
+		"batch_size", len(bp.tasks),
+		"batch_timeout", bp.batchTimeout)
+
+	// Process tasks in parallel for better performance
+	var wg sync.WaitGroup
+	errors := make(chan error, len(bp.tasks))
+
+	for _, task := range bp.tasks {
+		wg.Add(1)
+		go func(t *TaskStreamData) {
+			defer wg.Done()
+			if err := bp.processSingleTask(t); err != nil {
+				errors <- err
+			}
+		}(task)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// Collect any errors
+	var errs []error
+	for err := range errors {
+		errs = append(errs, err)
+	}
+
+	// Clear the batch
+	bp.tasks = bp.tasks[:0]
+
+	if len(errs) > 0 {
+		bp.streamMgr.logger.Error("Batch processing completed with errors",
+			"error_count", len(errs),
+			"total_tasks", len(bp.tasks))
+		return fmt.Errorf("batch processing failed with %d errors", len(errs))
+	}
+
+	bp.streamMgr.logger.Info("Batch processing completed successfully",
+		"processed_tasks", len(bp.tasks))
+	return nil
+}
+
+// processSingleTask processes a single task from the batch
+func (bp *TaskBatchProcessor) processSingleTask(task *TaskStreamData) error {
+	// Add task to ready stream
+	_, err := bp.streamMgr.AddTaskToReadyStream(*task)
+	if err != nil {
+		bp.streamMgr.logger.Error("Failed to process task in batch",
+			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"error", err)
+		return err
+	}
+
+	return nil
+}
+
+// GetBatchStats returns current batch statistics
+func (bp *TaskBatchProcessor) GetBatchStats() map[string]interface{} {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+
+	return map[string]interface{}{
+		"current_batch_size": len(bp.tasks),
+		"batch_size_limit":   bp.batchSize,
+		"batch_timeout":      bp.batchTimeout,
+		"is_running":         bp.ticker != nil,
 	}
 }
 

@@ -67,6 +67,10 @@ type Config struct {
 	initializationTimeout time.Duration
 	maxRetryBackoff       time.Duration
 	streamOperationTimeout time.Duration
+
+	// Batch processing settings
+	taskBatchSize    int
+	taskBatchTimeout time.Duration
 }
 
 var cfg Config
@@ -106,6 +110,8 @@ func Init() error {
 		initializationTimeout: env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
 		maxRetryBackoff:     env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
 		streamOperationTimeout: env.GetEnvDuration("REDIS_STREAM_OPERATION_TIMEOUT", 5*time.Second),
+		taskBatchSize:       env.GetEnvInt("REDIS_TASK_BATCH_SIZE", 10),
+		taskBatchTimeout:    env.GetEnvDuration("REDIS_TASK_BATCH_TIMEOUT", 5*time.Second),
 		pinataHost:          env.GetEnvString("PINATA_HOST", ""),
 		ottempoEndpoint:     env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 	}
@@ -260,6 +266,14 @@ func GetMaxRetryBackoff() time.Duration {
 
 func GetStreamOperationTimeout() time.Duration {
 	return cfg.streamOperationTimeout
+}
+
+func GetTaskBatchSize() int {
+	return cfg.taskBatchSize
+}
+
+func GetTaskBatchTimeout() time.Duration {
+	return cfg.taskBatchTimeout
 }
 
 func GetOTTempoEndpoint() string {
