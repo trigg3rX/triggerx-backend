@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/performers"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/performers"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -40,14 +40,14 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 	}
 	task.SendTaskDataToKeeper.SchedulerSignature.SchedulerSignature = signature
 
-	// err = tsm.addTaskToStream(TasksReadyStream, &task)
-	// if err != nil {
-	// 	tsm.logger.Error("Failed to add task to ready stream",
-	// 		"task_id", task.SendTaskDataToKeeper.TaskID,
-	// 		"performer_id", performerData.KeeperID,
-	// 		"error", err)
-	// 	return types.PerformerData{}, err
-	// }
+	err = tsm.addTaskToStream(TasksReadyStream, &task)
+	if err != nil {
+		tsm.logger.Error("Failed to add task to ready stream",
+			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"performer_id", performerData.KeeperID,
+			"error", err)
+		return types.PerformerData{}, err
+	}
 
 	tsm.sendTaskToPerformer(task)
 

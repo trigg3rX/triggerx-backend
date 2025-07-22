@@ -1,15 +1,15 @@
-package redis
+package taskmanager
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/performers"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/performers"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )

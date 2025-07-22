@@ -12,4 +12,4 @@ else
 fi
 
 # Run the service
-exec /home/appuser/redis
+exec /home/appuser/taskmanager

@@ -40,8 +40,8 @@ start-registrar: ## Start the Registrar
 start-health: ## Start the Health Check
 	./scripts/services/start-health.sh
 
-start-redis: ## Start the Redis
-	./scripts/services/start-redis.sh
+start-taskmanager: ## Start the Task Manager
+	./scripts/services/start-taskmanager.sh
 
 start-time-scheduler: ## Start the Time Scheduler
 	./scripts/services/start-time-scheduler.sh

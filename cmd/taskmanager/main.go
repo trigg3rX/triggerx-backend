@@ -8,11 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/redis/api"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/config"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/redis/streams/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/api"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -36,7 +36,7 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting Redis Orchestrator service ...")
+	logger.Info("Starting Task Manager service ...")
 
 	// Initialize metrics collector
 	collector := metrics.NewCollector()
@@ -105,7 +105,7 @@ func main() {
 	defer cancel()
 
 	// Start orchestration workers in background
-	logger.Info("Starting Redis orchestration workers...")
+	logger.Info("Starting Task Manager workers...")
 
 	// Task Processor Workers - multiple instances for scaling
 	consumerName := fmt.Sprintf("redis-worker-%d", time.Now().Unix())
@@ -137,7 +137,7 @@ func main() {
 	}()
 
 	// Log Redis info
-	logger.Info("Redis Orchestrator service is running",
+	logger.Info("Task Manager service is running",
 		"redis_available", config.IsRedisAvailable(),
 		"redis_type", config.GetRedisType())
 
@@ -220,7 +220,7 @@ func performGracefulShutdown(ctx context.Context, client redisClient.RedisClient
 		logger.Info("API server stopped successfully")
 	}
 
-	logger.Info("Redis Orchestrator service shutdown complete")
+	logger.Info("Task Manager service shutdown complete")
 
 	// Ensure we exit cleanly
 	select {
