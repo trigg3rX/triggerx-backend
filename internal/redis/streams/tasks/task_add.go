@@ -40,14 +40,16 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 	}
 	task.SendTaskDataToKeeper.SchedulerSignature.SchedulerSignature = signature
 
-	err = tsm.addTaskToStream(TasksReadyStream, &task)
-	if err != nil {
-		tsm.logger.Error("Failed to add task to ready stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
-			"performer_id", performerData.KeeperID,
-			"error", err)
-		return types.PerformerData{}, err
-	}
+	// err = tsm.addTaskToStream(TasksReadyStream, &task)
+	// if err != nil {
+	// 	tsm.logger.Error("Failed to add task to ready stream",
+	// 		"task_id", task.SendTaskDataToKeeper.TaskID,
+	// 		"performer_id", performerData.KeeperID,
+	// 		"error", err)
+	// 	return types.PerformerData{}, err
+	// }
+
+	tsm.sendTaskToPerformer(task)
 
 	tsm.logger.Info("Task added to ready stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID,

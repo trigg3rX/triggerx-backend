@@ -83,8 +83,7 @@ func parseRedisConfig(config RedisConfig) (*redis.Options, error) {
 		if config.UpstashConfig.Token != "" {
 			opt.Password = config.UpstashConfig.Token
 		}
-	}
-	if !config.IsUpstash {
+	} else {
 		opt = &redis.Options{
 			Addr:     config.LocalRedisConfig.Addr,
 			Password: config.LocalRedisConfig.Password,
@@ -166,9 +165,6 @@ func (c *Client) Ping() error {
 
 // Stream management functions
 func (c *Client) CreateStreamIfNotExists(ctx context.Context, stream string, ttl time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	return c.executeWithRetry(ctx, func() error {
 		exists, err := c.redisClient.Exists(ctx, stream).Result()
 		if err != nil {

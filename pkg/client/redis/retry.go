@@ -6,6 +6,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	redis "github.com/redis/go-redis/v9"
 )
 
 // SetRetryConfig sets custom retry configuration
@@ -64,9 +66,9 @@ func (c *Client) executeWithRetryAndKey(ctx context.Context, operation func() er
 		if err := operation(); err != nil {
 			lastErr = err
 			if !c.isRetryableError(err) {
-				if c.logger != nil {
-					c.logger.Errorf("Non-retryable error in Redis operation %s: %v", operationName, err)
-				}
+				// if c.logger != nil {
+					// c.logger.Errorf("Non-retryable error in Redis operation %s: %v (type: %T)", operationName, err, err)
+				// }
 				return err
 			}
 			continue
@@ -103,6 +105,22 @@ func (c *Client) isRetryableError(err error) bool {
 		return false
 	}
 
+	// Check for redis.Nil error (non-retryable)
+	if err == redis.Nil {
+		// if c.logger != nil {
+			// c.logger.Debugf("Redis error is redis.Nil (non-retryable): %v", err)
+		// }
+		return false
+	}
+
+	// Check for redis: nil string error (non-retryable)
+	if err.Error() == "redis: nil" {
+		if c.logger != nil {
+			c.logger.Debugf("Redis error is 'redis: nil' string (non-retryable): %v", err)
+		}
+		return false
+	}
+
 	errStr := err.Error()
 	retryableErrors := []string{
 		"connection refused",
@@ -123,15 +141,20 @@ func (c *Client) isRetryableError(err error) bool {
 		"network unreachable",
 		"connection reset",
 		"host not found",
-		"redis: nil",
 		"EOF",
 	}
 
 	for _, retryableErr := range retryableErrors {
 		if errStr == retryableErr {
+			if c.logger != nil {
+				c.logger.Debugf("Redis error is retryable: %v", err)
+			}
 			return true
 		}
 	}
 
+	if c.logger != nil {
+		c.logger.Debugf("Redis error is non-retryable (default): %v (type: %T)", err, err)
+	}
 	return false
 }
