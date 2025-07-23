@@ -22,16 +22,16 @@ type UserData struct {
 }
 
 type JobData struct {
-	JobID            int64  `json:"job_id"`
-	JobTitle         string `json:"job_title"`
-	TaskDefinitionID int    `json:"task_definition_id"`
-	UserID           int64  `json:"user_id"`
-	LinkJobID        int64  `json:"link_job_id"`
-	ChainStatus      int    `json:"chain_status"`
-	Custom           bool   `json:"custom"`
-	TimeFrame        int64  `json:"time_frame"`
-	Recurring        bool   `json:"recurring"`
-	Status           string `json:"status"`
+	JobID            *big.Int `json:"job_id"`
+	JobTitle         string   `json:"job_title"`
+	TaskDefinitionID int      `json:"task_definition_id"`
+	UserID           int64    `json:"user_id"`
+	LinkJobID        *big.Int `json:"link_job_id"`
+	ChainStatus      int      `json:"chain_status"`
+	Custom           bool     `json:"custom"`
+	TimeFrame        int64    `json:"time_frame"`
+	Recurring        bool     `json:"recurring"`
+	Status           string   `json:"status"`
 	// Intial cost prediction for the job
 	JobCostPrediction float64 `json:"job_cost_prediction"`
 	// Actual cost of the job, updated after each task execution
@@ -47,8 +47,8 @@ type JobData struct {
 }
 
 type TimeJobData struct {
-	JobID            int64 `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
+	JobID            *big.Int `json:"job_id"`
+	TaskDefinitionID int      `json:"task_definition_id"`
 	// Time based job specific fields
 	ScheduleType           string    `json:"schedule_type"`
 	TimeInterval           int64     `json:"time_interval"`
@@ -73,9 +73,9 @@ type TimeJobData struct {
 }
 
 type EventJobData struct {
-	JobID            int64 `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
-	Recurring        bool  `json:"recurring"`
+	JobID            *big.Int `json:"job_id"`
+	TaskDefinitionID int      `json:"task_definition_id"`
+	Recurring        bool     `json:"recurring"`
 	// Event based job specific fields
 	TriggerChainID         string `json:"trigger_chain_id"`
 	TriggerContractAddress string `json:"trigger_contract_address"`
@@ -97,9 +97,9 @@ type EventJobData struct {
 }
 
 type ConditionJobData struct {
-	JobID            int64 `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
-	Recurring        bool  `json:"recurring"`
+	JobID            *big.Int `json:"job_id"`
+	TaskDefinitionID int      `json:"task_definition_id"`
+	Recurring        bool     `json:"recurring"`
 	// Condition based job specific fields
 	ConditionType   string  `json:"condition_type"`
 	UpperLimit      float64 `json:"upper_limit"`

@@ -16,6 +16,7 @@ const (
 // Create New Job
 type CreateJobRequest struct {
 	// Common fields for all job types
+	JobID             *big.Int  `json:"job_id" validate:"required"`
 	UserAddress       string    `json:"user_address" validate:"required,ethereum_address"`
 	DepositedEther    *big.Int  `json:"deposited_ether" validate:"required"`
 	DepositedToken    *big.Int  `json:"deposited_token" validate:"required"`
@@ -55,26 +56,26 @@ type CreateJobRequest struct {
 }
 
 type CreateJobResponse struct {
-	UserID            int64    `json:"user_id"`
-	AccountBalance    *big.Int `json:"account_balance"`
-	TokenBalance      *big.Int `json:"token_balance"`
-	JobIDs            []int64  `json:"job_ids"`
-	TaskDefinitionIDs []int    `json:"task_definition_ids"`
-	TimeFrames        []int64  `json:"time_frames"`
+	UserID            int64      `json:"user_id"`
+	AccountBalance    *big.Int   `json:"account_balance"`
+	TokenBalance      *big.Int   `json:"token_balance"`
+	JobIDs            []*big.Int `json:"job_ids"`
+	TaskDefinitionIDs []int      `json:"task_definition_ids"`
+	TimeFrames        []int64    `json:"time_frames"`
 }
 
 // Create New Task
 type CreateTaskRequest struct {
-	JobID            int64 `json:"job_id" validate:"required"`
-	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
-	TaskPerformerID  int64 `json:"task_performer_id" validate:"required"`
+	JobID            *big.Int `json:"job_id" validate:"required"`
+	TaskDefinitionID int      `json:"task_definition_id" validate:"required"`
+	TaskPerformerID  int64    `json:"task_performer_id" validate:"required"`
 }
 
 type CreateTaskResponse struct {
-	TaskID           int64 `json:"task_id"`
-	JobID            int64 `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
-	TaskPerformerID  int64 `json:"task_performer_id"`
+	TaskID           int64    `json:"task_id"`
+	JobID            *big.Int `json:"job_id"`
+	TaskDefinitionID int      `json:"task_definition_id"`
+	TaskPerformerID  int64    `json:"task_performer_id"`
 }
 
 // Create New Keeper from Contracts (registrar)
