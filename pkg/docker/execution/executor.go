@@ -20,8 +20,11 @@ type CodeExecutor struct {
 }
 
 func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, logger logging.Logger) (*CodeExecutor, error) {
-	// Create Docker client
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+	// Create Docker client with API version compatibility
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithVersion("1.44"),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
