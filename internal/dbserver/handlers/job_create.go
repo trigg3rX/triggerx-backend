@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -77,14 +78,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		UserID:            existingUser.UserID,
 		AccountBalance:    existingUser.EtherBalance,
 		TokenBalance:      existingUser.TokenBalance,
-		JobIDs:            make([]int64, len(tempJobs)),
+		JobIDs:            make([]*big.Int, len(tempJobs)),
 		TaskDefinitionIDs: make([]int, len(tempJobs)),
 		TimeFrames:        make([]int64, len(tempJobs)),
 	}
 
 	for i := len(tempJobs) - 1; i >= 0; i-- {
 		chainStatus := 1
-		var linkJobID int64 = -1
+		var linkJobID *big.Int = nil
 
 		if i == 0 {
 			chainStatus = 0

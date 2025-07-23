@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -14,12 +15,12 @@ import (
 
 type TimeJobRepository interface {
 	CreateTimeJob(timeJob *types.TimeJobData) error
-	GetTimeJobByJobID(jobID int64) (types.TimeJobData, error)
-	CompleteTimeJob(jobID int64) error
-	UpdateTimeJobStatus(jobID int64, isActive bool) error
+	GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error)
+	CompleteTimeJob(jobID *big.Int) error
+	UpdateTimeJobStatus(jobID *big.Int, isActive bool) error
 	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error)
-	UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error
-	UpdateTimeJobInterval(jobID int64, timeInterval int64) error
+	UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error
+	UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error
 }
 
 type timeJobRepository struct {
@@ -47,7 +48,7 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
+func (r *timeJobRepository) GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
 		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp,
@@ -62,7 +63,7 @@ func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, e
 	return timeJob, nil
 }
 
-func (r *timeJobRepository) CompleteTimeJob(jobID int64) error {
+func (r *timeJobRepository) CompleteTimeJob(jobID *big.Int) error {
 	err := r.db.Session().Query(queries.CompleteTimeJobStatusQuery, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to complete time job")
@@ -76,7 +77,7 @@ func (r *timeJobRepository) CompleteTimeJob(jobID int64) error {
 	return nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobStatus(jobID int64, isActive bool) error {
+func (r *timeJobRepository) UpdateTimeJobStatus(jobID *big.Int, isActive bool) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time job status")
@@ -138,7 +139,7 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 	return timeJobs, nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error {
+func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobNextExecutionTimestampQuery, nextExecutionTimestamp, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time job next execution timestamp")
@@ -147,7 +148,7 @@ func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nex
 	return nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobInterval(jobID int64, timeInterval int64) error {
+func (r *timeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobIntervalQuery, timeInterval, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time_interval in time_job_data")

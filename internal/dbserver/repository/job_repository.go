@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -10,13 +11,13 @@ import (
 )
 
 type JobRepository interface {
-	CreateNewJob(job *types.JobData) (int64, error)
+	CreateNewJob(job *types.JobData) (*big.Int, error)
 	UpdateJobFromUserInDB(job *types.UpdateJobDataFromUserRequest) error
-	UpdateJobLastExecutedAt(jobID int64, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
-	UpdateJobStatus(jobID int64, status string) error
-	GetJobByID(jobID int64) (*types.JobData, error)
-	GetTaskDefinitionIDByJobID(jobID int64) (int, error)
-	GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error)
+	UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
+	UpdateJobStatus(jobID *big.Int, status string) error
+	GetJobByID(jobID *big.Int) (*types.JobData, error)
+	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
+	GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error)
 }
 
 type jobRepository struct {
@@ -30,7 +31,7 @@ func NewJobRepository(db *database.Connection) JobRepository {
 	}
 }
 
-func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
+func (r *jobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
 	// var lastJobID int64
 	// err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
 	// if err == gocql.ErrNotFound {
@@ -42,7 +43,7 @@ func (r *jobRepository) CreateNewJob(job *types.JobData) (int64, error) {
 		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua, job.CreatedChainID).Exec()
 
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 
 	return job.JobID, nil
@@ -57,7 +58,7 @@ func (r *jobRepository) UpdateJobFromUserInDB(job *types.UpdateJobDataFromUserRe
 	return nil
 }
 
-func (r *jobRepository) UpdateJobLastExecutedAt(jobID int64, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error {
+func (r *jobRepository) UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error {
 	var existingTaskIDs []int64
 	err := r.db.Session().Query(queries.GetTaskIDsByJobIDQuery, jobID).Scan(&existingTaskIDs)
 	if err != nil {
@@ -73,7 +74,7 @@ func (r *jobRepository) UpdateJobLastExecutedAt(jobID int64, taskID int64, jobCo
 	return nil
 }
 
-func (r *jobRepository) UpdateJobStatus(jobID int64, status string) error {
+func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
 	err := r.db.Session().Query(queries.UpdateJobDataStatusQuery,
 		status, time.Now(), jobID).Exec()
 	if err != nil {
@@ -82,7 +83,7 @@ func (r *jobRepository) UpdateJobStatus(jobID int64, status string) error {
 	return nil
 }
 
-func (r *jobRepository) GetJobByID(jobID int64) (*types.JobData, error) {
+func (r *jobRepository) GetJobByID(jobID *big.Int) (*types.JobData, error) {
 	var jobData types.JobData
 	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
 		&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
@@ -97,7 +98,7 @@ func (r *jobRepository) GetJobByID(jobID int64) (*types.JobData, error) {
 	return &jobData, nil
 }
 
-func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID int64) (int, error) {
+func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) {
 	var taskDefinitionID int
 	err := r.db.Session().Query(queries.GetTaskDefinitionIDByJobIDQuery, jobID).Scan(&taskDefinitionID)
 	if err != nil {
@@ -106,7 +107,7 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID int64) (int, error) {
 	return taskDefinitionID, nil
 }
 
-func (r *jobRepository) GetTaskFeesByJobID(jobID int64) ([]types.TaskFeeResponse, error) {
+func (r *jobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error) {
 	session := r.db.Session()
 	iter := session.Query(queries.GetTaskFeesByJobIDQuery, jobID).Iter()
 

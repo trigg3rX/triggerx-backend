@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 
@@ -151,9 +152,10 @@ func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
 		return
 	}
 
-	jobID, err := parseInt64(jobIDParam)
-	if err != nil {
-		h.logger.Errorf("[GetTaskFeesByJobID] invalid job_id: %v", err)
+	jobID := new(big.Int)
+	_, ok := jobID.SetString(jobIDParam, 10)
+	if !ok {
+		h.logger.Errorf("[GetTaskFeesByJobID] invalid job_id: %v", jobIDParam)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
 		return
 	}

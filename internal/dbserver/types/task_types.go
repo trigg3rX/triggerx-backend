@@ -1,11 +1,14 @@
 package types
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
-	JobID                int64     `json:"job_id"`
+	JobID                *big.Int     `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
 	TaskOpXCost          float64   `json:"task_opx_cost"`
@@ -23,7 +26,7 @@ type TaskData struct {
 }
 
 type CreateTaskDataRequest struct {
-	JobID            int64 `json:"job_id" validate:"required"`
+	JobID            *big.Int `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
 	IsImua           bool  `json:"is_imua"`
 }

@@ -6,11 +6,11 @@ import (
 )
 
 type JobData struct {
-	JobID             int64     `json:"job_id"`
+	JobID             *big.Int  `json:"job_id"`
 	JobTitle          string    `json:"job_title"`
 	TaskDefinitionID  int       `json:"task_definition_id"`
 	UserID            int64     `json:"user_id"`
-	LinkJobID         int64     `json:"link_job_id"`
+	LinkJobID         *big.Int     `json:"link_job_id"`
 	ChainStatus       int       `json:"chain_status"`
 	Custom            bool      `json:"custom"`
 	TimeFrame         int64     `json:"time_frame"`
@@ -24,7 +24,7 @@ type JobData struct {
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	Timezone          string    `json:"timezone"`
 	IsImua            bool      `json:"is_imua"`
-	CreatedChainID string    `json:"created_chain_id"`
+	CreatedChainID    string    `json:"created_chain_id"`
 }
 
 // JobResponse is a unified type for different job types to be sent to the frontend
@@ -59,7 +59,7 @@ const (
 
 type CreateJobData struct {
 	// Common fields for all job types
-	JobID        int64    `json:"job_id" validate:"required"`
+	JobID        *big.Int `json:"job_id" validate:"required"`
 	UserAddress  string   `json:"user_address" validate:"required,ethereum_address"`
 	EtherBalance *big.Int `json:"ether_balance" validate:"required"`
 	TokenBalance *big.Int `json:"token_balance" validate:"required"`
@@ -71,7 +71,7 @@ type CreateJobData struct {
 	Recurring         bool    `json:"recurring"`
 	JobCostPrediction float64 `json:"job_cost_prediction" validate:"required,min=0"`
 	Timezone          string  `json:"timezone" validate:"required"`
-	CreatedChainID    string    `json:"created_chain_id" validate:"required,chain_id"`
+	CreatedChainID    string  `json:"created_chain_id" validate:"required,chain_id"`
 
 	// Time job specific fields
 	ScheduleType     string `json:"schedule_type,omitempty" validate:"omitempty,oneof=cron specific interval"`
@@ -104,27 +104,27 @@ type CreateJobData struct {
 }
 
 type CreateJobResponse struct {
-	UserID            int64    `json:"user_id"`
-	AccountBalance    *big.Int `json:"account_balance"`
-	TokenBalance      *big.Int `json:"token_balance"`
-	JobIDs            []int64  `json:"job_ids"`
-	TaskDefinitionIDs []int    `json:"task_definition_ids"`
-	TimeFrames        []int64  `json:"time_frames"`
+	UserID            int64      `json:"user_id"`
+	AccountBalance    *big.Int   `json:"account_balance"`
+	TokenBalance      *big.Int   `json:"token_balance"`
+	JobIDs            []*big.Int `json:"job_ids"`
+	TaskDefinitionIDs []int      `json:"task_definition_ids"`
+	TimeFrames        []int64    `json:"time_frames"`
 }
 
 type UpdateJobDataFromUserRequest struct {
-	JobID             int64   `json:"job_id"`
-	JobTitle          string  `json:"job_title"`
-	Recurring         bool    `json:"recurring"`
-	Status            string  `json:"status"`
-	TimeFrame         int64   `json:"time_frame"`
-	JobCostPrediction float64 `json:"job_cost_prediction"`
-	Timezone          string  `json:"timezone"`
-	TimeInterval      int64   `json:"time_interval"`
+	JobID             *big.Int `json:"job_id"`
+	JobTitle          string   `json:"job_title"`
+	Recurring         bool     `json:"recurring"`
+	Status            string   `json:"status"`
+	TimeFrame         int64    `json:"time_frame"`
+	JobCostPrediction float64  `json:"job_cost_prediction"`
+	Timezone          string   `json:"timezone"`
+	TimeInterval      int64    `json:"time_interval"`
 }
 
 type UpdateJobLastExecutedAtRequest struct {
-	JobID          int64     `json:"job_id"`
+	JobID          *big.Int  `json:"job_id"`
 	TaskIDs        int64     `json:"task_ids"`
 	JobCostActual  float64   `json:"job_cost_actual"`
 	LastExecutedAt time.Time `json:"last_executed_at"`

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"math/big"
 	"sort"
 	"time"
 
@@ -15,12 +16,12 @@ type UserRepository interface {
 	CheckUserExists(address string) (int64, error)
 	CreateNewUser(user *types.CreateUserDataRequest) (types.UserData, error)
 	UpdateUserBalance(user *types.UpdateUserBalanceRequest) error
-	UpdateUserJobIDs(userID int64, jobIDs []int64) error
+	UpdateUserJobIDs(userID int64, jobIDs []*big.Int) error
 	UpdateUserTasksAndPoints(userID int64, tasksCompleted int64, userPoints float64) error
 	GetUserDataByAddress(address string) (int64, types.UserData, error)
 	GetUserPointsByID(id int64) (float64, error)
 	GetUserPointsByAddress(address string) (float64, error)
-	GetUserJobIDsByAddress(address string) (int64, []int64, error)
+	GetUserJobIDsByAddress(address string) (int64, []*big.Int, error)
 	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
 	GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error)
 	UpdateUserEmail(address string, email string) error
@@ -75,7 +76,7 @@ func (r *userRepository) UpdateUserBalance(user *types.UpdateUserBalanceRequest)
 	return nil
 }
 
-func (r *userRepository) UpdateUserJobIDs(userID int64, jobIDs []int64) error {
+func (r *userRepository) UpdateUserJobIDs(userID int64, jobIDs []*big.Int) error {
 	err := r.db.Session().Query(queries.UpdateUserJobIDsQuery, jobIDs, len(jobIDs), time.Now(), userID).Exec()
 	if err != nil {
 		return err
@@ -148,9 +149,9 @@ func (r *userRepository) GetUserPointsByAddress(address string) (float64, error)
 	return userPoints, nil
 }
 
-func (r *userRepository) GetUserJobIDsByAddress(address string) (int64, []int64, error) {
+func (r *userRepository) GetUserJobIDsByAddress(address string) (int64, []*big.Int, error) {
 	var userID int64
-	var jobIDs []int64
+	var jobIDs []*big.Int
 	err := r.db.Session().Query(queries.GetUserJobIDsByAddressQuery, address).Scan(&userID, &jobIDs)
 	if err == gocql.ErrNotFound {
 		return -1, nil, errors.New("user address not found")

@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,12 +37,12 @@ func TestCreateTaskData(t *testing.T) {
 		{
 			name: "Success - Create Task",
 			requestBody: types.CreateTaskDataRequest{
-				JobID:            1,
+				JobID:            big.NewInt(1),
 				TaskDefinitionID: 1,
 			},
 			setupMocks: func() {
 				mockTaskRepo.On("CreateTaskDataInDB", &types.CreateTaskDataRequest{
-					JobID:            1,
+					JobID:            big.NewInt(1),
 					TaskDefinitionID: 1,
 				}).Return(int64(1), nil)
 			},
@@ -59,12 +60,12 @@ func TestCreateTaskData(t *testing.T) {
 		{
 			name: "Error - Database Error",
 			requestBody: types.CreateTaskDataRequest{
-				JobID:            1,
+				JobID:            big.NewInt(1),
 				TaskDefinitionID: 1,
 			},
 			setupMocks: func() {
 				mockTaskRepo.On("CreateTaskDataInDB", &types.CreateTaskDataRequest{
-					JobID:            1,
+					JobID:            big.NewInt(1),
 					TaskDefinitionID: 1,
 				}).Return(int64(0), assert.AnError)
 			},
@@ -362,7 +363,7 @@ func TestGetTaskDataByID(t *testing.T) {
 				mockTaskRepo.On("GetTaskDataByID", int64(1)).Return(types.TaskData{
 					TaskID:               1,
 					TaskNumber:           1,
-					JobID:                1,
+					JobID:                big.NewInt(1),
 					TaskDefinitionID:     1,
 					CreatedAt:            fixedTime,
 					TaskOpXCost:          10.5,

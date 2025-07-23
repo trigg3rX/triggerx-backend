@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -16,7 +17,7 @@ type TaskRepository interface {
 	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
 	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
 	GetTaskDataByID(taskID int64) (types.TaskData, error)
-	GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error)
+	GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error)
 	UpdateTaskFee(taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
 }
@@ -85,7 +86,7 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
 	return task, nil
 }
 
-func (r *taskRepository) GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error) {
+func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
 	iter := r.db.Session().Query(queries.GetTasksByJobIDQuery, jobID).Iter()
 	var tasks []types.TasksByJobIDResponse
 	var task types.TasksByJobIDResponse

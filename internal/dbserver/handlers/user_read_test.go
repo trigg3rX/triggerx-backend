@@ -44,7 +44,7 @@ func TestGetUserDataByAddress(t *testing.T) {
 				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(1), types.UserData{
 					UserID:        1,
 					UserAddress:   "0x123",
-					JobIDs:        []int64{1, 2, 3},
+					JobIDs:        []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3)},
 					EtherBalance:  big.NewInt(1000000000000000000), // 1 ETH
 					TokenBalance:  big.NewInt(1000000),             // 1M tokens
 					UserPoints:    100.0,
@@ -59,7 +59,7 @@ func TestGetUserDataByAddress(t *testing.T) {
 			expectedData: types.UserData{
 				UserID:        1,
 				UserAddress:   "0x123",
-				JobIDs:        []int64{1, 2, 3},
+				JobIDs:        []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3)},
 				EtherBalance:  big.NewInt(1000000000000000000), // 1 ETH
 				TokenBalance:  big.NewInt(1000000),             // 1M tokens
 				UserPoints:    100.0,

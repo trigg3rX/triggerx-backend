@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -105,7 +106,7 @@ func (m *MockTaskRepository) GetTaskDataByID(taskID int64) (types.TaskData, erro
 	return args.Get(0).(types.TaskData), args.Error(1)
 }
 
-func (m *MockTaskRepository) GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error) {
+func (m *MockTaskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
 	args := m.Called(jobID)
 	return args.Get(0).([]types.TasksByJobIDResponse), args.Error(1)
 }

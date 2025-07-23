@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 // notifyConditionScheduler sends a notification to the condition scheduler
-func (h *Handler) notifyConditionScheduler(jobID int64, scheduleConditionJobData types.ScheduleConditionJobData) (bool, error) {
+func (h *Handler) notifyConditionScheduler(jobID *big.Int, scheduleConditionJobData types.ScheduleConditionJobData) (bool, error) {
 	success, err := h.sendDataToScheduler("/api/v1/job/schedule", scheduleConditionJobData)
 	if err != nil {
 		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", jobID, err)
@@ -28,7 +29,7 @@ func (h *Handler) notifyConditionScheduler(jobID int64, scheduleConditionJobData
 }
 
 // SendPauseToEventScheduler sends a DELETE request to the event scheduler
-func (h *Handler) notifyPauseToConditionScheduler(jobID int64) (bool, error) {
+func (h *Handler) notifyPauseToConditionScheduler(jobID *big.Int) (bool, error) {
 	success, err := h.sendDataToScheduler("/api/v1/job/pause", types.ScheduleConditionJobData{JobID: jobID})
 	if err != nil {
 		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", jobID, err)

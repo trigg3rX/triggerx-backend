@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,7 +43,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				nextExecutionTime := mockTime.Add(60 * time.Second)
 				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]types.TimeJobData{
 					{
-						JobID:          1,
+						JobID:          big.NewInt(1),
 						ExpirationTime: mockTime.Add(60 * time.Second),
 						// Recurring:                 true,
 						TimeInterval:              60,
@@ -61,7 +62,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 						IsActive:                  true,
 					},
 					{
-						JobID:          2,
+						JobID:          big.NewInt(2),
 						ExpirationTime: mockTime.Add(60 * time.Second),
 						// Recurring:                 false,
 						TimeInterval:              120,
@@ -84,7 +85,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 			expectedCode: http.StatusOK,
 			expectedJobs: []types.TimeJobData{
 				{
-					JobID:          1,
+					JobID:          big.NewInt(1),
 					ExpirationTime: mockTime.Add(60 * time.Second),
 					// Recurring:                 true,
 					TimeInterval:              60,
@@ -103,7 +104,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 					IsActive:                  true,
 				},
 				{
-					JobID:          2,
+					JobID:          big.NewInt(2),
 					ExpirationTime: mockTime.Add(60 * time.Second),
 					// Recurring:                 false,
 					TimeInterval:              120,

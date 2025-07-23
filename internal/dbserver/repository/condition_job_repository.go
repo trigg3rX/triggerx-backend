@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -11,9 +12,9 @@ import (
 
 type ConditionJobRepository interface {
 	CreateConditionJob(conditionJob *types.ConditionJobData) error
-	GetConditionJobByJobID(jobID int64) (types.ConditionJobData, error)
-	CompleteConditionJob(jobID int64) error
-	UpdateConditionJobStatus(jobID int64, isActive bool) error
+	GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error)
+	CompleteConditionJob(jobID *big.Int) error
+	UpdateConditionJobStatus(jobID *big.Int, isActive bool) error
 }
 
 type conditionJobRepository struct {
@@ -43,7 +44,7 @@ func (r *conditionJobRepository) CreateConditionJob(conditionJob *types.Conditio
 	return nil
 }
 
-func (r *conditionJobRepository) GetConditionJobByJobID(jobID int64) (types.ConditionJobData, error) {
+func (r *conditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error) {
 	var conditionJob types.ConditionJobData
 	err := r.db.Session().Query(queries.GetConditionJobDataByJobIDQuery, jobID).Scan(
 		&conditionJob.JobID, &conditionJob.ExpirationTime, &conditionJob.Recurring, &conditionJob.ConditionType,
@@ -59,7 +60,7 @@ func (r *conditionJobRepository) GetConditionJobByJobID(jobID int64) (types.Cond
 	return conditionJob, nil
 }
 
-func (r *conditionJobRepository) CompleteConditionJob(jobID int64) error {
+func (r *conditionJobRepository) CompleteConditionJob(jobID *big.Int) error {
 	err := r.db.Session().Query(queries.CompleteConditionJobStatusQuery, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to complete condition job")
@@ -73,7 +74,7 @@ func (r *conditionJobRepository) CompleteConditionJob(jobID int64) error {
 	return nil
 }
 
-func (r *conditionJobRepository) UpdateConditionJobStatus(jobID int64, isActive bool) error {
+func (r *conditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActive bool) error {
 	err := r.db.Session().Query(queries.UpdateConditionJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update condition job status")
