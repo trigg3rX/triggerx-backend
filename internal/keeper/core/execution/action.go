@@ -118,7 +118,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		// Assuming TotalCost is in float64 and needs to be converted to wei (1e18 multiplier) if it's in ETH
 		tgAmountBigInt = new(big.Int).SetInt64(int64(result.Stats.TotalCost * 1e18))
 	}
-	executionInput, err := executionABI.Pack("executeFunction",big.NewInt(targetData.JobID), tgAmountBigInt, taregtContractAddress, callData,)
+	executionInput, err := executionABI.Pack("executeFunction",targetData.JobID, tgAmountBigInt, taregtContractAddress, callData,)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
