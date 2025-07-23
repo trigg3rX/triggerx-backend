@@ -22,7 +22,7 @@ DROP TABLE IF EXISTS apikeys;
 CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint,
     user_address text,
-    job_ids set<bigint>,
+    job_ids set<varint>,
     ether_balance varint,
     token_balance varint,
     user_points double,
@@ -35,11 +35,11 @@ CREATE TABLE IF NOT EXISTS user_data (
 
 -- Create Job_data table    
 CREATE TABLE IF NOT EXISTS job_data (
-    job_id bigint,
+    job_id varint,
     job_title text,
     task_definition_id int,
     user_id bigint,
-    link_job_id bigint,
+    link_job_id varint,
     chain_status int,
     custom boolean,
     time_frame bigint,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS job_data (
 
 -- Create Time_Job_data table
 CREATE TABLE IF NOT EXISTS time_job_data (
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     schedule_type text,
     time_interval bigint,
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS time_job_data (
 
 -- Create Event_Job_data table
 CREATE TABLE IF NOT EXISTS event_job_data (
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     recurring boolean,
     trigger_chain_id text,
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS event_job_data (
 
 -- Create Condition_Job_data table
 CREATE TABLE IF NOT EXISTS condition_job_data (
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     recurring boolean,
     condition_type text,
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
 CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
     task_number bigint,
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     created_at timestamp,
     task_opx_predicted_cost double,
