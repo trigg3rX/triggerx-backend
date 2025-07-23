@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -311,7 +312,7 @@ func TestSendPauseToScheduler(t *testing.T) {
 			tt.setupMock()
 
 			// Execute
-			result, err := handler.notifyPauseToConditionScheduler(1)
+			result, err := handler.notifyPauseToConditionScheduler(big.NewInt(1))
 
 			// Assert
 			if tt.expectedError != "" {
