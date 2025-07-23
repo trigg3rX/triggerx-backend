@@ -101,58 +101,95 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
-	h.logger.Debug("Received keeper health check-in",
-		"keeper", keeperHealth.KeeperAddress,
-		"version", keeperHealth.Version,
-		"peer_id", keeperHealth.PeerID,
-	)
+	// Handle missing fields with defaults
+	if keeperHealth.PeerID == "" {
+		keeperHealth.PeerID = "no-peer-id"
+	}
+	if keeperHealth.Version == "" {
+		keeperHealth.Version = "0.1.0"
+	}
+
+	// h.logger.Debug("Received keeper health check-in",
+	// 	"keeper", keeperHealth.KeeperAddress,
+	// 	"version", keeperHealth.Version,
+	// 	"peer_id", keeperHealth.PeerID,
+	// )
 
 	// Record check-in by version metric
 	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
-	if keeperHealth.Version == "0.1.6" || keeperHealth.Version == "0.1.5" || keeperHealth.Version == "0.1.4" || keeperHealth.Version == "0.1.3" {
-		ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
-		if !ok {
-			h.logger.Error("Invalid keeper signature",
+	// Verify signature for all versions
+	ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+	if !ok {
+		h.logger.Error("Invalid keeper signature",
+			"keeper", keeperHealth.KeeperAddress,
+			"error", err,
+		)
+		c.JSON(http.StatusPreconditionFailed, gin.H{
+			"error": "Invalid signature",
+		})
+		return
+	}
+
+	// h.logger.Debug("Valid keeper signature verified",
+	// 	"keeper", keeperHealth.KeeperAddress,
+	// 	"version", keeperHealth.Version,
+	// 	"ip", c.ClientIP(),
+	// )
+
+	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
+	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
+
+	// Update keeper state for all versions
+	if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
+		if errors.Is(err, keeper.ErrKeeperNotVerified) {
+			h.logger.Warn("Unverified keeper attempted health check-in",
 				"keeper", keeperHealth.KeeperAddress,
-				"error", err,
 			)
-			c.JSON(http.StatusPreconditionFailed, gin.H{
-				"error": "Invalid signature",
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Keeper not verified",
+				"code":  "KEEPER_NOT_VERIFIED",
 			})
 			return
 		}
 
-		h.logger.Debug("Valid keeper signature verified",
+		h.logger.Error("Failed to update keeper state",
+			"error", err,
 			"keeper", keeperHealth.KeeperAddress,
-			"version", keeperHealth.Version,
-			"ip", c.ClientIP(),
 		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
+		return
+	}
 
-		keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
-		keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
+	h.logger.Infof("CheckIn Successful: %s | %s", keeperHealth.KeeperAddress, keeperHealth.Version)
 
-		if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
-			if errors.Is(err, keeper.ErrKeeperNotVerified) {
-				h.logger.Warn("Unverified keeper attempted health check-in",
-					"keeper", keeperHealth.KeeperAddress,
-				)
-				c.JSON(http.StatusForbidden, gin.H{
-					"error": "Keeper not verified",
-					"code":  "KEEPER_NOT_VERIFIED",
-				})
-				return
-			}
-
-			h.logger.Error("Failed to update keeper state",
+	// Handle different versions according to requirements
+	switch keeperHealth.Version {
+	case "0.1.6":
+		// Latest version - return msgData with no warning
+		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
+		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
+		if err != nil {
+			h.logger.Error("Failed to encrypt message for keeper",
 				"error", err,
-				"keeper", keeperHealth.KeeperAddress,
 			)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
+			response.Status = false
+			response.Data = err.Error()
+			c.JSON(http.StatusInternalServerError, response)
 			return
 		}
 
-		h.logger.Infof("CheckIn Successful: %s | %s", keeperHealth.KeeperAddress, keeperHealth.Version)
+		response.Status = true
+		response.Data = msgData
+		c.JSON(http.StatusOK, response)
+
+	case "0.1.5", "0.1.4", "0.1.3":
+		// Old versions that can handle msgData - return msgData with warning
+		// h.logger.Warn("Keeper using outdated version, recommend upgrade to latest",
+		// 	"keeper", keeperHealth.KeeperAddress,
+		// 	"version", keeperHealth.Version,
+		// 	"recommended_version", "0.1.6",
+		// )
 
 		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
@@ -168,17 +205,19 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 
 		response.Status = true
 		response.Data = msgData
-
 		c.JSON(http.StatusOK, response)
-	} else {
-		h.logger.Warn("Rejecting obsolete keeper version",
-			"keeper", keeperHealth.KeeperAddress,
-			"version", keeperHealth.Version,
-		)
-		response.Status = false
-		response.Data = "OBSOLETE VERSION of Keeper, authorization failed, UPGRADE TO v0.1.5"
-		c.JSON(http.StatusPreconditionFailed, response)
-		return
+
+	default:
+		// Oldest versions (0.1.0-0.1.2) - return warning only, no msgData
+		// h.logger.Warn("Keeper using very outdated version, recommend upgrade to latest",
+		// 	"keeper", keeperHealth.KeeperAddress,
+		// 	"version", keeperHealth.Version,
+		// 	"recommended_version", "0.1.6",
+		// )
+
+		response.Status = true
+		response.Data = "UPGRADE TO v0.1.6 for full functionality"
+		c.JSON(http.StatusOK, response)
 	}
 }
 
