@@ -27,6 +27,7 @@ type CreateJobRequest struct {
 	JobCostPrediction float64   `json:"job_cost_prediction" validate:"required,min=0"`
 	CreatedAt         time.Time `json:"created_at"`
 	Timezone          string    `json:"timezone" validate:"required,timezone"`
+	CreatedChainID    string    `json:"created_chain_id" validate:"required,chain_id"`
 	// Time job specific fields
 	ScheduleType     string `json:"schedule_type" validate:"required,oneof=cron interval specific"`
 	TimeInterval     int64  `json:"time_interval,omitempty" validate:"omitempty,min=30"`

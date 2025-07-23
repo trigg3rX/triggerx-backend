@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     last_executed_at timestamp,
     timezone text,
     is_imua boolean,
+    created_chain_id text,
     PRIMARY KEY (job_id)
 );
 

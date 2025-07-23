@@ -24,6 +24,7 @@ type JobData struct {
 	LastExecutedAt    time.Time `json:"last_executed_at"`
 	Timezone          string    `json:"timezone"`
 	IsImua            bool      `json:"is_imua"`
+	CreatedChainID string    `json:"created_chain_id"`
 }
 
 // JobResponse is a unified type for different job types to be sent to the frontend
@@ -70,6 +71,7 @@ type CreateJobData struct {
 	Recurring         bool    `json:"recurring"`
 	JobCostPrediction float64 `json:"job_cost_prediction" validate:"required,min=0"`
 	Timezone          string  `json:"timezone" validate:"required"`
+	CreatedChainID    string    `json:"created_chain_id" validate:"required,chain_id"`
 
 	// Time job specific fields
 	ScheduleType     string `json:"schedule_type,omitempty" validate:"omitempty,oneof=cron specific interval"`

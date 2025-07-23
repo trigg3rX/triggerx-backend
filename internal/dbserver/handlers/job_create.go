@@ -107,6 +107,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			JobCostPrediction: tempJobs[i].JobCostPrediction,
 			Timezone:          tempJobs[i].Timezone,
 			IsImua:            tempJobs[i].IsImua,
+			CreatedChainID:    tempJobs[i].CreatedChainID,
 		}
 
 		// Track job creation

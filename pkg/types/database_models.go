@@ -43,6 +43,7 @@ type JobData struct {
 	LastExecutedAt time.Time `json:"last_executed_at"`
 	Timezone       string    `json:"timezone"`
 	IsImua         bool      `json:"is_imua"`
+	CreatedChainID string    `json:"created_chain_id"`
 }
 
 type TimeJobData struct {
