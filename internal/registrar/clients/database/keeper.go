@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -91,7 +92,7 @@ func (dm *DatabaseClient) KeeperUnregistered(operatorAddress string) error {
 // UpdatePointsInDatabase updates points for all involved parties in a task
 func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(taskID int, keeperIds []string, isAccepted bool) error {
 	var taskOpxCost float64
-	var jobID int64
+	var jobID *big.Int
 	var userID int64
 
 	// Get task cost and job ID

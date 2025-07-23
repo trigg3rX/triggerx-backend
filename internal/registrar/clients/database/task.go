@@ -1,6 +1,8 @@
 package database
 
 import (
+	"math/big"
+
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
 )
 
@@ -26,7 +28,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 }
 
 // UpdateJobStatus updates job status in database
-func (dm *DatabaseClient) AddTaskIdToJob(taskID int64, jobID int64) error {
+func (dm *DatabaseClient) AddTaskIdToJob(taskID int64, jobID *big.Int) error {
 	dm.logger.Infof("Adding task %d to job %d", taskID, jobID)
 
 	// First get the job ID from task ID
