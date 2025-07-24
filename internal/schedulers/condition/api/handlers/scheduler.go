@@ -1,8 +1,9 @@
 package handlers
 
 import (
+	"fmt"
+	"math/big"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -79,8 +80,10 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 	h.logger.Info("[UnscheduleJob] trace_id=" + traceID + " - Unscheduling job")
 
 	jobIDStr := c.Param("job_id")
-	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
-	if err != nil {
+	jobID := new(big.Int)
+	_, ok := jobID.SetString(jobIDStr, 10)
+	if !ok {
+		err := fmt.Errorf("invalid job ID: %s", jobIDStr)
 		h.logger.Error("Invalid job ID", "job_id", jobIDStr, "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
@@ -121,8 +124,10 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 	h.logger.Info("[GetJobStats] trace_id=" + traceID + " - Getting job stats")
 
 	jobIDStr := c.Param("job_id")
-	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
-	if err != nil {
+	jobID := new(big.Int)
+	_, ok := jobID.SetString(jobIDStr, 10)
+	if !ok {
+		err := fmt.Errorf("invalid job ID: %s", jobIDStr)
 		h.logger.Error("Invalid job ID", "job_id", jobIDStr, "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
@@ -139,7 +144,7 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"status":    "error",
 			"message":   "Condition job not found",
-			"error":     err.Error(),
+			"error":     "condition job not found",
 			"timestamp": time.Now().UTC(),
 		})
 		return

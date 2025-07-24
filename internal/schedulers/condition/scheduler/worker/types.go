@@ -1,6 +1,9 @@
 package worker
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 const (
 	PerformerLockTTL         = 15 * time.Minute // Lock duration for condition monitoring
@@ -43,7 +46,7 @@ type ValueResponse struct {
 
 // ConditionTriggerNotification represents a notification from a worker when a condition is satisfied
 type TriggerNotification struct {
-	JobID           int64     `json:"job_id"`
+	JobID           *big.Int     `json:"job_id"`
 	TriggerTxHash   string    `json:"trigger_tx_hash"`
 	TriggerValue    float64   `json:"trigger_value"`
 	TriggeredAt     time.Time `json:"triggered_at"`

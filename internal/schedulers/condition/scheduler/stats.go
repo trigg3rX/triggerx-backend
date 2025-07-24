@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"math/big"
 )
 
 // GetStats returns current scheduler statistics
@@ -136,7 +137,7 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 }
 
 // GetConditionWorkerStats returns statistics for a specific condition worker
-func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID int64) (map[string]interface{}, error) {
+func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID *big.Int) (map[string]interface{}, error) {
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 
@@ -162,7 +163,7 @@ func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID int64) (map[stri
 }
 
 // GetEventWorkerStats returns statistics for a specific event worker
-func (s *ConditionBasedScheduler) GetEventWorkerStats(jobID int64) (map[string]interface{}, error) {
+func (s *ConditionBasedScheduler) GetEventWorkerStats(jobID *big.Int) (map[string]interface{}, error) {
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 

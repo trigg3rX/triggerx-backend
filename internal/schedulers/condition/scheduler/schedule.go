@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -305,7 +306,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskManager(jobData *type
 // createTriggerDataFromNotification creates appropriate trigger data based on job type
 func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) types.TaskTriggerData {
 	baseTriggerData := types.TaskTriggerData{
-		TaskID:                  notification.JobID,
+		TaskID:                  jobData.TaskTargetData.TaskID,
 		TaskDefinitionID:        jobData.TaskDefinitionID,
 		CurrentTriggerTimestamp: notification.TriggeredAt,
 	}
@@ -334,7 +335,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 }
 
 // submitTaskToTaskManager submits the task to TaskManager via HTTP
-func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID int64) (bool, error) {
+func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID *big.Int) (bool, error) {
 	startTime := time.Now()
 
 	// Marshal request to JSON
@@ -413,7 +414,7 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 }
 
 // UnscheduleJob stops and removes a condition worker
-func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
+func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
