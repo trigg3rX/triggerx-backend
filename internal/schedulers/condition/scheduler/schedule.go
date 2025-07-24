@@ -235,6 +235,19 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 		return fmt.Errorf("job data not found for job %d", notification.JobID)
 	}
 
+	createTaskRequest := types.CreateTaskRequest{
+		JobID:            jobData.JobID,
+		TaskDefinitionID: jobData.TaskDefinitionID,
+	}
+
+	// Create Task in Database
+	taskID, err := s.dbClient.CreateTask(createTaskRequest)
+	if err != nil {
+		s.logger.Error("Failed to create task in database", "job_id", notification.JobID, "error", err)
+		return fmt.Errorf("failed to create task in database: %w", err)
+	}
+	jobData.TaskTargetData.TaskID = taskID
+
 	// Create individual task and submit to Redis API
 	success, err := s.submitTriggeredTaskToRedis(jobData, notification)
 	if err != nil {
@@ -274,7 +287,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.Sche
 	// Create single task data (not batch like time scheduler)
 	targetData := types.TaskTargetData{
 		JobID:                     jobData.JobID,
-		TaskID:                    notification.JobID, // Use JobID as TaskID for condition-triggered tasks
+		TaskID:                    jobData.TaskTargetData.TaskID,
 		TaskDefinitionID:          jobData.TaskDefinitionID,
 		TargetChainID:             jobData.TaskTargetData.TargetChainID,
 		TargetContractAddress:     jobData.TaskTargetData.TargetContractAddress,
@@ -296,10 +309,11 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.Sche
 
 	// Create single task data for keeper
 	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:             notification.JobID,
-		TargetData:         []types.TaskTargetData{targetData}, // Single task, not batch
-		TriggerData:        []types.TaskTriggerData{triggerData},
-		SchedulerSignature: &schedulerSignatureData,
+		TaskID:           []int64{jobData.TaskTargetData.TaskID},
+		TargetData:       []types.TaskTargetData{targetData}, // Single task, not batch
+		TriggerData:      []types.TaskTriggerData{triggerData},
+		SchedulerID:      s.schedulerID,
+		ManagerSignature: "",
 	}
 
 	// Create request for Redis API
