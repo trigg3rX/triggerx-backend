@@ -4,25 +4,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/performers"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ReceiveTaskFromScheduler is the main entry point for schedulers to submit tasks
-func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskRequest) (*types.PerformerData, error) {
+func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskRequest) (error) {
 	taskCount := len(request.SendTaskDataToKeeper.TaskID)
 	tsm.logger.Info("Receiving task from scheduler",
 		"task_ids", request.SendTaskDataToKeeper.TaskID,
 		"task_count", taskCount,
 		"scheduler_id", request.SchedulerID,
 		"source", request.Source)
-
-	// Get performer data for immediate response
-	performerData := performers.GetPerformerData()
-	if performerData.KeeperID == 0 {
-		tsm.logger.Error("No performers available for tasks", "task_count", taskCount)
-		return nil, fmt.Errorf("no performers available")
-	}
 
 	// Handle batch requests by creating individual task stream data for each task
 	if taskCount > 1 {
@@ -81,16 +73,15 @@ func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskReq
 				"task_id", request.SendTaskDataToKeeper.TaskID[0],
 				"source", request.Source,
 				"error", err)
-			return nil, fmt.Errorf("failed to add task to batch processor: %w", err)
+			return fmt.Errorf("failed to add task to batch processor: %w", err)
 		}
 	}
 
 	tsm.logger.Info("Tasks received and added to batch processor",
 		"task_count", taskCount,
-		"performer_id", performerData.KeeperID,
 		"source", request.Source)
 
-	return &performerData, nil
+	return nil
 }
 
 func (tsm *TaskStreamManager) UpdateDatabase(ipfsData types.IPFSData) {

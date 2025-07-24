@@ -106,7 +106,7 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 		"source", request.Source)
 
 	// Submit task to Redis orchestrator
-	performerData, err := h.taskStreamMgr.ReceiveTaskFromScheduler(&request)
+	err := h.taskStreamMgr.ReceiveTaskFromScheduler(&request)
 	if err != nil {
 		h.logger.Error("[SubmitTaskFromScheduler] Failed to process scheduler task submission", "trace_id", traceID,
 			"task_id", request.SendTaskDataToKeeper.TaskID,
@@ -123,14 +123,13 @@ func (h *handler) SubmitTaskFromScheduler(c *gin.Context) {
 
 	h.logger.Info("[SubmitTaskFromScheduler] Task submitted successfully", "trace_id", traceID,
 		"task_id", request.SendTaskDataToKeeper.TaskID,
-		"performer_id", performerData.KeeperID,
-		"performer_address", performerData.KeeperAddress)
+		"is_imua", request.SendTaskDataToKeeper.TargetData[0].IsImua,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
 		"task_id":   request.SendTaskDataToKeeper.TaskID,
 		"message":   "Task submitted successfully",
-		"performer": performerData,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }

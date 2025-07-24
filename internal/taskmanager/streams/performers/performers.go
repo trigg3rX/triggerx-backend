@@ -24,16 +24,24 @@ const (
 
 // GetPerformerData returns an available performer for task execution
 // Currently returns a hardcoded performer - will be enhanced later
-func GetPerformerData() types.PerformerData {
+func GetPerformerData(isImua bool) types.PerformerData {
 	// TODO: Replace with actual performer selection logic
 	// For now, returning a fixed performer as mentioned in the scheduler code
 	// return types.PerformerData{
 	// 	KeeperID:      3,
 	// 	KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 	// }
-	return types.PerformerData{
-		KeeperID:      2,
-		KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
+	
+	if isImua {
+		return types.PerformerData{
+			KeeperID:      2,
+			KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
+		}
+	} else {
+		return types.PerformerData{
+			KeeperID:      2,
+			KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
+		}
 	}
 }
 
@@ -87,6 +95,7 @@ func (pm *PerformerManager) initializeDefaultPerformers() {
 	pm.logger.Info("Default performers initialized", "count", len(defaultPerformers))
 }
 
+// TODO: Add isImua flag
 // AcquirePerformer gets an available performer and locks it for task execution with improved selection
 func (pm *PerformerManager) AcquirePerformer(ctx context.Context) (*types.PerformerData, error) {
 	availablePerformers := pm.GetAvailablePerformers()

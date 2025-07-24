@@ -375,7 +375,7 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 	// Parse response
 	var apiResponse types.TaskManagerAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		s.logger.Error("Failed to decode Redis API response",
+		s.logger.Error("Failed to decode TaskManager response",
 			"task_id", taskID,
 			"status_code", resp.StatusCode,
 			"error", err)
@@ -385,29 +385,27 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 	duration := time.Since(startTime)
 
 	if resp.StatusCode != http.StatusOK {
-		s.logger.Error("Redis API returned error",
+		s.logger.Error("TaskManager returned error",
 			"task_id", taskID,
 			"status_code", resp.StatusCode,
 			"error", apiResponse.Error,
 			"details", apiResponse.Details,
 			"duration", duration)
-		return false, fmt.Errorf("redis API error: %s", apiResponse.Error)
+		return false, fmt.Errorf("taskManager error: %s", apiResponse.Error)
 	}
 
 	if !apiResponse.Success {
-		s.logger.Error("Redis API processing failed",
+		s.logger.Error("TaskManager processing failed",
 			"task_id", taskID,
 			"message", apiResponse.Message,
 			"error", apiResponse.Error,
 			"duration", duration)
-		return false, fmt.Errorf("redis API processing failed: %s", apiResponse.Error)
+		return false, fmt.Errorf("taskManager processing failed: %s", apiResponse.Error)
 	}
 
-	s.logger.Info("Successfully submitted task to Redis API",
+	s.logger.Info("Successfully submitted task to TaskManager",
 		"task_id", taskID,
 		"response_task_ids", apiResponse.TaskID,
-		"performer_id", apiResponse.Performer.KeeperID,
-		"performer_address", apiResponse.Performer.KeeperAddress,
 		"duration", duration,
 		"message", apiResponse.Message)
 

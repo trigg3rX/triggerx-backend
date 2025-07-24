@@ -185,7 +185,7 @@ func (bp *TaskBatchProcessor) GetBatchStats() map[string]interface{} {
 
 // Ready to be sent to the performer with improved error handling and performance
 func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.PerformerData, error) {
-	performerData := performers.GetPerformerData()
+	performerData := performers.GetPerformerData(task.SendTaskDataToKeeper.TargetData[0].IsImua)
 	if performerData.KeeperID == 0 {
 		tsm.logger.Error("No performers available for task", "task_id", task.SendTaskDataToKeeper.TaskID[0])
 		return types.PerformerData{}, fmt.Errorf("no performers available")

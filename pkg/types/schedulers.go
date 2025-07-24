@@ -115,7 +115,6 @@ type TaskManagerAPIResponse struct {
 	Success   bool                `json:"success"`
 	TaskID    []int64             `json:"task_id"`
 	Message   string              `json:"message"`
-	Performer PerformerData `json:"performer"`
 	Timestamp string              `json:"timestamp"`
 	Error     string              `json:"error,omitempty"`
 	Details   string              `json:"details,omitempty"`

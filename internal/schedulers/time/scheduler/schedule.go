@@ -173,7 +173,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request types.SchedulerTaskReque
 	// Parse response
 	var apiResponse types.TaskManagerAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		s.logger.Error("Failed to decode Redis API response",
+		s.logger.Error("Failed to decode TaskManager response",
 			"task_ids", taskIDs,
 			"status_code", resp.StatusCode,
 			"error", err)
@@ -183,7 +183,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request types.SchedulerTaskReque
 	duration := time.Since(startTime)
 
 	if resp.StatusCode != http.StatusOK {
-		s.logger.Error("Redis API returned error",
+		s.logger.Error("TaskManager returned error",
 			"task_ids", taskIDs,
 			"task_count", taskCount,
 			"status_code", resp.StatusCode,
@@ -194,7 +194,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request types.SchedulerTaskReque
 	}
 
 	if !apiResponse.Success {
-		s.logger.Error("Redis API processing failed",
+		s.logger.Error("TaskManager processing failed",
 			"task_ids", taskIDs,
 			"task_count", taskCount,
 			"message", apiResponse.Message,
@@ -203,12 +203,10 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request types.SchedulerTaskReque
 		return false
 	}
 
-	s.logger.Info("Successfully submitted batch to Redis API",
+	s.logger.Info("Successfully submitted batch to TaskManager",
 		"task_ids", taskIDs,
 		"task_count", taskCount,
 		"response_task_ids", apiResponse.TaskID,
-		"performer_id", apiResponse.Performer.KeeperID,
-		"performer_address", apiResponse.Performer.KeeperAddress,
 		"duration", duration,
 		"message", apiResponse.Message)
 
