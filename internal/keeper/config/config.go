@@ -50,6 +50,9 @@ type Config struct {
 	tlsProofHost string
 	tlsProofPort string
 
+	// Manager Signing Address
+	managerSigningAddress string
+
 	// Backend Service URLs
 	aggregatorRPCUrl string
 	healthRPCUrl     string
@@ -240,6 +243,15 @@ func GetTLSProofHost() string {
 
 func GetTLSProofPort() string {
 	return cfg.tlsProofPort
+}
+
+// Manager Signing Address
+func SetManagerSigningAddress(addr string) {
+	cfg.managerSigningAddress = addr
+}
+
+func GetManagerSigningAddress() string {
+	return cfg.managerSigningAddress
 }
 
 // SetKeeperAddress sets the keeper address in the config (for testing)

@@ -133,32 +133,40 @@ func (bp *TaskBatchProcessor) processBatch() error {
 		errs = append(errs, err)
 	}
 
+	// Store the original batch size before clearing
+	originalBatchSize := len(bp.tasks)
+
 	// Clear the batch
 	bp.tasks = bp.tasks[:0]
 
 	if len(errs) > 0 {
 		bp.streamMgr.logger.Error("Batch processing completed with errors",
 			"error_count", len(errs),
-			"total_tasks", len(bp.tasks))
+			"total_tasks", originalBatchSize)
 		return fmt.Errorf("batch processing failed with %d errors", len(errs))
 	}
 
 	bp.streamMgr.logger.Info("Batch processing completed successfully",
-		"processed_tasks", len(bp.tasks))
+		"processed_tasks", originalBatchSize)
 	return nil
 }
 
 // processSingleTask processes a single task from the batch
 func (bp *TaskBatchProcessor) processSingleTask(task *TaskStreamData) error {
+	bp.streamMgr.logger.Debug("Processing single task in batch",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0])
+
 	// Add task to ready stream
 	_, err := bp.streamMgr.AddTaskToReadyStream(*task)
 	if err != nil {
 		bp.streamMgr.logger.Error("Failed to process task in batch",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"error", err)
 		return err
 	}
 
+	bp.streamMgr.logger.Debug("Successfully processed single task in batch",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0])
 	return nil
 }
 
@@ -179,28 +187,22 @@ func (bp *TaskBatchProcessor) GetBatchStats() map[string]interface{} {
 func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.PerformerData, error) {
 	performerData := performers.GetPerformerData()
 	if performerData.KeeperID == 0 {
-		tsm.logger.Error("No performers available for task", "task_id", task.SendTaskDataToKeeper.TaskID)
+		tsm.logger.Error("No performers available for task", "task_id", task.SendTaskDataToKeeper.TaskID[0])
 		return types.PerformerData{}, fmt.Errorf("no performers available")
 	}
 
 	// Update task with performer information
 	task.SendTaskDataToKeeper.PerformerData = performerData
-	task.SendTaskDataToKeeper.SchedulerSignature = &types.SchedulerSignatureData{
-		TaskID: task.SendTaskDataToKeeper.TaskID,
-		// TODO: add this before keeper v0.1.5
-		// SchedulerID:             task.SendTaskDataToKeeper.SchedulerSignature.SchedulerID,
-		SchedulerSigningAddress: config.GetRedisSigningAddress(),
-	}
 
 	// Sign the task data with improved error handling
 	signature, err := cryptography.SignJSONMessage(task.SendTaskDataToKeeper, config.GetRedisSigningKey())
 	if err != nil {
 		tsm.logger.Error("Failed to sign batch task data",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"error", err)
 		return types.PerformerData{}, fmt.Errorf("failed to sign task data: %w", err)
 	}
-	task.SendTaskDataToKeeper.SchedulerSignature.SchedulerSignature = signature
+	task.SendTaskDataToKeeper.ManagerSignature = signature
 
 	// Add task to stream with improved performance
 	err = tsm.addTaskToStream(TasksReadyStream, &task)
@@ -218,7 +220,7 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 	}()
 
 	tsm.logger.Info("Task added to ready stream successfully",
-		"task_id", task.SendTaskDataToKeeper.TaskID,
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"performer_id", performerData.KeeperID,
 		"performer_address", performerData.KeeperAddress)
 
@@ -228,7 +230,7 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 // Failed to send to the performer, sent to the retry stream with improved backoff strategy
 func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryReason string) error {
 	tsm.logger.Warn("Adding task to retry stream",
-		"task_id", task.SendTaskDataToKeeper.TaskID,
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"job_id", task.JobID,
 		"retry_count", task.RetryCount,
 		"retry_reason", retryReason)
@@ -251,14 +253,14 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 	task.ScheduledFor = &scheduledFor
 
 	tsm.logger.Info("Task retry scheduled",
-		"task_id", task.SendTaskDataToKeeper.TaskID,
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"retry_count", task.RetryCount,
 		"scheduled_for", scheduledFor.Format(time.RFC3339),
 		"backoff_duration", backoffDuration)
 
 	if task.RetryCount >= MaxRetryAttempts {
 		tsm.logger.Error("Task exceeded max retry attempts, moving to failed stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"retry_count", task.RetryCount,
 			"max_attempts", MaxRetryAttempts)
 
@@ -268,7 +270,7 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 		err := tsm.addTaskToStream(TasksFailedStream, task)
 		if err != nil {
 			tsm.logger.Error("Failed to add task to failed stream",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"error", err)
 			return fmt.Errorf("failed to add task to failed stream: %w", err)
 		}
@@ -277,7 +279,7 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 		// tsm.notifySchedulerTaskComplete(task, false)
 
 		tsm.logger.Error("Task permanently failed",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"final_retry_count", task.RetryCount)
 
 		return nil
@@ -286,7 +288,7 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 	err := tsm.addTaskToStream(TasksRetryStream, task)
 	if err != nil {
 		tsm.logger.Error("Failed to add task to retry stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"error", err)
 		metrics.TasksAddedToStreamTotal.WithLabelValues("retry", "failure").Inc()
 		return fmt.Errorf("failed to add task to retry stream: %w", err)
@@ -304,7 +306,7 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 	taskJSON, err := json.Marshal(task)
 	if err != nil {
 		tsm.logger.Error("Failed to marshal task data",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"stream", stream,
 			"error", err)
 		return fmt.Errorf("failed to marshal task data: %w", err)
@@ -324,7 +326,7 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
 		tsm.logger.Error("Failed to add task to stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"stream", stream,
 			"duration", duration,
 			"error", err)
@@ -333,7 +335,7 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
 	tsm.logger.Debug("Task added to stream successfully",
-		"task_id", task.SendTaskDataToKeeper.TaskID,
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"stream", stream,
 		"stream_id", res,
 		"duration", duration,

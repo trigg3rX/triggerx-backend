@@ -27,9 +27,13 @@ const (
 func GetPerformerData() types.PerformerData {
 	// TODO: Replace with actual performer selection logic
 	// For now, returning a fixed performer as mentioned in the scheduler code
+	// return types.PerformerData{
+	// 	KeeperID:      3,
+	// 	KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
+	// }
 	return types.PerformerData{
-		KeeperID:      3,
-		KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
+		KeeperID:      2,
+		KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
 	}
 }
 

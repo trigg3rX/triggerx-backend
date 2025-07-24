@@ -10,34 +10,37 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskRequest) (types.CreateTaskResponse, error) {
+func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskRequest) (int64, error) {
 	url := fmt.Sprintf("%s/api/tasks", c.dbserverUrl)
 
 	jsonPayload, err := json.Marshal(createTaskData)
 	if err != nil {
-		return types.CreateTaskResponse{}, fmt.Errorf("failed to marshal create task data: %v", err)
+		return -1, fmt.Errorf("failed to marshal create task data: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		return types.CreateTaskResponse{}, fmt.Errorf("failed to create task: %v", err)
+		return -1, fmt.Errorf("failed to create task: %v", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.DoWithRetry(req)
 	if err != nil {
-		return types.CreateTaskResponse{}, fmt.Errorf("failed to create task: %v", err)
+		return -1, fmt.Errorf("failed to create task: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return -1, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return types.CreateTaskResponse{}, fmt.Errorf("failed to read response body: %v", err)
+	var response struct {
+		TaskID int64 `json:"task_id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return -1, fmt.Errorf("failed to decode response body: %v", err)
 	}
 
-	var createTaskResponse types.CreateTaskResponse
-	err = json.Unmarshal(body, &createTaskResponse)
-	if err != nil {
-		return types.CreateTaskResponse{}, fmt.Errorf("failed to unmarshal response body: %v", err)
-	}
-
-	return createTaskResponse, nil
+	return response.TaskID, nil
 }

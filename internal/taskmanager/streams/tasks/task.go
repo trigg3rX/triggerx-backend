@@ -117,39 +117,83 @@ func (tsm *TaskStreamManager) Initialize() error {
 
 // ReceiveTaskFromScheduler is the main entry point for schedulers to submit tasks
 func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskRequest) (*types.PerformerData, error) {
+	taskCount := len(request.SendTaskDataToKeeper.TaskID)
 	tsm.logger.Info("Receiving task from scheduler",
-		"task_id", request.SendTaskDataToKeeper.TaskID,
+		"task_ids", request.SendTaskDataToKeeper.TaskID,
+		"task_count", taskCount,
 		"scheduler_id", request.SchedulerID,
 		"source", request.Source)
-
-	// Create task stream data
-	taskStreamData := TaskStreamData{
-		JobID:                request.SendTaskDataToKeeper.TaskID, // Use TaskID as JobID for simple cases
-		TaskDefinitionID:     request.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
-		CreatedAt:            time.Now(),
-		RetryCount:           0,
-		SendTaskDataToKeeper: request.SendTaskDataToKeeper,
-	}
-
-	// Add task to batch processor for improved performance
-	err := tsm.batchProcessor.AddTask(&taskStreamData)
-	if err != nil {
-		tsm.logger.Error("Failed to add task to batch processor",
-			"task_id", request.SendTaskDataToKeeper.TaskID,
-			"source", request.Source,
-			"error", err)
-		return nil, fmt.Errorf("failed to add task to batch processor: %w", err)
-	}
 
 	// Get performer data for immediate response
 	performerData := performers.GetPerformerData()
 	if performerData.KeeperID == 0 {
-		tsm.logger.Error("No performers available for task", "task_id", request.SendTaskDataToKeeper.TaskID)
+		tsm.logger.Error("No performers available for tasks", "task_count", taskCount)
 		return nil, fmt.Errorf("no performers available")
 	}
 
-	tsm.logger.Info("Task received and added to batch processor",
-		"task_id", request.SendTaskDataToKeeper.TaskID,
+	// Handle batch requests by creating individual task stream data for each task
+	if taskCount > 1 {
+		// This is a batch request (likely from time scheduler)
+		tsm.logger.Info("Processing batch request", "task_count", taskCount)
+
+		for i := 0; i < taskCount; i++ {
+			// Create individual task data for each task in the batch
+			individualTaskData := types.SendTaskDataToKeeper{
+				TaskID:           []int64{request.SendTaskDataToKeeper.TaskID[i]},
+				PerformerData:    request.SendTaskDataToKeeper.PerformerData,
+				TargetData:       []types.TaskTargetData{request.SendTaskDataToKeeper.TargetData[i]},
+				TriggerData:      []types.TaskTriggerData{request.SendTaskDataToKeeper.TriggerData[i]},
+				SchedulerID:      request.SendTaskDataToKeeper.SchedulerID,
+				ManagerSignature: request.SendTaskDataToKeeper.ManagerSignature,
+			}
+
+			taskStreamData := TaskStreamData{
+				JobID:                individualTaskData.TargetData[0].JobID,
+				TaskDefinitionID:     individualTaskData.TargetData[0].TaskDefinitionID,
+				CreatedAt:            time.Now(),
+				RetryCount:           0,
+				SendTaskDataToKeeper: individualTaskData,
+			}
+
+			// Add individual task to batch processor
+			err := tsm.batchProcessor.AddTask(&taskStreamData)
+			if err != nil {
+				tsm.logger.Error("Failed to add individual task to batch processor",
+					"task_id", individualTaskData.TaskID[0],
+					"batch_index", i,
+					"source", request.Source,
+					"error", err)
+				// Continue processing other tasks in the batch
+				continue
+			}
+
+			tsm.logger.Debug("Individual task added to batch processor",
+				"task_id", individualTaskData.TaskID[0],
+				"batch_index", i)
+		}
+	} else {
+		// This is a single task request (likely from condition scheduler)
+		taskStreamData := TaskStreamData{
+			JobID:                request.SendTaskDataToKeeper.TargetData[0].JobID,
+			TaskDefinitionID:     request.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
+			CreatedAt:            time.Now(),
+			RetryCount:           0,
+			SendTaskDataToKeeper: request.SendTaskDataToKeeper,
+		}
+
+		// Add task to batch processor for improved performance
+		err := tsm.batchProcessor.AddTask(&taskStreamData)
+		if err != nil {
+			tsm.logger.Error("Failed to add task to batch processor",
+				"task_id", request.SendTaskDataToKeeper.TaskID[0],
+				"source", request.Source,
+				"error", err)
+			return nil, fmt.Errorf("failed to add task to batch processor: %w", err)
+		}
+	}
+
+	tsm.logger.Info("Tasks received and added to batch processor",
+		"task_count", taskCount,
 		"performer_id", performerData.KeeperID,
 		"source", request.Source)
 
@@ -230,7 +274,7 @@ func (tsm *TaskStreamManager) processReadyTasks(consumerName string) {
 		// Move task to processing stream
 		if err := tsm.moveTaskToProcessing(task, messageID); err != nil {
 			tsm.logger.Error("Failed to move task to processing",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"error", err)
 			continue
 		}
@@ -253,20 +297,20 @@ func (tsm *TaskStreamManager) moveTaskToProcessing(task TaskStreamData, messageI
 	// Acknowledge in ready stream
 	if err := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", messageID); err != nil {
 		tsm.logger.Warn("Failed to acknowledge task in ready stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"message_id", messageID,
 			"error", err)
 	}
 
 	tsm.logger.Debug("Task moved to processing stream",
-		"task_id", task.SendTaskDataToKeeper.TaskID)
+		"task_id", task.SendTaskDataToKeeper.TaskID[0])
 
 	return nil
 }
 
 // sendTaskToPerformer sends the task to the assigned performer
 func (tsm *TaskStreamManager) sendTaskToPerformer(task TaskStreamData) {
-	taskID := task.SendTaskDataToKeeper.TaskID
+	taskID := task.SendTaskDataToKeeper.TaskID[0]
 
 	tsm.logger.Info("Sending task to performer", "task_id", taskID)
 
@@ -279,7 +323,7 @@ func (tsm *TaskStreamManager) sendTaskToPerformer(task TaskStreamData) {
 	dataBytes := []byte(jsonData)
 
 	broadcastDataForPerformer := types.BroadcastDataForPerformer{
-		TaskID:           task.SendTaskDataToKeeper.TaskID,
+		TaskID:           task.SendTaskDataToKeeper.TaskID[0],
 		TaskDefinitionID: task.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
 		PerformerAddress: task.SendTaskDataToKeeper.PerformerData.KeeperAddress,
 		Data:             dataBytes,
@@ -360,7 +404,7 @@ func (tsm *TaskStreamManager) moveTaskToFailed(task TaskStreamData, errorMsg str
 		}
 
 		tsm.logger.Info("Task moved to retry stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"retry_count", task.RetryCount,
 			"scheduled_for", scheduledFor)
 
@@ -373,7 +417,7 @@ func (tsm *TaskStreamManager) moveTaskToFailed(task TaskStreamData, errorMsg str
 		}
 
 		tsm.logger.Error("Task permanently failed",
-			"task_id", task.SendTaskDataToKeeper.TaskID,
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
 			"retry_count", task.RetryCount,
 			"error", errorMsg)
 
@@ -402,13 +446,13 @@ func (tsm *TaskStreamManager) checkProcessingTimeouts() {
 			processingDuration := now.Sub(*task.ProcessingStartedAt)
 			if processingDuration > TasksProcessingTTL {
 				tsm.logger.Warn("Task processing timeout detected",
-					"task_id", task.SendTaskDataToKeeper.TaskID,
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
 					"processing_duration", processingDuration)
 
 				// Move to failed/retry
 				if err := tsm.moveTaskToFailed(task, "processing timeout"); err != nil {
 					tsm.logger.Error("Failed to handle timeout task",
-						"task_id", task.SendTaskDataToKeeper.TaskID,
+						"task_id", task.SendTaskDataToKeeper.TaskID[0],
 						"error", err)
 				} else {
 					// Acknowledge the timed-out task
@@ -416,7 +460,7 @@ func (tsm *TaskStreamManager) checkProcessingTimeouts() {
 					err := tsm.AckTaskProcessed(TasksProcessingStream, "timeout-checker", messageID)
 					if err != nil {
 						tsm.logger.Error("Failed to acknowledge timed-out task",
-							"task_id", task.SendTaskDataToKeeper.TaskID,
+							"task_id", task.SendTaskDataToKeeper.TaskID[0],
 							"error", err)
 					}
 					timeoutCount++
@@ -450,7 +494,7 @@ func (tsm *TaskStreamManager) processRetryTasks() {
 			err := tsm.addTaskToStream(TasksReadyStream, &task)
 			if err != nil {
 				tsm.logger.Error("Failed to move retry task to ready",
-					"task_id", task.SendTaskDataToKeeper.TaskID,
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
 					"error", err)
 				continue
 			}
@@ -460,13 +504,13 @@ func (tsm *TaskStreamManager) processRetryTasks() {
 			err = tsm.AckTaskProcessed(TasksRetryStream, "retry-processor", messageID)
 			if err != nil {
 				tsm.logger.Error("Failed to acknowledge task in retry stream",
-					"task_id", task.SendTaskDataToKeeper.TaskID,
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
 					"message_id", messageID,
 					"error", err)
 			}
 
 			tsm.logger.Info("Task moved from retry to ready",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"retry_count", task.RetryCount)
 
 			retryCount++
@@ -486,7 +530,7 @@ func (tsm *TaskStreamManager) findTaskInProcessing(taskID int64) (*TaskStreamDat
 	}
 
 	for _, task := range tasks {
-		if task.SendTaskDataToKeeper.TaskID == taskID {
+		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
 			return &task, nil
 		}
 	}
@@ -693,7 +737,7 @@ func (tsm *TaskStreamManager) readTasksFromStreamWithIDs(stream, consumerGroup, 
 			messageIDs = append(messageIDs, message.ID)
 
 			tsm.logger.Debug("Task read from stream",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"stream", stream.Stream,
 				"message_id", message.ID)
 		}

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
@@ -23,9 +25,9 @@ type ConditionBasedScheduler struct {
 	ctx                     context.Context
 	cancel                  context.CancelFunc
 	logger                  logging.Logger
-	conditionWorkers        map[int64]*worker.ConditionWorker         // jobID -> condition worker
-	eventWorkers            map[int64]*worker.EventWorker             // jobID -> event worker
-	jobDataStore            map[int64]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
+	conditionWorkers        map[*big.Int]*worker.ConditionWorker         // jobID -> condition worker
+	eventWorkers            map[*big.Int]*worker.EventWorker             // jobID -> event worker
+	jobDataStore            map[*big.Int]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	workersMutex            sync.RWMutex
 	chainClients            map[string]*ethclient.Client // chainID -> client
 	HTTPClient              *retry.HTTPClient
@@ -55,9 +57,9 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		ctx:                     ctx,
 		cancel:                  cancel,
 		logger:                  logger,
-		conditionWorkers:        make(map[int64]*worker.ConditionWorker),
-		eventWorkers:            make(map[int64]*worker.EventWorker),
-		jobDataStore:            make(map[int64]*types.ScheduleConditionJobData),
+		conditionWorkers:        make(map[*big.Int]*worker.ConditionWorker),
+		eventWorkers:            make(map[*big.Int]*worker.EventWorker),
+		jobDataStore:            make(map[*big.Int]*types.ScheduleConditionJobData),
 		chainClients:            make(map[string]*ethclient.Client),
 		dbClient:                dbClient,
 		httpClient:              httpClient,
@@ -127,9 +129,9 @@ func (s *ConditionBasedScheduler) Stop() {
 		worker.Stop()
 		s.logger.Info("Stopped event worker", "job_id", jobID)
 	}
-	s.conditionWorkers = make(map[int64]*worker.ConditionWorker)
-	s.eventWorkers = make(map[int64]*worker.EventWorker)
-	s.jobDataStore = make(map[int64]*types.ScheduleConditionJobData)
+	s.conditionWorkers = make(map[*big.Int]*worker.ConditionWorker)
+	s.eventWorkers = make(map[*big.Int]*worker.EventWorker)
+	s.jobDataStore = make(map[*big.Int]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
 
 	// Close chain clients

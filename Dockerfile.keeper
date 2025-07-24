@@ -20,8 +20,8 @@ RUN go mod tidy
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-keeper ./cmd/keeper
 
-# Use a minimal alpine image for the final stage
-FROM golang:1.24.2-alpine
+# Use Alpine 3.18 for the final stage (has Docker 25.0.5 compatible with API 1.44)
+FROM alpine:3.18
 
 # Install ca-certificates, curl, Docker, and Docker Compose
 RUN apk --no-cache add ca-certificates curl \
@@ -61,6 +61,9 @@ USER triggerx
 ENV GODEBUG=http2client=0
 ENV HTTPS_PROXY=""
 ENV HTTP_PROXY=""
+
+# Set Docker API version to be compatible with older daemons
+ENV DOCKER_API_VERSION=1.44
 
 # Run the startup script
 CMD ["sh", "./start-keeper.sh"]

@@ -94,19 +94,30 @@ type TaskTriggerData struct {
 	ConditionSatisfiedValue int    `json:"condition_satisfied_value"`
 }
 
-type SchedulerSignatureData struct {
-	TaskID                  int64  `json:"task_id"`
-	SchedulerID             int    `json:"scheduler_id"`
-	SchedulerSigningAddress string `json:"scheduler_signing_address"`
-	SchedulerSignature      string `json:"scheduler_signature"`
-}
-
 type SendTaskDataToKeeper struct {
-	TaskID             int64                   `json:"task_id"`
+	TaskID             []int64                   `json:"task_id"`
 	PerformerData      PerformerData           `json:"performer_data"`
 	TargetData         []TaskTargetData        `json:"target_data"`
 	TriggerData        []TaskTriggerData       `json:"trigger_data"`
-	SchedulerSignature *SchedulerSignatureData `json:"scheduler_signature_data"`
+	SchedulerID        int                     `json:"scheduler_id"`
+	ManagerSignature   string                  `json:"manager_signature"`
+}
+
+// SchedulerTaskRequest represents the request format for TaskManager
+type SchedulerTaskRequest struct {
+	SendTaskDataToKeeper SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
+	Source               string             `json:"source"`
+}
+
+// TaskManagerAPIResponse represents the response from TaskManager
+type TaskManagerAPIResponse struct {
+	Success   bool                `json:"success"`
+	TaskID    []int64             `json:"task_id"`
+	Message   string              `json:"message"`
+	Performer PerformerData `json:"performer"`
+	Timestamp string              `json:"timestamp"`
+	Error     string              `json:"error,omitempty"`
+	Details   string              `json:"details,omitempty"`
 }
 
 type BroadcastDataForPerformer struct {

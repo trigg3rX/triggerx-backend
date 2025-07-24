@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -55,7 +56,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		return
 	}
 
-	if config.GetKeeperAddress() != requestData.PerformerData.KeeperAddress {
+	if !strings.EqualFold(config.GetKeeperAddress(), requestData.PerformerData.KeeperAddress) {
 		h.logger.Infof("I am not the performer: %s", requestData.PerformerData.KeeperAddress)
 		c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
 		return

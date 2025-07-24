@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,24 +17,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-// SchedulerTaskRequest represents the request format for Redis API
-type SchedulerTaskRequest struct {
-	SendTaskDataToKeeper types.SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
-	SchedulerID          int                        `json:"scheduler_id"`
-	Source               string                     `json:"source"`
-}
-
-// RedisAPIResponse represents the response from Redis API
-type RedisAPIResponse struct {
-	Success   bool                `json:"success"`
-	TaskID    int64               `json:"task_id"`
-	Message   string              `json:"message"`
-	Performer types.PerformerData `json:"performer"`
-	Timestamp string              `json:"timestamp"`
-	Error     string              `json:"error,omitempty"`
-	Details   string              `json:"details,omitempty"`
-}
 
 // ScheduleJob creates and starts a new condition worker for monitoring
 func (s *ConditionBasedScheduler) ScheduleJob(jobData *types.ScheduleConditionJobData) error {
@@ -235,8 +218,21 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 		return fmt.Errorf("job data not found for job %d", notification.JobID)
 	}
 
+	createTaskRequest := types.CreateTaskRequest{
+		JobID:            jobData.JobID,
+		TaskDefinitionID: jobData.TaskDefinitionID,
+	}
+
+	// Create Task in Database
+	taskID, err := s.dbClient.CreateTask(createTaskRequest)
+	if err != nil {
+		s.logger.Error("Failed to create task in database", "job_id", notification.JobID, "error", err)
+		return fmt.Errorf("failed to create task in database: %w", err)
+	}
+	jobData.TaskTargetData.TaskID = taskID
+
 	// Create individual task and submit to Redis API
-	success, err := s.submitTriggeredTaskToRedis(jobData, notification)
+	success, err := s.submitTriggeredTaskToTaskManager(jobData, notification)
 	if err != nil {
 		s.logger.Error("Failed to submit triggered task to Redis API",
 			"job_id", notification.JobID,
@@ -264,8 +260,8 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 	return nil
 }
 
-// submitTriggeredTaskToRedis creates and submits a single task to Redis API when triggers occur
-func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
+// submitTriggeredTaskToTaskManager creates and submits a single task to TaskManager when triggers occur
+func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskManager(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
 	s.logger.Info("Creating triggered task for Redis API submission",
 		"job_id", jobData.JobID,
 		"task_definition_id", jobData.TaskDefinitionID,
@@ -274,7 +270,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.Sche
 	// Create single task data (not batch like time scheduler)
 	targetData := types.TaskTargetData{
 		JobID:                     jobData.JobID,
-		TaskID:                    notification.JobID, // Use JobID as TaskID for condition-triggered tasks
+		TaskID:                    jobData.TaskTargetData.TaskID,
 		TaskDefinitionID:          jobData.TaskDefinitionID,
 		TargetChainID:             jobData.TaskTargetData.TargetChainID,
 		TargetContractAddress:     jobData.TaskTargetData.TargetContractAddress,
@@ -288,61 +284,58 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.Sche
 	// Create trigger data based on job type
 	triggerData := s.createTriggerDataFromNotification(jobData, notification)
 
-	// Create scheduler signature data
-	schedulerSignatureData := types.SchedulerSignatureData{
-		TaskID:      notification.JobID,
-		SchedulerID: s.schedulerID,
-	}
-
 	// Create single task data for keeper
 	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:             notification.JobID,
-		TargetData:         []types.TaskTargetData{targetData}, // Single task, not batch
-		TriggerData:        []types.TaskTriggerData{triggerData},
-		SchedulerSignature: &schedulerSignatureData,
+		TaskID:           []int64{jobData.TaskTargetData.TaskID},
+		TargetData:       []types.TaskTargetData{targetData}, // Single task, not batch
+		TriggerData:      []types.TaskTriggerData{triggerData},
+		SchedulerID:      s.schedulerID,
+		ManagerSignature: "",
 	}
 
 	// Create request for Redis API
-	request := SchedulerTaskRequest{
+	request := types.SchedulerTaskRequest{
 		SendTaskDataToKeeper: sendTaskData,
-		SchedulerID:          s.schedulerID,
 		Source:               "condition_scheduler",
 	}
 
-	// Submit to Redis API
-	return s.submitTaskToRedisAPI(request, notification.JobID)
+	// Submit to TaskManager
+	return s.submitTaskToTaskManager(request, notification.JobID)
 }
 
 // createTriggerDataFromNotification creates appropriate trigger data based on job type
 func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) types.TaskTriggerData {
 	baseTriggerData := types.TaskTriggerData{
-		TaskID:                  notification.JobID,
+		TaskID:                  jobData.TaskTargetData.TaskID,
 		TaskDefinitionID:        jobData.TaskDefinitionID,
 		CurrentTriggerTimestamp: notification.TriggeredAt,
-		ExpirationTime:          jobData.EventWorkerData.ExpirationTime,
 	}
 
 	switch jobData.TaskDefinitionID {
 	case 5, 6: // Condition-based
+		baseTriggerData.ExpirationTime = jobData.ConditionWorkerData.ExpirationTime
 		baseTriggerData.ConditionSatisfiedValue = int(notification.TriggerValue)
 		baseTriggerData.ConditionType = jobData.ConditionWorkerData.ConditionType
 		baseTriggerData.ConditionSourceType = jobData.ConditionWorkerData.ValueSourceType
 		baseTriggerData.ConditionSourceUrl = jobData.ConditionWorkerData.ValueSourceUrl
 		baseTriggerData.ConditionUpperLimit = int(jobData.ConditionWorkerData.UpperLimit)
 		baseTriggerData.ConditionLowerLimit = int(jobData.ConditionWorkerData.LowerLimit)
+		s.logger.Info("Condition job expiration time", "expiration_time", jobData.ConditionWorkerData.ExpirationTime)
 
 	case 3, 4: // Event-based
+		baseTriggerData.ExpirationTime = jobData.EventWorkerData.ExpirationTime
 		baseTriggerData.EventTxHash = notification.TriggerTxHash
 		baseTriggerData.EventChainId = jobData.EventWorkerData.TriggerChainID
 		baseTriggerData.EventTriggerContractAddress = jobData.EventWorkerData.TriggerContractAddress
 		baseTriggerData.EventTriggerName = jobData.EventWorkerData.TriggerEvent
+		s.logger.Info("Event job expiration time", "expiration_time", jobData.EventWorkerData.ExpirationTime)
 	}
 
 	return baseTriggerData
 }
 
-// submitTaskToRedisAPI submits the task to Redis API via HTTP
-func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequest, taskID int64) (bool, error) {
+// submitTaskToTaskManager submits the task to TaskManager via HTTP
+func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID *big.Int) (bool, error) {
 	startTime := time.Now()
 
 	// Marshal request to JSON
@@ -379,7 +372,7 @@ func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequ
 	defer func() { _ = resp.Body.Close() }()
 
 	// Parse response
-	var apiResponse RedisAPIResponse
+	var apiResponse types.TaskManagerAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		s.logger.Error("Failed to decode Redis API response",
 			"task_id", taskID,
@@ -411,6 +404,7 @@ func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequ
 
 	s.logger.Info("Successfully submitted task to Redis API",
 		"task_id", taskID,
+		"response_task_ids", apiResponse.TaskID,
 		"performer_id", apiResponse.Performer.KeeperID,
 		"performer_address", apiResponse.Performer.KeeperAddress,
 		"duration", duration,
@@ -420,7 +414,7 @@ func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequ
 }
 
 // UnscheduleJob stops and removes a condition worker
-func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
+func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
@@ -447,29 +441,4 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 
 	s.logger.Info("Job unscheduled successfully", "job_id", jobID)
 	return nil
-}
-
-// Legacy method - Deprecated: Now handled by Redis orchestration
-func (s *ConditionBasedScheduler) SendTaskToPerformer(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
-	s.logger.Warn("SendTaskToPerformer is deprecated - triggered tasks are now handled by Redis orchestration")
-	// Redirect to new Redis-based approach
-	return s.submitTriggeredTaskToRedis(jobData, &worker.TriggerNotification{
-		JobID:         jobData.JobID,
-		TriggerValue:  0, // Convert as needed
-		TriggerTxHash: "",
-		TriggeredAt:   time.Now(),
-	})
-}
-
-// UpdateJobTask updates the task for a condition job
-// Deprecated: Tasks are now automatically managed by Redis orchestration
-func (s *ConditionBasedScheduler) UpdateJobTask(jobID, taskID int64) error {
-	s.logger.Warn("UpdateJobTask is deprecated - tasks are now automatically managed by Redis orchestration",
-		"job_id", jobID,
-		"task_id", taskID,
-	)
-
-	// In the new architecture, tasks are automatically created and managed by Redis
-	// when conditions are triggered, so manual task updates are not supported
-	return fmt.Errorf("manual task updates are not supported in Redis orchestration mode - tasks are automatically managed when conditions trigger")
 }

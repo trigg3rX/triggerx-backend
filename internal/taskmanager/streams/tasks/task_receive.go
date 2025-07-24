@@ -10,7 +10,7 @@ import (
 func (tsm *TaskStreamManager) UpdateDatabase(ipfsData types.IPFSData) {
 	tsm.logger.Info("Updating task stream and database ...")
 
-	taskID := ipfsData.TaskData.TaskID
+	taskID := ipfsData.TaskData.TaskID[0]
 	taskStreamData, err := tsm.getTaskStreamData(taskID)
 	if err != nil {
 		tsm.logger.Error("Failed to read task stream data", "error", err)
@@ -34,7 +34,7 @@ func (tsm *TaskStreamManager) UpdateDatabase(ipfsData types.IPFSData) {
 
 	// Update task execution data in Database
 	updateTaskExecutionData := types.UpdateTaskExecutionDataRequest{
-		TaskID: ipfsData.TaskData.TaskID,
+		TaskID: ipfsData.TaskData.TaskID[0],
 		TaskPerformerID: ipfsData.TaskData.PerformerData.KeeperID,
 		ExecutionTimestamp: ipfsData.ActionData.ExecutionTimestamp,
 		ExecutionTxHash: ipfsData.ActionData.ActionTxHash,

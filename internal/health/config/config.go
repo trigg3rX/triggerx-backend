@@ -29,6 +29,9 @@ type Config struct {
 	pinataHost string
 	pinataJWT  string
 
+	// Manager Signing Address
+	managerSigningAddress string
+
 	// Etherscan API Key
 	etherscanAPIKey string
 
@@ -52,6 +55,7 @@ func Init() error {
 		databaseHostPort:    env.GetEnvString("DATABASE_HOST_PORT", "9042"),
 		pinataHost:          env.GetEnvString("PINATA_HOST", ""),
 		pinataJWT:           env.GetEnvString("PINATA_JWT", ""),
+		managerSigningAddress: env.GetEnvString("MANAGER_SIGNING_ADDRESS", ""),
 		etherscanAPIKey:     env.GetEnvString("ETHERSCAN_API_KEY", ""),
 		alchemyAPIKey:       env.GetEnvString("ALCHEMY_API_KEY", ""),
 	}
@@ -142,4 +146,8 @@ func GetEtherscanAPIKey() string {
 
 func GetAlchemyAPIKey() string {
 	return cfg.alchemyAPIKey
+}
+
+func GetManagerSigningAddress() string {
+	return cfg.managerSigningAddress
 }

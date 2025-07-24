@@ -21,7 +21,7 @@ func (tsm *TaskStreamManager) getTaskStreamData(taskID int64) (*TaskStreamData, 
 	}
 
 	for _, task := range taskStreamData {
-		if task.SendTaskDataToKeeper.TaskID == taskID {
+		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
 			return &task, nil
 		}
 	}
@@ -53,12 +53,12 @@ func (tsm *TaskStreamManager) ReadTasksFromRetryStream(consumerGroup, consumerNa
 		if task.ScheduledFor == nil || task.ScheduledFor.Before(now) {
 			readyTasks = append(readyTasks, task)
 			tsm.logger.Debug("Task ready for retry",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"retry_count", task.RetryCount,
 				"scheduled_for", task.ScheduledFor)
 		} else {
 			tsm.logger.Debug("Task not yet ready for retry",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"scheduled_for", task.ScheduledFor,
 				"time_remaining", task.ScheduledFor.Sub(now))
 		}
@@ -139,7 +139,7 @@ func (tsm *TaskStreamManager) readTasksFromStream(stream, consumerGroup, consume
 
 			tasks = append(tasks, task)
 			tsm.logger.Debug("Task read from stream",
-				"task_id", task.SendTaskDataToKeeper.TaskID,
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
 				"stream", stream.Stream,
 				"message_id", message.ID)
 		}

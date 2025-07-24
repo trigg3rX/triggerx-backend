@@ -7,7 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-
+	"time"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -81,30 +81,55 @@ func UploadToIPFS(filename string, data []byte) (string, error) {
 }
 
 func FetchIPFSContent(cid string) (types.IPFSData, error) {
-	ipfsUrl := "https://" + config.GetIpfsHost() + "/ipfs/" + cid
-	resp, err := http.Get(ipfsUrl)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: %v", err)
+	const maxRetries = 5
+	ipfsURL := "https://" + config.GetIpfsHost() + "/ipfs/" + cid
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		resp, err := http.Get(ipfsURL)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to fetch IPFS content (attempt %d): %v", attempt, err)
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+
+		func() {
+			defer func() {
+				_ = resp.Body.Close()
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				lastErr = fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
+				time.Sleep(300 * time.Millisecond)
+				return
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				lastErr = fmt.Errorf("failed to read response body: %v", err)
+				time.Sleep(300 * time.Millisecond)
+				return
+			}
+
+			var ipfsData types.IPFSData
+			if err := json.Unmarshal(body, &ipfsData); err != nil {
+				lastErr = fmt.Errorf("failed to unmarshal IPFS data: %v", err)
+				time.Sleep(300 * time.Millisecond)
+				return
+			}
+
+			metrics.IPFSDownloadSizeBytes.Add(float64(len(body)))
+			lastErr = nil
+			// Return from the outer function with the result
+			ipfsDataResult = ipfsData
+		}()
+
+		if lastErr == nil {
+			return ipfsDataResult, nil
+		}
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
 
-	if resp.StatusCode != http.StatusOK {
-		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: status code %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	var ipfsData types.IPFSData
-	if err := json.Unmarshal(body, &ipfsData); err != nil {
-		return types.IPFSData{}, fmt.Errorf("failed to unmarshal IPFS data: %v", err)
-	}
-
-	metrics.IPFSDownloadSizeBytes.Add(float64(len(body)))
-
-	return ipfsData, nil
+	return types.IPFSData{}, lastErr
 }
+
+var ipfsDataResult types.IPFSData

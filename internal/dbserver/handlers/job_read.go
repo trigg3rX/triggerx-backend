@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+	// "fmt"
 	"math/big"
 	"net/http"
 	"strings"
@@ -201,8 +201,8 @@ func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 }
 
 // parseInt64 is a helper to parse int64 from string
-func parseInt64(s string) (int64, error) {
-	var i int64
-	_, err := fmt.Sscan(s, &i)
-	return i, err
-}
+// func parseInt64(s string) (int64, error) {
+// 	var i int64
+// 	_, err := fmt.Sscan(s, &i)
+// 	return i, err
+// }

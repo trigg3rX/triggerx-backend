@@ -2,7 +2,6 @@ package execution
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -99,11 +97,6 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 	e.logger.Debugf("Using nonce: %d", nonce)
 
-	gasPrice, err := client.SuggestGasPrice(context.Background())
-	if err != nil {
-		return types.PerformerActionData{}, err
-	}
-
 	// Pack the execution contract's executeFunction call
 	executionABI, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"uint256","name":"jobId","type":"uint256"},{"internalType":"uint256","name":"tgAmount","type":"uint256"},{"internalType":"address","name":"target","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"executeFunction","outputs":[],"stateMutability":"payable","type":"function"}]`))
 	if err != nil {
@@ -129,15 +122,20 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		return types.PerformerActionData{}, fmt.Errorf("failed to get chain ID: %v", err)
 	}
 
-	// Create and sign transaction with retry mechanism
-	receipt, finalTxHash, err := e.submitTransactionWithRetry(
-		client,
-		privateKey,
+	// Get nonce manager for this chain
+	nonceManager, err := e.getNonceManager(targetData.TargetChainID)
+	if err != nil {
+		return types.PerformerActionData{}, fmt.Errorf("failed to get nonce manager: %w", err)
+	}
+
+	// Submit transaction with smart retry
+	receipt, finalTxHash, err := nonceManager.SubmitTransactionWithSmartRetry(
+		context.Background(),
 		nonce,
 		ethcommon.HexToAddress(executionContractAddress),
 		executionInput,
 		chainID,
-		gasPrice,
+		privateKey,
 	)
 	if err != nil {
 		return types.PerformerActionData{}, err
@@ -167,78 +165,4 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	e.logger.Infof("Task ID %d executed successfully. Transaction: %s", targetData.TaskID, finalTxHash)
 
 	return executionResult, nil
-}
-
-// submitTransactionWithRetry handles transaction submission with timeout and fee bumping
-func (e *TaskExecutor) submitTransactionWithRetry(
-	client *ethclient.Client,
-	privateKey *ecdsa.PrivateKey,
-	nonce uint64,
-	to ethcommon.Address,
-	data []byte,
-	chainID *big.Int,
-	initialGasPrice *big.Int,
-) (*ethtypes.Receipt, string, error) {
-	const (
-		txTimeout     = 5 * time.Second // Wait 5 seconds before resubmitting
-		maxRetries    = 3               // Maximum number of retries
-		feeBumpFactor = 1.2             // Increase fees by 20% on each retry
-	)
-
-	currentGasPrice := new(big.Int).Set(initialGasPrice)
-	var lastTxHash string
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Create and sign transaction
-		tx := ethtypes.NewTransaction(nonce, to, big.NewInt(0), 300000, currentGasPrice, data)
-		signedTx, err := ethtypes.SignTx(tx, ethtypes.NewEIP155Signer(chainID), privateKey)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to sign transaction: %v", err)
-		}
-
-		// Send transaction
-		err = client.SendTransaction(context.Background(), signedTx)
-		if err != nil {
-			e.logger.Warnf("Failed to send transaction (attempt %d): %v", attempt+1, err)
-			if attempt == maxRetries-1 {
-				return nil, "", fmt.Errorf("failed to send transaction after %d attempts: %v", maxRetries, err)
-			}
-			continue
-		}
-
-		lastTxHash = signedTx.Hash().Hex()
-		e.logger.Infof("Transaction sent (attempt %d): %s with gas price: %s",
-			attempt+1, lastTxHash, currentGasPrice.String())
-
-		// Wait for transaction with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), txTimeout)
-		receipt, err := bind.WaitMined(ctx, client, signedTx)
-		cancel()
-
-		if err == nil {
-			// Transaction was mined successfully
-			e.logger.Infof("Transaction confirmed: %s", lastTxHash)
-			return receipt, lastTxHash, nil
-		}
-
-		// Check if it's a timeout or other error
-		if ctx.Err() == context.DeadlineExceeded {
-			e.logger.Warnf("Transaction %s timed out after %v, attempting resubmission with higher fees",
-				lastTxHash, txTimeout)
-
-			// Increase gas price for next attempt
-			currentGasPrice = new(big.Int).Mul(currentGasPrice, big.NewInt(int64(feeBumpFactor*100)))
-			currentGasPrice = new(big.Int).Div(currentGasPrice, big.NewInt(100))
-
-			continue
-		}
-
-		// Other error occurred
-		e.logger.Warnf("Error waiting for transaction %s: %v", lastTxHash, err)
-		if attempt == maxRetries-1 {
-			return nil, "", fmt.Errorf("transaction failed after %d attempts: %v", maxRetries, err)
-		}
-	}
-
-	return nil, "", fmt.Errorf("transaction failed after %d attempts", maxRetries)
 }

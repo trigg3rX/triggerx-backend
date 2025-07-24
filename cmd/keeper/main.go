@@ -117,10 +117,10 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	deps := api.Dependencies{
+	deps := &api.Dependencies{
 		Logger:    logger,
-		Executor:  *executor,
-		Validator: *validator,
+		Executor:  executor,
+		Validator: validator,
 	}
 
 	server := api.NewServer(serverCfg, deps)

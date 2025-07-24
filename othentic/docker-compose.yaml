@@ -23,6 +23,7 @@ services:
       "--internal-tasks",
       "--metrics",
       "--delay", "10000",
+      "--aggregator.simulate-transactions", "true",
       "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
       "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
     ]
