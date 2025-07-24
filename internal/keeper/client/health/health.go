@@ -121,10 +121,10 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 
 	metrics.SuccessfulHealthCheckinsTotal.Inc()
 
-	c.logger.Debug("Successfully completed health check-in",
-		"status", response.Status,
-		"keeperAddress", c.config.KeeperAddress,
-		"timestamp", payload.Timestamp)
+	// c.logger.Debug("Successfully completed health check-in",
+	// 	"status", response.Status,
+	// 	"keeperAddress", c.config.KeeperAddress,
+	// 	"timestamp", payload.Timestamp)
 
 	return response, nil
 }
@@ -199,7 +199,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	}
 
 	parts := strings.Split(decryptedString, ":")
-	if len(parts) != 4 {
+	if len(parts) != 5 {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
 			Data:   "invalid response format",
@@ -210,6 +210,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	config.SetAlchemyAPIKey(parts[1])
 	config.SetIpfsHost(parts[2])
 	config.SetPinataJWT(parts[3])
+	config.SetManagerSigningAddress(parts[4])
 
 	return types.KeeperHealthCheckInResponse{
 		Status: true,

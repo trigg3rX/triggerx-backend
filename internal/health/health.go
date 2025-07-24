@@ -167,7 +167,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	switch keeperHealth.Version {
 	case "0.1.6":
 		// Latest version - return msgData with no warning
-		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
+		message := fmt.Sprintf("%s:%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT(), config.GetManagerSigningAddress())
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
 			h.logger.Error("Failed to encrypt message for keeper",

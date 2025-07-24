@@ -31,9 +31,9 @@ func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManage
 
 func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSData, traceID string) (bool, error) {
 	// check if the scheduler signature is valid
-	isSchedulerSignatureTrue, err := v.ValidateSchedulerSignature(ipfsData.TaskData, traceID)
-	if !isSchedulerSignatureTrue {
-		v.logger.Error("Scheduler signature validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
+	isManagerSignatureTrue, err := v.ValidateManagerSignature(ipfsData.TaskData, traceID)
+	if !isManagerSignatureTrue {
+		v.logger.Error("Manager signature validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
 		return false, err
 	}
 	v.logger.Info("Scheduler signature validation passed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID)

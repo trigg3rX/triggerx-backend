@@ -78,7 +78,7 @@ func TestTaskValidator_ValidateProof(t *testing.T) {
 			name: "missing proof data",
 			ipfsData: types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID: 1,
+					TaskID: []int64{1},
 				},
 			},
 			traceID:   "test-trace-1",
@@ -90,7 +90,7 @@ func TestTaskValidator_ValidateProof(t *testing.T) {
 			name: "empty proof of task",
 			ipfsData: types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID: 2,
+					TaskID: []int64{2},
 				},
 				ProofData: &types.ProofData{},
 			},
@@ -103,7 +103,7 @@ func TestTaskValidator_ValidateProof(t *testing.T) {
 			name: "empty certificate hash",
 			ipfsData: types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID: 3,
+					TaskID: []int64{3},
 				},
 				ProofData: &types.ProofData{
 					ProofOfTask: "some-proof",
@@ -118,7 +118,7 @@ func TestTaskValidator_ValidateProof(t *testing.T) {
 			name: "valid proof data",
 			ipfsData: types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID: 4,
+					TaskID: []int64{4},
 				},
 				ProofData: &types.ProofData{
 					TaskID:          4,
@@ -174,7 +174,7 @@ func TestTaskValidator_validateProofHash(t *testing.T) {
 			name: "valid proof hash",
 			ipfsData: types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID: 1,
+					TaskID: []int64{1},
 				},
 				ProofData: &types.ProofData{
 					TaskID:          1,
@@ -195,7 +195,7 @@ func TestTaskValidator_validateProofHash(t *testing.T) {
 			name: "missing task data",
 			ipfsData: types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID: 2,
+					TaskID: []int64{2},
 				},
 				ProofData: &types.ProofData{
 					TaskID:          2,

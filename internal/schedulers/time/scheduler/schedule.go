@@ -5,29 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-// SchedulerTaskRequest represents the request format for Redis API
-type SchedulerTaskRequest struct {
-	SendTaskDataToKeeper types.SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
-	SchedulerID          int                        `json:"scheduler_id"`
-	Source               string                     `json:"source"`
-}
-
-// RedisAPIResponse represents the response from Redis API
-type RedisAPIResponse struct {
-	Success   bool                `json:"success"`
-	TaskID    int64               `json:"task_id"`
-	Message   string              `json:"message"`
-	Performer types.PerformerData `json:"performer"`
-	Timestamp string              `json:"timestamp"`
-	Error     string              `json:"error,omitempty"`
-	Details   string              `json:"details,omitempty"`
-}
 
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleTasks() {
@@ -112,34 +95,30 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 		return
 	}
 
-	// Use the first task ID as the primary task ID for the batch
-	primaryTaskID := validTaskIDs[0]
-
-	s.logger.Infof("Processing batch of %d tasks, primary task ID: %d", len(validTaskIDs), primaryTaskID)
-
-	// Create scheduler signature data
-	schedulerSignatureData := types.SchedulerSignatureData{
-		TaskID:      primaryTaskID,
-		SchedulerID: s.schedulerID,
-	}
-
 	// Create the batch task data
 	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:             primaryTaskID,
-		TargetData:         targetDataList,
-		TriggerData:        triggerDataList,
-		SchedulerSignature: &schedulerSignatureData,
+		TaskID:           validTaskIDs,
+		TargetData:       targetDataList,
+		TriggerData:      triggerDataList,
+		SchedulerID:      s.schedulerID,
+		ManagerSignature: "",
 	}
 
 	// Create request for Redis API
-	request := SchedulerTaskRequest{
+	request := types.SchedulerTaskRequest{
 		SendTaskDataToKeeper: sendTaskData,
-		SchedulerID:          s.schedulerID,
 		Source:               "time_scheduler",
 	}
 
+	// Convert validTaskIDs ([]int64) to []string for joining
+	taskIDStrs := make([]string, len(validTaskIDs))
+	for i, id := range validTaskIDs {
+		taskIDStrs[i] = fmt.Sprintf("%d", id)
+	}
+	taskIDs := strings.Join(taskIDStrs, ", ")
+
 	// Submit batch to Redis API
-	success := s.submitBatchToRedis(request, primaryTaskID, len(validTaskIDs))
+	success := s.submitBatchToRedis(request, taskIDs, len(validTaskIDs))
 
 	if success {
 		s.logger.Infof("Batch processing completed successfully: %d tasks submitted", len(validTaskIDs))
@@ -152,14 +131,14 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 }
 
 // submitBatchToRedis submits the batch task data to Redis API
-func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, primaryTaskID int64, taskCount int) bool {
+func (s *TimeBasedScheduler) submitBatchToRedis(request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
 	startTime := time.Now()
 
 	// Marshal request to JSON
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		s.logger.Error("Failed to marshal batch request",
-			"primary_task_id", primaryTaskID,
+			"task_ids", taskIDs,
 			"task_count", taskCount,
 			"error", err)
 		return false
@@ -170,7 +149,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBytes))
 	if err != nil {
 		s.logger.Error("Failed to create HTTP request",
-			"primary_task_id", primaryTaskID,
+			"task_ids", taskIDs,
 			"url", url,
 			"error", err)
 		return false
@@ -182,7 +161,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		s.logger.Error("Failed to send batch to Redis API",
-			"primary_task_id", primaryTaskID,
+			"task_ids", taskIDs,
 			"task_count", taskCount,
 			"url", url,
 			"error", err)
@@ -191,10 +170,10 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 	defer func() { _ = resp.Body.Close() }()
 
 	// Parse response
-	var apiResponse RedisAPIResponse
+	var apiResponse types.TaskManagerAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		s.logger.Error("Failed to decode Redis API response",
-			"primary_task_id", primaryTaskID,
+			"task_ids", taskIDs,
 			"status_code", resp.StatusCode,
 			"error", err)
 		return false
@@ -204,7 +183,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 
 	if resp.StatusCode != http.StatusOK {
 		s.logger.Error("Redis API returned error",
-			"primary_task_id", primaryTaskID,
+			"task_ids", taskIDs,
 			"task_count", taskCount,
 			"status_code", resp.StatusCode,
 			"error", apiResponse.Error,
@@ -215,7 +194,7 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 
 	if !apiResponse.Success {
 		s.logger.Error("Redis API processing failed",
-			"primary_task_id", primaryTaskID,
+			"task_ids", taskIDs,
 			"task_count", taskCount,
 			"message", apiResponse.Message,
 			"error", apiResponse.Error,
@@ -224,8 +203,9 @@ func (s *TimeBasedScheduler) submitBatchToRedis(request SchedulerTaskRequest, pr
 	}
 
 	s.logger.Info("Successfully submitted batch to Redis API",
-		"primary_task_id", primaryTaskID,
+		"task_ids", taskIDs,
 		"task_count", taskCount,
+		"response_task_ids", apiResponse.TaskID,
 		"performer_id", apiResponse.Performer.KeeperID,
 		"performer_address", apiResponse.Performer.KeeperAddress,
 		"duration", duration,

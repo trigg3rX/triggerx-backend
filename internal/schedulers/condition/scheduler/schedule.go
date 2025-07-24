@@ -17,24 +17,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// SchedulerTaskRequest represents the request format for Redis API
-type SchedulerTaskRequest struct {
-	SendTaskDataToKeeper types.SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
-	SchedulerID          int                        `json:"scheduler_id"`
-	Source               string                     `json:"source"`
-}
-
-// RedisAPIResponse represents the response from Redis API
-type RedisAPIResponse struct {
-	Success   bool                `json:"success"`
-	TaskID    int64               `json:"task_id"`
-	Message   string              `json:"message"`
-	Performer types.PerformerData `json:"performer"`
-	Timestamp string              `json:"timestamp"`
-	Error     string              `json:"error,omitempty"`
-	Details   string              `json:"details,omitempty"`
-}
-
 // ScheduleJob creates and starts a new condition worker for monitoring
 func (s *ConditionBasedScheduler) ScheduleJob(jobData *types.ScheduleConditionJobData) error {
 	s.workersMutex.Lock()
@@ -249,7 +231,7 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 	jobData.TaskTargetData.TaskID = taskID
 
 	// Create individual task and submit to Redis API
-	success, err := s.submitTriggeredTaskToRedis(jobData, notification)
+	success, err := s.submitTriggeredTaskToTaskManager(jobData, notification)
 	if err != nil {
 		s.logger.Error("Failed to submit triggered task to Redis API",
 			"job_id", notification.JobID,
@@ -277,8 +259,8 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 	return nil
 }
 
-// submitTriggeredTaskToRedis creates and submits a single task to Redis API when triggers occur
-func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
+// submitTriggeredTaskToTaskManager creates and submits a single task to TaskManager when triggers occur
+func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskManager(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
 	s.logger.Info("Creating triggered task for Redis API submission",
 		"job_id", jobData.JobID,
 		"task_definition_id", jobData.TaskDefinitionID,
@@ -301,12 +283,6 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.Sche
 	// Create trigger data based on job type
 	triggerData := s.createTriggerDataFromNotification(jobData, notification)
 
-	// Create scheduler signature data
-	schedulerSignatureData := types.SchedulerSignatureData{
-		TaskID:      notification.JobID,
-		SchedulerID: s.schedulerID,
-	}
-
 	// Create single task data for keeper
 	sendTaskData := types.SendTaskDataToKeeper{
 		TaskID:           []int64{jobData.TaskTargetData.TaskID},
@@ -317,14 +293,13 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToRedis(jobData *types.Sche
 	}
 
 	// Create request for Redis API
-	request := SchedulerTaskRequest{
+	request := types.SchedulerTaskRequest{
 		SendTaskDataToKeeper: sendTaskData,
-		SchedulerID:          s.schedulerID,
 		Source:               "condition_scheduler",
 	}
 
-	// Submit to Redis API
-	return s.submitTaskToRedisAPI(request, notification.JobID)
+	// Submit to TaskManager
+	return s.submitTaskToTaskManager(request, notification.JobID)
 }
 
 // createTriggerDataFromNotification creates appropriate trigger data based on job type
@@ -355,8 +330,8 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 	return baseTriggerData
 }
 
-// submitTaskToRedisAPI submits the task to Redis API via HTTP
-func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequest, taskID int64) (bool, error) {
+// submitTaskToTaskManager submits the task to TaskManager via HTTP
+func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID int64) (bool, error) {
 	startTime := time.Now()
 
 	// Marshal request to JSON
@@ -393,7 +368,7 @@ func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequ
 	defer func() { _ = resp.Body.Close() }()
 
 	// Parse response
-	var apiResponse RedisAPIResponse
+	var apiResponse types.TaskManagerAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		s.logger.Error("Failed to decode Redis API response",
 			"task_id", taskID,
@@ -425,6 +400,7 @@ func (s *ConditionBasedScheduler) submitTaskToRedisAPI(request SchedulerTaskRequ
 
 	s.logger.Info("Successfully submitted task to Redis API",
 		"task_id", taskID,
+		"response_task_ids", apiResponse.TaskID,
 		"performer_id", apiResponse.Performer.KeeperID,
 		"performer_address", apiResponse.Performer.KeeperAddress,
 		"duration", duration,
