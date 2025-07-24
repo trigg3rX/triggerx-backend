@@ -1,8 +1,10 @@
 package validation
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -82,15 +84,38 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		},
 	}
 
-	// Convert the task data to JSON message format (same as signing process)
-	isValid, err := cryptography.VerifySignatureFromJSON(
-		ipfsDataForVerification,
-		ipfsData.PerformerSignature.PerformerSignature,
-		ipfsData.PerformerSignature.PerformerSigningAddress,
-	)
+	// Convert the ipfs data to JSON message format (same as signing process)
+	ipfsDataBytes, err := json.Marshal(ipfsDataForVerification)
 	if err != nil {
-		logger.Error("Failed to verify performer signature", "error", err)
-		return false, fmt.Errorf("failed to verify performer signature: %w", err)
+		logger.Error("Failed to marshal ipfs data for verification", "error", err)
+		return false, fmt.Errorf("failed to marshal ipfs data for verification: %w", err)
+	}
+
+	// Parse the signature from string to BLS signature
+	signatureBytes := []byte(ipfsData.PerformerSignature.PerformerSignature)
+	_, err = bls.SignatureFromBytes(signatureBytes)
+	if err != nil {
+		logger.Error("Failed to parse BLS signature", "error", err)
+		return false, fmt.Errorf("failed to parse BLS signature: %w", err)
+	}
+
+	// Parse the public key from string to BLS public key
+	publicKeyBytes := []byte(ipfsData.PerformerSignature.PerformerSigningAddress)
+	publicKey, err := bls.PublicKeyFromBytes(publicKeyBytes)
+	if err != nil {
+		logger.Error("Failed to parse BLS public key", "error", err)
+		return false, fmt.Errorf("failed to parse BLS public key: %w", err)
+	}
+
+	// Hash the message to 32 bytes for BLS verification
+	var messageHash [32]byte
+	copy(messageHash[:], ipfsDataBytes)
+
+	// Verify the BLS signature
+	isValid, err := bls.VerifySignature(signatureBytes, messageHash, publicKey)
+	if err != nil {
+		logger.Error("Failed to verify BLS signature", "error", err)
+		return false, fmt.Errorf("failed to verify BLS signature: %w", err)
 	}
 
 	if !isValid {

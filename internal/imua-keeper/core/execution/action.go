@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
@@ -90,10 +89,6 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 
 	// Create transaction data for execution contract
-	privateKey, err := crypto.HexToECDSA(config.GetPrivateKeyController())
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to parse private key: %v", err)
-	}
 	e.logger.Debugf("Using nonce: %d", nonce)
 
 	// Pack the execution contract's executeFunction call
@@ -134,7 +129,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		ethcommon.HexToAddress(executionContractAddress),
 		executionInput,
 		chainID,
-		privateKey,
+		config.GetPrivateKeyController(),
 	)
 	if err != nil {
 		return types.PerformerActionData{}, err

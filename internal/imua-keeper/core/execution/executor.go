@@ -14,7 +14,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -157,7 +156,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			ipfsData.ProofData.TaskID = task.TaskID[0]
 			ipfsData.PerformerSignature.TaskID = task.TaskID[0]
-			ipfsData.PerformerSignature.PerformerSigningAddress = config.GetConsensusAddress()
+			ipfsData.PerformerSignature.PerformerSigningAddress = string(config.GetConsensusKeyPair().PublicKey().Marshal())
 
 			tlsConfig := proof.DefaultTLSProofConfig(config.GetTLSProofHost())
 			tlsConfig.TargetPort = config.GetTLSProofPort()
@@ -181,8 +180,16 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 					// Note: PerformerSignature field is intentionally left empty for signing
 				},
 			}
-
-			performerSignature, err := cryptography.SignJSONMessage(ipfsDataForSigning, config.GetPrivateKeyConsensus())
+			ipfsDataForSigningBytes, err := json.Marshal(ipfsDataForSigning)
+			if err != nil {
+				e.logger.Error("Failed to marshal ipfs data for signing", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, err}
+				return
+			}
+			performerSignature := config.GetConsensusKeyPair().Sign(ipfsDataForSigningBytes)
 			if err != nil {
 				e.logger.Error("Failed to sign the ipfs data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				resultCh <- struct {
@@ -193,8 +200,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			ipfsData.PerformerSignature = &types.PerformerSignatureData{
 				TaskID:                  task.TaskID[0],
-				PerformerSignature:      performerSignature,
-				PerformerSigningAddress: config.GetConsensusAddress(),
+				PerformerSignature:      string(performerSignature.Marshal()),
+				PerformerSigningAddress: string(config.GetConsensusKeyPair().PublicKey().Marshal()),
 			}
 			e.logger.Info("IPFS data signed", "task_id", task.TaskID, "trace_id", traceID)
 
@@ -207,7 +214,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				}{false, err}
 				return
 			}
-			cid, err := utils.UploadToIPFS(filename, ipfsDataBytes)
+			_, err = utils.UploadToIPFS(filename, ipfsDataBytes)
 			if err != nil {
 				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				resultCh <- struct {
@@ -218,22 +225,22 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			e.logger.Info("IPFS data uploaded", "task_id", task.TaskID, "trace_id", traceID)
 
-			aggregatorData := types.BroadcastDataForValidators{
-				ProofOfTask:      proofData.ProofOfTask,
-				Data:             []byte(cid),
-				TaskDefinitionID: task.TargetData[idx].TaskDefinitionID,
-				PerformerAddress: config.GetConsensusAddress(),
-			}
+			// aggregatorData := types.BroadcastDataForValidators{
+			// 	ProofOfTask:      proofData.ProofOfTask,
+			// 	Data:             []byte(cid),
+			// 	TaskDefinitionID: task.TargetData[idx].TaskDefinitionID,
+			// 	PerformerAddress: string(config.GetConsensusKeyPair().PublicKey().Marshal()),
+			// }
 
-			success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)
-			if !success {
-				e.logger.Error("Failed to send task result to aggregator", "task_id", task.TaskID, "error", err, "trace_id", traceID)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, fmt.Errorf("failed to send task result to aggregator")}
-				return
-			}
+			// success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)
+			// if !success {
+			// 	e.logger.Error("Failed to send task result to aggregator", "task_id", task.TaskID, "error", err, "trace_id", traceID)
+			// 	resultCh <- struct {
+			// 		success bool
+			// 		err     error
+			// 	}{false, fmt.Errorf("failed to send task result to aggregator")}
+			// 	return
+			// }
 			e.logger.Info("Task result sent to aggregator", "task_id", task.TaskID, "trace_id", traceID)
 			resultCh <- struct {
 				success bool

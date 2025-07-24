@@ -5,7 +5,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -15,16 +14,14 @@ type TaskValidator struct {
 	alchemyAPIKey    string
 	etherscanAPIKey  string
 	dockerManager    *docker.DockerManager
-	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
 }
 
-func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManager *docker.DockerManager, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskValidator {
+func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManager *docker.DockerManager, logger logging.Logger) *TaskValidator {
 	return &TaskValidator{
 		alchemyAPIKey:    alchemyAPIKey,
 		etherscanAPIKey:  etherscanAPIKey,
 		dockerManager:    dockerManager,
-		aggregatorClient: aggregatorClient,
 		logger:           logger,
 	}
 }
