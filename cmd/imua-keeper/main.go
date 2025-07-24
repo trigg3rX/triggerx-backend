@@ -15,7 +15,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	// "github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
@@ -45,7 +45,7 @@ func main() {
 
 	logger.Info("Starting keeper node ...",
 		"keeper_address", config.GetKeeperAddress(),
-		"consensus_address", config.GetConsensusAddress(),
+		"consensus_address", config.GetConsensusKeyPair().PublicKey().Marshal(),
 		"version", config.GetVersion(),
 	)
 
@@ -53,26 +53,26 @@ func main() {
 	logger.Info("[1/5] Dependency: Metrics collector Initialised")
 
 	// Initialize clients: ECDSA
-	aggregatorCfg := aggregator.AggregatorClientConfig{
-		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetPrivateKeyConsensus(),
-		SenderAddress:    config.GetKeeperAddress(),
-	}
+	// aggregatorCfg := aggregator.AggregatorClientConfig{
+	// 	AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+	// 	SenderPrivateKey: string(config.GetPrivateKeyController().D.Bytes()),
+	// 	SenderAddress:    config.GetKeeperAddress(),
+	// }
 	// Initialize clients: BLS
 	// aggregatorCfg := aggregator.AggregatorClientConfig{
 	// 	AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
 	// 	SenderPrivateKey: config.GetPrivateKeyConsensus(),
 	// 	SenderAddress:    config.GetKeeperAddress(),
 	// }
-	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
-	if err != nil {
-		logger.Fatal("Failed to initialize aggregator client", "error", err)
-	}
-	logger.Info("[2/5] Dependency: Aggregator client Initialised")
+	// aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
+	// if err != nil {
+	// 	logger.Fatal("Failed to initialize aggregator client", "error", err)
+	// }
+	// logger.Info("[2/5] Dependency: Aggregator client Initialised")
 
 	healthCfg := health.Config{
 		HealthServiceURL: config.GetHealthRPCUrl(),
-		PrivateKey:       config.GetPrivateKeyConsensus(),
+		PrivateKey:       string(config.GetPrivateKeyController().D.Bytes()),
 		KeeperAddress:    config.GetKeeperAddress(),
 		PeerID:           config.GetPeerID(),
 		Version:          config.GetVersion(),
@@ -106,8 +106,8 @@ func main() {
 	logger.Infof("[4/5] Dependency: Code executor Initialised with %d language pools", len(supportedLanguages))
 
 	// Initialize task executor and validator
-	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger)
-	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, aggregatorClient, logger)
+	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, logger)
+	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, nil, logger)
 
 	// Initialize API server
 	serverCfg := api.Config{
