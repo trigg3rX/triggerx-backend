@@ -1,8 +1,8 @@
 package keeper
 
 import (
-	"context"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -153,7 +153,7 @@ func (k *Keeper) parseEvent(vLog ethtypes.Log) (interface{}, error) {
 func (k *Keeper) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 	k.logger.Info("Processing new task created event",
 		"taskID", e.TaskId.Uint64(),
-		"definitionHash", fmt.Sprintf("0x%x", e.TaskDefinitionId),)
+		"definitionHash", fmt.Sprintf("0x%x", e.TaskDefinitionId))
 
 	validateRequest := handlers.TaskValidationRequest{
 		Data: string(e.TaskData),
