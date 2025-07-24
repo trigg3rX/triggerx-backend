@@ -44,6 +44,7 @@ func (w *ConditionWorker) Start() {
 		"value_source", w.ConditionWorkerData.ValueSourceUrl,
 		"upper_limit", w.ConditionWorkerData.UpperLimit,
 		"lower_limit", w.ConditionWorkerData.LowerLimit,
+		"expiration_time", w.ConditionWorkerData.ExpirationTime,
 	)
 
 	ticker := time.NewTicker(ConditionPollInterval)
@@ -64,6 +65,16 @@ func (w *ConditionWorker) Start() {
 			metrics.JobsCompleted.WithLabelValues("success").Inc()
 			return
 		case <-ticker.C:
+			// Check if job has expired
+			if time.Now().After(w.ConditionWorkerData.ExpirationTime) {
+				w.Logger.Info("Job has expired, stopping worker",
+					"job_id", w.ConditionWorkerData.JobID,
+					"expiration_time", w.ConditionWorkerData.ExpirationTime,
+				)
+				go w.Stop() // Stop in a goroutine to avoid deadlock
+				return
+			}
+
 			if err := w.checkCondition(); err != nil {
 				w.Logger.Error("Error checking condition", "job_id", w.ConditionWorkerData.JobID, "error", err)
 				metrics.JobsCompleted.WithLabelValues("failed").Inc()

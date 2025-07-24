@@ -308,23 +308,26 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 		TaskID:                  notification.JobID,
 		TaskDefinitionID:        jobData.TaskDefinitionID,
 		CurrentTriggerTimestamp: notification.TriggeredAt,
-		ExpirationTime:          jobData.EventWorkerData.ExpirationTime,
 	}
 
 	switch jobData.TaskDefinitionID {
 	case 5, 6: // Condition-based
+		baseTriggerData.ExpirationTime = jobData.ConditionWorkerData.ExpirationTime
 		baseTriggerData.ConditionSatisfiedValue = int(notification.TriggerValue)
 		baseTriggerData.ConditionType = jobData.ConditionWorkerData.ConditionType
 		baseTriggerData.ConditionSourceType = jobData.ConditionWorkerData.ValueSourceType
 		baseTriggerData.ConditionSourceUrl = jobData.ConditionWorkerData.ValueSourceUrl
 		baseTriggerData.ConditionUpperLimit = int(jobData.ConditionWorkerData.UpperLimit)
 		baseTriggerData.ConditionLowerLimit = int(jobData.ConditionWorkerData.LowerLimit)
+		s.logger.Info("Condition job expiration time", "expiration_time", jobData.ConditionWorkerData.ExpirationTime)
 
 	case 3, 4: // Event-based
+		baseTriggerData.ExpirationTime = jobData.EventWorkerData.ExpirationTime
 		baseTriggerData.EventTxHash = notification.TriggerTxHash
 		baseTriggerData.EventChainId = jobData.EventWorkerData.TriggerChainID
 		baseTriggerData.EventTriggerContractAddress = jobData.EventWorkerData.TriggerContractAddress
 		baseTriggerData.EventTriggerName = jobData.EventWorkerData.TriggerEvent
+		s.logger.Info("Event job expiration time", "expiration_time", jobData.EventWorkerData.ExpirationTime)
 	}
 
 	return baseTriggerData
