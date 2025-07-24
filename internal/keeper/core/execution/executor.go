@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	// "strconv"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
@@ -26,6 +27,8 @@ type TaskExecutor struct {
 	validator        *validation.TaskValidator
 	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
+	nonceManagers    map[string]*NonceManager // Chain ID -> NonceManager
+	nonceMutex       sync.RWMutex
 }
 
 // NewTaskExecutor creates a new instance of TaskExecutor
@@ -40,6 +43,7 @@ func NewTaskExecutor(
 		validator:        validator,
 		aggregatorClient: aggregatorClient,
 		logger:           logger,
+		nonceManagers:    make(map[string]*NonceManager),
 	}
 }
 
@@ -89,6 +93,28 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			e.logger.Info("Trigger validation passed", "task_id", task.TaskID, "trace_id", traceID)
 
+			// Get nonce manager for this chain
+			nonceManager, err := e.getNonceManager(task.TargetData[idx].TargetChainID)
+			if err != nil {
+				e.logger.Error("Failed to get nonce manager", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, err}
+				return
+			}
+
+			// Get next nonce atomically
+			nonce, err := nonceManager.GetNextNonce(context.Background())
+			if err != nil {
+				e.logger.Error("Failed to get nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, err}
+				return
+			}
+
 			// create a client for validating event based and performing action
 			rpcURL := utils.GetChainRpcUrl(task.TargetData[idx].TargetChainID)
 			client, err := ethclient.Dial(rpcURL)
@@ -103,17 +129,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			defer client.Close()
 			e.logger.Debugf("Connected to chain: %s", rpcURL)
 
-			nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(config.GetKeeperAddress()))
-			if err != nil {
-				e.logger.Error("Failed to get pending nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
-
-			// execute the action
+			// execute the action with the allocated nonce
 			var actionData types.PerformerActionData
 			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client)
 			if err != nil {
@@ -234,6 +250,39 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 		}
 	}
 	return true, nil
+}
+
+// getNonceManager returns or creates a nonce manager for the given chain
+func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
+	e.nonceMutex.RLock()
+	if nm, exists := e.nonceManagers[chainID]; exists {
+		e.nonceMutex.RUnlock()
+		return nm, nil
+	}
+	e.nonceMutex.RUnlock()
+
+	e.nonceMutex.Lock()
+	defer e.nonceMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if nm, exists := e.nonceManagers[chainID]; exists {
+		return nm, nil
+	}
+
+	// Create new client and nonce manager
+	rpcURL := utils.GetChainRpcUrl(chainID)
+	client, err := ethclient.Dial(rpcURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client for chain %s: %w", chainID, err)
+	}
+
+	nm := NewNonceManager(client, e.logger)
+	if err := nm.Initialize(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to initialize nonce manager for chain %s: %w", chainID, err)
+	}
+
+	e.nonceManagers[chainID] = nm
+	return nm, nil
 }
 
 // func parseStringToInt(str string) int {
