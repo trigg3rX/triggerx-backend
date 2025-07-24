@@ -2,20 +2,27 @@ package config
 
 import (
 	"fmt"
-	"log"
-
+	"crypto/ecdsa"
+	"time"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
+	sdkEcdsa "github.com/imua-xyz/imua-avs-sdk/crypto/ecdsa"
+	"github.com/imua-xyz/imua-avs-sdk/crypto/bls"
+	blscommon "github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
 const (
-	version = "0.1.6"
-	isImua  = false
+	version = "0.0.1"
+	isImua  = true
+)
+
+const (
+	avsName = "hello-world-avs-demo"
+	semVer  = "0.0.1"
+	maxRetries = 80
+	retryDelay = 1 * time.Second
 )
 
 type Config struct {
@@ -23,19 +30,18 @@ type Config struct {
 
 	// RPC URLs for Ethereum and Base
 	ethRPCUrl  string
-	baseRPCUrl string
+	ethWsUrl   string
 
 	// API Keys for Alchemy and Etherscan
 	alchemyAPIKey   string
 	etherscanAPIKey string
 
 	// Controller Key and Keeper Address
-	privateKeyController string
+	privateKeyController *ecdsa.PrivateKey
 	keeperAddress        string
 
-	// Consensus Key and Address
-	privateKeyConsensus string
-	consensusAddress    string
+	// Consensus Key and Address (BLS)
+	consensusKeyPair blscommon.SecretKey
 
 	// Public IP Address and Peer ID
 	publicIPV4Address string
@@ -46,6 +52,7 @@ type Config struct {
 	keeperP2PPort     string
 	keeperMetricsPort string
 	grafanaPort       string
+	nodeApiPort       string
 
 	// IPFS configuration
 	ipfsHost  string
@@ -66,9 +73,8 @@ type Config struct {
 	l2Chain string
 
 	// AVS Contract Address
-	avsGovernanceAddress     string
-	attestationCenterAddress string
-	taskExecutionAddress     string
+	avsGovernanceAddress string
+	taskExecutionAddress string
 
 	// Othentic Bootstrap ID
 	othenticBootstrapID string
@@ -82,18 +88,15 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnvString("L1_RPC", ""),
-		baseRPCUrl:               env.GetEnvString("L2_RPC", ""),
+		ethRPCUrl:                env.GetEnvString("ETH_RPC_URL", ""),
+		ethWsUrl:                 env.GetEnvString("ETH_WS_URL", ""),
 		alchemyAPIKey:           env.GetEnvString("ALCHEMY_API_KEY", ""),
-		privateKeyConsensus:      env.GetEnvString("PRIVATE_KEY", ""),
-		privateKeyController:     env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
-		keeperAddress:            env.GetEnvString("OPERATOR_ADDRESS", ""),
-		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnvString("PRIVATE_KEY", ""))).PublicKey).Hex(),
 		publicIPV4Address:        env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
 		peerID:                   env.GetEnvString("PEER_ID", ""),
 		keeperRPCPort:            env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
 		keeperP2PPort:            env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
 		keeperMetricsPort:        env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
+		nodeApiPort:              env.GetEnvString("OPERATOR_NODE_API_PORT", "9014"),
 		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
 		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
 		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
@@ -101,21 +104,43 @@ func Init() error {
 		tlsProofPort:             "443",
 		l1Chain:                  env.GetEnvString("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
-		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
+		avsGovernanceAddress:     env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
 		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
+
+	blsKeyPassword := env.GetEnvString("OPERATOR_BLS_KEY_PASSWORD", "")
+	blsKeyStorePath := env.GetEnvString("OPERATOR_BLS_KEY_STORE_PATH", "")
+	blsKeyPair, err := bls.ReadPrivateKeyFromFile(blsKeyStorePath, blsKeyPassword)
+	if err != nil {
+		return fmt.Errorf("invalid bls key password: %s", err)
+	}
+	cfg.consensusKeyPair = blsKeyPair
+
+	ecdsaKeyPassword := env.GetEnvString("OPERATOR_ECDSA_KEY_PASSWORD", "")
+	ecdsaKeyStorePath := env.GetEnvString("OPERATOR_ECDSA_KEY_STORE_PATH", "")
+	ecdsaPrivateKey, err := sdkEcdsa.ReadKey(ecdsaKeyStorePath, ecdsaKeyPassword)
+	if err != nil {
+		return fmt.Errorf("invalid ecdsa key password: %s", err)
+	}
+	cfg.privateKeyController = ecdsaPrivateKey
+
+	ecdsaAddress, err := sdkEcdsa.GetAddressFromKeyStoreFile(ecdsaKeyStorePath)
+	if err != nil {
+		return fmt.Errorf("invalid ecdsa key password: %s", err)
+	}
+	cfg.keeperAddress = ecdsaAddress.Hex()
+	
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	isRegistered := checkKeeperRegistration()
-	if !isRegistered {
-		log.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
-		log.Fatal("Keeper address is not registered on L2")
-	}
+	// isRegistered := checkKeeperRegistration()
+	// if !isRegistered {
+	// 	log.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
+	// 	log.Fatal("Keeper address is not registered on L2")
+	// }
 	return nil
 }
 
@@ -123,18 +148,15 @@ func validateConfig(cfg Config) error {
 	if env.IsEmpty(cfg.ethRPCUrl) {
 		return fmt.Errorf("invalid eth rpc url: %s", cfg.ethRPCUrl)
 	}
-	if env.IsEmpty(cfg.baseRPCUrl) {
-		return fmt.Errorf("invalid base rpc url: %s", cfg.baseRPCUrl)
+	if env.IsEmpty(cfg.ethWsUrl) {
+		return fmt.Errorf("invalid eth ws url: %s", cfg.ethWsUrl)
 	}
 	if !env.IsValidIPAddress(cfg.publicIPV4Address) {
 		return fmt.Errorf("invalid public ipv4 address: %s", cfg.publicIPV4Address)
 	}
-	if !env.IsValidPrivateKey(cfg.privateKeyConsensus) {
-		return fmt.Errorf("invalid private key consensus: %s", cfg.privateKeyConsensus)
-	}
-	if !env.IsValidEthAddress(cfg.keeperAddress) {
-		return fmt.Errorf("invalid keeper address: %s", cfg.keeperAddress)
-	}
+	// if !env.IsValidEthAddress(cfg.keeperAddress) {
+	// 	return fmt.Errorf("invalid keeper address: %s", cfg.keeperAddress)
+	// }
 	if !env.IsValidPeerID(cfg.peerID) {
 		return fmt.Errorf("invalid peer id: %s", cfg.peerID)
 	}
@@ -145,8 +167,8 @@ func GetEthRPCUrl() string {
 	return cfg.ethRPCUrl
 }
 
-func GetBaseRPCUrl() string {
-	return cfg.baseRPCUrl
+func GetEthWsUrl() string {
+	return cfg.ethWsUrl
 }
 
 // Only sets it if there was no key in env file
@@ -169,11 +191,7 @@ func GetEtherscanAPIKey() string {
 	return cfg.etherscanAPIKey
 }
 
-func GetPrivateKeyConsensus() string {
-	return cfg.privateKeyConsensus
-}
-
-func GetPrivateKeyController() string {
+func GetPrivateKeyController() *ecdsa.PrivateKey {
 	return cfg.privateKeyController
 }
 
@@ -181,8 +199,8 @@ func GetKeeperAddress() string {
 	return cfg.keeperAddress
 }
 
-func GetConsensusAddress() string {
-	return cfg.consensusAddress
+func GetConsensusKeyPair() blscommon.SecretKey {
+	return cfg.consensusKeyPair
 }
 
 func GetPublicIPV4Address() string {
@@ -195,6 +213,10 @@ func GetPeerID() string {
 
 func GetOperatorRPCPort() string {
 	return cfg.keeperRPCPort
+}
+
+func GetOperatorNodeApiPort() string {
+	return cfg.nodeApiPort
 }
 
 func IsDevMode() bool {
@@ -217,12 +239,24 @@ func GetAvsGovernanceAddress() string {
 	return cfg.avsGovernanceAddress
 }
 
-func GetAttestationCenterAddress() string {
-	return cfg.attestationCenterAddress
-}
-
 func GetVersion() string {
 	return version
+}
+
+func GetAvsName() string {
+	return avsName
+}
+
+func GetSemVer() string {
+	return semVer
+}
+
+func GetMaxRetries() int {
+	return maxRetries
+}
+
+func GetRetryDelay() time.Duration {
+	return retryDelay
 }
 
 func IsImua() bool {
@@ -278,9 +312,4 @@ func SetTaskExecutionAddress(addr string) {
 
 func GetTaskExecutionAddress() string {
 	return cfg.taskExecutionAddress
-}
-
-// SetKeeperAddress sets the keeper address in the config (for testing)
-func SetKeeperAddress(addr string) {
-	cfg.keeperAddress = addr
 }
