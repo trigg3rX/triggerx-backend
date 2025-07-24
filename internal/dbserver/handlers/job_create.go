@@ -94,8 +94,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			linkJobID = createdJobs.JobIDs[i+1]
 		}
 
+		jobID := new(big.Int)
+		if _, ok := jobID.SetString(tempJobs[i].JobID, 10); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
+			return
+		}
+
 		jobData := &types.JobData{
-			JobID:             tempJobs[i].JobID,
+			JobID:             jobID,
 			JobTitle:          tempJobs[i].JobTitle,
 			TaskDefinitionID:  tempJobs[i].TaskDefinitionID,
 			UserID:            existingUser.UserID,

@@ -119,8 +119,14 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		return
 	}
 
+	jobID := new(big.Int)
+	if _, ok := jobID.SetString(updateData.JobID, 10); !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
+		return
+	}
+
 	trackDBOp := metrics.TrackDBOperation("update", "job_data")
-	err := h.jobRepository.UpdateJobFromUserInDB(&updateData)
+	err := h.jobRepository.UpdateJobFromUserInDB(jobID, &updateData)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[UpdateJobData] Error updating job data for jobID %d: %v", updateData.JobID, err)
@@ -132,16 +138,16 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 	}
 
 	// Fetch the job to get its task_definition_id
-	job, err := h.jobRepository.GetJobByID(updateData.JobID)
+	job, err := h.jobRepository.GetJobByID(jobID)
 	if err == nil && (job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2) {
 		// For time-based jobs, update time_interval and next_execution_timestamp
-		err = h.timeJobRepository.UpdateTimeJobInterval(updateData.JobID, updateData.TimeInterval)
+		err = h.timeJobRepository.UpdateTimeJobInterval(jobID, updateData.TimeInterval)
 		if err != nil {
 			h.logger.Errorf("[UpdateJobData] Error updating time_interval for jobID %d: %v", updateData.JobID, err)
 		}
 		updatedAt := job.UpdatedAt
 		nextExecution := updatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
-		err = h.timeJobRepository.UpdateTimeJobNextExecutionTimestamp(updateData.JobID, nextExecution)
+		err = h.timeJobRepository.UpdateTimeJobNextExecutionTimestamp(jobID, nextExecution)
 		if err != nil {
 			h.logger.Errorf("[UpdateJobData] Error updating next_execution_timestamp for jobID %d: %v", updateData.JobID, err)
 			// Not returning error to client, just logging

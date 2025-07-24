@@ -12,7 +12,7 @@ import (
 
 type JobRepository interface {
 	CreateNewJob(job *types.JobData) (*big.Int, error)
-	UpdateJobFromUserInDB(job *types.UpdateJobDataFromUserRequest) error
+	UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error
 	UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
 	UpdateJobStatus(jobID *big.Int, status string) error
 	GetJobByID(jobID *big.Int) (*types.JobData, error)
@@ -49,9 +49,9 @@ func (r *jobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
 	return job.JobID, nil
 }
 
-func (r *jobRepository) UpdateJobFromUserInDB(job *types.UpdateJobDataFromUserRequest) error {
+func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error {
 	err := r.db.Session().Query(queries.UpdateJobDataFromUserQuery,
-		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), job.JobID).Exec()
+		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job from user")
 	}

@@ -59,7 +59,7 @@ const (
 
 type CreateJobData struct {
 	// Common fields for all job types
-	JobID        *big.Int `json:"job_id" validate:"required"`
+	JobID        string   `json:"job_id" validate:"required"`
 	UserAddress  string   `json:"user_address" validate:"required,ethereum_address"`
 	EtherBalance *big.Int `json:"ether_balance" validate:"required"`
 	TokenBalance *big.Int `json:"token_balance" validate:"required"`
@@ -113,7 +113,7 @@ type CreateJobResponse struct {
 }
 
 type UpdateJobDataFromUserRequest struct {
-	JobID             *big.Int `json:"job_id"`
+	JobID             string `json:"job_id"`
 	JobTitle          string   `json:"job_title"`
 	Recurring         bool     `json:"recurring"`
 	Status            string   `json:"status"`

@@ -17,7 +17,7 @@ noun=$(shuf -n 1 scripts/nouns.txt)
 
 JOB_TITLE="$adj $noun"
 
-JOB_ID=$(date +%s)
+JOB_ID="300749528249665590178224313442040528409305273634097553067152835846309150732"
 
 case $TASK_DEFINITION_ID in
   1)
@@ -73,13 +73,13 @@ esac
 # curl -X POST https://data.triggerx.network/api/jobs \ 192.168.1.56
 curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
-  -H "X-API-KEY: admin-1234-xyz" \
+  -H "X-API-KEY: ADMIN" \
   -d "[
     {
       \"user_address\": \"0x7Db951c0E6D8906687B459427eA3F3F2b456473B\",
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
-      \"job_id\": $JOB_ID,
+      \"job_id\": \"$JOB_ID\",
       \"job_title\": \"$JOB_TITLE\",
       \"task_definition_id\": $TASK_DEFINITION_ID,
       \"custom\": true,
@@ -106,12 +106,13 @@ curl -X POST http://localhost:9002/api/jobs \
       \"arg_type\": $ARG_TYPE,
       \"is_imua\": true,
       \"arguments\": [\"3\"],
+      \"created_chain_id\": \"11155420\",
       \"dynamic_arguments_script_url\": \"$DYNAMIC_ARGUMENTS_SCRIPT_URL\"
     }
   ]"
 
 if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
-  sleep 5
+  sleep 5 
   echo "\nCalling increment() to trigger the event..."
 
   cast send \
