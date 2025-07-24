@@ -448,28 +448,3 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID int64) error {
 	s.logger.Info("Job unscheduled successfully", "job_id", jobID)
 	return nil
 }
-
-// Legacy method - Deprecated: Now handled by Redis orchestration
-func (s *ConditionBasedScheduler) SendTaskToPerformer(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
-	s.logger.Warn("SendTaskToPerformer is deprecated - triggered tasks are now handled by Redis orchestration")
-	// Redirect to new Redis-based approach
-	return s.submitTriggeredTaskToRedis(jobData, &worker.TriggerNotification{
-		JobID:         jobData.JobID,
-		TriggerValue:  0, // Convert as needed
-		TriggerTxHash: "",
-		TriggeredAt:   time.Now(),
-	})
-}
-
-// UpdateJobTask updates the task for a condition job
-// Deprecated: Tasks are now automatically managed by Redis orchestration
-func (s *ConditionBasedScheduler) UpdateJobTask(jobID, taskID int64) error {
-	s.logger.Warn("UpdateJobTask is deprecated - tasks are now automatically managed by Redis orchestration",
-		"job_id", jobID,
-		"task_id", taskID,
-	)
-
-	// In the new architecture, tasks are automatically created and managed by Redis
-	// when conditions are triggered, so manual task updates are not supported
-	return fmt.Errorf("manual task updates are not supported in Redis orchestration mode - tasks are automatically managed when conditions trigger")
-}

@@ -104,8 +104,6 @@ func (s *Server) setupRoutes(deps Dependencies) {
 		api.POST("/job/schedule", schedulerHandler.ScheduleJob)
 		api.POST("/job/pause", schedulerHandler.UnscheduleJob)
 		api.GET("/job/stats/:job_id", schedulerHandler.GetJobStats)
-
-		api.PUT("/job/task/:job_id/:task_id", schedulerHandler.UpdateJobsTask)
 	}
 }
 
