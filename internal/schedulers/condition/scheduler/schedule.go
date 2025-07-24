@@ -279,6 +279,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskManager(jobData *type
 		ArgType:                   jobData.TaskTargetData.ArgType,
 		Arguments:                 jobData.TaskTargetData.Arguments,
 		DynamicArgumentsScriptUrl: jobData.TaskTargetData.DynamicArgumentsScriptUrl,
+		IsImua:                    jobData.IsImua,
 	}
 
 	// Create trigger data based on job type

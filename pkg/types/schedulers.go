@@ -18,6 +18,7 @@ type TaskTargetData struct {
 	ArgType                   int      `json:"arg_type"`
 	Arguments                 []string `json:"arguments"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url"`
+	IsImua                    bool     `json:"is_imua"`
 }
 
 // Monitoring Data for even and condition workers

@@ -71,6 +71,7 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 			ArgType:                   task.TaskTargetData.ArgType,
 			Arguments:                 task.TaskTargetData.Arguments,
 			DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
+			IsImua:                    task.IsImua,
 		}
 		triggerData := types.TaskTriggerData{
 			TaskID:                  task.TaskID,
