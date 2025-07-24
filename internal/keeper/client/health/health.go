@@ -106,6 +106,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		Timestamp:        time.Now().UTC(),
 		Signature:        signature,
 		PeerID:           c.config.PeerID,
+		IsImua:           config.IsImua(),
 	}
 
 	// c.logger.Infof("Payload: %+v", payload)
@@ -199,7 +200,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	}
 
 	parts := strings.Split(decryptedString, ":")
-	if len(parts) != 5 {
+	if len(parts) != 6 {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,
 			Data:   "invalid response format",
@@ -211,6 +212,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	config.SetIpfsHost(parts[2])
 	config.SetPinataJWT(parts[3])
 	config.SetManagerSigningAddress(parts[4])
+	config.SetTaskExecutionAddress(parts[5])
 
 	return types.KeeperHealthCheckInResponse{
 		Status: true,

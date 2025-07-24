@@ -302,15 +302,16 @@ func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 	var keepers []types.KeeperInfo
 
 	iter := dm.db.Session().Query(`
-		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in 
+		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in, on_imua
 		FROM triggerx.keeper_data 
 		WHERE registered = true AND whitelisted = true 
 		ALLOW FILTERING`).Iter()
 
 	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID string
 	var lastCheckedIn time.Time
+	var isImua bool
 
-	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn) {
+	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn, &isImua) {
 		keepers = append(keepers, types.KeeperInfo{
 			KeeperName:       keeperName,
 			KeeperAddress:    keeperAddress,
@@ -319,6 +320,7 @@ func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 			Version:          version,
 			PeerID:           peerID,
 			LastCheckedIn:    lastCheckedIn,
+			IsImua:           isImua,
 		})
 	}
 

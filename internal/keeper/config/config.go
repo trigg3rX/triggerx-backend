@@ -13,6 +13,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.1.6"
+	isImua  = false
+)
+
 type Config struct {
 	devMode bool
 
@@ -63,6 +68,7 @@ type Config struct {
 	// AVS Contract Address
 	avsGovernanceAddress     string
 	attestationCenterAddress string
+	taskExecutionAddress     string
 
 	// Othentic Bootstrap ID
 	othenticBootstrapID string
@@ -91,8 +97,8 @@ func Init() error {
 		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
 		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
 		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
-		tlsProofHost:             env.GetEnvString("TLS_PROOF_HOST", "www.google.com"),
-		tlsProofPort:             env.GetEnvString("TLS_PROOF_PORT", "443"),
+		tlsProofHost:             "www.google.com",
+		tlsProofPort:             "443",
 		l1Chain:                  env.GetEnvString("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
 		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
@@ -216,7 +222,11 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return "0.1.6"
+	return version
+}
+
+func IsImua() bool {
+	return isImua
 }
 
 // IPFS configuration
@@ -237,6 +247,14 @@ func GetPinataJWT() string {
 }
 
 // TLS Proof configuration
+func SetTLSProofHost(host string) {
+	cfg.tlsProofHost = host
+}
+
+func SetTLSProofPort(port string) {
+	cfg.tlsProofPort = port
+}
+
 func GetTLSProofHost() string {
 	return cfg.tlsProofHost
 }
@@ -252,6 +270,14 @@ func SetManagerSigningAddress(addr string) {
 
 func GetManagerSigningAddress() string {
 	return cfg.managerSigningAddress
+}
+
+func SetTaskExecutionAddress(addr string) {
+	cfg.taskExecutionAddress = addr
+}
+
+func GetTaskExecutionAddress() string {
+	return cfg.taskExecutionAddress
 }
 
 // SetKeeperAddress sets the keeper address in the config (for testing)

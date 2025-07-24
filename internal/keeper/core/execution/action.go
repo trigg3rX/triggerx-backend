@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -42,7 +41,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 	time.Sleep(timeToNextTrigger)
 
-	taregtContractAddress := ethcommon.HexToAddress(targetData.TargetContractAddress)
+	targetContractAddress := ethcommon.HexToAddress(targetData.TargetContractAddress)
 	contractABI, method, err := e.getContractMethodAndABI(targetData.TargetFunction, targetData)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
@@ -111,12 +110,12 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		// Assuming TotalCost is in float64 and needs to be converted to wei (1e18 multiplier) if it's in ETH
 		tgAmountBigInt = new(big.Int).SetInt64(int64(result.Stats.TotalCost * 1e18))
 	}
-	executionInput, err := executionABI.Pack("executeFunction",targetData.JobID, tgAmountBigInt, taregtContractAddress, callData,)
+	executionInput, err := executionABI.Pack("executeFunction", targetData.JobID, tgAmountBigInt, targetContractAddress, callData,)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
 
-	executionContractAddress := utils.GetProxyHubAddress(targetData.TargetChainID)
+	executionContractAddress := config.GetTaskExecutionAddress()
 	chainID, err := client.ChainID(context.Background())
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to get chain ID: %v", err)
