@@ -103,8 +103,8 @@ func (m *MockJobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
 	return args.Get(0).(*big.Int), args.Error(1)
 }
 
-func (m *MockJobRepository) UpdateJobFromUserInDB(updateData *types.UpdateJobDataFromUserRequest) error {
-	args := m.Called(updateData)
+func (m *MockJobRepository) UpdateJobFromUserInDB(jobID *big.Int, updateData *types.UpdateJobDataFromUserRequest) error {
+	args := m.Called(jobID, updateData)
 	return args.Error(0)
 }
 

@@ -116,6 +116,11 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 	h.logger.Infof("[GetJobsByUserAddress] Found %d jobs for user ID %d", len(jobs), userID)
 
+	var jobsAPI []types.JobResponseAPI
+	for _, job := range jobs {
+		jobsAPI = append(jobsAPI, types.ConvertJobResponseToAPI(job))
+	}
+
 	// If we have both jobs and errors, return a partial success response
 	if len(jobs) > 0 && hasErrors {
 		c.JSON(http.StatusPartialContent, gin.H{
@@ -136,7 +141,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 	// If we have only jobs and no errors, return success
 	c.JSON(http.StatusOK, gin.H{
-		"jobs": jobs,
+		"jobs": jobsAPI,
 	})
 }
 
