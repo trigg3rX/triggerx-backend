@@ -1,14 +1,50 @@
 #!/bin/bash
 
-# Function to display usage
+# Function to display comprehensive help menu
+show_help() {
+    cat << 'EOF'
+TriggerX Docker Build Script
+============================
+
+DESCRIPTION:
+    Builds Docker images for TriggerX microservices with specified versions.
+    Supports building individual services or all services in parallel.
+
+USAGE:
+    $0 -n <service> -v <version>
+    $0 -h|--help
+
+OPTIONS:
+    -n, --service    Service name to build (required)
+    -v, --version    Version tag for the Docker image (required, format: MAJOR.MINOR.PATCH)
+    -h, --help       Display this help message
+
+AVAILABLE SERVICES:
+    keeper              - TriggerX Keeper service (uses Dockerfile.keeper)
+    dbserver            - Database server service
+    registrar           - Registrar service
+    health              - Health monitoring service
+    taskmanager         - Task manager service
+    schedulers/time     - Time-based scheduler service
+    schedulers/condition - Condition-based scheduler service
+    all                 - Build all services in parallel (excluding keeper)
+
+VERSION FORMAT:
+    Must follow semantic versioning: MAJOR.MINOR.PATCH
+    Examples: 0.0.1, 1.2.3, 2.0.0
+EOF
+    exit 0
+}
+
+# Function to display usage (simplified version for errors)
 usage() {
     echo "Usage: $0 -n <service> -v <version>"
-    echo "Example: $0 -n keeper -v 0.0.1"
+    echo "Use '$0 -h' for detailed help and examples"
     exit 1
 }
 
 # Parse command-line arguments
-while getopts ":n:v:" opt; do
+while getopts ":n:v:h-:" opt; do
     case ${opt} in
         n )
             SERVICE=$OPTARG
@@ -16,26 +52,53 @@ while getopts ":n:v:" opt; do
         v )
             VERSION=$OPTARG
             ;;
+        h )
+            show_help
+            ;;
+        - )
+            # Handle long options
+            case "${OPTARG}" in
+                service=* )
+                    SERVICE="${OPTARG#*=}"
+                    ;;
+                version=* )
+                    VERSION="${OPTARG#*=}"
+                    ;;
+                help )
+                    show_help
+                    ;;
+                * )
+                    echo "Unknown long option: --${OPTARG}" 1>&2
+                    usage
+                    ;;
+            esac
+            ;;
         \? )
-            echo "Invalid option: $OPTARG" 1>&2
+            echo "Invalid option: -$OPTARG" 1>&2
             usage
             ;;
         : )
-            echo "Invalid option: $OPTARG requires an argument" 1>&2
+            echo "Option -$OPTARG requires an argument" 1>&2
             usage
             ;;
     esac
 done
 
+# Check if no arguments were provided
+if [ $# -eq 0 ]; then
+    echo "Error: No arguments provided" 1>&2
+    show_help
+fi
+
 # Check if name is provided
 if [ -z "$SERVICE" ]; then
-    echo "Error: Service is required" 1>&2
+    echo "Error: Service (-n) is required" 1>&2
     usage
 fi
 
 # Check if version is provided
 if [ -z "$VERSION" ]; then
-    echo "Error: Version is required (e.g., 0.0.1)" 1>&2
+    echo "Error: Version (-v) is required (e.g., 0.0.1)" 1>&2
     usage
 fi
 
