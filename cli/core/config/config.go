@@ -23,14 +23,6 @@ type Config struct {
 	ethHttpRpcUrl string
 	ethWsRpcUrl   string
 
-	// Contract Addresses
-	operatorStateRetrieverAddr common.Address
-	avsRegistryCoordinatorAddr common.Address
-
-	// Aggregator
-	aggregatorServerIpPortAddr string
-	aggregatorAddress          common.Address
-
 	// Operator and AVS Configuration
 	operatorAddress common.Address
 	avsOwnerAddress common.Address
@@ -79,28 +71,6 @@ func Init() error {
 	ethHttpRpcUrl := env.GetEnv("ETH_HTTP_RPC_URL", "")
 	ethWsRpcUrl := env.GetEnv("ETH_WS_RPC_URL", "")
 
-	// Contract Addresses
-	operatorStateRetrieverAddrStr := env.GetEnv("OPERATOR_STATE_RETRIEVER_ADDR", "")
-	var operatorStateRetrieverAddr common.Address
-	if operatorStateRetrieverAddrStr != "" {
-		operatorStateRetrieverAddr = common.HexToAddress(operatorStateRetrieverAddrStr)
-	}
-
-	avsRegistryCoordinatorAddrStr := env.GetEnv("AVS_REGISTRY_COORDINATOR_ADDR", "")
-	var avsRegistryCoordinatorAddr common.Address
-	if avsRegistryCoordinatorAddrStr != "" {
-		avsRegistryCoordinatorAddr = common.HexToAddress(avsRegistryCoordinatorAddrStr)
-	}
-
-	// Aggregator
-	aggregatorServerIpPortAddr := env.GetEnv("AGGREGATOR_SERVER_IP_PORT_ADDR", "")
-
-	aggregatorAddressStr := env.GetEnv("AGGREGATOR_ADDRESS", "")
-	var aggregatorAddress common.Address
-	if aggregatorAddressStr != "" {
-		aggregatorAddress = common.HexToAddress(aggregatorAddressStr)
-	}
-
 	// Operator and AVS Configuration
 	operatorAddressStr := env.GetEnv("OPERATOR_ADDRESS", "")
 	var operatorAddress common.Address
@@ -131,32 +101,24 @@ func Init() error {
 	production := env.GetEnv("PRODUCTION", "false") == "true"
 
 	cfg = Config{
-		ecdsaPrivateKey:            ecdsaPrivateKey,
-		blsPrivateKey:              blsPrivateKey,
-		ecdsaPrivateKeyStorePath:   ecdsaPrivateKeyStorePath,
-		blsPrivateKeyStorePath:     blsPrivateKeyStorePath,
-		ethHttpRpcUrl:              ethHttpRpcUrl,
-		ethWsRpcUrl:                ethWsRpcUrl,
-		operatorStateRetrieverAddr: operatorStateRetrieverAddr,
-		avsRegistryCoordinatorAddr: avsRegistryCoordinatorAddr,
-		aggregatorServerIpPortAddr: aggregatorServerIpPortAddr,
-		aggregatorAddress:          aggregatorAddress,
-		operatorAddress:            operatorAddress,
-		avsOwnerAddress:            avsOwnerAddress,
-		avsAddress:                 avsAddress,
-		nodeApiIpPortAddress:       nodeApiIpPortAddress,
-		enableNodeApi:              enableNodeApi,
-		production:                 production,
+		ecdsaPrivateKey:          ecdsaPrivateKey,
+		blsPrivateKey:            blsPrivateKey,
+		ecdsaPrivateKeyStorePath: ecdsaPrivateKeyStorePath,
+		blsPrivateKeyStorePath:   blsPrivateKeyStorePath,
+		ethHttpRpcUrl:            ethHttpRpcUrl,
+		ethWsRpcUrl:              ethWsRpcUrl,
+		operatorAddress:          operatorAddress,
+		avsOwnerAddress:          avsOwnerAddress,
+		avsAddress:               avsAddress,
+		nodeApiIpPortAddress:     nodeApiIpPortAddress,
+		enableNodeApi:            enableNodeApi,
+		production:               production,
 	}
 	return nil
 }
 
 func GetEcdsaPrivateKey() *ecdsa.PrivateKey {
 	return cfg.ecdsaPrivateKey
-}
-
-func GetBlsPrivateKey() *blscommon.SecretKey {
-	return cfg.blsPrivateKey
 }
 
 func GetEcdsaPrivateKeyStorePath() string {
@@ -173,22 +135,6 @@ func GetEthHttpRpcUrl() string {
 
 func GetEthWsRpcUrl() string {
 	return cfg.ethWsRpcUrl
-}
-
-func GetOperatorStateRetrieverAddr() common.Address {
-	return cfg.operatorStateRetrieverAddr
-}
-
-func GetAvsRegistryCoordinatorAddr() common.Address {
-	return cfg.avsRegistryCoordinatorAddr
-}
-
-func GetAggregatorServerIpPortAddr() string {
-	return cfg.aggregatorServerIpPortAddr
-}
-
-func GetAggregatorAddress() common.Address {
-	return cfg.aggregatorAddress
 }
 
 func GetOperatorAddress() common.Address {

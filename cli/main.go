@@ -25,25 +25,53 @@ func main() {
 			Usage:  "Generate BLS and ECDSA keystore files",
 			Action: actions.GenerateKeys,
 		},
+		// Imuachain Integration
 		{
-			Name:   "register-operator-with-chain",
-			Usage:  "Register operator with the chain",
-			Action: actions.RegisterOperatorWithChain,
+			Name:   "setup-imua-keys",
+			Usage:  "Setup and create required Imuachain validator keys",
+			Action: actions.SetupImuaKeys,
 		},
 		{
-			Name:   "register-operator-with-avs",
-			Usage:  "Register operator with AVS",
-			Action: actions.RegisterOperatorWithAvs,
+			Name:   "fund-imua-account",
+			Usage:  "Fund Imuachain validator account with IMUA tokens from faucet",
+			Action: actions.FundImuaAccount,
 		},
 		{
-			Name:   "complete-registration",
-			Usage:  "Generate keystores from existing keys and complete entire registration process",
-			Action: actions.CompleteRegistration,
+			Name:   "check-imua-balance",
+			Usage:  "Check IMUA token balance of validator account",
+			Action: actions.CheckImuaBalance,
 		},
 		{
-			Name:   "verify-address",
-			Usage:  "Verify the operator address derived from the private key in environment",
-			Action: actions.VerifyAddress,
+			Name:   "register-imua-operator",
+			Usage:  "Register operator on Imuachain",
+			Action: actions.RegisterImuaOperator,
+		},
+		// Token Management Commands
+		{
+			Name:   "get-imeth-tokens",
+			Usage:  "Get imETH tokens from faucet (required before depositing)",
+			Action: actions.GetImethTokens,
+		},
+		{
+			Name:   "deposit-tokens",
+			Usage:  "Deposit tokens from Ethereum Sepolia to Imuachain",
+			Action: actions.DepositTokens,
+		},
+		{
+			Name:   "delegate-tokens",
+			Usage:  "Delegate deposited tokens to your Imua validator",
+			Action: actions.DelegateTokens,
+		},
+		// AVS Management
+		{
+			Name:   "opt-in-to-avs",
+			Usage:  "Opt-in to AVS on Imuachain as a validator",
+			Action: actions.OptInToAVS,
+		},
+		{
+			Name:   "associate-operator",
+			Usage:  "Associate operator with EVM staker (post-bootstrap phase)",
+			Action: actions.AssociateOperator,
 		},
 	}
 
