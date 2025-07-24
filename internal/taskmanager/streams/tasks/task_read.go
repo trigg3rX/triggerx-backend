@@ -152,3 +152,79 @@ func (tsm *TaskStreamManager) readTasksFromStream(stream, consumerGroup, consume
 
 	return tasks, nil
 }
+
+// readTasksFromStreamWithIDs reads tasks and returns both tasks and message IDs
+func (tsm *TaskStreamManager) readTasksFromStreamWithIDs(stream, consumerGroup, consumerName string, count int64) ([]TaskStreamData, []string, error) {
+	if err := tsm.RegisterConsumerGroup(stream, consumerGroup); err != nil {
+		return nil, nil, err
+	}
+
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	streams, err := tsm.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    consumerGroup,
+		Consumer: consumerName,
+		Streams:  []string{stream, ">"},
+		Count:    count,
+		Block:    time.Second,
+	})
+
+	duration := time.Since(start)
+
+	if err != nil {
+		if err == redis.Nil {
+			// tsm.logger.Debug("No tasks available in stream",
+			// 	"stream", stream,
+			// 	"consumer_group", consumerGroup,
+			// 	"duration", duration)
+			return []TaskStreamData{}, []string{}, nil
+		}
+		tsm.logger.Error("Failed to read from stream",
+			"stream", stream,
+			"consumer_group", consumerGroup,
+			"duration", duration,
+			"error", err)
+		return nil, nil, fmt.Errorf("failed to read from stream: %w", err)
+	}
+
+	var tasks []TaskStreamData
+	var messageIDs []string
+
+	for _, stream := range streams {
+		for _, message := range stream.Messages {
+			taskJSON, exists := message.Values["task"].(string)
+			if !exists {
+				tsm.logger.Warn("Message missing task data",
+					"stream", stream.Stream,
+					"message_id", message.ID)
+				continue
+			}
+
+			var task TaskStreamData
+			if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
+				tsm.logger.Error("Failed to unmarshal task data",
+					"stream", stream.Stream,
+					"message_id", message.ID,
+					"error", err)
+				continue
+			}
+
+			tasks = append(tasks, task)
+			messageIDs = append(messageIDs, message.ID)
+
+			tsm.logger.Debug("Task read from stream",
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
+				"stream", stream.Stream,
+				"message_id", message.ID)
+		}
+	}
+
+	tsm.logger.Info("Tasks read from stream successfully",
+		"stream", stream,
+		"task_count", len(tasks),
+		"duration", duration)
+
+	return tasks, messageIDs, nil
+}

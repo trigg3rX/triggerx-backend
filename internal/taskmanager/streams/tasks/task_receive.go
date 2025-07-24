@@ -1,11 +1,97 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/performers"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// ReceiveTaskFromScheduler is the main entry point for schedulers to submit tasks
+func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskRequest) (*types.PerformerData, error) {
+	taskCount := len(request.SendTaskDataToKeeper.TaskID)
+	tsm.logger.Info("Receiving task from scheduler",
+		"task_ids", request.SendTaskDataToKeeper.TaskID,
+		"task_count", taskCount,
+		"scheduler_id", request.SchedulerID,
+		"source", request.Source)
+
+	// Get performer data for immediate response
+	performerData := performers.GetPerformerData()
+	if performerData.KeeperID == 0 {
+		tsm.logger.Error("No performers available for tasks", "task_count", taskCount)
+		return nil, fmt.Errorf("no performers available")
+	}
+
+	// Handle batch requests by creating individual task stream data for each task
+	if taskCount > 1 {
+		// This is a batch request (likely from time scheduler)
+		tsm.logger.Info("Processing batch request", "task_count", taskCount)
+
+		for i := 0; i < taskCount; i++ {
+			// Create individual task data for each task in the batch
+			individualTaskData := types.SendTaskDataToKeeper{
+				TaskID:           []int64{request.SendTaskDataToKeeper.TaskID[i]},
+				PerformerData:    request.SendTaskDataToKeeper.PerformerData,
+				TargetData:       []types.TaskTargetData{request.SendTaskDataToKeeper.TargetData[i]},
+				TriggerData:      []types.TaskTriggerData{request.SendTaskDataToKeeper.TriggerData[i]},
+				SchedulerID:      request.SendTaskDataToKeeper.SchedulerID,
+				ManagerSignature: request.SendTaskDataToKeeper.ManagerSignature,
+			}
+
+			taskStreamData := TaskStreamData{
+				JobID:                individualTaskData.TargetData[0].JobID,
+				TaskDefinitionID:     individualTaskData.TargetData[0].TaskDefinitionID,
+				CreatedAt:            time.Now(),
+				RetryCount:           0,
+				SendTaskDataToKeeper: individualTaskData,
+			}
+
+			// Add individual task to batch processor
+			err := tsm.batchProcessor.AddTask(&taskStreamData)
+			if err != nil {
+				tsm.logger.Error("Failed to add individual task to batch processor",
+					"task_id", individualTaskData.TaskID[0],
+					"batch_index", i,
+					"source", request.Source,
+					"error", err)
+				// Continue processing other tasks in the batch
+				continue
+			}
+
+			tsm.logger.Debug("Individual task added to batch processor",
+				"task_id", individualTaskData.TaskID[0],
+				"batch_index", i)
+		}
+	} else {
+		// This is a single task request (likely from condition scheduler)
+		taskStreamData := TaskStreamData{
+			JobID:                request.SendTaskDataToKeeper.TargetData[0].JobID,
+			TaskDefinitionID:     request.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
+			CreatedAt:            time.Now(),
+			RetryCount:           0,
+			SendTaskDataToKeeper: request.SendTaskDataToKeeper,
+		}
+
+		// Add task to batch processor for improved performance
+		err := tsm.batchProcessor.AddTask(&taskStreamData)
+		if err != nil {
+			tsm.logger.Error("Failed to add task to batch processor",
+				"task_id", request.SendTaskDataToKeeper.TaskID[0],
+				"source", request.Source,
+				"error", err)
+			return nil, fmt.Errorf("failed to add task to batch processor: %w", err)
+		}
+	}
+
+	tsm.logger.Info("Tasks received and added to batch processor",
+		"task_count", taskCount,
+		"performer_id", performerData.KeeperID,
+		"source", request.Source)
+
+	return &performerData, nil
+}
 
 func (tsm *TaskStreamManager) UpdateDatabase(ipfsData types.IPFSData) {
 	tsm.logger.Info("Updating task stream and database ...")
