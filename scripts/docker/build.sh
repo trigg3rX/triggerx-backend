@@ -21,13 +21,14 @@ OPTIONS:
 
 AVAILABLE SERVICES:
     keeper              - TriggerX Keeper service (uses Dockerfile.keeper)
+    imua-keeper         - TriggerX Imua Keeper service (uses Dockerfile.imua-keeper)
     dbserver            - Database server service
     registrar           - Registrar service
     health              - Health monitoring service
     taskmanager         - Task manager service
     schedulers/time     - Time-based scheduler service
     schedulers/condition - Condition-based scheduler service
-    all                 - Build all services in parallel (excluding keeper)
+    all                 - Build all services in parallel (excluding keepers)
 
 VERSION FORMAT:
     Must follow semantic versioning: MAJOR.MINOR.PATCH
@@ -103,8 +104,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|dbserver|registrar|health|taskmanager|schedulers/time|schedulers/condition|all)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: keeper, dbserver, registrar, health, taskmanager, schedulers/time, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(keeper|imua-keeper|dbserver|registrar|health|taskmanager|schedulers/time|schedulers/condition|all)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: keeper, imua-keeper, dbserver, registrar, health, taskmanager, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 
@@ -181,6 +182,11 @@ elif [[ "$SERVICE" == "keeper" ]]; then
     docker build --no-cache \
         -f Dockerfile.keeper \
         -t triggerx-keeper:${VERSION} .
+elif [[ "$SERVICE" == "imua-keeper" ]]; then
+    echo "Building $SERVICE..."
+    docker build --no-cache \
+        -f Dockerfile.imua-keeper \
+        -t triggerx-imua-keeper:${VERSION} .
 else
     echo "Building $SERVICE..."
     # Convert service name to Docker-compatible name
