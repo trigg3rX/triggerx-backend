@@ -12,24 +12,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-// isChainAVS determines if the given AVS address requires a validator public key
-func isChainAVS(avsAddress string) bool {
-	// List of known chain AVS addresses that require validator keys
-	chainAVSAddresses := map[string]bool{
-		// Add known chain AVS addresses here
-		"0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5": true,
-	}
-
-	// Check if this is a known chain AVS
-	if _, exists := chainAVSAddresses[strings.ToLower(avsAddress)]; exists {
-		return true
-	}
-
-	// Default to non-chain AVS (no validator key needed)
-	return false
-}
-
-// OptInToAVS handles the AVS opt-in process
+// OptInToAVS handles the AVS opt-in process using cast send
 func OptInToAVS(ctx *cli.Context) error {
 	log.Println("Starting AVS opt-in process...")
 
@@ -40,170 +23,145 @@ func OptInToAVS(ctx *cli.Context) error {
 
 	// Validate required environment variables
 	requiredVars := map[string]string{
-		"IMUA_HOME_DIR":         os.Getenv("IMUA_HOME_DIR"),
-		"IMUA_ACCOUNT_KEY_NAME": os.Getenv("IMUA_ACCOUNT_KEY_NAME"),
-		"IMUA_CHAIN_ID":         os.Getenv("IMUA_CHAIN_ID"),
-		"IMUA_COS_GRPC_URL":     os.Getenv("IMUA_COS_GRPC_URL"),
-		"KEYRING_PASSWORD":      os.Getenv("KEYRING_PASSWORD"),
-		"AVS_ADDRESS":           os.Getenv("AVS_ADDRESS"),
+		"AVS_ADDRESS":       os.Getenv("AVS_ADDRESS"),
+		"IMUA_PRIVATE_KEY":  os.Getenv("IMUA_PRIVATE_KEY"),
+		"RPC_URL":          os.Getenv("RPC_URL"),
 	}
 
+	// Set default values if not provided
+	if requiredVars["AVS_ADDRESS"] == "" {
+		requiredVars["AVS_ADDRESS"] = "0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5"
+	}
+	if requiredVars["RPC_URL"] == "" {
+		requiredVars["RPC_URL"] = "https://api-eth.exocore-restaking.com"
+	}
+
+	// Check required variables
 	for name, value := range requiredVars {
 		if value == "" {
 			return fmt.Errorf("%s environment variable not set", name)
 		}
 	}
 
-	// Log configuration
+	// Log configuration (redact private key)
 	log.Printf("AVS opt-in configuration:")
 	for name, value := range requiredVars {
-		if name != "KEYRING_PASSWORD" {
+		if name != "IMUA_PRIVATE_KEY" {
 			log.Printf("- %s: %s", name, value)
 		} else {
 			log.Printf("- %s: [redacted]", name)
 		}
 	}
 
-	// Step 1: Prepare validator key if needed
-	validatorKey := ""
-	if isChainAVS(requiredVars["AVS_ADDRESS"]) {
-		log.Println("\n🔑 Preparing validator key for chain AVS...")
-		validatorCmd := exec.Command("imuad",
-			"--home", requiredVars["IMUA_HOME_DIR"],
-			"tendermint", "show-validator",
-		)
-
-		validatorOutput, err := validatorCmd.Output()
-		if err != nil {
-			return fmt.Errorf("failed to get validator consensus key: %v", err)
-		}
-		validatorKey = strings.TrimSpace(string(validatorOutput))
-		log.Printf("Using validator key: %s", validatorKey)
-	} else {
-		log.Println("\nℹ️ Non-chain AVS detected - validator key not required")
+	// Check if cast is available
+	if err := checkCastAvailable(); err != nil {
+		return fmt.Errorf("cast command not available: %v", err)
 	}
 
-	// Step 2: Build and execute opt-in command
-	log.Println("\n🚀 Executing opt-in to AVS transaction...")
-	args := []string{
-		"--home", requiredVars["IMUA_HOME_DIR"],
-		"tx", "operator", "opt-into-avs",
+	// Execute the cast send command
+	log.Println("\n🚀 Executing registerOperatorToAVS transaction...")
+	
+	castCmd := exec.Command("cast", "send",
 		requiredVars["AVS_ADDRESS"],
-		"--from", requiredVars["IMUA_ACCOUNT_KEY_NAME"],
-		"--chain-id", requiredVars["IMUA_CHAIN_ID"],
-		"--node", requiredVars["IMUA_COS_GRPC_URL"],
-		"--gas", "200000", // Increased gas limit for safety
-		"--gas-prices", "7hua",
-		"--keyring-backend", "file",
-		"-y",
-	}
+		"registerOperatorToAVS()",
+		"--rpc-url", requiredVars["RPC_URL"],
+		"--private-key", requiredVars["IMUA_PRIVATE_KEY"],
+		"--gas-limit", "1000000",
+	)
 
-	// Add validator key only for chain AVS
-	if validatorKey != "" {
-		args = append(args, validatorKey)
-	}
-
-	optInCmd := exec.Command("imuad", args...)
-	optInCmd.Stdin = strings.NewReader(requiredVars["KEYRING_PASSWORD"] + "\n")
-
-	optInOutput, err := optInCmd.CombinedOutput()
+	// Execute the command and capture output
+	castOutput, err := castCmd.CombinedOutput()
 	if err != nil {
-		log.Printf("❌ Opt-in command output: %s", string(optInOutput))
-
+		log.Printf("❌ Cast send command output: %s", string(castOutput))
+		
 		// Handle specific error cases
-		if strings.Contains(string(optInOutput), "minimum self delegation") {
-			return fmt.Errorf("insufficient self-delegation (minimum $1,000 USD required)")
+		if strings.Contains(string(castOutput), "insufficient funds") {
+			return fmt.Errorf("insufficient ETH balance for gas fees")
 		}
-		if strings.Contains(string(optInOutput), "public key is not required") {
-			return fmt.Errorf("validator key provided for non-chain AVS - please contact support")
+		if strings.Contains(string(castOutput), "execution reverted") {
+			return fmt.Errorf("transaction reverted - check if already registered or meet requirements")
 		}
-
-		return fmt.Errorf("failed to opt-in to AVS: %v", err)
+		if strings.Contains(string(castOutput), "invalid private key") {
+			return fmt.Errorf("invalid private key format")
+		}
+		
+		return fmt.Errorf("failed to execute registerOperatorToAVS: %v", err)
 	}
 
-	log.Printf("✅ Opt-in submitted: %s", string(optInOutput))
+	log.Printf("✅ Transaction submitted: %s", string(castOutput))
 
-	// Step 3: Transaction verification
+	// Extract transaction hash from output
 	var txHash string
-	if strings.Contains(string(optInOutput), "txhash:") {
-		lines := strings.Split(string(optInOutput), "\n")
-		for _, line := range lines {
-			if strings.Contains(line, "txhash:") {
-				txHash = strings.TrimSpace(strings.Split(line, "txhash:")[1])
-				break
-			}
+	outputStr := string(castOutput)
+	
+	// Cast typically outputs just the transaction hash
+	lines := strings.Split(strings.TrimSpace(outputStr), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Look for a hex string that looks like a transaction hash (0x followed by 64 hex chars)
+		if strings.HasPrefix(line, "0x") && len(line) == 66 {
+			txHash = line
+			break
 		}
 	}
 
 	if txHash != "" {
 		log.Printf("\n🔍 Transaction hash: %s", txHash)
 		log.Println("Waiting for transaction confirmation...")
-		time.Sleep(5 * time.Second) // Increased wait time
+		time.Sleep(10 * time.Second) // Wait for block confirmation
 
-		// Query transaction status
-		queryTxCmd := exec.Command("imuad",
-			"--home", requiredVars["IMUA_HOME_DIR"],
-			"query", "tx", txHash,
-			"--node", requiredVars["IMUA_COS_GRPC_URL"],
-			"--output", "json",
-		)
-
-		queryTxOutput, queryErr := queryTxCmd.Output()
-		if queryErr != nil {
-			log.Printf("⚠️ Could not verify transaction status: %v", queryErr)
-			log.Println("Transaction was submitted but confirmation failed. Check chain explorer later.")
-		} else {
-			if strings.Contains(string(queryTxOutput), `"code":0`) {
-				log.Println("🎉 Transaction confirmed successfully!")
-			} else {
-				log.Printf("Transaction details: %s", string(queryTxOutput))
-				log.Println("⚠️ Transaction may have failed - check details above")
-			}
+		// Verify transaction status using cast
+		if err := verifyTransaction(txHash, requiredVars["RPC_URL"]); err != nil {
+			log.Printf("⚠️ Could not verify transaction status: %v", err)
+			log.Println("Transaction was submitted but confirmation failed. Check block explorer.")
 		}
-	}
-
-	// Step 4: Final verification
-	log.Println("\n🔎 Verifying AVS opt-in status...")
-	getAddrCmd := exec.Command("imuad",
-		"--home", requiredVars["IMUA_HOME_DIR"],
-		"keys", "show", "-a", requiredVars["IMUA_ACCOUNT_KEY_NAME"],
-		"--keyring-backend", "file",
-	)
-	getAddrCmd.Stdin = strings.NewReader(requiredVars["KEYRING_PASSWORD"] + "\n")
-
-	addrOutput, err := getAddrCmd.Output()
-	if err != nil {
-		log.Printf("⚠️ Failed to get operator address: %v", err)
 	} else {
-		operatorAddr := strings.TrimSpace(string(addrOutput))
-		log.Printf("Operator Address: %s", operatorAddr)
-
-		// Check AVS list
-		avsListCmd := exec.Command("imuad",
-			"--home", requiredVars["IMUA_HOME_DIR"],
-			"query", "operator", "get-avs-list",
-			operatorAddr,
-			"--node", requiredVars["IMUA_COS_GRPC_URL"],
-			"--output", "json",
-		)
-
-		if avsListOutput, err := avsListCmd.Output(); err == nil {
-			if strings.Contains(string(avsListOutput), requiredVars["AVS_ADDRESS"]) {
-				log.Println("✅ Successfully opted into AVS!")
-			} else {
-				log.Println("⚠️ AVS not yet visible in operator's AVS list")
-				log.Println("This may take some time to propagate. Check again later.")
-			}
-		} else {
-			log.Printf("⚠️ Failed to query AVS list: %v", err)
-		}
+		log.Println("⚠️ Could not extract transaction hash from output")
+		log.Println("Transaction may have been submitted. Check your wallet or block explorer.")
 	}
 
 	log.Println("\n✨ AVS opt-in process completed!")
 	log.Println("Next steps:")
-	log.Println("- Monitor your validator status")
-	log.Println("- Ensure sufficient self-delegation")
-	log.Println("- Check AVS dashboard for confirmation")
+	log.Println("- Check transaction on block explorer")
+	log.Println("- Monitor your operator status on AVS dashboard")
+	log.Printf("- Transaction hash: %s", txHash)
 
+	return nil
+}
+
+// checkCastAvailable verifies that the cast command is available
+func checkCastAvailable() error {
+	cmd := exec.Command("cast", "--help")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("cast command not found. Please install Foundry toolkit: https://getfoundry.sh/")
+	}
+	return nil
+}
+
+// verifyTransaction checks if the transaction was successful
+func verifyTransaction(txHash, rpcURL string) error {
+	log.Println("🔍 Verifying transaction status...")
+	
+	// Use cast to get transaction receipt
+	receiptCmd := exec.Command("cast", "receipt", txHash, "--rpc-url", rpcURL)
+	receiptOutput, err := receiptCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get transaction receipt: %v", err)
+	}
+
+	receiptStr := string(receiptOutput)
+	
+	// Check if transaction was successful (status: 0x1 means success)
+	if strings.Contains(receiptStr, "status") && strings.Contains(receiptStr, "0x1") {
+		log.Println("🎉 Transaction confirmed successfully!")
+		return nil
+	} else if strings.Contains(receiptStr, "status") && strings.Contains(receiptStr, "0x0") {
+		log.Println("❌ Transaction failed!")
+		log.Printf("Receipt: %s", receiptStr)
+		return fmt.Errorf("transaction failed with status 0x0")
+	}
+	
+	log.Println("⚠️ Transaction status unclear")
+	log.Printf("Receipt: %s", receiptStr)
 	return nil
 }
