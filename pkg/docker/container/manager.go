@@ -224,7 +224,12 @@ func (m *Manager) PullImage(ctx context.Context, imageName string) error {
 		m.logger.Errorf("Failed to pull image: %v", err)
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		err := reader.Close()
+		if err != nil {
+			m.logger.Errorf("Failed to close image pull reader: %v", err)
+		}
+	}()
 
 	// Read the output to ensure the pull completes
 	buf := new(bytes.Buffer)

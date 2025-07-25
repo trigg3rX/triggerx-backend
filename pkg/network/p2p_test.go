@@ -298,7 +298,10 @@ func TestLegacyFunctions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp node: %v", err)
 		}
-		tempNode.Close()
+		err = tempNode.Close()
+		if err != nil {
+			t.Fatalf("Failed to close temp node: %v", err)
+		}
 
 		// Now test legacy function
 		host, err := SetupServiceWithRegistry(ctx, serviceName, registry)
@@ -310,7 +313,10 @@ func TestLegacyFunctions(t *testing.T) {
 			t.Fatal("Expected host to be created")
 		}
 
-		host.Close()
+		err = host.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host: %v", err)
+		}
 	})
 }
 
@@ -319,7 +325,10 @@ func TestLegacyFunctions(t *testing.T) {
 func createTestRegistry(t *testing.T) *PeerRegistry {
 	// Create test data directory
 	testDir := filepath.Join("testdata", "test_registry")
-	os.RemoveAll(testDir) // Clean up any existing test data
+	err := os.RemoveAll(testDir) // Clean up any existing test data
+	if err != nil {
+		t.Fatalf("Failed to remove test registry directory: %v", err)
+	}
 
 	// Create a temporary registry with custom data directory
 	registry := &PeerRegistry{
@@ -345,7 +354,10 @@ func createTestRegistry(t *testing.T) *PeerRegistry {
 	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(testDir)
+		err := os.RemoveAll(testDir)
+		if err != nil {
+			t.Fatalf("Failed to remove test registry directory: %v", err)
+		}
 	})
 
 	return registry
@@ -397,8 +409,14 @@ func createTestPrivateKeys(t *testing.T) {
 
 	// Schedule cleanup
 	t.Cleanup(func() {
-		os.RemoveAll(serviceKeysPath)
-		os.RemoveAll(keeperIdentityPath)
+		err := os.RemoveAll(serviceKeysPath)
+		if err != nil {
+			t.Fatalf("Failed to remove service keys: %v", err)
+		}
+		err = os.RemoveAll(keeperIdentityPath)
+		if err != nil {
+			t.Fatalf("Failed to remove keeper identity: %v", err)
+		}
 	})
 }
 
@@ -423,13 +441,19 @@ func BenchmarkNewP2PNode(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to create P2P node: %v", err)
 		}
-		node.Close()
+		err = node.Close()
+		if err != nil {
+			b.Fatalf("Failed to close P2P node: %v", err)
+		}
 	}
 }
 
 func createTestRegistryForBench(b *testing.B) *PeerRegistry {
 	testDir := filepath.Join("testdata", "bench_registry")
-	os.RemoveAll(testDir)
+	err := os.RemoveAll(testDir)
+	if err != nil {
+		b.Fatalf("Failed to remove test registry directory: %v", err)
+	}
 
 	// Create a temporary registry with custom data directory
 	registry := &PeerRegistry{
@@ -455,7 +479,10 @@ func createTestRegistryForBench(b *testing.B) *PeerRegistry {
 	}
 
 	b.Cleanup(func() {
-		os.RemoveAll(testDir)
+		err := os.RemoveAll(testDir)
+		if err != nil {
+			b.Fatalf("Failed to remove test registry directory: %v", err)
+		}
 	})
 
 	return registry

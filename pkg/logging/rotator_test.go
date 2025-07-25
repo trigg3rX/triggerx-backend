@@ -13,14 +13,24 @@ func TestSequentialRotator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Fatalf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	// Create a test file path
 	testFile := filepath.Join(tempDir, "2025-07-01.log")
 
 	// Create a rotator with small size for testing (1KB)
 	rotator := NewSequentialRotator(testFile, 1, 30, 5, false) // 1KB max size
-	defer rotator.Close()
+	defer func() {
+		err := rotator.Close()
+		if err != nil {
+			t.Fatalf("Failed to close rotator: %v", err)
+		}
+	}()
 
 	// Write smaller chunks to trigger rotations more reliably
 	testData := strings.Repeat("This is a test log line.\n", 20) // ~500 bytes
@@ -79,7 +89,12 @@ func TestSequentialRotatorNaming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Fatalf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	testFile := filepath.Join(tempDir, "test.log")
 	rotator := NewSequentialRotator(testFile, 1, 30, 10, false) // 1KB max size
@@ -97,7 +112,10 @@ func TestSequentialRotatorNaming(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create test file %s: %v", file, err)
 		}
-		f.Close()
+		err = f.Close()
+		if err != nil {
+			t.Fatalf("Failed to close test file %s: %v", file, err)
+		}
 	}
 
 	// Test getNextSequenceNumber with existing files
@@ -106,5 +124,8 @@ func TestSequentialRotatorNaming(t *testing.T) {
 		t.Errorf("Expected next sequence to be 6, got %d", nextSeq)
 	}
 
-	rotator.Close()
+	err = rotator.Close()
+	if err != nil {
+		t.Fatalf("Failed to close rotator: %v", err)
+	}
 }

@@ -427,7 +427,10 @@ func (cc *ChainConnection) close() error {
 	cc.isConnected = false
 
 	if cc.wsConn != nil {
-		cc.wsConn.Close()
+		err := cc.wsConn.Close()
+		if err != nil {
+			cc.logger.Errorf("Failed to close WebSocket connection: %v", err)
+		}
 	}
 
 	if cc.ethClient != nil {

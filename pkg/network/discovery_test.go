@@ -34,7 +34,12 @@ func TestNewDiscovery(t *testing.T) {
 	// Create a test host
 	host, err := libp2p.New()
 	require.NoError(t, err)
-	defer host.Close()
+	defer func() {
+		err := host.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host: %v", err)
+		}
+	}()
 
 	tests := []struct {
 		name        string
@@ -71,7 +76,12 @@ func TestSavePeerInfo(t *testing.T) {
 	// Create test host
 	host1, err := libp2p.New()
 	require.NoError(t, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	discovery := NewDiscovery(ctx, host1, ServiceManager, logger)
 
@@ -88,11 +98,21 @@ func TestConnectToPeer(t *testing.T) {
 	// Create test hosts
 	host1, err := libp2p.New()
 	require.NoError(t, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	host2, err := libp2p.New()
 	require.NoError(t, err)
-	defer host2.Close()
+	defer func() {
+		err := host2.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host2: %v", err)
+		}
+	}()
 
 	discovery1 := NewDiscovery(ctx, host1, ServiceManager, logger)
 	discovery2 := NewDiscovery(ctx, host2, ServiceQuorum, logger)
@@ -123,15 +143,30 @@ func TestGetConnectedPeers(t *testing.T) {
 	// Create test hosts
 	host1, err := libp2p.New()
 	require.NoError(t, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	host2, err := libp2p.New()
 	require.NoError(t, err)
-	defer host2.Close()
+	defer func() {
+		err := host2.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host2: %v", err)
+		}
+	}()
 
 	host3, err := libp2p.New()
 	require.NoError(t, err)
-	defer host3.Close()
+	defer func() {
+		err := host3.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host3: %v", err)
+		}
+	}()
 
 	discovery1 := NewDiscovery(ctx, host1, ServiceManager, logger)
 	discovery2 := NewDiscovery(ctx, host2, ServiceQuorum, logger)
@@ -166,11 +201,21 @@ func TestIsConnected(t *testing.T) {
 	// Create test hosts
 	host1, err := libp2p.New()
 	require.NoError(t, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	host2, err := libp2p.New()
 	require.NoError(t, err)
-	defer host2.Close()
+	defer func() {
+		err := host2.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host2: %v", err)
+		}
+	}()
 
 	discovery1 := NewDiscovery(ctx, host1, ServiceManager, logger)
 	discovery2 := NewDiscovery(ctx, host2, ServiceQuorum, logger)
@@ -199,7 +244,12 @@ func TestDiscoveryWithServiceRegistry(t *testing.T) {
 
 	host1, err := libp2p.New()
 	require.NoError(t, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	discovery := NewDiscovery(ctx, host1, ServiceManager, logger)
 
@@ -218,7 +268,12 @@ func TestDiscoveryLogger(t *testing.T) {
 
 	host, err := libp2p.New()
 	require.NoError(t, err)
-	defer host.Close()
+	defer func() {
+		err := host.Close()
+		if err != nil {
+			t.Fatalf("Failed to close host: %v", err)
+		}
+	}()
 
 	discovery := NewDiscovery(ctx, host, ServiceManager, logger)
 
@@ -246,7 +301,12 @@ func TestDiscoveryMultipleConnections(t *testing.T) {
 	for i := 0; i < numHosts; i++ {
 		host, err := libp2p.New()
 		require.NoError(t, err)
-		defer host.Close()
+		defer func() {
+			err := host.Close()
+			if err != nil {
+				t.Fatalf("Failed to close host: %v", err)
+			}
+		}()
 		hosts[i] = host
 
 		serviceName := fmt.Sprintf("service-%d", i)
@@ -286,7 +346,12 @@ func BenchmarkNewDiscovery(b *testing.B) {
 	ctx := context.Background()
 	host, err := libp2p.New()
 	require.NoError(b, err)
-	defer host.Close()
+	defer func() {
+		err := host.Close()
+		if err != nil {
+			b.Fatalf("Failed to close host: %v", err)
+		}
+	}()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -299,7 +364,12 @@ func BenchmarkSavePeerInfo(b *testing.B) {
 	ctx := context.Background()
 	host1, err := libp2p.New()
 	require.NoError(b, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			b.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	discovery := NewDiscovery(ctx, host1, ServiceManager, logger)
 
@@ -316,11 +386,21 @@ func BenchmarkConnectToPeer(b *testing.B) {
 	ctx := context.Background()
 	host1, err := libp2p.New()
 	require.NoError(b, err)
-	defer host1.Close()
+	defer func() {
+		err := host1.Close()
+		if err != nil {
+			b.Fatalf("Failed to close host1: %v", err)
+		}
+	}()
 
 	host2, err := libp2p.New()
 	require.NoError(b, err)
-	defer host2.Close()
+	defer func() {
+		err := host2.Close()
+		if err != nil {
+			b.Fatalf("Failed to close host2: %v", err)
+		}
+	}()
 
 	discovery1 := NewDiscovery(ctx, host1, ServiceManager, logger)
 	discovery2 := NewDiscovery(ctx, host2, ServiceQuorum, logger)

@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -205,7 +206,10 @@ func (r *SequentialRotator) cleanupOldFiles() {
 	// Remove files that exceed maxBackups
 	if r.maxBackups > 0 && len(fileInfos) > r.maxBackups {
 		for i := r.maxBackups; i < len(fileInfos); i++ {
-			os.Remove(fileInfos[i].path)
+			err := os.Remove(fileInfos[i].path)
+			if err != nil {
+				log.Println("Failed to remove log file: ", err)
+			}
 		}
 		fileInfos = fileInfos[:r.maxBackups]
 	}
@@ -215,7 +219,10 @@ func (r *SequentialRotator) cleanupOldFiles() {
 		cutoff := time.Now().AddDate(0, 0, -r.maxAge)
 		for _, fi := range fileInfos {
 			if fi.modTime.Before(cutoff) {
-				os.Remove(fi.path)
+				err := os.Remove(fi.path)
+				if err != nil {
+					log.Println("Failed to remove log file: ", err)
+				}
 			}
 		}
 	}

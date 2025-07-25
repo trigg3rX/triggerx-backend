@@ -150,10 +150,7 @@ func (c *Client) PerformHealthCheck(ctx context.Context) (map[string]interface{}
 	}
 
 	// Overall health status
-	allHealthy := true
-	if pingErr != nil || setErr != nil {
-		allHealthy = false
-	}
+	allHealthy := pingErr == nil && setErr == nil
 
 	results["overall"] = map[string]interface{}{
 		"healthy":   allHealthy,

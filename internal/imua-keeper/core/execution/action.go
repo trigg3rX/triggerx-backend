@@ -100,7 +100,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	// According to the ABI, the function signature is:
 	// executeFunction(uint256 jobId, uint256 tgAmount, address target, bytes data)
 	// We use jobId from targetData.JobID, and tgAmount is determined by the execution result's total cost.
-	var tgAmountBigInt *big.Int = big.NewInt(0)
+	var tgAmountBigInt = big.NewInt(0)
 	if result != nil {
 		// Assuming TotalCost is in float64 and needs to be converted to wei (1e18 multiplier) if it's in ETH
 		tgAmountBigInt = new(big.Int).SetInt64(int64(result.Stats.TotalCost * 1e18))

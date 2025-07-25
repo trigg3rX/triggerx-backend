@@ -352,7 +352,8 @@ func setupKeeperNode(ctx context.Context, config KeeperConfig, registry *PeerReg
 }
 
 func LoadIdentity(nodeType string) (crypto.PrivKey, error) {
-	if nodeType == ServiceManager || nodeType == ServiceQuorum || nodeType == ServiceValidator {
+	switch nodeType {
+	case ServiceManager, ServiceQuorum, ServiceValidator:
 		privKeysPath := filepath.Join(BaseDataDir, RegistryDir, "services_privKeys.json")
 		data, err := os.ReadFile(privKeysPath)
 		if err != nil {
@@ -380,7 +381,7 @@ func LoadIdentity(nodeType string) (crypto.PrivKey, error) {
 		}
 
 		return crypto.UnmarshalPrivateKey(privKeyBytes)
-	} else if nodeType == ServiceKeeper {
+	case ServiceKeeper:
 		identityFile := filepath.Join(BaseDataDir, RegistryDir, "keeper_identity.json")
 
 		data, err := os.ReadFile(identityFile)

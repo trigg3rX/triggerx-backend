@@ -147,7 +147,12 @@ func (cl *ContainerLifecycle) GetContainerStats(ctx context.Context, containerID
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container stats: %w", err)
 	}
-	defer stats.Body.Close()
+	defer func() {
+		err := stats.Body.Close()
+		if err != nil {
+			cl.logger.Errorf("Failed to close container stats body: %v", err)
+		}
+	}()
 
 	// Docker stats stream JSON objects; decode the first one
 	var dockerStats container.StatsResponse

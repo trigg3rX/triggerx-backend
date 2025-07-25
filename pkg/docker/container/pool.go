@@ -414,7 +414,12 @@ func (p *ContainerPool) pullImage(ctx context.Context, imageName string) error {
 		p.logger.Errorf("Failed to pull image: %v", err)
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		err := reader.Close()
+		if err != nil {
+			p.logger.Errorf("Failed to close image pull reader: %v", err)
+		}
+	}()
 
 	p.logger.Infof("Successfully pulled image: %s", imageName)
 	return nil

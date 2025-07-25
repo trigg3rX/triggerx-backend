@@ -176,7 +176,12 @@ func (k *Keeper) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 		k.logger.Error("Failed to send request", "err", err)
 		return
 	}
-	defer response.Body.Close()
+	defer func() {
+		err := response.Body.Close()
+		if err != nil {
+			k.logger.Error("Failed to close response body", "err", err)
+		}
+	}()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {

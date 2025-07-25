@@ -98,7 +98,10 @@ func (c *Client) recreateConnection() error {
 
 	// Close existing connection
 	if c.redisClient != nil {
-		c.redisClient.Close()
+		err := c.redisClient.Close()
+		if err != nil {
+			c.logger.Errorf("Failed to close Redis client: %v", err)
+		}
 	}
 
 	// Parse config and create new connection
