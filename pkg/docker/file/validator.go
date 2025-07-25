@@ -116,7 +116,12 @@ func (v *CodeValidator) validateFileContent(filePath string, result *types.Valid
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			v.logger.Errorf("Failed to close file: %v", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	lineNumber := 0
@@ -196,7 +201,12 @@ func (v *CodeValidator) calculateComplexity(filePath string) float64 {
 		v.logger.Warnf("Failed to open file for complexity calculation: %v", err)
 		return 0.0
 	}
-	defer file.Close()
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			v.logger.Errorf("Failed to close file: %v", err)
+		}
+	}()
 
 	fileInfo, err := file.Stat()
 	if err != nil {

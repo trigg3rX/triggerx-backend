@@ -28,7 +28,12 @@ func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskRequest) (int
 	if err != nil {
 		return -1, fmt.Errorf("failed to create task: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			c.logger.Errorf("Failed to close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)

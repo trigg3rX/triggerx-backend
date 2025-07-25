@@ -41,7 +41,12 @@ func TestP2PBootstrapAndKeeperIntegration(t *testing.T) {
 	t.Logf("Creating bootstrap node...")
 	bootstrapNode, err := NewP2PNode(ctx, bootstrapConfig, registry)
 	require.NoError(t, err, "Failed to create bootstrap node")
-	defer bootstrapNode.Close()
+	defer func() {
+		err := bootstrapNode.Close()
+		if err != nil {
+			t.Fatalf("Failed to close bootstrap node: %v", err)
+		}
+	}()
 
 	// Wait for bootstrap node to fully initialize
 	time.Sleep(2 * time.Second)
@@ -66,7 +71,12 @@ func TestP2PBootstrapAndKeeperIntegration(t *testing.T) {
 	t.Logf("Creating keeper node...")
 	keeperNode, err := NewP2PNode(ctx, keeperConfig, registry)
 	require.NoError(t, err, "Failed to create keeper node")
-	defer keeperNode.Close()
+	defer func() {
+		err := keeperNode.Close()
+		if err != nil {
+			t.Fatalf("Failed to close keeper node: %v", err)
+		}
+	}()
 
 	// Wait for keeper node to initialize
 	time.Sleep(2 * time.Second)
@@ -135,7 +145,12 @@ func TestMultipleBootstrapNodes(t *testing.T) {
 		node, err := NewP2PNode(ctx, config, registry)
 		require.NoError(t, err, "Failed to create bootstrap node for %s", service)
 		nodes[i] = node
-		defer node.Close()
+		defer func() {
+			err := node.Close()
+			if err != nil {
+				t.Fatalf("Failed to close bootstrap node: %v", err)
+			}
+		}()
 
 		// Wait for node to initialize
 		time.Sleep(1 * time.Second)
@@ -190,7 +205,12 @@ func TestServiceDiscoveryFlow(t *testing.T) {
 
 	managerNode, err := NewP2PNode(ctx, managerConfig, registry)
 	require.NoError(t, err, "Failed to create manager node")
-	defer managerNode.Close()
+	defer func() {
+		err := managerNode.Close()
+		if err != nil {
+			t.Fatalf("Failed to close manager node: %v", err)
+		}
+	}()
 
 	time.Sleep(2 * time.Second)
 
@@ -235,24 +255,42 @@ func TestLegacyFunctionIntegration(t *testing.T) {
 
 	node, err := NewP2PNode(ctx, config, registry)
 	require.NoError(t, err, "Failed to create node with new API")
-	defer node.Close()
+	defer func() {
+		err := node.Close()
+		if err != nil {
+			t.Fatalf("Failed to close node: %v", err)
+		}
+	}()
 
 	time.Sleep(2 * time.Second)
 
 	// Now test legacy function
 	legacyHost, err := SetupServiceWithRegistry(ctx, ServiceManager, registry)
 	require.NoError(t, err, "Legacy function should work")
-	defer legacyHost.Close()
+	defer func() {
+		err := legacyHost.Close()
+		if err != nil {
+			t.Fatalf("Failed to close legacy host: %v", err)
+		}
+	}()
 
 	// Verify legacy host has the same peer ID as the new node since they're both manager services
 	assert.Equal(t, node.GetHost().ID(), legacyHost.ID(), "Legacy host should have same peer ID as it's the same service")
 
 	// Test keeper legacy function
-	os.Setenv("PUBLIC_IPV4_ADDRESS", "127.0.0.1")
-	os.Setenv("OPERATOR_P2P_PORT", "9401")
+	err = os.Setenv("PUBLIC_IPV4_ADDRESS", "127.0.0.1")
+	require.NoError(t, err, "Failed to set PUBLIC_IPV4_ADDRESS")
+	err = os.Setenv("OPERATOR_P2P_PORT", "9401")
+	require.NoError(t, err, "Failed to set OPERATOR_P2P_PORT")
 	defer func() {
-		os.Unsetenv("PUBLIC_IPV4_ADDRESS")
-		os.Unsetenv("OPERATOR_P2P_PORT")
+		err := os.Unsetenv("PUBLIC_IPV4_ADDRESS")
+		if err != nil {
+			t.Fatalf("Failed to unset PUBLIC_IPV4_ADDRESS: %v", err)
+		}
+		err = os.Unsetenv("OPERATOR_P2P_PORT")
+		if err != nil {
+			t.Fatalf("Failed to unset OPERATOR_P2P_PORT: %v", err)
+		}
 	}()
 
 	t.Logf("Legacy function integration test completed successfully")
@@ -291,7 +329,12 @@ func TestNetworkResilience(t *testing.T) {
 
 	node1, err := NewP2PNode(ctx, node1Config, registry)
 	require.NoError(t, err, "Failed to create node1")
-	defer node1.Close()
+	defer func() {
+		err := node1.Close()
+		if err != nil {
+			t.Fatalf("Failed to close node1: %v", err)
+		}
+	}()
 
 	node2, err := NewP2PNode(ctx, node2Config, registry)
 	require.NoError(t, err, "Failed to create node2")
@@ -305,7 +348,8 @@ func TestNetworkResilience(t *testing.T) {
 
 	// Simulate node2 going down
 	t.Logf("Simulating node2 shutdown...")
-	node2.Close()
+	err = node2.Close()
+	require.NoError(t, err, "Failed to close node2")
 
 	time.Sleep(2 * time.Second)
 
@@ -317,7 +361,12 @@ func TestNetworkResilience(t *testing.T) {
 	t.Logf("Recreating node2...")
 	node2, err = NewP2PNode(ctx, node2Config, registry)
 	require.NoError(t, err, "Failed to recreate node2")
-	defer node2.Close()
+	defer func() {
+		err := node2.Close()
+		if err != nil {
+			t.Fatalf("Failed to close node2: %v", err)
+		}
+	}()
 
 	time.Sleep(2 * time.Second)
 
@@ -342,8 +391,14 @@ func setupIntegrationTest(t *testing.T) {
 
 	t.Cleanup(func() {
 		// Clean up the created files after test
-		os.RemoveAll(filepath.Join(BaseDataDir, RegistryDir, "services_privKeys.json"))
-		os.RemoveAll(filepath.Join(BaseDataDir, RegistryDir, "keeper_identity.json"))
+		err := os.RemoveAll(filepath.Join(BaseDataDir, RegistryDir, "services_privKeys.json"))
+		if err != nil {
+			t.Fatalf("Failed to remove services_privKeys.json: %v", err)
+		}
+		err = os.RemoveAll(filepath.Join(BaseDataDir, RegistryDir, "keeper_identity.json"))
+		if err != nil {
+			t.Fatalf("Failed to remove keeper_identity.json: %v", err)
+		}
 	})
 }
 

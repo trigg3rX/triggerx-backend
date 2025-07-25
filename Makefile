@@ -52,6 +52,9 @@ start-condition-scheduler: ## Start the Condition Scheduler
 start-keeper: ## Start the Keeper
 	./scripts/services/start-keeper.sh
 
+start-imua-keeper: ## Start the Imua Keeper
+	./scripts/services/start-imua-keeper.sh
+
 ############################ GITHUB ACTIONS ####################################
 -------------------------GITHUB-ACTIONS-------------------------: ## 
 

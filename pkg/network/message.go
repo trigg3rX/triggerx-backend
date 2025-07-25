@@ -88,7 +88,12 @@ func (m *Messaging) GetHost() host.Host {
 
 func (m *Messaging) handleStream(stream network.Stream, onMessage func(Message)) {
 	reader := bufio.NewReader(stream)
-	defer stream.Close()
+	defer func() {
+		err := stream.Close()
+		if err != nil {
+			m.logger.Errorf("Failed to close stream: %v", err)
+		}
+	}()
 
 	for {
 		str, err := reader.ReadString('\n')
@@ -138,7 +143,12 @@ func (m *Messaging) SendMessage(to string, peerID peer.ID, content interface{}, 
 			time.Sleep(time.Second * time.Duration(1<<uint(i))) // Exponential backoff
 			continue
 		}
-		defer stream.Close()
+		defer func() {
+			err := stream.Close()
+			if err != nil {
+				m.logger.Errorf("Failed to close stream: %v", err)
+			}
+		}()
 
 		if _, err = stream.Write(msgBytes); err != nil {
 			lastErr = fmt.Errorf("error sending message: %w", err)
@@ -180,7 +190,12 @@ func (m *Messaging) BroadcastMessage(content interface{}) error {
 		if err != nil {
 			return fmt.Errorf("error opening stream: %w", err)
 		}
-		defer stream.Close()
+		defer func() {
+			err := stream.Close()
+			if err != nil {
+				m.logger.Errorf("Failed to close stream: %v", err)
+			}
+		}()
 
 		if _, err = stream.Write(msgBytes); err != nil {
 			return fmt.Errorf("error sending message: %w", err)
