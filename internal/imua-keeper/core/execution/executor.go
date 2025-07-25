@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/chainio"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/utils"
@@ -25,6 +26,7 @@ type TaskExecutor struct {
 	argConverter     *ArgumentConverter
 	validator        *validation.TaskValidator
 	aggregatorClient *aggregator.AggregatorClient
+	avsWriter        chainio.AvsWriter
 	logger           logging.Logger
 	nonceManagers    map[string]*NonceManager // Chain ID -> NonceManager
 	nonceMutex       sync.RWMutex
@@ -35,12 +37,14 @@ func NewTaskExecutor(
 	alchemyAPIKey string,
 	validator *validation.TaskValidator,
 	aggregatorClient *aggregator.AggregatorClient,
+	avsWriter chainio.AvsWriter,
 	logger logging.Logger) *TaskExecutor {
 	return &TaskExecutor{
 		alchemyAPIKey:    alchemyAPIKey,
 		argConverter:     &ArgumentConverter{},
 		validator:        validator,
 		aggregatorClient: aggregatorClient,
+		avsWriter:        avsWriter,
 		logger:           logger,
 		nonceManagers:    make(map[string]*NonceManager),
 	}
@@ -225,23 +229,53 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			e.logger.Info("IPFS data uploaded", "task_id", task.TaskID, "trace_id", traceID)
 
-			// aggregatorData := types.BroadcastDataForValidators{
-			// 	ProofOfTask:      proofData.ProofOfTask,
-			// 	Data:             []byte(cid),
-			// 	TaskDefinitionID: task.TargetData[idx].TaskDefinitionID,
-			// 	PerformerAddress: string(config.GetConsensusKeyPair().PublicKey().Marshal()),
-			// }
+			// Create task on-chain instead of sending to aggregator
+			taskName := fmt.Sprintf("Task_%d_%s", task.TaskID[0], time.Now().Format("20060102150405"))
+			taskDefinitionId := uint8(task.TargetData[idx].TaskDefinitionID)
 
-			// success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)
-			// if !success {
-			// 	e.logger.Error("Failed to send task result to aggregator", "task_id", task.TaskID, "error", err, "trace_id", traceID)
-			// 	resultCh <- struct {
-			// 		success bool
-			// 		err     error
-			// 	}{false, fmt.Errorf("failed to send task result to aggregator")}
-			// 	return
-			// }
-			e.logger.Info("Task result sent to aggregator", "task_id", task.TaskID, "trace_id", traceID)
+			// Use default values for task parameters
+			taskResponsePeriod := uint64(2)
+			taskChallengePeriod := uint64(2)
+			thresholdPercentage := uint8(80) // 80% threshold
+			taskStatisticalPeriod := uint64(2)
+
+			// Create task data from IPFS data
+			taskData, err := json.Marshal(ipfsData)
+			if err != nil {
+				e.logger.Error("Failed to marshal task data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, err}
+				return
+			}
+
+			// Create task on-chain
+			receipt, err := e.avsWriter.CreateNewTask(
+				ctx,
+				taskName,
+				taskDefinitionId,
+				taskData,
+				taskResponsePeriod,
+				taskChallengePeriod,
+				thresholdPercentage,
+				taskStatisticalPeriod,
+			)
+			if err != nil {
+				e.logger.Error("Failed to create task on-chain", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, fmt.Errorf("failed to create task on-chain: %w", err)}
+				return
+			}
+
+			e.logger.Info("Task created on-chain successfully",
+				"task_id", task.TaskID,
+				"trace_id", traceID,
+				"tx_hash", receipt.TxHash.String(),
+				"block_number", receipt.BlockNumber)
+
 			resultCh <- struct {
 				success bool
 				err     error

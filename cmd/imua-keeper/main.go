@@ -9,14 +9,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
+	"github.com/imua-xyz/imua-avs-sdk/signer"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/api"
+	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/chainio"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
-	// "github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
@@ -51,6 +54,38 @@ func main() {
 
 	collector := metrics.NewCollector()
 	logger.Info("[1/5] Dependency: Metrics collector Initialised")
+
+	// Initialize Ethereum client and AVS writer
+	ethClient, err := ethclient.Dial(config.GetEthRPCUrl())
+	if err != nil {
+		logger.Fatal("Failed to connect to Ethereum", "error", err)
+	}
+
+	chainId, err := ethClient.ChainID(context.Background())
+	if err != nil {
+		logger.Fatal("Cannot get chainId", "error", err)
+	}
+
+	// Setup signer and transaction manager
+	signer, _, err := signer.SignerFromConfig(signer.Config{
+		PrivateKey: config.GetPrivateKeyController(),
+	}, chainId)
+	if err != nil {
+		logger.Fatal("Failed to create signer", "error", err)
+	}
+
+	txMgr := txmgr.NewSimpleTxManager(ethClient, logger, signer, common.HexToAddress(config.GetKeeperAddress()))
+
+	// Initialize AVS writer
+	avsWriter, err := chainio.BuildChainWriter(
+		common.HexToAddress(config.GetAvsGovernanceAddress()),
+		ethClient,
+		logger,
+		txMgr)
+	if err != nil {
+		logger.Fatal("Failed to initialize AVS writer", "error", err)
+	}
+	logger.Info("[2/5] Dependency: AVS writer Initialised")
 
 	// Initialize clients: ECDSA
 	// aggregatorCfg := aggregator.AggregatorClientConfig{
@@ -107,7 +142,7 @@ func main() {
 
 	// Initialize task executor and validator
 	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, logger)
-	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, nil, logger)
+	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, nil, avsWriter, logger)
 
 	// Initialize API server
 	serverCfg := api.Config{
