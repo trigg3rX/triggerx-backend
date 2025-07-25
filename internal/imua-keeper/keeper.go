@@ -2,7 +2,11 @@ package keeper
 
 import (
 	"context"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -14,7 +18,8 @@ import (
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
 	"github.com/imua-xyz/imua-avs-sdk/nodeapi"
 	"github.com/imua-xyz/imua-avs-sdk/signer"
-	avs "github.com/trigg3rX/imua-contracts/bindings/contracts/TriggerXAvs"
+	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"
+	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/api/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/chainio"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -115,9 +120,9 @@ func (k *Keeper) Start(ctx context.Context) error {
 					k.logger.Error("Failed to sign task response", "err", err)
 					continue
 				}
-				taskInfo, _ := k.avsReader.GetTaskInfo(&bind.CallOpts{}, config.GetAvsGovernanceAddress(), e.TaskID)
+				taskInfo, _ := k.avsReader.GetTaskInfo(&bind.CallOpts{}, config.GetAvsGovernanceAddress(), e.TaskId.Uint64())
 				go func() {
-					_, err := k.SendSignedTaskResponseToChain(context.Background(), e.TaskID, resBytes, sig, taskInfo)
+					_, err := k.SendSignedTaskResponseToChain(context.Background(), e.TaskId.Uint64(), resBytes, sig, taskInfo)
 					if err != nil {
 						k.logger.Error("Failed to send signed task response to chain", "err", err)
 					}
@@ -147,15 +152,64 @@ func (k *Keeper) parseEvent(vLog ethtypes.Log) (interface{}, error) {
 // ProcessNewTaskCreatedLog processes a new task creation event
 func (k *Keeper) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 	k.logger.Info("Processing new task created event",
-		"taskID", e.TaskID,
-		"definitionHash", fmt.Sprintf("0x%x", e.DefinitionHash),
-		"kind", e.Kind)
+		"taskID", e.TaskId.Uint64(),
+		"definitionHash", fmt.Sprintf("0x%x", e.TaskDefinitionId),)
 
-	// TODO: Implement task processing logic
-	// This could include:
-	// - Fetching task details from the contract
-	// - Preparing task execution data
-	// - Setting up monitoring for the task
+	validateRequest := handlers.TaskValidationRequest{
+		Data: string(e.TaskData),
+	}
+	jsonData, err := json.Marshal(validateRequest)
+	if err != nil {
+		k.logger.Error("Failed to marshal validate request", "err", err)
+		return
+	}
+	request, err := http.NewRequest("POST", "http://localhost:"+config.GetOperatorRPCPort()+"/task/validate", bytes.NewBuffer(jsonData))
+	if err != nil {
+		k.logger.Error("Failed to create request", "err", err)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		k.logger.Error("Failed to send request", "err", err)
+		return
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		k.logger.Error("Failed to read response body", "err", err)
+		return
+	}
+
+	var validationResponse handlers.ValidationResponse
+	err = json.Unmarshal(body, &validationResponse)
+	if err != nil {
+		k.logger.Error("Failed to unmarshal response body", "err", err)
+		return
+	}
+
+	if validationResponse.Data {
+		k.logger.Info("Task is valid", "taskID", e.TaskId.Uint64())
+	} else {
+		k.logger.Error("Task is invalid", "taskID", e.TaskId.Uint64())
+	}
+
+	signature, responseBytes, err := k.SignTaskResponse()
+	if err != nil {
+		k.logger.Error("Failed to sign task response", "err", err)
+		return
+	}
+
+	taskInfo, _ := k.avsReader.GetTaskInfo(&bind.CallOpts{}, config.GetAvsGovernanceAddress(), e.TaskId.Uint64())
+	go func() {
+		_, err := k.SendSignedTaskResponseToChain(context.Background(), e.TaskId.Uint64(), responseBytes, signature, taskInfo)
+		if err != nil {
+			k.logger.Error("Failed to send signed task response to chain", "err", err)
+		}
+	}()
 }
 
 func (k *Keeper) SignTaskResponse() ([]byte, []byte, error) {
