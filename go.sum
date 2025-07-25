@@ -595,10 +595,10 @@ github.com/tklauser/go-sysconf v0.3.13 h1:GBUpcahXSpR2xN01jhkNAbTLRk2Yzgggk8IM08
 github.com/tklauser/go-sysconf v0.3.13/go.mod h1:zwleP4Q4OehZHGn4CYZDipCgg9usW5IJePewFCGVEa0=
 github.com/tklauser/numcpus v0.7.0 h1:yjuerZP127QG9m5Zh/mSO4wqurYil27tHrqwRoRjpr4=
 github.com/tklauser/numcpus v0.7.0/go.mod h1:bb6dMVcj8A42tSE7i32fsIUCbQNllK5iDguyOZRUzAY=
-github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724095030-b9f6fa91cd52 h1:Mt60a0+idViuK7dqwNjkCfK87eZcV9DewCWOQl/hz4Y=
-github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724095030-b9f6fa91cd52/go.mod h1:ehkuvptSNXTSmbkuX1eCLG1KrCOGj/q11A0vWBhZcC0=
-github.com/trigg3rX/triggerx-contracts v0.0.0-20250630112304-0df78d214171 h1:zoh2ecYuMFdpPfwD+WTu5+J7lSQCqD6Gg0m07/MqXR4=
-github.com/trigg3rX/triggerx-contracts v0.0.0-20250630112304-0df78d214171/go.mod h1:5Dy4BbATNO8qApyRmqxvJ6QyuDJv4MWAcMMjD7UGmVA=
+github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724143839-635671af334f h1:QRZUgdGK0xYDn2A5nvGECu6deYF4CuqiApsOMnBCJAk=
+github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724143839-635671af334f/go.mod h1:ehkuvptSNXTSmbkuX1eCLG1KrCOGj/q11A0vWBhZcC0=
+github.com/trigg3rX/triggerx-contracts v0.0.0-20250723085814-4f0a36310c50 h1:Cp5yrMCtEh7eqNXtKt+5+OJ5TNmke5BMaXNZTht/MCM=
+github.com/trigg3rX/triggerx-contracts v0.0.0-20250723085814-4f0a36310c50/go.mod h1:5Dy4BbATNO8qApyRmqxvJ6QyuDJv4MWAcMMjD7UGmVA=
 github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/ugorji/go/codec v1.2.12 h1:9LC83zGrHhuUA9l16C9AHXAqEV/2wBQ4nkvumAE65EE=

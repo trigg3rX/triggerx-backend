@@ -5,7 +5,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/ethclient"
-	avssub "github.com/trigg3rX/imua-contracts/bindings/contracts/TriggerXAvs"
+	avssub "github.com/trigg3rX/imua-contracts/bindings/contracts"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -46,7 +46,7 @@ func BuildAvsRegistryChainSubscriber(
 
 func (s *AvsRegistryChainSubscriber) SubscribeToNewTasks(newTaskCreatedChan chan *avssub.TriggerXAvsTaskCreated) event.Subscription {
 	sub, err := s.avssub.WatchTaskCreated(
-		&bind.WatchOpts{}, newTaskCreatedChan, []uint64{1},
+		&bind.WatchOpts{}, newTaskCreatedChan,
 	)
 	if err != nil {
 		s.logger.Error("Failed to subscribe to new  tasks", "err", err)

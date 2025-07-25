@@ -4,7 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethcommon "github.com/ethereum/go-ethereum/common"
-	avs "github.com/trigg3rX/imua-contracts/bindings/contracts/TriggerXAvs"
+	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 

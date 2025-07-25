@@ -3,11 +3,12 @@ package chainio
 import (
 	"context"
 	"errors"
+
 	gethcommon "github.com/ethereum/go-ethereum/common"
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
-	avs "github.com/trigg3rX/imua-contracts/bindings/contracts/TriggerXAvs"
+	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -16,6 +17,7 @@ type AvsWriter interface {
 		ctx context.Context,
 		name string,
 		taskDefinitionId uint8,
+		taskData []byte,
 		taskResponsePeriod uint64,
 		taskChallengePeriod uint64,
 		thresholdPercentage uint8,
@@ -90,6 +92,7 @@ func (w *ChainWriter) CreateNewTask(
 	ctx context.Context,
 	name string,
 	taskDefinitionId uint8,
+	taskData []byte,
 	taskResponsePeriod uint64,
 	taskChallengePeriod uint64,
 	thresholdPercentage uint8,
@@ -103,13 +106,16 @@ func (w *ChainWriter) CreateNewTask(
 		noSendTxOpts,
 		name,
 		taskDefinitionId,
+		taskData,
 		taskResponsePeriod,
 		taskChallengePeriod,
 		thresholdPercentage,
-		taskStatisticalPeriod)
+		taskStatisticalPeriod,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	receipt, err := w.txMgr.Send(ctx, tx)
 	if err != nil {
 		return nil, errors.New("failed to send tx with err: " + err.Error())

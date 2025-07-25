@@ -33,8 +33,8 @@ require (
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/stretchr/testify v1.10.0
-	github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724095030-b9f6fa91cd52
-	github.com/trigg3rX/triggerx-contracts v0.0.0-20250630112304-0df78d214171
+	github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724143839-635671af334f
+	github.com/trigg3rX/triggerx-contracts v0.0.0-20250723085814-4f0a36310c50
 	go.uber.org/zap v1.27.0
 )
 
