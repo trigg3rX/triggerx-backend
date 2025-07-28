@@ -61,12 +61,13 @@ func (bp *TaskBatchProcessor) Stop() {
 // AddTask adds a task to the batch processor
 func (bp *TaskBatchProcessor) AddTask(task *TaskStreamData) error {
 	bp.mu.Lock()
-	defer bp.mu.Unlock()
-
 	bp.tasks = append(bp.tasks, task)
+	shouldProcess := len(bp.tasks) >= bp.batchSize
+	bp.mu.Unlock()
 
 	// Process batch immediately if it reaches the batch size
-	if len(bp.tasks) >= bp.batchSize {
+	// Note: We release the lock before processing to avoid deadlocks
+	if shouldProcess {
 		return bp.processBatch()
 	}
 
@@ -102,24 +103,35 @@ func (bp *TaskBatchProcessor) processLoop() {
 
 // processBatch processes the current batch of tasks
 func (bp *TaskBatchProcessor) processBatch() error {
+	bp.mu.Lock()
 	if len(bp.tasks) == 0 {
+		bp.mu.Unlock()
 		return nil
 	}
 
+	// Copy tasks to avoid holding lock during processing
+	tasksToProcess := make([]*TaskStreamData, len(bp.tasks))
+	copy(tasksToProcess, bp.tasks)
+	bp.tasks = bp.tasks[:0] // Clear the slice
+	bp.mu.Unlock()
+
 	bp.streamMgr.logger.Info("Processing batch of tasks",
-		"batch_size", len(bp.tasks),
+		"batch_size", len(tasksToProcess),
 		"batch_timeout", bp.batchTimeout)
 
-	// Process tasks in parallel for better performance
+	// Process tasks with improved error handling
 	var wg sync.WaitGroup
-	errors := make(chan error, len(bp.tasks))
+	errors := make(chan error, len(tasksToProcess))
 
-	for _, task := range bp.tasks {
+	for _, task := range tasksToProcess {
 		wg.Add(1)
 		go func(t *TaskStreamData) {
 			defer wg.Done()
 			if err := bp.processSingleTask(t); err != nil {
 				errors <- err
+				bp.streamMgr.logger.Error("Failed to process task in batch",
+					"task_id", t.SendTaskDataToKeeper.TaskID[0],
+					"error", err)
 			}
 		}(task)
 	}
@@ -133,21 +145,17 @@ func (bp *TaskBatchProcessor) processBatch() error {
 		errs = append(errs, err)
 	}
 
-	// Store the original batch size before clearing
-	originalBatchSize := len(bp.tasks)
-
-	// Clear the batch
-	bp.tasks = bp.tasks[:0]
-
 	if len(errs) > 0 {
 		bp.streamMgr.logger.Error("Batch processing completed with errors",
 			"error_count", len(errs),
-			"total_tasks", originalBatchSize)
-		return fmt.Errorf("batch processing failed with %d errors", len(errs))
+			"total_tasks", len(tasksToProcess))
+		// Don't return error to avoid blocking the batch processor
+		// Instead, log the errors and continue
 	}
 
-	bp.streamMgr.logger.Info("Batch processing completed successfully",
-		"processed_tasks", originalBatchSize)
+	bp.streamMgr.logger.Info("Batch processing completed",
+		"processed_tasks", len(tasksToProcess),
+		"error_count", len(errs))
 	return nil
 }
 

@@ -35,8 +35,8 @@ type Config struct {
 	pinataHost string
 
 	// Fallback: Local Redis settings (optional)
-	localAddr     string
-	localPassword string
+	localAddr       string
+	localPassword   string
 	ottempoEndpoint string
 
 	// Common settings
@@ -62,10 +62,10 @@ type Config struct {
 	metricsUpdateInterval time.Duration
 
 	// Timeout and retry settings
-	retryDelay            time.Duration
-	requestTimeout        time.Duration
-	initializationTimeout time.Duration
-	maxRetryBackoff       time.Duration
+	retryDelay             time.Duration
+	requestTimeout         time.Duration
+	initializationTimeout  time.Duration
+	maxRetryBackoff        time.Duration
 	streamOperationTimeout time.Duration
 
 	// Batch processing settings
@@ -80,40 +80,40 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:             env.GetEnvBool("DEV_MODE", false),
-		redisRPCPort:        env.GetEnvString("REDIS_RPC_PORT", "9003"),
-		healthRPCUrl:        env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
-		dbServerRPCUrl:      env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:    env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		redisSigningKey:     env.GetEnvString("REDIS_SIGNING_KEY", ""),
-		redisSigningAddress: env.GetEnvString("REDIS_SIGNING_ADDRESS", ""),
-		upstashURL:          env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashToken:        env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		localAddr:           env.GetEnvString("REDIS_ADDR", "localhost:6379"),
-		localPassword:       env.GetEnvString("REDIS_PASSWORD", ""),
-		db:                  0,
-		poolSize:            env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		minIdleConns:        env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		maxRetries:          env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:         env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
-		readTimeout:         env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
-		writeTimeout:        env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
-		poolTimeout:         env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
-		streamMaxLen:        env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		jobStreamTTL:        env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
-		taskStreamTTL:       env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
-		cacheTTL:            env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
-		cleanupInterval:     env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
-		metricsUpdateInterval: env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
-		retryDelay:          env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
-		requestTimeout:      env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
-		initializationTimeout: env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
-		maxRetryBackoff:     env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
-		streamOperationTimeout: env.GetEnvDuration("REDIS_STREAM_OPERATION_TIMEOUT", 5*time.Second),
-		taskBatchSize:       env.GetEnvInt("REDIS_TASK_BATCH_SIZE", 10),
-		taskBatchTimeout:    env.GetEnvDuration("REDIS_TASK_BATCH_TIMEOUT", 5*time.Second),
-		pinataHost:          env.GetEnvString("PINATA_HOST", ""),
-		ottempoEndpoint:     env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		devMode:                env.GetEnvBool("DEV_MODE", false),
+		redisRPCPort:           env.GetEnvString("REDIS_RPC_PORT", "9003"),
+		healthRPCUrl:           env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
+		dbServerRPCUrl:         env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:       env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		redisSigningKey:        env.GetEnvString("REDIS_SIGNING_KEY", ""),
+		redisSigningAddress:    env.GetEnvString("REDIS_SIGNING_ADDRESS", ""),
+		upstashURL:             env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashToken:           env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		localAddr:              env.GetEnvString("REDIS_ADDR", "localhost:6379"),
+		localPassword:          env.GetEnvString("REDIS_PASSWORD", ""),
+		db:                     0,
+		poolSize:               env.GetEnvInt("REDIS_POOL_SIZE", 10),
+		minIdleConns:           env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+		maxRetries:             env.GetEnvInt("REDIS_MAX_RETRIES", 3),
+		dialTimeout:            env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:            env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:           env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:            env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
+		streamMaxLen:           env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
+		jobStreamTTL:           env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
+		taskStreamTTL:          env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
+		cacheTTL:               env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
+		cleanupInterval:        env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
+		metricsUpdateInterval:  env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
+		retryDelay:             env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
+		requestTimeout:         env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
+		initializationTimeout:  env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
+		maxRetryBackoff:        env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
+		streamOperationTimeout: env.GetEnvDuration("REDIS_STREAM_OPERATION_TIMEOUT", 15*time.Second),
+		taskBatchSize:          env.GetEnvInt("REDIS_TASK_BATCH_SIZE", 10),
+		taskBatchTimeout:       env.GetEnvDuration("REDIS_TASK_BATCH_TIMEOUT", 5*time.Second),
+		pinataHost:             env.GetEnvString("PINATA_HOST", ""),
+		ottempoEndpoint:        env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 	}
 
 	if !cfg.devMode {
