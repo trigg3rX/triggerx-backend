@@ -79,6 +79,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"user_address\": \"0x7Db951c0E6D8906687B459427eA3F3F2b456473B\",
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
+      \"created_chain_id\": \"11155420\",
       \"job_id\": $JOB_ID,
       \"job_title\": \"$JOB_TITLE\",
       \"task_definition_id\": $TASK_DEFINITION_ID,
