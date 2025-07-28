@@ -1,28 +1,29 @@
 package jobs
 
 import (
-	"context"
-	"encoding/json"
+	// "context"
+	// "encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	// "github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	// redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type JobStreamManager struct {
-	client         redisClient.RedisClientInterface
+	// client         redisClient.RedisClientInterface
 	logger         logging.Logger
 	consumerGroups map[string]bool
 }
 
-func NewJobStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*JobStreamManager, error) {
+// func NewJobStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*JobStreamManager, error) {
+func NewJobStreamManager(logger logging.Logger) (*JobStreamManager, error) {
 	logger.Info("Initializing JobStreamManager for condition scheduler...")
 
 	jsm := &JobStreamManager{
-		client:         client,
+		// client:         client,
 		logger:         logger,
 		consumerGroups: make(map[string]bool),
 	}
@@ -35,22 +36,22 @@ func NewJobStreamManager(logger logging.Logger, client redisClient.RedisClientIn
 func (jsm *JobStreamManager) Initialize() error {
 	jsm.logger.Info("Initializing job streams...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
 
 	// Initialize jobs:running stream (no expiration)
 	jsm.logger.Debug("Creating jobs:running stream")
-	if err := jsm.client.CreateStreamIfNotExists(ctx, JobsRunningStream, 0); err != nil {
-		jsm.logger.Error("Failed to initialize jobs:running stream", "error", err)
-		return fmt.Errorf("failed to initialize jobs:running stream: %w", err)
-	}
+	// if err := jsm.client.CreateStreamIfNotExists(ctx, JobsRunningStream, 0); err != nil {
+	// 	jsm.logger.Error("Failed to initialize jobs:running stream", "error", err)
+	// 	return fmt.Errorf("failed to initialize jobs:running stream: %w", err)
+	// }
 
 	// Initialize jobs:completed stream (24 hour expiration)
 	jsm.logger.Debug("Creating jobs:completed stream")
-	if err := jsm.client.CreateStreamIfNotExists(ctx, JobsCompletedStream, JobsCompletedTTL); err != nil {
-		jsm.logger.Error("Failed to initialize jobs:completed stream", "error", err)
-		return fmt.Errorf("failed to initialize jobs:completed stream: %w", err)
-	}
+	// if err := jsm.client.CreateStreamIfNotExists(ctx, JobsCompletedStream, JobsCompletedTTL); err != nil {
+	// 	jsm.logger.Error("Failed to initialize jobs:completed stream", "error", err)
+	// 	return fmt.Errorf("failed to initialize jobs:completed stream: %w", err)
+	// }
 
 	jsm.logger.Info("All job streams initialized successfully")
 	return nil
@@ -63,38 +64,38 @@ func (jsm *JobStreamManager) AddJobToRunningStream(jobData *JobStreamData, sched
 		"task_definition_id", jobData.TaskDefinitionID,
 		"scheduler_id", schedulerID)
 
-	jobJSON, err := json.Marshal(jobData)
-	if err != nil {
-		jsm.logger.Error("Failed to marshal job data",
-			"job_id", jobData.JobID,
-			"error", err)
-		return fmt.Errorf("failed to marshal job data: %w", err)
-	}
+	// jobJSON, err := json.Marshal(jobData)
+	// if err != nil {
+	// 	jsm.logger.Error("Failed to marshal job data",
+	// 		"job_id", jobData.JobID,
+	// 		"error", err)
+	// 	return fmt.Errorf("failed to marshal job data: %w", err)
+	// }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	messageID, err := jsm.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: JobsRunningStream,
-		ID:     "*",
-		Values: map[string]interface{}{
-			"job":          string(jobJSON),
-			"scheduler_id": schedulerID,
-			"created_at":   time.Now().Unix(),
-		},
-	})
+	// messageID, err := jsm.client.XAdd(ctx, &redis.XAddArgs{
+	// 	Stream: JobsRunningStream,
+	// 	ID:     "*",
+	// 	Values: map[string]interface{}{
+	// 		"job":          string(jobJSON),
+	// 		"scheduler_id": schedulerID,
+	// 		"created_at":   time.Now().Unix(),
+	// 	},
+	// })
 
-	if err != nil {
-		jsm.logger.Error("Failed to add job to running stream",
-			"job_id", jobData.JobID,
-			"scheduler_id", schedulerID,
-			"error", err)
-		return fmt.Errorf("failed to add job to running stream: %w", err)
-	}
+	// if err != nil {
+	// 	jsm.logger.Error("Failed to add job to running stream",
+	// 		"job_id", jobData.JobID,
+	// 		"scheduler_id", schedulerID,
+	// 		"error", err)
+	// 	return fmt.Errorf("failed to add job to running stream: %w", err)
+	// }
 
 	jsm.logger.Info("Job added to running stream successfully",
 		"job_id", jobData.JobID,
-		"message_id", messageID,
+		// "message_id", messageID,
 		"scheduler_id", schedulerID)
 
 	metrics.JobsAddedToStreamTotal.WithLabelValues("running").Inc()
@@ -123,48 +124,48 @@ func (jsm *JobStreamManager) MoveJobToCompleted(jobData *JobStreamData, schedule
 
 	// Add to completed stream
 	jobData.IsActive = false
-	jobJSON, err := json.Marshal(jobData)
-	if err != nil {
-		jsm.logger.Error("Failed to marshal job data for completed stream",
-			"job_id", jobData.JobID,
-			"error", err)
-		return fmt.Errorf("failed to marshal job data: %w", err)
-	}
+	// jobJSON, err := json.Marshal(jobData)
+	// if err != nil {
+	// 	jsm.logger.Error("Failed to marshal job data for completed stream",
+	// 		"job_id", jobData.JobID,
+	// 		"error", err)
+	// 	return fmt.Errorf("failed to marshal job data: %w", err)
+	// }
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	completedMessageID, err := jsm.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: JobsCompletedStream,
-		ID:     "*",
-		Values: map[string]interface{}{
-			"job":          string(jobJSON),
-			"scheduler_id": schedulerID,
-			"completed_at": time.Now().Unix(),
-			"reason":       reason,
-		},
-	})
+	// completedMessageID, err := jsm.client.XAdd(ctx, &redis.XAddArgs{
+	// 	Stream: JobsCompletedStream,
+	// 	ID:     "*",
+	// 	Values: map[string]interface{}{
+	// 		"job":          string(jobJSON),
+	// 		"scheduler_id": schedulerID,
+	// 		"completed_at": time.Now().Unix(),
+	// 		"reason":       reason,
+	// 	},
+	// })
 
-	if err != nil {
-		jsm.logger.Error("Failed to add job to completed stream",
-			"job_id", jobData.JobID,
-			"error", err)
-		return fmt.Errorf("failed to add job to completed stream: %w", err)
-	}
+	// if err != nil {
+	// 	jsm.logger.Error("Failed to add job to completed stream",
+	// 		"job_id", jobData.JobID,
+	// 		"error", err)
+	// 	return fmt.Errorf("failed to add job to completed stream: %w", err)
+	// }
 
 	// Acknowledge original message in running stream
-	consumerGroup := fmt.Sprintf("scheduler-%d", schedulerID)
-	if err := jsm.AckJobProcessed(JobsRunningStream, consumerGroup, messageID); err != nil {
-		jsm.logger.Warn("Failed to acknowledge job in running stream",
-			"job_id", jobData.JobID,
-			"message_id", messageID,
-			"error", err)
-		// Don't return error as job was successfully moved to completed
-	}
+	// consumerGroup := fmt.Sprintf("scheduler-%d", schedulerID)
+	// if err := jsm.AckJobProcessed(JobsRunningStream, consumerGroup, messageID); err != nil {
+	// 	jsm.logger.Warn("Failed to acknowledge job in running stream",
+	// 		"job_id", jobData.JobID,
+	// 		"message_id", messageID,
+	// 		"error", err)
+	// 	// Don't return error as job was successfully moved to completed
+	// }
 
 	jsm.logger.Info("Job moved to completed stream successfully",
 		"job_id", jobData.JobID,
-		"completed_message_id", completedMessageID,
+		// "completed_message_id", completedMessageID,
 		"reason", reason)
 
 	metrics.JobsAddedToStreamTotal.WithLabelValues("completed").Inc()
@@ -178,66 +179,66 @@ func (jsm *JobStreamManager) readJobsFromStream(stream, consumerGroup, consumerN
 	}
 
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
 
-	streams, err := jsm.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-		Group:    consumerGroup,
-		Consumer: consumerName,
-		Streams:  []string{stream, ">"},
-		Count:    count,
-		Block:    time.Second,
-	})
+	// streams, err := jsm.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+	// 	Group:    consumerGroup,
+	// 	Consumer: consumerName,
+	// 	Streams:  []string{stream, ">"},
+	// 	Count:    count,
+	// 	Block:    time.Second,
+	// })
 
 	duration := time.Since(start)
 
-	if err != nil {
-		if err == redis.Nil {
-			jsm.logger.Debug("No jobs available in stream",
-				"stream", stream,
-				"consumer_group", consumerGroup,
-				"duration", duration)
-			return []JobStreamData{}, []string{}, nil
-		}
-		jsm.logger.Error("Failed to read from stream",
-			"stream", stream,
-			"consumer_group", consumerGroup,
-			"duration", duration,
-			"error", err)
-		return nil, nil, fmt.Errorf("failed to read from stream: %w", err)
-	}
+	// if err != nil {
+	// 	if err == redis.Nil {
+	// 		jsm.logger.Debug("No jobs available in stream",
+	// 			"stream", stream,
+	// 			"consumer_group", consumerGroup,
+	// 			"duration", duration)
+	// 		return []JobStreamData{}, []string{}, nil
+	// 	}
+	// 	jsm.logger.Error("Failed to read from stream",
+	// 		"stream", stream,
+	// 		"consumer_group", consumerGroup,
+	// 		"duration", duration,
+	// 		"error", err)
+	// 	return nil, nil, fmt.Errorf("failed to read from stream: %w", err)
+	// }
 
 	var jobs []JobStreamData
 	var messageIDs []string
 
-	for _, stream := range streams {
-		for _, message := range stream.Messages {
-			jobJSON, exists := message.Values["job"].(string)
-			if !exists {
-				jsm.logger.Warn("Message missing job data",
-					"stream", stream.Stream,
-					"message_id", message.ID)
-				continue
-			}
+	// for _, stream := range streams {
+	// 	for _, message := range stream.Messages {
+	// 		jobJSON, exists := message.Values["job"].(string)
+	// 		if !exists {
+	// 			jsm.logger.Warn("Message missing job data",
+	// 				"stream", stream.Stream,
+	// 				"message_id", message.ID)
+	// 			continue
+	// 		}
 
-			var job JobStreamData
-			if err := json.Unmarshal([]byte(jobJSON), &job); err != nil {
-				jsm.logger.Error("Failed to unmarshal job data",
-					"stream", stream.Stream,
-					"message_id", message.ID,
-					"error", err)
-				continue
-			}
+	// 		var job JobStreamData
+	// 		if err := json.Unmarshal([]byte(jobJSON), &job); err != nil {
+	// 			jsm.logger.Error("Failed to unmarshal job data",
+	// 				"stream", stream.Stream,
+	// 				"message_id", message.ID,
+	// 				"error", err)
+	// 			continue
+	// 		}
 
-			jobs = append(jobs, job)
-			messageIDs = append(messageIDs, message.ID)
+	// 		jobs = append(jobs, job)
+	// 		messageIDs = append(messageIDs, message.ID)
 
-			jsm.logger.Debug("Job read from stream",
-				"job_id", job.JobID,
-				"stream", stream.Stream,
-				"message_id", message.ID)
-		}
-	}
+	// 		jsm.logger.Debug("Job read from stream",
+	// 			"job_id", job.JobID,
+	// 			"stream", stream.Stream,
+	// 			"message_id", message.ID)
+	// 	}
+	// }
 
 	jsm.logger.Info("Jobs read from stream successfully",
 		"stream", stream,
@@ -257,16 +258,16 @@ func (jsm *JobStreamManager) RegisterConsumerGroup(stream string, group string) 
 
 	jsm.logger.Info("Registering consumer group", "stream", stream, "group", group)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	if err := jsm.client.CreateConsumerGroup(ctx, stream, group); err != nil {
-		jsm.logger.Error("Failed to create consumer group",
-			"stream", stream,
-			"group", group,
-			"error", err)
-		return fmt.Errorf("failed to create consumer group for %s: %w", stream, err)
-	}
+	// if err := jsm.client.CreateConsumerGroup(ctx, stream, group); err != nil {
+	// 	jsm.logger.Error("Failed to create consumer group",
+	// 		"stream", stream,
+	// 		"group", group,
+	// 		"error", err)
+	// 	return fmt.Errorf("failed to create consumer group for %s: %w", stream, err)
+	// }
 
 	jsm.consumerGroups[key] = true
 	jsm.logger.Info("Consumer group created successfully", "stream", stream, "group", group)
@@ -280,18 +281,18 @@ func (jsm *JobStreamManager) AckJobProcessed(stream, consumerGroup, messageID st
 		"consumer_group", consumerGroup,
 		"message_id", messageID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	err := jsm.client.XAck(ctx, stream, consumerGroup, messageID)
-	if err != nil {
-		jsm.logger.Error("Failed to acknowledge job",
-			"stream", stream,
-			"consumer_group", consumerGroup,
-			"message_id", messageID,
-			"error", err)
-		return err
-	}
+	// err := jsm.client.XAck(ctx, stream, consumerGroup, messageID)
+	// if err != nil {
+	// 	jsm.logger.Error("Failed to acknowledge job",
+	// 		"stream", stream,
+	// 		"consumer_group", consumerGroup,
+	// 		"message_id", messageID,
+	// 		"error", err)
+	// 	return err
+	// }
 
 	jsm.logger.Debug("Job acknowledged successfully",
 		"stream", stream,
@@ -304,33 +305,33 @@ func (jsm *JobStreamManager) AckJobProcessed(stream, consumerGroup, messageID st
 func (jsm *JobStreamManager) GetJobStreamInfo() map[string]interface{} {
 	jsm.logger.Debug("Getting job stream information")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
 	streamLengths := make(map[string]int64)
-	streams := []string{JobsRunningStream, JobsCompletedStream}
+	// streams := []string{JobsRunningStream, JobsCompletedStream}
 
-	for _, stream := range streams {
-		length, err := jsm.client.XLen(ctx, stream)
-		if err != nil {
-			jsm.logger.Warn("Failed to get stream length",
-				"stream", stream,
-				"error", err)
-			length = -1
-		}
-		streamLengths[stream] = length
+	// for _, stream := range streams {
+		// length, err := jsm.client.XLen(ctx, stream)
+		// if err != nil {
+		// 	jsm.logger.Warn("Failed to get stream length",
+		// 		"stream", stream,
+		// 		"error", err)
+		// 	length = -1
+		// }
+		// streamLengths[stream] = length
 
-		// Update stream length metrics
-		switch stream {
-		case JobsRunningStream:
-			metrics.JobStreamLengths.WithLabelValues("running").Set(float64(length))
-		case JobsCompletedStream:
-			metrics.JobStreamLengths.WithLabelValues("completed").Set(float64(length))
-		}
-	}
+		// // Update stream length metrics
+		// switch stream {
+	// 	case JobsRunningStream:
+	// 		metrics.JobStreamLengths.WithLabelValues("running").Set(float64(length))
+	// 	case JobsCompletedStream:
+	// 		metrics.JobStreamLengths.WithLabelValues("completed").Set(float64(length))
+	// 	}
+	// }
 
 	info := map[string]interface{}{
-		"available":          jsm.client != nil,
+		// "available":          jsm.client != nil,
 		"jobs_completed_ttl": JobsCompletedTTL.String(),
 		"stream_lengths":     streamLengths,
 		"consumer_groups":    len(jsm.consumerGroups),
@@ -344,11 +345,11 @@ func (jsm *JobStreamManager) GetJobStreamInfo() map[string]interface{} {
 func (jsm *JobStreamManager) Close() error {
 	jsm.logger.Info("Closing JobStreamManager")
 
-	err := jsm.client.Close()
-	if err != nil {
-		jsm.logger.Error("Failed to close Redis client", "error", err)
-		return err
-	}
+	// err := jsm.client.Close()
+	// if err != nil {
+	// 	jsm.logger.Error("Failed to close Redis client", "error", err)
+	// 	return err
+	// }
 
 	jsm.logger.Info("JobStreamManager closed successfully")
 	return nil

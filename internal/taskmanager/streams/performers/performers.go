@@ -140,9 +140,10 @@ type PerformerManager struct {
 }
 
 // NewPerformerManager creates a new performer manager with improved initialization
-func NewPerformerManager(client redisClient.RedisClientInterface, logger logging.Logger) *PerformerManager {
+// func NewPerformerManager(client redisClient.RedisClientInterface, logger logging.Logger) *PerformerManager {
+func NewPerformerManager(logger logging.Logger) *PerformerManager {
 	pm := &PerformerManager{
-		client:       client,
+		// client:       client,
 		logger:       logger,
 		healthClient: NewHealthClient(logger),
 		startTime:    time.Now(),
