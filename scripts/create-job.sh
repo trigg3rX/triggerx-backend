@@ -80,7 +80,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
       \"created_chain_id\": \"11155420\",
-      \"job_id\": $JOB_ID,
+      \"job_id\": \"$JOB_ID\",
       \"job_title\": \"$JOB_TITLE\",
       \"task_definition_id\": $TASK_DEFINITION_ID,
       \"custom\": true,
@@ -112,6 +112,8 @@ curl -X POST http://localhost:9002/api/jobs \
     }
   ]"
 
+echo "\n"
+
 if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
   sleep 5 
   echo "\nCalling increment() to trigger the event..."
@@ -124,3 +126,5 @@ if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
     0x49a81A591afdDEF973e6e49aaEa7d76943ef234C "increment()" \
     -- --broadcast
 fi
+
+echo "\n"
