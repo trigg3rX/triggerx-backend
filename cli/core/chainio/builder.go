@@ -5,7 +5,7 @@ import (
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
 	"github.com/imua-xyz/imua-avs-sdk/logging"
 	"github.com/imua-xyz/imua-avs-sdk/signer"
-	"github.com/trigg3rX/triggerx-backend-imua/cli/core/chainio/eth"
+	"github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
 )
 
 type BuildAllConfig struct {

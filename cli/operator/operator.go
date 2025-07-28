@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,15 +17,10 @@ import (
 	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
 	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/trigg3rX/triggerx-backend-imua/cli/core"
-	chain "github.com/trigg3rX/triggerx-backend-imua/cli/core/chainio"
-	"github.com/trigg3rX/triggerx-backend-imua/cli/core/chainio/eth"
-	"github.com/trigg3rX/triggerx-backend-imua/cli/types"
-)
-
-const (
-	maxRetries = 80
-	retryDelay = 1 * time.Second
+	"github.com/trigg3rX/triggerx-backend/cli/core"
+	chain "github.com/trigg3rX/triggerx-backend/cli/core/chainio"
+	"github.com/trigg3rX/triggerx-backend/cli/core/chainio/eth"
+	"github.com/trigg3rX/triggerx-backend/cli/types"
 )
 
 // getKeyPair creates a BLS keypair from a hex private key (same as aggregator implementation)
@@ -313,129 +307,5 @@ func (o *Operator) RegisterBLSPublicKey() error {
 		o.logger.Info("BLS Public Key already registered")
 	}
 
-	return nil
-}
-
-func (o *Operator) RegisterOperator() error {
-	operatorAddress, err := core.SwitchEthAddressToImAddress(o.operatorAddr.String())
-	if err != nil {
-		o.logger.Error("Cannot switch eth address to im address", "err", err)
-		return err
-	}
-
-	// Check if operator is registered
-	flag, err := o.avsReader.IsOperator(&bind.CallOpts{}, o.operatorAddr.String())
-	if err != nil {
-		o.logger.Error("Cannot exec IsOperator", "err", err)
-		return err
-	}
-	if !flag {
-		return fmt.Errorf("operator is not registered: %s", operatorAddress)
-	}
-
-	// Register BLS Public Key
-	pubKey, err := o.avsReader.GetRegisteredPubkey(&bind.CallOpts{}, o.operatorAddr.String(), o.avsAddr.String())
-	if err != nil {
-		o.logger.Error("Cannot exec GetRegisteredPubKey", "err", err)
-		return err
-	}
-
-	if len(pubKey) == 0 {
-		msg := fmt.Sprintf(core.BLSMessageToSign,
-			core.ChainIDWithoutRevision("imuachainlocalnet_232"), operatorAddress)
-		hashedMsg := crypto.Keccak256Hash([]byte(msg))
-
-		// Sign the message with BLS private key (convert to [32]byte array)
-		var messageArray [32]byte
-		copy(messageArray[:], hashedMsg.Bytes())
-		sig := o.blsKeypair.SignMessage(messageArray)
-
-		_, err = o.avsWriter.RegisterBLSPublicKey(
-			context.Background(),
-			o.avsAddr.String(),
-			o.blsKeypair.GetPubKeyG2().Marshal(),
-			sig.Marshal())
-
-		if err != nil {
-			o.logger.Error("operator failed to registerBLSPublicKey", "err", err)
-			return err
-		}
-	}
-
-	// Ensure operator has sufficient delegation
-	return o.ensureDelegation()
-}
-
-func (o *Operator) ensureDelegation() error {
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Check operator delegation USD amount
-		amount, err := o.avsReader.GetOperatorOptedUSDValue(&bind.CallOpts{}, o.avsAddr.String(), o.operatorAddr.String())
-		if err != nil {
-			o.logger.Error("Cannot exec GetOperatorOptedUSDValue", "err", err)
-			return err
-		}
-
-		if !amount.IsZero() && !amount.IsNegative() {
-			o.logger.Info("Operator has sufficient delegation", "amount", amount)
-			break
-		}
-
-		// Perform deposit and delegation if amount is zero
-		if amount.IsZero() {
-			err := o.Deposit()
-			if err != nil {
-				return fmt.Errorf("cannot deposit: %w", err)
-			}
-			err = o.Delegate()
-			if err != nil {
-				return fmt.Errorf("cannot delegate: %w", err)
-			}
-			err = o.SelfDelegate()
-			if err != nil {
-				return fmt.Errorf("cannot self delegate: %w", err)
-			}
-		}
-
-		// Wait for delegation to be processed
-		for waitAttempt := 1; waitAttempt <= maxRetries; waitAttempt++ {
-			amount, err := o.avsReader.GetOperatorOptedUSDValue(&bind.CallOpts{}, o.avsAddr.String(), o.operatorAddr.String())
-			if err == nil && !amount.IsZero() && !amount.IsNegative() {
-				return nil
-			}
-
-			if err != nil {
-				o.logger.Error("Cannot GetOperatorOptedUSDValue",
-					"err", err,
-					"attempt", waitAttempt,
-					"max_attempts", maxRetries)
-			} else {
-				o.logger.Info("OperatorOptedUSDValue is zero or negative",
-					"operator_usd_value", amount,
-					"attempt", waitAttempt,
-					"max_attempts", maxRetries)
-			}
-			time.Sleep(retryDelay)
-		}
-	}
-
-	return fmt.Errorf("failed to ensure delegation after %d attempts", maxRetries)
-}
-
-// Placeholder functions - implement based on your requirements
-func (o *Operator) Deposit() error {
-	// Implement deposit logic
-	o.logger.Info("Executing deposit...")
-	return nil
-}
-
-func (o *Operator) Delegate() error {
-	// Implement delegation logic
-	o.logger.Info("Executing delegation...")
-	return nil
-}
-
-func (o *Operator) SelfDelegate() error {
-	// Implement self-delegation logic
-	o.logger.Info("Executing self-delegation...")
 	return nil
 }
