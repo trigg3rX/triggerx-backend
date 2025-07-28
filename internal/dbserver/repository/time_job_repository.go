@@ -107,6 +107,13 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 			timeJob.TaskTargetData.TaskDefinitionID = 1
 		}
 
+		var isImua bool
+		err := r.db.Session().Query(queries.IsJobImuaQuery, timeJob.TaskTargetData.JobID).Scan(&isImua)
+		if err != nil {
+			return nil, err
+		}
+		timeJob.IsImua = isImua
+
 		// Calculate next execution time after the current execution time
 		nextExecutionTime, err := parser.CalculateNextExecutionTime(timeJob.NextExecutionTimestamp, timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule)
 		if err != nil {

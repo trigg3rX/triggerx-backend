@@ -75,6 +75,11 @@ const (
 
 // Read Queries
 const (
+	IsJobImuaQuery = `
+			SELECT is_imua
+			FROM triggerx.job_data
+			WHERE job_id = ?`
+
 	GetTimeJobDataByJobIDQuery = `
 			SELECT job_id, expiration_time, 
 				next_execution_timestamp, schedule_type,
