@@ -77,6 +77,7 @@ func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
 	router.POST("/health", handler.HandleCheckInEvent)
 	router.GET("/status", handler.GetKeeperStatus)
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
+	router.GET("/performers", handler.GetActivePerformers) // New endpoint for taskmanager
 	router.GET("/metrics", gin.WrapH(metricsCollector.Handler()))
 }
 
@@ -270,5 +271,30 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 		"active_keepers": active,
 		"keepers":        detailedInfo,
 		"timestamp":      time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+// GetActivePerformers returns active performers for taskmanager service
+func (h *Handler) GetActivePerformers(c *gin.Context) {
+	detailedKeepers := h.stateManager.GetDetailedKeeperInfo()
+
+	// Filter for active keepers only and convert to performer format
+	performers := make([]map[string]interface{}, 0)
+	for _, keeper := range detailedKeepers {
+		if keeper.IsActive {
+			performer := map[string]interface{}{
+				"operator_id":    keeper.OperatorID,
+				"keeper_address": keeper.KeeperAddress,
+				"is_imua":        keeper.IsImua,
+				"last_seen":      keeper.LastCheckedIn,
+			}
+			performers = append(performers, performer)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"performers": performers,
+		"count":      len(performers),
+		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 	})
 }

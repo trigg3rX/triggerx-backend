@@ -217,7 +217,7 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 	if err != nil {
 		tsm.logger.Error("Failed to add task to ready stream",
 			"task_id", task.SendTaskDataToKeeper.TaskID,
-			"performer_id", performerData.KeeperID,
+			"performer_id", performerData.OperatorID,
 			"error", err)
 		return types.PerformerData{}, fmt.Errorf("failed to add task to ready stream: %w", err)
 	}
@@ -229,7 +229,7 @@ func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.P
 
 	tsm.logger.Info("Task added to ready stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"performer_id", performerData.KeeperID,
+		"performer_id", performerData.OperatorID,
 		"performer_address", performerData.KeeperAddress)
 
 	return performerData, nil
