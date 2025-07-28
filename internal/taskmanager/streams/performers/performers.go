@@ -2,13 +2,13 @@ package performers
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	// redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -28,15 +28,15 @@ func (pm *PerformerManager) GetPerformerData(isImua bool) (types.PerformerData, 
 	pm.logger.Debug("Getting performer data dynamically", "is_imua", isImua)
 
 	// Refresh performers if needed
-	if time.Since(pm.lastRefresh) > PerformerRefreshTTL {
-		pm.logger.Debug("Refreshing performers from health service")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := pm.refreshPerformers(ctx); err != nil {
-			pm.logger.Error("Failed to refresh performers", "error", err)
-			// Fall back to cached performers
-		}
-	}
+	// if time.Since(pm.lastRefresh) > PerformerRefreshTTL {
+	// 	pm.logger.Debug("Refreshing performers from health service")
+	// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 	defer cancel()
+	// 	if err := pm.refreshPerformers(ctx); err != nil {
+	// 		pm.logger.Error("Failed to refresh performers", "error", err)
+	// 		// Fall back to cached performers
+	// 	}
+	// }
 
 	var availablePerformers []types.PerformerData
 	// availablePerformers := pm.GetAvailablePerformers()
@@ -47,14 +47,14 @@ func (pm *PerformerManager) GetPerformerData(isImua bool) (types.PerformerData, 
 		// Fallback to default performers
 		fallbackPerformers := []types.PerformerData{
 			{
-				OperatorID:    3,
+				OperatorID:    1,
 				KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
 				IsImua:        false,
 			},
 			{
 				OperatorID:    4,
-				KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
-				IsImua:        false,
+				KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
+				IsImua:        true,
 			},
 		}
 		availablePerformers = fallbackPerformers
@@ -125,7 +125,7 @@ func (pm *PerformerManager) GetPerformerData(isImua bool) (types.PerformerData, 
 
 // PerformerManager handles performer lifecycle and assignment
 type PerformerManager struct {
-	client       redisClient.RedisClientInterface
+	// client       redisClient.RedisClientInterface
 	logger       logging.Logger
 	healthClient *HealthClient
 	startTime    time.Time
@@ -199,39 +199,39 @@ func (pm *PerformerManager) AcquirePerformer(ctx context.Context) (*types.Perfor
 	}
 
 	// Create lock key with improved naming
-	lockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, performer.OperatorID)
+	// lockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, performer.OperatorID)
 
 	// Try to acquire lock with improved timeout handling
-	locked, err := pm.client.SetNX(ctx, lockKey, "locked", PerformerLockTTL)
-	if err != nil {
-		pm.logger.Error("Failed to acquire performer lock",
-			"performer_id", performer.OperatorID,
-			"error", err)
-		return nil, fmt.Errorf("failed to acquire performer lock: %w", err)
-	}
+	// locked, err := pm.client.SetNX(ctx, lockKey, "locked", PerformerLockTTL)
+	// if err != nil {
+	// 	pm.logger.Error("Failed to acquire performer lock",
+	// 		"performer_id", performer.OperatorID,
+	// 		"error", err)
+	// 	return nil, fmt.Errorf("failed to acquire performer lock: %w", err)
+	// }
 
-	if !locked {
-		pm.logger.Debug("Performer is locked, trying next available performer",
-			"performer_id", performer.OperatorID)
+	// if !locked {
+	// 	pm.logger.Debug("Performer is locked, trying next available performer",
+	// 		"performer_id", performer.OperatorID)
 
-		// Try to find another available performer
-		for _, altPerformer := range availablePerformers {
-			if altPerformer.OperatorID == performer.OperatorID {
-				continue // Skip the one we just tried
-			}
+	// 	// Try to find another available performer
+	// 	for _, altPerformer := range availablePerformers {
+	// 		if altPerformer.OperatorID == performer.OperatorID {
+	// 			continue // Skip the one we just tried
+	// 		}
 
-			altLockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, altPerformer.OperatorID)
-			altLocked, altErr := pm.client.SetNX(ctx, altLockKey, "locked", PerformerLockTTL)
-			if altErr == nil && altLocked {
-				pm.logger.Info("Acquired alternative performer for task execution",
-					"performer_id", altPerformer.OperatorID,
-					"performer_address", altPerformer.KeeperAddress)
-				return &altPerformer, nil
-			}
-		}
+	// 		altLockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, altPerformer.OperatorID)
+	// 		altLocked, altErr := pm.client.SetNX(ctx, altLockKey, "locked", PerformerLockTTL)
+	// 		if altErr == nil && altLocked {
+	// 			pm.logger.Info("Acquired alternative performer for task execution",
+	// 				"performer_id", altPerformer.OperatorID,
+	// 				"performer_address", altPerformer.KeeperAddress)
+	// 			return &altPerformer, nil
+	// 		}
+	// 	}
 
-		return nil, fmt.Errorf("no available performers")
-	}
+	// 	return nil, fmt.Errorf("no available performers")
+	// }
 
 	pm.logger.Info("Acquired performer for task execution",
 		"performer_id", performer.OperatorID,
@@ -243,15 +243,15 @@ func (pm *PerformerManager) AcquirePerformer(ctx context.Context) (*types.Perfor
 
 // ReleasePerformer releases the performer lock with improved error handling
 func (pm *PerformerManager) ReleasePerformer(ctx context.Context, performerID int64) error {
-	lockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, performerID)
+	// lockKey := fmt.Sprintf("%s%d", PerformerLockPrefix, performerID)
 
-	err := pm.client.Del(ctx, lockKey)
-	if err != nil {
-		pm.logger.Error("Failed to release performer lock",
-			"performer_id", performerID,
-			"error", err)
-		return fmt.Errorf("failed to release performer lock: %w", err)
-	}
+	// err := pm.client.Del(ctx, lockKey)
+	// if err != nil {
+	// 	pm.logger.Error("Failed to release performer lock",
+	// 		"performer_id", performerID,
+	// 		"error", err)
+	// 	return fmt.Errorf("failed to release performer lock: %w", err)
+	// }
 
 	pm.logger.Info("Released performer lock",
 		"performer_id", performerID)
@@ -296,34 +296,34 @@ func (pm *PerformerManager) SelectPerformerRoundRobin(performers []types.Perform
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
 	// Get current next performer index from Redis
-	nextPerformerStr, err := pm.client.Get(ctx, NextPerformerKey)
-	if err != nil {
-		// If not found, start with 0
-		nextPerformerStr = "0"
-	}
+	// nextPerformerStr, err := pm.client.Get(ctx, NextPerformerKey)
+	// if err != nil {
+	// 	// If not found, start with 0
+	// 	nextPerformerStr = "0"
+	// }
 
 	var nextIndex int
-	if _, parseErr := fmt.Sscanf(nextPerformerStr, "%d", &nextIndex); parseErr != nil {
-		nextIndex = 0
-	}
+	// if _, parseErr := fmt.Sscanf(nextPerformerStr, "%d", &nextIndex); parseErr != nil {
+	// 	nextIndex = 0
+	// }
 
 	// Ensure index is within bounds
 	nextIndex = nextIndex % len(performers)
 
 	// Get busy performers from Redis
-	busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
-	if err != nil {
-		busyPerformersStr = "[]"
-	}
+	// busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
+	// if err != nil {
+	// 	busyPerformersStr = "[]"
+	// }
 
-	var busyPerformerIDs []int64
-	if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
-		busyPerformerIDs = []int64{}
-	}
+	// var busyPerformerIDs []int64
+	// if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
+	// 	busyPerformerIDs = []int64{}
+	// }
 
 	// Find next available performer
 	attempts := 0
@@ -332,20 +332,20 @@ func (pm *PerformerManager) SelectPerformerRoundRobin(performers []types.Perform
 
 		// Check if performer is busy
 		isBusy := false
-		for _, busyID := range busyPerformerIDs {
-			if busyID == selectedPerformer.OperatorID {
-				isBusy = true
-				break
-			}
-		}
+		// for _, busyID := range busyPerformerIDs {
+		// 	if busyID == selectedPerformer.OperatorID {
+		// 		isBusy = true
+		// 		break
+		// 	}
+		// }
 
 		if !isBusy {
 			// Update next performer index in Redis
 			nextIndex = (nextIndex + 1) % len(performers)
-			err := pm.client.Set(ctx, NextPerformerKey, fmt.Sprintf("%d", nextIndex), 0)
-			if err != nil {
-				pm.logger.Error("Failed to update next performer index in Redis", "error", err)
-			}
+			// err := pm.client.Set(ctx, NextPerformerKey, fmt.Sprintf("%d", nextIndex), 0)
+			// if err != nil {
+			// 	pm.logger.Error("Failed to update next performer index in Redis", "error", err)
+			// }
 
 			pm.logger.Debug("Selected performer using round-robin",
 				"performer_id", selectedPerformer.OperatorID,
@@ -367,23 +367,23 @@ func (pm *PerformerManager) SelectPerformerRoundRobin(performers []types.Perform
 // IsPerformerAvailable checks if a performer is available with improved health checking
 func (pm *PerformerManager) IsPerformerAvailable(ctx context.Context, performerID int64) bool {
 	// Get busy performers from Redis
-	busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
-	if err != nil {
-		// If not found, performer is available
-		return true
-	}
+	// busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
+	// if err != nil {
+	// 	// If not found, performer is available
+	// 	return true
+	// }
 
-	var busyPerformerIDs []int64
-	if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
-		return true
-	}
+	// var busyPerformerIDs []int64
+	// if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
+	// 	return true
+	// }
 
 	// Check if performer is in busy list
-	for _, busyID := range busyPerformerIDs {
-		if busyID == performerID {
-			return false
-		}
-	}
+	// for _, busyID := range busyPerformerIDs {
+	// 	if busyID == performerID {
+	// 		return false
+	// 	}
+	// }
 
 	return true
 }
@@ -391,30 +391,31 @@ func (pm *PerformerManager) IsPerformerAvailable(ctx context.Context, performerI
 // MarkPerformerBusy marks a performer as busy in Redis
 func (pm *PerformerManager) MarkPerformerBusy(ctx context.Context, performerID int64) error {
 	// Get current busy performers
-	busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
-	if err != nil {
-		busyPerformersStr = "[]"
-	}
+	// busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
+	// if err != nil {
+	// 	busyPerformersStr = "[]"
+	// }
 
-	var busyPerformerIDs []int64
-	if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
-		busyPerformerIDs = []int64{}
-	}
+	// var busyPerformerIDs []int64
+	// if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
+	// 	busyPerformerIDs = []int64{}
+	// }
 
 	// Add performer to busy list if not already there
-	found := false
-	for _, busyID := range busyPerformerIDs {
-		if busyID == performerID {
-			found = true
-			break
-		}
-	}
+	// found := false
+	// for _, busyID := range busyPerformerIDs {
+	// 	if busyID == performerID {
+	// 		found = true
+	// 		break
+	// 	}
+	// }
 
-	if !found {
-		busyPerformerIDs = append(busyPerformerIDs, performerID)
-		busyJSON, _ := json.Marshal(busyPerformerIDs)
-		return pm.client.Set(ctx, BusyPerformersKey, string(busyJSON), PerformerLockTTL)
-	}
+	// if !found {
+		// busyPerformerIDs = append(busyPerformerIDs, performerID)
+		// busyJSON, _ := json.Marshal(busyPerformerIDs)
+		// return pm.client.Set(ctx, BusyPerformersKey, string(busyJSON), PerformerLockTTL)
+		// return nil
+	// }
 
 	return nil
 }
@@ -422,26 +423,27 @@ func (pm *PerformerManager) MarkPerformerBusy(ctx context.Context, performerID i
 // MarkPerformerAvailable marks a performer as available in Redis
 func (pm *PerformerManager) MarkPerformerAvailable(ctx context.Context, performerID int64) error {
 	// Get current busy performers
-	busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
-	if err != nil {
-		return nil // Already available
-	}
+	// busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
+	// if err != nil {
+	// 	return nil // Already available
+	// }
 
-	var busyPerformerIDs []int64
-	if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
-		return nil
-	}
+	// var busyPerformerIDs []int64
+	// if err := json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs); err != nil {
+	// 	return nil
+	// }
 
 	// Remove performer from busy list
-	newBusyIDs := make([]int64, 0, len(busyPerformerIDs))
-	for _, busyID := range busyPerformerIDs {
-		if busyID != performerID {
-			newBusyIDs = append(newBusyIDs, busyID)
-		}
-	}
+	// newBusyIDs := make([]int64, 0, len(busyPerformerIDs))
+	// for _, busyID := range busyPerformerIDs {
+	// 	if busyID != performerID {
+	// 		newBusyIDs = append(newBusyIDs, busyID)
+	// 	}
+	// }
 
-	busyJSON, _ := json.Marshal(newBusyIDs)
-	return pm.client.Set(ctx, BusyPerformersKey, string(busyJSON), PerformerLockTTL)
+	// busyJSON, _ := json.Marshal(newBusyIDs)
+	// return pm.client.Set(ctx, BusyPerformersKey, string(busyJSON), PerformerLockTTL)
+	return nil
 }
 
 // GetPerformerStats returns statistics about performer usage and availability
@@ -454,13 +456,13 @@ func (pm *PerformerManager) GetPerformerStats() map[string]interface{} {
 
 	// Get busy performers count
 	busyCount := 0
-	busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
-	if err == nil {
-		var busyPerformerIDs []int64
-		if json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs) == nil {
-			busyCount = len(busyPerformerIDs)
-		}
-	}
+	// busyPerformersStr, err := pm.client.Get(ctx, BusyPerformersKey)
+	// if err == nil {
+	// 	var busyPerformerIDs []int64
+	// 	if json.Unmarshal([]byte(busyPerformersStr), &busyPerformerIDs) == nil {
+	// 		busyCount = len(busyPerformerIDs)
+	// 	}
+	// }
 
 	stats := map[string]interface{}{
 		"total_performers":       len(pm.performers),

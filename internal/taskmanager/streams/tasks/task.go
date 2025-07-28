@@ -25,7 +25,6 @@ type TaskStreamManager struct {
 	consumerGroups   map[string]bool
 	mu               sync.RWMutex
 	startTime        time.Time
-	batchProcessor   *TaskBatchProcessor
 }
 
 // func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*TaskStreamManager, error) {
@@ -66,11 +65,6 @@ func NewTaskStreamManager(logger logging.Logger) (*TaskStreamManager, error) {
 		startTime:        time.Now(),
 	}
 
-	// Initialize batch processor for improved performance
-	batchSize := config.GetTaskBatchSize()
-	batchTimeout := config.GetTaskBatchTimeout()
-	tsm.batchProcessor = NewTaskBatchProcessor(batchSize, batchTimeout, tsm)
-
 	logger.Info("TaskStreamManager initialized successfully")
 	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
 	return tsm, nil
@@ -109,10 +103,6 @@ func (tsm *TaskStreamManager) Initialize() error {
 	}
 
 	tsm.logger.Info("All task streams initialized successfully")
-
-	// Start the batch processor
-	tsm.batchProcessor.Start()
-	tsm.logger.Info("Batch processor started successfully")
 
 	return nil
 }
@@ -249,28 +239,12 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 		"consumer_groups":      len(tsm.consumerGroups),
 	}
 
-	tsm.logger.Debug("Stream information retrieved", "info", info)
+	// tsm.logger.Debug("Stream information retrieved", "info", info)
 	return info
-}
-
-// GetBatchProcessorStats returns statistics about the batch processor
-func (tsm *TaskStreamManager) GetBatchProcessorStats() map[string]interface{} {
-	if tsm.batchProcessor == nil {
-		return map[string]interface{}{
-			"status": "not_initialized",
-		}
-	}
-	return tsm.batchProcessor.GetBatchStats()
 }
 
 func (tsm *TaskStreamManager) Close() error {
 	tsm.logger.Info("Closing TaskStreamManager")
-
-	// Stop the batch processor
-	if tsm.batchProcessor != nil {
-		tsm.batchProcessor.Stop()
-		tsm.logger.Info("Batch processor stopped")
-	}
 
 	// err := tsm.client.Close()
 	// if err != nil {

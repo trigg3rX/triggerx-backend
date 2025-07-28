@@ -13,7 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
-	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	// redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -152,7 +152,7 @@ func main() {
 
 	// Perform graceful shutdown
 	// performGracefulShutdown(ctx, client, server, logger)
-	performGracefulShutdown(ctx, nil, server, logger)
+	performGracefulShutdown(ctx, server, logger)
 }
 
 // startStreamHealthMonitor monitors the health of Redis streams
@@ -172,9 +172,9 @@ func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *jobs.JobStreamM
 			jobInfo := jobStreamMgr.GetJobStreamInfo()
 			taskInfo := taskStreamMgr.GetStreamInfo()
 
-			logger.Info("Stream health status",
-				"job_streams", jobInfo,
-				"task_streams", taskInfo)
+			// logger.Info("Stream health status",
+			// 	"job_streams", jobInfo,
+			// 	"task_streams", taskInfo)
 
 			// Log warnings for high stream lengths
 			if jobLengths, ok := jobInfo["stream_lengths"].(map[string]int64); ok {
@@ -200,7 +200,8 @@ func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *jobs.JobStreamM
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, client redisClient.RedisClientInterface, server *api.Server, logger logging.Logger) {
+// func performGracefulShutdown(ctx context.Context, client redisClient.RedisClientInterface, server *api.Server, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, server *api.Server, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -208,12 +209,12 @@ func performGracefulShutdown(ctx context.Context, client redisClient.RedisClient
 	defer cancel()
 
 	// Close Redis client connection
-	logger.Info("Closing Redis client connection...")
-	if err := client.Close(); err != nil {
-		logger.Error("Error closing Redis client", "error", err)
-	} else {
-		logger.Info("Redis client closed successfully")
-	}
+	// logger.Info("Closing Redis client connection...")
+	// if err := client.Close(); err != nil {
+	// 	logger.Error("Error closing Redis client", "error", err)
+	// } else {
+	// 	logger.Info("Redis client closed successfully")
+	// }
 
 	// Shutdown server gracefully
 	logger.Info("Shutting down API server...")

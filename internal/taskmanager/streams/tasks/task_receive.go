@@ -41,7 +41,7 @@ func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskReq
 			}
 
 			// Add individual task to batch processor
-			err := tsm.batchProcessor.AddTask(&taskStreamData)
+			_, err := tsm.AddTaskToReadyStream(taskStreamData)
 			if err != nil {
 				tsm.logger.Error("Failed to add individual task to batch processor",
 					"task_id", individualTaskData.TaskID[0],
@@ -67,7 +67,7 @@ func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskReq
 		}
 
 		// Add task to batch processor for improved performance
-		err := tsm.batchProcessor.AddTask(&taskStreamData)
+		_, err := tsm.AddTaskToReadyStream(taskStreamData)
 		if err != nil {
 			tsm.logger.Error("Failed to add task to batch processor",
 				"task_id", request.SendTaskDataToKeeper.TaskID[0],
@@ -77,7 +77,7 @@ func (tsm *TaskStreamManager) ReceiveTaskFromScheduler(request *SchedulerTaskReq
 		}
 	}
 
-	tsm.logger.Info("Tasks received and added to batch processor",
+	tsm.logger.Info("Tasks received and added to ready stream",
 		"task_count", taskCount,
 		"source", request.Source)
 
