@@ -8,8 +8,9 @@ type JobResponse struct {
 }
 
 type PerformerData struct {
-	KeeperID      int64  `json:"keeper_id"`
+	OperatorID    int64  `json:"operator_id"`
 	KeeperAddress string `json:"keeper_address"`
+	IsImua        bool   `json:"is_imua"`
 }
 
 type KeeperLeaderboardEntry struct {

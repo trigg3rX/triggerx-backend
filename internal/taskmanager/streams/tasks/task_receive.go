@@ -112,7 +112,7 @@ func (tsm *TaskStreamManager) UpdateDatabase(ipfsData types.IPFSData) {
 	// Update task execution data in Database
 	updateTaskExecutionData := types.UpdateTaskExecutionDataRequest{
 		TaskID: ipfsData.TaskData.TaskID[0],
-		TaskPerformerID: ipfsData.TaskData.PerformerData.KeeperID,
+		TaskPerformerID: ipfsData.TaskData.PerformerData.OperatorID,
 		ExecutionTimestamp: ipfsData.ActionData.ExecutionTimestamp,
 		ExecutionTxHash: ipfsData.ActionData.ActionTxHash,
 		ProofOfTask: ipfsData.ProofData.ProofOfTask,
