@@ -14,6 +14,7 @@ require (
 	github.com/Layr-Labs/eigensdk-go v0.3.0
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/consensys/gnark-crypto v0.18.0
+	github.com/cosmos/btcutil v1.0.5
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/ethereum/go-ethereum v1.16.1
@@ -35,6 +36,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724143839-635671af334f
 	github.com/trigg3rX/triggerx-contracts v0.0.0-20250723085814-4f0a36310c50
+	github.com/urfave/cli v1.22.17
 	go.uber.org/zap v1.27.0
 )
 
@@ -181,6 +183,7 @@ require (
 	github.com/quic-go/quic-go v0.52.0 // indirect
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66 // indirect
 	github.com/rs/cors v1.11.1 // indirect
+	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
