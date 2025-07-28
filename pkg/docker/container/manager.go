@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -373,13 +372,13 @@ func (m *Manager) CleanupContainer(ctx context.Context, containerID string) erro
 	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
-func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (*dockertypes.ContainerJSON, error) {
+func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (container.InspectResponse, error) {
 	info, err := m.Cli.ContainerInspect(ctx, containerID)
 	if err != nil {
 		m.logger.Errorf("failed to get container info: %v", err)
-		return nil, fmt.Errorf("failed to get container info: %w", err)
+		return container.InspectResponse{}, fmt.Errorf("failed to get container info: %w", err)
 	}
-	return &info, nil
+	return info, nil
 }
 
 func (m *Manager) replaceCodeFile(ctx context.Context, containerID string, filePath string, language types.Language) error {

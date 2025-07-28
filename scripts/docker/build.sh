@@ -176,6 +176,51 @@ if [[ "$SERVICE" == "all" ]]; then
     for service in "${services[@]}"; do
         docker_name=$(echo $service | sed 's/\//-/g')
         rm -f "build_${docker_name}.log"
+            --build-arg DOCKER_NAME=${docker_name} \
+            -t triggerx-${docker_name}:${version} . > "build_${docker_name}.log" 2>&1; then
+            echo "[$(date '+%H:%M:%S')] ✅ Successfully built $service"
+            return 0
+        else
+            echo "[$(date '+%H:%M:%S')] ❌ Failed to build $service (check build_${docker_name}.log)"
+            return 1
+        fi
+    }
+    
+    echo "Starting parallel builds for ${#services[@]} services..."
+    
+    # Start all builds in parallel
+    for service in "${services[@]}"; do
+        build_service "$service" "$VERSION" &
+        build_pids+=($!)
+    done
+    
+    # Wait for all builds to complete and collect results
+    echo "Waiting for all builds to complete..."
+    for i in "${!build_pids[@]}"; do
+        if ! wait "${build_pids[$i]}"; then
+            failed_services+=("${services[$i]}")
+        fi
+    done
+    
+    # Report results
+    echo ""
+    echo "=== Build Summary ==="
+    if [[ ${#failed_services[@]} -eq 0 ]]; then
+        echo "✅ All ${#services[@]} services built successfully!"
+    else
+        echo "❌ ${#failed_services[@]} service(s) failed to build:"
+        for service in "${failed_services[@]}"; do
+            echo "  - $service"
+        done
+        echo ""
+        echo "Check individual log files (build_*.log) for detailed error information."
+        exit 1
+    fi
+    
+    # Clean up log files on success
+    for service in "${services[@]}"; do
+        docker_name=$(echo $service | sed 's/\//-/g')
+        rm -f "build_${docker_name}.log"
     done
 elif [[ "$SERVICE" == "keeper" ]]; then
     echo "Building $SERVICE..."
@@ -202,6 +247,11 @@ else
         -t triggerx-${DOCKER_NAME}:${VERSION} .
 fi
 
+if [[ "$SERVICE" == "all" ]]; then
+    echo "All services built successfully with version ${VERSION}"
+else
+    echo "Successfully built: triggerx-${SERVICE}:${VERSION}"
+fi
 if [[ "$SERVICE" == "all" ]]; then
     echo "All services built successfully with version ${VERSION}"
 else

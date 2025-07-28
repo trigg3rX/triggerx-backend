@@ -174,9 +174,7 @@ func DepositTokens(ctx *cli.Context) error {
 
 		// Pad the amount to 64 characters (32 bytes)
 		amountHexStr := strings.TrimSpace(string(amountHexOutput))
-		if strings.HasPrefix(amountHexStr, "0x") {
-			amountHexStr = amountHexStr[2:]
-		}
+		amountHexStr = strings.TrimPrefix(amountHexStr, "0x")
 		quantityB32 := fmt.Sprintf("%064s", amountHexStr)
 		quantityB32 = strings.ReplaceAll(quantityB32, " ", "0")
 

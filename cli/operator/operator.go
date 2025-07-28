@@ -184,7 +184,7 @@ func NewOperatorFromConfig(c types.NodeConfig) (*Operator, error) {
 	}
 
 	// Check if addresses match (case-insensitive)
-	if strings.ToLower(c.OperatorAddress) != strings.ToLower(operatorSender.String()) {
+	if !strings.EqualFold(c.OperatorAddress, operatorSender.String()) {
 		logger.Warn("Configured operator address differs from keystore address",
 			"configured", c.OperatorAddress,
 			"keystore", operatorSender.String())

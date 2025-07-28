@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     total_tasks bigint,
     created_at timestamp,
     last_updated_at timestamp,
+    email_id text,
     PRIMARY KEY (user_id)
 );
 

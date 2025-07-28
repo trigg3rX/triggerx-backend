@@ -151,9 +151,7 @@ func DelegateTokens(ctx *cli.Context) error {
 		amountHex := strings.TrimSpace(string(amountHexOutput))
 
 		// Remove 0x prefix and pad to 64 characters (32 bytes)
-		if strings.HasPrefix(amountHex, "0x") {
-			amountHex = amountHex[2:]
-		}
+		amountHex = strings.TrimPrefix(amountHex, "0x")
 		// Pad with leading zeros to make it 64 characters
 		for len(amountHex) < 64 {
 			amountHex = "0" + amountHex
