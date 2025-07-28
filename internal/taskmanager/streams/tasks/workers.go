@@ -126,15 +126,31 @@ func (tsm *TaskStreamManager) processReadyTasks(consumerName string) {
 	for i, task := range tasks {
 		messageID := messageIDs[i]
 
-		// Move task to processing stream
+		// Move task to processing stream with improved error handling
 		if err := tsm.moveTaskToProcessing(task, messageID); err != nil {
 			tsm.logger.Error("Failed to move task to processing",
 				"task_id", task.SendTaskDataToKeeper.TaskID[0],
+				"message_id", messageID,
 				"error", err)
+
+			// Try to acknowledge the message to prevent reprocessing
+			if ackErr := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", messageID); ackErr != nil {
+				tsm.logger.Error("Failed to acknowledge failed task",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"message_id", messageID,
+					"ack_error", ackErr)
+			}
+
+			// Move task to retry stream
+			if retryErr := tsm.AddTaskToRetryStream(&task, err.Error()); retryErr != nil {
+				tsm.logger.Error("Failed to move task to retry stream",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"error", retryErr)
+			}
 			continue
 		}
 
-		// Send task to performer
+		// Send task to performer asynchronously
 		go tsm.sendTaskToPerformer(task)
 	}
 }
@@ -197,12 +213,32 @@ func (tsm *TaskStreamManager) moveTaskToProcessing(task TaskStreamData, messageI
 		return fmt.Errorf("failed to add to processing stream: %w", err)
 	}
 
-	// Acknowledge in ready stream
-	if err := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", messageID); err != nil {
-		tsm.logger.Warn("Failed to acknowledge task in ready stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"message_id", messageID,
-			"error", err)
+	// Acknowledge in ready stream with retry logic
+	maxAckRetries := 3
+	for attempt := 1; attempt <= maxAckRetries; attempt++ {
+		if err := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", messageID); err != nil {
+			tsm.logger.Warn("Failed to acknowledge task in ready stream (attempt %d/%d)",
+				"task_id", task.SendTaskDataToKeeper.TaskID[0],
+				"message_id", messageID,
+				"attempt", attempt,
+				"max_retries", maxAckRetries,
+				"error", err)
+
+			if attempt == maxAckRetries {
+				// On final attempt, log as error but don't fail the operation
+				tsm.logger.Error("Failed to acknowledge task after all retries",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"message_id", messageID,
+					"error", err)
+			} else {
+				// Wait before retry
+				time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
+				continue
+			}
+		} else {
+			// Successfully acknowledged
+			break
+		}
 	}
 
 	tsm.logger.Debug("Task moved to processing stream",
@@ -218,7 +254,8 @@ func (tsm *TaskStreamManager) AckTaskProcessed(stream, consumerGroup, messageID 
 		"consumer_group", consumerGroup,
 		"message_id", messageID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Increase timeout for acknowledgment operations
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	err := tsm.client.XAck(ctx, stream, consumerGroup, messageID)
