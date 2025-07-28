@@ -1,14 +1,14 @@
 package tasks
 
 import (
-	"context"
+	// "context"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	// "github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
@@ -326,8 +326,8 @@ func (tsm *TaskStreamManager) AddTaskToRetryStream(task *TaskStreamData, retryRe
 
 func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamData) error {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetStreamOperationTimeout())
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), config.GetStreamOperationTimeout())
+	// defer cancel()
 
 	taskJSON, err := json.Marshal(task)
 	if err != nil {
@@ -338,15 +338,15 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 		return fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
-	res, err := tsm.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: stream,
-		MaxLen: int64(config.GetStreamMaxLen()),
-		Approx: true,
-		Values: map[string]interface{}{
-			"task":       taskJSON,
-			"created_at": time.Now().Unix(),
-		},
-	})
+	// res, err := tsm.client.XAdd(ctx, &redis.XAddArgs{
+	// 	Stream: stream,
+	// 	MaxLen: int64(config.GetStreamMaxLen()),
+	// 	Approx: true,
+	// 	Values: map[string]interface{}{
+	// 		"task":       taskJSON,
+	// 		"created_at": time.Now().Unix(),
+	// 	},
+	// })
 	duration := time.Since(start)
 
 	if err != nil {
@@ -363,7 +363,7 @@ func (tsm *TaskStreamManager) addTaskToStream(stream string, task *TaskStreamDat
 	tsm.logger.Debug("Task added to stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"stream", stream,
-		"stream_id", res,
+		// "stream_id", res,
 		"duration", duration,
 		"task_json_size", len(taskJSON))
 

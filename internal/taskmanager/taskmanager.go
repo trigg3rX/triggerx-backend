@@ -58,7 +58,8 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	client.SetMonitoringHooks(monitoringHooks)
 
 	// Initialize stream managers with proper error handling
-	taskStreamManager, err := tasks.NewTaskStreamManager(logger, client)
+	// taskStreamManager, err := tasks.NewTaskStreamManager(logger, client)
+	taskStreamManager, err := tasks.NewTaskStreamManager(logger)
 	if err != nil {
 		// Clean up resources on error
 		cancel()
@@ -69,7 +70,8 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		return nil, fmt.Errorf("failed to create task stream manager: %w", err)
 	}
 
-	jobStreamManager, err := jobs.NewJobStreamManager(logger, client)
+	// jobStreamManager, err := jobs.NewJobStreamManager(logger, client)
+	jobStreamManager, err := jobs.NewJobStreamManager(logger)
 	if err != nil {
 		// Clean up resources on error
 		cancel()
@@ -83,7 +85,8 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		return nil, fmt.Errorf("failed to create job stream manager: %w", err)
 	}
 
-	performerManager := performers.NewPerformerManager(client, logger)
+	// performerManager := performers.NewPerformerManager(client, logger)
+	performerManager := performers.NewPerformerManager(logger)
 
 	tm := &TaskManager{
 		logger:              logger,

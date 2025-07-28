@@ -2,11 +2,11 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	// "github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
 )
 
@@ -35,109 +35,109 @@ func (tsm *TaskStreamManager) StartTaskProcessor(ctx context.Context, consumerNa
 func (tsm *TaskStreamManager) handleOrphanedPendingMessages(consumerName string) {
 	tsm.logger.Info("Checking for orphaned pending messages")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
 
 	// Get pending messages info
-	pendingInfo, err := tsm.client.XPending(ctx, TasksReadyStream, "task-processors")
-	if err != nil {
-		tsm.logger.Error("Failed to get pending messages info", "error", err)
-		return
-	}
+	// pendingInfo, err := tsm.client.XPending(ctx, TasksReadyStream, "task-processors")
+	// if err != nil {
+	// 	tsm.logger.Error("Failed to get pending messages info", "error", err)
+	// 	return
+	// }
 
-	if pendingInfo.Count == 0 {
-		tsm.logger.Debug("No pending messages found")
-		return
-	}
+	// if pendingInfo.Count == 0 {
+	// 	tsm.logger.Debug("No pending messages found")
+	// 	return
+	// }
 
-	tsm.logger.Info("Found pending messages", "count", pendingInfo.Count)
+	// tsm.logger.Info("Found pending messages", "count", pendingInfo.Count)
 
 	// Get detailed pending messages
-	pendingMsgs, err := tsm.client.XPendingExt(ctx, &redis.XPendingExtArgs{
-		Stream: TasksReadyStream,
-		Group:  "task-processors",
-		Start:  "-",
-		End:    "+",
-		Count:  pendingInfo.Count,
-	})
-	if err != nil {
-		tsm.logger.Error("Failed to get pending messages details", "error", err)
-		return
-	}
+	// pendingMsgs, err := tsm.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+	// 	Stream: TasksReadyStream,
+	// 	Group:  "task-processors",
+	// 	Start:  "-",
+	// 	End:    "+",
+	// 	Count:  pendingInfo.Count,
+	// })
+	// if err != nil {
+	// 	tsm.logger.Error("Failed to get pending messages details", "error", err)
+	// 	return
+	// }
 
 	claimedCount := 0
 
-	for _, msg := range pendingMsgs {
-		// Check if message is older than 5 minutes (likely orphaned)
-		if msg.Idle > 5*time.Minute {
-			tsm.logger.Warn("Found orphaned pending message, attempting to claim",
-				"message_id", msg.ID,
-				"consumer", msg.Consumer,
-				"idle_time", msg.Idle)
+	// for _, msg := range pendingMsgs {
+	// 	// Check if message is older than 5 minutes (likely orphaned)
+	// 	if msg.Idle > 5*time.Minute {
+	// 		tsm.logger.Warn("Found orphaned pending message, attempting to claim",
+	// 			"message_id", msg.ID,
+	// 			"consumer", msg.Consumer,
+	// 			"idle_time", msg.Idle)
 
-			// Try to claim the message
-			claimedMsgs, err := tsm.client.XClaim(ctx, &redis.XClaimArgs{
-				Stream:   TasksReadyStream,
-				Group:    "task-processors",
-				Consumer: consumerName,
-				MinIdle:  0,
-				Messages: []string{msg.ID},
-			}).Result()
+	// 		// Try to claim the message
+	// 		claimedMsgs, err := tsm.client.XClaim(ctx, &redis.XClaimArgs{
+	// 			Stream:   TasksReadyStream,
+	// 			Group:    "task-processors",
+	// 			Consumer: consumerName,
+	// 			MinIdle:  0,
+	// 			Messages: []string{msg.ID},
+	// 		}).Result()
 
-			if err != nil {
-				tsm.logger.Error("Failed to claim orphaned message",
-					"message_id", msg.ID,
-					"error", err)
-				continue
-			}
+	// 		if err != nil {
+	// 			tsm.logger.Error("Failed to claim orphaned message",
+	// 				"message_id", msg.ID,
+	// 				"error", err)
+	// 			continue
+	// 		}
 
-			if len(claimedMsgs) > 0 {
-				// Process the claimed message
-				for _, claimedMsg := range claimedMsgs {
-					taskJSON, exists := claimedMsg.Values["task"].(string)
-					if !exists {
-						tsm.logger.Warn("Claimed message missing task data", "message_id", claimedMsg.ID)
-						// Acknowledge to remove from pending
-						if ackErr := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", claimedMsg.ID); ackErr != nil {
-							tsm.logger.Error("Failed to acknowledge orphaned message", "message_id", claimedMsg.ID, "error", ackErr)
-						}
-						continue
-					}
+	// 		if len(claimedMsgs) > 0 {
+	// 			// Process the claimed message
+	// 			for _, claimedMsg := range claimedMsgs {
+	// 				taskJSON, exists := claimedMsg.Values["task"].(string)
+	// 				if !exists {
+	// 					tsm.logger.Warn("Claimed message missing task data", "message_id", claimedMsg.ID)
+	// 					// Acknowledge to remove from pending
+	// 					if ackErr := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", claimedMsg.ID); ackErr != nil {
+	// 						tsm.logger.Error("Failed to acknowledge orphaned message", "message_id", claimedMsg.ID, "error", ackErr)
+	// 					}
+	// 					continue
+	// 				}
 
-					var task TaskStreamData
-					if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
-						tsm.logger.Error("Failed to unmarshal claimed task", "message_id", claimedMsg.ID, "error", err)
-						// Acknowledge to remove from pending
-						if ackErr := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", claimedMsg.ID); ackErr != nil {
-							tsm.logger.Error("Failed to acknowledge invalid task", "message_id", claimedMsg.ID, "error", ackErr)
-						}
-						continue
-					}
+	// 				var task TaskStreamData
+	// 				if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
+	// 					tsm.logger.Error("Failed to unmarshal claimed task", "message_id", claimedMsg.ID, "error", err)
+	// 					// Acknowledge to remove from pending
+	// 					if ackErr := tsm.AckTaskProcessed(TasksReadyStream, "task-processors", claimedMsg.ID); ackErr != nil {
+	// 						tsm.logger.Error("Failed to acknowledge invalid task", "message_id", claimedMsg.ID, "error", ackErr)
+	// 					}
+	// 					continue
+	// 				}
 
-					tsm.logger.Info("Processing orphaned task",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"message_id", claimedMsg.ID)
+	// 				tsm.logger.Info("Processing orphaned task",
+	// 					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+	// 					"message_id", claimedMsg.ID)
 
-					// Process the task
-					if err := tsm.moveTaskToProcessing(task, claimedMsg.ID); err != nil {
-						tsm.logger.Error("Failed to process orphaned task",
-							"task_id", task.SendTaskDataToKeeper.TaskID[0],
-							"message_id", claimedMsg.ID,
-							"error", err)
-						// Move to retry stream
-						if retryErr := tsm.AddTaskToRetryStream(&task, err.Error()); retryErr != nil {
-							tsm.logger.Error("Failed to move orphaned task to retry", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", retryErr)
-						}
-					} else {
-						// Send task to performer
-						go tsm.sendTaskToPerformer(task)
-					}
+	// 				// Process the task
+	// 				if err := tsm.moveTaskToProcessing(task, claimedMsg.ID); err != nil {
+	// 					tsm.logger.Error("Failed to process orphaned task",
+	// 						"task_id", task.SendTaskDataToKeeper.TaskID[0],
+	// 						"message_id", claimedMsg.ID,
+	// 						"error", err)
+	// 					// Move to retry stream
+	// 					if retryErr := tsm.AddTaskToRetryStream(&task, err.Error()); retryErr != nil {
+	// 						tsm.logger.Error("Failed to move orphaned task to retry", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", retryErr)
+	// 					}
+	// 				} else {
+	// 					// Send task to performer
+	// 					go tsm.sendTaskToPerformer(task)
+	// 				}
 
-					claimedCount++
-				}
-			}
-		}
-	}
+	// 				claimedCount++
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	if claimedCount > 0 {
 		tsm.logger.Info("Successfully processed orphaned pending messages", "count", claimedCount)
@@ -385,18 +385,18 @@ func (tsm *TaskStreamManager) AckTaskProcessed(stream, consumerGroup, messageID 
 		"message_id", messageID)
 
 	// Increase timeout for acknowledgment operations
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
 
-	err := tsm.client.XAck(ctx, stream, consumerGroup, messageID)
-	if err != nil {
-		tsm.logger.Error("Failed to acknowledge task",
-			"stream", stream,
-			"consumer_group", consumerGroup,
-			"message_id", messageID,
-			"error", err)
-		return err
-	}
+	// err := tsm.client.XAck(ctx, stream, consumerGroup, messageID)
+	// if err != nil {
+	// 	tsm.logger.Error("Failed to acknowledge task",
+	// 		"stream", stream,
+	// 		"consumer_group", consumerGroup,
+	// 		"message_id", messageID,
+	// 		"error", err)
+	// 	return err
+	// }
 
 	tsm.logger.Debug("Task acknowledged successfully",
 		"stream", stream,

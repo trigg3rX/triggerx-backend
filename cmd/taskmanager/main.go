@@ -44,31 +44,33 @@ func main() {
 	collector.Start()
 
 	// Create Redis client and verify connection
-	redisConfig := config.GetRedisClientConfig()
-	client, err := redisClient.NewRedisClient(logger, redisConfig)
-	if err != nil {
-		logger.Fatal("Failed to create Redis client", "error", err)
-	}
+	// redisConfig := config.GetRedisClientConfig()
+	// client, err := redisClient.NewRedisClient(logger, redisConfig)
+	// if err != nil {
+	// 	logger.Fatal("Failed to create Redis client", "error", err)
+	// }
 
 	// Set up monitoring hooks for metrics integration
-	monitoringHooks := metrics.CreateRedisMonitoringHooks()
-	client.SetMonitoringHooks(monitoringHooks)
+	// monitoringHooks := metrics.CreateRedisMonitoringHooks()
+	// client.SetMonitoringHooks(monitoringHooks)
 
 	// Test Redis connection
-	if err := client.Ping(); err != nil {
-		logger.Fatal("Redis is not reachable", "error", err)
-	}
-	logger.Info("Redis client Initialised")
+	// if err := client.Ping(); err != nil {
+	// 	logger.Fatal("Redis is not reachable", "error", err)
+	// }
+	// logger.Info("Redis client Initialised")
 
 	// Initialize job stream manager for orchestration
-	jobStreamMgr, err := jobs.NewJobStreamManager(logger, client)
+	// jobStreamMgr, err := jobs.NewJobStreamManager(logger, client)
+	jobStreamMgr, err := jobs.NewJobStreamManager(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
 	}
 	logger.Info("Job stream manager Initialised")
 
 	// Initialize task stream manager for orchestration
-	taskStreamMgr, err := tasks.NewTaskStreamManager(logger, client)
+	// taskStreamMgr, err := tasks.NewTaskStreamManager(logger, client)
+	taskStreamMgr, err := tasks.NewTaskStreamManager(logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
 	}
@@ -149,7 +151,8 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, client, server, logger)
+	// performGracefulShutdown(ctx, client, server, logger)
+	performGracefulShutdown(ctx, nil, server, logger)
 }
 
 // startStreamHealthMonitor monitors the health of Redis streams
