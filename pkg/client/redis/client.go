@@ -288,6 +288,36 @@ func (c *Client) XAck(ctx context.Context, stream, group, id string) error {
 	}, "XAck")
 }
 
+func (c *Client) XPending(ctx context.Context, stream, group string) (*redis.XPending, error) {
+	var result *redis.XPending
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.XPending(ctx, stream, group).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "XPending")
+	return result, err
+}
+
+func (c *Client) XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error) {
+	var result []redis.XPendingExt
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.XPendingExt(ctx, args).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "XPendingExt")
+	return result, err
+}
+
+func (c *Client) XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd {
+	return c.redisClient.XClaim(ctx, args)
+}
+
 // TTL returns the time-to-live for a key with retry logic
 func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
 	var result time.Duration

@@ -11,7 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/performers"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -60,14 +59,24 @@ func (bp *TaskBatchProcessor) Stop() {
 
 // AddTask adds a task to the batch processor
 func (bp *TaskBatchProcessor) AddTask(task *TaskStreamData) error {
+	bp.streamMgr.logger.Debug("Adding task to batch processor",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
+		"current_batch_size", len(bp.tasks))
+
 	bp.mu.Lock()
 	bp.tasks = append(bp.tasks, task)
 	shouldProcess := len(bp.tasks) >= bp.batchSize
 	bp.mu.Unlock()
 
+	bp.streamMgr.logger.Debug("Task added to batch",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
+		"new_batch_size", len(bp.tasks),
+		"should_process", shouldProcess)
+
 	// Process batch immediately if it reaches the batch size
 	// Note: We release the lock before processing to avoid deadlocks
 	if shouldProcess {
+		bp.streamMgr.logger.Info("Processing batch immediately due to size limit", "batch_size", len(bp.tasks))
 		return bp.processBatch()
 	}
 
@@ -76,6 +85,8 @@ func (bp *TaskBatchProcessor) AddTask(task *TaskStreamData) error {
 
 // processLoop runs the main processing loop
 func (bp *TaskBatchProcessor) processLoop() {
+	bp.streamMgr.logger.Info("Batch processor loop started")
+
 	for {
 		select {
 		case <-bp.done:
@@ -83,6 +94,7 @@ func (bp *TaskBatchProcessor) processLoop() {
 			// Process any remaining tasks before stopping
 			bp.mu.Lock()
 			if len(bp.tasks) > 0 {
+				bp.streamMgr.logger.Info("Processing final batch before stopping", "batch_size", len(bp.tasks))
 				if err := bp.processBatch(); err != nil {
 					bp.streamMgr.logger.Error("Failed to process final batch", "error", err)
 				}
@@ -92,6 +104,7 @@ func (bp *TaskBatchProcessor) processLoop() {
 		case <-bp.ticker.C:
 			bp.mu.Lock()
 			if len(bp.tasks) > 0 {
+				bp.streamMgr.logger.Debug("Processing batch due to timeout", "batch_size", len(bp.tasks))
 				if err := bp.processBatch(); err != nil {
 					bp.streamMgr.logger.Error("Failed to process batch", "error", err)
 				}
@@ -165,7 +178,7 @@ func (bp *TaskBatchProcessor) processSingleTask(task *TaskStreamData) error {
 		"task_id", task.SendTaskDataToKeeper.TaskID[0])
 
 	// Add task to ready stream
-	_, err := bp.streamMgr.AddTaskToReadyStream(*task)
+	performerData, err := bp.streamMgr.AddTaskToReadyStream(*task)
 	if err != nil {
 		bp.streamMgr.logger.Error("Failed to process task in batch",
 			"task_id", task.SendTaskDataToKeeper.TaskID[0],
@@ -173,8 +186,10 @@ func (bp *TaskBatchProcessor) processSingleTask(task *TaskStreamData) error {
 		return err
 	}
 
-	bp.streamMgr.logger.Debug("Successfully processed single task in batch",
-		"task_id", task.SendTaskDataToKeeper.TaskID[0])
+	bp.streamMgr.logger.Info("Successfully processed single task in batch",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
+		"performer_id", performerData.OperatorID,
+		"performer_address", performerData.KeeperAddress)
 	return nil
 }
 
@@ -193,10 +208,13 @@ func (bp *TaskBatchProcessor) GetBatchStats() map[string]interface{} {
 
 // Ready to be sent to the performer with improved error handling and performance
 func (tsm *TaskStreamManager) AddTaskToReadyStream(task TaskStreamData) (types.PerformerData, error) {
-	performerData := performers.GetPerformerData(task.SendTaskDataToKeeper.TargetData[0].IsImua)
-	if performerData.KeeperID == 0 {
-		tsm.logger.Error("No performers available for task", "task_id", task.SendTaskDataToKeeper.TaskID[0])
-		return types.PerformerData{}, fmt.Errorf("no performers available")
+	// Use dynamic performer selection instead of hardcoded selection
+	performerData, err := tsm.performerManager.GetPerformerData(task.SendTaskDataToKeeper.TargetData[0].IsImua)
+	if err != nil {
+		tsm.logger.Error("Failed to get performer data dynamically",
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
+			"error", err)
+		return types.PerformerData{}, fmt.Errorf("failed to get performer: %w", err)
 	}
 
 	// Update task with performer information

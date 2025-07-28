@@ -8,6 +8,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/performers"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
@@ -16,14 +17,15 @@ import (
 )
 
 type TaskStreamManager struct {
-	client         redisClient.RedisClientInterface
-	aggClient      *aggregator.AggregatorClient
-	dbClient       *dbserver.DBServerClient
-	logger         logging.Logger
-	consumerGroups map[string]bool
-	mu             sync.RWMutex
-	startTime      time.Time
-	batchProcessor *TaskBatchProcessor
+	client           redisClient.RedisClientInterface
+	aggClient        *aggregator.AggregatorClient
+	dbClient         *dbserver.DBServerClient
+	performerManager *performers.PerformerManager
+	logger           logging.Logger
+	consumerGroups   map[string]bool
+	mu               sync.RWMutex
+	startTime        time.Time
+	batchProcessor   *TaskBatchProcessor
 }
 
 func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientInterface) (*TaskStreamManager, error) {
@@ -53,12 +55,13 @@ func NewTaskStreamManager(logger logging.Logger, client redisClient.RedisClientI
 	}
 
 	tsm := &TaskStreamManager{
-		client:         client,
-		aggClient:      aggClient,
-		dbClient:       dbserverClient,
-		logger:         logger,
-		consumerGroups: make(map[string]bool),
-		startTime:      time.Now(),
+		client:           client,
+		aggClient:        aggClient,
+		dbClient:         dbserverClient,
+		performerManager: performers.NewPerformerManager(client, logger),
+		logger:           logger,
+		consumerGroups:   make(map[string]bool),
+		startTime:        time.Now(),
 	}
 
 	// Initialize batch processor for improved performance
@@ -116,7 +119,18 @@ func (tsm *TaskStreamManager) Initialize() error {
 func (tsm *TaskStreamManager) MarkTaskCompleted(taskID int64, performerData types.PerformerData) error {
 	tsm.logger.Info("Marking task as completed",
 		"task_id", taskID,
-		"performer_id", performerData.KeeperID)
+		"performer_id", performerData.OperatorID)
+
+	// Release the performer
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := tsm.performerManager.MarkPerformerAvailable(ctx, performerData.OperatorID); err != nil {
+		tsm.logger.Warn("Failed to mark performer as available",
+			"performer_id", performerData.OperatorID,
+			"error", err)
+		// Continue anyway, the task is still marked as completed
+	}
 
 	// Find and move task from processing to completed
 	task, err := tsm.findTaskInProcessing(taskID)
