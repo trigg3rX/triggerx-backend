@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/config"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -131,7 +132,6 @@ type PerformerManager struct {
 
 	// Performance tracking
 	lastRoundRobinIndex int
-	roundRobinMu        sync.Mutex
 
 	// Cached performers
 	performers   []types.PerformerData
@@ -149,7 +149,7 @@ func NewPerformerManager(client redisClient.RedisClientInterface, logger logging
 		performers:   make([]types.PerformerData, 0),
 	}
 
-	logger.Info("PerformerManager initialized successfully")
+	logger.Info("PerformerManager initialized successfully", "health_rpc_url", config.GetHealthRPCUrl())
 	return pm
 }
 
@@ -170,7 +170,8 @@ func (pm *PerformerManager) refreshPerformers(ctx context.Context) error {
 		pm.logger.Debug("Fetched performer",
 			"index", i,
 			"operator_id", performer.OperatorID,
-			"keeper_address", performer.KeeperAddress)
+			"keeper_address", performer.KeeperAddress,
+			"is_imua", performer.IsImua)
 	}
 
 	pm.performersMu.Lock()
@@ -269,8 +270,11 @@ func (pm *PerformerManager) GetAvailablePerformers() []types.PerformerData {
 	pm.performersMu.RLock()
 	defer pm.performersMu.RUnlock()
 
+	pm.logger.Debug("Getting available performers", "cached_count", len(pm.performers), "last_refresh", pm.lastRefresh)
+
 	// Check if we need to refresh performers
 	if time.Since(pm.lastRefresh) > PerformerRefreshTTL {
+		pm.logger.Debug("Performers need refresh, triggering background refresh")
 		// Refresh in background
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -337,7 +341,10 @@ func (pm *PerformerManager) SelectPerformerRoundRobin(performers []types.Perform
 		if !isBusy {
 			// Update next performer index in Redis
 			nextIndex = (nextIndex + 1) % len(performers)
-			pm.client.Set(ctx, NextPerformerKey, fmt.Sprintf("%d", nextIndex), 0)
+			err := pm.client.Set(ctx, NextPerformerKey, fmt.Sprintf("%d", nextIndex), 0)
+			if err != nil {
+				pm.logger.Error("Failed to update next performer index in Redis", "error", err)
+			}
 
 			pm.logger.Debug("Selected performer using round-robin",
 				"performer_id", selectedPerformer.OperatorID,

@@ -28,6 +28,9 @@ type RedisClientInterface interface {
 	XLen(ctx context.Context, stream string) (int64, error)
 	XReadGroup(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error)
 	XAck(ctx context.Context, stream, group, id string) error
+	XPending(ctx context.Context, stream, group string) (*redis.XPending, error)
+	XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error)
+	XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd
 
 	// TTL management
 	RefreshTTL(ctx context.Context, key string, ttl time.Duration) error
