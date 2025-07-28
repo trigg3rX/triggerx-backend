@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -107,7 +108,7 @@ func main() {
 
 	healthCfg := health.Config{
 		HealthServiceURL: config.GetHealthRPCUrl(),
-		PrivateKey:       string(config.GetPrivateKeyController().D.Bytes()),
+		PrivateKey:       hex.EncodeToString(config.GetPrivateKeyController().D.Bytes()),
 		KeeperAddress:    config.GetKeeperAddress(),
 		PeerID:           config.GetPeerID(),
 		Version:          config.GetVersion(),

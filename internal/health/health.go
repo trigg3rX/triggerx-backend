@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -282,8 +283,15 @@ func (h *Handler) GetActivePerformers(c *gin.Context) {
 	performers := make([]map[string]interface{}, 0)
 	for _, keeper := range detailedKeepers {
 		if keeper.IsActive {
+			// Parse operator_id from string to int64
+			operatorID, err := strconv.ParseInt(keeper.OperatorID, 10, 64)
+			if err != nil {
+				h.logger.Error("Failed to parse operator_id", "operator_id", keeper.OperatorID, "error", err)
+				continue // Skip this keeper if we can't parse the operator_id
+			}
+
 			performer := map[string]interface{}{
-				"operator_id":    keeper.OperatorID,
+				"operator_id":    operatorID,
 				"keeper_address": keeper.KeeperAddress,
 				"is_imua":        keeper.IsImua,
 				"last_seen":      keeper.LastCheckedIn,

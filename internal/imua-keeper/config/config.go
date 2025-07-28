@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "0.0.1"
+	version = "0.1.6"
 	isImua  = true
 )
 
@@ -104,7 +104,7 @@ func Init() error {
 		tlsProofPort:             "443",
 		l1Chain:                  env.GetEnvString("L1_CHAIN", "17000"),
 		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
+		avsGovernanceAddress:     env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5"),
 		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 
