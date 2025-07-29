@@ -172,20 +172,6 @@ if [[ "$SERVICE" == "all" ]]; then
         exit 1
     fi
     
-    # Clean up log files on success
-    for service in "${services[@]}"; do
-        docker_name=$(echo $service | sed 's/\//-/g')
-        rm -f "build_${docker_name}.log"
-            --build-arg DOCKER_NAME=${docker_name} \
-            -t triggerx-${docker_name}:${version} . > "build_${docker_name}.log" 2>&1; then
-            echo "[$(date '+%H:%M:%S')] ✅ Successfully built $service"
-            return 0
-        else
-            echo "[$(date '+%H:%M:%S')] ❌ Failed to build $service (check build_${docker_name}.log)"
-            return 1
-        fi
-    }
-    
     echo "Starting parallel builds for ${#services[@]} services..."
     
     # Start all builds in parallel
@@ -247,11 +233,6 @@ else
         -t triggerx-${DOCKER_NAME}:${VERSION} .
 fi
 
-if [[ "$SERVICE" == "all" ]]; then
-    echo "All services built successfully with version ${VERSION}"
-else
-    echo "Successfully built: triggerx-${SERVICE}:${VERSION}"
-fi
 if [[ "$SERVICE" == "all" ]]; then
     echo "All services built successfully with version ${VERSION}"
 else

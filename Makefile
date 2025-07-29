@@ -78,8 +78,14 @@ build-go: ## Build the Go code (active)
 ############################ BUILD AND PUSH DOCKER IMAGES ####################################
 ----------------------------DOCKERS----------------------------: ## 
 
-docker-build: ## Build the Docker image
-	./scripts/docker/build.sh
+docker-build: ## Build the Docker image (usage: make docker-build SERVICE=<service> VERSION=<version>)
+	@if [ -z "$(SERVICE)" ] || [ -z "$(VERSION)" ]; then \
+		echo "Error: SERVICE and VERSION are required"; \
+		echo "Usage: make docker-build SERVICE=<service> VERSION=<version>"; \
+		echo "Example: make docker-build SERVICE=all VERSION=0.0.7"; \
+		exit 1; \
+	fi
+	./scripts/docker/build.sh -n $(SERVICE) -v $(VERSION)
 
 docker-push: ## Push the Docker image
 	./scripts/docker/publish.sh
