@@ -12,12 +12,7 @@ func (c *Client) GetHealthStatus(ctx context.Context) *HealthStatus {
 		Connected:  false,
 		LastPing:   time.Time{},
 		Errors:     []string{},
-		Type:       "local",
 		ServerInfo: make(map[string]interface{}),
-	}
-
-	if c.config.IsUpstash {
-		status.Type = "upstash"
 	}
 
 	// Test ping with latency measurement

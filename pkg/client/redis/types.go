@@ -23,25 +23,9 @@ type UpstashConfig struct {
 	Token string
 }
 
-type LocalRedisConfig struct {
-	Addr     string
-	Password string
-	DB       int
-}
-
-type StreamsConfig struct {
-	JobStreamTTL       time.Duration
-	TaskStreamTTL      time.Duration
-	KeeperStreamTTL    time.Duration
-	RegistrarStreamTTL time.Duration
-}
-
 type RedisConfig struct {
-	IsUpstash          bool
 	UpstashConfig      UpstashConfig
-	LocalRedisConfig   LocalRedisConfig
 	ConnectionSettings ConnectionSettings
-	StreamsConfig      StreamsConfig
 }
 
 // RetryConfig defines configuration for retry mechanisms
@@ -72,7 +56,6 @@ type HealthStatus struct {
 	LastPing    time.Time
 	PingLatency time.Duration
 	Errors      []string
-	Type        string
 	ServerInfo  map[string]interface{}
 }
 
