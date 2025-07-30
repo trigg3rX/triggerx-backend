@@ -124,7 +124,7 @@ type ConditionJobData struct {
 
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
-	TaskNumber           int       `json:"task_number"`
+	TaskNumber           int64       `json:"task_number"`
 	JobID                int64     `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
@@ -139,7 +139,7 @@ type TaskData struct {
 	TpSignature          []byte    `json:"tp_signature"`
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
-	IsSuccessful         bool      `json:"is_successful"`
+	IsAccepted           bool      `json:"is_accepted"`
 	IsImua               bool      `json:"is_imua"`
 }
 
