@@ -18,7 +18,7 @@ import (
 // TaskManager orchestrates all Redis-based task management components
 type TaskManager struct {
 	logger              logging.Logger
-	redisClient         redisClient.RedisClientInterface
+	redisClient         *redisClient.Client
 	taskStreamManager   *tasks.TaskStreamManager
 	jobStreamManager    *jobs.JobStreamManager
 	performerManager    *performers.PerformerManager
@@ -32,13 +32,6 @@ type TaskManager struct {
 // NewTaskManager creates a new TaskManager instance
 func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	logger.Info("Initializing TaskManager...")
-
-	// Check if Redis is available
-	if !config.IsRedisAvailable() {
-		logger.Error("Redis not available for TaskManager initialization")
-		metrics.ServiceStatus.WithLabelValues("task_manager").Set(0)
-		return nil, fmt.Errorf("redis not available")
-	}
 
 	// Create context for managing background workers
 	ctx, cancel := context.WithCancel(context.Background())
@@ -101,7 +94,6 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	}
 
 	logger.Info("TaskManager initialized successfully",
-		"redis_type", config.GetRedisType(),
 		"metrics_update_interval", config.GetMetricsUpdateInterval())
 
 	metrics.ServiceStatus.WithLabelValues("task_manager").Set(1)
@@ -230,7 +222,7 @@ func (tm *TaskManager) GetPerformerManager() *performers.PerformerManager {
 }
 
 // GetRedisClient returns the Redis client
-func (tm *TaskManager) GetRedisClient() redisClient.RedisClientInterface {
+func (tm *TaskManager) GetRedisClient() *redisClient.Client {
 	return tm.redisClient
 }
 
@@ -242,8 +234,6 @@ func (tm *TaskManager) HealthCheck() map[string]interface{} {
 	defer cancel()
 
 	healthStatus := map[string]interface{}{
-		"redis_available": config.IsRedisAvailable(),
-		"redis_type":      config.GetRedisType(),
 		"timestamp":       time.Now(),
 		"uptime_seconds":  time.Since(tm.startTime).Seconds(),
 		"start_time":      tm.startTime.Format(time.RFC3339),
@@ -257,7 +247,6 @@ func (tm *TaskManager) HealthCheck() map[string]interface{} {
 			"last_ping":    redisHealth.LastPing,
 			"ping_latency": redisHealth.PingLatency,
 			"errors":       redisHealth.Errors,
-			"type":         redisHealth.Type,
 		}
 	}
 
