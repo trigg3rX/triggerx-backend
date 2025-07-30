@@ -8,12 +8,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	// "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
-	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
 	syncMgr "github.com/trigg3rX/triggerx-backend/internal/registrar/sync"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -26,19 +27,8 @@ const (
 type RegistrarService struct {
 	logger logging.Logger
 
-	// Blockchain clients
-	ethClient  *ethclient.Client
-	baseClient *ethclient.Client
-	optClient  *ethclient.Client
-
-	// Redis client
-	redis *redisClient.Client
-
 	// Event listener
 	eventListener *events.ContractEventListener
-
-	// Clients
-	// databaseClient *database.DatabaseClient
 
 	// State management
 	stateManager      *syncMgr.StateManager
@@ -46,11 +36,7 @@ type RegistrarService struct {
 	backfillManager   *syncMgr.BackfillManager
 
 	// Rewards service
-	// rewardsService *rewards.RewardsService
-
-	// Event handlers
-	// operatorHandler *events.OperatorEventHandler
-	// taskHandler     *events.TaskEventHandler
+	rewardsService *rewards.RewardsService
 
 	// Lifecycle management
 	ctx      context.Context
@@ -76,14 +62,31 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 		return nil, fmt.Errorf("failed to connect to Base node: %w", err)
 	}
 
-	optClient, err := ethclient.Dial(config.GetChainRPCUrl(true, "11155420"))
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to connect to Optimism node: %w", err)
-	}
+	// optClient, err := ethclient.Dial(config.GetChainRPCUrl(true, "11155420"))
+	// if err != nil {
+	// 	cancel()
+	// 	return nil, fmt.Errorf("failed to connect to Optimism node: %w", err)
+	// }
 
 	// Initialize Redis client first
-	redis, err := redisClient.NewClient(logger)
+	redis, err := redis.NewRedisClient(logger, redis.RedisConfig{
+		UpstashConfig: redis.UpstashConfig{
+			URL:   config.GetUpstashRedisUrl(),
+			Token: config.GetUpstashRedisRestToken(),
+		},
+		ConnectionSettings: redis.ConnectionSettings{
+			PoolSize:      10,
+			MaxIdleConns:  10,
+			MinIdleConns:  1,
+			MaxRetries:    3,
+			DialTimeout:   5 * time.Second,
+			ReadTimeout:   5 * time.Second,
+			WriteTimeout:  5 * time.Second,
+			PoolTimeout:   5 * time.Second,
+			PingTimeout:   5 * time.Second,
+			HealthTimeout: 5 * time.Second,
+		},
+	})
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to initialize Redis client: %w", err)
@@ -96,11 +99,11 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 	checkpointManager := syncMgr.NewCheckpointManager(redis, logger)
 
 	// Initialize backfill manager
-	backfillManager := syncMgr.NewBackfillManager(ethClient, baseClient, optClient, logger)
+	backfillManager := syncMgr.NewBackfillManager(ethClient, baseClient, logger)
 
 	// Try to load existing state from Redis first
 	initCtx, initCancel := context.WithTimeout(ctx, defaultConnectTimeout)
-	lastEthBlock, err := stateManager.GetLastPolledEthBlock(initCtx)
+	lastEthBlock, err := stateManager.GetLastEthBlockUpdated(initCtx)
 	if err != nil || lastEthBlock == 0 {
 		// Fallback to current blockchain block if Redis is empty
 		logger.Info("No ETH block found in Redis, getting current block from blockchain")
@@ -114,7 +117,7 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 		logger.Infof("Loaded ETH block %d from Redis", lastEthBlock)
 	}
 
-	lastBaseBlock, err := stateManager.GetLastPolledBaseBlock(initCtx)
+	lastBaseBlock, err := stateManager.GetLastBaseBlockUpdated(initCtx)
 	if err != nil || lastBaseBlock == 0 {
 		logger.Info("No BASE block found in Redis, getting current block from blockchain")
 		lastBaseBlock, err = baseClient.BlockNumber(initCtx)
@@ -127,42 +130,54 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 		logger.Infof("Loaded BASE block %d from Redis", lastBaseBlock)
 	}
 
-	lastOptBlock, err := stateManager.GetLastPolledOptBlock(initCtx)
-	if err != nil || lastOptBlock == 0 {
-		logger.Info("No OPT block found in Redis, getting current block from blockchain")
-		lastOptBlock, err = optClient.BlockNumber(initCtx)
-		if err != nil {
-			initCancel()
-			cancel()
-			return nil, fmt.Errorf("failed to get OPT latest block: %w", err)
-		}
-	} else {
-		logger.Infof("Loaded OPT block %d from Redis", lastOptBlock)
-	}
+	// lastOptBlock, err := stateManager.GetLastOptBlockUpdated(initCtx)
+	// if err != nil || lastOptBlock == 0 {
+	// 	logger.Info("No OPT block found in Redis, getting current block from blockchain")
+	// 	lastOptBlock, err = optClient.BlockNumber(initCtx)
+	// 	if err != nil {
+	// 		initCancel()
+	// 		cancel()
+	// 		return nil, fmt.Errorf("failed to get OPT latest block: %w", err)
+	// 	}
+	// } else {
+	// 	logger.Infof("Loaded OPT block %d from Redis", lastOptBlock)
+	// }
 	initCancel()
-
-	// Initialize event listener with configuration
-	eventConfig := events.GetDefaultConfig()
-	eventListener := events.NewContractEventListener(logger, eventConfig)
 
 	// TODO: Initialize event handlers properly - need constructor functions
 
 	// Ensure state is initialized in Redis (will only set if not already present)
-	if err := stateManager.InitializeState(ctx, lastEthBlock, lastBaseBlock, lastOptBlock); err != nil {
+	if err := stateManager.InitializeState(ctx, lastEthBlock, lastBaseBlock, 0, time.Now().UTC()); err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to initialize blockchain state: %w", err)
 	}
 
+	dbCfg := &dbClient.Config{
+		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:    "triggerx",
+		Timeout:     10 * time.Second,
+		Retries:     3,
+		ConnectWait: 5 * time.Second,
+	}
+	dbConn, err := dbClient.NewConnection(dbCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize database client: %w", err)
+	}
+
+	// Initialize database client
+	databaseClient := database.NewDatabaseClient(logger, dbConn)
+
+	// Initialize rewards service
+	rewardsService := rewards.NewRewardsService(logger, stateManager, databaseClient, time.Now().UTC())
+
 	return &RegistrarService{
 		logger:            logger,
-		ethClient:         ethClient,
-		baseClient:        baseClient,
-		optClient:         optClient,
-		redis:             redis,
 		eventListener:     eventListener,
 		stateManager:      stateManager,
 		checkpointManager: checkpointManager,
 		backfillManager:   backfillManager,
+		rewardsService:    rewardsService,
 		ctx:               ctx,
 		cancel:            cancel,
 		stopChan:          make(chan struct{}),
@@ -172,6 +187,13 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 // Start begins the event monitoring service
 func (s *RegistrarService) Start() error {
 	s.logger.Info("Starting registrar service...")
+
+	// Start Rewards Service (if initialized)
+	if s.rewardsService != nil {
+		go s.rewardsService.StartDailyRewardsPoints()
+	} else {
+		s.logger.Info("Rewards service not initialized (database client not available)")
+	}
 
 	// Start event listener
 	if err := s.eventListener.Start(); err != nil {
@@ -215,19 +237,19 @@ func (s *RegistrarService) Stop() error {
 		s.logger.Errorf("Error stopping event listener: %v", err)
 	}
 
-	// Wait for all goroutines to finish
-	s.wg.Wait()
+	// Wait for all goroutines to finish with timeout
+	// done := make(chan struct{})
+	// go func() {
+	// 	s.wg.Wait()
+	// 	close(done)
+	// }()
 
-	// Close HTTP clients
-	if s.ethClient != nil {
-		s.ethClient.Close()
-	}
-	if s.baseClient != nil {
-		s.baseClient.Close()
-	}
-	if s.optClient != nil {
-		s.optClient.Close()
-	}
+	// select {
+	// case <-done:
+	// 	s.logger.Info("All goroutines finished gracefully")
+	// case <-time.After(10 * time.Second):
+	// 	s.logger.Warn("Timeout waiting for goroutines to finish")
+	// }
 
 	s.logger.Info("Registrar service stopped")
 	return nil
@@ -372,10 +394,10 @@ func (s *RegistrarService) GetStatus() map[string]interface{} {
 	if err != nil {
 		s.logger.Errorf("Failed to get last processed BASE block: %v", err)
 	}
-	optBlock, err := s.stateManager.GetLastPolledOptBlock(s.ctx)
-	if err != nil {
-		s.logger.Errorf("Failed to get last processed OPT block: %v", err)
-	}
+	// optBlock, err := s.stateManager.GetLastOptBlockUpdated(s.ctx)
+	// if err != nil {
+	// 	s.logger.Errorf("Failed to get last processed OPT block: %v", err)
+	// }
 
 	// Get checkpoint and backfill health
 	checkpointHealth := s.checkpointManager.GetCheckpointHealth(s.ctx)
@@ -387,7 +409,7 @@ func (s *RegistrarService) GetStatus() map[string]interface{} {
 		"block_state": map[string]interface{}{
 			"ethereum": ethBlock,
 			"base":     baseBlock,
-			"optimism": optBlock,
+			// "optimism": optBlock,
 		},
 		"websocket_active": len(chainStatus) > 0,
 		"checkpoints":      checkpointHealth,
