@@ -21,7 +21,8 @@ const (
 type BackfillManager struct {
 	ethClient  *ethclient.Client
 	baseClient *ethclient.Client
-	optClient  *ethclient.Client
+	// optClient  *ethclient.Client
+
 	logger     logging.Logger
 	batchSize  uint64
 	delay      time.Duration
@@ -54,11 +55,11 @@ type BackfillProgress struct {
 }
 
 // NewBackfillManager creates a new backfill manager
-func NewBackfillManager(ethClient, baseClient, optClient *ethclient.Client, logger logging.Logger) *BackfillManager {
+func NewBackfillManager(ethClient, baseClient *ethclient.Client, logger logging.Logger) *BackfillManager {
 	return &BackfillManager{
 		ethClient:  ethClient,
 		baseClient: baseClient,
-		optClient:  optClient,
+		// optClient:  optClient,
 		logger:     logger,
 		batchSize:  DefaultBackfillBatchSize,
 		delay:      DefaultBackfillDelay,
@@ -172,9 +173,9 @@ func (bm *BackfillManager) BackfillMissingBlocks(ctx context.Context, stateManag
 		client       *ethclient.Client
 		getLastBlock func(context.Context) (uint64, error)
 	}{
-		{"17000", bm.ethClient, stateManager.GetLastPolledEthBlock},
-		{"84532", bm.baseClient, stateManager.GetLastPolledBaseBlock},
-		{"11155420", bm.optClient, stateManager.GetLastPolledOptBlock},
+		{"17000", bm.ethClient, stateManager.GetLastEthBlockUpdated},
+		{"84532", bm.baseClient, stateManager.GetLastBaseBlockUpdated},
+		// {"11155420", bm.optClient, stateManager.GetLastOptBlockUpdated},
 	}
 
 	for _, chain := range chains {
@@ -246,9 +247,9 @@ func (bm *BackfillManager) processBatch(chainID string, fromBlock, toBlock uint6
 		// Event processing should be handled by the main ContractEventListener
 		eventsFound = 0
 
-	case "11155420": // Optimism Sepolia
-		bm.logger.Debugf("Processed OPT blocks %d-%d for backfill", fromBlock, toBlock)
-		eventsFound = 0
+	// case "11155420": // Optimism Sepolia
+	// 	bm.logger.Debugf("Processed OPT blocks %d-%d for backfill", fromBlock, toBlock)
+	// 	eventsFound = 0
 	}
 
 	return eventsFound, nil
@@ -298,8 +299,8 @@ func (bm *BackfillManager) getClientForChain(chainID string) *ethclient.Client {
 		return bm.ethClient
 	case "84532":
 		return bm.baseClient
-	case "11155420":
-		return bm.optClient
+	// case "11155420":
+	// 	return bm.optClient
 	default:
 		return nil
 	}
@@ -312,8 +313,8 @@ func (bm *BackfillManager) getEventTypesForChain(chainID string) []string {
 		return []string{"OperatorRegistered", "OperatorUnregistered"}
 	case "84532": // Base Sepolia
 		return []string{"TaskSubmitted", "TaskRejected"}
-	case "11155420": // Optimism Sepolia
-		return []string{} // Add Optimism events when implemented
+	// case "11155420": // Optimism Sepolia
+	// 	return []string{} // Add Optimism events when implemented
 	default:
 		return []string{}
 	}
@@ -325,11 +326,11 @@ func (bm *BackfillManager) GetBackfillHealth() map[string]interface{} {
 		"batch_size":       bm.batchSize,
 		"delay":            bm.delay.String(),
 		"max_blocks":       MaxBackfillBlocks,
-		"supported_chains": []string{"17000", "84532", "11155420"},
+		"supported_chains": []string{"17000", "84532"},
 		"available_events": map[string][]string{
 			"17000":    bm.getEventTypesForChain("17000"),
 			"84532":    bm.getEventTypesForChain("84532"),
-			"11155420": bm.getEventTypesForChain("11155420"),
+			// "11155420": bm.getEventTypesForChain("11155420"),
 		},
 	}
 }

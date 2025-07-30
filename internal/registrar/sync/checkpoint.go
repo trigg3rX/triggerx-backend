@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/redis"
+	redisclient "github.com/redis/go-redis/v9"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -21,7 +22,7 @@ const (
 
 // CheckpointManager handles periodic state snapshots
 type CheckpointManager struct {
-	redis    *redisClient.Client
+	redis    *redis.Client
 	logger   logging.Logger
 	interval time.Duration
 }
@@ -32,14 +33,21 @@ type Checkpoint struct {
 	Timestamp           time.Time              `json:"timestamp"`
 	LastPolledEthBlock  uint64                 `json:"last_polled_eth_block"`
 	LastPolledBaseBlock uint64                 `json:"last_polled_base_block"`
-	LastPolledOptBlock  uint64                 `json:"last_polled_opt_block"`
+	// LastPolledOptBlock  uint64                 `json:"last_polled_opt_block"`
 	LastRewardsUpdate   time.Time              `json:"last_rewards_update"`
 	Version             string                 `json:"version"`
 	ServiceInfo         map[string]interface{} `json:"service_info"`
 }
 
+// CheckpointSummary represents a lightweight checkpoint summary for listing
+type CheckpointSummary struct {
+	ID        string    `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	BlockInfo string    `json:"block_info"`
+}
+
 // NewCheckpointManager creates a new checkpoint manager
-func NewCheckpointManager(redis *redisClient.Client, logger logging.Logger) *CheckpointManager {
+func NewCheckpointManager(redis *redis.Client, logger logging.Logger) *CheckpointManager {
 	return &CheckpointManager{
 		redis:    redis,
 		logger:   logger,
@@ -65,9 +73,9 @@ func (cm *CheckpointManager) CreateCheckpoint(ctx context.Context, stateManager 
 	checkpoint := &Checkpoint{
 		ID:                  checkpointID,
 		Timestamp:           time.Now().UTC(),
-		LastPolledEthBlock:  state.LastPolledEthBlock,
-		LastPolledBaseBlock: state.LastPolledBaseBlock,
-		LastPolledOptBlock:  state.LastPolledOptBlock,
+		LastPolledEthBlock:  state.LastEthBlockUpdated,
+		LastPolledBaseBlock: state.LastBaseBlockUpdated,
+		// LastPolledOptBlock:  state.LastOptBlockUpdated,
 		LastRewardsUpdate:   state.LastRewardsUpdate,
 		Version:             "1.0",
 		ServiceInfo:         serviceInfo,
@@ -90,8 +98,14 @@ func (cm *CheckpointManager) CreateCheckpoint(ctx context.Context, stateManager 
 		return fmt.Errorf("failed to update latest checkpoint: %w", err)
 	}
 
-	cm.logger.Infof("Created checkpoint %s at blocks ETH:%d, BASE:%d, OPT:%d",
-		checkpointID, state.LastPolledEthBlock, state.LastPolledBaseBlock, state.LastPolledOptBlock)
+	// Add to sorted set index for efficient listing
+	timestamp := float64(checkpoint.Timestamp.Unix())
+	if _, err := cm.redis.ZAdd(ctx, "registrar:checkpoints:index", redisclient.Z{Score: timestamp, Member: checkpointID}); err != nil {
+		return fmt.Errorf("failed to add checkpoint to index: %w", err)
+	}
+
+	cm.logger.Infof("Created checkpoint %s at blocks ETH:%d, BASE:%d",
+		checkpointID, state.LastEthBlockUpdated, state.LastBaseBlockUpdated)
 
 	return nil
 }
@@ -139,17 +153,17 @@ func (cm *CheckpointManager) RestoreFromCheckpoint(ctx context.Context, stateMan
 	}
 
 	// Restore state
-	if err := stateManager.SetLastPolledEthBlock(ctx, checkpoint.LastPolledEthBlock); err != nil {
+	if err := stateManager.SetLastEthBlockUpdated(ctx, checkpoint.LastPolledEthBlock); err != nil {
 		return fmt.Errorf("failed to restore ETH block: %w", err)
 	}
 
-	if err := stateManager.SetLastPolledBaseBlock(ctx, checkpoint.LastPolledBaseBlock); err != nil {
+	if err := stateManager.SetLastBaseBlockUpdated(ctx, checkpoint.LastPolledBaseBlock); err != nil {
 		return fmt.Errorf("failed to restore BASE block: %w", err)
 	}
 
-	if err := stateManager.SetLastPolledOptBlock(ctx, checkpoint.LastPolledOptBlock); err != nil {
-		return fmt.Errorf("failed to restore OPT block: %w", err)
-	}
+	// if err := stateManager.SetLastOptBlockUpdated(ctx, checkpoint.LastPolledOptBlock); err != nil {
+	// 	return fmt.Errorf("failed to restore OPT block: %w", err)
+	// }
 
 	if !checkpoint.LastRewardsUpdate.IsZero() {
 		if err := stateManager.SetLastRewardsUpdate(ctx, checkpoint.LastRewardsUpdate); err != nil {
@@ -189,35 +203,96 @@ func (cm *CheckpointManager) StartPeriodicCheckpoints(ctx context.Context, state
 }
 
 // ListCheckpoints lists all available checkpoints
-func (cm *CheckpointManager) ListCheckpoints(ctx context.Context) ([]string, error) {
-	// This would need a more sophisticated implementation in production
-	// For now, we'll use a simple pattern match
-	// In Redis, you'd typically maintain an index of checkpoint IDs
-
-	latestID, err := cm.redis.Get(ctx, KeyLatestCheckpoint)
+func (cm *CheckpointManager) ListCheckpoints(ctx context.Context, limit int, offset int) ([]CheckpointSummary, error) {
+	// Use Redis Sorted Set for efficient listing
+	checkpointIDs, err := cm.redis.ZRevRange(ctx, "registrar:checkpoints:index", int64(offset), int64(offset+limit-1))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest checkpoint: %w", err)
+		return nil, fmt.Errorf("failed to get checkpoint index: %w", err)
 	}
 
-	if latestID == "" {
-		return []string{}, nil
+	// Fetch metadata for each checkpoint
+	var summaries []CheckpointSummary
+	for _, id := range checkpointIDs {
+		// Get checkpoint metadata (could be cached)
+		checkpoint, err := cm.GetCheckpoint(ctx, id)
+		if err != nil {
+			continue // Skip corrupted checkpoints
+		}
+		summaries = append(summaries, CheckpointSummary{
+			ID:        checkpoint.ID,
+			Timestamp: checkpoint.Timestamp,
+			BlockInfo: fmt.Sprintf("ETH:%d, BASE:%d",
+				checkpoint.LastPolledEthBlock,
+				checkpoint.LastPolledBaseBlock),
+		})
 	}
 
-	// For simplicity, return just the latest checkpoint
-	// In production, you'd maintain a sorted set of checkpoint IDs
-	return []string{latestID}, nil
+	return summaries, nil
 }
 
 // CleanupOldCheckpoints removes checkpoints older than the specified duration
 func (cm *CheckpointManager) CleanupOldCheckpoints(ctx context.Context, maxAge time.Duration) error {
-	// This is a simplified implementation
-	// In production, you'd maintain an index of checkpoints with timestamps
-	cm.logger.Infof("Checkpoint cleanup would remove checkpoints older than %v", maxAge)
+	cm.logger.Infof("Cleaning up checkpoints older than %v", maxAge)
 
-	// The TTL on checkpoint keys handles automatic cleanup
-	// This method could be enhanced to manually clean up based on business logic
+	// Calculate the cutoff timestamp
+	cutoffTime := time.Now().Add(-maxAge)
+	cutoffScore := float64(cutoffTime.Unix())
+
+	// Remove old checkpoints from the sorted set index
+	removedCount, err := cm.redis.ZRemRangeByScore(ctx, "registrar:checkpoints:index", "0", fmt.Sprintf("%.0f", cutoffScore))
+	if err != nil {
+		return fmt.Errorf("failed to remove old checkpoints from index: %w", err)
+	}
+
+	if removedCount > 0 {
+		cm.logger.Infof("Removed %d old checkpoints from index", removedCount)
+	}
+
+	// Also clean up the actual checkpoint keys that might still exist
+	// (in case they weren't automatically expired by TTL)
+	pattern := KeyCheckpointPrefix + "*"
+	keys, err := cm.redis.Keys(ctx, pattern)
+	if err != nil {
+		return fmt.Errorf("failed to scan checkpoint keys: %w", err)
+	}
+
+	var deletedKeys []string
+	for _, key := range keys {
+		// Extract checkpoint ID from key
+		checkpointID := key[len(KeyCheckpointPrefix):]
+
+		// Get checkpoint to check its timestamp
+		checkpoint, err := cm.GetCheckpoint(ctx, checkpointID)
+		if err != nil {
+			// If we can't get the checkpoint, it might be corrupted, so delete the key
+			if err := cm.redis.Del(ctx, key); err != nil {
+				cm.logger.Warnf("Failed to delete corrupted checkpoint key %s: %v", key, err)
+			} else {
+				deletedKeys = append(deletedKeys, key)
+			}
+			continue
+		}
+
+		// Delete checkpoint if it's older than maxAge
+		if checkpoint.Timestamp.Before(cutoffTime) {
+			if err := cm.redis.Del(ctx, key); err != nil {
+				cm.logger.Warnf("Failed to delete old checkpoint key %s: %v", key, err)
+			} else {
+				deletedKeys = append(deletedKeys, key)
+			}
+		}
+	}
+
+	if len(deletedKeys) > 0 {
+		cm.logger.Infof("Deleted %d old checkpoint keys", len(deletedKeys))
+	}
 
 	return nil
+}
+
+// GetCheckpointCount returns the total number of checkpoints
+func (cm *CheckpointManager) GetCheckpointCount(ctx context.Context) (int64, error) {
+	return cm.redis.ZCard(ctx, "registrar:checkpoints:index")
 }
 
 // GetCheckpointHealth returns health information about checkpoints
@@ -239,9 +314,9 @@ func (cm *CheckpointManager) GetCheckpointHealth(ctx context.Context) map[string
 	}
 
 	// Get checkpoint count
-	checkpoints, err := cm.ListCheckpoints(ctx)
+	count, err := cm.GetCheckpointCount(ctx)
 	if err == nil {
-		health["checkpoint_count"] = len(checkpoints)
+		health["checkpoint_count"] = count
 	}
 
 	return health

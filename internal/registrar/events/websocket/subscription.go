@@ -17,10 +17,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
 	// Contract bindings
-	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/AVSGovernanceLogic"
+	// "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AVSGovernanceLogic"
 	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
 	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/AvsGovernance"
-	"github.com/trigg3rX/triggerx-contracts/bindings/contracts/OBLS"
+	// "github.com/trigg3rX/triggerx-contracts/bindings/contracts/OBLS"
 )
 
 // ContractType represents the type of contract
@@ -29,8 +29,8 @@ type ContractType string
 const (
 	ContractTypeAttestationCenter  ContractType = "attestation_center"
 	ContractTypeAvsGovernance      ContractType = "avs_governance"
-	ContractTypeAVSGovernanceLogic ContractType = "avs_governance_logic"
-	ContractTypeOBLS               ContractType = "obls"
+	// ContractTypeAVSGovernanceLogic ContractType = "avs_governance_logic"
+	// ContractTypeOBLS               ContractType = "obls"
 )
 
 // SubscriptionManager manages WebSocket event subscriptions for a chain
@@ -143,21 +143,21 @@ func (sm *SubscriptionManager) initializeContractABIs() {
 		sm.logger.Errorf("Failed to initialize AvsGovernance ABI: %v", err)
 	}
 
-	// Initialize AVSGovernanceLogic ABI
-	if avsGovernanceLogicABI, err := contractAVSGovernanceLogic.ContractAVSGovernanceLogicMetaData.GetAbi(); err == nil {
-		sm.contractABIs[ContractTypeAVSGovernanceLogic] = *avsGovernanceLogicABI
-		sm.logger.Infof("Initialized AVSGovernanceLogic ABI")
-	} else {
-		sm.logger.Errorf("Failed to initialize AVSGovernanceLogic ABI: %v", err)
-	}
+	// // Initialize AVSGovernanceLogic ABI
+	// if avsGovernanceLogicABI, err := contractAVSGovernanceLogic.ContractAVSGovernanceLogicMetaData.GetAbi(); err == nil {
+	// 	sm.contractABIs[ContractTypeAVSGovernanceLogic] = *avsGovernanceLogicABI
+	// 	sm.logger.Infof("Initialized AVSGovernanceLogic ABI")
+	// } else {
+	// 	sm.logger.Errorf("Failed to initialize AVSGovernanceLogic ABI: %v", err)
+	// }
 
-	// Initialize OBLS ABI
-	if oblsABI, err := contractOBLS.ContractOBLSMetaData.GetAbi(); err == nil {
-		sm.contractABIs[ContractTypeOBLS] = *oblsABI
-		sm.logger.Infof("Initialized OBLS ABI")
-	} else {
-		sm.logger.Errorf("Failed to initialize OBLS ABI: %v", err)
-	}
+	// // Initialize OBLS ABI
+	// if oblsABI, err := contractOBLS.ContractOBLSMetaData.GetAbi(); err == nil {
+	// 	sm.contractABIs[ContractTypeOBLS] = *oblsABI
+	// 	sm.logger.Infof("Initialized OBLS ABI")
+	// } else {
+	// 	sm.logger.Errorf("Failed to initialize OBLS ABI: %v", err)
+	// }
 }
 
 // AddContractSubscription adds a new contract event subscription
@@ -645,33 +645,3 @@ func (sm *SubscriptionManager) GetSubscriptionStats() map[string]interface{} {
 	stats["active_subscriptions"] = activeCount
 	return stats
 }
-
-// Specific event parsing methods for known contract events
-// func (sm *SubscriptionManager) parseOperatorRegisteredEvent(log types.Log) interface{} {
-// 	// This should be handled by the contract-specific parsing now
-// 	return sm.parseBasicEventData(&EventSubscription{
-// 		EventName: "OperatorRegistered",
-// 		EventSig:  log.Topics[0],
-// 	}, log)
-// }
-
-// func (sm *SubscriptionManager) parseOperatorUnregisteredEvent(log types.Log) interface{} {
-// 	return sm.parseBasicEventData(&EventSubscription{
-// 		EventName: "OperatorUnregistered",
-// 		EventSig:  log.Topics[0],
-// 	}, log)
-// }
-
-// func (sm *SubscriptionManager) parseTaskSubmittedEvent(log types.Log) interface{} {
-// 	return sm.parseBasicEventData(&EventSubscription{
-// 		EventName: "TaskSubmitted",
-// 		EventSig:  log.Topics[0],
-// 	}, log)
-// }
-
-// func (sm *SubscriptionManager) parseTaskRejectedEvent(log types.Log) interface{} {
-// 	return sm.parseBasicEventData(&EventSubscription{
-// 		EventName: "TaskRejected",
-// 		EventSig:  log.Topics[0],
-// 	}, log)
-// }

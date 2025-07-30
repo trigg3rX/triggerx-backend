@@ -364,13 +364,13 @@ func GetDefaultConfig() *ListenerConfig {
 				WebSocketURL: config.GetChainRPCUrl(true, "84532"),
 				Enabled:      true,
 			},
-			{
-				ChainID:      "11155420",
-				Name:         "Optimism Sepolia",
-				RPCURL:       config.GetChainRPCUrl(false, "11155420"),
-				WebSocketURL: config.GetChainRPCUrl(true, "11155420"),
-				Enabled:      true,
-			},
+			// {
+			// 	ChainID:      "11155420",
+			// 	Name:         "Optimism Sepolia",
+			// 	RPCURL:       config.GetChainRPCUrl(false, "11155420"),
+			// 	WebSocketURL: config.GetChainRPCUrl(true, "11155420"),
+			// 	Enabled:      true,
+			// },
 		},
 		ReconnectConfig: ReconnectConfig{
 			MaxRetries:    10,
@@ -384,16 +384,16 @@ func GetDefaultConfig() *ListenerConfig {
 		ContractAddresses: map[string]map[string]string{
 			"17000": { // Ethereum Holesky
 				"avs_governance":     config.GetAvsGovernanceAddress(),
-				"avs_governance_logic": config.GetAvsGovernanceLogicAddress(),
+				// "avs_governance_logic": config.GetAvsGovernanceLogicAddress(),
 			},
 			"84532": { // Base Sepolia
 				"attestation_center": config.GetAttestationCenterAddress(),
-				"obls": config.GetOBLSAddress(),
-				"trigger_gas_registry": config.GetTriggerGasRegistryAddress(),
+			// 	"obls": config.GetOBLSAddress(),
+			// 	"trigger_gas_registry": config.GetTriggerGasRegistryAddress(),
 			},
-			"11155420": { // Optimism Sepolia
-				"trigger_gas_registry": config.GetTriggerGasRegistryAddress(),
-			},
+			// "11155420": { // Optimism Sepolia
+			// 	"trigger_gas_registry": config.GetTriggerGasRegistryAddress(),
+			// },
 		},
 	}
 }
