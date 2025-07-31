@@ -205,6 +205,36 @@ func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 	h.GetJobsByUserAddress(c)
 }
 
+// GetJobDataByJobID handles GET /jobs/:job_id
+func (h *Handler) GetJobDataByJobID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetJobDataByJobID] trace_id=%s - Retrieving job data by job ID", traceID)
+
+	jobIDParam := c.Param("job_id")
+	if jobIDParam == "" {
+		h.logger.Error("[GetJobDataByJobID] job_id param missing")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id param missing"})
+		return
+	}
+
+	jobID := new(big.Int)
+	_, ok := jobID.SetString(jobIDParam, 10)
+	if !ok {
+		h.logger.Errorf("[GetJobDataByJobID] invalid job_id: %v", jobIDParam)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
+		return
+	}
+
+	jobData, err := h.jobRepository.GetJobByID(jobID)
+	if err != nil {
+		h.logger.Errorf("[GetJobDataByJobID] failed to get job data: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get job data"})
+		return
+	}
+
+	c.JSON(http.StatusOK, jobData)
+}
+
 // parseInt64 is a helper to parse int64 from string
 // func parseInt64(s string) (int64, error) {
 // 	var i int64

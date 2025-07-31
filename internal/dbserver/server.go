@@ -243,6 +243,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerManager *docker.Docker
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
+	protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
