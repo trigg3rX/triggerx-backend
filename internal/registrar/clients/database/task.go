@@ -12,19 +12,21 @@ import (
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database
 func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData) error {
-	dm.logger.Infof("Updating task %d with number %d and acceptance status %t", data.TaskID, data.TaskNumber, data.IsAccepted)
+	// dm.logger.Infof("Updating task %d with task number %d and acceptance status %t", data.TaskID, data.TaskNumber, data.IsAccepted)
 
-	performerId := data.KeeperIds[0]
-	attesterIds := data.KeeperIds[1:]
+	performerId, err := dm.GetKeeperIds([]string{data.PerformerAddress})
+	if err != nil {
+		dm.logger.Errorf("Failed to get performer ID: %v", err)
+		return err
+	}
+	attesterIds := data.AttesterIds
 
 	if err := dm.db.RetryableExec(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
 		data.TaskSubmissionTxHash,
-		performerId,
+		performerId[0],
 		attesterIds,
-		data.AttesterSignatures,
-		data.PerformerSignature,
 		data.ExecutionTxHash,
 		data.ExecutionTimestamp,
 		data.TaskOpxCost,
@@ -39,71 +41,100 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
-func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(taskID int, keeperIds []string, taskOpxCost float64, isAccepted bool) error {
+func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmissionData) error {
 	var jobID *big.Int
 	var userID int64
 	var taskPredictedOpxCost float64
 
+	var keeperId int64
+	var keeperPoints float64
+	var rewardsBooster float64
+	var noAttestedTasks int64
+	var noExecutedTasks int64
+
 	// Get task cost and job ID
-	if err := dm.db.RetryableScan(queries.GetTaskCostAndJobId,
-		taskID, &taskPredictedOpxCost, &jobID); err != nil {
-		dm.logger.Errorf("Failed to get task fee and job ID for task ID %d: %v", taskID, err)
-		return err
+	iter := dm.db.RetryableIter(queries.GetTaskCostAndJobId, data.TaskID)
+	defer iter.Close()
+
+	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
+		dm.logger.Errorf("Failed to get task fee and job ID for task ID %d: no results found", data.TaskID)
+		return fmt.Errorf("task not found for task ID %d", data.TaskID)
 	}
 
-	dm.logger.Debugf("Details: taskID: %d, taskPredictedOpxCost: %f, taskOpxCost: %f, jobID: %d", taskID, taskPredictedOpxCost, taskOpxCost, jobID)
+	// dm.logger.Debugf("Details: taskID: %d, taskPredictedOpxCost: %f, taskOpxCost: %f, jobID: %d", data.TaskID, taskPredictedOpxCost, data.TaskOpxCost, jobID)
 
 	// TODO:
 	// Alert if taskOpxCost is greater than taskPredictedOpxCost by a threshold
 
 	// Get user ID from job ID
-	if err := dm.db.RetryableScan(queries.GetUserIdByJobId,
-		jobID, &userID); err != nil {
-		dm.logger.Errorf("Failed to get user ID for job ID %d: %v", jobID, err)
-		return err
+	iter = dm.db.RetryableIter(queries.GetUserIdByJobId, jobID)
+	defer iter.Close()
+
+	if !iter.Scan(&userID) {
+		dm.logger.Errorf("Failed to get user ID for job ID %d: no results found", jobID)
+		return fmt.Errorf("user not found for job ID %d", jobID)
 	}
 
-	// Update the Keeper Points, neglect Performer if isAccepted is false
-	for i, keeperId := range keeperIds {
-		var keeperPoints float64
-		var rewardsBooster float32
-		var noExecutedTasks int64
-		var noAttestedTasks int64
+	// Update the Attester Points
+	for _, operator_id := range data.AttesterIds {
+		// Use RetryableIter since the query needs parameters
+		iter := dm.db.RetryableIter(queries.GetAttesterPointsAndNoOfTasks, operator_id)
+		defer iter.Close()
 
-		if err := dm.db.RetryableScan(queries.GetKeeperPointsAndNoOfTasks,
-			keeperId, &keeperPoints, &rewardsBooster, &noExecutedTasks, &noAttestedTasks); err != nil {
-			dm.logger.Error(fmt.Sprintf("Failed to get keeper points: %v", err))
-			return err
+		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
+			dm.logger.Error(fmt.Sprintf("Failed to get keeper points for operator_id %d: no results found", operator_id))
+			return fmt.Errorf("keeper not found for operator_id %d", operator_id)
 		}
+		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
+		noAttestedTasks = noAttestedTasks + 1
 
-		// Performer if task is accepted, add points and increment no_executed_tasks
-		if i == 0 && isAccepted {
-			keeperPoints = keeperPoints + float64(rewardsBooster)*taskOpxCost
-			noExecutedTasks = noExecutedTasks + 1
-		// Performer if task is not accepted, deduct points (10% of taskOpxCost)
-		} else if i == 0 && !isAccepted {
-			keeperPoints = keeperPoints - float64(rewardsBooster)*taskOpxCost*0.1
-		} else if i != 0 {
-			keeperPoints = keeperPoints + float64(rewardsBooster)*taskOpxCost
-			noAttestedTasks = noAttestedTasks + 1
-		}
+		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeperPoints, rewardsBooster, noAttestedTasks)
 
-		if err := dm.db.RetryableExec(queries.UpdateKeeperPointsAndNoOfTasks,
-			keeperPoints, noExecutedTasks, noAttestedTasks, keeperId); err != nil {
+		if err := dm.db.RetryableExec(queries.UpdateAttesterPointsAndNoOfTasks,
+			keeperPoints, noAttestedTasks, keeperId); err != nil {
 			dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
 			return err
 		}
 	}
 
-	// Update the User Points
-	var userPoints float64
-	if err := dm.db.RetryableScan(queries.GetUserPoints,
-		userID, &userPoints); err != nil {
-		dm.logger.Errorf("Failed to get user points: %v", err)
+	// Update the Performer Points
+	performerId, err := dm.GetKeeperIds([]string{data.PerformerAddress})
+	if err != nil {
+		dm.logger.Errorf("Failed to get performer ID: %v", err)
+		return err
+	}
+	// Use RetryableIter since the query needs parameters
+	iter = dm.db.RetryableIter(queries.GetPerformerPointsAndNoOfTasks, performerId[0])
+	defer iter.Close()
+
+	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
+		dm.logger.Error(fmt.Sprintf("Failed to get keeper points for performer_id %d: no results found", performerId[0]))
+		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
+	}
+	if data.IsAccepted {
+		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
+		noExecutedTasks = noExecutedTasks + 1
+	} else {
+		keeperPoints = keeperPoints - float64(rewardsBooster)*data.TaskOpxCost*0.1
+	}
+
+	if err := dm.db.RetryableExec(queries.UpdatePerformerPointsAndNoOfTasks,
+		keeperPoints, noExecutedTasks, performerId[0]); err != nil {
+		dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
 		return err
 	}
 
-	userPoints = userPoints + taskOpxCost
+	// Update the User Points
+	var userPoints float64
+	iter = dm.db.RetryableIter(queries.GetUserPoints, userID)
+	defer iter.Close()
+
+	if !iter.Scan(&userPoints) {
+		dm.logger.Errorf("Failed to get user points for user ID %d: no results found", userID)
+		return fmt.Errorf("user not found for user ID %d", userID)
+	}
+
+	userPoints = userPoints + data.TaskOpxCost
 	lastUpdatedAt := time.Now().UTC()
 
 	if err := dm.db.RetryableExec(queries.UpdateUserPoints,
@@ -111,7 +142,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(taskID int, keeperIds []s
 		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
 	}
-	dm.logger.Infof("Successfully updated points for user ID %d: added %.2f points", userID, taskOpxCost)
+	dm.logger.Infof("Successfully updated points for user ID %d: added %.2f points", userID, data.TaskOpxCost)
 	return nil
 }
 
@@ -121,12 +152,18 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 	for _, keeperAddress := range keeperAddresses {
 		var keeperID int64
 		keeperAddress = strings.ToLower(keeperAddress)
-		if err := dm.db.RetryableScan(queries.GetKeeperIDByAddress,
-			keeperAddress, &keeperID); err != nil {
-			dm.logger.Errorf("Failed to get keeper ID for address %s: %v", keeperAddress, err)
-			return nil, err
+
+		// Use RetryableIter since the query needs parameters
+		iter := dm.db.RetryableIter(queries.GetKeeperIDByAddress, keeperAddress)
+		defer iter.Close()
+
+		if iter.Scan(&keeperID) {
+			dm.logger.Infof("Keeper ID for address %s: %d", keeperAddress, keeperID)
+			keeperIds = append(keeperIds, keeperID)
+		} else {
+			dm.logger.Errorf("Failed to get keeper ID for address %s: no results found", keeperAddress)
+			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
 		}
-		keeperIds = append(keeperIds, keeperID)
 	}
 	return keeperIds, nil
 }

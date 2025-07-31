@@ -16,9 +16,8 @@ type TaskSubmissionData struct {
 	TaskNumber int64
 	IsAccepted bool
 	TaskSubmissionTxHash string
-	KeeperIds []string
-	AttesterSignatures []int64
-	PerformerSignature []int64
+	PerformerAddress string
+	AttesterIds []int64
 	ExecutionTxHash string
 	ExecutionTimestamp time.Time
 	TaskOpxCost float64
@@ -27,6 +26,6 @@ type TaskSubmissionData struct {
 
 type DailyRewardsPoints struct {
 	KeeperID       int64   `json:"keeper_id"`
-	RewardsBooster float32 `json:"rewards_booster"`
+	RewardsBooster float64 `json:"rewards_booster"`
 	KeeperPoints   float64 `json:"keeper_points"`
 }

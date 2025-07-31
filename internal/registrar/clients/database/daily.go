@@ -8,7 +8,7 @@ import (
 // DailyRewardsPoints processes daily rewards for all eligible keepers
 func (dm *DatabaseClient) DailyRewardsPoints() error {
 	var keeperID int64
-	var rewardsBooster float32
+	var rewardsBooster float64
 	var keeperPoints float64
 	var currentKeeperPoints []types.DailyRewardsPoints
 

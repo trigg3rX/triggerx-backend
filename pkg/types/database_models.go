@@ -151,7 +151,7 @@ type KeeperData struct {
 	RegisteredTx      string    `json:"registered_tx"`
 	OperatorID        int64     `json:"operator_id"`
 	RewardsAddress    string    `json:"rewards_address"`
-	RewardsBooster    float32   `json:"rewards_booster"`
+	RewardsBooster    float64   `json:"rewards_booster"`
 	VotingPower       int64     `json:"voting_power"`
 	KeeperPoints      float64   `json:"keeper_points"`
 	ConnectionAddress string    `json:"connection_address"`

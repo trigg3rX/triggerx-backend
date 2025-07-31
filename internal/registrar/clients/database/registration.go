@@ -1,12 +1,13 @@
 package database
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gocql/gocql"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database/queries"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
 )
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)
@@ -19,9 +20,17 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 
 	var booster float32 = 1
 	var keeperID int64
+	var err error
 
-	err := dm.db.RetryableScan(queries.GetKeeperIDByAddress,
-		data.OperatorAddress, &keeperID)
+	// Use RetryableIter since the query needs parameters
+	iter := dm.db.RetryableIter(queries.GetKeeperIDByAddress, data.OperatorAddress)
+	defer iter.Close()
+
+	if iter.Scan(&keeperID) {
+		err = nil
+	} else {
+		err = gocql.ErrNotFound
+	}
 
 	if err == gocql.ErrNotFound {
 		var maxKeeperID int64
@@ -66,10 +75,13 @@ func (dm *DatabaseClient) KeeperUnregistered(operatorAddress string) error {
 	var currentKeeperID int64
 	operatorAddress = strings.ToLower(operatorAddress)
 
-	if err := dm.db.RetryableScan(queries.GetKeeperIDByAddress,
-		operatorAddress, &currentKeeperID); err != nil {
-		dm.logger.Errorf("Error getting keeper ID: %v", err)
-		return err
+	// Use RetryableIter since the query needs parameters
+	iter := dm.db.RetryableIter(queries.GetKeeperIDByAddress, operatorAddress)
+	defer iter.Close()
+
+	if !iter.Scan(&currentKeeperID) {
+		dm.logger.Errorf("Error getting keeper ID: no results found")
+		return fmt.Errorf("keeper not found for address %s", operatorAddress)
 	}
 
 	if err := dm.db.RetryableExec(queries.UpdateKeeperRegistrationStatus,

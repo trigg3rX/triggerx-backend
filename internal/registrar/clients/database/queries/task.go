@@ -14,8 +14,18 @@ const (
 		SELECT user_id 
 		FROM triggerx.job_data 
 		WHERE job_id = ?`
-	GetKeeperPointsAndNoOfTasks = `
-		SELECT keeper_points, rewards_booster, no_executed_tasks, no_attested_tasks 
+	GetAttesterPointsAndNoOfTasks = `
+		SELECT keeper_id,
+			keeper_points, 
+			rewards_booster,
+			no_attested_tasks
+		FROM triggerx.keeper_data 
+		WHERE operator_id = ?
+		ALLOW FILTERING`
+	GetPerformerPointsAndNoOfTasks = `
+		SELECT keeper_points, 
+			rewards_booster,
+			no_executed_tasks
 		FROM triggerx.keeper_data 
 		WHERE keeper_id = ?`
 	GetUserPoints = `
@@ -31,16 +41,20 @@ const (
 			task_submission_tx_hash = ?, 
 			task_performer_id = ?, 
 			task_attester_ids = ?, 
-			ta_signature = ?, 
-			tp_signature = ?,
 			execution_tx_hash = ?,
 			execution_timestamp = ?,
 			task_opx_cost = ?,
 			proof_of_task = ?
 		WHERE task_id = ?`
-	UpdateKeeperPointsAndNoOfTasks = `
+	UpdateAttesterPointsAndNoOfTasks = `
 		UPDATE triggerx.keeper_data 
-		SET keeper_points = ?, no_executed_tasks = ?, no_attested_tasks = ?
+		SET keeper_points = ?,
+			no_attested_tasks = ?
+		WHERE keeper_id = ?`
+	UpdatePerformerPointsAndNoOfTasks = `
+		UPDATE triggerx.keeper_data 
+		SET keeper_points = ?,
+			no_executed_tasks = ?
 		WHERE keeper_id = ?`
 	UpdateUserPoints = `
 		UPDATE triggerx.user_data 
