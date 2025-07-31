@@ -31,9 +31,7 @@ type RegistrarService struct {
 	eventListener *events.ContractEventListener
 
 	// State management
-	stateManager      *syncMgr.StateManager
-	checkpointManager *syncMgr.CheckpointManager
-	backfillManager   *syncMgr.BackfillManager
+	stateManager *syncMgr.StateManager
 
 	// Rewards service
 	rewardsService *rewards.RewardsService
@@ -62,12 +60,6 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 		return nil, fmt.Errorf("failed to connect to Base node: %w", err)
 	}
 
-	// optClient, err := ethclient.Dial(config.GetChainRPCUrl(true, "11155420"))
-	// if err != nil {
-	// 	cancel()
-	// 	return nil, fmt.Errorf("failed to connect to Optimism node: %w", err)
-	// }
-
 	// Initialize Redis client first
 	redis, err := redis.NewRedisClient(logger, redis.RedisConfig{
 		UpstashConfig: redis.UpstashConfig{
@@ -94,12 +86,6 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 
 	// Initialize state manager
 	stateManager := syncMgr.NewStateManager(redis, logger)
-
-	// Initialize checkpoint manager
-	checkpointManager := syncMgr.NewCheckpointManager(redis, logger)
-
-	// Initialize backfill manager
-	backfillManager := syncMgr.NewBackfillManager(ethClient, baseClient, logger)
 
 	// Try to load existing state from Redis first
 	initCtx, initCancel := context.WithTimeout(ctx, defaultConnectTimeout)
@@ -129,22 +115,7 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 	} else {
 		logger.Infof("Loaded BASE block %d from Redis", lastBaseBlock)
 	}
-
-	// lastOptBlock, err := stateManager.GetLastOptBlockUpdated(initCtx)
-	// if err != nil || lastOptBlock == 0 {
-	// 	logger.Info("No OPT block found in Redis, getting current block from blockchain")
-	// 	lastOptBlock, err = optClient.BlockNumber(initCtx)
-	// 	if err != nil {
-	// 		initCancel()
-	// 		cancel()
-	// 		return nil, fmt.Errorf("failed to get OPT latest block: %w", err)
-	// 	}
-	// } else {
-	// 	logger.Infof("Loaded OPT block %d from Redis", lastOptBlock)
-	// }
 	initCancel()
-
-	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig())
 
 	// Ensure state is initialized in Redis (will only set if not already present)
 	if err := stateManager.InitializeState(ctx, lastEthBlock, lastBaseBlock, 0, time.Now().UTC()); err != nil {
@@ -168,19 +139,19 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 	// Initialize database client
 	databaseClient := database.NewDatabaseClient(logger, dbConn)
 
+	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig(), databaseClient)
+
 	// Initialize rewards service
 	rewardsService := rewards.NewRewardsService(logger, stateManager, databaseClient)
 
 	return &RegistrarService{
-		logger:            logger,
-		eventListener:     eventListener,
-		stateManager:      stateManager,
-		checkpointManager: checkpointManager,
-		backfillManager:   backfillManager,
-		rewardsService:    rewardsService,
-		ctx:               ctx,
-		cancel:            cancel,
-		stopChan:          make(chan struct{}),
+		logger:         logger,
+		eventListener:  eventListener,
+		stateManager:   stateManager,
+		rewardsService: rewardsService,
+		ctx:            ctx,
+		cancel:         cancel,
+		stopChan:       make(chan struct{}),
 	}, nil
 }
 
@@ -201,17 +172,6 @@ func (s *RegistrarService) Start() error {
 		s.logger.Info("Falling back to polling mode")
 	}
 
-	// Start periodic checkpoints
-	s.wg.Add(1)
-	go s.checkpointManager.StartPeriodicCheckpoints(s.ctx, s.stateManager)
-
-	// Perform initial backfill check for missing blocks
-	go func() {
-		if err := s.backfillManager.BackfillMissingBlocks(s.ctx, s.stateManager); err != nil {
-			s.logger.Errorf("Initial backfill failed: %v", err)
-		}
-	}()
-
 	s.logger.Info("Registrar service started successfully")
 	return nil
 }
@@ -223,6 +183,20 @@ func (s *RegistrarService) Stop() error {
 	// Signal all goroutines to stop
 	s.cancel()
 	close(s.stopChan)
+
+	// Wait for all goroutines with timeout
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.Info("All goroutines stopped successfully")
+	case <-time.After(30 * time.Second):
+		s.logger.Warn("Timeout waiting for goroutines to stop")
+	}
 
 	// Stop event listener
 	if err := s.eventListener.Stop(); err != nil {

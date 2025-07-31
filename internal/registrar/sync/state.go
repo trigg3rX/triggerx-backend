@@ -14,7 +14,6 @@ import (
 const (
 	KeyLastEthBlockUpdated  = "registrar:state:last_eth_block_updated"
 	KeyLastBaseBlockUpdated = "registrar:state:last_base_block_updated"
-	// KeyLastOptBlockUpdated  = "registrar:state:last_opt_block_updated"
 	KeyLastRewardsUpdate   = "registrar:state:last_rewards_update"
 )
 
@@ -28,7 +27,6 @@ type StateManager struct {
 type BlockchainState struct {
 	LastEthBlockUpdated  uint64    `json:"last_eth_block_updated"`
 	LastBaseBlockUpdated uint64    `json:"last_base_block_updated"`
-	// LastOptBlockUpdated  uint64    `json:"last_opt_block_updated"`
 	LastRewardsUpdate   time.Time `json:"last_rewards_update"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
@@ -54,10 +52,6 @@ func (sm *StateManager) InitializeState(ctx context.Context, ethBlock uint64, ba
 		return fmt.Errorf("failed to initialize BASE block: %w", err)
 	}
 
-	// if err := sm.setBlockIfNotExists(ctx, KeyLastOptBlockUpdated, optBlock); err != nil {
-	// 	return fmt.Errorf("failed to initialize OPT block: %w", err)
-	// }
-
 	// Set initial rewards update time if it doesn't exist
 	if err := sm.setTimeIfNotExists(ctx, KeyLastRewardsUpdate, rewardsUpdate); err != nil {
 		return fmt.Errorf("failed to initialize rewards update time: %w", err)
@@ -66,7 +60,6 @@ func (sm *StateManager) InitializeState(ctx context.Context, ethBlock uint64, ba
 	sm.logger.Info("Blockchain state initialized successfully",
 		"eth_block", ethBlock,
 		"base_block", baseBlock,
-		// "opt_block", optBlock,
 		"last_rewards_update", rewardsUpdate,
 	)
 
@@ -92,16 +85,6 @@ func (sm *StateManager) GetLastBaseBlockUpdated(ctx context.Context) (uint64, er
 func (sm *StateManager) SetLastBaseBlockUpdated(ctx context.Context, blockNumber uint64) error {
 	return sm.setBlockNumber(ctx, KeyLastBaseBlockUpdated, blockNumber)
 }
-
-// GetLastPolledOptBlock gets the last polled Optimism block number
-// func (sm *StateManager) GetLastOptBlockUpdated(ctx context.Context) (uint64, error) {
-// 	return sm.getBlockNumber(ctx, KeyLastOptBlockUpdated)
-// }
-
-// SetLastPolledOptBlock sets the last polled Optimism block number
-// func (sm *StateManager) SetLastOptBlockUpdated(ctx context.Context, blockNumber uint64) error {
-// 	return sm.setBlockNumber(ctx, KeyLastOptBlockUpdated, blockNumber)
-// }
 
 // GetLastRewardsUpdate gets the last rewards update timestamp
 func (sm *StateManager) GetLastRewardsUpdate(ctx context.Context) (time.Time, error) {
@@ -147,11 +130,6 @@ func (sm *StateManager) GetFullState(ctx context.Context) (*BlockchainState, err
 		return nil, fmt.Errorf("failed to get BASE block: %w", err)
 	}
 
-	// optBlock, err := sm.GetLastOptBlockUpdated(ctx)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to get OPT block: %w", err)
-	// }
-
 	rewardsUpdate, err := sm.GetLastRewardsUpdate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rewards update: %w", err)
@@ -160,7 +138,6 @@ func (sm *StateManager) GetFullState(ctx context.Context) (*BlockchainState, err
 	return &BlockchainState{
 		LastEthBlockUpdated:  ethBlock,
 		LastBaseBlockUpdated: baseBlock,
-		// LastOptBlockUpdated:  optBlock,
 		LastRewardsUpdate:   rewardsUpdate,
 		UpdatedAt:           time.Now().UTC(),
 	}, nil
@@ -179,10 +156,6 @@ func (sm *StateManager) UpdateBlockchainProgress(ctx context.Context, ethBlock, 
 		pipe.Set(ctx, KeyLastBaseBlockUpdated, strconv.FormatUint(*baseBlock, 10), 0)
 	}
 
-	// if optBlock != nil {
-	// 	pipe.Set(ctx, KeyLastOptBlockUpdated, strconv.FormatUint(*optBlock, 10), 0)
-	// }
-
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update blockchain progress: %w", err)
@@ -199,7 +172,6 @@ func (sm *StateManager) ResetState(ctx context.Context) error {
 	keys := []string{
 		KeyLastEthBlockUpdated,
 		KeyLastBaseBlockUpdated,
-		// KeyLastOptBlockUpdated,
 		KeyLastRewardsUpdate,
 	}
 
@@ -229,7 +201,6 @@ func (sm *StateManager) GetStateHealth(ctx context.Context) map[string]interface
 	keys := map[string]string{
 		"eth_block":      KeyLastEthBlockUpdated,
 		"base_block":     KeyLastBaseBlockUpdated,
-		// "opt_block":      KeyLastOptBlockUpdated,
 		"rewards_update": KeyLastRewardsUpdate,
 	}
 
@@ -257,7 +228,6 @@ func (sm *StateManager) GetStateHealth(ctx context.Context) map[string]interface
 }
 
 // Helper methods
-
 func (sm *StateManager) getBlockNumber(ctx context.Context, key string) (uint64, error) {
 	blockStr, err := sm.redis.Get(ctx, key)
 	if err != nil {
