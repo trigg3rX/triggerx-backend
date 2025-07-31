@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -13,23 +14,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
-
-// ChainConfig represents configuration for a specific blockchain
-type ChainConfig struct {
-	ChainID      string
-	Name         string
-	RPCURL       string
-	WebSocketURL string
-	Contracts    []ContractConfig
-}
-
-// ContractConfig represents a contract to monitor
-type ContractConfig struct {
-	Address      string
-	ContractType ContractType
-	ABI          string
-	Events       []string // Event names to monitor
-}
 
 // Client manages WebSocket connections to multiple blockchains
 type Client struct {
@@ -56,6 +40,7 @@ type ChainConnection struct {
 	mu            sync.RWMutex
 	isConnected   bool
 	lastMessage   time.Time
+	websocketURL  string
 }
 
 // Subscription represents an event subscription
@@ -92,7 +77,7 @@ func NewClient(logger logging.Logger) *Client {
 	return &Client{
 		logger:    logger,
 		chains:    make(map[string]*ChainConnection),
-		eventChan: make(chan *ChainEvent, 10000), // Large buffer for high-throughput
+		eventChan: make(chan *ChainEvent, 10000),
 		ctx:       ctx,
 		cancel:    cancel,
 	}
@@ -116,6 +101,9 @@ func (c *Client) AddChain(config ChainConfig) error {
 	// Create subscription manager
 	subManager := NewSubscriptionManager(config.ChainID, c.logger)
 
+	// Create reconnection manager
+	reconnectMgr := NewReconnectManagerWithConfig(config.WebSocketURL, config.Reconnect, c.logger)
+
 	// Create chain connection
 	chainConn := &ChainConnection{
 		chainID:       config.ChainID,
@@ -123,10 +111,11 @@ func (c *Client) AddChain(config ChainConfig) error {
 		ethClient:     ethClient,
 		subscriptions: make(map[string]*Subscription),
 		subManager:    subManager,
-		reconnectMgr:  NewReconnectManager(config.WebSocketURL, c.logger),
+		reconnectMgr:  reconnectMgr,
 		eventChan:     c.eventChan,
 		logger:        c.logger,
 		isConnected:   false,
+		websocketURL:  config.WebSocketURL,
 	}
 
 	c.chains[config.ChainID] = chainConn
@@ -140,26 +129,26 @@ func (c *Client) AddChain(config ChainConfig) error {
 		}
 	}
 
-	c.logger.Infof("Added chain %s (%s) for monitoring", config.Name, config.ChainID)
+	// c.logger.Infof("Added chain %s (%s) for monitoring", config.Name, config.ChainID)
 	return nil
 }
 
 // Start begins monitoring all configured chains
 func (c *Client) Start() error {
-	c.logger.Info("Starting multi-chain WebSocket client")
+	// c.logger.Info("Starting multi-chain WebSocket client")
 
 	for chainID, chainConn := range c.chains {
 		c.wg.Add(1)
 		go c.startChainConnection(chainID, chainConn)
 	}
 
-	c.logger.Infof("Started monitoring %d chains", len(c.chains))
+	// c.logger.Infof("Started monitoring %d chains", len(c.chains))
 	return nil
 }
 
 // Stop gracefully stops all chain connections
 func (c *Client) Stop() error {
-	c.logger.Info("Stopping multi-chain WebSocket client")
+	// c.logger.Info("Stopping multi-chain WebSocket client")
 
 	c.cancel()
 	c.wg.Wait()
@@ -174,7 +163,7 @@ func (c *Client) Stop() error {
 	c.mu.Unlock()
 
 	close(c.eventChan)
-	c.logger.Info("Multi-chain WebSocket client stopped")
+	// c.logger.Info("Multi-chain WebSocket client stopped")
 	return nil
 }
 
@@ -238,10 +227,8 @@ func (c *Client) startChainConnection(chainID string, chainConn *ChainConnection
 
 	c.logger.Infof("Starting connection for chain %s", chainID)
 
-	// Start the reconnect manager
-	go chainConn.reconnectMgr.Start(c.ctx, func() error {
-		return chainConn.connect()
-	})
+	// Start the reconnection manager with the connect function
+	chainConn.reconnectMgr.Start(c.ctx, chainConn.connect)
 
 	// Start processing events from the subscription manager
 	go chainConn.processEvents(c.ctx)
@@ -252,44 +239,172 @@ func (c *Client) startChainConnection(chainID string, chainConn *ChainConnection
 		case <-c.ctx.Done():
 			return
 		case <-time.After(30 * time.Second):
-			if chainConn.isConnected {
+			chainConn.mu.RLock()
+			isConnected := chainConn.isConnected
+			chainConn.mu.RUnlock()
+
+			if isConnected {
 				if err := chainConn.ping(); err != nil {
 					c.logger.Warnf("Ping failed for chain %s: %v", chainID, err)
 					chainConn.markDisconnected()
+					// Trigger reconnection
+					chainConn.reconnectMgr.TriggerReconnect(c.ctx, chainConn.connect)
 				}
 			}
 		}
 	}
 }
 
-// processEvents processes events from the subscription manager
+// processEvents processes events from the WebSocket connection
 func (cc *ChainConnection) processEvents(ctx context.Context) {
+	cc.logger.Infof("Starting event processing for chain %s", cc.chainName)
+
+	// Start ping ticker to keep connection alive
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer pingTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
+			cc.logger.Infof("Stopping event processing for chain %s", cc.chainName)
 			return
+		case <-pingTicker.C:
+			// Send ping to keep connection alive
+			if err := cc.ping(); err != nil {
+				cc.logger.Errorf("Failed to ping WebSocket for chain %s: %v", cc.chainName, err)
+				cc.markDisconnected()
+				// Trigger reconnection
+				cc.reconnectMgr.TriggerReconnect(ctx, cc.connect)
+				return
+			}
 		default:
-			// Process WebSocket messages and events
-			// This is a placeholder - you'll need to implement the actual WebSocket message processing
-			time.Sleep(100 * time.Millisecond)
+			// Read WebSocket messages
+			if err := cc.readMessage(); err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					cc.logger.Errorf("WebSocket connection closed unexpectedly for chain %s: %v", cc.chainName, err)
+				} else {
+					cc.logger.Debugf("WebSocket read error for chain %s: %v", cc.chainName, err)
+				}
+				cc.markDisconnected()
+				// Trigger reconnection
+				cc.reconnectMgr.TriggerReconnect(ctx, cc.connect)
+				return
+			}
 		}
 	}
 }
 
+// readMessage reads and processes a single WebSocket message
+func (cc *ChainConnection) readMessage() error {
+	cc.mu.RLock()
+	conn := cc.wsConn
+	cc.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("WebSocket connection not established")
+	}
+
+	// Set read deadline
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
+	// Read message
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		return err
+	}
+
+	// Update last message time
+	cc.mu.Lock()
+	cc.lastMessage = time.Now()
+	cc.mu.Unlock()
+
+	// Process the message using subscription manager
+	if err := cc.subManager.ProcessWebSocketMessage(message, cc.eventChan); err != nil {
+		cc.logger.Errorf("Failed to process WebSocket message for chain %s: %v", cc.chainName, err)
+		// Don't return error here as we want to continue processing other messages
+	}
+
+	return nil
+}
+
 // connect establishes WebSocket connection for the chain
 func (cc *ChainConnection) connect() error {
-	cc.logger.Infof("Connecting to chain %s WebSocket", cc.chainName)
+	cc.logger.Infof("Connecting to chain %s WebSocket at %s", cc.chainName, cc.websocketURL)
 
-	// Connect to WebSocket (implementation depends on your WebSocket library)
-	// This is a placeholder - you'll need to implement based on your WebSocket client
+	if cc.websocketURL == "" {
+		return fmt.Errorf("WebSocket URL not configured for chain %s", cc.chainName)
+	}
+
+	// Create dialer with timeout and other options
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+		Proxy:            http.ProxyFromEnvironment,
+	}
+
+	// Connect to WebSocket
+	conn, resp, err := dialer.Dial(cc.websocketURL, nil)
+	if err != nil {
+		if resp != nil {
+			return fmt.Errorf("failed to connect to WebSocket %s (status: %d): %w", cc.websocketURL, resp.StatusCode, err)
+		}
+		return fmt.Errorf("failed to connect to WebSocket %s: %w", cc.websocketURL, err)
+	}
+
+	// Set connection parameters for reliability
+	conn.SetReadLimit(512 * 1024) // 512KB max message size
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
+	// Set ping handler to keep connection alive
+	conn.SetPingHandler(func(appData string) error {
+		// cc.logger.Debugf("Received ping from %s", cc.chainName)
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(30*time.Second))
+	})
 
 	cc.mu.Lock()
+	cc.wsConn = conn
 	cc.isConnected = true
 	cc.lastMessage = time.Now()
 	cc.mu.Unlock()
 
-	// Re-establish all subscriptions
-	return cc.reestablishSubscriptions()
+	cc.logger.Infof("Successfully connected to chain %s WebSocket", cc.chainName)
+
+	// Send subscription message for all active subscriptions
+	if err := cc.sendSubscription(); err != nil {
+		cc.logger.Errorf("Failed to send subscription for chain %s: %v", cc.chainName, err)
+		// Don't fail the connection for subscription errors
+	}
+
+	return nil
+}
+
+// sendSubscription sends the WebSocket subscription message for all active subscriptions
+func (cc *ChainConnection) sendSubscription() error {
+	cc.mu.RLock()
+	conn := cc.wsConn
+	cc.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("WebSocket connection not established")
+	}
+
+	// Build subscription message
+	subscriptionMsg, err := cc.subManager.BuildWebSocketSubscription()
+	if err != nil {
+		return fmt.Errorf("failed to build subscription message: %w", err)
+	}
+
+	// Send subscription message
+	err = conn.WriteMessage(websocket.TextMessage, subscriptionMsg)
+	if err != nil {
+		return fmt.Errorf("failed to send subscription message: %w", err)
+	}
+
+	cc.logger.Infof("Sent subscription message for chain %s", cc.chainName)
+	return nil
 }
 
 // subscribeToContractEvents subscribes to events from a contract using ContractConfig
@@ -328,7 +443,7 @@ func (cc *ChainConnection) subscribeToContractWithType(contractAddr string, cont
 		}
 
 		cc.subscriptions[subID] = subscription
-		cc.logger.Infof("Subscribed to %s.%s events from %s on chain %s", contractType, eventName, contractAddr, cc.chainID)
+		// cc.logger.Infof("Subscribed to %s.%s events from %s on chain %s", contractType, eventName, contractAddr, cc.chainID)
 	}
 
 	return nil
@@ -360,24 +475,7 @@ func (cc *ChainConnection) subscribeToContract(contractAddr string, events []str
 		}
 
 		cc.subscriptions[subID] = subscription
-		cc.logger.Infof("Subscribed to %s events from %s on chain %s", eventName, contractAddr, cc.chainID)
-	}
-
-	return nil
-}
-
-// reestablishSubscriptions re-creates all subscriptions after reconnection
-func (cc *ChainConnection) reestablishSubscriptions() error {
-	cc.mu.RLock()
-	subscriptions := make([]*Subscription, 0, len(cc.subscriptions))
-	for _, sub := range cc.subscriptions {
-		subscriptions = append(subscriptions, sub)
-	}
-	cc.mu.RUnlock()
-
-	for _, sub := range subscriptions {
-		// Re-establish subscription (implementation specific)
-		cc.logger.Debugf("Re-establishing subscription %s", sub.ID)
+		// cc.logger.Infof("Subscribed to %s events from %s on chain %s", eventName, contractAddr, cc.chainID)
 	}
 
 	return nil
@@ -408,7 +506,22 @@ func (cc *ChainConnection) getStatus() ChainStatus {
 
 // ping sends a ping to keep the connection alive
 func (cc *ChainConnection) ping() error {
-	// Implementation specific ping
+	cc.mu.RLock()
+	conn := cc.wsConn
+	cc.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("WebSocket connection not established")
+	}
+
+	// Send ping with current timestamp as data
+	pingData := []byte(fmt.Sprintf("ping_%d", time.Now().Unix()))
+	err := conn.WriteControl(websocket.PingMessage, pingData, time.Now().Add(10*time.Second))
+	if err != nil {
+		return fmt.Errorf("failed to send ping: %w", err)
+	}
+
+	// cc.logger.Debugf("Sent ping to chain %s", cc.chainName)
 	return nil
 }
 
@@ -431,10 +544,16 @@ func (cc *ChainConnection) close() error {
 		if err != nil {
 			cc.logger.Errorf("Failed to close WebSocket connection: %v", err)
 		}
+		cc.wsConn = nil
 	}
 
 	if cc.ethClient != nil {
 		cc.ethClient.Close()
+	}
+
+	// Reset reconnection count when closing
+	if cc.reconnectMgr != nil {
+		cc.reconnectMgr.resetReconnectCount()
 	}
 
 	return nil
@@ -461,6 +580,38 @@ func (c *Client) GetAllSubscriptionStats() map[string]interface{} {
 	stats := make(map[string]interface{})
 	for chainID, chainConn := range c.chains {
 		stats[chainID] = chainConn.subManager.GetSubscriptionStats()
+	}
+
+	return stats
+}
+
+// TriggerReconnect manually triggers reconnection for a specific chain
+func (c *Client) TriggerReconnect(chainID string) error {
+	c.mu.RLock()
+	chainConn, exists := c.chains[chainID]
+	c.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("chain %s not found", chainID)
+	}
+
+	chainConn.logger.Infof("Manual reconnection triggered for chain %s", chainID)
+	chainConn.reconnectMgr.TriggerReconnect(c.ctx, chainConn.connect)
+	return nil
+}
+
+// GetReconnectStats returns reconnection statistics for all chains
+func (c *Client) GetReconnectStats() map[string]interface{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	stats := make(map[string]interface{})
+	for chainID, chainConn := range c.chains {
+		stats[chainID] = map[string]interface{}{
+			"reconnect_count": chainConn.reconnectMgr.GetReconnectCount(),
+			"is_running":      chainConn.reconnectMgr.IsRunning(),
+			"config":          chainConn.reconnectMgr.GetConfig(),
+		}
 	}
 
 	return stats
