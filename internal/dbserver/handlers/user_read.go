@@ -88,6 +88,8 @@ func (h *Handler) StoreUserEmail(c *gin.Context) {
 		return
 	}
 
+	req.UserAddress = strings.ToLower(req.UserAddress)
+
 	err := h.userRepository.UpdateUserEmail(req.UserAddress, req.Email)
 	if err != nil {
 		h.logger.Errorf("[StoreUserEmail] Failed to update email %s for address %s: %v", req.Email, req.UserAddress, err)
