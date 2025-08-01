@@ -15,6 +15,10 @@ func (dm *DatabaseClient) DailyRewardsPoints() error {
 	iter := dm.db.RetryableIter(queries.GetDailyRewardsPoints)
 
 	for iter.Scan(&keeperID, &rewardsBooster, &keeperPoints) {
+		if keeperID == 1 || keeperID == 2 || keeperID == 3 || keeperID == 4 {
+			continue
+		}
+
 		currentKeeperPoints = append(currentKeeperPoints, types.DailyRewardsPoints{
 			KeeperID:       keeperID,
 			RewardsBooster: rewardsBooster,
