@@ -36,7 +36,6 @@ func main() {
 		"port", config.GetRegistrarPort(),
 		"avs_governance", config.GetAvsGovernanceAddress(),
 		"attestation_center", config.GetAttestationCenterAddress(),
-		"trigger_gas_registry", config.GetTriggerGasRegistryAddress(),
 	)
 
 	// Initialize and start registrar service

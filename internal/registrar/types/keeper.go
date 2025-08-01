@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 type KeeperRegistrationData struct {
 	OperatorAddress string
 	RewardsReceiver string
@@ -10,17 +12,21 @@ type KeeperRegistrationData struct {
 }
 
 type TaskSubmissionData struct {
-	TaskID int
+	TaskID int64
 	TaskNumber int64
+	TaskDefinitionID int
 	IsAccepted bool
 	TaskSubmissionTxHash string
-	KeeperIds []string
-	AttesterSignatures []int64
-	PerformerSignature []int64
+	PerformerAddress string
+	AttesterIds []int64
+	ExecutionTxHash string
+	ExecutionTimestamp time.Time
+	TaskOpxCost float64
+	ProofOfTask string
 }
 
 type DailyRewardsPoints struct {
 	KeeperID       int64   `json:"keeper_id"`
-	RewardsBooster float32 `json:"rewards_booster"`
+	RewardsBooster float64 `json:"rewards_booster"`
 	KeeperPoints   float64 `json:"keeper_points"`
 }

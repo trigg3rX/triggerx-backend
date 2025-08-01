@@ -139,9 +139,7 @@ func main() {
 	}()
 
 	// Log Redis info
-	logger.Info("Task Manager service is running",
-		"redis_available", config.IsRedisAvailable(),
-		"redis_type", config.GetRedisType())
+	logger.Info("Task Manager service is running")
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)

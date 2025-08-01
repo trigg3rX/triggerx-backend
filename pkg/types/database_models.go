@@ -124,7 +124,7 @@ type ConditionJobData struct {
 
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
-	TaskNumber           int       `json:"task_number"`
+	TaskNumber           int64       `json:"task_number"`
 	JobID                int64     `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
@@ -139,7 +139,7 @@ type TaskData struct {
 	TpSignature          []byte    `json:"tp_signature"`
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
-	IsSuccessful         bool      `json:"is_successful"`
+	IsAccepted           bool      `json:"is_accepted"`
 	IsImua               bool      `json:"is_imua"`
 }
 
@@ -151,7 +151,7 @@ type KeeperData struct {
 	RegisteredTx      string    `json:"registered_tx"`
 	OperatorID        int64     `json:"operator_id"`
 	RewardsAddress    string    `json:"rewards_address"`
-	RewardsBooster    float32   `json:"rewards_booster"`
+	RewardsBooster    float64   `json:"rewards_booster"`
 	VotingPower       int64     `json:"voting_power"`
 	KeeperPoints      float64   `json:"keeper_points"`
 	ConnectionAddress string    `json:"connection_address"`

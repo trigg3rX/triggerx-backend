@@ -49,11 +49,7 @@ func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) 
 	}
 
 	if err := redisClient.CheckConnection(); err != nil {
-		redisType := "local"
-		if config.IsUpstash {
-			redisType = "upstash"
-		}
-		return nil, fmt.Errorf("failed to connect to %s Redis: %w", redisType, err)
+		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
 	// Start connection recovery goroutine if enabled
@@ -61,11 +57,7 @@ func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) 
 		go redisClient.connectionRecoveryLoop()
 	}
 
-	redisType := "local"
-	if config.IsUpstash {
-		redisType = "upstash"
-	}
-	logger.Infof("Successfully connected to %s Redis", redisType)
+	logger.Infof("Successfully connected to Redis")
 	return redisClient, nil
 }
 
@@ -74,21 +66,13 @@ func parseRedisConfig(config RedisConfig) (*redis.Options, error) {
 	var opt *redis.Options
 	var err error
 
-	if config.IsUpstash {
-		opt, err = redis.ParseURL(config.UpstashConfig.URL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse Upstash Redis URL: %w", err)
-		}
+	opt, err = redis.ParseURL(config.UpstashConfig.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Upstash Redis URL: %w", err)
+	}
 
-		if config.UpstashConfig.Token != "" {
-			opt.Password = config.UpstashConfig.Token
-		}
-	} else {
-		opt = &redis.Options{
-			Addr:     config.LocalRedisConfig.Addr,
-			Password: config.LocalRedisConfig.Password,
-			DB:       config.LocalRedisConfig.DB,
-		}
+	if config.UpstashConfig.Token != "" {
+		opt.Password = config.UpstashConfig.Token
 	}
 
 	applyConnectionSettings(opt, config)
@@ -104,21 +88,6 @@ func applyConnectionSettings(opt *redis.Options, config RedisConfig) {
 	opt.ReadTimeout = config.ConnectionSettings.ReadTimeout
 	opt.WriteTimeout = config.ConnectionSettings.WriteTimeout
 	opt.PoolTimeout = config.ConnectionSettings.PoolTimeout
-}
-
-// GetRedisInfo returns information about the current Redis configuration
-func (c *Client) GetRedisInfo() map[string]interface{} {
-	return map[string]interface{}{
-		"available":            c.config.IsUpstash,
-		"type":                 c.config.IsUpstash,
-		"upstash":              c.config.IsUpstash,
-		"local":                !c.config.IsUpstash,
-		"job_stream_ttl":       c.config.StreamsConfig.JobStreamTTL,
-		"task_stream_ttl":      c.config.StreamsConfig.TaskStreamTTL,
-		"keeper_stream_ttl":    c.config.StreamsConfig.KeeperStreamTTL,
-		"registrar_stream_ttl": c.config.StreamsConfig.RegistrarStreamTTL,
-		"retry_config":         c.retryConfig,
-	}
 }
 
 // CheckConnection validates the Redis connection
@@ -316,6 +285,76 @@ func (c *Client) XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) (
 
 func (c *Client) XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd {
 	return c.redisClient.XClaim(ctx, args)
+}
+
+// ZAdd adds members to a sorted set
+func (c *Client) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error) {
+	var result int64
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.ZAdd(ctx, key, members...).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZAdd")
+	return result, err
+}
+
+// ZRevRange returns members from a sorted set in reverse order
+func (c *Client) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	var result []string
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.ZRevRange(ctx, key, start, stop).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZRevRange")
+	return result, err
+}
+
+// ZRemRangeByScore removes members from a sorted set by score range
+func (c *Client) ZRemRangeByScore(ctx context.Context, key, min, max string) (int64, error) {
+	var result int64
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.ZRemRangeByScore(ctx, key, min, max).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZRemRangeByScore")
+	return result, err
+}
+
+// Keys returns all keys matching a pattern
+func (c *Client) Keys(ctx context.Context, pattern string) ([]string, error) {
+	var result []string
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.Keys(ctx, pattern).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "Keys")
+	return result, err
+}
+
+// ZCard returns the number of members in a sorted set
+func (c *Client) ZCard(ctx context.Context, key string) (int64, error) {
+	var result int64
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.ZCard(ctx, key).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZCard")
+	return result, err
 }
 
 // TTL returns the time-to-live for a key with retry logic

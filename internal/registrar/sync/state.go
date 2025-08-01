@@ -6,35 +6,33 @@ import (
 	"strconv"
 	"time"
 
-	redisClient "github.com/trigg3rX/triggerx-backend/internal/registrar/clients/redis"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Redis keys for storing state
 const (
-	KeyLastPolledEthBlock  = "registrar:state:last_polled_eth_block"
-	KeyLastPolledBaseBlock = "registrar:state:last_polled_base_block"
-	KeyLastPolledOptBlock  = "registrar:state:last_polled_opt_block"
+	KeyLastEthBlockUpdated  = "registrar:state:last_eth_block_updated"
+	KeyLastBaseBlockUpdated = "registrar:state:last_base_block_updated"
 	KeyLastRewardsUpdate   = "registrar:state:last_rewards_update"
 )
 
 // StateManager manages blockchain synchronization state in Redis
 type StateManager struct {
-	redis  *redisClient.Client
+	redis  *redis.Client
 	logger logging.Logger
 }
 
 // BlockchainState represents the current state of blockchain synchronization
 type BlockchainState struct {
-	LastPolledEthBlock  uint64    `json:"last_polled_eth_block"`
-	LastPolledBaseBlock uint64    `json:"last_polled_base_block"`
-	LastPolledOptBlock  uint64    `json:"last_polled_opt_block"`
+	LastEthBlockUpdated  uint64    `json:"last_eth_block_updated"`
+	LastBaseBlockUpdated uint64    `json:"last_base_block_updated"`
 	LastRewardsUpdate   time.Time `json:"last_rewards_update"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // NewStateManager creates a new Redis-backed state manager
-func NewStateManager(redis *redisClient.Client, logger logging.Logger) *StateManager {
+func NewStateManager(redis *redis.Client, logger logging.Logger) *StateManager {
 	return &StateManager{
 		redis:  redis,
 		logger: logger,
@@ -42,63 +40,50 @@ func NewStateManager(redis *redisClient.Client, logger logging.Logger) *StateMan
 }
 
 // InitializeState initializes the state in Redis with current blockchain data
-func (sm *StateManager) InitializeState(ctx context.Context, ethBlock, baseBlock, optBlock uint64) error {
+func (sm *StateManager) InitializeState(ctx context.Context, ethBlock uint64, baseBlock uint64, optBlock uint64, rewardsUpdate time.Time) error {
 	sm.logger.Info("Initializing blockchain state in Redis")
 
 	// Set initial block numbers if they don't exist
-	if err := sm.setBlockIfNotExists(ctx, KeyLastPolledEthBlock, ethBlock); err != nil {
+	if err := sm.setBlockIfNotExists(ctx, KeyLastEthBlockUpdated, ethBlock); err != nil {
 		return fmt.Errorf("failed to initialize ETH block: %w", err)
 	}
 
-	if err := sm.setBlockIfNotExists(ctx, KeyLastPolledBaseBlock, baseBlock); err != nil {
+	if err := sm.setBlockIfNotExists(ctx, KeyLastBaseBlockUpdated, baseBlock); err != nil {
 		return fmt.Errorf("failed to initialize BASE block: %w", err)
 	}
 
-	if err := sm.setBlockIfNotExists(ctx, KeyLastPolledOptBlock, optBlock); err != nil {
-		return fmt.Errorf("failed to initialize OPT block: %w", err)
-	}
-
 	// Set initial rewards update time if it doesn't exist
-	if err := sm.setTimeIfNotExists(ctx, KeyLastRewardsUpdate, time.Now().UTC()); err != nil {
+	if err := sm.setTimeIfNotExists(ctx, KeyLastRewardsUpdate, rewardsUpdate); err != nil {
 		return fmt.Errorf("failed to initialize rewards update time: %w", err)
 	}
 
 	sm.logger.Info("Blockchain state initialized successfully",
 		"eth_block", ethBlock,
 		"base_block", baseBlock,
-		"opt_block", optBlock)
+		"last_rewards_update", rewardsUpdate,
+	)
 
 	return nil
 }
 
 // GetLastPolledEthBlock gets the last polled Ethereum block number
-func (sm *StateManager) GetLastPolledEthBlock(ctx context.Context) (uint64, error) {
-	return sm.getBlockNumber(ctx, KeyLastPolledEthBlock)
+func (sm *StateManager) GetLastEthBlockUpdated(ctx context.Context) (uint64, error) {
+	return sm.getBlockNumber(ctx, KeyLastEthBlockUpdated)
 }
 
 // SetLastPolledEthBlock sets the last polled Ethereum block number
-func (sm *StateManager) SetLastPolledEthBlock(ctx context.Context, blockNumber uint64) error {
-	return sm.setBlockNumber(ctx, KeyLastPolledEthBlock, blockNumber)
+func (sm *StateManager) SetLastEthBlockUpdated(ctx context.Context, blockNumber uint64) error {
+	return sm.setBlockNumber(ctx, KeyLastEthBlockUpdated, blockNumber)
 }
 
 // GetLastPolledBaseBlock gets the last polled Base block number
-func (sm *StateManager) GetLastPolledBaseBlock(ctx context.Context) (uint64, error) {
-	return sm.getBlockNumber(ctx, KeyLastPolledBaseBlock)
+func (sm *StateManager) GetLastBaseBlockUpdated(ctx context.Context) (uint64, error) {
+	return sm.getBlockNumber(ctx, KeyLastBaseBlockUpdated)
 }
 
 // SetLastPolledBaseBlock sets the last polled Base block number
-func (sm *StateManager) SetLastPolledBaseBlock(ctx context.Context, blockNumber uint64) error {
-	return sm.setBlockNumber(ctx, KeyLastPolledBaseBlock, blockNumber)
-}
-
-// GetLastPolledOptBlock gets the last polled Optimism block number
-func (sm *StateManager) GetLastPolledOptBlock(ctx context.Context) (uint64, error) {
-	return sm.getBlockNumber(ctx, KeyLastPolledOptBlock)
-}
-
-// SetLastPolledOptBlock sets the last polled Optimism block number
-func (sm *StateManager) SetLastPolledOptBlock(ctx context.Context, blockNumber uint64) error {
-	return sm.setBlockNumber(ctx, KeyLastPolledOptBlock, blockNumber)
+func (sm *StateManager) SetLastBaseBlockUpdated(ctx context.Context, blockNumber uint64) error {
+	return sm.setBlockNumber(ctx, KeyLastBaseBlockUpdated, blockNumber)
 }
 
 // GetLastRewardsUpdate gets the last rewards update timestamp
@@ -109,8 +94,8 @@ func (sm *StateManager) GetLastRewardsUpdate(ctx context.Context) (time.Time, er
 	}
 
 	if timestampStr == "" {
-		// Return zero time if not set
-		return time.Time{}, nil
+		// Return previous day's 6:30 AM UTC
+		return time.Now().AddDate(0, 0, -1).Add(6*time.Hour + 30*time.Minute).UTC(), nil
 	}
 
 	timestamp, err := time.Parse(time.RFC3339, timestampStr)
@@ -135,19 +120,14 @@ func (sm *StateManager) SetLastRewardsUpdate(ctx context.Context, timestamp time
 
 // GetFullState gets the complete blockchain state
 func (sm *StateManager) GetFullState(ctx context.Context) (*BlockchainState, error) {
-	ethBlock, err := sm.GetLastPolledEthBlock(ctx)
+	ethBlock, err := sm.GetLastEthBlockUpdated(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ETH block: %w", err)
 	}
 
-	baseBlock, err := sm.GetLastPolledBaseBlock(ctx)
+	baseBlock, err := sm.GetLastBaseBlockUpdated(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get BASE block: %w", err)
-	}
-
-	optBlock, err := sm.GetLastPolledOptBlock(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get OPT block: %w", err)
 	}
 
 	rewardsUpdate, err := sm.GetLastRewardsUpdate(ctx)
@@ -156,29 +136,24 @@ func (sm *StateManager) GetFullState(ctx context.Context) (*BlockchainState, err
 	}
 
 	return &BlockchainState{
-		LastPolledEthBlock:  ethBlock,
-		LastPolledBaseBlock: baseBlock,
-		LastPolledOptBlock:  optBlock,
+		LastEthBlockUpdated:  ethBlock,
+		LastBaseBlockUpdated: baseBlock,
 		LastRewardsUpdate:   rewardsUpdate,
 		UpdatedAt:           time.Now().UTC(),
 	}, nil
 }
 
 // UpdateBlockchainProgress updates multiple blockchain states atomically
-func (sm *StateManager) UpdateBlockchainProgress(ctx context.Context, ethBlock, baseBlock, optBlock *uint64) error {
+func (sm *StateManager) UpdateBlockchainProgress(ctx context.Context, ethBlock, baseBlock *uint64) error {
 	// Use Redis pipeline for atomic updates
 	pipe := sm.redis.Client().Pipeline()
 
 	if ethBlock != nil {
-		pipe.Set(ctx, KeyLastPolledEthBlock, strconv.FormatUint(*ethBlock, 10), 0)
+		pipe.Set(ctx, KeyLastEthBlockUpdated, strconv.FormatUint(*ethBlock, 10), 0)
 	}
 
 	if baseBlock != nil {
-		pipe.Set(ctx, KeyLastPolledBaseBlock, strconv.FormatUint(*baseBlock, 10), 0)
-	}
-
-	if optBlock != nil {
-		pipe.Set(ctx, KeyLastPolledOptBlock, strconv.FormatUint(*optBlock, 10), 0)
+		pipe.Set(ctx, KeyLastBaseBlockUpdated, strconv.FormatUint(*baseBlock, 10), 0)
 	}
 
 	_, err := pipe.Exec(ctx)
@@ -186,8 +161,8 @@ func (sm *StateManager) UpdateBlockchainProgress(ctx context.Context, ethBlock, 
 		return fmt.Errorf("failed to update blockchain progress: %w", err)
 	}
 
-	sm.logger.Debugf("Updated blockchain progress - ETH: %v, BASE: %v, OPT: %v",
-		formatBlockPtr(ethBlock), formatBlockPtr(baseBlock), formatBlockPtr(optBlock))
+	sm.logger.Debugf("Updated blockchain progress - ETH: %v, BASE: %v",
+		formatBlockPtr(ethBlock), formatBlockPtr(baseBlock))
 
 	return nil
 }
@@ -195,9 +170,8 @@ func (sm *StateManager) UpdateBlockchainProgress(ctx context.Context, ethBlock, 
 // ResetState resets all state to initial values
 func (sm *StateManager) ResetState(ctx context.Context) error {
 	keys := []string{
-		KeyLastPolledEthBlock,
-		KeyLastPolledBaseBlock,
-		KeyLastPolledOptBlock,
+		KeyLastEthBlockUpdated,
+		KeyLastBaseBlockUpdated,
 		KeyLastRewardsUpdate,
 	}
 
@@ -225,9 +199,8 @@ func (sm *StateManager) GetStateHealth(ctx context.Context) map[string]interface
 
 	// Check each state key
 	keys := map[string]string{
-		"eth_block":      KeyLastPolledEthBlock,
-		"base_block":     KeyLastPolledBaseBlock,
-		"opt_block":      KeyLastPolledOptBlock,
+		"eth_block":      KeyLastEthBlockUpdated,
+		"base_block":     KeyLastBaseBlockUpdated,
 		"rewards_update": KeyLastRewardsUpdate,
 	}
 
@@ -255,7 +228,6 @@ func (sm *StateManager) GetStateHealth(ctx context.Context) map[string]interface
 }
 
 // Helper methods
-
 func (sm *StateManager) getBlockNumber(ctx context.Context, key string) (uint64, error) {
 	blockStr, err := sm.redis.Get(ctx, key)
 	if err != nil {

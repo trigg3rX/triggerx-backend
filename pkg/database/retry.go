@@ -114,28 +114,28 @@ func (c *Connection) RetryableExec(query string, values ...interface{}) error {
 func (c *Connection) RetryableExecWithContext(ctx context.Context, query string, values ...interface{}) error {
 	config := DefaultRetryableConfig()
 
-	if c.logger != nil {
-		c.logger.Info("Starting retryable exec operation",
-			"query", query,
-			"max_retries", config.MaxRetries,
-			"initial_delay", config.InitialDelay)
-	}
+	// if c.logger != nil {
+	// 	c.logger.Info("Starting retryable exec operation",
+	// 		"query", query,
+	// 		"max_retries", config.MaxRetries,
+	// 		"initial_delay", config.InitialDelay)
+	// }
 
 	_, err := retry.Retry(ctx, func() (interface{}, error) {
 		if err := c.session.Query(query, values...).Exec(); err != nil {
 			if !isRetryableError(err) {
-				if c.logger != nil {
-					c.logger.Error("Non-retryable error during exec operation",
-						"error", err.Error(),
-						"query", query)
-				}
+				// if c.logger != nil {
+				// 	c.logger.Error("Non-retryable error during exec operation",
+				// 		"error", err.Error(),
+				// 		"query", query)
+				// }
 				return nil, err
 			}
-			if c.logger != nil {
-				c.logger.Warn("Retryable error during exec operation",
-					"error", err.Error(),
-					"query", query)
-			}
+			// if c.logger != nil {
+			// 	c.logger.Warn("Retryable error during exec operation",
+			// 		"error", err.Error(),
+			// 		"query", query)
+			// }
 			return nil, err
 		}
 		return nil, nil
@@ -167,28 +167,28 @@ func (c *Connection) RetryableScan(query string, dest ...interface{}) error {
 func (c *Connection) RetryableScanWithContext(ctx context.Context, query string, dest ...interface{}) error {
 	config := DefaultRetryableConfig()
 
-	if c.logger != nil {
-		c.logger.Info("Starting retryable scan operation",
-			"query", query,
-			"max_retries", config.MaxRetries,
-			"initial_delay", config.InitialDelay)
-	}
+	// if c.logger != nil {
+	// 	c.logger.Info("Starting retryable scan operation",
+	// 		"query", query,
+	// 		"max_retries", config.MaxRetries,
+	// 		"initial_delay", config.InitialDelay)
+	// }
 
 	_, err := retry.Retry(ctx, func() (interface{}, error) {
 		err := c.session.Query(query).Scan(dest...)
 		if err != nil && !isRetryableError(err) {
-			if c.logger != nil {
-				c.logger.Error("Non-retryable error during scan operation",
-					"error", err.Error(),
-					"query", query)
-			}
+			// if c.logger != nil {
+			// 	c.logger.Error("Non-retryable error during scan operation",
+			// 		"error", err.Error(),
+			// 		"query", query)
+			// }
 			return nil, err
 		}
-		if err != nil && c.logger != nil {
-			c.logger.Warn("Retryable error during scan operation",
-				"error", err.Error(),
-				"query", query)
-		}
+		// if err != nil && c.logger != nil {
+		// 	c.logger.Warn("Retryable error during scan operation",
+		// 		"error", err.Error(),
+		// 		"query", query)
+		// }
 		return nil, err
 	}, &retry.RetryConfig{
 		MaxRetries:      config.MaxRetries,
@@ -251,28 +251,28 @@ func (c *Connection) RetryableBatch(batch *gocql.Batch) error {
 func (c *Connection) RetryableBatchWithContext(ctx context.Context, batch *gocql.Batch) error {
 	config := DefaultRetryableConfig()
 
-	if c.logger != nil {
-		c.logger.Info("Starting retryable batch operation",
-			"batch_size", len(batch.Entries),
-			"max_retries", config.MaxRetries,
-			"initial_delay", config.InitialDelay)
-	}
+	// if c.logger != nil {
+	// 	c.logger.Info("Starting retryable batch operation",
+	// 		"batch_size", len(batch.Entries),
+	// 		"max_retries", config.MaxRetries,
+	// 		"initial_delay", config.InitialDelay)
+	// }
 
 	_, err := retry.Retry(ctx, func() (interface{}, error) {
 		err := c.session.ExecuteBatch(batch)
 		if err != nil && !isRetryableError(err) {
-			if c.logger != nil {
-				c.logger.Error("Non-retryable error during batch operation",
-					"error", err.Error(),
-					"batch_size", len(batch.Entries))
-			}
+			// if c.logger != nil {
+			// 	c.logger.Error("Non-retryable error during batch operation",
+			// 		"error", err.Error(),
+			// 		"batch_size", len(batch.Entries))
+			// }
 			return nil, err
 		}
-		if err != nil && c.logger != nil {
-			c.logger.Warn("Retryable error during batch operation",
-				"error", err.Error(),
-				"batch_size", len(batch.Entries))
-		}
+		// if err != nil && c.logger != nil {
+		// 	c.logger.Warn("Retryable error during batch operation",
+		// 		"error", err.Error(),
+		// 		"batch_size", len(batch.Entries))
+		// }
 		return nil, err
 	}, &retry.RetryConfig{
 		MaxRetries:      config.MaxRetries,

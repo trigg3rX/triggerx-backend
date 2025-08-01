@@ -6,8 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/websocket"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/events/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -23,6 +24,7 @@ type ContractEventListener struct {
 	mu           sync.RWMutex
 	eventChan    chan *websocket.ChainEvent
 	processingWg sync.WaitGroup
+	dbClient     *database.DatabaseClient
 }
 
 // ListenerConfig holds configuration for the event listener
@@ -67,10 +69,11 @@ type OperatorEventHandler struct {
 // TaskEventHandler handles task-related events
 type TaskEventHandler struct {
 	logger logging.Logger
+	db     *database.DatabaseClient
 }
 
 // NewContractEventListener creates a new contract event listener
-func NewContractEventListener(logger logging.Logger, config *ListenerConfig) *ContractEventListener {
+func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbClient *database.DatabaseClient) *ContractEventListener {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := websocket.NewClient(logger)
@@ -82,6 +85,7 @@ func NewContractEventListener(logger logging.Logger, config *ListenerConfig) *Co
 		ctx:       ctx,
 		cancel:    cancel,
 		eventChan: make(chan *websocket.ChainEvent, config.EventBufferSize),
+		dbClient:  dbClient,
 	}
 }
 
@@ -152,7 +156,7 @@ func (l *ContractEventListener) Stop() error {
 func (l *ContractEventListener) setupChainConnections() error {
 	for _, chainConfig := range l.config.Chains {
 		if !chainConfig.Enabled {
-			l.logger.Infof("Skipping disabled chain: %s", chainConfig.Name)
+			// l.logger.Infof("Skipping disabled chain: %s", chainConfig.Name)
 			continue
 		}
 
@@ -163,6 +167,13 @@ func (l *ContractEventListener) setupChainConnections() error {
 			RPCURL:       chainConfig.RPCURL,
 			WebSocketURL: chainConfig.WebSocketURL,
 			Contracts:    l.getContractConfigsForChain(chainConfig.ChainID),
+			Reconnect: websocket.ReconnectConfig{
+				MaxRetries:    l.config.ReconnectConfig.MaxRetries,
+				BaseDelay:     l.config.ReconnectConfig.BaseDelay,
+				MaxDelay:      l.config.ReconnectConfig.MaxDelay,
+				BackoffFactor: l.config.ReconnectConfig.BackoffFactor,
+				Jitter:        true,
+			},
 		}
 
 		if err := l.client.AddChain(wsConfig); err != nil {
@@ -174,7 +185,7 @@ func (l *ContractEventListener) setupChainConnections() error {
 			return fmt.Errorf("failed to setup subscriptions for chain %s: %w", chainConfig.Name, err)
 		}
 
-		l.logger.Infof("Successfully configured chain: %s (%s)", chainConfig.Name, chainConfig.ChainID)
+		// l.logger.Infof("Successfully configured chain: %s (%s)", chainConfig.Name, chainConfig.ChainID)
 	}
 
 	return nil
@@ -228,7 +239,7 @@ func (l *ContractEventListener) setupContractSubscriptions(chainID string) error
 		); err != nil {
 			return fmt.Errorf("failed to subscribe to AvsGovernance events: %w", err)
 		}
-		l.logger.Infof("Subscribed to AvsGovernance events on chain %s", chainID)
+		// l.logger.Infof("Subscribed to AvsGovernance events on chain %s", chainID)
 	}
 
 	// Subscribe to AttestationCenter events
@@ -241,7 +252,7 @@ func (l *ContractEventListener) setupContractSubscriptions(chainID string) error
 		); err != nil {
 			return fmt.Errorf("failed to subscribe to AttestationCenter events: %w", err)
 		}
-		l.logger.Infof("Subscribed to AttestationCenter events on chain %s", chainID)
+		// l.logger.Infof("Subscribed to AttestationCenter events on chain %s", chainID)
 	}
 
 	return nil
@@ -252,7 +263,7 @@ func (l *ContractEventListener) startEventProcessors() {
 	processor := &EventProcessor{
 		logger:          l.logger,
 		operatorHandler: &OperatorEventHandler{logger: l.logger},
-		taskHandler:     &TaskEventHandler{logger: l.logger},
+		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient},
 	}
 
 	// Start multiple processing workers
@@ -261,7 +272,7 @@ func (l *ContractEventListener) startEventProcessors() {
 		go l.eventProcessorWorker(processor, i)
 	}
 
-	l.logger.Infof("Started %d event processing workers", l.config.ProcessingWorkers)
+	// l.logger.Infof("Started %d event processing workers", l.config.ProcessingWorkers)
 }
 
 // eventListeningLoop is the main event listening loop
@@ -293,36 +304,39 @@ func (l *ContractEventListener) eventListeningLoop() {
 func (l *ContractEventListener) eventProcessorWorker(processor *EventProcessor, workerID int) {
 	defer l.processingWg.Done()
 
-	l.logger.Infof("Event processor worker %d started", workerID)
+	l.logger.Debugf("Event processor worker %d started", workerID)
 
 	for {
 		select {
 		case <-l.ctx.Done():
-			l.logger.Infof("Event processor worker %d stopped", workerID)
+			// l.logger.Infof("Event processor worker %d stopped", workerID)
 			return
 		case event := <-l.eventChan:
-			l.processEvent(processor, event, workerID)
+			l.processEvent(processor, event)
 		}
 	}
 }
 
 // processEvent processes a single contract event
-func (l *ContractEventListener) processEvent(processor *EventProcessor, event *websocket.ChainEvent, workerID int) {
+func (l *ContractEventListener) processEvent(processor *EventProcessor, event *websocket.ChainEvent) {
 	// Set processing timeout
-	ctx, cancel := context.WithTimeout(l.ctx, l.config.ProcessingTimeout)
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(l.ctx, l.config.ProcessingTimeout)
+	// defer cancel()
 
-	l.logger.Debugf("Worker %d processing %s event from %s",
-		workerID, event.EventName, event.ContractType)
+	// l.logger.Debugf("Worker %d processing %s event from %s contract at %s",
+	// 	workerID, event.EventName, event.ContractType, event.ContractAddr)
 
 	// Process event based on contract type
 	switch event.ContractType {
 	case websocket.ContractTypeAvsGovernance:
-		processor.operatorHandler.ProcessOperatorEvent(ctx, event)
+		l.logger.Debugf("Processing %s event from AvsGovernance contract on chain %s", event.EventName, event.ChainID)
+		processor.operatorHandler.ProcessOperatorEvent(l.ctx, event)
 	case websocket.ContractTypeAttestationCenter:
-		processor.taskHandler.ProcessTaskEvent(ctx, event)
+		l.logger.Debugf("Processing %s event from AttestationCenter contract on chain %s", event.EventName, event.ChainID)
+		processor.taskHandler.ProcessTaskEvent(event)
 	default:
-		l.logger.Warnf("Unknown contract type: %s", event.ContractType)
+		l.logger.Warnf("Unknown contract type: %s for event %s from contract %s on chain %s",
+			event.ContractType, event.EventName, event.ContractAddr, event.ChainID)
 	}
 }
 
@@ -353,22 +367,15 @@ func GetDefaultConfig() *ListenerConfig {
 			{
 				ChainID:      "17000",
 				Name:         "Ethereum Holesky",
-				RPCURL:       config.GetChainRPCUrl(false, "17000"),
-				WebSocketURL: config.GetChainRPCUrl(true, "17000"),
+				RPCURL:       config.GetChainRPCUrl(true, "17000"),
+				WebSocketURL: config.GetChainRPCUrl(false, "17000"),
 				Enabled:      true,
 			},
 			{
 				ChainID:      "84532",
 				Name:         "Base Sepolia",
-				RPCURL:       config.GetChainRPCUrl(false, "84532"),
-				WebSocketURL: config.GetChainRPCUrl(true, "84532"),
-				Enabled:      true,
-			},
-			{
-				ChainID:      "11155420",
-				Name:         "Optimism Sepolia",
-				RPCURL:       config.GetChainRPCUrl(false, "11155420"),
-				WebSocketURL: config.GetChainRPCUrl(true, "11155420"),
+				RPCURL:       config.GetChainRPCUrl(true, "84532"),
+				WebSocketURL: config.GetChainRPCUrl(false, "84532"),
 				Enabled:      true,
 			},
 		},
@@ -383,16 +390,10 @@ func GetDefaultConfig() *ListenerConfig {
 		ProcessingTimeout: 30 * time.Second,
 		ContractAddresses: map[string]map[string]string{
 			"17000": { // Ethereum Holesky
-				"avs_governance":     config.GetAvsGovernanceAddress(),
-				"avs_governance_logic": config.GetAvsGovernanceLogicAddress(),
+				"avs_governance": config.GetAvsGovernanceAddress(),
 			},
 			"84532": { // Base Sepolia
 				"attestation_center": config.GetAttestationCenterAddress(),
-				"obls": config.GetOBLSAddress(),
-				"trigger_gas_registry": config.GetTriggerGasRegistryAddress(),
-			},
-			"11155420": { // Optimism Sepolia
-				"trigger_gas_registry": config.GetTriggerGasRegistryAddress(),
 			},
 		},
 	}

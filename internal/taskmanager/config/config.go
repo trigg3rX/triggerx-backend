@@ -34,13 +34,10 @@ type Config struct {
 	// Pinata Host
 	pinataHost string
 
-	// Fallback: Local Redis settings (optional)
-	localAddr       string
-	localPassword   string
+	// OpenTelemetry endpoint
 	ottempoEndpoint string
 
 	// Common settings
-	db           int
 	poolSize     int
 	minIdleConns int
 	maxRetries   int
@@ -89,9 +86,6 @@ func Init() error {
 		redisSigningAddress:    env.GetEnvString("REDIS_SIGNING_ADDRESS", ""),
 		upstashURL:             env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashToken:           env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		localAddr:              env.GetEnvString("REDIS_ADDR", "localhost:6379"),
-		localPassword:          env.GetEnvString("REDIS_PASSWORD", ""),
-		db:                     0,
 		poolSize:               env.GetEnvInt("REDIS_POOL_SIZE", 10),
 		minIdleConns:           env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
 		maxRetries:             env.GetEnvInt("REDIS_MAX_RETRIES", 3),
@@ -120,28 +114,6 @@ func Init() error {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	return nil
-}
-
-func IsUpstashEnabled() bool {
-	return cfg.upstashURL != ""
-}
-
-func IsLocalRedisEnabled() bool {
-	return cfg.localAddr != ""
-}
-
-func IsRedisAvailable() bool {
-	return IsUpstashEnabled() || IsLocalRedisEnabled()
-}
-
-func GetRedisType() string {
-	if IsUpstashEnabled() {
-		return "upstash"
-	}
-	if IsLocalRedisEnabled() {
-		return "local"
-	}
-	return "none"
 }
 
 func IsDevMode() bool {
@@ -182,18 +154,6 @@ func GetUpstashURL() string {
 
 func GetUpstashToken() string {
 	return cfg.upstashToken
-}
-
-func GetRedisAddr() string {
-	return cfg.localAddr
-}
-
-func GetRedisPassword() string {
-	return cfg.localPassword
-}
-
-func GetRedisDB() int {
-	return cfg.db
 }
 
 func GetStreamMaxLen() int {
@@ -283,15 +243,9 @@ func GetOTTempoEndpoint() string {
 // GetRedisClientConfig returns a RedisConfig for the new Redis client
 func GetRedisClientConfig() redisClient.RedisConfig {
 	return redisClient.RedisConfig{
-		IsUpstash: IsUpstashEnabled(),
 		UpstashConfig: redisClient.UpstashConfig{
 			URL:   cfg.upstashURL,
 			Token: cfg.upstashToken,
-		},
-		LocalRedisConfig: redisClient.LocalRedisConfig{
-			Addr:     cfg.localAddr,
-			Password: cfg.localPassword,
-			DB:       cfg.db,
 		},
 		ConnectionSettings: redisClient.ConnectionSettings{
 			PoolSize:         cfg.poolSize,
@@ -305,12 +259,6 @@ func GetRedisClientConfig() redisClient.RedisConfig {
 			PingTimeout:      2 * time.Second,  // Default ping timeout
 			HealthTimeout:    5 * time.Second,  // Default health check timeout
 			OperationTimeout: 10 * time.Second, // Default operation timeout
-		},
-		StreamsConfig: redisClient.StreamsConfig{
-			JobStreamTTL:       cfg.jobStreamTTL,
-			TaskStreamTTL:      cfg.taskStreamTTL,
-			KeeperStreamTTL:    24 * time.Hour, // Default keeper stream TTL
-			RegistrarStreamTTL: 24 * time.Hour, // Default registrar stream TTL
 		},
 	}
 }

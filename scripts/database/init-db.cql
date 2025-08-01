@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     tp_signature blob,
     ta_signature blob,
     task_submission_tx_hash text,
-    is_successful boolean,
+    is_accepted boolean,
     is_imua boolean,
     PRIMARY KEY (task_id)
 );
