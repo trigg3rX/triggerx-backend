@@ -70,6 +70,20 @@ case $TASK_DEFINITION_ID in
     ;;
 esac
 
+
+echo "\nCalling CreateJob() to TriggerXJobRegistry..."
+
+cast send \
+  --async \
+  --chain 84532 \
+  --rpc-url https://base-sepolia.g.alchemy.com/v2/PIUHuKF0BQoK9ibzzDH-B-bk0LbiYY38 \
+  --private-key 2212ec53a0dddee799b3342a86bb45fd1192a1981139244869102be2b3c47045 \
+  0xdB66c11221234C6B19cCBd29868310c31494C21C \
+  "createJob(string,uint8,uint256,address,bytes)" test $TASK_DEFINITION_ID $TIME_FRAME 0x49a81A591afdDEF973e6e49aaEa7d76943ef234C 0x01 \
+  -- --broadcast
+
+sleep 3
+
 # curl -X POST https://data.triggerx.network/api/jobs \ 192.168.1.56
 curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
@@ -122,7 +136,7 @@ if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
     --async \
     --chain 11155420 \
     --rpc-url https://opt-sepolia.g.alchemy.com/v2/PIUHuKF0BQoK9ibzzDH-B-bk0LbiYY38 \
-    --private-key 3a636c73c3388970114d86ff4d5f0becffaff0db24db342eebb00323238f0fda \
+    --private-key 2212ec53a0dddee799b3342a86bb45fd1192a1981139244869102be2b3c47045 \
     0x49a81A591afdDEF973e6e49aaEa7d76943ef234C "increment()" \
     -- --broadcast
 fi
