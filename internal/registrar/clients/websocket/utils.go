@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"math/rand"
+	"crypto/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"

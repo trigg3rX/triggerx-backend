@@ -58,7 +58,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                   env.GetEnvBool("DEV_MODE", false),
-		registrarPort:             env.GetEnvString("REGISTRAR_PORT", "9007"),
+		registrarPort:             env.GetEnvString("REGISTRAR_PORT", "9010"),
 		avsGovernanceAddress:      env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
 		// avsGovernanceLogicAddress: env.GetEnvString("AVS_GOVERNANCE_LOGIC_ADDRESS", "0x4EbE2f2b7db5B48559167f2be7d760B23b00B427"),
 		attestationCenterAddress:  env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),

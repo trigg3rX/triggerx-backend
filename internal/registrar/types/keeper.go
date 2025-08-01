@@ -14,6 +14,7 @@ type KeeperRegistrationData struct {
 type TaskSubmissionData struct {
 	TaskID int64
 	TaskNumber int64
+	TaskDefinitionID int
 	IsAccepted bool
 	TaskSubmissionTxHash string
 	PerformerAddress string

@@ -6,8 +6,8 @@ import (
 	"math/big"
 	"strconv"
 
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/websocket"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
@@ -25,22 +25,43 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *websocket.ChainEvent) {
 			taskData.IsAccepted = false
 		}
 
-		// Update task submission data in database
-		if err := h.db.UpdateTaskSubmissionData(*taskData); err != nil {
-			h.logger.Errorf("Failed to update task submission data in database: %v", err)
-			return
-		}
-
-		// Update keeper points in database
-		if err := h.db.UpdateKeeperPointsInDatabase(*taskData); err != nil {
-			h.logger.Errorf("Failed to update keeper points in database: %v", err)
-			return
+		if taskData.TaskID != 0 {
+			// Update task submission data in database
+			if err := h.db.UpdateTaskSubmissionData(*taskData); err != nil {
+				h.logger.Errorf("Failed to update task submission data in database: %v", err)
+				return
+			}
+			// Update keeper points in database
+			if err := h.db.UpdateKeeperPointsInDatabase(*taskData); err != nil {
+				h.logger.Errorf("Failed to update keeper points in database: %v", err)
+				return
+			}
 		}
 	}
 }
 
 // parseTaskSubmissionData parses the event data into TaskSubmissionData
 func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interface{}, txHash string) (*types.TaskSubmissionData, error) {
+	// Extract taskDefinitionId - it's indexed, so it comes as a string (hex-encoded)
+	taskDefinitionIdStr, ok := parsedData["taskDefinitionId"].(string)
+	if !ok {
+		return nil, fmt.Errorf("taskDefinitionId not found or invalid type")
+	}
+
+	// Convert hex string to integer
+	taskDefinitionIdInt64, err := strconv.ParseInt(taskDefinitionIdStr, 0, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse taskDefinitionId: %v", err)
+	}
+	taskDefinitionId := int(taskDefinitionIdInt64)
+
+	if taskDefinitionId == 10001 || taskDefinitionId == 10002 {
+		taskData := &types.TaskSubmissionData{
+			TaskID:               0,
+		}
+		return taskData, nil
+	}
+	
 	// Extract task number - it's already parsed as uint32, so we need to handle it as a number
 	var taskNumber int64
 	switch v := parsedData["taskNumber"].(type) {
@@ -121,11 +142,10 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 		return nil, fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
 
-	// For now, set default values for fields that might not be available in the event
-	// These could be updated later when more information is available
 	taskData := &types.TaskSubmissionData{
 		TaskID:               ipfsData.ActionData.TaskID,
 		TaskNumber:           taskNumber,
+		TaskDefinitionID:     taskDefinitionId,
 		IsAccepted:           true,
 		TaskSubmissionTxHash: txHash,
 		PerformerAddress:     performerAddress,

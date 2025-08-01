@@ -305,7 +305,10 @@ func (cc *ChainConnection) readMessage() error {
 	}
 
 	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	err := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err != nil {
+		cc.logger.Errorf("Failed to set read deadline: %v", err)
+	}
 
 	// Read message
 	_, message, err := conn.ReadMessage()
@@ -352,9 +355,15 @@ func (cc *ChainConnection) connect() error {
 
 	// Set connection parameters for reliability
 	conn.SetReadLimit(512 * 1024) // 512KB max message size
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err != nil {
+		cc.logger.Errorf("Failed to set read deadline: %v", err)
+	}
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		err = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if err != nil {
+			cc.logger.Errorf("Failed to set read deadline: %v", err)
+		}
 		return nil
 	})
 

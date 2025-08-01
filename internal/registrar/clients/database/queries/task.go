@@ -29,7 +29,7 @@ const (
 		FROM triggerx.keeper_data 
 		WHERE keeper_id = ?`
 	GetUserPoints = `
-		SELECT user_points 
+		SELECT user_points, total_tasks 
 		FROM triggerx.user_data 
 		WHERE user_id = ?`
 
@@ -58,7 +58,7 @@ const (
 		WHERE keeper_id = ?`
 	UpdateUserPoints = `
 		UPDATE triggerx.user_data 
-		SET user_points = ?, last_updated_at = ?
+		SET user_points = ?, total_tasks = ?, last_updated_at = ?
 		WHERE user_id = ?`
 
 )

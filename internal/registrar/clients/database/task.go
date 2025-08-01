@@ -44,6 +44,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmissionData) error {
 	var jobID *big.Int
 	var userID int64
+	var userTasks int64
 	var taskPredictedOpxCost float64
 
 	var keeperId int64
@@ -65,15 +66,6 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	// TODO:
 	// Alert if taskOpxCost is greater than taskPredictedOpxCost by a threshold
-
-	// Get user ID from job ID
-	iter = dm.db.RetryableIter(queries.GetUserIdByJobId, jobID)
-	defer iter.Close()
-
-	if !iter.Scan(&userID) {
-		dm.logger.Errorf("Failed to get user ID for job ID %d: no results found", jobID)
-		return fmt.Errorf("user not found for job ID %d", jobID)
-	}
 
 	// Update the Attester Points
 	for _, operator_id := range data.AttesterIds {
@@ -113,10 +105,10 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 	if data.IsAccepted {
 		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
-		noExecutedTasks = noExecutedTasks + 1
 	} else {
 		keeperPoints = keeperPoints - float64(rewardsBooster)*data.TaskOpxCost*0.1
 	}
+	noExecutedTasks = noExecutedTasks + 1
 
 	if err := dm.db.RetryableExec(queries.UpdatePerformerPointsAndNoOfTasks,
 		keeperPoints, noExecutedTasks, performerId[0]); err != nil {
@@ -125,20 +117,29 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 
 	// Update the User Points
+	iter = dm.db.RetryableIter(queries.GetUserIdByJobId, jobID)
+	defer iter.Close()
+
+	if !iter.Scan(&userID) {
+		dm.logger.Errorf("Failed to get user ID for job ID %d: no results found", jobID)
+		return fmt.Errorf("user not found for job ID %d", jobID)
+	}
+
 	var userPoints float64
 	iter = dm.db.RetryableIter(queries.GetUserPoints, userID)
 	defer iter.Close()
 
-	if !iter.Scan(&userPoints) {
+	if !iter.Scan(&userPoints, &userTasks) {
 		dm.logger.Errorf("Failed to get user points for user ID %d: no results found", userID)
 		return fmt.Errorf("user not found for user ID %d", userID)
 	}
 
+	userTasks = userTasks + 1
 	userPoints = userPoints + data.TaskOpxCost
 	lastUpdatedAt := time.Now().UTC()
 
 	if err := dm.db.RetryableExec(queries.UpdateUserPoints,
-		userPoints, lastUpdatedAt, userID); err != nil {
+		userPoints, userTasks, lastUpdatedAt, userID); err != nil {
 		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
 	}
