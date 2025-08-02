@@ -4,6 +4,7 @@ go 1.24.2
 
 // resolve the issue with the docker client
 require (
+	github.com/docker/docker v28.3.3+incompatible
 	google.golang.org/genproto/googleapis/api v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250707201910-8d1bb00bc6a7 // indirect
 )
@@ -14,7 +15,6 @@ require (
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/consensys/gnark-crypto v0.18.0
 	github.com/cosmos/btcutil v1.0.5
-	github.com/docker/docker v28.3.2+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/ethereum/go-ethereum v1.16.1
 	github.com/gin-gonic/gin v1.10.1
