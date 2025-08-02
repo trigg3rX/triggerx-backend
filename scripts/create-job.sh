@@ -17,7 +17,7 @@ noun=$(shuf -n 1 scripts/nouns.txt)
 
 JOB_TITLE="$adj $noun"
 
-JOB_ID="300749528249665590178224313442040528409305273634097553067152835846309150732"
+JOB_ID=$(date +%s)
 
 case $TASK_DEFINITION_ID in
   1)
@@ -38,7 +38,7 @@ case $TASK_DEFINITION_ID in
     ;;
   3)
     TASK_DEFINITION_ID=3 # Event Based, Static Args
-    TIME_FRAME=20
+    TIME_FRAME=25
     TIME_INTERVAL=0
     ARG_TYPE=1
     DYNAMIC_ARGUMENTS_SCRIPT_URL=
@@ -46,7 +46,7 @@ case $TASK_DEFINITION_ID in
     ;;
   4)
     TASK_DEFINITION_ID=4 # Event Based, Dynamic Args
-    TIME_FRAME=20
+    TIME_FRAME=25
     TIME_INTERVAL=0
     ARG_TYPE=2
     DYNAMIC_ARGUMENTS_SCRIPT_URL="https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la"
