@@ -14,6 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// EventWorker monitors blockchain events for specific contracts
 type EventWorker struct {
 	EventWorkerData *types.EventWorkerData
 	ChainClient     *ethclient.Client
@@ -25,6 +26,7 @@ type EventWorker struct {
 	LastBlock       uint64
 	LastBlockTimestamp time.Time
 	TriggerCallback WorkerTriggerCallback // Callback to notify scheduler when event is detected
+	CleanupCallback WorkerCleanupCallback // Callback to clean up job data when worker stops
 }
 
 
@@ -105,6 +107,15 @@ func (w *EventWorker) Stop() {
 
 		// Track worker stop
 		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.EventWorkerData.JobID))
+
+		// Clean up job data from scheduler store
+		if w.CleanupCallback != nil {
+			if err := w.CleanupCallback(w.EventWorkerData.JobID); err != nil {
+				w.Logger.Error("Failed to clean up job data",
+					"job_id", w.EventWorkerData.JobID,
+					"error", err)
+			}
+		}
 
 		w.Logger.Info("Event worker stopped", "job_id", w.EventWorkerData.JobID)
 	}

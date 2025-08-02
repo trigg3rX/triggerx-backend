@@ -77,7 +77,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(jobData *types.ScheduleCo
 
 	// Store worker and job data separately for Redis integration
 	s.conditionWorkers[jobData.JobID] = conditionWorker
-	s.jobDataStore[jobData.JobID] = jobData
+	s.jobDataStore[jobData.JobID.String()] = jobData
 
 	// Start worker
 	go conditionWorker.Start()
@@ -131,7 +131,7 @@ func (s *ConditionBasedScheduler) scheduleEventJob(jobData *types.ScheduleCondit
 
 	// Store worker and job data separately for Redis integration
 	s.eventWorkers[jobData.JobID] = eventWorker
-	s.jobDataStore[jobData.JobID] = jobData
+	s.jobDataStore[jobData.JobID.String()] = jobData
 
 	// Start worker
 	go eventWorker.Start()
@@ -167,6 +167,7 @@ func (s *ConditionBasedScheduler) createConditionWorker(conditionWorkerData *typ
 		IsActive:            false,
 		LastCheckTimestamp:  time.Now(),
 		TriggerCallback:     s.handleTriggerNotification,
+		CleanupCallback:     s.cleanupJobData,
 	}
 
 	return worker, nil
@@ -192,9 +193,25 @@ func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.Event
 		LastBlock:       currentBlock,
 		IsActive:        false,
 		TriggerCallback: s.handleTriggerNotification,
+		CleanupCallback: s.cleanupJobData,
 	}
 
 	return worker, nil
+}
+
+// cleanupJobData removes job data from the scheduler's store when a worker stops
+func (s *ConditionBasedScheduler) cleanupJobData(jobID *big.Int) error {
+	s.notificationMutex.Lock()
+	defer s.notificationMutex.Unlock()
+
+	s.workersMutex.Lock()
+	defer s.workersMutex.Unlock()
+
+	// Remove job data from store
+	delete(s.jobDataStore, jobID.String())
+
+	s.logger.Debug("Cleaned up job data from store", "job_id", jobID)
+	return nil
 }
 
 // handleTriggerNotification processes trigger notifications and submits individual tasks to Redis API
@@ -208,9 +225,13 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 		"triggered_at", notification.TriggeredAt,
 	)
 
+	// Acquire notification mutex to prevent cleanup during processing
+	s.notificationMutex.Lock()
+	defer s.notificationMutex.Unlock()
+
 	// Get the job data from storage
 	s.workersMutex.RLock()
-	jobData, exists := s.jobDataStore[notification.JobID]
+	jobData, exists := s.jobDataStore[notification.JobID.String()]
 	s.workersMutex.RUnlock()
 
 	if !exists || jobData == nil {
@@ -414,6 +435,9 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 
 // UnscheduleJob stops and removes a condition worker
 func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
+	s.notificationMutex.Lock()
+	defer s.notificationMutex.Unlock()
+
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
@@ -421,11 +445,11 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 	if conditionWorker, exists := s.conditionWorkers[jobID]; exists {
 		conditionWorker.Stop()
 		delete(s.conditionWorkers, jobID)
-		delete(s.jobDataStore, jobID) // Clean up job data
+		delete(s.jobDataStore, jobID.String()) // Clean up job data
 	} else if eventWorker, exists := s.eventWorkers[jobID]; exists {
 		eventWorker.Stop()
 		delete(s.eventWorkers, jobID)
-		delete(s.jobDataStore, jobID) // Clean up job data
+		delete(s.jobDataStore, jobID.String()) // Clean up job data
 	} else {
 		metrics.TrackCriticalError("job_not_found")
 		return fmt.Errorf("job %d is not scheduled", jobID)

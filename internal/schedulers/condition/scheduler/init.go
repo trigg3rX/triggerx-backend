@@ -27,8 +27,9 @@ type ConditionBasedScheduler struct {
 	logger                  logging.Logger
 	conditionWorkers        map[*big.Int]*worker.ConditionWorker         // jobID -> condition worker
 	eventWorkers            map[*big.Int]*worker.EventWorker             // jobID -> event worker
-	jobDataStore            map[*big.Int]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
+	jobDataStore            map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	workersMutex            sync.RWMutex
+	notificationMutex       sync.Mutex // Protect job data during notification processing
 	chainClients            map[string]*ethclient.Client // chainID -> client
 	HTTPClient              *retry.HTTPClient
 	dbClient                *dbserver.DBServerClient
@@ -59,7 +60,7 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		logger:                  logger,
 		conditionWorkers:        make(map[*big.Int]*worker.ConditionWorker),
 		eventWorkers:            make(map[*big.Int]*worker.EventWorker),
-		jobDataStore:            make(map[*big.Int]*types.ScheduleConditionJobData),
+		jobDataStore:            make(map[string]*types.ScheduleConditionJobData),
 		chainClients:            make(map[string]*ethclient.Client),
 		dbClient:                dbClient,
 		httpClient:              httpClient,
@@ -96,7 +97,7 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 // Start begins the scheduler's main loop (for compatibility)
 func (s *ConditionBasedScheduler) Start(ctx context.Context) {
 	s.logger.Info("Condition-based scheduler ready for job scheduling",
-		"scheduler_id", s.schedulerID,)
+		"scheduler_id", s.schedulerID)
 
 	// Keep the service alive
 	<-ctx.Done()
@@ -131,7 +132,7 @@ func (s *ConditionBasedScheduler) Stop() {
 	}
 	s.conditionWorkers = make(map[*big.Int]*worker.ConditionWorker)
 	s.eventWorkers = make(map[*big.Int]*worker.EventWorker)
-	s.jobDataStore = make(map[*big.Int]*types.ScheduleConditionJobData)
+	s.jobDataStore = make(map[string]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
 
 	// Close chain clients

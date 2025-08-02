@@ -55,3 +55,5 @@ type TriggerNotification struct {
 // WorkerTriggerCallback is the interface that workers use to notify the scheduler
 type WorkerTriggerCallback func(notification *TriggerNotification) error
 
+// WorkerCleanupCallback is a callback function to clean up job data when worker stops
+type WorkerCleanupCallback func(*big.Int) error

@@ -25,6 +25,7 @@ type ConditionWorker struct {
 	LastCheckTimestamp time.Time
 	ConditionMet    int64 // Count of consecutive condition met checks
 	TriggerCallback WorkerTriggerCallback // Callback to notify scheduler when condition is satisfied
+	CleanupCallback WorkerCleanupCallback // Callback to clean up job data when worker stops
 }
 
 // Start begins the condition worker's monitoring loop
@@ -94,6 +95,15 @@ func (w *ConditionWorker) Stop() {
 
 		// Track worker stop
 		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+
+		// Clean up job data from scheduler store
+		if w.CleanupCallback != nil {
+			if err := w.CleanupCallback(w.ConditionWorkerData.JobID); err != nil {
+				w.Logger.Error("Failed to clean up job data",
+					"job_id", w.ConditionWorkerData.JobID,
+					"error", err)
+			}
+		}
 
 		w.Logger.Info("Condition worker stopped", "job_id", w.ConditionWorkerData.JobID)
 	}
