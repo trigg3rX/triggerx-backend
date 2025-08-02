@@ -95,6 +95,10 @@ fi
 echo "Setting up log directory: ./data/logs/${DOCKER_NAME}"
 mkdir -p "./data/logs/${DOCKER_NAME}"
 
+# Ensure the cache directory exists and has proper permissions
+echo "Setting up cache directory: ./data/cache"
+mkdir -p "./data/cache"
+
 # Get current user and group IDs
 CURRENT_UID=$(id -u)
 CURRENT_GID=$(id -g)
@@ -119,22 +123,22 @@ fi
 # For dbserver, use docker group if available for socket access
 if [[ "$SERVICE" == "dbserver" && -n "$DOCKER_GID" ]]; then
     echo "Setting ownership for dbserver to UID ${CURRENT_UID} (${CURRENT_USER}) and GID ${DOCKER_GID} (docker group)..."
-    sudo chown ${CURRENT_UID}:${DOCKER_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+    sudo chown ${CURRENT_UID}:${DOCKER_GID} "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null || {
         echo "Warning: Could not set docker group ownership. Using fallback permissions..."
-        chmod 775 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+        chmod 775 "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null
     }
-    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null
     USER_MAPPING="--user ${CURRENT_UID}:${DOCKER_GID}"
 elif [ -n "$PROMTAIL_GID" ]; then
     # Set owner to current user and group to promtail for log reading
     echo "Setting ownership to UID ${CURRENT_UID} (${CURRENT_USER}) and GID ${PROMTAIL_GID} (promtail)..."
-    sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+    sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null || {
         echo "Warning: Could not set specific ownership. Using fallback permissions..."
-        chmod 775 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+        chmod 775 "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null
     }
     # User can read/write, group (promtail) can read/write, others can read
     # Set setgid bit (s) so new files automatically inherit the directory's group ownership
-    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null
     
     # Set user mapping for docker container to run with promtail group
     USER_MAPPING="--user ${CURRENT_UID}:${PROMTAIL_GID}"
@@ -142,12 +146,12 @@ elif [ -n "$PROMTAIL_GID" ]; then
 else
     # No promtail group, set to current user's group
     echo "No promtail group found. Setting ownership to UID ${CURRENT_UID} (${CURRENT_USER})..."
-    sudo chown ${CURRENT_UID}:${CURRENT_GID} "./data/logs/${DOCKER_NAME}" 2>/dev/null || {
+    sudo chown ${CURRENT_UID}:${CURRENT_GID} "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null || {
         echo "Warning: Could not set ownership. Using world-writable fallback..."
-        chmod 777 "./data/logs/${DOCKER_NAME}" 2>/dev/null
+        chmod 777 "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null
     }
     # Set setgid bit so new files inherit group ownership
-    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" 2>/dev/null
+    chmod ug+rws,o+r "./data/logs/${DOCKER_NAME}" "./data/cache" 2>/dev/null
     USER_MAPPING="--user ${CURRENT_UID}:${CURRENT_GID}"
 fi
 
@@ -166,7 +170,22 @@ if [ "$(ls -A "./data/logs/${DOCKER_NAME}" 2>/dev/null)" ]; then
     fi
 fi
 
-echo "Log directory permissions set successfully."
+# Fix permissions on any existing cache files
+if [ "$(ls -A "./data/cache" 2>/dev/null)" ]; then
+    echo "Fixing permissions on existing cache files..."
+    if [[ "$SERVICE" == "dbserver" && -n "$DOCKER_GID" ]]; then
+        sudo chown ${CURRENT_UID}:${DOCKER_GID} "./data/cache"/* 2>/dev/null
+        chmod 664 "./data/cache"/* 2>/dev/null
+    elif [ -n "$PROMTAIL_GID" ]; then
+        sudo chown ${CURRENT_UID}:${PROMTAIL_GID} "./data/cache"/* 2>/dev/null
+        chmod 664 "./data/cache"/* 2>/dev/null
+    else
+        sudo chown ${CURRENT_UID}:${CURRENT_GID} "./data/cache"/* 2>/dev/null
+        chmod 664 "./data/cache"/* 2>/dev/null
+    fi
+fi
+
+echo "Log and cache directory permissions set successfully."
 
 if [[ "$SERVICE" == "registrar" ]]; then
     # Run the container
@@ -177,6 +196,7 @@ if [[ "$SERVICE" == "registrar" ]]; then
         ${ENV_FILE} \
         -v ./pkg/bindings/abi:/home/appuser/pkg/bindings/abi \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
+        -v ./data/cache:/home/appuser/data/cache \
         -p ${PORT}:${PORT} \
         --restart unless-stopped \
         ${IMAGE_NAME}
@@ -198,6 +218,7 @@ elif [[ "$SERVICE" == "dbserver" ]]; then
         ${ENV_FILE} \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
+        -v ./data/cache:/home/appuser/data/cache \
         -p ${PORT}:${PORT} \
         ${IMAGE_NAME}
 else
@@ -209,6 +230,7 @@ else
         ${ENV_FILE} \
         --network host \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
+        -v ./data/cache:/home/appuser/data/cache \
         --restart unless-stopped \
         ${IMAGE_NAME}
 fi
