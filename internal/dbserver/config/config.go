@@ -14,11 +14,10 @@ type Config struct {
 
 	// Scheduler RPC URLs
 	timeSchedulerRPCUrl      string
-	eventSchedulerRPCUrl     string
 	conditionSchedulerRPCUrl string
 
 	// Database RPC Port
-	databaseRPCPort string
+	dbserverRPCPort string
 
 	// ScyllaDB Host and Port
 	databaseHostAddress string
@@ -39,6 +38,7 @@ type Config struct {
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
+	otTempoEndpoint       string
 
 	// Polling Look Ahead
 	timeSchedulerPollingLookAhead int
@@ -51,21 +51,21 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		timeSchedulerRPCUrl:      env.GetEnv("TIME_SCHEDULER_RPC_URL", "http://localhost:9004"),
-		eventSchedulerRPCUrl:     env.GetEnv("EVENT_SCHEDULER_RPC_URL", "http://localhost:9004"),
-		conditionSchedulerRPCUrl: env.GetEnv("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9005"),
-		databaseRPCPort:          env.GetEnv("DATABASE_RPC_PORT", "9002"),
-		databaseHostAddress:      env.GetEnv("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:         env.GetEnv("DATABASE_HOST_PORT", "9042"),
-		emailUser:                env.GetEnv("EMAIL_USER", ""),
-		emailPassword:            env.GetEnv("EMAIL_PASS", ""),
-		botToken:                 env.GetEnv("BOT_TOKEN", ""),
-		alchemyAPIKey:            env.GetEnv("ALCHEMY_API_KEY", ""),
-		faucetPrivateKey:         env.GetEnv("FAUCET_PRIVATE_KEY", ""),
-		faucetFundAmount:         env.GetEnv("FAUCET_FUND_AMOUNT", "30000000000000000"),
-		upstashRedisUrl:          env.GetEnv("UPSTASH_REDIS_URL", ""),
-		upstashRedisRestToken:    env.GetEnv("UPSTASH_REDIS_REST_TOKEN", ""),
-		devMode:                  env.GetEnvBool("DEV_MODE", false),
+		timeSchedulerRPCUrl:           env.GetEnvString("TIME_SCHEDULER_RPC_URL", "http://localhost:9005"),
+		conditionSchedulerRPCUrl:      env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9006"),
+		dbserverRPCPort:               env.GetEnvString("DBSERVER_RPC_PORT", "9002"),
+		databaseHostAddress:           env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:              env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		emailUser:                     env.GetEnvString("EMAIL_USER", ""),
+		emailPassword:                 env.GetEnvString("EMAIL_PASS", ""),
+		botToken:                      env.GetEnvString("BOT_TOKEN", ""),
+		alchemyAPIKey:                 env.GetEnvString("ALCHEMY_API_KEY", ""),
+		faucetPrivateKey:              env.GetEnvString("FAUCET_PRIVATE_KEY", ""),
+		faucetFundAmount:              env.GetEnvString("FAUCET_FUND_AMOUNT", "30000000000000000"),
+		upstashRedisUrl:               env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		otTempoEndpoint:               env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		devMode:                       env.GetEnvBool("DEV_MODE", false),
 		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
 	}
 	if err := validateConfig(cfg); err != nil {
@@ -81,14 +81,11 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidURL(cfg.timeSchedulerRPCUrl) {
 		return fmt.Errorf("invalid time scheduler RPC URL: %s", cfg.timeSchedulerRPCUrl)
 	}
-	if !env.IsValidURL(cfg.eventSchedulerRPCUrl) {
-		return fmt.Errorf("invalid event scheduler RPC URL: %s", cfg.eventSchedulerRPCUrl)
-	}
 	if !env.IsValidURL(cfg.conditionSchedulerRPCUrl) {
 		return fmt.Errorf("invalid condition scheduler RPC URL: %s", cfg.conditionSchedulerRPCUrl)
 	}
-	if !env.IsValidPort(cfg.databaseRPCPort) {
-		return fmt.Errorf("invalid database RPC port: %s", cfg.databaseRPCPort)
+	if !env.IsValidPort(cfg.dbserverRPCPort) {
+		return fmt.Errorf("invalid database RPC port: %s", cfg.dbserverRPCPort)
 	}
 	if !env.IsValidIPAddress(cfg.databaseHostAddress) {
 		return fmt.Errorf("invalid database host address: %s", cfg.databaseHostAddress)
@@ -102,12 +99,15 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidPrivateKey(cfg.faucetPrivateKey) {
 		return fmt.Errorf("invalid faucet private key: %s", cfg.faucetPrivateKey)
 	}
-	if env.IsEmpty(cfg.upstashRedisUrl) {
-		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	if env.IsEmpty(cfg.otTempoEndpoint) {
+		return fmt.Errorf("invalid tempo otlp endpoint: %s", cfg.otTempoEndpoint)
 	}
-	if env.IsEmpty(cfg.upstashRedisRestToken) {
-		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
-	}
+	// if env.IsEmpty(cfg.upstashRedisUrl) {
+	// 	return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	// }
+	// if env.IsEmpty(cfg.upstashRedisRestToken) {
+	// 	return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
+	// }
 	if !cfg.devMode {
 		if !env.IsValidEmail(cfg.emailUser) {
 			return fmt.Errorf("invalid email user: %s", cfg.emailUser)
@@ -126,16 +126,12 @@ func GetTimeSchedulerRPCUrl() string {
 	return cfg.timeSchedulerRPCUrl
 }
 
-func GetEventSchedulerRPCUrl() string {
-	return cfg.eventSchedulerRPCUrl
-}
-
 func GetConditionSchedulerRPCUrl() string {
 	return cfg.conditionSchedulerRPCUrl
 }
 
-func GetDatabaseRPCPort() string {
-	return cfg.databaseRPCPort
+func GetDBServerRPCPort() string {
+	return cfg.dbserverRPCPort
 }
 
 func GetDatabaseHostAddress() string {
@@ -176,6 +172,10 @@ func GetUpstashRedisUrl() string {
 
 func GetUpstashRedisRestToken() string {
 	return cfg.upstashRedisRestToken
+}
+
+func GetOTTempoEndpoint() string {
+	return cfg.otTempoEndpoint
 }
 
 func IsDevMode() bool {

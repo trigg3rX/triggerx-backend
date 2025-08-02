@@ -23,7 +23,7 @@ type HTTPRetryConfig struct {
 func DefaultHTTPRetryConfig() *HTTPRetryConfig {
 	return &HTTPRetryConfig{
 		RetryConfig:     DefaultRetryConfig(),
-		Timeout:         3 * time.Second,
+		Timeout:         10 * time.Second,
 		IdleConnTimeout: 30 * time.Second,
 		MaxResponseSize: 4096, // 4KB default max for error messages
 	}

@@ -1,11 +1,14 @@
 package types
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
-	JobID                int64     `json:"job_id"`
+	JobID                *big.Int     `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
 	TaskOpXCost          float64   `json:"task_opx_cost"`
@@ -18,15 +21,19 @@ type TaskData struct {
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
 	IsSuccessful         bool      `json:"is_successful"`
+	TaskStatus           string    `json:"task_status"`
+	IsImua               bool      `json:"is_imua"`
 }
 
 type CreateTaskDataRequest struct {
-	JobID            int64 `json:"job_id" validate:"required"`
+	JobID            *big.Int `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
+	IsImua           bool  `json:"is_imua"`
 }
 
 type UpdateTaskExecutionDataRequest struct {
 	TaskID             int64     `json:"task_id" validate:"required"`
+	TaskPerformerID    int64     `json:"task_performer_id" validate:"required"`
 	ExecutionTimestamp time.Time `json:"execution_timestamp" validate:"required"`
 	ExecutionTxHash    string    `json:"execution_tx_hash" validate:"required"`
 	ProofOfTask        string    `json:"proof_of_task" validate:"required"`
@@ -52,4 +59,5 @@ type TasksByJobIDResponse struct {
 	TaskPerformerID    int64     `json:"task_performer_id"`
 	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
 	IsSuccessful       bool      `json:"is_successful"`
+	TaskStatus         string    `json:"task_status"`
 }

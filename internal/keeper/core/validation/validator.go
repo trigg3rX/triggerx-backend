@@ -14,16 +14,16 @@ import (
 type TaskValidator struct {
 	alchemyAPIKey    string
 	etherscanAPIKey  string
-	codeExecutor     *docker.CodeExecutor
+	dockerManager    *docker.DockerManager
 	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
 }
 
-func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, codeExecutor *docker.CodeExecutor, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskValidator {
+func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManager *docker.DockerManager, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskValidator {
 	return &TaskValidator{
 		alchemyAPIKey:    alchemyAPIKey,
 		etherscanAPIKey:  etherscanAPIKey,
-		codeExecutor:     codeExecutor,
+		dockerManager:    dockerManager,
 		aggregatorClient: aggregatorClient,
 		logger:           logger,
 	}
@@ -31,9 +31,9 @@ func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, codeExecutor
 
 func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSData, traceID string) (bool, error) {
 	// check if the scheduler signature is valid
-	isSchedulerSignatureTrue, err := v.ValidateSchedulerSignature(ipfsData.TaskData, traceID)
-	if !isSchedulerSignatureTrue {
-		v.logger.Error("Scheduler signature validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
+	isManagerSignatureTrue, err := v.ValidateManagerSignature(ipfsData.TaskData, traceID)
+	if !isManagerSignatureTrue {
+		v.logger.Error("Manager signature validation failed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID, "error", err)
 		return false, err
 	}
 	v.logger.Info("Scheduler signature validation passed", "task_id", ipfsData.TaskData.TaskID, "trace_id", traceID)
@@ -85,4 +85,9 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSDat
 func (v *TaskValidator) ValidateTarget(targetData *types.TaskTargetData, traceID string) (bool, error) {
 	// TODO: Implement target validation
 	return true, nil
+}
+
+// GetDockerManager returns the DockerManager instance
+func (v *TaskValidator) GetDockerManager() *docker.DockerManager {
+	return v.dockerManager
 }

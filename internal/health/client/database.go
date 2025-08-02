@@ -5,6 +5,7 @@ import (
 	// "encoding/json"
 	"errors"
 	"fmt"
+
 	// "net/http"
 	"strings"
 	"time"
@@ -76,10 +77,15 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 	}
 
 	var keeperID int64
+	var prevOnline bool
+	var prevLastCheckedIn time.Time
+	var prevUptime int64
+
+	// Fetch previous online status, last_checked_in, and uptime
 	if err := dm.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperHealth.KeeperAddress).Scan(&keeperID); err != nil {
-		dm.logger.Error("Failed to retrieve keeper_id",
+		SELECT keeper_id, online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
+		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime); err != nil {
+		dm.logger.Error("Failed to retrieve keeper_id and previous status",
 			"keeper", keeperHealth.KeeperAddress,
 			"error", err,
 		)
@@ -97,7 +103,34 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 
 	dm.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %d | Online: %t", keeperID, isActive)
 
+	// --- UPTIME LOGIC ---
+	// If previously online, add to uptime (regardless of new isActive)
+	if prevOnline {
+		now := time.Now().UTC()
+		uptimeToAdd := int64(now.Sub(prevLastCheckedIn).Seconds())
+		if uptimeToAdd < 0 {
+			uptimeToAdd = 0 // avoid negative values
+		}
+		newUptime := prevUptime + uptimeToAdd
+
+		// Update uptime field
+		if err := dm.db.Session().Query(`
+			UPDATE triggerx.keeper_data 
+			SET uptime = ?
+			WHERE keeper_id = ?`,
+			newUptime, keeperID).Exec(); err != nil {
+			dm.logger.Error("Failed to update keeper uptime",
+				"error", err,
+				"keeper_id", keeperID,
+				"keeper", keeperHealth.KeeperAddress,
+			)
+			return err
+		}
+	}
+	// --- END UPTIME LOGIC ---
+
 	if !isActive {
+		// If not active, just set online = false
 		if err := dm.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET online = ?
@@ -113,6 +146,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 		return nil
 	}
 
+	// If active, update all fields including last_checked_in
 	if err := dm.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
@@ -263,25 +297,21 @@ func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error
 	return nil
 }
 
-// Public wrapper functions
-func UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
-	return GetInstance().UpdateKeeperHealth(keeperHealth, isActive)
-}
-
 // GetVerifiedKeepers retrieves only verified keepers from the database
 func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 	var keepers []types.KeeperInfo
 
 	iter := dm.db.Session().Query(`
-		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in 
+		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in, on_imua
 		FROM triggerx.keeper_data 
 		WHERE registered = true AND whitelisted = true 
 		ALLOW FILTERING`).Iter()
 
 	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID string
 	var lastCheckedIn time.Time
+	var isImua bool
 
-	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn) {
+	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn, &isImua) {
 		keepers = append(keepers, types.KeeperInfo{
 			KeeperName:       keeperName,
 			KeeperAddress:    keeperAddress,
@@ -290,6 +320,7 @@ func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 			Version:          version,
 			PeerID:           peerID,
 			LastCheckedIn:    lastCheckedIn,
+			IsImua:           isImua,
 		})
 	}
 

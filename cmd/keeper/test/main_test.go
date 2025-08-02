@@ -55,7 +55,7 @@ func TestMain(t *testing.T) {
 	t.Run("Server Setup", func(t *testing.T) {
 		srv := api.NewServer(api.Config{
 			Port: "8080",
-		}, api.Dependencies{
+		}, &api.Dependencies{
 			Logger: logger,
 		})
 		assert.NotNil(t, srv, "Server should be created successfully")

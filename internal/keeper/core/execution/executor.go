@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	// "strconv"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -23,27 +23,27 @@ import (
 // TaskExecutor is the default implementation of TaskExecutor
 type TaskExecutor struct {
 	alchemyAPIKey    string
-	codeExecutor     *docker.CodeExecutor
 	argConverter     *ArgumentConverter
 	validator        *validation.TaskValidator
 	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
+	nonceManagers    map[string]*NonceManager // Chain ID -> NonceManager
+	nonceMutex       sync.RWMutex
 }
 
 // NewTaskExecutor creates a new instance of TaskExecutor
 func NewTaskExecutor(
 	alchemyAPIKey string,
-	codeExecutor *docker.CodeExecutor,
 	validator *validation.TaskValidator,
 	aggregatorClient *aggregator.AggregatorClient,
 	logger logging.Logger) *TaskExecutor {
 	return &TaskExecutor{
 		alchemyAPIKey:    alchemyAPIKey,
-		codeExecutor:     codeExecutor,
 		argConverter:     &ArgumentConverter{},
 		validator:        validator,
 		aggregatorClient: aggregatorClient,
 		logger:           logger,
+		nonceManagers:    make(map[string]*NonceManager),
 	}
 }
 
@@ -65,9 +65,9 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 	}
 
 	// check if the scheduler signature is valid
-	isSchedulerSignatureTrue, err := e.validator.ValidateSchedulerSignature(task, traceID)
-	if !isSchedulerSignatureTrue {
-		e.logger.Error("Scheduler signature validation failed", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+	isManagerSignatureTrue, err := e.validator.ValidateManagerSignature(task, traceID)
+	if !isManagerSignatureTrue {
+		e.logger.Error("Manager signature validation failed", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 		return false, err
 	}
 	e.logger.Info("Scheduler signature validation passed", "task_id", task.TaskID, "trace_id", traceID)
@@ -93,6 +93,28 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			e.logger.Info("Trigger validation passed", "task_id", task.TaskID, "trace_id", traceID)
 
+			// Get nonce manager for this chain
+			nonceManager, err := e.getNonceManager(task.TargetData[idx].TargetChainID)
+			if err != nil {
+				e.logger.Error("Failed to get nonce manager", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, err}
+				return
+			}
+
+			// Get next nonce atomically
+			nonce, err := nonceManager.GetNextNonce(context.Background())
+			if err != nil {
+				e.logger.Error("Failed to get nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				resultCh <- struct {
+					success bool
+					err     error
+				}{false, err}
+				return
+			}
+
 			// create a client for validating event based and performing action
 			rpcURL := utils.GetChainRpcUrl(task.TargetData[idx].TargetChainID)
 			client, err := ethclient.Dial(rpcURL)
@@ -107,17 +129,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			defer client.Close()
 			e.logger.Debugf("Connected to chain: %s", rpcURL)
 
-			nonce, err := client.PendingNonceAt(context.Background(), common.HexToAddress(config.GetKeeperAddress()))
-			if err != nil {
-				e.logger.Error("Failed to get pending nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
-
-			// execute the action
+			// execute the action with the allocated nonce
 			var actionData types.PerformerActionData
 			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client)
 			if err != nil {
@@ -133,18 +145,19 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 			ipfsData := types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
-					TaskID:        task.TargetData[idx].TaskID,
-					PerformerData: task.PerformerData,
-					TargetData:    []types.TaskTargetData{task.TargetData[idx]},
-					TriggerData:   []types.TaskTriggerData{task.TriggerData[idx]},
-					SchedulerSignature: task.SchedulerSignature,
+					TaskID:           []int64{task.TargetData[idx].TaskID},
+					PerformerData:    task.PerformerData,
+					TargetData:       []types.TaskTargetData{task.TargetData[idx]},
+					TriggerData:      []types.TaskTriggerData{task.TriggerData[idx]},
+					SchedulerID:      task.SchedulerID,
+					ManagerSignature: task.ManagerSignature,
 				},
 				ActionData:         &actionData,
 				ProofData:          &types.ProofData{},
 				PerformerSignature: &types.PerformerSignatureData{},
 			}
-			ipfsData.ProofData.TaskID = task.TaskID
-			ipfsData.PerformerSignature.TaskID = task.TaskID
+			ipfsData.ProofData.TaskID = task.TaskID[0]
+			ipfsData.PerformerSignature.TaskID = task.TaskID[0]
 			ipfsData.PerformerSignature.PerformerSigningAddress = config.GetConsensusAddress()
 
 			tlsConfig := proof.DefaultTLSProofConfig(config.GetTLSProofHost())
@@ -157,7 +170,20 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 
 			ipfsData.ProofData = &proofData
-			performerSignature, err := cryptography.SignJSONMessage(ipfsData, config.GetPrivateKeyConsensus())
+
+			// Create a copy of ipfsData without the signature for signing
+			ipfsDataForSigning := types.IPFSData{
+				TaskData:   ipfsData.TaskData,
+				ActionData: ipfsData.ActionData,
+				ProofData:  ipfsData.ProofData,
+				PerformerSignature: &types.PerformerSignatureData{
+					TaskID:                  ipfsData.PerformerSignature.TaskID,
+					PerformerSigningAddress: ipfsData.PerformerSignature.PerformerSigningAddress,
+					// Note: PerformerSignature field is intentionally left empty for signing
+				},
+			}
+
+			performerSignature, err := cryptography.SignJSONMessage(ipfsDataForSigning, config.GetPrivateKeyConsensus())
 			if err != nil {
 				e.logger.Error("Failed to sign the ipfs data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				resultCh <- struct {
@@ -167,6 +193,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				return
 			}
 			ipfsData.PerformerSignature = &types.PerformerSignatureData{
+				TaskID:                  task.TaskID[0],
 				PerformerSignature:      performerSignature,
 				PerformerSigningAddress: config.GetConsensusAddress(),
 			}
@@ -223,6 +250,39 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 		}
 	}
 	return true, nil
+}
+
+// getNonceManager returns or creates a nonce manager for the given chain
+func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
+	e.nonceMutex.RLock()
+	if nm, exists := e.nonceManagers[chainID]; exists {
+		e.nonceMutex.RUnlock()
+		return nm, nil
+	}
+	e.nonceMutex.RUnlock()
+
+	e.nonceMutex.Lock()
+	defer e.nonceMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if nm, exists := e.nonceManagers[chainID]; exists {
+		return nm, nil
+	}
+
+	// Create new client and nonce manager
+	rpcURL := utils.GetChainRpcUrl(chainID)
+	client, err := ethclient.Dial(rpcURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client for chain %s: %w", chainID, err)
+	}
+
+	nm := NewNonceManager(client, e.logger)
+	if err := nm.Initialize(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to initialize nonce manager for chain %s: %w", chainID, err)
+	}
+
+	e.nonceManagers[chainID] = nm
+	return nm, nil
 }
 
 // func parseStringToInt(str string) int {

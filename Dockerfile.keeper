@@ -20,29 +20,50 @@ RUN go mod tidy
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-keeper ./cmd/keeper
 
-# Use a minimal alpine image for the final stage
-FROM golang:1.24.2-alpine
+# Use Alpine 3.18 for the final stage (has Docker 25.0.5 compatible with API 1.44)
+FROM alpine:3.18
 
 # Install ca-certificates, curl, Docker, and Docker Compose
 RUN apk --no-cache add ca-certificates curl \
     && apk --no-cache add docker \
     && apk --no-cache add docker-compose
 
-# Set working directory
-WORKDIR /root/
+# Create a non-root user for running the application
+RUN addgroup -g 1000 triggerx && \
+    adduser -D -s /bin/sh -u 1000 -G triggerx triggerx
+
+# Create necessary directories for persistent storage with proper permissions
+RUN mkdir -p /home/triggerx/data/cache \
+    && mkdir -p /home/triggerx/data/logs \
+    && mkdir -p /home/triggerx/data/peerstore/attester \
+    && chown -R 1000:1000 /home/triggerx/data \
+    && chmod -R 755 /home/triggerx/data
+
+# Set working directory to user's home
+WORKDIR /home/triggerx
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/triggerx-keeper .
 
-# Copy the startup script
-COPY ./scripts/docker/services/start-keeper.sh /root/start-keeper.sh
-RUN mkdir -p /root/data/peerstore/attester
-RUN touch .env
+# Copy the startup script and set proper permissions
+COPY ./scripts/docker/services/start-keeper.sh /home/triggerx/start-keeper.sh
+RUN chmod +x /home/triggerx/start-keeper.sh \
+    && chown 1000:1000 /home/triggerx/start-keeper.sh \
+    && chown 1000:1000 /home/triggerx/triggerx-keeper
+
+# Create .env file with proper ownership
+RUN touch .env && chown 1000:1000 .env
+
+# Switch to non-root user
+USER triggerx
 
 # Disable SSL verification for HTTP client
 ENV GODEBUG=http2client=0
 ENV HTTPS_PROXY=""
 ENV HTTP_PROXY=""
+
+# Set Docker API version to be compatible with older daemons
+ENV DOCKER_API_VERSION=1.44
 
 # Run the startup script
 CMD ["sh", "./start-keeper.sh"]

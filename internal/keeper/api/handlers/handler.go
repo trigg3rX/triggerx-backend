@@ -12,12 +12,12 @@ const TraceIDKey = "trace_id"
 // TaskHandler handles task-related requests
 type TaskHandler struct {
 	logger    logging.Logger
-	executor  execution.TaskExecutor
-	validator validation.TaskValidator
+	executor  *execution.TaskExecutor
+	validator *validation.TaskValidator
 }
 
 // NewTaskHandler creates a new task handler
-func NewTaskHandler(logger logging.Logger, executor execution.TaskExecutor, validator validation.TaskValidator) *TaskHandler {
+func NewTaskHandler(logger logging.Logger, executor *execution.TaskExecutor, validator *validation.TaskValidator) *TaskHandler {
 	return &TaskHandler{
 		logger:    logger,
 		executor:  executor,

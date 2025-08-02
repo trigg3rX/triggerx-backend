@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -21,5 +22,14 @@ func NewStatusHandler(logger logging.Logger) *StatusHandler {
 
 // Status handles status endpoint requests
 func (h *StatusHandler) Status(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	traceID := getTraceID(c)
+	h.logger.Info("[Status] trace_id=" + traceID + " - Checking service health")
+	response := gin.H{
+		"status":    "healthy",
+		"service":   "condition-scheduler",
+		"timestamp": time.Now().UTC(),
+		"uptime":    time.Since(time.Now()).String(), // This would be calculated from startup time
+	}
+
+	c.JSON(http.StatusOK, response)
 }

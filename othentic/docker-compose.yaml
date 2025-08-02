@@ -22,11 +22,13 @@ services:
       "--p2p.discovery-interval", "${AGGREGATOR_P2P_DISCOVERY_INTERVAL}",
       "--internal-tasks",
       "--metrics",
+      "--delay", "10000",
+      "--aggregator.simulate-transactions", "true",
       "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
       "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
     ]
     environment:
-      - PRIVATE_KEY=${AGGREGATOR_PRIVATE_KEY}
+      - PRIVATE_KEY=${AGGREGATOR_OPERATOR_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${AGGREGATOR_OPERATOR_ADDRESS}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}

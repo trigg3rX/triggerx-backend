@@ -20,15 +20,16 @@ type Config struct {
 	dbServerURL string
 	// Aggregator RPC URL
 	aggregatorRPCUrl string
+	// Redis API URL
+	redisRPCUrl string
 
-	// Scheduler Private Key and Address
-	timeSchedulerSigningKey     string
-	timeSchedulerSigningAddress string
+	// Scheduler ID
+	timeSchedulerID int
 
 	// Time Durations
 	pollingInterval     time.Duration
 	pollingLookAhead    time.Duration
-	taskBatchSize        int
+	taskBatchSize       int
 	performerLockTTL    time.Duration
 	taskCacheTTL        time.Duration
 	duplicateTaskWindow time.Duration
@@ -42,11 +43,10 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                 env.GetEnvBool("DEV_MODE", false),
-		timeSchedulerRPCPort:    env.GetEnv("TIME_SCHEDULER_RPC_PORT", "9004"),
-		dbServerURL:             env.GetEnv("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:        env.GetEnv("AGGREGATOR_RPC_URL", "http://localhost:9003"),
-		timeSchedulerSigningKey:     env.GetEnv("TIME_SCHEDULER_SIGNING_KEY", ""),
-		timeSchedulerSigningAddress: env.GetEnv("TIME_SCHEDULER_SIGNING_ADDRESS", ""),
+		timeSchedulerRPCPort:    env.GetEnvString("TIME_SCHEDULER_RPC_PORT", "9005"),
+		redisRPCUrl:             env.GetEnvString("REDIS_RPC_URL", "http://localhost:9003"),
+		dbServerURL:             env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:        env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
 		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
 		taskBatchSize:            env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
@@ -73,8 +73,8 @@ func validateConfig() error {
 	if !env.IsValidURL(cfg.aggregatorRPCUrl) {
 		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCUrl)
 	}
-	if !env.IsValidEthKeyPair(cfg.timeSchedulerSigningKey, cfg.timeSchedulerSigningAddress) {
-		return fmt.Errorf("invalid time scheduler signing key pair address: %s", cfg.timeSchedulerSigningAddress)
+	if !env.IsValidURL(cfg.redisRPCUrl) {
+		return fmt.Errorf("invalid Redis API URL: %s", cfg.redisRPCUrl)
 	}
 	return nil
 }
@@ -95,12 +95,12 @@ func GetAggregatorRPCUrl() string {
 	return cfg.aggregatorRPCUrl
 }
 
-func GetSchedulerSigningKey() string {
-	return cfg.timeSchedulerSigningKey
+func GetRedisRPCUrl() string {
+	return cfg.redisRPCUrl
 }
 
-func GetSchedulerSigningAddress() string {
-	return cfg.timeSchedulerSigningAddress
+func GetSchedulerID() int {
+	return cfg.timeSchedulerID
 }
 
 func GetPollingInterval() time.Duration {

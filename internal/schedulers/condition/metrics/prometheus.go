@@ -82,6 +82,22 @@ var (
 		Help:      "Number of active job workers currently running",
 	})
 
+	// Chain connections
+	ChainConnectionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "chain_connections_total",
+		Help:      "Blockchain connection attempts",
+	}, []string{"chain_id", "status"})
+
+	// RPC requests
+	RPCRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "rpc_requests_total",
+		Help:      "RPC requests to blockchain nodes",
+	}, []string{"chain_id", "method", "status"})
+
 	// Condition evaluation duration
 	ConditionEvaluationDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "triggerx",
@@ -146,6 +162,14 @@ var (
 		Help:      "Database request retry attempts",
 	}, []string{"endpoint"})
 
+	// Action executions
+	ActionExecutionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "action_executions_total",
+		Help:      "Action executions triggered by events",
+	}, []string{"job_id", "status"})
+
 	// Action execution duration
 	ActionExecutionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "triggerx",
@@ -161,6 +185,14 @@ var (
 		Name:      "worker_uptime_seconds",
 		Help:      "Individual worker uptime",
 	}, []string{"job_id"})
+
+	// Worker errors
+	WorkerErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "worker_errors_total",
+		Help:      "Worker errors by type",
+	}, []string{"job_id", "error_type"})
 
 	// Worker memory usage
 	WorkerMemoryUsageBytes = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -194,12 +226,36 @@ var (
 		Help:      "Duplicate condition detection window",
 	})
 
+	// Duplicate event window
+	DuplicateEventWindowSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "duplicate_event_window_seconds",
+		Help:      "Duplicate event detection window",
+	})
+
 	// Average condition check time
 	AverageConditionCheckTimeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "condition_scheduler",
 		Name:      "average_condition_check_time_seconds",
 		Help:      "Mean condition check time",
+	})
+
+	// Connection failures
+	ConnectionFailuresTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "connection_failures_total",
+		Help:      "Blockchain connection failures",
+	}, []string{"chain_id"})
+
+	// Average event processing time
+	AverageEventProcessingTimeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "triggerx",
+		Subsystem: "event_scheduler",
+		Name:      "average_event_processing_time_seconds",
+		Help:      "Mean event processing time",
 	})
 
 	// Timeouts
@@ -240,7 +296,6 @@ func StartMetricsCollection() {
 			collectConfigurationMetrics()
 			collectPerformanceMetrics()
 			collectWorkerMetrics()
-			collectDatabaseMetrics()
 		}
 	}()
 

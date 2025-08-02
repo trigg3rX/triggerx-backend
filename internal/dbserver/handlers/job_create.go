@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -10,9 +11,12 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateJobData] trace_id=%s - Creating job data", traceID)
 	var tempJobs []types.CreateJobData
 	if err := c.ShouldBindJSON(&tempJobs); err != nil {
 		h.logger.Errorf("[CreateJobData] Error decoding request body: %v", err)
@@ -43,10 +47,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	if err != nil && err != gocql.ErrNotFound {
 		h.logger.Errorf("[CreateJobData] Error getting user ID for address %s: %v", tempJobs[0].UserAddress, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database error while retrieving user",
-			"code":  "DB_ERROR",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
@@ -66,28 +67,25 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating new user for address %s: %v", tempJobs[0].UserAddress, err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create new user",
-				"code":  "USER_CREATION_ERROR",
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
-		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUserID, tempJobs[0].UserAddress)
+		h.logger.Infof("[CreateJobData] Created new user with userID %d | Address: %s", existingUser.UserID, existingUser.UserAddress)
 	}
 
 	createdJobs := types.CreateJobResponse{
-		UserID:            existingUserID,
+		UserID:            existingUser.UserID,
 		AccountBalance:    existingUser.EtherBalance,
 		TokenBalance:      existingUser.TokenBalance,
-		JobIDs:            make([]int64, len(tempJobs)),
+		JobIDs:            make([]*big.Int, len(tempJobs)),
 		TaskDefinitionIDs: make([]int, len(tempJobs)),
 		TimeFrames:        make([]int64, len(tempJobs)),
 	}
 
 	for i := len(tempJobs) - 1; i >= 0; i-- {
 		chainStatus := 1
-		var linkJobID int64 = -1
+		var linkJobID *big.Int = nil
 
 		if i == 0 {
 			chainStatus = 0
@@ -96,10 +94,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			linkJobID = createdJobs.JobIDs[i+1]
 		}
 
+		jobID := new(big.Int)
+		if _, ok := jobID.SetString(tempJobs[i].JobID, 10); !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
+			return
+		}
+
 		jobData := &types.JobData{
+			JobID:             jobID,
 			JobTitle:          tempJobs[i].JobTitle,
 			TaskDefinitionID:  tempJobs[i].TaskDefinitionID,
-			UserID:            existingUserID,
+			UserID:            existingUser.UserID,
 			LinkJobID:         linkJobID,
 			ChainStatus:       chainStatus,
 			Custom:            tempJobs[i].Custom,
@@ -108,6 +113,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			Status:            "pending",
 			JobCostPrediction: tempJobs[i].JobCostPrediction,
 			Timezone:          tempJobs[i].Timezone,
+			IsImua:            tempJobs[i].IsImua,
+			CreatedChainID:    tempJobs[i].CreatedChainID,
 		}
 
 		// Track job creation
@@ -117,15 +124,13 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		if err != nil {
 			h.logger.Errorf("[CreateJobData] Error creating job: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create job",
-				"code":  "JOB_CREATION_ERROR",
-			})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
 		createdJobs.JobIDs[i] = jobID
 		expirationTime := time.Now().Add(time.Duration(tempJobs[i].TimeFrame) * time.Second)
+		var scheduleConditionJobData commonTypes.ScheduleConditionJobData
 
 		switch tempJobs[i].TaskDefinitionID {
 		case 1, 2:
@@ -139,11 +144,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 
 			timeJobData := types.TimeJobData{
-				JobID:                     jobID,
-				ExpirationTime:            expirationTime,
+				JobID:            jobID,
+				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
+				ExpirationTime:   expirationTime,
 				// Recurring:                 tempJobs[i].Recurring,
 				TimeInterval:              tempJobs[i].TimeInterval,
-				ScheduleType:              tempJobs[i].ScheduleType,
+				ScheduleType:              "interval",
 				CronExpression:            tempJobs[i].CronExpression,
 				SpecificSchedule:          tempJobs[i].SpecificSchedule,
 				NextExecutionTimestamp:    nextExecutionTimestamp,
@@ -163,7 +169,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
 				trackDBOp(err)
 				h.logger.Errorf("[CreateJobData] Error inserting time job data for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting time job data: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
@@ -174,6 +180,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Event-based job
 			eventJobData := types.EventJobData{
 				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
 				TriggerChainID:            tempJobs[i].TriggerChainID,
@@ -192,14 +199,30 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 			if err := h.eventJobRepository.CreateEventJob(&eventJobData); err != nil {
 				h.logger.Errorf("[CreateJobData] Error inserting event job data for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting event job data: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
-			success, err := h.notifyEventScheduler(jobID, eventJobData)
-			if !success {
-				h.logger.Errorf("[CreateJobData] Error notifying event scheduler for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying event scheduler: " + err.Error()})
-				return
+			scheduleConditionJobData.JobID = jobID
+			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
+			scheduleConditionJobData.LastExecutedAt = time.Now()
+			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
+				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
+				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
+			}
+			scheduleConditionJobData.EventWorkerData = commonTypes.EventWorkerData{
+				JobID:                  jobID,
+				ExpirationTime:         expirationTime,
+				Recurring:              tempJobs[i].Recurring,
+				TriggerChainID:         tempJobs[i].TriggerChainID,
+				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
+				TriggerEvent:           tempJobs[i].TriggerEvent,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
 				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
@@ -208,6 +231,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			// Condition-based job
 			conditionJobData := types.ConditionJobData{
 				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
 				ConditionType:             tempJobs[i].ConditionType,
@@ -228,14 +252,32 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
 				h.logger.Errorf("[CreateJobData] Error inserting condition job data for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting condition job data: " + err.Error()})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
-			success, err := h.notifyConditionScheduler(jobID, conditionJobData)
-			if !success {
-				h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error notifying condition scheduler: " + err.Error()})
-				return
+			scheduleConditionJobData.JobID = jobID
+			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
+			scheduleConditionJobData.LastExecutedAt = time.Now()
+			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
+				JobID:                     jobID,
+				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
+				TargetChainID:             tempJobs[i].TargetChainID,
+				TargetContractAddress:     tempJobs[i].TargetContractAddress,
+				TargetFunction:            tempJobs[i].TargetFunction,
+				ABI:                       tempJobs[i].ABI,
+				ArgType:                   tempJobs[i].ArgType,
+				Arguments:                 tempJobs[i].Arguments,
+				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
+			}
+			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
+				JobID:           jobID,
+				ExpirationTime:  expirationTime,
+				Recurring:       tempJobs[i].Recurring,
+				ConditionType:   tempJobs[i].ConditionType,
+				UpperLimit:      tempJobs[i].UpperLimit,
+				LowerLimit:      tempJobs[i].LowerLimit,
+				ValueSourceType: tempJobs[i].ValueSourceType,
+				ValueSourceUrl:  tempJobs[i].ValueSourceUrl,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
@@ -243,6 +285,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			h.logger.Errorf("[CreateJobData] Invalid task definition ID %d for job %d", tempJobs[i].TaskDefinitionID, i)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
 			return
+		}
+
+		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
+			go func() {
+				success, err := h.notifyConditionScheduler(jobID, scheduleConditionJobData)
+				if !success {
+					h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
+				} else {
+					h.logger.Infof("[CreateJobData] Successfully notified condition scheduler for jobID %d", jobID)
+				}
+			}()
 		}
 
 		pointsToAdd := 10.0
@@ -253,10 +306,10 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		var currentPoints = existingUser.UserPoints
 		newPoints := currentPoints + pointsToAdd
 		trackDBOp = metrics.TrackDBOperation("update", "users")
-		if err := h.userRepository.UpdateUserTasksAndPoints(existingUserID, 0, newPoints); err != nil {
+		if err := h.userRepository.UpdateUserTasksAndPoints(existingUser.UserID, 0, newPoints); err != nil {
 			trackDBOp(err)
-			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUserID, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user points: " + err.Error()})
+			h.logger.Errorf("[CreateJobData] Error updating user points for userID %d: %v", existingUser.UserID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 		trackDBOp(nil)
@@ -269,14 +322,14 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	// Update user's job_ids
 	allJobIDs := append(existingUser.JobIDs, createdJobs.JobIDs...)
 	trackDBOp = metrics.TrackDBOperation("update", "users")
-	if err := h.userRepository.UpdateUserJobIDs(existingUserID, allJobIDs); err != nil {
+	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, allJobIDs); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUserID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user job IDs: " + err.Error()})
+		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUser.UserID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	trackDBOp(nil)
-	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUserID, len(allJobIDs))
+	h.logger.Infof("[CreateJobData] Successfully updated user %d with %d total jobs", existingUser.UserID, len(allJobIDs))
 
 	// Track total operation duration
 	trackDBOp = metrics.TrackDBOperation("create", "jobs")
@@ -284,5 +337,5 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	c.JSON(http.StatusOK, createdJobs)
 	h.logger.Infof("[CreateJobData] Successfully completed job creation for user %d with %d new jobs",
-		existingUserID, len(tempJobs))
+		existingUser.UserID, len(tempJobs))
 }

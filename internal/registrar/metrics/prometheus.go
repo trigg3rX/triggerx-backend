@@ -58,22 +58,6 @@ var (
 		Help:      "Points distributed (recipient_type=performer/attester/user)",
 	}, []string{"recipient_type"})
 
-	// Daily rewards processing metrics
-	NoOfDaysRewardsProcessedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "registrar",
-		Name:      "no_of_days_rewards_processed_total",
-		Help:      "Daily rewards processing executions",
-	})
-
-	// Pinata file cleanup metrics
-	PinataFilesCleanedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: "triggerx",
-		Subsystem: "registrar",
-		Name:      "pinata_files_cleaned_total",
-		Help:      "Files cleaned from Pinata",
-	})
-
 	// Memory usage metrics
 	MemoryUsageBytes = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",

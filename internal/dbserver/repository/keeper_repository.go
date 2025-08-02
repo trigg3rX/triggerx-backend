@@ -24,7 +24,10 @@ type KeeperRepository interface {
 	GetKeeperPointsByIDInDB(id int64) (float64, error)
 	GetKeeperCommunicationInfo(id int64) (types.KeeperCommunicationInfo, error)
 	GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntry, error)
+	GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error)
 	GetKeeperLeaderboardByIdentifierInDB(address string, name string) (types.KeeperLeaderboardEntry, error)
+	CheckKeeperExistsByAddress(address string) (int64, error)
+	CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error)
 }
 
 type keeperRepository struct {
@@ -97,6 +100,7 @@ func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error)
 		&keeperData.ChatID,
 		&keeperData.EmailID,
 		&keeperData.LastCheckedIn,
+		&keeperData.OnImua,
 	)
 	if err != nil {
 		return types.KeeperData{}, err
@@ -207,6 +211,50 @@ func (r *keeperRepository) GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntr
 		&keeperEntry.NoExecutedTasks,
 		&keeperEntry.NoAttestedTasks,
 		&keeperEntry.KeeperPoints,
+		&keeperEntry.OnImua,
+	) {
+		keeperLeaderboard = append(keeperLeaderboard, keeperEntry)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+
+	// Sort leaderboard by UserPoints (desc), TotalJobs (desc), TotalTasks (desc), UserID (asc)
+	sort.Slice(keeperLeaderboard, func(i, j int) bool {
+		// First compare UserPoints
+		if keeperLeaderboard[i].KeeperPoints != keeperLeaderboard[j].KeeperPoints {
+			return keeperLeaderboard[i].KeeperPoints > keeperLeaderboard[j].KeeperPoints
+		}
+		// If UserPoints equal, compare TotalJobs
+		if keeperLeaderboard[i].NoExecutedTasks != keeperLeaderboard[j].NoExecutedTasks {
+			return keeperLeaderboard[i].NoExecutedTasks > keeperLeaderboard[j].NoExecutedTasks
+		}
+		// If TotalJobs equal, compare TotalTasks
+		if keeperLeaderboard[i].NoAttestedTasks != keeperLeaderboard[j].NoAttestedTasks {
+			return keeperLeaderboard[i].NoAttestedTasks > keeperLeaderboard[j].NoAttestedTasks
+		}
+		// If all else equal, sort by UserID ascending
+		return keeperLeaderboard[i].KeeperID < keeperLeaderboard[j].KeeperID
+	})
+
+	return keeperLeaderboard, nil
+}
+
+func (r *keeperRepository) GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error) {
+	iter := r.db.Session().Query(queries.GetKeeperLeaderboardByOnImuaQuery, onImua).Iter()
+
+	var keeperLeaderboard []types.KeeperLeaderboardEntry
+	var keeperEntry types.KeeperLeaderboardEntry
+
+	for iter.Scan(
+		&keeperEntry.KeeperID,
+		&keeperEntry.KeeperAddress,
+		&keeperEntry.KeeperName,
+		&keeperEntry.NoExecutedTasks,
+		&keeperEntry.NoAttestedTasks,
+		&keeperEntry.KeeperPoints,
+		&keeperEntry.OnImua,
 	) {
 		keeperLeaderboard = append(keeperLeaderboard, keeperEntry)
 	}
@@ -255,4 +303,59 @@ func (r *keeperRepository) GetKeeperLeaderboardByIdentifierInDB(address string, 
 	}
 
 	return keeperEntry, nil
+}
+
+func (r *keeperRepository) CheckKeeperExistsByAddress(address string) (int64, error) {
+	var id int64
+	err := r.db.Session().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
+	if err == gocql.ErrNotFound {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (r *keeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error) {
+	existingKeeperID, err := r.CheckKeeperExistsByAddress(keeperData.KeeperAddress)
+	if err != nil {
+		return 0, err
+	}
+	if existingKeeperID != 0 {
+		err = r.db.Session().Query(
+			queries.UpdateKeeperFromGoogleFormQuery,
+			keeperData.KeeperName,
+			keeperData.KeeperAddress,
+			keeperData.RewardsAddress,
+			keeperData.EmailID,
+			keeperData.OnImua,
+			existingKeeperID,
+		).Exec()
+		if err != nil {
+			return 0, err
+		}
+		return existingKeeperID, nil
+	}
+	var maxKeeperID int64
+	err = r.db.Session().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
+	if err == gocql.ErrNotFound {
+		maxKeeperID = 0
+	} else if err != nil {
+		return 0, err
+	}
+	currentKeeperID := maxKeeperID + 1
+	err = r.db.Session().Query(
+		queries.CreateNewKeeperFromGoogleFormQuery,
+		currentKeeperID,
+		keeperData.KeeperName,
+		keeperData.KeeperAddress,
+		keeperData.RewardsAddress,
+		keeperData.EmailID,
+		keeperData.OnImua,
+	).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return currentKeeperID, nil
 }

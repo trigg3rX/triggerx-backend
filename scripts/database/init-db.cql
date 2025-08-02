@@ -22,7 +22,7 @@ DROP TABLE IF EXISTS apikeys;
 CREATE TABLE IF NOT EXISTS user_data (
     user_id bigint,
     user_address text,
-    job_ids set<bigint>,
+    job_ids set<varint>,
     ether_balance varint,
     token_balance varint,
     user_points double,
@@ -30,16 +30,17 @@ CREATE TABLE IF NOT EXISTS user_data (
     total_tasks bigint,
     created_at timestamp,
     last_updated_at timestamp,
+    email_id text,
     PRIMARY KEY (user_id)
 );
 
 -- Create Job_data table    
 CREATE TABLE IF NOT EXISTS job_data (
-    job_id bigint,
+    job_id varint,
     job_title text,
     task_definition_id int,
     user_id bigint,
-    link_job_id bigint,
+    link_job_id varint,
     chain_status int,
     custom boolean,
     time_frame bigint,
@@ -52,12 +53,14 @@ CREATE TABLE IF NOT EXISTS job_data (
     updated_at timestamp,
     last_executed_at timestamp,
     timezone text,
+    is_imua boolean,
+    created_chain_id text,
     PRIMARY KEY (job_id)
 );
 
 -- Create Time_Job_data table
 CREATE TABLE IF NOT EXISTS time_job_data (
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     schedule_type text,
     time_interval bigint,
@@ -83,7 +86,7 @@ CREATE TABLE IF NOT EXISTS time_job_data (
 
 -- Create Event_Job_data table
 CREATE TABLE IF NOT EXISTS event_job_data (
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     recurring boolean,
     trigger_chain_id text,
@@ -108,7 +111,8 @@ CREATE TABLE IF NOT EXISTS event_job_data (
 
 -- Create Condition_Job_data table
 CREATE TABLE IF NOT EXISTS condition_job_data (
-    job_id bigint,
+    job_id varint,
+    task_definition_id int,
     recurring boolean,
     condition_type text,
     upper_limit double,
@@ -136,7 +140,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
 CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
     task_number bigint,
-    job_id bigint,
+    job_id varint,
     task_definition_id int,
     created_at timestamp,
     task_opx_predicted_cost double,
@@ -149,7 +153,8 @@ CREATE TABLE IF NOT EXISTS task_data (
     tp_signature blob,
     ta_signature blob,
     task_submission_tx_hash text,
-    is_successful boolean,
+    is_accepted boolean,
+    is_imua boolean,
     PRIMARY KEY (task_id)
 );
 
@@ -177,6 +182,8 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     chat_id bigint,
     email_id text,
     last_checked_in timestamp,
+    on_imua boolean,
+    uptime bigint,
     PRIMARY KEY (keeper_id)
 );
 

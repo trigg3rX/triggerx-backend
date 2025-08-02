@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,8 @@ import (
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetTaskDataByID] trace_id=%s - Retrieving task data", traceID)
 	taskID := c.Param("id")
 	if taskID == "" {
 		h.logger.Error("[GetTaskDataByID] No task ID provided")
@@ -48,6 +51,8 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 }
 
 func (h *Handler) GetTasksByJobID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetTasksByJobID] trace_id=%s - Retrieving tasks for job", traceID)
 	jobID := c.Param("job_id")
 	if jobID == "" {
 		h.logger.Error("[GetTasksByJobID] No job ID provided")
@@ -58,9 +63,10 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	jobIDInt, err := strconv.ParseInt(jobID, 10, 64)
-	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Invalid job ID format: %v", err)
+	jobIDBig := new(big.Int)
+	_, ok := jobIDBig.SetString(jobID, 10)
+	if !ok {
+		h.logger.Errorf("[GetTasksByJobID] Invalid job ID format: %v", jobID)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid job ID format",
 			"code":  "INVALID_JOB_ID",
@@ -68,13 +74,13 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %d", jobIDInt)
+	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s", jobIDBig.String())
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	tasks, err := h.taskRepository.GetTasksByJobID(jobIDInt)
+	tasks, err := h.taskRepository.GetTasksByJobID(jobIDBig)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %d: %v", jobIDInt, err)
+		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobIDBig.String(), err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for this job",
 			"code":  "TASKS_NOT_FOUND",
@@ -82,6 +88,6 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %d", len(tasks), jobIDInt)
+	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", len(tasks), jobIDBig.String())
 	c.JSON(http.StatusOK, tasks)
 }

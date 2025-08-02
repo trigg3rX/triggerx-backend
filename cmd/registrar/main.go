@@ -1,20 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/client"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
-
-	// "github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
@@ -34,26 +33,10 @@ func main() {
 	}
 
 	logger.Info("Starting registrar service...",
-		"mode", config.IsDevMode(),
+		"port", config.GetRegistrarPort(),
 		"avs_governance", config.GetAvsGovernanceAddress(),
 		"attestation_center", config.GetAttestationCenterAddress(),
 	)
-
-	// Initialize database connection
-	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
-	dbConn, err := database.NewConnection(dbConfig, logger)
-	if err != nil {
-		logger.Fatal("Failed to connect to database", "error", err)
-	}
-	defer dbConn.Close()
-
-	// Initialize database manager with logger
-	client.InitDatabaseManager(logger, dbConn)
-	logger.Info("Database manager initialized")
-
-	// Start weekly Pinata cleanup goroutine
-	events.StartWeeklyPinataCleanup(logger)
-	logger.Info("Weekly Pinata cleanup goroutine started")
 
 	// Initialize and start registrar service
 	registrarService, err := registrar.NewRegistrarService(logger)
@@ -62,11 +45,10 @@ func main() {
 	}
 
 	// Start services
-	registrarService.Start()
-
-	// // Initialize and start rewards service
-	// rewardsService := rewards.NewRewardsService(logger)
-	// go rewardsService.StartDailyRewardsPoints()
+	err = registrarService.Start()
+	if err != nil {
+		logger.Fatal("Failed to start registrar service", "error", err)
+	}
 
 	logger.Info("All services started successfully")
 
@@ -77,8 +59,25 @@ func main() {
 	sig := <-shutdown
 	logger.Infof("Received shutdown signal: %s", sig.String())
 
-	// Cleanup
-	registrarService.Stop()
+	// Perform graceful shutdown
+	performGracefulShutdown(registrarService, logger)
+
+	logger.Info("Shutdown complete")
+}
+
+func performGracefulShutdown(registrarService *registrar.RegistrarService, logger logging.Logger) {
+	logger.Info("Initiating graceful shutdown...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	err := registrarService.Stop()
+	if err != nil {
+		logger.Fatal("Failed to stop registrar service", "error", err)
+	}
+
+	// Wait for context timeout or manual cancellation
+	<-ctx.Done()
 
 	logger.Info("Shutdown complete")
 }

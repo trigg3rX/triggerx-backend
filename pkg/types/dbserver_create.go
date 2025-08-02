@@ -16,6 +16,7 @@ const (
 // Create New Job
 type CreateJobRequest struct {
 	// Common fields for all job types
+	JobID             *big.Int  `json:"job_id" validate:"required"`
 	UserAddress       string    `json:"user_address" validate:"required,ethereum_address"`
 	DepositedEther    *big.Int  `json:"deposited_ether" validate:"required"`
 	DepositedToken    *big.Int  `json:"deposited_token" validate:"required"`
@@ -27,6 +28,7 @@ type CreateJobRequest struct {
 	JobCostPrediction float64   `json:"job_cost_prediction" validate:"required,min=0"`
 	CreatedAt         time.Time `json:"created_at"`
 	Timezone          string    `json:"timezone" validate:"required,timezone"`
+	CreatedChainID    string    `json:"created_chain_id" validate:"required,chain_id"`
 	// Time job specific fields
 	ScheduleType     string `json:"schedule_type" validate:"required,oneof=cron interval specific"`
 	TimeInterval     int64  `json:"time_interval,omitempty" validate:"omitempty,min=30"`
@@ -50,29 +52,28 @@ type CreateJobRequest struct {
 	ArgType                   int      `json:"arg_type" validate:"required"`
 	Arguments                 []string `json:"arguments" validate:"required"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,url"`
+	IsImua                    bool     `json:"is_imua"`
 }
 
 type CreateJobResponse struct {
-	UserID            int64    `json:"user_id"`
-	AccountBalance    *big.Int `json:"account_balance"`
-	TokenBalance      *big.Int `json:"token_balance"`
-	JobIDs            []int64  `json:"job_ids"`
-	TaskDefinitionIDs []int    `json:"task_definition_ids"`
-	TimeFrames        []int64  `json:"time_frames"`
+	UserID            int64      `json:"user_id"`
+	AccountBalance    *big.Int   `json:"account_balance"`
+	TokenBalance      *big.Int   `json:"token_balance"`
+	JobIDs            []*big.Int `json:"job_ids"`
+	TaskDefinitionIDs []int      `json:"task_definition_ids"`
+	TimeFrames        []int64    `json:"time_frames"`
 }
 
 // Create New Task
 type CreateTaskRequest struct {
-	JobID            int64 `json:"job_id" validate:"required"`
+	JobID            *big.Int `json:"job_id" validate:"required"`
 	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
-	TaskPerformerID  int64 `json:"task_performer_id" validate:"required"`
 }
 
 type CreateTaskResponse struct {
 	TaskID           int64 `json:"task_id"`
-	JobID            int64 `json:"job_id"`
+	JobID            *big.Int `json:"job_id"`
 	TaskDefinitionID int   `json:"task_definition_id"`
-	TaskPerformerID  int64 `json:"task_performer_id"`
 }
 
 // Create New Keeper from Contracts (registrar)
@@ -89,6 +90,7 @@ type GoogleFormCreateKeeperData struct {
 	RewardsAddress string `json:"rewards_address" validate:"required,ethereum_address"`
 	KeeperName     string `json:"keeper_name" validate:"required,min=3,max=50"`
 	EmailID        string `json:"email_id" validate:"required,email"`
+	OnImua         bool   `json:"on_imua"`
 }
 
 // Create New API Key (SDK)

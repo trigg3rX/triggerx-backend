@@ -56,7 +56,7 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 	}
 
 	if cfg.Version == "" {
-		cfg.Version = "0.1.3"
+		cfg.Version = "0.1.6"
 	}
 
 	retryConfig := retry.DefaultHTTPRetryConfig()
@@ -106,6 +106,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		Timestamp:        time.Now().UTC(),
 		Signature:        signature,
 		PeerID:           c.config.PeerID,
+		IsImua:           config.IsImua(),
 	}
 
 	// c.logger.Infof("Payload: %+v", payload)
@@ -121,10 +122,10 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 
 	metrics.SuccessfulHealthCheckinsTotal.Inc()
 
-	c.logger.Debug("Successfully completed health check-in",
-		"status", response.Status,
-		"keeperAddress", c.config.KeeperAddress,
-		"timestamp", payload.Timestamp)
+	// c.logger.Debug("Successfully completed health check-in",
+	// 	"status", response.Status,
+	// 	"keeperAddress", c.config.KeeperAddress,
+	// 	"timestamp", payload.Timestamp)
 
 	return response, nil
 }
@@ -190,31 +191,39 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		}, fmt.Errorf("failed to unmarshal health check response: %w", err)
 	}
 
-	decryptedString, err := cryptography.DecryptMessage(c.config.PrivateKey, response.Data)
-	if err != nil {
+	// Only decrypt if the response was successful
+	if response.Status {
+		decryptedString, err := cryptography.DecryptMessage(c.config.PrivateKey, response.Data)
+		if err != nil {
+			return types.KeeperHealthCheckInResponse{
+				Status: false,
+				Data:   err.Error(),
+			}, fmt.Errorf("failed to decrypt health check response: %w", err)
+		}
+
+		parts := strings.Split(decryptedString, ":")
+		if len(parts) != 6 {
+			return types.KeeperHealthCheckInResponse{
+				Status: false,
+				Data:   "invalid response format",
+			}, fmt.Errorf("invalid response format: expected host:token")
+		}
+
+		config.SetEtherscanAPIKey(parts[0])
+		config.SetAlchemyAPIKey(parts[1])
+		config.SetIpfsHost(parts[2])
+		config.SetPinataJWT(parts[3])
+		config.SetManagerSigningAddress(parts[4])
+		config.SetTaskExecutionAddress(parts[5])
+
 		return types.KeeperHealthCheckInResponse{
-			Status: false,
-			Data:   err.Error(),
-		}, fmt.Errorf("failed to decrypt health check response: %w", err)
+			Status: true,
+			Data:   "Health check-in successful",
+		}, nil
 	}
 
-	parts := strings.Split(decryptedString, ":")
-	if len(parts) != 4 {
-		return types.KeeperHealthCheckInResponse{
-			Status: false,
-			Data:   "invalid response format",
-		}, fmt.Errorf("invalid response format: expected host:token")
-	}
-
-	config.SetEtherscanAPIKey(parts[0])
-	config.SetAlchemyAPIKey(parts[1])
-	config.SetIpfsHost(parts[2])
-	config.SetPinataJWT(parts[3])
-
-	return types.KeeperHealthCheckInResponse{
-		Status: true,
-		Data:   "Health check-in successful",
-	}, nil
+	// If response was not successful, return the error as is
+	return response, nil
 }
 
 // Close closes the HTTP client

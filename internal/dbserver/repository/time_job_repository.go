@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -14,11 +15,12 @@ import (
 
 type TimeJobRepository interface {
 	CreateTimeJob(timeJob *types.TimeJobData) error
-	GetTimeJobByJobID(jobID int64) (types.TimeJobData, error)
-	CompleteTimeJob(jobID int64) error
-	UpdateTimeJobStatus(jobID int64, isActive bool) error
+	GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error)
+	CompleteTimeJob(jobID *big.Int) error
+	UpdateTimeJobStatus(jobID *big.Int, isActive bool) error
 	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error)
-	UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error
+	UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error
+	UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error
 }
 
 type timeJobRepository struct {
@@ -33,11 +35,11 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 
 func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
-		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression,
-		timeJob.SpecificSchedule, timeJob.Timezone, timeJob.TargetChainID,
-		timeJob.TargetContractAddress, timeJob.TargetFunction, timeJob.ABI, timeJob.ArgType,
-		timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl, false, true).Exec()
+		timeJob.JobID, timeJob.TaskDefinitionID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
+		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule,
+		timeJob.Timezone, timeJob.TargetChainID, timeJob.TargetContractAddress, timeJob.TargetFunction,
+		timeJob.ABI, timeJob.ArgType, timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl,
+		timeJob.IsCompleted, timeJob.IsActive, time.Now(), time.Now()).Exec()
 
 	if err != nil {
 		return err
@@ -46,7 +48,7 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, error) {
+func (r *timeJobRepository) GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error) {
 	var timeJob types.TimeJobData
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
 		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp,
@@ -61,16 +63,21 @@ func (r *timeJobRepository) GetTimeJobByJobID(jobID int64) (types.TimeJobData, e
 	return timeJob, nil
 }
 
-func (r *timeJobRepository) CompleteTimeJob(jobID int64) error {
+func (r *timeJobRepository) CompleteTimeJob(jobID *big.Int) error {
 	err := r.db.Session().Query(queries.CompleteTimeJobStatusQuery, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to complete time job")
 	}
 
+	err = r.db.Session().Query(queries.UpdateJobDataToCompletedQuery, jobID).Exec()
+	if err != nil {
+		return errors.New("failed to update job_data status to completed")
+	}
+
 	return nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobStatus(jobID int64, isActive bool) error {
+func (r *timeJobRepository) UpdateTimeJobStatus(jobID *big.Int, isActive bool) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobStatusQuery, isActive, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time job status")
@@ -99,6 +106,13 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 			timeJob.TaskDefinitionID = 1
 			timeJob.TaskTargetData.TaskDefinitionID = 1
 		}
+
+		var isImua bool
+		err := r.db.Session().Query(queries.IsJobImuaQuery, timeJob.TaskTargetData.JobID).Scan(&isImua)
+		if err != nil {
+			return nil, err
+		}
+		timeJob.IsImua = isImua
 
 		// Calculate next execution time after the current execution time
 		nextExecutionTime, err := parser.CalculateNextExecutionTime(timeJob.NextExecutionTimestamp, timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule)
@@ -132,11 +146,19 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 	return timeJobs, nil
 }
 
-func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID int64, nextExecutionTimestamp time.Time) error {
+func (r *timeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error {
 	err := r.db.Session().Query(queries.UpdateTimeJobNextExecutionTimestampQuery, nextExecutionTimestamp, jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update time job next execution timestamp")
 	}
 
+	return nil
+}
+
+func (r *timeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error {
+	err := r.db.Session().Query(queries.UpdateTimeJobIntervalQuery, timeInterval, jobID).Exec()
+	if err != nil {
+		return errors.New("failed to update time_interval in time_job_data")
+	}
 	return nil
 }

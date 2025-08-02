@@ -11,6 +11,7 @@ type KeeperHealthCheckIn struct {
 	Timestamp        time.Time `json:"timestamp" validate:"required"`
 	Signature        string    `json:"signature" validate:"required"`
 	PeerID           string    `json:"peer_id" validate:"required"`
+	IsImua           bool      `json:"is_imua" validate:"required"`
 }
 
 // KeeperHealthCheckInResponse represents the response from the health check-in endpoint

@@ -9,6 +9,8 @@ import (
 )
 
 func (h *Handler) GetUserDataByAddress(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetUserDataByAddress] trace_id=%s - Retrieving user data by address", traceID)
 	userAddress := strings.ToLower(c.Param("address"))
 	if userAddress == "" {
 		h.logger.Errorf("[GetUserDataByAddress] Invalid user address: %v", userAddress)
@@ -38,6 +40,8 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 }
 
 func (h *Handler) GetWalletPoints(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetWalletPoints] trace_id=%s - Retrieving wallet points", traceID)
 	walletAddress := strings.ToLower(c.Param("address"))
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
@@ -63,4 +67,36 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,
 	})
+}
+
+func (h *Handler) StoreUserEmail(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[StoreUserEmail] trace_id=%s - Storing user email", traceID)
+
+	var req struct {
+		UserAddress string `json:"user_address"`
+		Email       string `json:"email_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("[StoreUserEmail] Invalid request: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "code": "INVALID_REQUEST"})
+		return
+	}
+	if req.UserAddress == "" || req.Email == "" {
+		h.logger.Errorf("[StoreUserEmail] Missing user_address or email")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_address or email", "code": "MISSING_FIELDS"})
+		return
+	}
+
+	req.UserAddress = strings.ToLower(req.UserAddress)
+
+	err := h.userRepository.UpdateUserEmail(req.UserAddress, req.Email)
+	if err != nil {
+		h.logger.Errorf("[StoreUserEmail] Failed to update email %s for address %s: %v", req.Email, req.UserAddress, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update email", "code": "UPDATE_FAILED"})
+		return
+	}
+
+	h.logger.Infof("[StoreUserEmail] Successfully updated email for address: %s", req.UserAddress)
+	c.JSON(http.StatusOK, gin.H{"message": "Email updated successfully"})
 }

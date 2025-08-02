@@ -49,8 +49,6 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		tasks[i].TaskID = taskID
 	}
 
-	h.logger.Infof("[GetTimeBasedJobs] Tasks: %v", tasks)
-
 	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
 	c.JSON(http.StatusOK, tasks)
 }

@@ -45,6 +45,12 @@ func MetricsMiddleware() gin.HandlerFunc {
 // LoggerMiddleware creates a gin middleware for logging requests
 func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip logging for metrics endpoint
+		if c.Request.URL.Path == "/metrics" {
+			c.Next()
+			return
+		}
+
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery

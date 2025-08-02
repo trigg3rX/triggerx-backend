@@ -16,6 +16,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -38,7 +41,7 @@ func main() {
 
 	logger.Info("Starting database server...",
 		"mode", config.IsDevMode(),
-		"port", config.GetDatabaseRPCPort(),
+		"port", config.GetDBServerRPCPort(),
 		"host", config.GetDatabaseHostAddress(),
 	)
 
@@ -59,12 +62,34 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
+	// Initialize Docker manager with language support
+	dockerConfig := dockerconfig.DefaultConfig("go")
+	supportedLanguages := []types.Language{
+		types.LanguageGo,
+		// types.LanguagePy,
+		// types.LanguageJS,
+		// types.LanguageTS,
+		// types.LanguageNode,
+	}
+
+	dockerManager, err := docker.NewDockerManager(dockerConfig, logger)
+	if err != nil {
+		logger.Errorf("Failed to create Docker manager: %v", err)
+	} else {
+		// Initialize Docker manager with language-specific pools
+		if err := dockerManager.Initialize(context.Background(), supportedLanguages); err != nil {
+			logger.Errorf("Failed to initialize Docker manager: %v", err)
+		} else {
+			logger.Infof("Docker manager initialized successfully with %d language pools", len(supportedLanguages))
+		}
+	}
+
 	dbServer := dbserver.NewServer(conn, logger)
 
-	dbServer.RegisterRoutes(dbServer.GetRouter())
+	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerManager)
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetDatabaseRPCPort()),
+		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
 		Handler: dbServer.GetRouter(),
 	}
 
@@ -78,7 +103,7 @@ func main() {
 	}()
 
 	close(ready)
-	logger.Infof("Database Server initialized, starting on port %s...", config.GetDatabaseRPCPort())
+	logger.Infof("Database Server initialized, starting on port %s...", config.GetDBServerRPCPort())
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
@@ -90,10 +115,10 @@ func main() {
 		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(srv, &wg, logger)
+	performGracefulShutdown(srv, &wg, logger, dockerManager)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerManager *docker.DockerManager) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -103,6 +128,12 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		logger.Error("HTTP server shutdown error", "error", err)
 		if err := srv.Close(); err != nil {
 			logger.Error("Forced HTTP server close error", "error", err)
+		}
+	}
+
+	if dockerManager != nil {
+		if err := dockerManager.Close(); err != nil {
+			logger.Error("Failed to close Docker manager", "error", err)
 		}
 	}
 

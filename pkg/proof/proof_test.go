@@ -13,7 +13,7 @@ func TestGenerateProofWithTLSConnection(t *testing.T) {
 	// Create sample IPFS data for testing
 	ipfsData := types.IPFSData{
 		TaskData: &types.SendTaskDataToKeeper{
-			TaskID: 123,
+			TaskID: []int64{123},
 		},
 		ActionData: &types.PerformerActionData{
 			TaskID:             123,
@@ -33,7 +33,7 @@ func TestGenerateProofWithTLSConnection(t *testing.T) {
 	}
 
 	// Validate proof data
-	if proofData.TaskID != ipfsData.TaskData.TaskID {
+	if proofData.TaskID != ipfsData.TaskData.TaskID[0] {
 		t.Errorf("Expected TaskID %d, got %d", ipfsData.TaskData.TaskID, proofData.TaskID)
 	}
 
@@ -56,7 +56,7 @@ func TestGenerateProofWithMockCert(t *testing.T) {
 	// Create sample IPFS data for testing
 	ipfsData := types.IPFSData{
 		TaskData: &types.SendTaskDataToKeeper{
-			TaskID: 456,
+			TaskID: []int64{456},
 		},
 		ActionData: &types.PerformerActionData{
 			TaskID:             456,
@@ -84,7 +84,7 @@ func TestGenerateProofWithMockCert(t *testing.T) {
 	}
 
 	// Validate proof data
-	if proofData.TaskID != ipfsData.TaskData.TaskID {
+	if proofData.TaskID != ipfsData.TaskData.TaskID[0] {
 		t.Errorf("Expected TaskID %d, got %d", ipfsData.TaskData.TaskID, proofData.TaskID)
 	}
 

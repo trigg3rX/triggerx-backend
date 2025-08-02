@@ -13,6 +13,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.1.6"
+	isImua  = false
+)
+
 type Config struct {
 	devMode bool
 
@@ -50,6 +55,9 @@ type Config struct {
 	tlsProofHost string
 	tlsProofPort string
 
+	// Manager Signing Address
+	managerSigningAddress string
+
 	// Backend Service URLs
 	aggregatorRPCUrl string
 	healthRPCUrl     string
@@ -60,6 +68,7 @@ type Config struct {
 	// AVS Contract Address
 	avsGovernanceAddress     string
 	attestationCenterAddress string
+	taskExecutionAddress     string
 
 	// Othentic Bootstrap ID
 	othenticBootstrapID string
@@ -73,27 +82,28 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnv("L1_RPC", ""),
-		baseRPCUrl:               env.GetEnv("L2_RPC", ""),
-		privateKeyConsensus:      env.GetEnv("PRIVATE_KEY", ""),
-		privateKeyController:     env.GetEnv("OPERATOR_PRIVATE_KEY", ""),
-		keeperAddress:            env.GetEnv("OPERATOR_ADDRESS", ""),
-		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnv("PRIVATE_KEY", ""))).PublicKey).Hex(),
-		publicIPV4Address:        env.GetEnv("PUBLIC_IPV4_ADDRESS", ""),
-		peerID:                   env.GetEnv("PEER_ID", ""),
-		keeperRPCPort:            env.GetEnv("OPERATOR_RPC_PORT", "9011"),
-		keeperP2PPort:            env.GetEnv("OPERATOR_P2P_PORT", "9012"),
-		keeperMetricsPort:        env.GetEnv("OPERATOR_METRICS_PORT", "9013"),
-		grafanaPort:              env.GetEnv("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:         env.GetEnv("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
-		healthRPCUrl:             env.GetEnv("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
-		tlsProofHost:             env.GetEnv("TLS_PROOF_HOST", "www.google.com"),
-		tlsProofPort:             env.GetEnv("TLS_PROOF_PORT", "443"),
-		l1Chain:                  env.GetEnv("L1_CHAIN", "17000"),
-		l2Chain:                  env.GetEnv("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnv("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
-		attestationCenterAddress: env.GetEnv("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
-		othenticBootstrapID:      env.GetEnv("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		ethRPCUrl:                env.GetEnvString("L1_RPC", ""),
+		baseRPCUrl:               env.GetEnvString("L2_RPC", ""),
+		alchemyAPIKey:           env.GetEnvString("ALCHEMY_API_KEY", ""),
+		privateKeyConsensus:      env.GetEnvString("PRIVATE_KEY", ""),
+		privateKeyController:     env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
+		keeperAddress:            env.GetEnvString("OPERATOR_ADDRESS", ""),
+		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnvString("PRIVATE_KEY", ""))).PublicKey).Hex(),
+		publicIPV4Address:        env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
+		peerID:                   env.GetEnvString("PEER_ID", ""),
+		keeperRPCPort:            env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
+		keeperP2PPort:            env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
+		keeperMetricsPort:        env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
+		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
+		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
+		tlsProofHost:             "www.google.com",
+		tlsProofPort:             "443",
+		l1Chain:                  env.GetEnvString("L1_CHAIN", "17000"),
+		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
+		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
+		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
+		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -139,7 +149,11 @@ func GetBaseRPCUrl() string {
 	return cfg.baseRPCUrl
 }
 
+// Only sets it if there was no key in env file
 func SetAlchemyAPIKey(key string) {
+	if !env.IsEmpty(cfg.alchemyAPIKey) {
+		return
+	}
 	cfg.alchemyAPIKey = key
 }
 
@@ -208,7 +222,11 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return "0.1.3"
+	return version
+}
+
+func IsImua() bool {
+	return isImua
 }
 
 // IPFS configuration
@@ -229,12 +247,37 @@ func GetPinataJWT() string {
 }
 
 // TLS Proof configuration
+func SetTLSProofHost(host string) {
+	cfg.tlsProofHost = host
+}
+
+func SetTLSProofPort(port string) {
+	cfg.tlsProofPort = port
+}
+
 func GetTLSProofHost() string {
 	return cfg.tlsProofHost
 }
 
 func GetTLSProofPort() string {
 	return cfg.tlsProofPort
+}
+
+// Manager Signing Address
+func SetManagerSigningAddress(addr string) {
+	cfg.managerSigningAddress = addr
+}
+
+func GetManagerSigningAddress() string {
+	return cfg.managerSigningAddress
+}
+
+func SetTaskExecutionAddress(addr string) {
+	cfg.taskExecutionAddress = addr
+}
+
+func GetTaskExecutionAddress() string {
+	return cfg.taskExecutionAddress
 }
 
 // SetKeeperAddress sets the keeper address in the config (for testing)

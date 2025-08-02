@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
@@ -14,8 +15,9 @@ type TaskRepository interface {
 	AddTaskPerformerID(taskID int64, performerID int64) error
 	UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error
 	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
+	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
 	GetTaskDataByID(taskID int64) (types.TaskData, error)
-	GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error)
+	GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error)
 	UpdateTaskFee(taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
 }
@@ -36,7 +38,7 @@ func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (
 	if err != nil {
 		return -1, errors.New("error getting max task ID")
 	}
-	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID+1, task.JobID, task.TaskDefinitionID, time.Now()).Exec()
+	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID+1, task.JobID, task.TaskDefinitionID, time.Now(), task.IsImua).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
 	}
@@ -52,7 +54,7 @@ func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) err
 }
 
 func (r *taskRepository) UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error {
-	err := r.db.Session().Query(queries.UpdateTaskExecutionDataQuery, task.ExecutionTimestamp, task.ExecutionTxHash, task.ProofOfTask, task.TaskOpXCost, task.TaskID).Exec()
+	err := r.db.Session().Query(queries.UpdateTaskExecutionDataQuery, task.TaskPerformerID, task.ExecutionTimestamp, task.ExecutionTxHash, task.ProofOfTask, task.TaskOpXCost, task.TaskID).Exec()
 	if err != nil {
 		return errors.New("error updating task execution data")
 	}
@@ -67,16 +69,24 @@ func (r *taskRepository) UpdateTaskAttestationDataInDB(task *types.UpdateTaskAtt
 	return nil
 }
 
+func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error {
+	err := r.db.Session().Query(queries.UpdateTaskNumberAndStatusQuery, taskNumber, status, txHash, taskID).Exec()
+	if err != nil {
+		return errors.New("error updating task number and status")
+	}
+	return nil
+}
+
 func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
 	var task types.TaskData
-	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &task.JobID, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpXCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsSuccessful)
+	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &task.JobID, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpXCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsSuccessful, &task.TaskStatus, &task.IsImua)
 	if err != nil {
 		return types.TaskData{}, errors.New("error getting task data by ID")
 	}
 	return task, nil
 }
 
-func (r *taskRepository) GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error) {
+func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
 	iter := r.db.Session().Query(queries.GetTasksByJobIDQuery, jobID).Iter()
 	var tasks []types.TasksByJobIDResponse
 	var task types.TasksByJobIDResponse
@@ -90,6 +100,7 @@ func (r *taskRepository) GetTasksByJobID(jobID int64) ([]types.TasksByJobIDRespo
 		&task.TaskPerformerID,
 		&task.TaskAttesterIDs,
 		&task.IsSuccessful,
+		&task.TaskStatus,
 	) {
 		tasks = append(tasks, task)
 	}

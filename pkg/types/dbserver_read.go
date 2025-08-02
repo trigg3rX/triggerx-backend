@@ -8,14 +8,9 @@ type JobResponse struct {
 }
 
 type PerformerData struct {
-	KeeperID      int64  `json:"keeper_id"`
+	OperatorID    int64  `json:"operator_id"`
 	KeeperAddress string `json:"keeper_address"`
-}
-
-type DailyRewardsPoints struct {
-	KeeperID       int64   `json:"keeper_id"`
-	RewardsBooster float32 `json:"rewards_booster"`
-	KeeperPoints   float64 `json:"keeper_points"`
+	IsImua        bool   `json:"is_imua"`
 }
 
 type KeeperLeaderboardEntry struct {

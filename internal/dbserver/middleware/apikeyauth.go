@@ -125,8 +125,8 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 }
 
 func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
-	query := `SELECT key, owner, isActive, rateLimit, lastUsed, createdAt 
-			  FROM triggerx.apikeys WHERE key = ? AND isActive = ? ALLOW FILTERING`
+	query := `SELECT key, owner, is_active, rate_limit, last_used, created_at 
+			  FROM triggerx.apikeys WHERE key = ? AND is_active = ? ALLOW FILTERING`
 
 	var apiKey types.ApiKey
 
@@ -148,7 +148,7 @@ func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
 }
 
 func (a *ApiKeyAuth) updateLastUsed(key string) {
-	query := `UPDATE triggerx.apikeys SET lastUsed = ? WHERE key = ? ALLOW FILTERING`
+	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ?`
 
 	if err := a.db.Session().Query(query, time.Now().UTC(), key).Exec(); err != nil {
 		a.logger.Errorf("Failed to update last used timestamp: %v", err)

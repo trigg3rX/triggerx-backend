@@ -35,6 +35,7 @@ func (sm *StateManager) LoadVerifiedKeepers() error {
 			PeerID:           keeper.PeerID,
 			IsActive:         false,
 			LastCheckedIn:    keeper.LastCheckedIn,
+			IsImua:           keeper.IsImua,
 		}
 		sm.keepers[keeper.KeeperAddress] = state
 	}

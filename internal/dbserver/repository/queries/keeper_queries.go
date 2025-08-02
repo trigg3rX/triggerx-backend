@@ -9,6 +9,17 @@ const (
 				keeper_id, keeper_name, keeper_address, rewards_booster,
 				keeper_points, whitelisted, email_id
 			) VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	CreateNewKeeperFromGoogleFormQuery = `
+			INSERT INTO triggerx.keeper_data (
+				keeper_id, keeper_name, keeper_address,
+				rewards_address, email_id, on_imua
+			) VALUES (?, ?, ?, ?, ?, ?)`
+
+	UpdateKeeperFromGoogleFormQuery = `
+			UPDATE triggerx.keeper_data SET 
+				keeper_name = ?, keeper_address = ?, rewards_address = ?, email_id = ?, on_imua = ?
+			WHERE keeper_id = ?`
 )
 
 // Update Queries
@@ -54,56 +65,61 @@ const (
 // Read Queries
 const (
 	GetKeeperDataByIDQuery = `
-			SELECT keeper_id, keeper_name, keeper_address, consensus_address, registered_tx, operator_id,
-				rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
-				peer_id, strategies, whitelisted, registered, online, version, no_executed_tasks,
-				no_attested_tasks, chat_id, email_id, last_checked_in
-			FROM triggerx.keeper_data 
-			WHERE keeper_id = ?`
+		SELECT keeper_id, keeper_name, keeper_address, consensus_address, registered_tx, operator_id,
+			rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
+			peer_id, strategies, whitelisted, registered, online, version, no_executed_tasks,
+			no_attested_tasks, chat_id, email_id, last_checked_in, on_imua
+		FROM triggerx.keeper_data 
+		WHERE keeper_id = ?`
 
 	GetKeeperIDByAddressQuery = `
-			SELECT keeper_id
-			FROM triggerx.keeper_data 
-			WHERE keeper_address = ? ALLOW FILTERING`
+		SELECT keeper_id
+		FROM triggerx.keeper_data 
+		WHERE keeper_address = ? ALLOW FILTERING`
 
 	GetKeeperIDByOperatorIDQuery = `
-			SELECT keeper_id
-			FROM triggerx.keeper_data 
-			WHERE operator_id = ? ALLOW FILTERING`
+		SELECT keeper_id
+		FROM triggerx.keeper_data 
+		WHERE operator_id = ? ALLOW FILTERING`
 
 	GetKeeperIDByNameQuery = `
-			SELECT keeper_id
-			FROM triggerx.keeper_data 
-			WHERE keeper_name = ? ALLOW FILTERING`
+		SELECT keeper_id
+		FROM triggerx.keeper_data 
+		WHERE keeper_name = ? ALLOW FILTERING`
 
 	GetKeeperLeaderboardQuery = `
-			SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
-			FROM triggerx.keeper_data 
-			WHERE registered = true AND whitelisted = true ALLOW FILTERING`
+		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points, on_imua
+		FROM triggerx.keeper_data 
+		WHERE registered = true AND whitelisted = true ALLOW FILTERING`
 
 	GetKeeperLeaderboardByAddressQuery = `
-			SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
-			FROM triggerx.keeper_data 
-			WHERE registered = true AND keeper_address = ? ALLOW FILTERING`
+		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
+		FROM triggerx.keeper_data 
+		WHERE registered = true AND keeper_address = ? ALLOW FILTERING`
 
 	GetKeeperLeaderboardByNameQuery = `
-			SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
-			FROM triggerx.keeper_data 
-			WHERE registered = true AND keeper_name = ? ALLOW FILTERING`
+		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points 
+		FROM triggerx.keeper_data 
+		WHERE registered = true AND keeper_name = ? ALLOW FILTERING`
+
+	GetKeeperLeaderboardByOnImuaQuery = `
+		SELECT keeper_id, keeper_address, keeper_name, no_executed_tasks, no_attested_tasks, keeper_points, on_imua
+		FROM triggerx.keeper_data 
+		WHERE registered = true AND whitelisted = true AND on_imua = ? ALLOW FILTERING`
 
 	GetKeeperAsPerformersQuery = `
-			SELECT keeper_id, keeper_address 
-			FROM triggerx.keeper_data 
-			WHERE whitelisted = true AND registered = true ALLOW FILTERING`
+		SELECT keeper_id, keeper_address 
+		FROM triggerx.keeper_data 
+		WHERE whitelisted = true AND registered = true ALLOW FILTERING`
 
 	GetKeeperTaskCountByIDQuery = `
-			SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`
+		SELECT no_executed_tasks FROM triggerx.keeper_data WHERE keeper_id = ?`
 
 	GetKeeperPointsByIDQuery = `
-			SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`
+		SELECT keeper_points FROM triggerx.keeper_data WHERE keeper_id = ?`
 
 	GetKeeperCommunicationInfoQuery = `
-			SELECT chat_id, keeper_name, email_id 
-			FROM triggerx.keeper_data 
-			WHERE keeper_id = ?`
+		SELECT chat_id, keeper_name, email_id 
+		FROM triggerx.keeper_data 
+		WHERE keeper_id = ?`
 )

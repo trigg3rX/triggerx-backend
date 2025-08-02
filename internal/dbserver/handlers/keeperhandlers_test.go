@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -79,6 +80,11 @@ func (m *MockKeeperRepository) GetKeeperLeaderboard() ([]types.KeeperLeaderboard
 	return args.Get(0).([]types.KeeperLeaderboardEntry), args.Error(1)
 }
 
+func (m *MockKeeperRepository) GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error) {
+	args := m.Called(onImua)
+	return args.Get(0).([]types.KeeperLeaderboardEntry), args.Error(1)
+}
+
 func (m *MockKeeperRepository) GetKeeperLeaderboardByIdentifierInDB(address string, name string) (types.KeeperLeaderboardEntry, error) {
 	args := m.Called(address, name)
 	return args.Get(0).(types.KeeperLeaderboardEntry), args.Error(1)
@@ -100,7 +106,7 @@ func (m *MockTaskRepository) GetTaskDataByID(taskID int64) (types.TaskData, erro
 	return args.Get(0).(types.TaskData), args.Error(1)
 }
 
-func (m *MockTaskRepository) GetTasksByJobID(jobID int64) ([]types.TasksByJobIDResponse, error) {
+func (m *MockTaskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
 	args := m.Called(jobID)
 	return args.Get(0).([]types.TasksByJobIDResponse), args.Error(1)
 }
@@ -125,13 +131,18 @@ func (m *MockTaskRepository) AddTaskPerformerID(taskID int64, performerID int64)
 	return args.Error(0)
 }
 
+func (m *MockTaskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error {
+	args := m.Called(taskID, taskNumber, status, txHash)
+	return args.Error(0)
+}
+
 // Test setup helper
 func setupTestKeeperHandler() (*Handler, *MockKeeperRepository, *MockTaskRepository) {
 	mockKeeperRepo := new(MockKeeperRepository)
 	mockTaskRepo := new(MockTaskRepository)
 
 	handler := &Handler{
-		keeperRepository: mockKeeperRepo,
+		keeperRepository: mockKeeperRepo, // This will cause a compile error if MockKeeperRepository does not implement all methods of KeeperRepository
 		taskRepository:   mockTaskRepo,
 		logger:           &MockLogger{},
 	}
@@ -670,4 +681,23 @@ func TestGetKeeperCommunicationInfo(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Add missing methods to MockKeeperRepository
+func (m *MockKeeperRepository) CheckKeeperExistsByAddress(address string) (int64, error) {
+	args := m.Called(address)
+	var defaultReturnInt64 int64 = 0
+	if args.Get(0) == nil {
+		return defaultReturnInt64, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockKeeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error) {
+	args := m.Called(keeperData)
+	var defaultReturnInt64 int64 = 0
+	if args.Get(0) == nil {
+		return defaultReturnInt64, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
 }

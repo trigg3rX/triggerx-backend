@@ -29,7 +29,7 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 		return nil, fmt.Errorf("RPC address cannot be empty")
 	}
 	if cfg.SenderPrivateKey == "" {
-		return nil, fmt.Errorf("private key cannot be empty")
+		return nil, fmt.Errorf("sender private key cannot be empty")
 	}
 
 	privateKey, err := crypto.HexToECDSA(cfg.SenderPrivateKey)
@@ -72,7 +72,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		switch method {
 		case "sendTask":
 			// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
-			err = rpcClient.Call(result, method, params.ProofOfTask, params.Data, params.TaskDefinitionID, params.PerformerAddress, params.Signature)
+			err = rpcClient.Call(result, method, params.ProofOfTask, params.Data, params.TaskDefinitionID, params.PerformerAddress, params.Signature, params.SignatureType, params.TargetChainID)
 		case "sendCustomMessage":
 			err = rpcClient.Call(result, method, params.Data, params.TaskDefinitionID)
 		}
@@ -93,4 +93,8 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 	}, c.logger)
 
 	return err
+}
+
+func (c *AggregatorClient) Close() {
+	c.httpClient.Close()
 }

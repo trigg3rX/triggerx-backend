@@ -3,17 +3,19 @@ package validation
 import (
 	"context"
 	"fmt"
-	// "time"
-
+	"time"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 
 	"github.com/ethereum/go-ethereum/common"
-	// ethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
+const timeTolerance = 2200 * time.Millisecond
+const expirationTimeTolerance = 5 * time.Second
+
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
-	v.logger.Infof("txHash: %s", actionData.ActionTxHash)
+	// v.logger.Infof("txHash: %s", actionData.ActionTxHash)
 	// time.Sleep(10 * time.Second)
 	// Fetch the tx details from the action data
 	txHash := common.HexToHash(actionData.ActionTxHash)
@@ -38,24 +40,24 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 	// check if the tx was made to correct target contract
 	// fetch the AA contract address and the transaction from there to complete the flow
 
-	// TODO: Investigate this err: transaction type not supported
-	// check if the task was time, if yes, check if it was executed within the time interval + tolerance
-	// if targetData.TaskDefinitionID == 1 || targetData.TaskDefinitionID == 2 {
-	// 	const timeTolerance = 1100 * time.Millisecond
-	// 	var block *ethTypes.Block
-	// 	block, err = client.BlockByHash(context.Background(), receipt.BlockHash)
-	// 	if err != nil {
-	// 		return false, fmt.Errorf("failed to get block: %v", err)
-	// 	}
-	// 	txTimestamp := time.Unix(int64(block.Time()), 0)
+	txTimestamp, err := v.getBlockTimestamp(receipt, utils.GetChainRpcUrl(targetData.TargetChainID))
+	if err != nil {
+		return false, fmt.Errorf("failed to get block timestamp: %v", err)
+	}
 
-	// 	if txTimestamp.After(triggerData.NextTriggerTimestamp.Add(timeTolerance)) {
-	// 		return false, fmt.Errorf("transaction was made after the next execution timestamp")
-	// 	}
-	// 	if txTimestamp.Before(triggerData.NextTriggerTimestamp.Add(-timeTolerance)) {
-	// 		return false, fmt.Errorf("transaction was made before the next execution timestamp")
-	// 	}
-	// 	return true, nil
-	// }
+	// check if the tx was made before expiration time + tolerance
+	if txTimestamp.After(triggerData.ExpirationTime.Add(expirationTimeTolerance)) {
+		return false, fmt.Errorf("transaction was made after the expiration time by %v", txTimestamp.Sub(triggerData.ExpirationTime.Add(expirationTimeTolerance)))
+	}
+
+	// check if the task was time, if yes, check if it was executed within the time interval + tolerance
+	if targetData.TaskDefinitionID == 1 || targetData.TaskDefinitionID == 2 {
+		if txTimestamp.After(triggerData.NextTriggerTimestamp.Add(timeTolerance)) {
+			return false, fmt.Errorf("transaction was made after the next execution timestamp by %v", txTimestamp.Sub(triggerData.NextTriggerTimestamp.Add(timeTolerance)))
+		}
+		// if txTimestamp.Before(triggerData.NextTriggerTimestamp.Add(-timeTolerance)) {
+		// 	return false, fmt.Errorf("transaction was made before the next execution timestamp by %v", triggerData.NextTriggerTimestamp.Add(-timeTolerance).Sub(txTimestamp))
+		// }
+	}
 	return true, nil
 }

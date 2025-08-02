@@ -63,6 +63,56 @@ func (m *ComprehensiveMockLogger) With(tags ...any) logging.Logger {
 	return args.Get(0).(logging.Logger)
 }
 
+// MockLogger is a mock implementation of the logger interface
+type MockLogger struct {
+	mock.Mock
+}
+
+func (m *MockLogger) Debug(msg string, keysAndValues ...interface{}) {
+	m.Called(msg, keysAndValues)
+}
+
+func (m *MockLogger) Info(msg string, keysAndValues ...interface{}) {
+	m.Called(msg, keysAndValues)
+}
+
+func (m *MockLogger) Warn(msg string, keysAndValues ...interface{}) {
+	m.Called(msg, keysAndValues)
+}
+
+func (m *MockLogger) Error(msg string, keysAndValues ...interface{}) {
+	m.Called(msg, keysAndValues)
+}
+
+func (m *MockLogger) Fatal(msg string, keysAndValues ...interface{}) {
+	m.Called(msg, keysAndValues)
+}
+
+func (m *MockLogger) Debugf(format string, args ...interface{}) {
+	m.Called(format, args)
+}
+
+func (m *MockLogger) Infof(format string, args ...interface{}) {
+	m.Called(format, args)
+}
+
+func (m *MockLogger) Warnf(format string, args ...interface{}) {
+	m.Called(format, args)
+}
+
+func (m *MockLogger) Errorf(format string, args ...interface{}) {
+	m.Called(format, args)
+}
+
+func (m *MockLogger) Fatalf(format string, args ...interface{}) {
+	m.Called(format, args)
+}
+
+func (m *MockLogger) With(tags ...any) logging.Logger {
+	args := m.Called(tags)
+	return args.Get(0).(logging.Logger)
+}
+
 // ===============================
 // getContractMethodAndABI Tests
 // ===============================
@@ -964,4 +1014,100 @@ func BenchmarkParseDynamicArgs(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = e.parseDynamicArgs(jsonStr)
 	}
+}
+
+func TestParseDynamicArgs(t *testing.T) {
+	t.Run("JSON parsing", func(t *testing.T) {
+		logger := new(MockLogger)
+		// Setup expectations - allow any debug calls
+		logger.On("Debugf", mock.Anything, mock.Anything).Return()
+		logger.On("With", mock.Anything).Return(logger)
+
+		executor := &TaskExecutor{
+			logger: logger,
+		}
+
+		// Test with valid JSON array
+		output := `[123.45, "test", true]`
+		args := executor.parseDynamicArgs(output)
+
+		assert.Len(t, args, 3)
+		assert.Equal(t, 123.45, args[0])
+		assert.Equal(t, "test", args[1])
+		assert.Equal(t, true, args[2])
+	})
+
+	t.Run("Response pattern", func(t *testing.T) {
+		logger := new(MockLogger)
+		// Setup expectations - allow any debug calls
+		logger.On("Debugf", mock.Anything, mock.Anything).Return()
+		logger.On("With", mock.Anything).Return(logger)
+
+		executor := &TaskExecutor{
+			logger: logger,
+		}
+
+		// Test with container log output containing Response: lines
+		output := `
+Container Log: START_EXECUTION
+Container Log: Condition satisfied: true
+Container Log: Timestamp: 2025-07-18T12:31:08Z
+Container Log: Response: 3603.66
+Container Log: Response: 3603.66
+Container Log: Ethereum price is greater than 0
+Code execution completed in: 42.284769713s
+Container Log: END_EXECUTION
+`
+		args := executor.parseDynamicArgs(output)
+
+		assert.Len(t, args, 2)
+		assert.Equal(t, 3603.66, args[0])
+		assert.Equal(t, 3603.66, args[1])
+	})
+
+	t.Run("Condition pattern", func(t *testing.T) {
+		logger := new(MockLogger)
+		// Setup expectations - allow any debug calls
+		logger.On("Debugf", mock.Anything, mock.Anything).Return()
+		logger.On("Warnf", mock.Anything, mock.Anything).Return()
+		logger.On("With", mock.Anything).Return(logger)
+
+		executor := &TaskExecutor{
+			logger: logger,
+		}
+
+		// Test with container log output containing only condition satisfied
+		output := `
+Container Log: START_EXECUTION
+Container Log: Condition satisfied: true
+Container Log: END_EXECUTION
+`
+		args := executor.parseDynamicArgs(output)
+
+		assert.Len(t, args, 1)
+		assert.Equal(t, true, args[0])
+	})
+
+	t.Run("Fallback", func(t *testing.T) {
+		logger := new(MockLogger)
+		// Setup expectations - allow any debug calls
+		logger.On("Debugf", mock.Anything, mock.Anything).Return()
+		logger.On("Warnf", mock.Anything, mock.Anything).Return()
+		logger.On("With", mock.Anything).Return(logger)
+
+		executor := &TaskExecutor{
+			logger: logger,
+		}
+
+		// Test with container log output that doesn't match any pattern
+		output := `
+Container Log: START_EXECUTION
+Container Log: Some random output
+Container Log: END_EXECUTION
+`
+		args := executor.parseDynamicArgs(output)
+
+		assert.Len(t, args, 1)
+		assert.Equal(t, "0", args[0])
+	})
 }
