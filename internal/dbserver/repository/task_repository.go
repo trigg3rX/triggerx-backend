@@ -18,6 +18,7 @@ type TaskRepository interface {
 	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
 	GetTaskDataByID(taskID int64) (types.TaskData, error)
 	GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error)
+	AddTaskIDToJob(jobID *big.Int, taskID int64) error
 	UpdateTaskFee(taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
 }
@@ -110,6 +111,23 @@ func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDRe
 	}
 
 	return tasks, nil
+}
+
+func (r *taskRepository) AddTaskIDToJob(jobID *big.Int, taskID int64) error {
+	var taskIDs []int64
+	iter := r.db.Session().Query(queries.GetTaskIDsByJobIDQuery, jobID).Iter()
+	for iter.Scan(&taskIDs) {
+		taskIDs = append(taskIDs, taskID)
+	}
+	if err := iter.Close(); err != nil {
+		return errors.New("error getting task IDs by job ID")
+	}
+	taskIDs = append(taskIDs, taskID)
+	err := r.db.Session().Query(queries.AddTaskIDToJobQuery, taskIDs, jobID).Exec()
+	if err != nil {
+		return errors.New("error adding task ID to job")
+	}
+	return nil
 }
 
 func (r *taskRepository) UpdateTaskFee(taskID int64, fee float64) error {

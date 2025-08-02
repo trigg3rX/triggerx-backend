@@ -126,6 +126,11 @@ func (m *MockTaskRepository) UpdateTaskFee(taskID int64, fee float64) error {
 	return args.Error(0)
 }
 
+func (m *MockTaskRepository) AddTaskIDToJob(jobID *big.Int, taskID int64) error {
+	args := m.Called(jobID, taskID)
+	return args.Error(0)
+}
+
 func (m *MockTaskRepository) AddTaskPerformerID(taskID int64, performerID int64) error {
 	args := m.Called(taskID, performerID)
 	return args.Error(0)

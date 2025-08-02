@@ -46,6 +46,19 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 			})
 			continue
 		}
+
+		trackDBOp = metrics.TrackDBOperation("update", "add_task_id")
+		err = h.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID, taskID)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[GetTimeBasedJobs] Error adding task ID: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to add task ID",
+				"code":  "TASK_ID_ADDITION_ERROR",
+			})
+			continue
+		}
+
 		tasks[i].TaskID = taskID
 	}
 

@@ -37,6 +37,11 @@ const (
 		UPDATE triggerx.task_data
 		SET task_number = ?, task_status = ?, task_submission_tx_hash = ?
 		WHERE task_id = ?`
+
+	AddTaskIDToJobQuery = `
+		UPDATE triggerx.job_data
+		SET task_ids = ?
+		WHERE job_id = ?`
 )
 
 // Read Task Queries
