@@ -5,12 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"os"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
+	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 	"github.com/trigg3rX/triggerx-backend/cli/core/config"
 )
 
@@ -156,22 +156,12 @@ func GenerateBLSKeystoreFromExistingKey(keystorePath, privateKeyHex string) erro
 
 // GenerateBLSPublicKey generates a BLS public key from private key
 func GenerateBLSPublicKey(privateKeyBytes []byte) []byte {
-	// Convert private key bytes to big.Int
-	privateKey := new(big.Int).SetBytes(privateKeyBytes)
-
-	// For BLS12-381, the public key is typically 48 bytes (compressed G1 point)
-	// This is a simplified approach - in production you'd use proper BLS12-381 operations
-	publicKey := make([]byte, 48)
-
-	// Use a deterministic approach based on private key for demo
-	// In reality, this would be proper elliptic curve multiplication
-	hash := crypto.Keccak256(privateKey.Bytes())
-	copy(publicKey[:32], hash)
-
-	// Add some additional bytes to make it 48 bytes total
-	copy(publicKey[32:], hash[:16])
-
-	return publicKey
+	secretKey, err := bls.SecretKeyFromBytes(privateKeyBytes)
+	if err != nil {
+		// Handle error (maybe return zero bytes or panic)
+		return make([]byte, 48)
+	}
+	return secretKey.PublicKey().Marshal()
 }
 
 // GenerateECDSAKeystore creates an ECDSA keystore file
