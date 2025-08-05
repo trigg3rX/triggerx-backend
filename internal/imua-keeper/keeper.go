@@ -32,6 +32,8 @@ type Keeper struct {
 	nodeApi     *nodeapi.NodeApi
 	avsReader   chainio.AvsReader
 	avsWriter   chainio.AvsWriter
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func NewKeeper(logger logging.Logger) *Keeper {
@@ -73,6 +75,9 @@ func NewKeeper(logger logging.Logger) *Keeper {
 		logger,
 		txMgr)
 
+	// Create context for shutdown handling
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &Keeper{
 		logger:      logger,
 		ethClient:   ethClient,
@@ -80,6 +85,8 @@ func NewKeeper(logger logging.Logger) *Keeper {
 		nodeApi:     nodeApi,
 		avsReader:   avsReader,
 		avsWriter:   avsWriter,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
@@ -103,6 +110,9 @@ func (k *Keeper) Start(ctx context.Context) error {
 
 	for {
 		select {
+		case <-ctx.Done():
+			k.logger.Info("Shutdown signal received, stopping keeper")
+			return ctx.Err()
 		case err := <-sub.Err():
 			k.logger.Error("Subscription error:", err)
 		case vLog := <-logs:
@@ -185,9 +195,9 @@ func (k *Keeper) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 	}
 
 	if validationResponse.Data {
-		k.logger.Info("Task is valid", "taskID", e.TaskId.Uint64())
+		k.logger.Info("Task is valid", "taskNumber", e.TaskId.Uint64())
 	} else {
-		k.logger.Error("Task is invalid", "taskID", e.TaskId.Uint64())
+		k.logger.Error("Task is invalid", "taskNumber", e.TaskId.Uint64())
 	}
 
 	signature, responseBytes, err := k.SignTaskResponse(TaskResponse{
@@ -239,6 +249,7 @@ func (k *Keeper) SendSignedTaskResponseToChain(
 	for {
 		select {
 		case <-ctx.Done():
+			k.logger.Info("Shutdown signal received, stopping task response submission", "taskId", taskId)
 			return "", ctx.Err() // Gracefully exit if context is canceled
 		default:
 			// Fetch the current epoch information
@@ -264,7 +275,7 @@ func (k *Keeper) SendSignedTaskResponseToChain(
 
 			switch {
 			case currentEpoch <= startingEpoch:
-				k.logger.Info("current epoch is less than or equal to the starting epoch", "currentEpoch", currentEpoch, "startingEpoch", startingEpoch, "taskId", taskId)
+				// k.logger.Info("current epoch is less than or equal to the starting epoch", "currentEpoch", currentEpoch, "startingEpoch", startingEpoch, "taskId", taskId)
 				time.Sleep(config.GetRetryDelay())
 
 			case currentEpoch <= startingEpoch+taskResponsePeriod:
@@ -287,7 +298,7 @@ func (k *Keeper) SendSignedTaskResponseToChain(
 					phaseOneSubmitted = true
 					k.logger.Info("Successfully submitted task response for phase one", "taskId", taskId)
 				} else {
-					k.logger.Info("Phase One already submitted", "taskId", taskId)
+					// k.logger.Info("Phase One already submitted", "taskId", taskId)
 					time.Sleep(config.GetRetryDelay())
 				}
 
@@ -311,7 +322,7 @@ func (k *Keeper) SendSignedTaskResponseToChain(
 					phaseTwoSubmitted = true
 					k.logger.Info("Successfully submitted task response for phase two", "taskId", taskId)
 				} else {
-					k.logger.Info("Phase Two already submitted", "taskId", taskId)
+					// k.logger.Info("Phase Two already submitted", "taskId", taskId)
 					time.Sleep(config.GetRetryDelay())
 				}
 
@@ -326,8 +337,14 @@ func (k *Keeper) SendSignedTaskResponseToChain(
 				return "Both task response phases completed successfully", nil
 			}
 
-			// Add a small delay to prevent tight looping
+			// Add a small delay to prevent tight looping, but respect shutdown context
 			time.Sleep(config.GetRetryDelay())
 		}
 	}
+}
+
+func (k *Keeper) Close() {
+	k.logger.Info("Shutting down keeper...")
+	k.cancel() // Cancel the context to signal shutdown to all goroutines
+	// k.nodeApi.Stop()
 }
