@@ -65,4 +65,9 @@ const (
 		SELECT task_opx_cost
 		FROM triggerx.task_data
 		WHERE task_id = ?`
+
+	GetCreatedChainIDByJobIDQuery = `
+        SELECT created_chain_id
+        FROM triggerx.job_data
+        WHERE job_id = ?`
 )

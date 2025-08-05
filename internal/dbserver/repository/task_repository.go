@@ -21,6 +21,7 @@ type TaskRepository interface {
 	AddTaskIDToJob(jobID *big.Int, taskID int64) error
 	UpdateTaskFee(taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
+	GetCreatedChainIDByJobID(jobID *big.Int) (string, error)
 }
 
 type taskRepository struct {
@@ -145,4 +146,13 @@ func (r *taskRepository) GetTaskFee(taskID int64) (float64, error) {
 		return 0, errors.New("error getting task fee")
 	}
 	return fee, nil
+}
+
+func (r *taskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error) {
+	var createdChainID string
+	err := r.db.Session().Query(queries.GetCreatedChainIDByJobIDQuery, jobID).Scan(&createdChainID)
+	if err != nil {
+		return "", errors.New("error getting created chain ID by job ID")
+	}
+	return createdChainID, nil
 }

@@ -60,4 +60,5 @@ type TasksByJobIDResponse struct {
 	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
 	IsSuccessful       bool      `json:"is_successful"`
 	TaskStatus         string    `json:"task_status"`
+	TxURL              string    `json:"tx_url"`
 }
