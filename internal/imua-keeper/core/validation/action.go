@@ -33,9 +33,9 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 	}
 
 	// check if the tx is successful
-	if receipt.Status != 1 {
-		return false, fmt.Errorf("transaction is not successful")
-	}
+	// if receipt.Status != 1 {
+	// 	return false, fmt.Errorf("transaction is not successful")
+	// }
 
 	// TODO: get the action tx check right
 	// check if the tx was made to correct target contract

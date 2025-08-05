@@ -115,18 +115,6 @@ func (k *Keeper) Start(ctx context.Context) error {
 				e := event.(*avs.TriggerXAvsTaskCreated)
 				// Process the task creation event
 				k.ProcessNewTaskCreatedLog(e)
-				sig, resBytes, err := k.SignTaskResponse()
-				if err != nil {
-					k.logger.Error("Failed to sign task response", "err", err)
-					continue
-				}
-				taskInfo, _ := k.avsReader.GetTaskInfo(&bind.CallOpts{}, config.GetAvsGovernanceAddress(), e.TaskId.Uint64())
-				go func() {
-					_, err := k.SendSignedTaskResponseToChain(context.Background(), e.TaskId.Uint64(), resBytes, sig, taskInfo)
-					if err != nil {
-						k.logger.Error("Failed to send signed task response to chain", "err", err)
-					}
-				}()
 			}
 		}
 	}
@@ -202,7 +190,10 @@ func (k *Keeper) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 		k.logger.Error("Task is invalid", "taskID", e.TaskId.Uint64())
 	}
 
-	signature, responseBytes, err := k.SignTaskResponse()
+	signature, responseBytes, err := k.SignTaskResponse(TaskResponse{
+		TaskID:  e.TaskId.Uint64(),
+		IsValid: validationResponse.Data,
+	})
 	if err != nil {
 		k.logger.Error("Failed to sign task response", "err", err)
 		return
@@ -210,25 +201,24 @@ func (k *Keeper) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 
 	taskInfo, _ := k.avsReader.GetTaskInfo(&bind.CallOpts{}, config.GetAvsGovernanceAddress(), e.TaskId.Uint64())
 	go func() {
-		_, err := k.SendSignedTaskResponseToChain(context.Background(), e.TaskId.Uint64(), responseBytes, signature, taskInfo)
+		_, err := k.SendSignedTaskResponseToChain(k.ctx, e.TaskId.Uint64(), responseBytes, signature, taskInfo)
 		if err != nil {
 			k.logger.Error("Failed to send signed task response to chain", "err", err)
 		}
 	}()
 }
 
-func (k *Keeper) SignTaskResponse() ([]byte, []byte, error) {
-	// TODO: Implement task response signing
-	// This should:
-	// 1. Create a task response structure
-	// 2. Sign it with the BLS key
-	// 3. Return the signature and response bytes
+func (k *Keeper) SignTaskResponse(taskResponse TaskResponse) ([]byte, []byte, error) {
+	taskResponseHash, data, err := GetTaskResponseDigestEncodeByAbi(taskResponse)
+	if err != nil {
+		k.logger.Error("Error SignTaskResponse with getting task response header hash. skipping task (this is not expected and should be investigated)", "err", err)
+		return nil, nil, err
+	}
+	msgBytes := taskResponseHash[:]
 
-	// For now, return placeholder values
-	responseBytes := []byte("task_response_placeholder")
-	signature := []byte("bls_signature_placeholder")
+	sig := config.GetConsensusKeyPair().Sign(msgBytes)
 
-	return signature, responseBytes, nil
+	return sig.Marshal(), data, nil
 }
 
 func (k *Keeper) SendSignedTaskResponseToChain(

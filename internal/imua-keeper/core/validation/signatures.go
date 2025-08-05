@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -91,16 +92,26 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		return false, fmt.Errorf("failed to marshal ipfs data for verification: %w", err)
 	}
 
-	// Parse the signature from string to BLS signature
-	signatureBytes := []byte(ipfsData.PerformerSignature.PerformerSignature)
-	_, err = bls.SignatureFromBytes(signatureBytes)
+	// Decode the base64-encoded signature
+	signatureBytes, err := base64.StdEncoding.DecodeString(ipfsData.PerformerSignature.PerformerSignature)
+	if err != nil {
+		logger.Error("Failed to decode base64 signature", "error", err)
+		return false, fmt.Errorf("failed to decode base64 signature: %w", err)
+	}
+	v.logger.Info("Signature bytes", "signatureBytes", signatureBytes)
+	v.logger.Info("Signature bytes length", "signatureBytesLength", len(signatureBytes))
+	signature, err := bls.SignatureFromBytes(signatureBytes)
 	if err != nil {
 		logger.Error("Failed to parse BLS signature", "error", err)
 		return false, fmt.Errorf("failed to parse BLS signature: %w", err)
 	}
 
-	// Parse the public key from string to BLS public key
-	publicKeyBytes := []byte(ipfsData.PerformerSignature.PerformerSigningAddress)
+	// Decode the base64-encoded public key
+	publicKeyBytes, err := base64.StdEncoding.DecodeString(ipfsData.PerformerSignature.PerformerSigningAddress)
+	if err != nil {
+		logger.Error("Failed to decode base64 public key", "error", err)
+		return false, fmt.Errorf("failed to decode base64 public key: %w", err)
+	}
 	publicKey, err := bls.PublicKeyFromBytes(publicKeyBytes)
 	if err != nil {
 		logger.Error("Failed to parse BLS public key", "error", err)
@@ -112,7 +123,7 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 	copy(messageHash[:], ipfsDataBytes)
 
 	// Verify the BLS signature
-	isValid, err := bls.VerifySignature(signatureBytes, messageHash, publicKey)
+	isValid := signature.Verify(publicKey, messageHash[:])
 	if err != nil {
 		logger.Error("Failed to verify BLS signature", "error", err)
 		return false, fmt.Errorf("failed to verify BLS signature: %w", err)
