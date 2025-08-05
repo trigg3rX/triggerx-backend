@@ -3,12 +3,12 @@ package config
 import (
 	"fmt"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"time"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	sdkEcdsa "github.com/imua-xyz/imua-avs-sdk/crypto/ecdsa"
-	"github.com/imua-xyz/imua-avs-sdk/crypto/bls"
-	blscommon "github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
+	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
@@ -40,8 +40,11 @@ type Config struct {
 	privateKeyController *ecdsa.PrivateKey
 	keeperAddress        string
 
+	privateKeyOwner *ecdsa.PrivateKey
+	ownerAddress    string
+
 	// Consensus Key and Address (BLS)
-	consensusKeyPair blscommon.SecretKey
+	consensusKeyPair bls.SecretKey
 
 	// Public IP Address and Peer ID
 	publicIPV4Address string
@@ -108,11 +111,27 @@ func Init() error {
 		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 
-	blsKeyPassword := env.GetEnvString("OPERATOR_BLS_KEY_PASSWORD", "")
-	blsKeyStorePath := env.GetEnvString("OPERATOR_BLS_KEY_STORE_PATH", "")
-	blsKeyPair, err := bls.ReadPrivateKeyFromFile(blsKeyStorePath, blsKeyPassword)
+	// Load BLS private key from environment variable
+	blsPrivateKeyHex := env.GetEnvString("BLS_PRIVATE_KEY", "")
+	if blsPrivateKeyHex == "" {
+		return fmt.Errorf("BLS_PRIVATE_KEY environment variable not set")
+	}
+
+	// Remove 0x prefix if present
+	if len(blsPrivateKeyHex) >= 2 && blsPrivateKeyHex[:2] == "0x" {
+		blsPrivateKeyHex = blsPrivateKeyHex[2:]
+	}
+
+	// Convert hex to bytes
+	blsKeyBytes, err := hex.DecodeString(blsPrivateKeyHex)
 	if err != nil {
-		return fmt.Errorf("invalid bls key password: %s", err)
+		return fmt.Errorf("invalid BLS private key format: %s", err)
+	}
+
+	// Create BLS secret key from bytes
+	blsKeyPair, err := bls.SecretKeyFromBytes(blsKeyBytes)
+	if err != nil {
+		return fmt.Errorf("invalid bls key: %s", err)
 	}
 	cfg.consensusKeyPair = blsKeyPair
 
@@ -129,7 +148,21 @@ func Init() error {
 		return fmt.Errorf("invalid ecdsa key password: %s", err)
 	}
 	cfg.keeperAddress = ecdsaAddress.Hex()
-	
+
+	ownerEcdsaKeyPassword := env.GetEnvString("OWNER_ECDSA_KEY_PASSWORD", "")
+	ownerEcdsaKeyStorePath := env.GetEnvString("OWNER_ECDSA_KEY_STORE_PATH", "")
+	ownerEcdsaPrivateKey, err := sdkEcdsa.ReadKey(ownerEcdsaKeyStorePath, ownerEcdsaKeyPassword)
+	if err != nil {
+		return fmt.Errorf("invalid ecdsa key password: %s", err)
+	}
+	cfg.privateKeyOwner = ownerEcdsaPrivateKey
+
+	ownerAddress, err := sdkEcdsa.GetAddressFromKeyStoreFile(ownerEcdsaKeyStorePath)
+	if err != nil {
+		return fmt.Errorf("invalid ecdsa key password: %s", err)
+	}
+	cfg.ownerAddress = ownerAddress.Hex()
+
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
@@ -195,11 +228,19 @@ func GetPrivateKeyController() *ecdsa.PrivateKey {
 	return cfg.privateKeyController
 }
 
+func GetPrivateKeyOwner() *ecdsa.PrivateKey {
+	return cfg.privateKeyOwner
+}
+
+func GetOwnerAddress() string {
+	return cfg.ownerAddress
+}
+
 func GetKeeperAddress() string {
 	return cfg.keeperAddress
 }
 
-func GetConsensusKeyPair() blscommon.SecretKey {
+func GetConsensusKeyPair() bls.SecretKey {
 	return cfg.consensusKeyPair
 }
 

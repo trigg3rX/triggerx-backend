@@ -85,7 +85,7 @@ func NewKeeper(logger logging.Logger) *Keeper {
 
 func (k *Keeper) Start(ctx context.Context) error {
 	k.logger.Infof("Starting operator.")
-	k.nodeApi.Start()
+	// k.nodeApi.Start()
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{common.HexToAddress(config.GetAvsGovernanceAddress())},

@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -193,41 +194,48 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				}{false, err}
 				return
 			}
-			performerSignature := config.GetConsensusKeyPair().Sign(ipfsDataForSigningBytes)
-			if err != nil {
-				e.logger.Error("Failed to sign the ipfs data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
+			// Convert the data to 32-byte hash for BLS signing
+			var messageHash [32]byte
+			copy(messageHash[:], ipfsDataForSigningBytes)
+
+			// Sign using Prysmaticlabs BLS
+			performerSignature := config.GetConsensusKeyPair().Sign(messageHash[:])
+
+			// Encode signature as base64 for proper serialization
+			signatureBytes := performerSignature.Marshal()
+			performerSignatureEncoded := base64.StdEncoding.EncodeToString(signatureBytes)
+
+			// Encode public key as base64 for proper serialization
+			publicKeyBytes := config.GetConsensusKeyPair().PublicKey().Marshal()
+			performerSigningAddressEncoded := base64.StdEncoding.EncodeToString(publicKeyBytes)
+
 			ipfsData.PerformerSignature = &types.PerformerSignatureData{
 				TaskID:                  task.TaskID[0],
-				PerformerSignature:      string(performerSignature.Marshal()),
-				PerformerSigningAddress: string(config.GetConsensusKeyPair().PublicKey().Marshal()),
+				PerformerSignature:      performerSignatureEncoded,
+				PerformerSigningAddress: performerSigningAddressEncoded,
 			}
 			e.logger.Info("IPFS data signed", "task_id", task.TaskID, "trace_id", traceID)
+			e.logger.Info("Performer signature", "performerSignature", ipfsData.PerformerSignature)
 
-			filename := fmt.Sprintf("proof_of_task_%d_%s.json", task.TaskID, time.Now().Format("20060102150405"))
-			ipfsDataBytes, err := json.Marshal(ipfsData)
-			if err != nil {
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
-			_, err = utils.UploadToIPFS(filename, ipfsDataBytes)
-			if err != nil {
-				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
-			e.logger.Info("IPFS data uploaded", "task_id", task.TaskID, "trace_id", traceID)
+			// filename := fmt.Sprintf("proof_of_task_%d_%s.json", task.TaskID, time.Now().Format("20060102150405"))
+			// ipfsDataBytes, err := json.Marshal(ipfsData)
+			// if err != nil {
+			// 	resultCh <- struct {
+			// 		success bool
+			// 		err     error
+			// 	}{false, err}
+			// 	return
+			// }
+			// _, err = utils.UploadToIPFS(filename, ipfsDataBytes)
+			// if err != nil {
+			// 	e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+			// 	resultCh <- struct {
+			// 		success bool
+			// 		err     error
+			// 	}{false, err}
+			// 	return
+			// }
+			// e.logger.Info("IPFS data uploaded", "task_id", task.TaskID, "trace_id", traceID)
 
 			// Create task on-chain instead of sending to aggregator
 			taskName := fmt.Sprintf("Task_%d_%s", task.TaskID[0], time.Now().Format("20060102150405"))

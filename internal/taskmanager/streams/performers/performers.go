@@ -53,7 +53,7 @@ func (pm *PerformerManager) GetPerformerData(isImua bool) (types.PerformerData, 
 			},
 			{
 				OperatorID:    4,
-				KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
+				KeeperAddress: "0x80ce5df21ef5e7c7bdaf52534f0e05e72fcfb9be",
 				IsImua:        true,
 			},
 		}
