@@ -83,18 +83,18 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobIDBig.String(), err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for this job",
-			"code":  "TASKS_NOT_FOUND",l̥
+			"code":  "TASKS_NOT_FOUND",
 		})
 		return
 	}
-	//find the created_chain id for the job using jobIDBig from database 
+	//find the created_chain id for the job using jobIDBig from database
 	var createdChainID string
-	createdChainID, err = h.jobRepository.GetCreatedChainIDByJobID(jobIDBig)
+	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobIDBig)
 	if err != nil {
 		h.logger.Errorf("[GetTasksByJobID] Error retrieving created_chain_id for jobID %s: %v", jobIDBig.String(), err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for this job",
-			"code":  "TASKS_NOT_FOUND",l̥
+			"code":  "TASKS_NOT_FOUND",
 		})
 		return
 	}
@@ -111,7 +111,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	c.JSON(http.StatusOK, tasks)
 }
 
-	// Helper function to get Blockscout base URL from chain ID
+// Helper function to get Blockscout base URL from chain ID
 func getBlockscoutBaseURL(chainID string) string {
 	switch chainID {
 	case "1337":
@@ -119,7 +119,7 @@ func getBlockscoutBaseURL(chainID string) string {
 	case "11155420": // OP Sepolia
 		return "https://sepolia-optimism.etherscan.io/tx/"
 	case "84532": // Base Sepolia
-		return "https://sepolia.basescan.org/tx/"	
+		return "https://sepolia.basescan.org/tx/"
 	default:
 		return "https://sepolia.etherscan.io/tx/"
 	}

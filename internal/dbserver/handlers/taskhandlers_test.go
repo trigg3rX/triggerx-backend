@@ -24,6 +24,12 @@ func setupTestTaskHandler() (*Handler, *MockTaskRepository) {
 	return handler, mockTaskRepo
 }
 
+// Add the missing method to MockTaskRepository to satisfy repository.TaskRepository
+func (m *MockTaskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error) {
+	args := m.Called(jobID)
+	return args.String(0), args.Error(1)
+}
+
 func TestCreateTaskData(t *testing.T) {
 	handler, mockTaskRepo := setupTestTaskHandler()
 
