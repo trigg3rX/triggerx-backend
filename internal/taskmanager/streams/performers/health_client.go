@@ -54,7 +54,11 @@ func (hc *HealthClient) GetActivePerformers(ctx context.Context) ([]types.Perfor
 		hc.logger.Error("Failed to fetch performers", "url", url, "error", err)
 		return nil, fmt.Errorf("failed to fetch performers: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			hc.logger.Error("Failed to close response body", "error", err)
+		}
+	}()
 
 	hc.logger.Debug("Health service response", "status_code", resp.StatusCode, "url", url)
 

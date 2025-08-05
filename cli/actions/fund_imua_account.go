@@ -241,7 +241,12 @@ func requestFaucetTokens(faucetURL, address string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to make faucet request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			log.Printf("Warning: Could not close response body: %v", err)
+		}
+	}()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)

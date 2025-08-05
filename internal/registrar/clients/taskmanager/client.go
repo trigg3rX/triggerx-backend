@@ -13,6 +13,7 @@ import (
 
 type Client struct {
 	retryClient *retry.HTTPClient
+	logger      logging.Logger
 }
 
 func NewClient(logger logging.Logger) (*Client, error) {
@@ -20,7 +21,7 @@ func NewClient(logger logging.Logger) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{retryClient: retryClient}, nil
+	return &Client{retryClient: retryClient, logger: logger}, nil
 }
 
 func (c *Client) InformTaskManager(taskID int64, isAccepted bool) error {
@@ -47,7 +48,12 @@ func (c *Client) InformTaskManager(taskID int64, isAccepted bool) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			c.logger.Error("Failed to close response body", "error", err)
+		}
+	}()
 
 	return nil
 }
