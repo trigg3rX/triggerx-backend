@@ -1,5 +1,5 @@
-# Use golang:1.24.2-alpine as the base image
-FROM golang:1.24.2-alpine AS builder
+# Use golang:1.24.2 as the base image (not alpine) for better CGO support
+FROM golang:1.24.2 AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY . .
 RUN go mod tidy
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-imua-keeper ./cmd/imua-keeper
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o triggerx-imua-keeper ./cmd/imua-keeper
 
 # Use Alpine 3.18 for the final stage (has Docker 25.0.5 compatible with API 1.44)
 FROM alpine:3.18
