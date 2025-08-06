@@ -13,6 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -44,7 +45,7 @@ type Dependencies struct {
 }
 
 // NewServer creates a new API server
-func NewServer(cfg Config, deps Dependencies) *Server {
+func NewServer(cfg Config, deps Dependencies, ipfsClient ipfs.IPFSClient) *Server {
 	if cfg.ReadTimeout == 0 {
 		cfg.ReadTimeout = 30 * time.Second
 	}
@@ -81,7 +82,7 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 	srv.setupMiddleware()
 
 	// Setup routes
-	srv.setupRoutes(deps)
+	srv.setupRoutes(deps, ipfsClient)
 
 	return srv
 }
@@ -111,9 +112,9 @@ func (s *Server) setupMiddleware() {
 }
 
 // setupRoutes sets up the routes for the server
-func (s *Server) setupRoutes(deps Dependencies) {
+func (s *Server) setupRoutes(deps Dependencies, ipfsClient ipfs.IPFSClient) {
 	// Create handlers
-	redisHandler := handler.NewHandler(deps.Logger, deps.TaskStreamMgr, deps.JobStreamMgr, deps.MetricsCollector)
+	redisHandler := handler.NewHandler(deps.Logger, deps.TaskStreamMgr, deps.JobStreamMgr, deps.MetricsCollector, ipfsClient)
 
 	// Task Manager service routes
 	s.router.GET("/", redisHandler.HandleRoot)

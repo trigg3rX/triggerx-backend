@@ -15,6 +15,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
 	// redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -100,7 +101,13 @@ func main() {
 		MetricsCollector: collector,
 	}
 
-	server := api.NewServer(serverCfg, deps)
+	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), "a")
+	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize IPFS client", "error", err)
+	}
+
+	server := api.NewServer(serverCfg, deps, ipfsClient)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

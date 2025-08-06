@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/websocket"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 // ContractEventListener handles listening to contract events across multiple chains
@@ -25,6 +26,7 @@ type ContractEventListener struct {
 	eventChan    chan *websocket.ChainEvent
 	processingWg sync.WaitGroup
 	dbClient     *database.DatabaseClient
+	ipfsClient   ipfs.IPFSClient
 }
 
 // ListenerConfig holds configuration for the event listener
@@ -70,10 +72,11 @@ type OperatorEventHandler struct {
 type TaskEventHandler struct {
 	logger logging.Logger
 	db     *database.DatabaseClient
+	ipfsClient ipfs.IPFSClient
 }
 
 // NewContractEventListener creates a new contract event listener
-func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbClient *database.DatabaseClient) *ContractEventListener {
+func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbClient *database.DatabaseClient, ipfsClient ipfs.IPFSClient) *ContractEventListener {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := websocket.NewClient(logger)
@@ -86,6 +89,7 @@ func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbC
 		cancel:    cancel,
 		eventChan: make(chan *websocket.ChainEvent, config.EventBufferSize),
 		dbClient:  dbClient,
+		ipfsClient: ipfsClient,
 	}
 }
 
@@ -263,7 +267,7 @@ func (l *ContractEventListener) startEventProcessors() {
 	processor := &EventProcessor{
 		logger:          l.logger,
 		operatorHandler: &OperatorEventHandler{logger: l.logger},
-		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient},
+		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient, ipfsClient: l.ipfsClient},
 	}
 
 	// Start multiple processing workers

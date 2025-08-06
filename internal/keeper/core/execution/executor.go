@@ -208,7 +208,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				}{false, err}
 				return
 			}
-			cid, err := utils.UploadToIPFS(filename, ipfsDataBytes)
+			cid, err := e.validator.IpfsClient.Upload(filename, ipfsDataBytes)
 			if err != nil {
 				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				resultCh <- struct {

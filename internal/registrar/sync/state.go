@@ -191,7 +191,7 @@ func (sm *StateManager) GetStateHealth(ctx context.Context) map[string]interface
 	}
 
 	// Check if Redis is accessible
-	if err := sm.redis.CheckConnection(); err != nil {
+	if err := sm.redis.CheckConnection(ctx); err != nil {
 		health["redis_connected"] = false
 		health["error"] = err.Error()
 		return health

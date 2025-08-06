@@ -16,6 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 const (
@@ -139,7 +140,13 @@ func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
 	// Initialize database client
 	databaseClient := database.NewDatabaseClient(logger, dbConn)
 
-	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig(), databaseClient)
+	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())
+	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize IPFS client: %w", err)
+	}
+	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig(), databaseClient, ipfsClient)
 
 	// Initialize rewards service
 	rewardsService := rewards.NewRewardsService(logger, stateManager, databaseClient)

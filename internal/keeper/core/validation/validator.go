@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
@@ -9,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 type TaskValidator struct {
@@ -17,19 +19,41 @@ type TaskValidator struct {
 	dockerManager    *docker.DockerManager
 	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
+	IpfsClient       ipfs.IPFSClient
 }
 
-func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManager *docker.DockerManager, aggregatorClient *aggregator.AggregatorClient, logger logging.Logger) *TaskValidator {
+func NewTaskValidator(
+	alchemyAPIKey string,
+	etherscanAPIKey string,
+	dockerManager *docker.DockerManager,
+	aggregatorClient *aggregator.AggregatorClient,
+	logger logging.Logger,
+	ipfsClient ipfs.IPFSClient,
+) *TaskValidator {
 	return &TaskValidator{
 		alchemyAPIKey:    alchemyAPIKey,
 		etherscanAPIKey:  etherscanAPIKey,
 		dockerManager:    dockerManager,
 		aggregatorClient: aggregatorClient,
 		logger:           logger,
+		IpfsClient:       ipfsClient,
 	}
 }
 
-func (v *TaskValidator) ValidateTask(ctx context.Context, ipfsData types.IPFSData, traceID string) (bool, error) {
+func (v *TaskValidator) ValidateTask(ctx context.Context, data string, traceID string) (bool, error) {
+	// Decode the data if it's hex-encoded (with 0x prefix)
+	dataBytes, err := hex.DecodeString(data[2:]) // Remove "0x" prefix before decoding
+	if err != nil {
+		v.logger.Error("Failed to hex-decode data", "trace_id", traceID, "error", err)
+		return false, err
+	}
+	decodedData := string(dataBytes)
+	ipfsData, err := v.IpfsClient.Fetch(decodedData)
+	if err != nil {
+		v.logger.Error("Failed to fetch IPFS content", "trace_id", traceID, "error", err)
+		return false, err
+	}
+
 	// check if the scheduler signature is valid
 	isManagerSignatureTrue, err := v.ValidateManagerSignature(ipfsData.TaskData, traceID)
 	if !isManagerSignatureTrue {

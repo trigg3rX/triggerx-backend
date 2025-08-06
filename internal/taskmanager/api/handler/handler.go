@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/jobs"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmanager/streams/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 // Handler encapsulates the dependencies for Redis handlers
@@ -18,15 +19,17 @@ type handler struct {
 	taskStreamMgr    *tasks.TaskStreamManager
 	jobStreamMgr     *jobs.JobStreamManager
 	metricsCollector *metrics.Collector
+	ipfsClient       ipfs.IPFSClient
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger, taskStreamMgr *tasks.TaskStreamManager, jobStreamMgr *jobs.JobStreamManager, metricsCollector *metrics.Collector) *handler {
+func NewHandler(logger logging.Logger, taskStreamMgr *tasks.TaskStreamManager, jobStreamMgr *jobs.JobStreamManager, metricsCollector *metrics.Collector, ipfsClient ipfs.IPFSClient) *handler {
 	return &handler{
 		logger:           logger,
 		taskStreamMgr:    taskStreamMgr,
 		jobStreamMgr:     jobStreamMgr,
 		metricsCollector: metricsCollector,
+		ipfsClient:       ipfsClient,
 	}
 }
 

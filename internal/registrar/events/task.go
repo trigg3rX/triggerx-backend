@@ -7,9 +7,7 @@ import (
 	"strconv"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/websocket"
-	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 )
 
 // ProcessTaskEvent processes task-related events
@@ -137,7 +135,7 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 	}
 	decodedData = string(dataBytes)
 
-	ipfsData, err := ipfs.FetchIPFSContent(config.GetPinataHost(), decodedData)
+	ipfsData, err := h.ipfsClient.Fetch(decodedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
