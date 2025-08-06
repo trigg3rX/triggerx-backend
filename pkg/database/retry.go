@@ -2,293 +2,77 @@ package database
 
 import (
 	"context"
-	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-// RetryableConfig holds configuration for retryable database operations
-type RetryableConfig struct {
-	MaxRetries      int
-	InitialDelay    time.Duration
-	MaxDelay        time.Duration
-	BackoffFactor   float64
-	JitterFactor    float64
-	LogRetryAttempt bool
+// Queryx is a wrapper around gocql.Query that provides retry logic via the generic retry package.
+type Queryx struct {
+	query  *gocql.Query
+	conn   *Connection
+	isIdem bool
 }
 
-// DefaultRetryableConfig returns default configuration for database operations
-func DefaultRetryableConfig() *RetryableConfig {
-	return &RetryableConfig{
-		MaxRetries:      5,
-		InitialDelay:    time.Second,
-		MaxDelay:        30 * time.Second,
-		BackoffFactor:   2.0,
-		JitterFactor:    0.1,
-		LogRetryAttempt: true,
+// NewQuery wraps a gocql.Query to provide retry functionality.
+func (c *Connection) NewQuery(stmt string, values ...interface{}) *Queryx {
+	return &Queryx{
+		query: c.session.Query(stmt, values...),
+		conn:  c,
 	}
 }
 
-// isRetryableError determines if the error is retryable
-func isRetryableError(err error) bool {
-	if err == nil {
-		return false
+// Exec executes a query with retry logic.
+// The query should be marked as Idempotent() for safe retries on CUD operations.
+func (q *Queryx) Exec() error {
+	if !q.isIdem {
+		q.conn.logger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
 	}
 
-	// Check for common retryable errors
-	switch err.(type) {
-	case *gocql.RequestErrWriteTimeout:
-		return true
-	case *gocql.RequestErrReadTimeout:
-		return true
-	case *gocql.RequestErrUnavailable:
-		return true
-	case *gocql.RequestErrReadFailure:
-		return true
-	case *gocql.RequestErrWriteFailure:
-		return true
-	case *gocql.RequestErrFunctionFailure:
-		return true
-	case gocql.RequestErrWriteTimeout:
-		return true
-	case gocql.RequestErrReadTimeout:
-		return true
-	case gocql.RequestErrUnavailable:
-		return true
-	case gocql.RequestErrReadFailure:
-		return true
-	case gocql.RequestErrWriteFailure:
-		return true
-	case gocql.RequestErrFunctionFailure:
-		return true
+	operation := func() error {
+		return q.query.Exec()
 	}
 
-	// Check error message for other retryable conditions
-	errMsg := err.Error()
-	retryableMessages := []string{
-		"no connections available",
-		"connection refused",
-		"connection reset by peer",
-		"i/o timeout",
-		"timeout",
-		"network is unreachable",
-		"host is unreachable",
-		"broken pipe",
-		"connection aborted",
-		"connection timed out",
-		"temporary failure",
-		"service unavailable",
-		"server overloaded",
-		"too many connections",
-		"connection lost",
-		"connection closed",
-		"no route to host",
-		"operation timed out",
-		"network unreachable",
-		"connection reset",
-		"connection refused",
-		"host not found",
-	}
+	cfg := *q.conn.config.RetryConfig
+	cfg.ShouldRetry = gocqlShouldRetry
 
-	for _, msg := range retryableMessages {
-		if errMsg == msg {
-			return true
-		}
-	}
-
-	return false
+	return retry.RetryFunc(q.query.Context(), operation, &cfg, q.conn.logger)
 }
 
-// Query returns a query without retry logic for direct use
-func (c *Connection) Query(query string, values ...interface{}) *gocql.Query {
-	return c.session.Query(query, values...)
-}
-
-// RetryableExec executes a query with retry logic and returns error
-func (c *Connection) RetryableExec(query string, values ...interface{}) error {
-	return c.RetryableExecWithContext(context.Background(), query, values...)
-}
-
-// RetryableExecWithContext executes a query with retry logic and context support
-func (c *Connection) RetryableExecWithContext(ctx context.Context, query string, values ...interface{}) error {
-	config := DefaultRetryableConfig()
-
-	// if c.logger != nil {
-	// 	c.logger.Info("Starting retryable exec operation",
-	// 		"query", query,
-	// 		"max_retries", config.MaxRetries,
-	// 		"initial_delay", config.InitialDelay)
-	// }
-
-	_, err := retry.Retry(ctx, func() (interface{}, error) {
-		if err := c.session.Query(query, values...).Exec(); err != nil {
-			if !isRetryableError(err) {
-				// if c.logger != nil {
-				// 	c.logger.Error("Non-retryable error during exec operation",
-				// 		"error", err.Error(),
-				// 		"query", query)
-				// }
-				return nil, err
-			}
-			// if c.logger != nil {
-			// 	c.logger.Warn("Retryable error during exec operation",
-			// 		"error", err.Error(),
-			// 		"query", query)
-			// }
-			return nil, err
-		}
-		return nil, nil
-	}, &retry.RetryConfig{
-		MaxRetries:      config.MaxRetries,
-		InitialDelay:    config.InitialDelay,
-		MaxDelay:        config.MaxDelay,
-		BackoffFactor:   config.BackoffFactor,
-		JitterFactor:    config.JitterFactor,
-		LogRetryAttempt: config.LogRetryAttempt,
-	}, c.logger)
-
-	if err != nil && c.logger != nil {
-		c.logger.Error("Exec operation failed after all retries",
-			"error", err.Error(),
-			"query", query,
-			"max_retries", config.MaxRetries)
+// Scan executes a query and scans the result, with retry logic.
+func (q *Queryx) Scan(dest ...interface{}) error {
+	operation := func() error {
+		return q.query.Scan(dest...)
 	}
+
+	cfg := *q.conn.config.RetryConfig
+	cfg.ShouldRetry = gocqlShouldRetry
+
+	_, err := retry.Retry(q.query.Context(), func() (struct{}, error) {
+		return struct{}{}, operation()
+	}, &cfg, q.conn.logger)
 
 	return err
 }
 
-// RetryableScan executes a query with retry logic and scans the result
-func (c *Connection) RetryableScan(query string, dest ...interface{}) error {
-	return c.RetryableScanWithContext(context.Background(), query, dest...)
+// Iter returns an iterator for the query.
+// Retries on iterators are handled internally by gocql's paging mechanism.
+// No custom retry wrapper is needed here.
+func (q *Queryx) Iter() *gocql.Iter {
+	return q.query.Iter()
 }
 
-// RetryableScanWithContext executes a query with retry logic and context support
-func (c *Connection) RetryableScanWithContext(ctx context.Context, query string, dest ...interface{}) error {
-	config := DefaultRetryableConfig()
-
-	// if c.logger != nil {
-	// 	c.logger.Info("Starting retryable scan operation",
-	// 		"query", query,
-	// 		"max_retries", config.MaxRetries,
-	// 		"initial_delay", config.InitialDelay)
-	// }
-
-	_, err := retry.Retry(ctx, func() (interface{}, error) {
-		err := c.session.Query(query).Scan(dest...)
-		if err != nil && !isRetryableError(err) {
-			// if c.logger != nil {
-			// 	c.logger.Error("Non-retryable error during scan operation",
-			// 		"error", err.Error(),
-			// 		"query", query)
-			// }
-			return nil, err
-		}
-		// if err != nil && c.logger != nil {
-		// 	c.logger.Warn("Retryable error during scan operation",
-		// 		"error", err.Error(),
-		// 		"query", query)
-		// }
-		return nil, err
-	}, &retry.RetryConfig{
-		MaxRetries:      config.MaxRetries,
-		InitialDelay:    config.InitialDelay,
-		MaxDelay:        config.MaxDelay,
-		BackoffFactor:   config.BackoffFactor,
-		JitterFactor:    config.JitterFactor,
-		LogRetryAttempt: config.LogRetryAttempt,
-	}, c.logger)
-
-	if err != nil && c.logger != nil {
-		c.logger.Error("Scan operation failed after all retries",
-			"error", err.Error(),
-			"query", query,
-			"max_retries", config.MaxRetries)
-	}
-
-	return err
+// WithContext sets the context for the underlying gocql.Query.
+// Note: The retry mechanism itself also uses context for timeouts/cancellation.
+func (q *Queryx) WithContext(ctx context.Context) *Queryx {
+	q.query.WithContext(ctx)
+	return q
 }
 
-// RetryableIter executes a query with retry logic and returns an iterator
-func (c *Connection) RetryableIter(query string, values ...interface{}) *gocql.Iter {
-	return c.RetryableIterWithContext(context.Background(), query, values...)
-}
-
-// RetryableIterWithContext executes a query with retry logic and context support
-func (c *Connection) RetryableIterWithContext(ctx context.Context, query string, values ...interface{}) *gocql.Iter {
-	config := DefaultRetryableConfig()
-
-	result, err := retry.Retry(ctx, func() (interface{}, error) {
-		iter := c.session.Query(query, values...).Iter()
-		if err := iter.Close(); err != nil && isRetryableError(err) {
-			return nil, err
-		}
-		// Return a fresh iterator for use
-		return c.session.Query(query, values...).Iter(), nil
-	}, &retry.RetryConfig{
-		MaxRetries:      config.MaxRetries,
-		InitialDelay:    config.InitialDelay,
-		MaxDelay:        config.MaxDelay,
-		BackoffFactor:   config.BackoffFactor,
-		JitterFactor:    config.JitterFactor,
-		LogRetryAttempt: config.LogRetryAttempt,
-	}, c.logger)
-
-	if err != nil {
-		// Return an empty iterator if all retries failed
-		return c.session.Query("SELECT * FROM system.local WHERE key = 'unavailable'").Iter()
-	}
-
-	return result.(*gocql.Iter)
-}
-
-// RetryableBatch executes a batch with retry logic
-func (c *Connection) RetryableBatch(batch *gocql.Batch) error {
-	return c.RetryableBatchWithContext(context.Background(), batch)
-}
-
-// RetryableBatchWithContext executes a batch with retry logic and context support
-func (c *Connection) RetryableBatchWithContext(ctx context.Context, batch *gocql.Batch) error {
-	config := DefaultRetryableConfig()
-
-	// if c.logger != nil {
-	// 	c.logger.Info("Starting retryable batch operation",
-	// 		"batch_size", len(batch.Entries),
-	// 		"max_retries", config.MaxRetries,
-	// 		"initial_delay", config.InitialDelay)
-	// }
-
-	_, err := retry.Retry(ctx, func() (interface{}, error) {
-		err := c.session.ExecuteBatch(batch)
-		if err != nil && !isRetryableError(err) {
-			// if c.logger != nil {
-			// 	c.logger.Error("Non-retryable error during batch operation",
-			// 		"error", err.Error(),
-			// 		"batch_size", len(batch.Entries))
-			// }
-			return nil, err
-		}
-		// if err != nil && c.logger != nil {
-		// 	c.logger.Warn("Retryable error during batch operation",
-		// 		"error", err.Error(),
-		// 		"batch_size", len(batch.Entries))
-		// }
-		return nil, err
-	}, &retry.RetryConfig{
-		MaxRetries:      config.MaxRetries,
-		InitialDelay:    config.InitialDelay,
-		MaxDelay:        config.MaxDelay,
-		BackoffFactor:   config.BackoffFactor,
-		JitterFactor:    config.JitterFactor,
-		LogRetryAttempt: config.LogRetryAttempt,
-	}, c.logger)
-
-	if err != nil && c.logger != nil {
-		c.logger.Error("Batch operation failed after all retries",
-			"error", err.Error(),
-			"batch_size", len(batch.Entries),
-			"max_retries", config.MaxRetries)
-	}
-
-	return err
+// Idempotent marks the query as idempotent.
+// This is critical for Exec() to be retried safely.
+func (q *Queryx) Idempotent() *Queryx {
+	q.query.Idempotent(true)
+	q.isIdem = true
+	return q
 }

@@ -23,7 +23,7 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 	var err error
 
 	// Use RetryableIter since the query needs parameters
-	iter := dm.db.RetryableIter(queries.GetKeeperIDByAddress, data.OperatorAddress)
+	iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, data.OperatorAddress).Iter()
 	defer iter.Close()
 
 	if iter.Scan(&keeperID) {
@@ -34,14 +34,14 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 
 	if err == gocql.ErrNotFound {
 		var maxKeeperID int64
-		if err := dm.db.RetryableScan(queries.GetMaxKeeperID, &maxKeeperID); err != nil {
+		if err := dm.db.NewQuery(queries.GetMaxKeeperID, &maxKeeperID).Scan(); err != nil {
 			dm.logger.Debug("No keeper ID found, creating new keeper")
 			maxKeeperID = 0
 		}
 
 		keeperID = maxKeeperID + 1
 
-		if err := dm.db.RetryableExec(queries.CreateKeeper,
+		if err := dm.db.NewQuery(queries.CreateKeeper,
 			keeperID,
 			data.OperatorAddress,
 			data.RewardsReceiver,
@@ -49,7 +49,7 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 			data.OperatorID,
 			data.VotingPower,
 			data.Strategies,
-			true, booster); err != nil {
+			true, booster).Exec(); err != nil {
 			dm.logger.Errorf("Error creating new keeper: %v", err)
 			return 0, false, err
 		}
@@ -60,8 +60,9 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 		dm.logger.Errorf("Error getting keeper ID: %v", err)
 		return 0, false, err
 	} else {
-		if err := dm.db.RetryableExec(queries.UpdateKeeper,
-			data.RewardsReceiver, data.TxHash, data.OperatorID, data.VotingPower, data.Strategies, true, booster, keeperID); err != nil {
+		if err := dm.db.NewQuery(queries.UpdateKeeper,
+			data.RewardsReceiver, data.TxHash, data.OperatorID, data.VotingPower, 
+			data.Strategies, true, booster, keeperID).Exec(); err != nil {
 			dm.logger.Errorf("Error updating keeper with ID %d: %v", keeperID, err)
 			return 0, false, err
 		}
@@ -76,7 +77,7 @@ func (dm *DatabaseClient) KeeperUnregistered(operatorAddress string) error {
 	operatorAddress = strings.ToLower(operatorAddress)
 
 	// Use RetryableIter since the query needs parameters
-	iter := dm.db.RetryableIter(queries.GetKeeperIDByAddress, operatorAddress)
+	iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, operatorAddress).Iter()
 	defer iter.Close()
 
 	if !iter.Scan(&currentKeeperID) {
@@ -84,8 +85,8 @@ func (dm *DatabaseClient) KeeperUnregistered(operatorAddress string) error {
 		return fmt.Errorf("keeper not found for address %s", operatorAddress)
 	}
 
-	if err := dm.db.RetryableExec(queries.UpdateKeeperRegistrationStatus,
-		false, currentKeeperID); err != nil {
+	if err := dm.db.NewQuery(queries.UpdateKeeperRegistrationStatus,
+		false, currentKeeperID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating keeper with ID %d: %v", currentKeeperID, err)
 		return err
 	}

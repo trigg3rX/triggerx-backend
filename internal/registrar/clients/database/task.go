@@ -21,7 +21,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	}
 	attesterIds := data.AttesterIds
 
-	if err := dm.db.RetryableExec(queries.UpdateTaskSubmissionData,
+	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
 		data.TaskSubmissionTxHash,
@@ -31,7 +31,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 		data.ExecutionTimestamp,
 		data.TaskOpxCost,
 		data.ProofOfTask,
-		data.TaskID); err != nil {
+		data.TaskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", data.TaskID, err)
 		return err
 	}
@@ -54,7 +54,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	var noExecutedTasks int64
 
 	// Get task cost and job ID
-	iter := dm.db.RetryableIter(queries.GetTaskCostAndJobId, data.TaskID)
+	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, data.TaskID).Iter()
 	defer iter.Close()
 
 	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
@@ -70,7 +70,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	// Update the Attester Points
 	for _, operator_id := range data.AttesterIds {
 		// Use RetryableIter since the query needs parameters
-		iter := dm.db.RetryableIter(queries.GetAttesterPointsAndNoOfTasks, operator_id)
+		iter := dm.db.NewQuery(queries.GetAttesterPointsAndNoOfTasks, operator_id).Iter()
 		defer iter.Close()
 
 		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
@@ -82,8 +82,8 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeperPoints, rewardsBooster, noAttestedTasks)
 
-		if err := dm.db.RetryableExec(queries.UpdateAttesterPointsAndNoOfTasks,
-			keeperPoints, noAttestedTasks, keeperId); err != nil {
+		if err := dm.db.NewQuery(queries.UpdateAttesterPointsAndNoOfTasks,
+			keeperPoints, noAttestedTasks, keeperId).Exec(); err != nil {
 			dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
 			return err
 		}
@@ -96,7 +96,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		return err
 	}
 	// Use RetryableIter since the query needs parameters
-	iter = dm.db.RetryableIter(queries.GetPerformerPointsAndNoOfTasks, performerId[0])
+	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId[0]).Iter()
 	defer iter.Close()
 
 	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
@@ -110,14 +110,14 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 	noExecutedTasks = noExecutedTasks + 1
 
-	if err := dm.db.RetryableExec(queries.UpdatePerformerPointsAndNoOfTasks,
-		keeperPoints, noExecutedTasks, performerId[0]); err != nil {
+	if err := dm.db.NewQuery(queries.UpdatePerformerPointsAndNoOfTasks,
+		keeperPoints, noExecutedTasks, performerId[0]).Exec(); err != nil {
 		dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
 		return err
 	}
 
 	// Update the User Points
-	iter = dm.db.RetryableIter(queries.GetUserIdByJobId, jobID)
+	iter = dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
 	defer iter.Close()
 
 	if !iter.Scan(&userID) {
@@ -126,7 +126,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 
 	var userPoints float64
-	iter = dm.db.RetryableIter(queries.GetUserPoints, userID)
+	iter = dm.db.NewQuery(queries.GetUserPoints, userID).Iter()
 	defer iter.Close()
 
 	if !iter.Scan(&userPoints, &userTasks) {
@@ -138,8 +138,8 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	userPoints = userPoints + data.TaskOpxCost
 	lastUpdatedAt := time.Now().UTC()
 
-	if err := dm.db.RetryableExec(queries.UpdateUserPoints,
-		userPoints, userTasks, lastUpdatedAt, userID); err != nil {
+	if err := dm.db.NewQuery(queries.UpdateUserPoints,
+		userPoints, userTasks, lastUpdatedAt, userID).Exec(); err != nil {
 		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
 	}
@@ -155,7 +155,7 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 		keeperAddress = strings.ToLower(keeperAddress)
 
 		// Use RetryableIter since the query needs parameters
-		iter := dm.db.RetryableIter(queries.GetKeeperIDByAddress, keeperAddress)
+		iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, keeperAddress).Iter()
 		defer iter.Close()
 
 		if iter.Scan(&keeperID) {

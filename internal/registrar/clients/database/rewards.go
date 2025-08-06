@@ -12,7 +12,7 @@ func (dm *DatabaseClient) DailyRewardsPoints() error {
 	var keeperPoints float64
 	var currentKeeperPoints []types.DailyRewardsPoints
 
-	iter := dm.db.RetryableIter(queries.GetDailyRewardsPoints)
+	iter := dm.db.NewQuery(queries.GetDailyRewardsPoints).Iter()
 
 	for iter.Scan(&keeperID, &rewardsBooster, &keeperPoints) {
 		if keeperID == 1 || keeperID == 2 || keeperID == 3 || keeperID == 4 {
@@ -33,8 +33,8 @@ func (dm *DatabaseClient) DailyRewardsPoints() error {
 	for _, currentKeeperPoint := range currentKeeperPoints {
 		newPoints := currentKeeperPoint.KeeperPoints + float64(10*currentKeeperPoint.RewardsBooster)
 
-		err := dm.db.RetryableExec(queries.UpdateKeeperPoints,
-			newPoints, currentKeeperPoint.KeeperID)
+		err := dm.db.NewQuery(queries.UpdateKeeperPoints,
+			newPoints, currentKeeperPoint.KeeperID).Exec()
 		if err != nil {
 			dm.logger.Errorf("Failed to update daily rewards for keeper ID %d: %v", currentKeeperPoint.KeeperID, err)
 			continue
