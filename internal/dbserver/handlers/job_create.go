@@ -289,14 +289,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 
 		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
-			go func() {
-				success, err := h.notifyConditionScheduler(jobID, scheduleConditionJobData)
-				if !success {
-					h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
-				} else {
-					h.logger.Infof("[CreateJobData] Successfully notified condition scheduler for jobID %d", jobID)
-				}
-			}()
+			success, err := h.notifyConditionScheduler(jobID, scheduleConditionJobData)
+			if !success {
+				h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
+			} else {
+				h.logger.Infof("[CreateJobData] Successfully notified condition scheduler for jobID %d", jobID)
+			}
 		}
 
 		pointsToAdd := 10.0
