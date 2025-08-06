@@ -17,7 +17,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -34,7 +34,7 @@ type ErrorResponse struct {
 
 // Client represents a Health service client
 type Client struct {
-	httpClient *retry.HTTPClient
+	httpClient *httppkg.HTTPClient
 	logger     logging.Logger
 	config     Config
 }
@@ -59,9 +59,9 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 		cfg.Version = "0.1.6"
 	}
 
-	retryConfig := retry.DefaultHTTPRetryConfig()
+	retryConfig := httppkg.DefaultHTTPRetryConfig()
 
-	httpClient, err := retry.NewHTTPClient(retryConfig, logger)
+	httpClient, err := httppkg.NewHTTPClient(retryConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}

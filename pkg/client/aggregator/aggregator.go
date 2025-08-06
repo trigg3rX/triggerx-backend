@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
@@ -17,7 +18,7 @@ type AggregatorClient struct {
 	config            AggregatorClientConfig
 	privateKey        *ecdsa.PrivateKey
 	publicKey         *ecdsa.PublicKey
-	httpClient        *retry.HTTPClient
+	httpClient        *httppkg.HTTPClient
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient
@@ -43,9 +44,9 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	}
 
 	// Create retry client with configuration
-	retryConfig := retry.DefaultHTTPRetryConfig()
+	retryConfig := httppkg.DefaultHTTPRetryConfig()
 
-	httpClient, err := retry.NewHTTPClient(retryConfig, logger)
+	httpClient, err := httppkg.NewHTTPClient(retryConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}

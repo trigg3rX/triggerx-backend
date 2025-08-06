@@ -14,7 +14,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -155,7 +155,7 @@ func (s *ConditionBasedScheduler) scheduleEventJob(jobData *types.ScheduleCondit
 }
 
 // createConditionWorker creates a new condition worker instance
-func (s *ConditionBasedScheduler) createConditionWorker(conditionWorkerData *types.ConditionWorkerData, httpClient *retry.HTTPClient) (*worker.ConditionWorker, error) {
+func (s *ConditionBasedScheduler) createConditionWorker(conditionWorkerData *types.ConditionWorkerData, httpClient *httppkg.HTTPClient) (*worker.ConditionWorker, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	worker := &worker.ConditionWorker{

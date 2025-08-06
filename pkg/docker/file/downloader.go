@@ -8,12 +8,12 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 type Downloader struct {
-	client    *retry.HTTPClient
+	client    *httppkg.HTTPClient
 	cache     *FileCache
 	validator *CodeValidator
 	logger    logging.Logger
@@ -29,7 +29,7 @@ type DownloadResult struct {
 }
 
 func NewDownloader(cfg config.CacheConfig, validationCfg config.ValidationConfig, logger logging.Logger) (*Downloader, error) {
-	httpClient, err := retry.NewHTTPClient(retry.DefaultHTTPRetryConfig(), logger)
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
@@ -110,19 +110,10 @@ func (d *Downloader) DownloadFile(key string, url string) (*DownloadResult, erro
 }
 
 func (d *Downloader) downloadContent(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := d.client.DoWithRetry(req)
+	resp, err := d.client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
-	// resp, err := http.Get(url)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to download file: %w", err)
-	// }
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			d.logger.Error("Error closing response body", "error", err)
@@ -138,7 +129,6 @@ func (d *Downloader) downloadContent(url string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// d.logger.Infof("Downloaded %d bytes from %s", len(content), url)
 	d.logger.Debugf("Downloaded %d bytes", len(content))
 	return content, nil
 }

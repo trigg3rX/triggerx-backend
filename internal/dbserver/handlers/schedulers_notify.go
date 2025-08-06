@@ -7,10 +7,9 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -52,29 +51,7 @@ func (h *Handler) sendDataToScheduler(route string, data types.ScheduleCondition
 
 	apiURL := fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCUrl(), route)
 
-	// Create a client with aggressive timeouts and connection pooling
-	httpConfig := &retry.HTTPRetryConfig{
-		RetryConfig: &retry.RetryConfig{
-			MaxRetries:      3,
-			InitialDelay:    1 * time.Second,
-			MaxDelay:        10 * time.Second,
-			BackoffFactor:   2.0,
-			JitterFactor:    0.5,
-			LogRetryAttempt: true,
-			StatusCodes: []int{
-				http.StatusInternalServerError,
-				http.StatusBadGateway,
-				http.StatusServiceUnavailable,
-				http.StatusGatewayTimeout,
-			},
-			ShouldRetry: func(err error) bool {
-				return err != nil
-			},
-		},
-		Timeout:         3 * time.Second,
-		IdleConnTimeout: 30 * time.Second,
-	}
-	client, err := retry.NewHTTPClient(httpConfig, h.logger)
+	client, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), h.logger)
 	if err != nil {
 		return false, fmt.Errorf("error creating HTTP client: %v", err)
 	}

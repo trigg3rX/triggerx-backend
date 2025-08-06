@@ -8,7 +8,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -16,7 +16,7 @@ import (
 type ConditionWorker struct {
 	ConditionWorkerData *types.ConditionWorkerData
 	Logger          logging.Logger
-	HttpClient      *retry.HTTPClient
+	HttpClient      *httppkg.HTTPClient
 	Ctx             context.Context
 	Cancel          context.CancelFunc
 	IsActive        bool

@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 )
 
 // Helper functions
@@ -34,9 +34,9 @@ func isValidSourceType(sourceType string) bool {
 }
 
 func (s *ConditionBasedScheduler) initRetryClient() error {
-	retryConfig := retry.DefaultHTTPRetryConfig()
+	retryConfig := httppkg.DefaultHTTPRetryConfig()
 	var err error
-	s.HTTPClient, err = retry.NewHTTPClient(retryConfig, s.logger)
+	s.HTTPClient, err = httppkg.NewHTTPClient(retryConfig, s.logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize retry client: %w", err)
 	}

@@ -8,15 +8,15 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 )
 
 type Client struct {
-	retryClient *retry.HTTPClient
+	retryClient *httppkg.HTTPClient
 }
 
 func NewClient(logger logging.Logger) (*Client, error) {
-	retryClient, err := retry.NewHTTPClient(retry.DefaultHTTPRetryConfig(), logger)
+	retryClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), logger)
 	if err != nil {
 		return nil, err
 	}

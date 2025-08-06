@@ -6,16 +6,15 @@ import (
 	"net/http"
 	"time"
 
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
-
 
 // DBServerClient handles communication with the DBServer service
 type DBServerClient struct {
 	logger            logging.Logger
 	dbserverUrl       string
-	httpClient        *retry.HTTPClient
+	httpClient        *httppkg.HTTPClient
 }
 
 // NewDBServerClient creates a new instance of DBServerClient
@@ -27,7 +26,7 @@ func NewDBServerClient(logger logging.Logger, dbserverUrl string) (*DBServerClie
 		return nil, fmt.Errorf("RPC address cannot be empty")
 	}
 
-	httpClient, err := retry.NewHTTPClient(retry.DefaultHTTPRetryConfig(), logger)
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}

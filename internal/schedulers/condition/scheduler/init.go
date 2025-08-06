@@ -16,7 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -31,7 +31,7 @@ type ConditionBasedScheduler struct {
 	workersMutex            sync.RWMutex
 	notificationMutex       sync.Mutex // Protect job data during notification processing
 	chainClients            map[string]*ethclient.Client // chainID -> client
-	HTTPClient              *retry.HTTPClient
+	HTTPClient              *httppkg.HTTPClient
 	dbClient                *dbserver.DBServerClient
 	httpClient              *http.Client // For Redis API calls
 	redisAPIURL             string
