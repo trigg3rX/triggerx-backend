@@ -1,3 +1,4 @@
+// worker.go
 package worker
 
 import (
@@ -42,7 +43,7 @@ type ValueResponse struct {
 	Result    float64 `json:"result"`    // Generic result field
 	Data      float64 `json:"data"`      // Generic data field
 	Timestamp int64   `json:"timestamp"` // Optional timestamp
-	Key       string  `json:"key"`       // Optional key field
+	KeyPath   string  `json:"key_path"`  // Dot-notation path to value in JSON
 }
 
 // ConditionTriggerNotification represents a notification from a worker when a condition is satisfied

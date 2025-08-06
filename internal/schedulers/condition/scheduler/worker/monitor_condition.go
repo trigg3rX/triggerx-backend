@@ -1,3 +1,4 @@
+// monitor_condition.go
 package worker
 
 import (
@@ -77,9 +78,9 @@ func (w *ConditionWorker) checkCondition() error {
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
 			notification := &TriggerNotification{
-				JobID:           w.ConditionWorkerData.JobID,
-				TriggerValue:    currentValue,
-				TriggeredAt:     time.Now(),
+				JobID:        w.ConditionWorkerData.JobID,
+				TriggerValue: currentValue,
+				TriggeredAt:  time.Now(),
 			}
 
 			if err := w.TriggerCallback(notification); err != nil {
@@ -157,14 +158,22 @@ func isTimeoutError(err error) bool {
 		strings.Contains(err.Error(), "deadline exceeded")
 }
 
-// extractValueFromResponse extracts the numeric value from the response using the specified key
+// extractValueFromResponse extracts the numeric value from the response
 func (w *ConditionWorker) extractValueFromResponse(body []byte) (float64, error) {
+	// If key path is specified, use it to extract the value
+	if w.ConditionWorkerData.ValueKeyPath != "" {
+		value, err := w.extractValueByKeyPath(body, w.ConditionWorkerData.ValueKeyPath)
+		if err == nil {
+			return value, nil
+		}
+	}
+
 	// Try to parse response as ValueResponse struct
 	var valueResp ValueResponse
 	if err := json.Unmarshal(body, &valueResp); err == nil {
-		// If a specific key is provided, use it to extract the value
-		if valueResp.Key != "" {
-			return w.extractValueByKey(body, valueResp.Key)
+		// If key path is specified in response, use it
+		if valueResp.KeyPath != "" {
+			return w.extractValueByKeyPath(body, valueResp.KeyPath)
 		}
 
 		// Otherwise, use the original fallback logic
@@ -192,31 +201,36 @@ func (w *ConditionWorker) extractValueFromResponse(body []byte) (float64, error)
 	return w.parseDirectValue(body)
 }
 
-// extractValueByKey extracts a value from JSON response using the specified key
-func (w *ConditionWorker) extractValueByKey(body []byte, key string) (float64, error) {
-	// Parse as generic JSON
-	var jsonData map[string]interface{}
+// extractValueByKeyPath extracts a value from JSON response using dot notation path
+func (w *ConditionWorker) extractValueByKeyPath(body []byte, keyPath string) (float64, error) {
+	var jsonData interface{}
 	if err := json.Unmarshal(body, &jsonData); err != nil {
 		return 0, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	// Navigate through nested keys if the key contains dots (e.g., "data.price")
-	keys := strings.Split(key, ".")
+	keys := strings.Split(keyPath, ".")
 	var current interface{} = jsonData
 
 	for _, k := range keys {
-		if currentMap, ok := current.(map[string]interface{}); ok {
-			if val, exists := currentMap[k]; exists {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			if val, exists := v[k]; exists {
 				current = val
 			} else {
 				return 0, fmt.Errorf("key '%s' not found in response", k)
 			}
-		} else {
-			return 0, fmt.Errorf("cannot navigate to key '%s': intermediate value is not an object", k)
+		case []interface{}:
+			// Handle array indices
+			if idx, err := strconv.Atoi(k); err == nil && idx >= 0 && idx < len(v) {
+				current = v[idx]
+			} else {
+				return 0, fmt.Errorf("invalid array index '%s'", k)
+			}
+		default:
+			return 0, fmt.Errorf("cannot navigate to key '%s': intermediate value is not an object or array", k)
 		}
 	}
 
-	// Convert the final value to float64
 	return w.convertToFloat64(current)
 }
 
@@ -274,7 +288,6 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		metrics.TrackHTTPRequest("GET", w.ConditionWorkerData.ValueSourceUrl, "error")
 		metrics.TrackHTTPClientConnectionError()
 
-		// Check if it's a timeout error
 		if isTimeoutError(err) {
 			metrics.TrackTimeout("http_api_request")
 		}
@@ -301,7 +314,6 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		return 0, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Use the new extraction method
 	value, err := w.extractValueFromResponse(body)
 	if err != nil {
 		metrics.TrackInvalidValue(w.ConditionWorkerData.ValueSourceUrl)
@@ -321,7 +333,6 @@ func (w *ConditionWorker) fetchFromOracle() (float64, error) {
 
 // fetchStaticValue returns a static value (for testing purposes)
 func (w *ConditionWorker) fetchStaticValue() (float64, error) {
-	// Parse URL as the static value
 	value, err := strconv.ParseFloat(w.ConditionWorkerData.ValueSourceUrl, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid static value: %s", w.ConditionWorkerData.ValueSourceUrl)
