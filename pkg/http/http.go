@@ -1,4 +1,4 @@
-package retry
+package http
 
 import (
 	"bytes"
@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 // HTTPRetryConfig holds configuration for HTTP retry operations
 type HTTPRetryConfig struct {
-	RetryConfig     *RetryConfig
+	RetryConfig     *retry.RetryConfig
 	Timeout         time.Duration
 	IdleConnTimeout time.Duration
 	MaxResponseSize int64 // Maximum response size to read for error messages
@@ -22,7 +23,7 @@ type HTTPRetryConfig struct {
 // DefaultHTTPRetryConfig returns default configuration for HTTP retry operations
 func DefaultHTTPRetryConfig() *HTTPRetryConfig {
 	return &HTTPRetryConfig{
-		RetryConfig:     DefaultRetryConfig(),
+		RetryConfig:     retry.DefaultRetryConfig(),
 		Timeout:         10 * time.Second,
 		IdleConnTimeout: 30 * time.Second,
 		MaxResponseSize: 4096, // 4KB default max for error messages
@@ -40,7 +41,17 @@ func (c *HTTPRetryConfig) Validate() error {
 	if c.MaxResponseSize < 0 {
 		return fmt.Errorf("maxResponseSize must be >= 0")
 	}
-	return c.RetryConfig.validate()
+	return nil
+}
+
+// HTTPError represents an HTTP-specific error with status code
+type HTTPError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Message)
 }
 
 // HTTPClient is a wrapper around http.Client that includes retry logic
@@ -82,17 +93,10 @@ func NewHTTPClient(httpConfig *HTTPRetryConfig, logger logging.Logger) (*HTTPCli
 	}, nil
 }
 
-// DoWithRetry performs an HTTP request with retry logic.
+// DoWithRetry performs an HTTP request with retry logic using the retry package.
 // The caller is responsible for closing the response body.
 func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
-	var (
-		lastErr  error
-		lastResp *http.Response
-		attempt  int
-		delay    = c.HTTPConfig.RetryConfig.InitialDelay
-	)
-
-	// Use GetBody if available to avoid reading into memory
+	// Prepare request body for retries
 	var getBody func() (io.ReadCloser, error)
 	if req.GetBody != nil {
 		getBody = req.GetBody
@@ -111,7 +115,8 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	for attempt = 1; attempt <= c.HTTPConfig.RetryConfig.MaxRetries; attempt++ {
+	// Create operation function for retry package
+	operation := func() (*http.Response, error) {
 		// Clone the request for each attempt
 		reqClone := req.Clone(req.Context())
 		if getBody != nil {
@@ -124,71 +129,65 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 
 		resp, err := c.client.Do(reqClone)
 		if err != nil {
-			lastErr = fmt.Errorf("http request failed: %w", err)
-			if attempt == c.HTTPConfig.RetryConfig.MaxRetries {
-				break
-			}
-
-			if c.HTTPConfig.RetryConfig.LogRetryAttempt {
-				c.logger.Warnf("Attempt %d/%d failed: %v. Retrying in %v...", attempt, c.HTTPConfig.RetryConfig.MaxRetries, err, delay)
-			}
-
-			select {
-			case <-time.After(delay):
-				delay = c.nextDelay(delay)
-				continue
-			case <-req.Context().Done():
-				return nil, req.Context().Err()
-			}
+			return nil, fmt.Errorf("http request failed: %w", err)
 		}
 
-		// Check if we should retry based on status code or custom predicate
-		if !c.shouldRetry(resp.StatusCode) && (c.HTTPConfig.RetryConfig.ShouldRetry == nil || !c.HTTPConfig.RetryConfig.ShouldRetry(nil)) {
-			return resp, nil
-		}
-
-		// For retryable responses, read and close the body (unless it's the final attempt)
-		if attempt < c.HTTPConfig.RetryConfig.MaxRetries {
-			// Drain body without storing for non-final attempts
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, c.HTTPConfig.MaxResponseSize))
+		// Check if response status code indicates retryable error
+		if c.shouldRetryResponse(resp.StatusCode) {
+			// Read and close body for retryable responses
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, c.HTTPConfig.MaxResponseSize))
 			_ = resp.Body.Close()
-		} else {
-			// On final attempt, keep the body open for the caller
-			lastResp = resp
+
+			bodyPreview := fmt.Sprintf(", body preview: %q", truncate(string(bodyBytes), 200))
+			return nil, &HTTPError{
+				StatusCode: resp.StatusCode,
+				Message:    fmt.Sprintf("retryable status code%s", bodyPreview),
+			}
 		}
 
-		// Create error with limited body content
-		var bodyPreview string
-		if attempt == c.HTTPConfig.RetryConfig.MaxRetries && lastResp != nil {
-			bodyBytes, _ := io.ReadAll(io.LimitReader(lastResp.Body, c.HTTPConfig.MaxResponseSize))
-			_ = lastResp.Body.Close()
-			lastResp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-			bodyPreview = fmt.Sprintf(", body preview: %q", truncate(string(bodyBytes), 200))
-		}
-
-		lastErr = fmt.Errorf("received retryable status code: %d%s", resp.StatusCode, bodyPreview)
-
-		if attempt == c.HTTPConfig.RetryConfig.MaxRetries {
-			break
-		}
-
-		if c.HTTPConfig.RetryConfig.LogRetryAttempt {
-			c.logger.Warnf("Attempt %d/%d failed with status %d%s. Retrying in %v...",
-				attempt, c.HTTPConfig.RetryConfig.MaxRetries, resp.StatusCode, bodyPreview, delay)
-		}
-
-		select {
-		case <-time.After(delay):
-			delay = c.nextDelay(delay)
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
-		}
+		return resp, nil
 	}
 
-	if lastResp != nil {
-		return lastResp, lastErr
+	// Use retry package to execute the operation
+	return retry.Retry(req.Context(), operation, c.HTTPConfig.RetryConfig, c.logger)
+}
+
+// Get performs a GET request with retry logic
+func (c *HTTPClient) Get(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GET request: %w", err)
 	}
-	return nil, fmt.Errorf("failed after %d attempts: %w", attempt, lastErr)
+	return c.DoWithRetry(req)
+}
+
+// Post performs a POST request with retry logic
+func (c *HTTPClient) Post(url, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create POST request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	return c.DoWithRetry(req)
+}
+
+// Put performs a PUT request with retry logic
+func (c *HTTPClient) Put(url, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest("PUT", url, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create PUT request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	return c.DoWithRetry(req)
+}
+
+// Delete performs a DELETE request with retry logic
+func (c *HTTPClient) Delete(url string) (*http.Response, error) {
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DELETE request: %w", err)
+	}
+	return c.DoWithRetry(req)
 }
 
 // truncate shortens a string to maxLen, adding "..." if truncated
@@ -199,38 +198,39 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// shouldRetry checks if the status code is in the list of retryable status codes
-func (c *HTTPClient) shouldRetry(statusCode int) bool {
-	for _, retryCode := range c.HTTPConfig.RetryConfig.StatusCodes {
-		if statusCode == retryCode {
-			return true
-		}
-	}
-	return false
-}
-
-// nextDelay calculates the next delay with backoff and jitter
-func (c *HTTPClient) nextDelay(currentDelay time.Duration) time.Duration {
-	nextDelay := time.Duration(float64(currentDelay) * c.HTTPConfig.RetryConfig.BackoffFactor)
-	jitter := time.Duration(float64(nextDelay) * c.HTTPConfig.RetryConfig.JitterFactor)
-	nextDelay += time.Duration(float64(jitter) * (0.5 - secureFloat64()))
-
-	// Cap at max delay
-	if nextDelay > c.HTTPConfig.RetryConfig.MaxDelay {
-		nextDelay = c.HTTPConfig.RetryConfig.MaxDelay
+// shouldRetryResponse checks if the status code should be retried based on default logic and custom retry function
+func (c *HTTPClient) shouldRetryResponse(statusCode int) bool {
+	// Create a mock error to test with custom retry function
+	mockErr := &HTTPError{
+		StatusCode: statusCode,
+		Message:    "mock error for retry check",
 	}
 
-	return nextDelay
+	// If custom retry function is set, use it
+	if c.HTTPConfig.RetryConfig.ShouldRetry != nil {
+		return c.HTTPConfig.RetryConfig.ShouldRetry(mockErr)
+	}
+
+	// Default logic: retry on server errors (5xx) and some specific client errors
+	return statusCode >= 500 || statusCode == 429 // 429 is rate limit
 }
 
+// isRetryableStatusCode checks if the status code indicates a retryable error (deprecated, use shouldRetryResponse)
+func (c *HTTPClient) isRetryableStatusCode(statusCode int) bool {
+	return c.shouldRetryResponse(statusCode)
+}
+
+// Close closes idle connections
 func (c *HTTPClient) Close() {
 	c.client.CloseIdleConnections()
 }
 
+// GetTimeout returns the configured timeout
 func (c *HTTPClient) GetTimeout() time.Duration {
 	return c.HTTPConfig.Timeout
 }
 
+// GetIdleConnTimeout returns the configured idle connection timeout
 func (c *HTTPClient) GetIdleConnTimeout() time.Duration {
 	return c.HTTPConfig.IdleConnTimeout
 }
