@@ -35,7 +35,7 @@ func (r *conditionJobRepository) CreateConditionJob(conditionJob *types.Conditio
 		conditionJob.TargetContractAddress, conditionJob.TargetFunction,
 		conditionJob.ABI, conditionJob.ArgType, conditionJob.Arguments,
 		conditionJob.DynamicArgumentsScriptUrl, conditionJob.IsCompleted, conditionJob.IsActive,
-		time.Now(), time.Now()).Exec()
+		conditionJob.SelectedKeyRoute, time.Now(), time.Now()).Exec()
 
 	if err != nil {
 		return err
@@ -52,6 +52,7 @@ func (r *conditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (types.C
 		&conditionJob.ValueSourceUrl, &conditionJob.TargetChainID, &conditionJob.TargetContractAddress,
 		&conditionJob.TargetFunction, &conditionJob.ABI, &conditionJob.ArgType, &conditionJob.Arguments,
 		&conditionJob.DynamicArgumentsScriptUrl, &conditionJob.IsCompleted, &conditionJob.IsActive,
+		&conditionJob.SelectedKeyRoute,
 	)
 	if err != nil {
 		return types.ConditionJobData{}, errors.New("failed to get condition job by job ID")

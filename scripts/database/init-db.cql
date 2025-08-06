@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
     last_executed_at timestamp,
     expiration_time timestamp,
     timezone text,
+    selected_key_route text, 
     PRIMARY KEY (job_id)
 );
 

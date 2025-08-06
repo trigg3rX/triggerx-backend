@@ -90,6 +90,7 @@ type CreateJobData struct {
 	LowerLimit      float64 `json:"lower_limit,omitempty" validate:"omitempty,gt=0"`
 	ValueSourceType string  `json:"value_source_type,omitempty" validate:"omitempty"`
 	ValueSourceUrl  string  `json:"value_source_url,omitempty" validate:"omitempty"`
+	SelectedKeyRoute string  `json:"selected_key_route,omitempty" validate:"omitempty"`
 
 	// Target fields (common for all job types)
 	TargetChainID             string   `json:"target_chain_id" validate:"required,chain_id"`

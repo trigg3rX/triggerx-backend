@@ -248,6 +248,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 				IsCompleted:               false,
 				IsActive:                  true,
+				SelectedKeyRoute:          tempJobs[i].SelectedKeyRoute,
 			}
 
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {

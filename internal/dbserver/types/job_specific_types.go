@@ -71,4 +71,5 @@ type ConditionJobData struct {
 	DynamicArgumentsScriptUrl string    `json:"dynamic_arguments_script_url"`
 	IsCompleted               bool      `json:"is_completed"`
 	IsActive                  bool      `json:"is_active"`
+	SelectedKeyRoute          string    `json:"selected_key_route"`
 }

@@ -25,9 +25,9 @@ const (
 				job_id, task_definition_id, expiration_time, recurring, condition_type, upper_limit, lower_limit, 
 				value_source_type, value_source_url, target_chain_id, target_contract_address, 
 				target_function, abi, arg_type, arguments, dynamic_arguments_script_url,
-				is_completed, is_active, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`
-	// 20 values to be inserted, so 20 ?s
+				is_completed, is_active, selected_key_route, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`
+	// 21 values to be inserted, so 21 ?s
 )
 
 // Write Queries
@@ -105,7 +105,7 @@ const (
 				value_source_type, value_source_url,
 				target_chain_id, target_contract_address, target_function,
 				abi, arg_type, arguments, dynamic_arguments_script_url,
-				is_completed, is_active
+				is_completed, is_active, selected_key_route
 			FROM triggerx.condition_job_data
 			WHERE job_id = ?`
 
