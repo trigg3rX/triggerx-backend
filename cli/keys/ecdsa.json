@@ -1,21 +1,20 @@
 {
-  "address": "2932b15371E441D06741Cad48ad155B2C3388Ce5",
+  "address": "fFF39BFba80505321193803a44baA87751E0e249",
   "crypto": {
     "cipher": "aes-128-ctr",
-    "ciphertext": "99e8c6eb6283208d2e09e6be5a400c6f80b88454b3ebacad2b5c336f1247d259",
+    "ciphertext": "3819d40d979665b9d5a1806c6f532cf056d1151d2e3a636c3f7c7233ce2f9ddc",
     "cipherparams": {
-      "iv": "0d6462a4990b40c21996899b4a8b0ee5"
+      "iv": "b264028cd0ac7cf2bab7b37210f4b6c7"
     },
-    "kdf": "scrypt",
+    "kdf": "pbkdf2",
     "kdfparams": {
+      "c": 262144,
       "dklen": 32,
-      "n": 262144,
-      "p": 1,
-      "r": 8,
-      "salt": "7d29e14a4aa2b6b9e91105172259aaefabfa3a7dd0d2c51f10006272c11490c7"
+      "prf": "hmac-sha256",
+      "salt": "8691c98d49bd24fe08186fc4d792ca52e6b0e1ab0f7a34a2c71cd944ef6e2e7d"
     },
-    "mac": "0000000000000000000000000000000000000000000000000000000000000000"
+    "mac": "16912ac4a4fb1186925a7add0574d2bbfda0e3212e7ea2e9bfd416979560f9f1"
   },
-  "id": "9d149c2e-48b5-4168-9aaf-673bfbedd0ac",
+  "id": "9416796f-9538-43af-9402-73d38c832767",
   "version": 3
 }

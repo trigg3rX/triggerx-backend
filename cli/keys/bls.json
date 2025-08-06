@@ -1,21 +1,21 @@
 {
   "crypto": {
     "cipher": "aes-128-ctr",
+    "ciphertext": "92173830cf9eb8dc7ecf9eb2cb550370a8aaa8cb99a9344c0b26a22878ccb056",
     "cipherparams": {
-      "iv": "00000000000000000000000000000000"
+      "iv": "efdb3fea68343bdd3f01c3dda8f1ca22"
     },
-    "ciphertext": "439dab2d7889f204753aff8aa479f303ad25d2ea67519bc64d67b3ea9bb8013a",
     "kdf": "pbkdf2",
     "kdfparams": {
-      "c": 1,
+      "c": 262144,
       "dklen": 32,
       "prf": "hmac-sha256",
-      "salt": "0000000000000000000000000000000000000000000000000000000000000000"
+      "salt": "67a4436b8e341b307b5b31011fed7a650c0b3ea9cebbba4cb12308407fccc09d"
     },
-    "mac": "0000000000000000000000000000000000000000000000000000000000000000"
+    "mac": "6833563c38b75262f00d7c71d15d4e343f707cb6cbaf5d87ab88d2235ef86352"
   },
+  "pubkey": "81aaf4b124eac404d1c17347a0772e65935a4caaf607e4fca672bd2274dacf7d37ccb96e152e32d0435b0b9e3dc243ea",
   "path": "m/12381/3600/0/0",
-  "pubkey": "a4f8f384998d8a4d5e1a54b83f68d4ae5d127b2e793fb1279330b2fa49cfaa386deaf2f478aa8356cc45d3bd1cefb87c",
-  "uuid": "9ee52236-6968-413a-a809-78e5b090f7b1",
+  "uuid": "d5778a25-df5e-411a-ba7b-06ff9b2a240d",
   "version": 4
 }
