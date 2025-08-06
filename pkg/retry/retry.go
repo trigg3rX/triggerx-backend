@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net/http"
+	"math"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -18,9 +18,8 @@ type RetryConfig struct {
 	InitialDelay    time.Duration    // Initial delay between retries
 	MaxDelay        time.Duration    // Maximum delay between retries
 	BackoffFactor   float64          // Multiplier for exponential backoff
-	JitterFactor    float64          // Factor for adding jitter to delays
+	JitterFactor    float64          // Factor for adding jitter to delays (% of delay)
 	LogRetryAttempt bool             // Whether to log retry attempts
-	StatusCodes     []int            // Status codes that should trigger a retry
 	ShouldRetry     func(error) bool // Custom function to determine if error should be retried
 }
 
@@ -31,20 +30,14 @@ func DefaultRetryConfig() *RetryConfig {
 		InitialDelay:    time.Second,
 		MaxDelay:        30 * time.Second,
 		BackoffFactor:   2.0,
-		JitterFactor:    0.1,
+		JitterFactor:    0.2,
 		LogRetryAttempt: true,
-		StatusCodes: []int{
-			http.StatusInternalServerError,
-			http.StatusBadGateway,
-			http.StatusServiceUnavailable,
-			http.StatusGatewayTimeout,
-		},
-		ShouldRetry: nil,
+		ShouldRetry:     nil,
 	}
 }
 
 // validate checks the configuration for reasonable values
-func (c *RetryConfig) validate() error {
+func (c *RetryConfig) Validate() error {
 	if c.MaxRetries < 0 {
 		return errors.New("MaxRetries must be >= 0")
 	}
@@ -63,84 +56,92 @@ func (c *RetryConfig) validate() error {
 	return nil
 }
 
-// secureFloat64 returns a secure random float64 in [0.0,1.0)
-func secureFloat64() float64 {
-	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		// Fallback to time-based randomness if crypto fails
-		return float64(time.Now().UnixNano()%1000) / 1000.0
+// SecureFloat64 returns a secure random float64 in [0.0,1.0)
+func SecureFloat64() float64 {
+	var b [8]byte
+	_, err := rand.Read(b[:])
+	if err != nil {
+		// Fallback to a less random source if crypto/rand fails
+		return math.Mod(float64(time.Now().UnixNano()), 1000) / 1000.0
 	}
-	return float64(binary.BigEndian.Uint64(buf[:])) / float64(^uint64(0))
+	return float64(binary.BigEndian.Uint64(b[:])) / (1 << 64)
+}
+
+// CalculateDelayWithJitter calculates the sleep duration for the given base delay with jitter applied
+func CalculateDelayWithJitter(baseDelay time.Duration, jitterFactor float64) time.Duration {
+	sleepDuration := baseDelay
+	if jitterFactor > 0 {
+		jitter := time.Duration(jitterFactor * float64(baseDelay) * SecureFloat64())
+		sleepDuration += jitter
+	}
+	return sleepDuration
+}
+
+// CalculateNextDelay calculates the next delay value using exponential backoff
+func CalculateNextDelay(currentDelay time.Duration, backoffFactor float64, maxDelay time.Duration) time.Duration {
+	nextDelay := time.Duration(float64(currentDelay) * backoffFactor)
+	if nextDelay > maxDelay {
+		nextDelay = maxDelay
+	}
+	return nextDelay
 }
 
 // Retry executes the given operation with exponential backoff and retry logic.
 // Returns the result of the operation if successful, or an error if all attempts fail.
 func Retry[T any](ctx context.Context, operation func() (T, error), retryConfig *RetryConfig, logger logging.Logger) (T, error) {
-	var result T
+	var zero T
 	var err error
 
 	if retryConfig == nil {
 		retryConfig = DefaultRetryConfig()
-	} else {
-		if err := retryConfig.validate(); err != nil {
-			return result, fmt.Errorf("invalid retry config: %w", err)
-		}
+	} else if err := retryConfig.Validate(); err != nil {
+		return zero, fmt.Errorf("invalid retry config: %w", err)
 	}
 
 	delay := retryConfig.InitialDelay
 
-	for attempt := 1; attempt <= retryConfig.MaxRetries; attempt++ {
+	for attempt := 0; attempt < retryConfig.MaxRetries; attempt++ {
 		select {
 		case <-ctx.Done():
-			return result, ctx.Err()
+			return zero, ctx.Err()
 		default:
 		}
 
-		result, err = operation()
-		if err == nil {
+		result, opErr := operation()
+		if opErr == nil {
 			return result, nil
 		}
+		err = opErr
 
 		// Check if we should retry based on custom predicate
 		if retryConfig.ShouldRetry != nil && !retryConfig.ShouldRetry(err) {
-			return result, err
+			return zero, err
 		}
 
-		if attempt == retryConfig.MaxRetries {
-			break
-		}
+		sleepDuration := CalculateDelayWithJitter(delay, retryConfig.JitterFactor)
 
 		if retryConfig.LogRetryAttempt {
-			logger.Warnf("Attempt %d/%d failed: %v. Retrying in %v...", attempt, retryConfig.MaxRetries, err, delay)
-		}
-
-		// Calculate next delay with exponential backoff
-		nextDelay := time.Duration(float64(delay) * retryConfig.BackoffFactor)
-
-		// Add jitter to prevent thundering herd
-		if retryConfig.JitterFactor > 0 {
-			jitter := time.Duration(float64(nextDelay) * retryConfig.JitterFactor)
-			nextDelay += time.Duration(float64(jitter) * (0.5 - secureFloat64()))
-		}
-
-		// Ensure delay doesn't exceed max delay
-		if nextDelay > retryConfig.MaxDelay {
-			nextDelay = retryConfig.MaxDelay
+			logger.Warnf("Attempt %d/%d failed: %v. Retrying in %v...", attempt+1, retryConfig.MaxRetries, err, sleepDuration)
 		}
 
 		select {
-		case <-time.After(delay):
-			delay = nextDelay
+		case <-time.After(sleepDuration):
+			// Calculate next delay
+			delay = CalculateNextDelay(delay, retryConfig.BackoffFactor, retryConfig.MaxDelay)
 		case <-ctx.Done():
-			return result, ctx.Err()
+			return zero, ctx.Err()
 		}
 	}
 
-	return result, fmt.Errorf("operation failed after %d attempts: %w", retryConfig.MaxRetries, err)
+	return zero, fmt.Errorf("operation failed after %d attempts: %w", retryConfig.MaxRetries, err)
 }
 
-// WithExponentialBackoff is a convenience function that uses default configuration
-// with exponential backoff.
-func WithExponentialBackoff[T any](ctx context.Context, operation func() (T, error), logger logging.Logger) (T, error) {
-	return Retry(ctx, operation, DefaultRetryConfig(), logger)
+// RetryFunc executes an operation that only returns an error, with exponential backoff.
+// This is a convenience wrapper around Retry.
+func RetryFunc(ctx context.Context, operation func() error, config *RetryConfig, logger logging.Logger) error {
+	opWithValue := func() (struct{}, error) {
+		return struct{}{}, operation()
+	}
+	_, err := Retry(ctx, opWithValue, config, logger)
+	return err
 }
