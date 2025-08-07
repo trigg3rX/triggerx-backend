@@ -274,22 +274,22 @@ func (w *ConditionWorker) parseDirectValue(body []byte) (float64, error) {
 	}
 
 	// Try to parse as a generic JSON object and look for common patterns
-	var jsonObj map[string]interface{}
-	if err := json.Unmarshal(body, &jsonObj); err == nil {
-		// Look for common nested patterns like {"ethereum":{"usd":3620.84}}
-		for _, value := range jsonObj {
-			if nestedObj, ok := value.(map[string]interface{}); ok {
-				// Check for common price fields in nested objects
-				for fieldName, fieldValue := range nestedObj {
-					if fieldName == "usd" || fieldName == "price" || fieldName == "value" || fieldName == "rate" {
-						if floatVal, err := w.convertToFloat64(fieldValue); err == nil {
-							return floatVal, nil
-						}
-					}
-				}
-			}
-		}
-	}
+	// var jsonObj map[string]interface{}
+	// if err := json.Unmarshal(body, &jsonObj); err == nil {
+	// 	// Look for common nested patterns like {"ethereum":{"usd":3620.84}}
+	// 	for _, value := range jsonObj {
+	// 		if nestedObj, ok := value.(map[string]interface{}); ok {
+	// 			// Check for common price fields in nested objects
+	// 			for fieldName, fieldValue := range nestedObj {
+	// 				if fieldName == "usd" || fieldName == "price" || fieldName == "value" || fieldName == "rate" {
+	// 					if floatVal, err := w.convertToFloat64(fieldValue); err == nil {
+	// 						return floatVal, nil
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	return 0, fmt.Errorf("could not extract numeric value from response: %s", string(body))
 }
@@ -379,13 +379,3 @@ func (w *ConditionWorker) evaluateCondition(currentValue float64) (bool, error) 
 		return false, fmt.Errorf("unsupported condition type: %s", w.ConditionWorkerData.ConditionType)
 	}
 }
-
-
-
-
-
-
-
-
-
-
