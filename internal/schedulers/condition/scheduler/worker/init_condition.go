@@ -43,7 +43,7 @@ func (w *ConditionWorker) Start() {
 		"job_id", w.ConditionWorkerData.JobID,
 		"condition_type", w.ConditionWorkerData.ConditionType,
 		"value_source", w.ConditionWorkerData.ValueSourceUrl,
-		"value_key_path", w.ConditionWorkerData.ValueKeyPath,
+		"selected_key_route", w.ConditionWorkerData.SelectedKeyRoute,
 		"upper_limit", w.ConditionWorkerData.UpperLimit,
 		"lower_limit", w.ConditionWorkerData.LowerLimit,
 		"expiration_time", w.ConditionWorkerData.ExpirationTime,

@@ -35,12 +35,11 @@ type ConditionWorkerData struct {
 	ExpirationTime   time.Time `json:"expiration_time"`
 	Recurring        bool      `json:"recurring"`
 	ConditionType    string    `json:"condition_type"`
-	ValueKeyPath     string    `json:"value_key_path"`
+	SelectedKeyRoute string    `json:"selected_key_route"`
 	UpperLimit       float64   `json:"upper_limit"`
 	LowerLimit       float64   `json:"lower_limit"`
 	ValueSourceType  string    `json:"value_source_type"`
 	ValueSourceUrl   string    `json:"value_source_url"`
-	SelectedKeyRoute string    `json:"selected_key_route"`
 }
 
 // Data to pass to time scheduler

@@ -161,8 +161,8 @@ func isTimeoutError(err error) bool {
 // extractValueFromResponse extracts the numeric value from the response
 func (w *ConditionWorker) extractValueFromResponse(body []byte) (float64, error) {
 	// If key path is specified, use it to extract the value
-	if w.ConditionWorkerData.ValueKeyPath != "" {
-		value, err := w.extractValueByKeyPath(body, w.ConditionWorkerData.ValueKeyPath)
+	if w.ConditionWorkerData.SelectedKeyRoute != "" {
+		value, err := w.extractValueByKeyPath(body, w.ConditionWorkerData.SelectedKeyRoute)
 		if err == nil {
 			return value, nil
 		}
@@ -172,8 +172,8 @@ func (w *ConditionWorker) extractValueFromResponse(body []byte) (float64, error)
 	var valueResp ValueResponse
 	if err := json.Unmarshal(body, &valueResp); err == nil {
 		// If key path is specified in response, use it
-		if valueResp.KeyPath != "" {
-			return w.extractValueByKeyPath(body, valueResp.KeyPath)
+		if valueResp.SelectedKeyRoute != "" {
+			return w.extractValueByKeyPath(body, w.ConditionWorkerData.SelectedKeyRoute)
 		}
 
 		// Otherwise, use the original fallback logic
