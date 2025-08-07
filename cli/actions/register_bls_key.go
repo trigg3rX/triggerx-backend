@@ -131,9 +131,7 @@ func RegisterBLSPublicKey(c *cli.Context) error {
 }
 
 func parseBLSPrivateKey(hexKey string) (bls.SecretKey, error) {
-	if strings.HasPrefix(hexKey, "0x") {
-		hexKey = hexKey[2:]
-	}
+	hexKey = strings.TrimPrefix(hexKey, "0x")
 
 	keyBytes := common.FromHex(hexKey)
 	if len(keyBytes) != 32 {
@@ -156,9 +154,7 @@ func parseBLSPrivateKey(hexKey string) (bls.SecretKey, error) {
 }
 
 func validateAndFixBLSKey(currentKey string) (string, error) {
-	if strings.HasPrefix(currentKey, "0x") {
-		currentKey = currentKey[2:]
-	}
+	currentKey = strings.TrimPrefix(currentKey, "0x")
 
 	if len(currentKey) != 64 {
 		return "", fmt.Errorf("BLS key must be 64 hex characters, got %d", len(currentKey))
@@ -230,7 +226,9 @@ func storeSignatureInEnvFile(filePath, signature string) error {
 	// If we found an existing signature, we should update it rather than append
 	if hasSignature {
 		// Read the entire file
-		file.Seek(0, 0)
+		if _, err := file.Seek(0, 0); err != nil {
+			return fmt.Errorf("failed to seek to beginning of .env file: %w", err)
+		}
 		var lines []string
 		scanner = bufio.NewScanner(file)
 		for scanner.Scan() {
