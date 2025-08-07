@@ -271,14 +271,15 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
-				JobID:           jobID,
-				ExpirationTime:  expirationTime,
-				Recurring:       tempJobs[i].Recurring,
-				ConditionType:   tempJobs[i].ConditionType,
-				UpperLimit:      tempJobs[i].UpperLimit,
-				LowerLimit:      tempJobs[i].LowerLimit,
-				ValueSourceType: tempJobs[i].ValueSourceType,
-				ValueSourceUrl:  tempJobs[i].ValueSourceUrl,
+				JobID:            jobID,
+				ExpirationTime:   expirationTime,
+				Recurring:        tempJobs[i].Recurring,
+				ConditionType:    tempJobs[i].ConditionType,
+				UpperLimit:       tempJobs[i].UpperLimit,
+				LowerLimit:       tempJobs[i].LowerLimit,
+				ValueSourceType:  tempJobs[i].ValueSourceType,
+				ValueSourceUrl:   tempJobs[i].ValueSourceUrl,
+				SelectedKeyRoute: tempJobs[i].SelectedKeyRoute,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)

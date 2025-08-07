@@ -31,15 +31,16 @@ type EventWorkerData struct {
 	TriggerEvent           string    `json:"trigger_event"`
 }
 type ConditionWorkerData struct {
-	JobID           *big.Int  `json:"job_id"`
-	ExpirationTime  time.Time `json:"expiration_time"`
-	Recurring       bool      `json:"recurring"`
-	ConditionType   string    `json:"condition_type"`
-	ValueKeyPath    string    `json:"value_key_path"`
-	UpperLimit      float64   `json:"upper_limit"`
-	LowerLimit      float64   `json:"lower_limit"`
-	ValueSourceType string    `json:"value_source_type"`
-	ValueSourceUrl  string    `json:"value_source_url"`
+	JobID            *big.Int  `json:"job_id"`
+	ExpirationTime   time.Time `json:"expiration_time"`
+	Recurring        bool      `json:"recurring"`
+	ConditionType    string    `json:"condition_type"`
+	ValueKeyPath     string    `json:"value_key_path"`
+	UpperLimit       float64   `json:"upper_limit"`
+	LowerLimit       float64   `json:"lower_limit"`
+	ValueSourceType  string    `json:"value_source_type"`
+	ValueSourceUrl   string    `json:"value_source_url"`
+	SelectedKeyRoute string    `json:"selected_key_route"`
 }
 
 // Data to pass to time scheduler
