@@ -1,22 +1,23 @@
-package dbserver
+package db
 
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"time"
-
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -100,6 +101,7 @@ type Server struct {
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
+	jobStatusChecker   *handlers.JobStatusChecker
 }
 
 func NewServer(db *database.Connection, logger logging.Logger) *Server {
@@ -211,6 +213,15 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	// Apply retry middleware only to API routes
 	apiGroup := router.Group("/api")
 	apiGroup.Use(middleware.RetryMiddleware(retryConfig, logger))
+
+	// Initialize repositories
+	eventJobRepo := repository.NewEventJobRepository(db)
+	conditionJobRepo := repository.NewConditionJobRepository(db)
+
+	// Initialize and start job status checker
+	s.jobStatusChecker = handlers.NewJobStatusChecker(eventJobRepo, conditionJobRepo, logger)
+	go s.jobStatusChecker.StartStatusCheckLoop()
+	logger.Info("Job status checker started successfully")
 
 	return s
 }

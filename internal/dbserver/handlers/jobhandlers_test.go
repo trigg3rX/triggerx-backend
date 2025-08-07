@@ -33,8 +33,20 @@ type MockEventJobRepository struct {
 	mock.Mock
 }
 
+// Add missing method to satisfy the interface
+func (m *MockEventJobRepository) GetActiveEventJobs() ([]types.EventJobData, error) {
+	args := m.Called()
+	return args.Get(0).([]types.EventJobData), args.Error(1)
+}
+
 type MockConditionJobRepository struct {
 	mock.Mock
+}
+
+// Add missing method to satisfy the interface
+func (m *MockConditionJobRepository) GetActiveConditionJobs() ([]types.ConditionJobData, error) {
+	args := m.Called()
+	return args.Get(0).([]types.ConditionJobData), args.Error(1)
 }
 
 // Mock implementations

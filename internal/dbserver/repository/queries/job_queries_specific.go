@@ -117,4 +117,24 @@ const (
 			FROM triggerx.time_job_data
 			WHERE next_execution_timestamp >= ? AND next_execution_timestamp <= ? AND is_active = true
 			ALLOW FILTERING`
+
+	GetActiveEventJobsQuery string = `
+			SELECT job_id, expiration_time, recurring,
+				trigger_chain_id, trigger_contract_address, trigger_event,
+				target_chain_id, target_contract_address, target_function,
+				abi, arg_type, arguments, dynamic_arguments_script_url,
+				is_completed, is_active
+			FROM triggerx.event_job_data
+			WHERE is_active = true
+			ALLOW FILTERING`
+	GetActiveConditionJobsQuery string = `
+			SELECT job_id, expiration_time, recurring,
+				condition_type, upper_limit, lower_limit,
+				value_source_type, value_source_url,
+				target_chain_id, target_contract_address, target_function,
+				abi, arg_type, arguments, dynamic_arguments_script_url,
+				is_completed, is_active, selected_key_route
+			FROM triggerx.condition_job_data
+			WHERE is_active = true
+			ALLOW FILTERING`
 )

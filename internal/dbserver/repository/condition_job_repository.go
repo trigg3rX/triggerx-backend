@@ -15,6 +15,7 @@ type ConditionJobRepository interface {
 	GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error)
 	CompleteConditionJob(jobID *big.Int) error
 	UpdateConditionJobStatus(jobID *big.Int, isActive bool) error
+	GetActiveConditionJobs() ([]types.ConditionJobData, error)
 }
 
 type conditionJobRepository struct {
@@ -82,4 +83,23 @@ func (r *conditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActi
 	}
 
 	return nil
+}
+
+func (r *conditionJobRepository) GetActiveConditionJobs() ([]types.ConditionJobData, error) {
+	var conditionJobs []types.ConditionJobData
+	iter := r.db.Session().Query(queries.GetActiveConditionJobsQuery).Iter()
+	var conditionJob types.ConditionJobData
+	for iter.Scan(
+		&conditionJob.JobID, &conditionJob.ExpirationTime, &conditionJob.Recurring,
+		&conditionJob.ConditionType, &conditionJob.UpperLimit, &conditionJob.LowerLimit,
+		&conditionJob.ValueSourceType, &conditionJob.ValueSourceUrl, &conditionJob.TargetChainID,
+		&conditionJob.TargetContractAddress, &conditionJob.TargetFunction, &conditionJob.ABI,
+		&conditionJob.ArgType, &conditionJob.Arguments, &conditionJob.DynamicArgumentsScriptUrl,
+		&conditionJob.IsCompleted, &conditionJob.IsActive, &conditionJob.SelectedKeyRoute) {
+		conditionJobs = append(conditionJobs, conditionJob)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, errors.New("failed to fetch active condition jobs")
+	}
+	return conditionJobs, nil
 }
