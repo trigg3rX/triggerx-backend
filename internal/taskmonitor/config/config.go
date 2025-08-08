@@ -1,0 +1,264 @@
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
+)
+
+type Config struct {
+	devMode bool
+
+	// Redis RPC port
+	redisRPCPort string
+
+	// DBServer RPC URL
+	dbServerRPCUrl string
+	// Health RPC URL
+	healthRPCUrl string
+	// Aggregator RPC URL
+	aggregatorRPCUrl string
+
+	// Redis signing key
+	redisSigningKey     string
+	redisSigningAddress string
+
+	// Primary: Cloud Redis (Upstash) settings
+	upstashURL   string
+	upstashToken string
+
+	// Pinata Host
+	pinataHost string
+
+	// OpenTelemetry endpoint
+	ottempoEndpoint string
+
+	// Common settings
+	poolSize     int
+	minIdleConns int
+	maxRetries   int
+
+	// Timeout settings
+	dialTimeout  time.Duration
+	readTimeout  time.Duration
+	writeTimeout time.Duration
+	poolTimeout  time.Duration
+
+	// Stream settings
+	streamMaxLen    int
+	jobStreamTTL    time.Duration
+	taskStreamTTL   time.Duration
+	cacheTTL        time.Duration
+	cleanupInterval time.Duration
+
+	// Metrics settings
+	metricsUpdateInterval time.Duration
+
+	// Timeout and retry settings
+	retryDelay             time.Duration
+	requestTimeout         time.Duration
+	initializationTimeout  time.Duration
+	maxRetryBackoff        time.Duration
+	streamOperationTimeout time.Duration
+
+	// Batch processing settings
+	taskBatchSize    int
+	taskBatchTimeout time.Duration
+}
+
+var cfg Config
+
+func Init() error {
+	if err := godotenv.Load(); err != nil {
+		return fmt.Errorf("error loading .env file: %w", err)
+	}
+	cfg = Config{
+		devMode:                env.GetEnvBool("DEV_MODE", false),
+		redisRPCPort:           env.GetEnvString("REDIS_RPC_PORT", "9003"),
+		healthRPCUrl:           env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
+		dbServerRPCUrl:         env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:       env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		redisSigningKey:        env.GetEnvString("REDIS_SIGNING_KEY", ""),
+		redisSigningAddress:    env.GetEnvString("REDIS_SIGNING_ADDRESS", ""),
+		upstashURL:             env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashToken:           env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		poolSize:               env.GetEnvInt("REDIS_POOL_SIZE", 10),
+		minIdleConns:           env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+		maxRetries:             env.GetEnvInt("REDIS_MAX_RETRIES", 3),
+		dialTimeout:            env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:            env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:           env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:            env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
+		streamMaxLen:           env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
+		jobStreamTTL:           env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
+		taskStreamTTL:          env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
+		cacheTTL:               env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
+		cleanupInterval:        env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
+		metricsUpdateInterval:  env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
+		retryDelay:             env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
+		requestTimeout:         env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
+		initializationTimeout:  env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
+		maxRetryBackoff:        env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
+		streamOperationTimeout: env.GetEnvDuration("REDIS_STREAM_OPERATION_TIMEOUT", 15*time.Second),
+		taskBatchSize:          env.GetEnvInt("REDIS_TASK_BATCH_SIZE", 10),
+		taskBatchTimeout:       env.GetEnvDuration("REDIS_TASK_BATCH_TIMEOUT", 5*time.Second),
+		pinataHost:             env.GetEnvString("PINATA_HOST", ""),
+		ottempoEndpoint:        env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+	}
+
+	if !cfg.devMode {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	return nil
+}
+
+func IsDevMode() bool {
+	return cfg.devMode
+}
+
+func GetPinataHost() string {
+	return cfg.pinataHost
+}
+
+func GetHealthRPCUrl() string {
+	return cfg.healthRPCUrl
+}
+
+func GetRedisRPCPort() string {
+	return cfg.redisRPCPort
+}
+
+func GetDBServerRPCUrl() string {
+	return cfg.dbServerRPCUrl
+}
+
+func GetAggregatorRPCUrl() string {
+	return cfg.aggregatorRPCUrl
+}
+
+func GetRedisSigningKey() string {
+	return cfg.redisSigningKey
+}
+
+func GetRedisSigningAddress() string {
+	return cfg.redisSigningAddress
+}
+
+func GetUpstashURL() string {
+	return cfg.upstashURL
+}
+
+func GetUpstashToken() string {
+	return cfg.upstashToken
+}
+
+func GetStreamMaxLen() int {
+	return cfg.streamMaxLen
+}
+
+func GetJobStreamTTL() time.Duration {
+	return cfg.jobStreamTTL
+}
+
+func GetTaskStreamTTL() time.Duration {
+	return cfg.taskStreamTTL
+}
+
+func GetPoolSize() int {
+	return cfg.poolSize
+}
+
+func GetMinIdleConns() int {
+	return cfg.minIdleConns
+}
+
+func GetMaxRetries() int {
+	return cfg.maxRetries
+}
+
+func GetDialTimeout() time.Duration {
+	return cfg.dialTimeout
+}
+
+func GetReadTimeout() time.Duration {
+	return cfg.readTimeout
+}
+
+func GetWriteTimeout() time.Duration {
+	return cfg.writeTimeout
+}
+
+func GetPoolTimeout() time.Duration {
+	return cfg.poolTimeout
+}
+
+func GetCacheTTL() time.Duration {
+	return cfg.cacheTTL
+}
+
+func GetCleanupInterval() time.Duration {
+	return cfg.cleanupInterval
+}
+
+func GetMetricsUpdateInterval() time.Duration {
+	return cfg.metricsUpdateInterval
+}
+
+func GetRetryDelay() time.Duration {
+	return cfg.retryDelay
+}
+
+func GetRequestTimeout() time.Duration {
+	return cfg.requestTimeout
+}
+
+func GetInitializationTimeout() time.Duration {
+	return cfg.initializationTimeout
+}
+
+func GetMaxRetryBackoff() time.Duration {
+	return cfg.maxRetryBackoff
+}
+
+func GetStreamOperationTimeout() time.Duration {
+	return cfg.streamOperationTimeout
+}
+
+func GetTaskBatchSize() int {
+	return cfg.taskBatchSize
+}
+
+func GetTaskBatchTimeout() time.Duration {
+	return cfg.taskBatchTimeout
+}
+
+func GetOTTempoEndpoint() string {
+	return cfg.ottempoEndpoint
+}
+
+// GetRedisClientConfig returns a RedisConfig for the new Redis client
+func GetRedisClientConfig() redisClient.RedisConfig {
+	return redisClient.RedisConfig{
+		UpstashConfig: redisClient.UpstashConfig{
+			URL:   cfg.upstashURL,
+			Token: cfg.upstashToken,
+		},
+		ConnectionSettings: redisClient.ConnectionSettings{
+			PoolSize:         cfg.poolSize,
+			MaxIdleConns:     0, // Let Redis client manage this
+			MinIdleConns:     cfg.minIdleConns,
+			MaxRetries:       cfg.maxRetries,
+			DialTimeout:      cfg.dialTimeout,
+			ReadTimeout:      cfg.readTimeout,
+			WriteTimeout:     cfg.writeTimeout,
+			PoolTimeout:      cfg.poolTimeout,
+			PingTimeout:      2 * time.Second,  // Default ping timeout
+			HealthTimeout:    5 * time.Second,  // Default health check timeout
+			OperationTimeout: 10 * time.Second, // Default operation timeout
+		},
+	}
+}
