@@ -7,21 +7,12 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"time"
 
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-// HTTPClientInterface defines the interface for HTTP operations
-type HTTPClientInterface interface {
-	DoWithRetry(req *http.Request) (*http.Response, error)
-	Get(url string) (*http.Response, error)
-	Post(url, contentType string, body io.Reader) (*http.Response, error)
-	Put(url, contentType string, body io.Reader) (*http.Response, error)
-	Delete(url string) (*http.Response, error)
-	Close()
-}
 
 // Client interface defines the methods for IPFS operations
 type IPFSClient interface {
@@ -31,15 +22,44 @@ type IPFSClient interface {
 	// Fetch retrieves content from IPFS by CID
 	Fetch(cid string) (types.IPFSData, error)
 
+	// Delete deletes a file from IPFS by CID
+	Delete(cid string) error
+
+	// ListFiles lists all files from Pinata v3 API
+	ListFiles() ([]PinataFile, error)
+
 	// Close closes the client and cleans up resources
 	Close() error
+}
+
+// Pinata v3 API structures
+type PinataFile struct {
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	CID       string            `json:"cid"`
+	Size      int64             `json:"size"`
+	MimeType  string            `json:"mime_type"`
+	GroupID   string            `json:"group_id,omitempty"`
+	Keyvalues map[string]string `json:"keyvalues,omitempty"`
+	CreatedAt time.Time         `json:"created_at"`
+}
+
+type PinataListResponse struct {
+	Data struct {
+		Files         []PinataFile `json:"files"`
+		NextPageToken string       `json:"next_page_token,omitempty"`
+	} `json:"data"`
+}
+
+type PinataDeleteResponse struct {
+	Data interface{} `json:"data"`
 }
 
 // client implements the Client interface
 type ipfsClient struct {
 	config     *Config
 	logger     logging.Logger
-	httpClient HTTPClientInterface
+	httpClient httppkg.HTTPClientInterface
 }
 
 // NewClient creates a new IPFS client with the given configuration
@@ -170,6 +190,117 @@ func (c *ipfsClient) Fetch(cid string) (types.IPFSData, error) {
 	}
 
 	return ipfsData, nil
+}
+
+// Delete file by ID using Pinata v3 API
+func (c *ipfsClient) Delete(cid string) error {
+	// Find file ID by CID
+	network := c.config.PinataHost // Use configurable network from config
+	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?cid=%s&limit=1", network, cid)
+
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to search for CID %s: %w", cid, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Debugf("failed to close response body: %v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to search for CID %s: status %d, body: %s",
+			cid, resp.StatusCode, string(body))
+	}
+
+	var listResp PinataListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return fmt.Errorf("failed to decode search response for CID %s: %w", cid, err)
+	}
+
+	if len(listResp.Data.Files) == 0 {
+		return fmt.Errorf("no file found with CID %s", cid)
+	}
+
+	url = fmt.Sprintf("https://api.pinata.cloud/v3/files/%s/%s", network, listResp.Data.Files[0].ID)
+
+	resp, err = c.httpClient.Delete(url)
+	if err != nil {
+		return fmt.Errorf("failed to delete file %s: %w", listResp.Data.Files[0].ID, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Debugf("failed to close response body: %v", err)
+		}
+	}()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("failed to delete file %s: status %d, body: %s",
+			listResp.Data.Files[0].ID, resp.StatusCode, string(body))
+	}
+
+	var deleteResp PinataDeleteResponse
+	if err := json.Unmarshal(body, &deleteResp); err != nil {
+		// If we can't parse the response but got a success status, that's still OK
+		c.logger.Debugf("Could not parse delete response for file %s, but status was %d", listResp.Data.Files[0].ID, resp.StatusCode)
+	}
+
+	c.logger.Infof("Successfully deleted file %s from Pinata", listResp.Data.Files[0].ID)
+	return nil
+}
+
+// List all files from Pinata v3 API
+func (c *ipfsClient) ListFiles() ([]PinataFile, error) {
+	network := c.config.PinataHost // Use configurable network from config
+	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?limit=1000", network)
+
+	var allFiles []PinataFile
+	nextPageToken := ""
+
+	for {
+		requestURL := url
+		if nextPageToken != "" {
+			requestURL = fmt.Sprintf("%s&pageToken=%s", url, nextPageToken)
+		}
+
+		resp, err := c.httpClient.Get(requestURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list files: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Debugf("failed to close response body: %v", err)
+			}
+			return nil, fmt.Errorf("failed to list files: status %d, body: %s",
+				resp.StatusCode, string(body))
+		}
+
+		var listResp PinataListResponse
+		if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Debugf("failed to close response body: %v", err)
+			}
+			return nil, fmt.Errorf("failed to decode list response: %w", err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Debugf("failed to close response body: %v", err)
+		}
+
+		allFiles = append(allFiles, listResp.Data.Files...)
+
+		// Check if there are more pages
+		if listResp.Data.NextPageToken == "" {
+			break
+		}
+		nextPageToken = listResp.Data.NextPageToken
+	}
+
+	return allFiles, nil
 }
 
 // Close closes the client and cleans up resources
