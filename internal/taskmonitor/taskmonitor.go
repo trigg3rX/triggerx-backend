@@ -201,7 +201,7 @@ func (tm *TaskManager) updateMetrics() {
 
 	// Update connection status
 	connectionStatus := tm.redisClient.GetConnectionStatus()
-	if isRecovering, ok := connectionStatus["is_recovering"].(bool); ok && !isRecovering {
+	if connectionStatus != nil && !connectionStatus.IsRecovering {
 		metrics.RedisConnectionHealth.WithLabelValues("main").Set(1)
 	}
 }

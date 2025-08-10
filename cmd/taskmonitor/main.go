@@ -28,7 +28,7 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.TaskManagerProcess,
+		ProcessName:   logging.TaskMonitorProcess,
 		IsDevelopment: config.IsDevMode(),
 	}
 
