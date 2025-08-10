@@ -8,14 +8,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/api"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/streams/tasks"
-	// redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
+	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -28,7 +28,7 @@ func main() {
 
 	// Initialize logger
 	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.TaskManagerProcess,
+		ProcessName:   logging.TaskDispatcherProcess,
 		IsDevelopment: config.IsDevMode(),
 	}
 
@@ -37,116 +37,82 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting Task Manager service ...")
+	logger.Info("Starting Task Dispatcher service ...")
 
 	// Initialize metrics collector
 	collector := metrics.NewCollector()
-	logger.Info("Metrics collector Initialised")
+	logger.Info("[1/5] Metrics collector Initialised")
 	collector.Start()
 
 	// Create Redis client and verify connection
-	// redisConfig := config.GetRedisClientConfig()
-	// client, err := redisClient.NewRedisClient(logger, redisConfig)
-	// if err != nil {
-	// 	logger.Fatal("Failed to create Redis client", "error", err)
-	// }
+	redisConfig := config.GetRedisClientConfig()
+	redisClient, err := redis.NewRedisClient(logger, redisConfig)
+	if err != nil {
+		logger.Fatal("Failed to create Redis client", "error", err)
+	}
+	if err := redisClient.Ping(context.Background()); err != nil {
+		logger.Fatal("Redis is not reachable", "error", err)
+	}
+	logger.Info("[2/5] Redis client Initialised")
 
 	// Set up monitoring hooks for metrics integration
-	// monitoringHooks := metrics.CreateRedisMonitoringHooks()
-	// client.SetMonitoringHooks(monitoringHooks)
+	monitoringHooks := metrics.CreateRedisMonitoringHooks()
+	redisClient.SetMonitoringHooks(monitoringHooks)
 
-	// Test Redis connection
-	// if err := client.Ping(); err != nil {
-	// 	logger.Fatal("Redis is not reachable", "error", err)
-	// }
-	// logger.Info("Redis client Initialised")
-
-	// Initialize job stream manager for orchestration
-	// jobStreamMgr, err := jobs.NewJobStreamManager(logger, client)
-	jobStreamMgr, err := jobs.NewJobStreamManager(logger)
-	if err != nil {
-		logger.Fatal("Failed to initialize JobStreamManager", "error", err)
+	aggCfg := aggregator.AggregatorClientConfig{
+		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+		SenderPrivateKey: config.GetTaskDispatcherSigningKey(),
+		SenderAddress:    config.GetTaskDispatcherSigningAddress(),
 	}
-	logger.Info("Job stream manager Initialised")
+	aggClient, err := aggregator.NewAggregatorClient(logger, aggCfg)
+	if err != nil {
+		logger.Fatal("Failed to create aggregator client", "error", err)
+	}
+	logger.Info("[3/5] Aggregator client Initialised")
+
+	healthClient := taskdispatcher.NewHealthClient(logger, config.GetHealthRPCUrl())
+	logger.Info("[4/5] Health client Initialised")
 
 	// Initialize task stream manager for orchestration
-	// taskStreamMgr, err := tasks.NewTaskStreamManager(logger, client)
-	taskStreamMgr, err := tasks.NewTaskStreamManager(logger)
+	taskStreamMgr, err := tasks.NewTaskStreamManager(redisClient, aggClient, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
 	}
-	logger.Info("Task stream manager Initialised")
+	logger.Info("[5/5] Task stream manager Initialised")
 
-	// Initialize stream managers
-	if err := jobStreamMgr.Initialize(); err != nil {
-		logger.Fatal("Failed to initialize job streams", "error", err)
-	}
-	if err := taskStreamMgr.Initialize(); err != nil {
-		logger.Fatal("Failed to initialize task streams", "error", err)
-	}
-	logger.Info("Redis streams initialized successfully")
-
-	// Initialize API server
-	serverCfg := api.Config{
-		Port:           config.GetRedisRPCPort(),
-		ReadTimeout:    config.GetReadTimeout(),
-		WriteTimeout:   config.GetWriteTimeout(),
-		MaxHeaderBytes: 1 << 20,
-	}
-
-	deps := api.Dependencies{
-		Logger:           logger,
-		TaskStreamMgr:    taskStreamMgr,
-		JobStreamMgr:     jobStreamMgr,
-		MetricsCollector: collector,
-	}
-
-	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), "a")
-	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
+	// TaskDispatcher is the main orchestrator. It needs all the other components.
+	dispatcher, err := taskdispatcher.NewTaskDispatcher(
+		logger,
+		taskStreamMgr,
+		healthClient,
+		config.GetTaskDispatcherSigningKey(),
+		config.GetTaskDispatcherSigningAddress(),
+	)
 	if err != nil {
-		logger.Fatal("Failed to initialize IPFS client", "error", err)
+		logger.Fatal("Failed to initialize TaskDispatcher", "error", err)
 	}
+	logger.Info("Task Dispatcher Initialised")
 
-	server := api.NewServer(serverCfg, deps, ipfsClient)
+	// 5. Initialize the delivery mechanism (RPC Server) and inject the business logic handler.
+	rpcHandler := taskdispatcher.NewDispatcherRPCHandler(logger, dispatcher)
 
-	// Create context for graceful shutdown
+	serverConfig := rpcserver.Config{
+		Name:    "TaskDispatcher",
+		Version: "1.0.0",
+		Address: "0.0.0.0",
+		Port:    config.GetTaskDispatcherRPCPort(),
+	}
+	srv := rpcserver.NewServer(serverConfig, logger)
+	srv.AddMiddleware(rpcserver.NewLoggingMiddleware(logger))
+	srv.RegisterHandler("TaskDispatcher", rpcHandler)
+
+	// 6. Start everything
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// Start orchestration workers in background
-	logger.Info("Starting Task Manager workers...")
-
-	// Task Processor Workers - multiple instances for scaling
-	consumerName := fmt.Sprintf("redis-worker-%d", time.Now().Unix())
-	go taskStreamMgr.StartTaskProcessor(ctx, consumerName)
-	logger.Info("Started task processor worker", "consumer_name", consumerName)
-
-	// Timeout Worker - monitors processing timeouts
-	go taskStreamMgr.StartTimeoutWorker(ctx)
-	logger.Info("Started task timeout worker")
-
-	// Retry Worker - processes retry streams
-	go taskStreamMgr.StartRetryWorker(ctx)
-	logger.Info("Started task retry worker")
-
-	// Stream Health Monitor - monitors stream health
-	go startStreamHealthMonitor(ctx, jobStreamMgr, taskStreamMgr, logger)
-
-	// Start API server in a goroutine
-	go func() {
-		if err := server.Start(); err != nil {
-			logger.Fatal("Failed to start server", "error", err)
-		}
-	}()
-	logger.Info("API server Started")
-
-	// Start metrics collector in a goroutine
-	go func() {
-		collector.Start()
-	}()
-
-	// Log Redis info
-	logger.Info("Task Manager service is running")
+	
+	if err := srv.Start(ctx); err != nil {
+		logger.Fatal("Failed to start RPC server", "error", err)
+	}
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -156,80 +122,33 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	// performGracefulShutdown(ctx, client, server, logger)
-	performGracefulShutdown(ctx, server, logger)
-}
-
-// startStreamHealthMonitor monitors the health of Redis streams
-func startStreamHealthMonitor(ctx context.Context, jobStreamMgr *jobs.JobStreamManager, taskStreamMgr *tasks.TaskStreamManager, logger logging.Logger) {
-	logger.Info("Starting stream health monitor")
-
-	ticker := time.NewTicker(30 * time.Second) // Check health every 30 seconds
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Stream health monitor shutting down")
-			return
-		case <-ticker.C:
-			// Get stream information
-			jobInfo := jobStreamMgr.GetJobStreamInfo()
-			taskInfo := taskStreamMgr.GetStreamInfo()
-
-			// logger.Info("Stream health status",
-			// 	"job_streams", jobInfo,
-			// 	"task_streams", taskInfo)
-
-			// Log warnings for high stream lengths
-			if jobLengths, ok := jobInfo["stream_lengths"].(map[string]int64); ok {
-				for stream, length := range jobLengths {
-					if length > 100 { // Warn if more than 100 pending jobs
-						logger.Warn("High job stream length detected",
-							"stream", stream,
-							"length", length)
-					}
-				}
-			}
-
-			if taskLengths, ok := taskInfo["stream_lengths"].(map[string]int64); ok {
-				for stream, length := range taskLengths {
-					if length > 50 { // Warn if more than 50 tasks in any stream
-						logger.Warn("High task stream length detected",
-							"stream", stream,
-							"length", length)
-					}
-				}
-			}
-		}
-	}
+	performGracefulShutdown(ctx, srv, dispatcher, logger)
 }
 
 // func performGracefulShutdown(ctx context.Context, client redisClient.RedisClientInterface, server *api.Server, logger logging.Logger) {
-func performGracefulShutdown(ctx context.Context, server *api.Server, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	// Close Redis client connection
-	// logger.Info("Closing Redis client connection...")
-	// if err := client.Close(); err != nil {
-	// 	logger.Error("Error closing Redis client", "error", err)
-	// } else {
-	// 	logger.Info("Redis client closed successfully")
-	// }
-
 	// Shutdown server gracefully
-	logger.Info("Shutting down API server...")
+	logger.Info("Shutting down RPC server...")
 	if err := server.Stop(shutdownCtx); err != nil {
-		logger.Error("Server forced to shutdown", "error", err)
+		logger.Error("RPC server forced to shutdown", "error", err)
 	} else {
-		logger.Info("API server stopped successfully")
+		logger.Info("RPC server stopped successfully")
 	}
 
-	logger.Info("Task Manager service shutdown complete")
+	// Close the Dispatcher
+	if err := dispatcher.Close(); err != nil {
+		logger.Error("Failed to close dispatcher", "error", err)
+	} else {
+		logger.Info("Dispatcher closed successfully")
+	}
+
+	logger.Info("Task Dispatcher service shutdown complete")
 
 	// Ensure we exit cleanly
 	select {
