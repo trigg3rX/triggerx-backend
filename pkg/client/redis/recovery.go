@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -13,28 +14,33 @@ func (c *Client) connectionRecoveryLoop() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		c.checkAndRecoverConnection()
+		c.checkAndRecoverConnection(context.Background())
 	}
 }
 
 // checkAndRecoverConnection checks connection health and attempts recovery if needed
-func (c *Client) checkAndRecoverConnection() {
+func (c *Client) checkAndRecoverConnection(ctx context.Context) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.isRecovering {
+		c.mu.Unlock()
 		return // Already in recovery mode
 	}
+	c.mu.Unlock()
 
 	// Quick health check
-	if err := c.Ping(); err != nil {
+	if err := c.Ping(ctx); err != nil {
 		c.logger.Warnf("Redis connection unhealthy, starting recovery: %v", err)
+		c.mu.Lock()
 		c.isRecovering = true
+		c.mu.Unlock()
 		go c.performConnectionRecovery()
 	} else {
+		c.mu.Lock()
 		c.lastHealthCheck = time.Now()
+		c.mu.Unlock()
 	}
 }
+
 
 // performConnectionRecovery attempts to recover the Redis connection
 func (c *Client) performConnectionRecovery() {
@@ -49,6 +55,8 @@ func (c *Client) performConnectionRecovery() {
 
 	config := c.recoveryConfig
 	backoff := time.Second
+
+	ctx := context.Background()
 
 	for attempt := 0; attempt < config.MaxRetries; attempt++ {
 		if attempt > 0 {
@@ -70,13 +78,16 @@ func (c *Client) performConnectionRecovery() {
 		}
 
 		// Test the new connection
-		if err := c.CheckConnection(); err != nil {
+		if err := c.CheckConnection(ctx); err != nil {
 			c.logger.Errorf("Redis connection recovery test failed: %v", err)
 			continue
 		}
 
 		c.logger.Infof("Redis connection recovery successful after %d attempts", attempt+1)
+		c.mu.Lock()
 		c.lastHealthCheck = time.Now()
+		c.mu.Unlock()
+
 
 		// Track successful recovery
 		duration := time.Since(start)
@@ -114,24 +125,24 @@ func (c *Client) recreateConnection() error {
 	return nil
 }
 
-// GetConnectionStatus returns current connection status
-func (c *Client) GetConnectionStatus() map[string]interface{} {
+// GetConnectionStatus returns the current connection status in a strongly-typed struct.
+func (c *Client) GetConnectionStatus() *ConnectionStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	stats := c.redisClient.PoolStats()
-	return map[string]interface{}{
-		"is_recovering":     c.isRecovering,
-		"last_health_check": c.lastHealthCheck,
-		"recovery_enabled":  c.recoveryConfig.Enabled,
-		"recovery_interval": c.recoveryConfig.CheckInterval,
-		"pool_stats": map[string]interface{}{
-			"hits":        stats.Hits,
-			"misses":      stats.Misses,
-			"timeouts":    stats.Timeouts,
-			"total_conns": stats.TotalConns,
-			"idle_conns":  stats.IdleConns,
-			"stale_conns": stats.StaleConns,
+	return &ConnectionStatus{
+		IsRecovering:     c.isRecovering,
+		LastHealthCheck:  c.lastHealthCheck,
+		RecoveryEnabled:  c.recoveryConfig.Enabled,
+		RecoveryInterval: c.recoveryConfig.CheckInterval,
+		PoolStats: PoolHealthStats{
+			Hits:       stats.Hits,
+			Misses:     stats.Misses,
+			Timeouts:   stats.Timeouts,
+			TotalConns: stats.TotalConns,
+			IdleConns:  stats.IdleConns,
+			StaleConns: stats.StaleConns,
 		},
 	}
 }
