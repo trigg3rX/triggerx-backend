@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
+	// "strconv"
 	"strings"
 	"time"
 
@@ -277,32 +277,46 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 
 // GetActivePerformers returns active performers for taskmanager service
 func (h *Handler) GetActivePerformers(c *gin.Context) {
-	detailedKeepers := h.stateManager.GetDetailedKeeperInfo()
+	// detailedKeepers := h.stateManager.GetDetailedKeeperInfo()
 
 	// Filter for active keepers only and convert to performer format
-	performers := make([]map[string]interface{}, 0)
-	for _, keeper := range detailedKeepers {
-		if keeper.IsActive {
-			// Parse operator_id from string to int64
-			operatorID, err := strconv.ParseInt(keeper.OperatorID, 10, 64)
-			if err != nil {
-				h.logger.Error("Failed to parse operator_id", "operator_id", keeper.OperatorID, "error", err)
-				continue // Skip this keeper if we can't parse the operator_id
-			}
+	// performers := make([]map[string]interface{}, 0)
+	// for _, keeper := range detailedKeepers {
+	// 	if keeper.IsActive {
+	// 		// Parse operator_id from string to int64
+	// 		operatorID, err := strconv.ParseInt(keeper.OperatorID, 10, 64)
+	// 		if err != nil {
+	// 			h.logger.Error("Failed to parse operator_id", "operator_id", keeper.OperatorID, "error", err)
+	// 			continue // Skip this keeper if we can't parse the operator_id
+	// 		}
 
-			performer := map[string]interface{}{
-				"operator_id":    operatorID,
-				"keeper_address": keeper.KeeperAddress,
-				"is_imua":        keeper.IsImua,
-				"last_seen":      keeper.LastCheckedIn,
-			}
-			performers = append(performers, performer)
-		}
+	// 		performer := map[string]interface{}{
+	// 			"operator_id":    operatorID,
+	// 			"keeper_address": keeper.KeeperAddress,
+	// 			"is_imua":        keeper.IsImua,
+	// 			"last_seen":      keeper.LastCheckedIn,
+	// 		}
+	// 		performers = append(performers, performer)
+	// 	}
+	// }
+
+	// Temporary fix for taskmanager
+	fallbackPerformers := []commonTypes.PerformerData{
+		{
+			OperatorID:    1,
+			KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
+			IsImua:        false,
+		},
+		{
+			OperatorID:    4,
+			KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
+			IsImua:        true,
+		},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"performers": performers,
-		"count":      len(performers),
+		"performers": fallbackPerformers,
+		"count":      len(fallbackPerformers),
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 	})
 }
