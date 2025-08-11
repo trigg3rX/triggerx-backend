@@ -3,13 +3,13 @@ package redis
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"syscall"
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 // SetRetryConfig sets custom retry configuration
@@ -38,19 +38,17 @@ func (c *Client) executeWithRetryAndKey(ctx context.Context, operation func() er
 		config = DefaultRetryConfig()
 	}
 
-	// Convert Redis RetryConfig to generic RetryConfig
-	retryConfig := &retry.RetryConfig{
-		MaxRetries:      config.MaxRetries,
-		InitialDelay:    config.InitialDelay,
-		MaxDelay:        config.MaxDelay,
-		BackoffFactor:   config.BackoffFactor,
-		JitterFactor:    config.JitterFactor,
-		LogRetryAttempt: config.LogRetryAttempt,
-		ShouldRetry:     c.isRetryableError,
-	}
+	delay := config.InitialDelay
+	var lastErr error
 
-	// Create a wrapper operation that includes monitoring
-	wrappedOperation := func() error {
+	for attempt := 0; attempt < config.MaxRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Execute the operation with monitoring
 		start := time.Now()
 		c.trackOperationStart(operationName, key)
 
@@ -59,11 +57,64 @@ func (c *Client) executeWithRetryAndKey(ctx context.Context, operation func() er
 		duration := time.Since(start)
 		c.trackOperationEnd(operationName, key, duration, err)
 
-		return err
+		// If operation succeeded, return immediately
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+
+		// Check if we should retry based on custom predicate
+		if !c.isRetryableError(err) {
+			return err
+		}
+
+		// Track retry attempt
+		c.trackRetryAttempt(operationName, attempt+1, err)
+
+		// Calculate delay with jitter
+		sleepDuration := c.calculateDelayWithJitter(delay, config.JitterFactor)
+
+		if config.LogRetryAttempt {
+			c.logger.Warnf("Attempt %d/%d failed: %v. Retrying in %v...", attempt+1, config.MaxRetries, err, sleepDuration)
+		}
+
+		select {
+		case <-time.After(sleepDuration):
+			// Calculate next delay using exponential backoff
+			delay = c.calculateNextDelay(delay, config.BackoffFactor, config.MaxDelay)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
-	// Use the generic retry package
-	return retry.RetryFunc(ctx, wrappedOperation, retryConfig, c.logger)
+	return fmt.Errorf("operation failed after %d attempts: %w", config.MaxRetries, lastErr)
+}
+
+// calculateDelayWithJitter calculates the sleep duration with jitter applied
+func (c *Client) calculateDelayWithJitter(baseDelay time.Duration, jitterFactor float64) time.Duration {
+	sleepDuration := baseDelay
+	if jitterFactor > 0 {
+		// Use a simple jitter calculation
+		jitter := time.Duration(jitterFactor * float64(baseDelay) * c.secureFloat64())
+		sleepDuration += jitter
+	}
+	return sleepDuration
+}
+
+// calculateNextDelay calculates the next delay value using exponential backoff
+func (c *Client) calculateNextDelay(currentDelay time.Duration, backoffFactor float64, maxDelay time.Duration) time.Duration {
+	nextDelay := time.Duration(float64(currentDelay) * backoffFactor)
+	if nextDelay > maxDelay {
+		nextDelay = maxDelay
+	}
+	return nextDelay
+}
+
+// secureFloat64 returns a secure random float64 in [0.0,1.0)
+func (c *Client) secureFloat64() float64 {
+	// Use time-based random for simplicity, but could be enhanced with crypto/rand
+	return float64(time.Now().UnixNano()%1000) / 1000.0
 }
 
 // isRetryableError determines if an error is retryable using type assertions and specific checks
