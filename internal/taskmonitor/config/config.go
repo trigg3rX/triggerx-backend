@@ -271,6 +271,7 @@ func GetChainRPCUrl(isRPC bool, chainID string) string {
 	var domain string
 	if cfg.rpcProvider == "alchemy" {
 		switch chainID {
+		// Testnets
 		case "17000":
 			domain = "eth-holesky.g.alchemy.com/v2/"
 		case "11155111":
@@ -279,12 +280,25 @@ func GetChainRPCUrl(isRPC bool, chainID string) string {
 			domain = "opt-sepolia.g.alchemy.com/v2/"
 		case "84532":
 			domain = "base-sepolia.g.alchemy.com/v2/"
+		case "421614":
+			domain = "arb-sepolia.g.alchemy.com/v2/"
+
+		// Mainnets
+		case "1":
+			domain = "eth-mainnet.g.alchemy.com/v2/"
+		case "10":
+			domain = "opt-mainnet.g.alchemy.com/v2/"
+		case "8453":
+			domain = "base-mainnet.g.alchemy.com/v2/"
+		case "42161":
+			domain = "arb-mainnet.g.alchemy.com/v2/"
 		default:
 			return ""
 		}
 	}
 	if cfg.rpcProvider == "blast" {
 		switch chainID {
+		// Testnets
 		case "17000":
 			domain = "eth-holesky.blastapi.io/"
 		case "11155111":
@@ -293,6 +307,18 @@ func GetChainRPCUrl(isRPC bool, chainID string) string {
 			domain = "optimism-sepolia.blastapi.io/"
 		case "84532":
 			domain = "base-sepolia.blastapi.io/"
+		case "421614":
+			domain = "arb-sepolia.blastapi.io/"
+
+		// Mainnets
+		case "1":
+			domain = "eth-mainnet.blastapi.io/"
+		case "10":
+			domain = "optimism-mainnet.blastapi.io/"
+		case "8453":
+			domain = "base-mainnet.blastapi.io/"
+		case "42161":
+			domain = "arbitrum-one.blastapi.io/"
 		default:
 			return ""
 		}

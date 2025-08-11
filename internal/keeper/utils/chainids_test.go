@@ -30,6 +30,11 @@ func TestGetChainRpcUrl(t *testing.T) {
 			expected: fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey()),
 		},
 		{
+			name:     "Arbitrum Sepolia",
+			chainID:  "421614",
+			expected: fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey()),
+		},
+		{
 			name:     "Unknown chain ID",
 			chainID:  "12345",
 			expected: "",
