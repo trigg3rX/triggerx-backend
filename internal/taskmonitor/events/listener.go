@@ -106,7 +106,7 @@ func (l *ContractEventListener) Start() error {
 		return fmt.Errorf("event listener is already running")
 	}
 
-	l.logger.Info("Starting contract event listener")
+	// l.logger.Info("Starting contract event listener")
 
 	// Set up chain connections and subscriptions
 	if err := l.setupChainConnections(); err != nil {

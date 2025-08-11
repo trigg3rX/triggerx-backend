@@ -82,7 +82,17 @@ func (tsm *TaskStreamManager) Initialize() error {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
-	go tsm.StartStreamHealthMonitor(ctx)
+	// Register consumer groups for timeout checking
+	if err := tsm.RegisterConsumerGroup(StreamTaskDispatched, "timeout-checker"); err != nil {
+		return fmt.Errorf("failed to register timeout-checker group: %w", err)
+	}
+
+	// Register consumer groups for task finding
+	if err := tsm.RegisterConsumerGroup(StreamTaskDispatched, "task-finder"); err != nil {
+		return fmt.Errorf("failed to register task-finder group: %w", err)
+	}
+
+	// go tsm.StartStreamHealthMonitor(ctx)
 
 	tsm.logger.Info("All task streams initialized successfully")
 
@@ -120,7 +130,7 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(stream string, group string)
 
 // GetStreamInfo returns information about task streams
 func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
-	tsm.logger.Debug("Getting stream information")
+	// tsm.logger.Debug("Getting stream information")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

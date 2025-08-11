@@ -51,10 +51,10 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(stream, consumerGroup, consume
 	if err != nil {
 		if err == redis.Nil {
 			metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "empty").Inc()
-			tsm.logger.Debug("No tasks available in stream",
-				"stream", stream,
-				"consumer_group", consumerGroup,
-				"duration", duration)
+			// tsm.logger.Debug("No tasks available in stream",
+			// 	"stream", stream,
+			// 	"consumer_group", consumerGroup,
+			// 	"duration", duration)
 			return []TaskStreamData{}, []string{}, nil
 		}
 		tsm.logger.Error("Failed to read from stream",

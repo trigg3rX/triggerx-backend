@@ -27,29 +27,16 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *websocket.ChainEvent) {
 		}
 
 		if taskData.TaskID != 0 {
-			// First, move the task from dispatched to completed/failed stream based on onchain result
-			if taskData.IsAccepted {
-				h.logger.Info("Task accepted onchain, moving to completed stream",
-					"task_id", taskData.TaskID,
-					"task_number", taskData.TaskNumber,
-					"tx_hash", event.TxHash)
+			// First, move the task from dispatched to completed based on onchain result
+			h.logger.Info("Task accepted onchain, moving to completed stream",
+				"task_id", taskData.TaskID,
+				"task_number", taskData.TaskNumber,
+				"tx_hash", event.TxHash)
 
-				// Move task from dispatched to completed stream
-				if err := h.moveTaskToCompleted(taskData.TaskID); err != nil {
-					h.logger.Errorf("Failed to move task to completed stream: %v", err)
-					return
-				}
-			} else {
-				h.logger.Info("Task rejected onchain, moving to failed stream",
-					"task_id", taskData.TaskID,
-					"task_number", taskData.TaskNumber,
-					"tx_hash", event.TxHash)
-
-				// Move task from dispatched to failed stream
-				if err := h.moveTaskToFailed(taskData.TaskID, "task rejected onchain"); err != nil {
-					h.logger.Errorf("Failed to move task to failed stream: %v", err)
-					return
-				}
+			// Move task from dispatched to completed stream
+			if err := h.moveTaskToCompleted(taskData.TaskID); err != nil {
+				h.logger.Errorf("Failed to move task to completed stream: %v", err)
+				return
 			}
 
 			// Then update the database with parsed data (like registrar was doing)
@@ -91,35 +78,6 @@ func (h *TaskEventHandler) moveTaskToCompleted(taskID int64) error {
 	// Remove from dispatched stream (acknowledge)
 	// Note: In a real implementation, we'd need to track the dispatched message ID
 	h.logger.Info("Task moved to completed stream successfully", "task_id", taskID)
-
-	return nil
-}
-
-// moveTaskToFailed moves a task from dispatched to failed stream
-func (h *TaskEventHandler) moveTaskToFailed(taskID int64, reason string) error {
-	h.logger.Info("Moving task to failed stream", "task_id", taskID, "reason", reason)
-
-	// Find the task in the dispatched stream
-	task, err := h.taskStreamManager.FindTaskInDispatched(taskID)
-	if err != nil {
-		h.logger.Error("Failed to find task in dispatched stream", "task_id", taskID, "error", err)
-		return err
-	}
-
-	// Mark task as failed
-	task.LastError = reason
-	task.RetryCount++
-
-	// Add to failed stream
-	err = h.taskStreamManager.AddTaskToStream(context.Background(), tasks.StreamTaskFailed, task)
-	if err != nil {
-		h.logger.Error("Failed to add task to failed stream", "task_id", taskID, "error", err)
-		return err
-	}
-
-	// Remove from dispatched stream (acknowledge)
-	// Note: In a real implementation, we'd need to track the dispatched message ID
-	h.logger.Info("Task moved to failed stream successfully", "task_id", taskID, "reason", reason)
 
 	return nil
 }
