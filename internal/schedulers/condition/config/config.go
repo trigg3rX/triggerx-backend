@@ -73,9 +73,8 @@ func validateConfig() error {
 	if !env.IsValidURL(cfg.aggregatorRPCURL) {
 		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCURL)
 	}
-	if !env.IsValidURL(cfg.taskDispatcherRPCUrl) {
-		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
-	}
+	// Note: taskDispatcherRPCUrl is a gRPC endpoint (host:port format), not an HTTP URL
+	// so we don't validate it as a URL
 	return nil
 }
 

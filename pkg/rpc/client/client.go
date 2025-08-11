@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -145,9 +146,15 @@ func (c *Client) makeGRPCCall(ctx context.Context, conn *grpc.ClientConn, method
 				return fmt.Errorf("failed to serialize request: %w", err)
 			}
 		} else {
-			// For non-proto messages, we'll store them as-is for now
-			// In a real implementation, you might want to serialize them differently
-			payload = &anypb.Any{}
+			// For non-proto messages, serialize as JSON
+			jsonData, err := json.Marshal(request)
+			if err != nil {
+				return fmt.Errorf("failed to serialize request as JSON: %w", err)
+			}
+			payload = &anypb.Any{
+				TypeUrl: "application/json",
+				Value:   jsonData,
+			}
 		}
 	}
 
@@ -174,9 +181,16 @@ func (c *Client) makeGRPCCall(ctx context.Context, conn *grpc.ClientConn, method
 			if err := grpcResp.Result.UnmarshalTo(protoMsg); err != nil {
 				return fmt.Errorf("failed to deserialize response: %w", err)
 			}
+		} else {
+			// For non-proto messages, deserialize from JSON
+			if grpcResp.Result.TypeUrl == "application/json" {
+				if err := json.Unmarshal(grpcResp.Result.Value, response); err != nil {
+					return fmt.Errorf("failed to deserialize response from JSON: %w", err)
+				}
+			} else {
+				return fmt.Errorf("unsupported response type: %s", grpcResp.Result.TypeUrl)
+			}
 		}
-		// TODO: For non-proto messages, we'll store them as-is for now
-		// In a real implementation, you might want to deserialize them differently
 	}
 
 	return nil

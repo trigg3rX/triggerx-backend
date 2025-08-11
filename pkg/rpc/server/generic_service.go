@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
@@ -39,10 +40,23 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 	// Extract request payload
 	var request interface{}
 	if req.Payload != nil {
-		// For now, we'll use a simple approach
-		// In a real implementation, you might want to use a more sophisticated
-		// serialization/deserialization mechanism
-		request = req.Payload
+		if req.Payload.TypeUrl == "application/json" {
+			// Deserialize JSON payload
+			var jsonData map[string]interface{}
+			if err := json.Unmarshal(req.Payload.Value, &jsonData); err != nil {
+				s.logger.Error("Failed to deserialize JSON payload",
+					"service", s.serviceName,
+					"method", req.Method,
+					"error", err)
+				return &rpcproto.RPCResponse{
+					Error: fmt.Sprintf("failed to deserialize JSON payload: %v", err),
+				}, nil
+			}
+			request = jsonData
+		} else {
+			// For protobuf messages, pass as-is
+			request = req.Payload
+		}
 	}
 
 	// Call the handler
@@ -74,9 +88,21 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 				}, nil
 			}
 		} else {
-			// For non-proto messages, we'll store them as-is for now
-			// In a real implementation, you might want to serialize them differently
-			resultAny = &anypb.Any{}
+			// For non-proto messages, serialize as JSON
+			jsonData, err := json.Marshal(result)
+			if err != nil {
+				s.logger.Error("Failed to serialize result as JSON",
+					"service", s.serviceName,
+					"method", req.Method,
+					"error", err)
+				return &rpcproto.RPCResponse{
+					Error: fmt.Sprintf("failed to serialize result as JSON: %v", err),
+				}, nil
+			}
+			resultAny = &anypb.Any{
+				TypeUrl: "application/json",
+				Value:   jsonData,
+			}
 		}
 	}
 

@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -38,7 +39,11 @@ func (h *TaskDispatcherHandler) Handle(ctx context.Context, method string, reque
 		if !ok {
 			// Try to convert from map if it's JSON-decoded
 			if reqMap, ok := request.(map[string]interface{}); ok {
-				req = h.convertMapToRequest(reqMap)
+				var err error
+				req, err = h.convertMapToRequest(reqMap)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert request: %w", err)
+				}
 			} else {
 				return nil, fmt.Errorf("invalid request type for submit-task: %T", request)
 			}
@@ -70,14 +75,17 @@ func (h *TaskDispatcherHandler) GetMethods() []rpcpkg.RPCMethod {
 
 // convertMapToRequest converts a map to SchedulerTaskRequest
 // This is used when the request comes as JSON-decoded map
-func (h *TaskDispatcherHandler) convertMapToRequest(reqMap map[string]interface{}) *types.SchedulerTaskRequest {
-	// This is a simplified conversion - in a real implementation,
-	// you might want to use a more robust JSON marshaling approach
-	h.logger.Warn("Converting map to SchedulerTaskRequest - consider using proper JSON marshaling")
-
-	// For now, return a basic request structure
-	// In practice, you'd want to properly unmarshal the map
-	return &types.SchedulerTaskRequest{
-		Source: "unknown", // Default value
+func (h *TaskDispatcherHandler) convertMapToRequest(reqMap map[string]interface{}) (*types.SchedulerTaskRequest, error) {
+	// Convert map back to JSON and then unmarshal to proper struct
+	jsonData, err := json.Marshal(reqMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request map: %w", err)
 	}
+
+	var req types.SchedulerTaskRequest
+	if err := json.Unmarshal(jsonData, &req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	return &req, nil
 }
