@@ -12,4 +12,4 @@ else
 fi
 
 # Run the service
-exec /home/appuser/taskmanager
+exec /home/appuser/taskdispatcher

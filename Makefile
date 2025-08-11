@@ -40,8 +40,11 @@ start-registrar: ## Start the Registrar
 start-health: ## Start the Health Check
 	./scripts/services/start-health.sh
 
-start-taskmanager: ## Start the Task Manager
-	./scripts/services/start-taskmanager.sh
+start-taskdispatcher: ## Start the Task Dispatcher
+	./scripts/services/start-taskdispatcher.sh
+
+start-taskmonitor: ## Start the Task Monitor
+	./scripts/services/start-taskmonitor.sh
 
 start-time-scheduler: ## Start the Time Scheduler
 	./scripts/services/start-time-scheduler.sh
@@ -54,6 +57,40 @@ start-keeper: ## Start the Keeper
 
 start-imua-keeper: ## Start the Imua Keeper
 	./scripts/services/start-imua-keeper.sh
+
+############################# TESTING #############################
+----------------------------TESTING----------------------------: ## 
+
+test: ## Run all tests
+	go test -v ./...
+
+test-short: ## Run tests in short mode
+	go test -v -short ./...
+
+test-race: ## Run tests with race detection
+	go test -v -race ./...
+
+test-coverage: ## Get the coverage of tests
+	./scripts/tests/coverage.sh
+
+test-coverage-short: ## Get test coverage in short mode
+	go test -v -short -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+
+test-unit: ## Run unit tests only
+	go test -v -short ./internal/... ./pkg/...
+
+test-integration: ## Run integration tests only
+	go test -v -run Integration ./...
+
+test-api: ## Run API tests only
+	go test -v ./internal/*/api/...
+
+test-database: ## Run database tests only
+	go test -v ./internal/*/repository/... ./pkg/database/...
+
+benchmark: ## Run benchmarks
+	go test -v -bench=. -benchmem ./pkg/...
 
 ############################ GITHUB ACTIONS ####################################
 -------------------------GITHUB-ACTIONS-------------------------: ## 

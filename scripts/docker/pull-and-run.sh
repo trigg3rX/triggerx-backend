@@ -49,8 +49,8 @@ if [ -z "$PORT" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(dbserver|registrar|health|taskmanager|schedulers/time|schedulers/condition)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: dbserver, registrar, health, taskmanager, schedulers/time, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(dbserver|health|taskdispatcher|taskmonitor|schedulers/time|schedulers/condition)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: dbserver, health, taskdispatcher, taskmonitor, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 
@@ -187,20 +187,7 @@ fi
 
 echo "Log and cache directory permissions set successfully."
 
-if [[ "$SERVICE" == "registrar" ]]; then
-    # Run the container
-    echo "Starting container triggerx-${DOCKER_NAME}..."
-    docker run -d \
-        --name triggerx-${DOCKER_NAME} \
-        ${USER_MAPPING} \
-        ${ENV_FILE} \
-        -v ./pkg/bindings/abi:/home/appuser/pkg/bindings/abi \
-        -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
-        -v ./data/cache:/home/appuser/data/cache \
-        -p ${PORT}:${PORT} \
-        --restart unless-stopped \
-        ${IMAGE_NAME}
-elif [[ "$SERVICE" == "dbserver" ]]; then
+if [[ "$SERVICE" == "dbserver" ]]; then
     # Special handling for dbserver which needs docker socket access
     if [ -n "$DOCKER_GID" ]; then
         DBSERVER_USER_MAPPING="--user ${CURRENT_UID}:${DOCKER_GID}"

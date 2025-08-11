@@ -25,7 +25,8 @@ AVAILABLE SERVICES:
     dbserver            - Database server service
     registrar           - Registrar service
     health              - Health monitoring service
-    taskmanager         - Task manager service
+    taskdispatcher      - Task dispatcher service
+    taskmonitor         - Task monitor service
     schedulers/time     - Time-based scheduler service
     schedulers/condition - Condition-based scheduler service
     all                 - Build all services in parallel (excluding keepers)
@@ -104,8 +105,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|imua-keeper|dbserver|registrar|health|taskmanager|schedulers/time|schedulers/condition|all)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: keeper, imua-keeper, dbserver, registrar, health, taskmanager, schedulers/time, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(keeper|imua-keeper|dbserver|health|taskdispatcher|taskmonitor|schedulers/time|schedulers/condition|all)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: keeper, imua-keeper, dbserver, health, taskdispatcher, taskmonitor, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 
@@ -117,7 +118,7 @@ fi
 
 if [[ "$SERVICE" == "all" ]]; then
     # Build all services in parallel
-    services=(dbserver registrar health taskmanager schedulers/time schedulers/condition)
+    services=(dbserver health taskdispatcher taskmonitor schedulers/time schedulers/condition)
     build_pids=()
     failed_services=()
     
