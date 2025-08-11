@@ -6,19 +6,19 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TaskDispatcher encapsulates dependencies for handling scheduler submissions
 // and forwarding them to the aggregator.
 type TaskDispatcher struct {
-	logger           logging.Logger
+	logger            logging.Logger
 	taskStreamManager *tasks.TaskStreamManager
-	healthClient *HealthClient
-	signingKey string
-	signingAddress string
+	healthClient      *HealthClient
+	signingKey        string
+	signingAddress    string
 }
 
 // NewTaskDispatcher constructs a new dispatcher with an initialized aggregator client.
@@ -28,13 +28,13 @@ func NewTaskDispatcher(
 	healthClient *HealthClient,
 	signingKey string,
 	signingAddress string) (*TaskDispatcher, error) {
-	
+
 	return &TaskDispatcher{
-		logger:           logger,
+		logger:            logger,
 		taskStreamManager: taskStreamManager,
-		healthClient: healthClient,
-		signingKey: signingKey,
-		signingAddress: signingAddress,
+		healthClient:      healthClient,
+		signingKey:        signingKey,
+		signingAddress:    signingAddress,
 	}, nil
 }
 

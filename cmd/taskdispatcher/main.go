@@ -11,6 +11,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
@@ -93,9 +94,7 @@ func main() {
 	}
 	logger.Info("Task Dispatcher Initialised")
 
-	// 5. Initialize the delivery mechanism (RPC Server) and inject the business logic handler.
-	rpcHandler := taskdispatcher.NewDispatcherRPCHandler(logger, dispatcher)
-
+	// 5. Initialize the delivery mechanism (RPC Server) using the generic approach
 	serverConfig := rpcserver.Config{
 		Name:    "TaskDispatcher",
 		Version: "1.0.0",
@@ -103,13 +102,16 @@ func main() {
 		Port:    config.GetTaskDispatcherRPCPort(),
 	}
 	srv := rpcserver.NewServer(serverConfig, logger)
-	srv.AddMiddleware(rpcserver.NewLoggingMiddleware(logger))
-	srv.RegisterHandler("TaskDispatcher", rpcHandler)
+	srv.AddInterceptor(rpcserver.LoggingInterceptor(logger))
+
+	// Create and register the generic RPC handler
+	handler := rpc.NewTaskDispatcherHandler(logger, dispatcher)
+	srv.RegisterHandler("TaskDispatcher", handler)
 
 	// 6. Start everything
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	if err := srv.Start(ctx); err != nil {
 		logger.Fatal("Failed to start RPC server", "error", err)
 	}
@@ -125,7 +127,7 @@ func main() {
 	performGracefulShutdown(ctx, srv, dispatcher, logger)
 }
 
-// func performGracefulShutdown(ctx context.Context, client redisClient.RedisClientInterface, server *api.Server, logger logging.Logger) {
+// performGracefulShutdown handles graceful shutdown of the service
 func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
