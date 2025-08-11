@@ -56,7 +56,7 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 	}
 
 	if cfg.Version == "" {
-		cfg.Version = "0.1.6"
+		cfg.Version = config.GetVersion()
 	}
 
 	retryConfig := httppkg.DefaultHTTPRetryConfig()
