@@ -217,9 +217,10 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	// Initialize repositories
 	eventJobRepo := repository.NewEventJobRepository(db)
 	conditionJobRepo := repository.NewConditionJobRepository(db)
+	timeJobRepo := repository.NewTimeJobRepository(db) // NEW
 
 	// Initialize and start job status checker
-	s.jobStatusChecker = handlers.NewJobStatusChecker(eventJobRepo, conditionJobRepo, logger)
+	s.jobStatusChecker = handlers.NewJobStatusChecker(eventJobRepo, conditionJobRepo, timeJobRepo, logger)
 	go s.jobStatusChecker.StartStatusCheckLoop()
 	logger.Info("Job status checker started successfully")
 

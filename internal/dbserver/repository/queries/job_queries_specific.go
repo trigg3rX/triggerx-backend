@@ -137,4 +137,13 @@ const (
 			FROM triggerx.condition_job_data
 			WHERE is_active = true
 			ALLOW FILTERING`
+	// NEW: GetActiveTimeJobsQuery
+	GetActiveTimeJobsQuery string = `
+			SELECT job_id, expiration_time, next_execution_timestamp, schedule_type,
+				time_interval, cron_expression, specific_schedule, timezone,
+				target_chain_id, target_contract_address, target_function, abi, arg_type,
+				arguments, dynamic_arguments_script_url, is_completed, is_active
+			FROM triggerx.time_job_data
+			WHERE is_active = true
+			ALLOW FILTERING`
 )

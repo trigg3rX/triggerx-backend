@@ -18,6 +18,7 @@ const (
 type JobStatusChecker struct {
 	eventJobRepo     repository.EventJobRepository
 	conditionJobRepo repository.ConditionJobRepository
+	timeJobRepo      repository.TimeJobRepository
 	logger           logging.Logger
 }
 
@@ -25,11 +26,13 @@ type JobStatusChecker struct {
 func NewJobStatusChecker(
 	eventJobRepo repository.EventJobRepository,
 	conditionJobRepo repository.ConditionJobRepository,
+	timeJobRepo repository.TimeJobRepository,
 	logger logging.Logger,
 ) *JobStatusChecker {
 	return &JobStatusChecker{
 		eventJobRepo:     eventJobRepo,
 		conditionJobRepo: conditionJobRepo,
+		timeJobRepo:      timeJobRepo,
 		logger:           logger,
 	}
 }
@@ -49,6 +52,9 @@ func (c *JobStatusChecker) checkJobStatuses() {
 	var wg sync.WaitGroup
 	currentTime := time.Now()
 
+	//log the current time and checking for jobs
+	c.logger.Info(fmt.Sprintf("Checking for jobs at %s", currentTime.Format(time.RFC3339)))
+
 	// Check event jobs
 	wg.Add(1)
 	go func() {
@@ -63,7 +69,16 @@ func (c *JobStatusChecker) checkJobStatuses() {
 		c.checkConditionJobs(currentTime)
 	}()
 
+	// Check time jobs
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.checkTimeJobs(currentTime)
+	}()
+
 	wg.Wait()
+
+	c.logger.Info("Job status check completed")
 }
 
 // checkEventJobs checks all active event jobs for expiration
@@ -100,6 +115,25 @@ func (c *JobStatusChecker) checkConditionJobs(currentTime time.Time) {
 				continue
 			}
 			c.logger.Info(fmt.Sprintf("Condition job %s marked as inactive due to expiration", job.JobID.String()))
+		}
+	}
+}
+
+// checkTimeJobs checks all active time jobs for expiration
+func (c *JobStatusChecker) checkTimeJobs(currentTime time.Time) {
+	timeJobs, err := c.timeJobRepo.GetActiveTimeJobs()
+	if err != nil {
+		c.logger.Error("Failed to fetch active time jobs", err)
+		return
+	}
+
+	for _, job := range timeJobs {
+		if job.ExpirationTime.Before(currentTime) {
+			if err := c.timeJobRepo.UpdateTimeJobStatus(job.JobID, false); err != nil {
+				c.logger.Error(fmt.Sprintf("Failed to update time job status for job ID %s", job.JobID.String()), err)
+				continue
+			}
+			c.logger.Info(fmt.Sprintf("Time job %s marked as inactive due to expiration", job.JobID.String()))
 		}
 	}
 }

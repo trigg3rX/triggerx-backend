@@ -21,6 +21,7 @@ type TimeJobRepository interface {
 	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error)
 	UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error
 	UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error
+	GetActiveTimeJobs() ([]types.TimeJobData, error)
 }
 
 type timeJobRepository struct {
@@ -161,4 +162,21 @@ func (r *timeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterval i
 		return errors.New("failed to update time_interval in time_job_data")
 	}
 	return nil
+}
+
+func (r *timeJobRepository) GetActiveTimeJobs() ([]types.TimeJobData, error) {
+	var timeJobs []types.TimeJobData
+	iter := r.db.Session().Query(queries.GetActiveTimeJobsQuery).Iter()
+	var timeJob types.TimeJobData
+	for iter.Scan(
+		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp, &timeJob.ScheduleType,
+		&timeJob.TimeInterval, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.Timezone,
+		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
+		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive) {
+		timeJobs = append(timeJobs, timeJob)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+	return timeJobs, nil
 }
