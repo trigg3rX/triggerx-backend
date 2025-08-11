@@ -13,25 +13,29 @@ import (
 type Config struct {
 	devMode bool
 
-	// Redis RPC port
-	redisRPCPort string
+	// Task Monitor RPC port
+	taskMonitorRPCPort string
 
-	// DBServer RPC URL
-	dbServerRPCUrl string
-	// Health RPC URL
-	healthRPCUrl string
-	// Aggregator RPC URL
-	aggregatorRPCUrl string
+	// Contract Addresses to listen for events
+	attestationCenterAddress string
 
-	// Redis signing key
-	redisSigningKey     string
-	redisSigningAddress string
+	// RPC URLs for Ethereum and Base
+	rpcProvider string
+	rpcAPIKey   string
 
-	// Primary: Cloud Redis (Upstash) settings
-	upstashURL   string
-	upstashToken string
+	// ScyllaDB Host and Port
+	databaseHostAddress string
+	databaseHostPort    string
 
-	// Pinata Host
+	// Upstash Redis URL and Rest Token
+	upstashRedisUrl       string
+	upstashRedisRestToken string
+
+	// Sync Configs Update
+	lastBaseBlockUpdated uint64
+
+	// Pinata JWT and Host
+	pinataJWT  string
 	pinataHost string
 
 	// OpenTelemetry endpoint
@@ -59,15 +63,10 @@ type Config struct {
 	metricsUpdateInterval time.Duration
 
 	// Timeout and retry settings
-	retryDelay             time.Duration
-	requestTimeout         time.Duration
-	initializationTimeout  time.Duration
-	maxRetryBackoff        time.Duration
-	streamOperationTimeout time.Duration
-
-	// Batch processing settings
-	taskBatchSize    int
-	taskBatchTimeout time.Duration
+	retryDelay            time.Duration
+	requestTimeout        time.Duration
+	initializationTimeout time.Duration
+	maxRetryBackoff       time.Duration
 }
 
 var cfg Config
@@ -77,37 +76,35 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                env.GetEnvBool("DEV_MODE", false),
-		redisRPCPort:           env.GetEnvString("REDIS_RPC_PORT", "9003"),
-		healthRPCUrl:           env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
-		dbServerRPCUrl:         env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:       env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		redisSigningKey:        env.GetEnvString("REDIS_SIGNING_KEY", ""),
-		redisSigningAddress:    env.GetEnvString("REDIS_SIGNING_ADDRESS", ""),
-		upstashURL:             env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashToken:           env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		poolSize:               env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		minIdleConns:           env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		maxRetries:             env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:            env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
-		readTimeout:            env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
-		writeTimeout:           env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
-		poolTimeout:            env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
-		streamMaxLen:           env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		jobStreamTTL:           env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
-		taskStreamTTL:          env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
-		cacheTTL:               env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
-		cleanupInterval:        env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
-		metricsUpdateInterval:  env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
-		retryDelay:             env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
-		requestTimeout:         env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
-		initializationTimeout:  env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
-		maxRetryBackoff:        env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
-		streamOperationTimeout: env.GetEnvDuration("REDIS_STREAM_OPERATION_TIMEOUT", 15*time.Second),
-		taskBatchSize:          env.GetEnvInt("REDIS_TASK_BATCH_SIZE", 10),
-		taskBatchTimeout:       env.GetEnvDuration("REDIS_TASK_BATCH_TIMEOUT", 5*time.Second),
-		pinataHost:             env.GetEnvString("PINATA_HOST", ""),
-		ottempoEndpoint:        env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		devMode:                  env.GetEnvBool("DEV_MODE", false),
+		taskMonitorRPCPort:       env.GetEnvString("TASK_MONITOR_RPC_PORT", "9003"),
+		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
+		rpcProvider:              env.GetEnvString("RPC_PROVIDER", ""),
+		rpcAPIKey:                env.GetEnvString("RPC_API_KEY", ""),
+		databaseHostAddress:      env.GetEnvString("DATABASE_HOST_ADDRESS", ""),
+		databaseHostPort:         env.GetEnvString("DATABASE_HOST_PORT", ""),
+		upstashRedisUrl:          env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:    env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		pinataJWT:                env.GetEnvString("PINATA_JWT", ""),
+		pinataHost:               env.GetEnvString("PINATA_HOST", ""),
+		poolSize:                 env.GetEnvInt("REDIS_POOL_SIZE", 10),
+		minIdleConns:             env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+		maxRetries:               env.GetEnvInt("REDIS_MAX_RETRIES", 3),
+		dialTimeout:              env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:              env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:             env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:              env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
+		streamMaxLen:             env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
+		jobStreamTTL:             env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
+		taskStreamTTL:            env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
+		cacheTTL:                 env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
+		cleanupInterval:          env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
+		metricsUpdateInterval:    env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
+		retryDelay:               env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
+		requestTimeout:           env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
+		initializationTimeout:    env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
+		maxRetryBackoff:          env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
+		ottempoEndpoint:          env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 	}
 
 	if !cfg.devMode {
@@ -120,40 +117,52 @@ func IsDevMode() bool {
 	return cfg.devMode
 }
 
+func GetDatabaseHostAddress() string {
+	return cfg.databaseHostAddress
+}
+
+func GetDatabaseHostPort() string {
+	return cfg.databaseHostPort
+}
+
+func SetLastBaseBlockUpdated(blockNumber uint64) {
+	cfg.lastBaseBlockUpdated = blockNumber
+}
+
+func GetLastBaseBlockUpdated() uint64 {
+	return cfg.lastBaseBlockUpdated
+}
+
+func GetAttestationCenterAddress() string {
+	return cfg.attestationCenterAddress
+}
+
+func GetRPCProvider() string {
+	return cfg.rpcProvider
+}
+
+func GetRPCAPIKey() string {
+	return cfg.rpcAPIKey
+}
+
 func GetPinataHost() string {
 	return cfg.pinataHost
 }
 
-func GetHealthRPCUrl() string {
-	return cfg.healthRPCUrl
+func GetPinataJWT() string {
+	return cfg.pinataJWT
 }
 
-func GetRedisRPCPort() string {
-	return cfg.redisRPCPort
+func GetTaskMonitorRPCPort() string {
+	return cfg.taskMonitorRPCPort
 }
 
-func GetDBServerRPCUrl() string {
-	return cfg.dbServerRPCUrl
+func GetUpstashRedisUrl() string {
+	return cfg.upstashRedisUrl
 }
 
-func GetAggregatorRPCUrl() string {
-	return cfg.aggregatorRPCUrl
-}
-
-func GetRedisSigningKey() string {
-	return cfg.redisSigningKey
-}
-
-func GetRedisSigningAddress() string {
-	return cfg.redisSigningAddress
-}
-
-func GetUpstashURL() string {
-	return cfg.upstashURL
-}
-
-func GetUpstashToken() string {
-	return cfg.upstashToken
+func GetUpstashRedisRestToken() string {
+	return cfg.upstashRedisRestToken
 }
 
 func GetStreamMaxLen() int {
@@ -224,18 +233,6 @@ func GetMaxRetryBackoff() time.Duration {
 	return cfg.maxRetryBackoff
 }
 
-func GetStreamOperationTimeout() time.Duration {
-	return cfg.streamOperationTimeout
-}
-
-func GetTaskBatchSize() int {
-	return cfg.taskBatchSize
-}
-
-func GetTaskBatchTimeout() time.Duration {
-	return cfg.taskBatchTimeout
-}
-
 func GetOTTempoEndpoint() string {
 	return cfg.ottempoEndpoint
 }
@@ -244,8 +241,8 @@ func GetOTTempoEndpoint() string {
 func GetRedisClientConfig() redisClient.RedisConfig {
 	return redisClient.RedisConfig{
 		UpstashConfig: redisClient.UpstashConfig{
-			URL:   cfg.upstashURL,
-			Token: cfg.upstashToken,
+			URL:   cfg.upstashRedisUrl,
+			Token: cfg.upstashRedisRestToken,
 		},
 		ConnectionSettings: redisClient.ConnectionSettings{
 			PoolSize:         cfg.poolSize,
@@ -261,4 +258,44 @@ func GetRedisClientConfig() redisClient.RedisConfig {
 			OperationTimeout: 10 * time.Second, // Default operation timeout
 		},
 	}
+}
+
+// Get Chain Configs
+func GetChainRPCUrl(isRPC bool, chainID string) string {
+	var protocol string
+	if isRPC {
+		protocol = "https://"
+	} else {
+		protocol = "wss://"
+	}
+	var domain string
+	if cfg.rpcProvider == "alchemy" {
+		switch chainID {
+		case "17000":
+			domain = "eth-holesky.g.alchemy.com/v2/"
+		case "11155111":
+			domain = "eth-sepolia.g.alchemy.com/v2/"
+		case "11155420":
+			domain = "opt-sepolia.g.alchemy.com/v2/"
+		case "84532":
+			domain = "base-sepolia.g.alchemy.com/v2/"
+		default:
+			return ""
+		}
+	}
+	if cfg.rpcProvider == "blast" {
+		switch chainID {
+		case "17000":
+			domain = "eth-holesky.blastapi.io/"
+		case "11155111":
+			domain = "eth-sepolia.blastapi.io/"
+		case "11155420":
+			domain = "optimism-sepolia.blastapi.io/"
+		case "84532":
+			domain = "base-sepolia.blastapi.io/"
+		default:
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s%s%s", protocol, domain, cfg.rpcAPIKey)
 }

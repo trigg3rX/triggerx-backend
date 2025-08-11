@@ -1,4 +1,4 @@
-package taskmanager
+package taskmonitor
 
 import (
 	"context"
@@ -6,13 +6,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/events"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/streams/jobs"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/streams/performers"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/streams/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+)
+
+const (
+	// defaultConnectTimeout = 30 * time.Second
+	// defaultBlockOverlap   = uint64(5)
 )
 
 // TaskManager orchestrates all Redis-based task management components
@@ -20,8 +27,7 @@ type TaskManager struct {
 	logger              logging.Logger
 	redisClient         *redisClient.Client
 	taskStreamManager   *tasks.TaskStreamManager
-	jobStreamManager    *jobs.JobStreamManager
-	performerManager    *performers.PerformerManager
+	eventListener       *events.ContractEventListener
 	metricsUpdateTicker *time.Ticker
 	ctx                 context.Context
 	cancel              context.CancelFunc
@@ -50,9 +56,33 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	monitoringHooks := metrics.CreateRedisMonitoringHooks()
 	client.SetMonitoringHooks(monitoringHooks)
 
-	// Initialize stream managers with proper error handling
-	// taskStreamManager, err := tasks.NewTaskStreamManager(logger, client)
-	taskStreamManager, err := tasks.NewTaskStreamManager(logger)
+	// Initialize database client
+	dbCfg := &dbClient.Config{
+		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:    "triggerx",
+		Timeout:     10 * time.Second,
+		Retries:     3,
+		ConnectWait: 5 * time.Second,
+	}
+	dbConn, err := dbClient.NewConnection(dbCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize database client: %w", err)
+	}
+
+	// Initialize database client
+	databaseClient := database.NewDatabaseClient(logger, dbConn)
+
+	// Initialize IPFS client
+	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())
+	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize IPFS client: %w", err)
+	}
+
+	// Initialize task stream manager
+	taskStreamManager, err := tasks.NewTaskStreamManager(client, databaseClient, logger)
 	if err != nil {
 		// Clean up resources on error
 		cancel()
@@ -63,30 +93,14 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		return nil, fmt.Errorf("failed to create task stream manager: %w", err)
 	}
 
-	// jobStreamManager, err := jobs.NewJobStreamManager(logger, client)
-	jobStreamManager, err := jobs.NewJobStreamManager(logger)
-	if err != nil {
-		// Clean up resources on error
-		cancel()
-		if closeErr := client.Close(); closeErr != nil {
-			logger.Error("Failed to close Redis client during error cleanup", "error", closeErr)
-		}
-		if closeErr := taskStreamManager.Close(); closeErr != nil {
-			logger.Error("Failed to close TaskStreamManager during error cleanup", "error", closeErr)
-		}
-		logger.Error("Failed to create JobStreamManager", "error", err)
-		return nil, fmt.Errorf("failed to create job stream manager: %w", err)
-	}
-
-	// performerManager := performers.NewPerformerManager(client, logger)
-	performerManager := performers.NewPerformerManager(logger)
+	// Initialize event listener
+	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig(), databaseClient, ipfsClient, taskStreamManager)
 
 	tm := &TaskManager{
 		logger:              logger,
 		redisClient:         client,
 		taskStreamManager:   taskStreamManager,
-		jobStreamManager:    jobStreamManager,
-		performerManager:    performerManager,
+		eventListener:       eventListener,
 		metricsUpdateTicker: time.NewTicker(config.GetMetricsUpdateInterval()),
 		ctx:                 ctx,
 		cancel:              cancel,
@@ -109,13 +123,14 @@ func (tm *TaskManager) Initialize() error {
 		return fmt.Errorf("failed to initialize task stream manager: %w", err)
 	}
 
-	// Initialize job streams
-	if err := tm.jobStreamManager.Initialize(); err != nil {
-		return fmt.Errorf("failed to initialize job stream manager: %w", err)
+	// Start event listener
+	if err := tm.eventListener.Start(); err != nil {
+		tm.logger.Errorf("Failed to start event listener: %v", err)
+		tm.logger.Info("Falling back to polling mode")
 	}
 
 	// Start background workers with proper synchronization
-	tm.shutdownWg.Add(4) // Track all background goroutines
+	tm.shutdownWg.Add(2) // Track all background goroutines
 
 	go func() {
 		defer tm.shutdownWg.Done()
@@ -124,17 +139,7 @@ func (tm *TaskManager) Initialize() error {
 
 	go func() {
 		defer tm.shutdownWg.Done()
-		tm.taskStreamManager.StartTaskProcessor(tm.ctx, "taskmanager-processor")
-	}()
-
-	go func() {
-		defer tm.shutdownWg.Done()
 		tm.taskStreamManager.StartTimeoutWorker(tm.ctx)
-	}()
-
-	go func() {
-		defer tm.shutdownWg.Done()
-		tm.taskStreamManager.StartRetryWorker(tm.ctx)
 	}()
 
 	tm.logger.Info("TaskManager initialization completed successfully")
@@ -187,18 +192,6 @@ func (tm *TaskManager) updateMetrics() {
 		}
 	}
 
-	jobStreamInfo := tm.jobStreamManager.GetJobStreamInfo()
-	if lengths, ok := jobStreamInfo["stream_lengths"].(map[string]int64); ok {
-		for stream, length := range lengths {
-			switch stream {
-			case "jobs:running":
-				metrics.JobStreamLengths.WithLabelValues("running").Set(float64(length))
-			case "jobs:completed":
-				metrics.JobStreamLengths.WithLabelValues("completed").Set(float64(length))
-			}
-		}
-	}
-
 	// Update connection status
 	connectionStatus := tm.redisClient.GetConnectionStatus()
 	if connectionStatus != nil && !connectionStatus.IsRecovering {
@@ -209,21 +202,6 @@ func (tm *TaskManager) updateMetrics() {
 // GetTaskStreamManager returns the task stream manager
 func (tm *TaskManager) GetTaskStreamManager() *tasks.TaskStreamManager {
 	return tm.taskStreamManager
-}
-
-// GetJobStreamManager returns the job stream manager
-func (tm *TaskManager) GetJobStreamManager() *jobs.JobStreamManager {
-	return tm.jobStreamManager
-}
-
-// GetPerformerManager returns the performer manager
-func (tm *TaskManager) GetPerformerManager() *performers.PerformerManager {
-	return tm.performerManager
-}
-
-// GetRedisClient returns the Redis client
-func (tm *TaskManager) GetRedisClient() *redisClient.Client {
-	return tm.redisClient
 }
 
 // HealthCheck performs a comprehensive health check
@@ -255,10 +233,6 @@ func (tm *TaskManager) HealthCheck() map[string]interface{} {
 		healthStatus["task_streams"] = tm.taskStreamManager.GetStreamInfo()
 	}
 
-	if tm.jobStreamManager != nil {
-		healthStatus["job_streams"] = tm.jobStreamManager.GetJobStreamInfo()
-	}
-
 	return healthStatus
 }
 
@@ -288,6 +262,11 @@ func (tm *TaskManager) Close() error {
 		tm.logger.Warn("Timeout waiting for background workers to stop")
 	}
 
+	// Stop event listener
+	if err := tm.eventListener.Stop(); err != nil {
+		tm.logger.Errorf("Error stopping event listener: %v", err)
+	}
+
 	// Stop metrics ticker
 	if tm.metricsUpdateTicker != nil {
 		tm.metricsUpdateTicker.Stop()
@@ -300,13 +279,6 @@ func (tm *TaskManager) Close() error {
 		if err := tm.taskStreamManager.Close(); err != nil {
 			tm.logger.Error("Failed to close TaskStreamManager", "error", err)
 			errors = append(errors, fmt.Errorf("task stream manager: %w", err))
-		}
-	}
-
-	if tm.jobStreamManager != nil {
-		if err := tm.jobStreamManager.Close(); err != nil {
-			tm.logger.Error("Failed to close JobStreamManager", "error", err)
-			errors = append(errors, fmt.Errorf("job stream manager: %w", err))
 		}
 	}
 
