@@ -14,7 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-type CachedFile struct {
+type cachedFile struct {
 	Path         string    `json:"path"`
 	Hash         string    `json:"hash"`
 	LastAccessed time.Time `json:"last_accessed"`
@@ -22,9 +22,9 @@ type CachedFile struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-type FileCache struct {
+type fileCache struct {
 	cacheDir      string
-	fileCache     map[string]*CachedFile
+	fileCache     map[string]*cachedFile
 	mutex         sync.RWMutex
 	config        config.CacheConfig
 	logger        logging.Logger
@@ -34,7 +34,7 @@ type FileCache struct {
 	statsMutex    sync.RWMutex
 }
 
-func NewFileCache(cfg config.CacheConfig, logger logging.Logger) (*FileCache, error) {
+func newFileCache(cfg config.CacheConfig, logger logging.Logger) (*fileCache, error) {
 	// Use configured cache directory or fallback to persistent location
 	cacheDir := cfg.CacheDir
 	if cacheDir == "" {
@@ -46,9 +46,9 @@ func NewFileCache(cfg config.CacheConfig, logger logging.Logger) (*FileCache, er
 		return nil, fmt.Errorf("failed to create cache directory %s: %w", cacheDir, err)
 	}
 
-	cache := &FileCache{
+	cache := &fileCache{
 		cacheDir:    cacheDir,
-		fileCache:   make(map[string]*CachedFile),
+		fileCache:   make(map[string]*cachedFile),
 		config:      cfg,
 		logger:      logger,
 		stopCleanup: make(chan struct{}),
@@ -74,7 +74,7 @@ func NewFileCache(cfg config.CacheConfig, logger logging.Logger) (*FileCache, er
 }
 
 // GetOrDownload checks if the file is in the cache by key (CID or URL). If not, it calls downloadFunc to get the content and stores it.
-func (c *FileCache) GetOrDownload(key string, downloadFunc func() ([]byte, error)) (string, error) {
+func (c *fileCache) getOrDownloadFile(key string, downloadFunc func() ([]byte, error)) (string, error) {
 	c.mutex.RLock()
 	if cachedFile, exists := c.fileCache[key]; exists {
 		c.mutex.RUnlock()
@@ -95,29 +95,7 @@ func (c *FileCache) GetOrDownload(key string, downloadFunc func() ([]byte, error
 	return c.storeFile(key, content)
 }
 
-// GetByKey retrieves a cached file by its key (CID or URL)
-func (c *FileCache) GetByKey(key string) (string, error) {
-	c.mutex.RLock()
-	cachedFile, exists := c.fileCache[key]
-	c.mutex.RUnlock()
-
-	if !exists {
-		c.statsMutex.Lock()
-		c.stats.MissCount++
-		c.updateHitRate()
-		c.statsMutex.Unlock()
-		return "", fmt.Errorf("file not found in cache: %s", key)
-	}
-
-	c.statsMutex.Lock()
-	c.stats.HitCount++
-	c.updateHitRate()
-	c.statsMutex.Unlock()
-
-	return c.accessCachedFile(cachedFile)
-}
-
-func (c *FileCache) accessCachedFile(cachedFile *CachedFile) (string, error) {
+func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
 	// Check if file still exists on disk
 	if _, err := os.Stat(cachedFile.Path); os.IsNotExist(err) {
 		// File was deleted, remove from cache
@@ -146,7 +124,7 @@ func (c *FileCache) accessCachedFile(cachedFile *CachedFile) (string, error) {
 }
 
 // storeFile now uses the key (CID or URL) as the filename (with .go extension)
-func (c *FileCache) storeFile(key string, content []byte) (string, error) {
+func (c *fileCache) storeFile(key string, content []byte) (string, error) {
 	if err := c.ensureSpace(int64(len(content))); err != nil {
 		return "", fmt.Errorf("failed to ensure cache space: %w", err)
 	}
@@ -164,7 +142,7 @@ func (c *FileCache) storeFile(key string, content []byte) (string, error) {
 		return "", fmt.Errorf("failed to get file info: %w", err)
 	}
 
-	cachedFile := &CachedFile{
+	cachedFile := &cachedFile{
 		Path:         filePath,
 		Hash:         key,
 		LastAccessed: time.Now(),
@@ -187,7 +165,7 @@ func (c *FileCache) storeFile(key string, content []byte) (string, error) {
 	return filePath, nil
 }
 
-func (c *FileCache) ensureSpace(requiredSize int64) error {
+func (c *fileCache) ensureSpace(requiredSize int64) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -202,7 +180,7 @@ func (c *FileCache) ensureSpace(requiredSize int64) error {
 	// Sort files by last accessed time (oldest first)
 	type fileEntry struct {
 		hash string
-		file *CachedFile
+		file *cachedFile
 	}
 
 	var files []fileEntry
@@ -252,34 +230,7 @@ func (c *FileCache) ensureSpace(requiredSize int64) error {
 	return nil
 }
 
-// func (c *FileCache) startCleanupRoutine() {
-// 	c.cleanupTicker = time.NewTicker(c.config.CleanupInterval)
-
-// 	go func() {
-// 		for {
-// 			select {
-// 			case <-c.cleanupTicker.C:
-// 				c.cleanup()
-// 			case <-c.stopCleanup:
-// 				c.cleanupTicker.Stop()
-// 				return
-// 			}
-// 		}
-// 	}()
-// }
-
-// func (c *FileCache) cleanup() {
-// 	c.mutex.Lock()
-// 	defer c.mutex.Unlock()
-
-// 	now := time.Now()
-
-// 	// No TTL-based cleanup - files are only evicted when cache size limit is reached
-// 	// This function now just updates the last cleanup time for stats
-// 	c.stats.LastCleanup = now
-// }
-
-func (c *FileCache) loadExistingFiles() error {
+func (c *fileCache) loadExistingFiles() error {
 	// Load metadata file if it exists
 	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
 	if _, err := os.Stat(metadataPath); err == nil {
@@ -314,7 +265,7 @@ func (c *FileCache) loadExistingFiles() error {
 			continue
 		}
 
-		cachedFile := &CachedFile{
+		cachedFile := &cachedFile{
 			Path:         filePath,
 			Hash:         key,
 			LastAccessed: fileInfo.ModTime(),
@@ -331,13 +282,13 @@ func (c *FileCache) loadExistingFiles() error {
 	return nil
 }
 
-func (c *FileCache) loadMetadata(metadataPath string) error {
+func (c *fileCache) loadMetadata(metadataPath string) error {
 	data, err := os.ReadFile(metadataPath)
 	if err != nil {
 		return err
 	}
 
-	var metadata map[string]*CachedFile
+	var metadata map[string]*cachedFile
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		return err
 	}
@@ -354,7 +305,7 @@ func (c *FileCache) loadMetadata(metadataPath string) error {
 	return nil
 }
 
-func (c *FileCache) saveMetadata() error {
+func (c *fileCache) saveMetadata() error {
 	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
 	data, err := json.MarshalIndent(c.fileCache, "", "  ")
 	if err != nil {
@@ -364,14 +315,14 @@ func (c *FileCache) saveMetadata() error {
 	return os.WriteFile(metadataPath, data, 0644)
 }
 
-func (c *FileCache) updateHitRate() {
+func (c *fileCache) updateHitRate() {
 	total := c.stats.HitCount + c.stats.MissCount
 	if total > 0 {
 		c.stats.HitRate = float64(c.stats.HitCount) / float64(total)
 	}
 }
 
-func (c *FileCache) GetStats() *types.CacheStats {
+func (c *fileCache) getCacheStats() *types.CacheStats {
 	c.statsMutex.RLock()
 	defer c.statsMutex.RUnlock()
 
@@ -380,7 +331,7 @@ func (c *FileCache) GetStats() *types.CacheStats {
 	return &stats
 }
 
-func (c *FileCache) Close() error {
+func (c *fileCache) close() error {
 	if c.cleanupTicker != nil {
 		close(c.stopCleanup)
 	}

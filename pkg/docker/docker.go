@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/execution"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 )
 
 // DockerManager is the main entry point for the Docker package
@@ -48,8 +49,13 @@ func (dm *DockerManager) Initialize(ctx context.Context, languages []types.Langu
 
 	dm.logger.Info("Initializing Docker manager")
 
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), dm.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+
 	// Create the code executor
-	executor, err := execution.NewCodeExecutor(ctx, dm.config, dm.logger)
+	executor, err := execution.NewCodeExecutor(ctx, dm.config, httpClient, dm.logger)
 	if err != nil {
 		return fmt.Errorf("failed to create code executor: %w", err)
 	}

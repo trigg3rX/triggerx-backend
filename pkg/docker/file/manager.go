@@ -3,44 +3,31 @@ package file
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 )
 
 type FileManager struct {
-	downloader *Downloader
-	cache      *FileCache
-	validator  *CodeValidator
+	downloader *downloader
 	config     config.ExecutorConfig
 	logger     logging.Logger
 	mutex      sync.RWMutex
 	stats      *types.PerformanceMetrics
 }
 
-func NewFileManager(cfg config.ExecutorConfig, logger logging.Logger) (*FileManager, error) {
-	downloader, err := NewDownloader(cfg.Cache, cfg.Validation, logger)
+func NewFileManager(cfg config.ExecutorConfig, httpClient *httppkg.HTTPClient, logger logging.Logger) (*FileManager, error) {
+	downloader, err := newDownloader(cfg.Cache, cfg.Validation, httpClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create downloader: %w", err)
 	}
 
-	cache, err := NewFileCache(cfg.Cache, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache: %w", err)
-	}
-
-	validator := NewCodeValidator(cfg.Validation, logger)
-
 	return &FileManager{
 		downloader: downloader,
-		cache:      cache,
-		validator:  validator,
 		config:     cfg,
 		logger:     logger,
 		stats: &types.PerformanceMetrics{
@@ -62,7 +49,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string) (*type
 	fm.logger.Debugf("Processing file: %s", fileURL)
 
 	// Download and validate file
-	result, err := fm.downloader.DownloadFile(fileURL, fileURL)
+	result, err := fm.downloader.downloadFile(fileURL, fileURL)
 	if err != nil {
 		fm.updateStats(false, time.Since(startTime), 0.0)
 		return nil, fmt.Errorf("failed to download file: %w", err)
@@ -104,22 +91,6 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string) (*type
 	return execCtx, nil
 }
 
-func (fm *FileManager) ValidateFile(filePath string) (*types.ValidationResult, error) {
-	return fm.validator.ValidateFile(filePath)
-}
-
-func (fm *FileManager) ValidateContent(content []byte) (*types.ValidationResult, error) {
-	return fm.validator.ValidateContent(content)
-}
-
-func (fm *FileManager) GetFileByKey(key string) (string, error) {
-	return fm.cache.GetByKey(key)
-}
-
-func (fm *FileManager) GetCacheStats() *types.CacheStats {
-	return fm.cache.GetStats()
-}
-
 func (fm *FileManager) GetPerformanceStats() *types.PerformanceMetrics {
 	fm.mutex.RLock()
 	defer fm.mutex.RUnlock()
@@ -129,24 +100,8 @@ func (fm *FileManager) GetPerformanceStats() *types.PerformanceMetrics {
 	return &stats
 }
 
-func (fm *FileManager) CleanupFile(filePath string) error {
-	// Only cleanup if it's not in our cache
-	// This prevents accidentally deleting cached files
-	if !fm.isCachedFile(filePath) {
-		if err := os.Remove(filePath); err != nil {
-			fm.logger.Warnf("Failed to cleanup file %s: %v", filePath, err)
-			return err
-		}
-		fm.logger.Debugf("Cleaned up file: %s", filePath)
-	}
-	return nil
-}
-
-func (fm *FileManager) isCachedFile(filePath string) bool {
-	// Check if the file is in our cache directory
-	cacheDir := filepath.Join("/tmp", "docker-file-cache")
-	relPath, err := filepath.Rel(cacheDir, filePath)
-	return err == nil && !filepath.IsAbs(relPath) && !strings.HasPrefix(relPath, "..")
+func (fm *FileManager) GetCacheStats() *types.CacheStats {
+	return fm.downloader.cache.getCacheStats()
 }
 
 func (fm *FileManager) updateStats(success bool, duration time.Duration, complexity float64) {
@@ -200,14 +155,8 @@ func (fm *FileManager) Close() error {
 	var errors []error
 
 	if fm.downloader != nil {
-		if err := fm.downloader.Close(); err != nil {
+		if err := fm.downloader.close(); err != nil {
 			errors = append(errors, fmt.Errorf("failed to close downloader: %w", err))
-		}
-	}
-
-	if fm.cache != nil {
-		if err := fm.cache.Close(); err != nil {
-			errors = append(errors, fmt.Errorf("failed to close cache: %w", err))
 		}
 	}
 

@@ -1,7 +1,6 @@
 package file
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,19 +11,20 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-type CodeValidator struct {
+type codeValidator struct {
 	config config.ValidationConfig
 	logger logging.Logger
 }
 
-func NewCodeValidator(cfg config.ValidationConfig, logger logging.Logger) *CodeValidator {
-	return &CodeValidator{
+func newCodeValidator(cfg config.ValidationConfig, logger logging.Logger) *codeValidator {
+	return &codeValidator{
 		config: cfg,
 		logger: logger,
 	}
 }
 
-func (v *CodeValidator) ValidateFile(filePath string) (*types.ValidationResult, error) {
+// validateFile validates a file by checking its size, extension, and content (meant to be when writing file to cache)
+func (v *codeValidator) validateFile(filePath string) (*types.ValidationResult, error) {
 	result := &types.ValidationResult{
 		IsValid:    true,
 		Errors:     make([]string, 0),
@@ -53,31 +53,19 @@ func (v *CodeValidator) ValidateFile(filePath string) (*types.ValidationResult, 
 	return result, nil
 }
 
-func (v *CodeValidator) ValidateContent(content []byte) (*types.ValidationResult, error) {
-	result := &types.ValidationResult{
-		IsValid:    true,
-		Errors:     make([]string, 0),
-		Warnings:   make([]string, 0),
-		Complexity: 0.0,
+func (v *codeValidator) validateFileContent(filePath string, result *types.ValidationResult) error {
+	content, err := os.ReadFile(filePath) // Read the entire file into memory
+	if err != nil {
+		return fmt.Errorf("failed to read file for validation: %w", err)
 	}
 
-	// Check content size
-	if int64(len(content)) > v.config.MaxFileSize {
-		result.IsValid = false
-		result.Errors = append(result.Errors, fmt.Sprintf("file size exceeds limit: %d bytes", len(content)))
-		return result, nil
-	}
-
-	// Validate content for dangerous patterns
+    // Delegate the actual pattern matching to the function that handles byte slices
 	v.validateContentPatterns(content, result)
 
-	// Calculate complexity
-	result.Complexity = v.calculateContentComplexity(content)
-
-	return result, nil
+	return nil
 }
 
-func (v *CodeValidator) validateFileSize(filePath string, result *types.ValidationResult) error {
+func (v *codeValidator) validateFileSize(filePath string, result *types.ValidationResult) error {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %w", err)
@@ -91,7 +79,7 @@ func (v *CodeValidator) validateFileSize(filePath string, result *types.Validati
 	return nil
 }
 
-func (v *CodeValidator) validateFileExtension(filePath string, result *types.ValidationResult) error {
+func (v *codeValidator) validateFileExtension(filePath string, result *types.ValidationResult) error {
 	ext := filepath.Ext(filePath)
 
 	// Check if extension is allowed
@@ -111,46 +99,7 @@ func (v *CodeValidator) validateFileExtension(filePath string, result *types.Val
 	return nil
 }
 
-func (v *CodeValidator) validateFileContent(filePath string, result *types.ValidationResult) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer func() {
-		err := file.Close()
-		if err != nil {
-			v.logger.Errorf("Failed to close file: %v", err)
-		}
-	}()
-
-	scanner := bufio.NewScanner(file)
-	lineNumber := 0
-
-	for scanner.Scan() {
-		lineNumber++
-		line := scanner.Text()
-
-		// Check for dangerous patterns
-		for _, pattern := range v.config.BlockedPatterns {
-			if strings.Contains(line, pattern) {
-				result.IsValid = false
-				result.Errors = append(result.Errors,
-					fmt.Sprintf("dangerous pattern found at line %d: %s", lineNumber, pattern))
-			}
-		}
-
-		// Check for suspicious patterns (warnings)
-		v.checkSuspiciousPatterns(line, lineNumber, result)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading file: %w", err)
-	}
-
-	return nil
-}
-
-func (v *CodeValidator) validateContentPatterns(content []byte, result *types.ValidationResult) {
+func (v *codeValidator) validateContentPatterns(content []byte, result *types.ValidationResult) {
 	contentStr := string(content)
 	lines := strings.Split(contentStr, "\n")
 
@@ -171,7 +120,7 @@ func (v *CodeValidator) validateContentPatterns(content []byte, result *types.Va
 	}
 }
 
-func (v *CodeValidator) checkSuspiciousPatterns(line string, lineNumber int, result *types.ValidationResult) {
+func (v *codeValidator) checkSuspiciousPatterns(line string, lineNumber int, result *types.ValidationResult) {
 	suspiciousPatterns := []string{
 		"http://",
 		"ftp://",
@@ -195,7 +144,7 @@ func (v *CodeValidator) checkSuspiciousPatterns(line string, lineNumber int, res
 	}
 }
 
-func (v *CodeValidator) calculateComplexity(filePath string) float64 {
+func (v *codeValidator) calculateComplexity(filePath string) float64 {
 	file, err := os.Open(filePath)
 	if err != nil {
 		v.logger.Warnf("Failed to open file for complexity calculation: %v", err)
@@ -225,7 +174,7 @@ func (v *CodeValidator) calculateComplexity(filePath string) float64 {
 	return v.calculateContentComplexity(content)
 }
 
-func (v *CodeValidator) calculateContentComplexity(content []byte) float64 {
+func (v *codeValidator) calculateContentComplexity(content []byte) float64 {
 	contentStr := string(content)
 
 	// Basic complexity calculation based on:
@@ -257,20 +206,4 @@ func (v *CodeValidator) calculateContentComplexity(content []byte) float64 {
 		(loopCount+conditionalCount)*0.3 // Control flow factor
 
 	return complexity
-}
-
-func (v *CodeValidator) IsFileValid(filePath string) (bool, error) {
-	result, err := v.ValidateFile(filePath)
-	if err != nil {
-		return false, err
-	}
-	return result.IsValid, nil
-}
-
-func (v *CodeValidator) IsContentValid(content []byte) (bool, error) {
-	result, err := v.ValidateContent(content)
-	if err != nil {
-		return false, err
-	}
-	return result.IsValid, nil
 }

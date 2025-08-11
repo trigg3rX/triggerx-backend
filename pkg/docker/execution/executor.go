@@ -9,6 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/container"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/file"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -19,7 +20,7 @@ type CodeExecutor struct {
 	logger   logging.Logger
 }
 
-func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, logger logging.Logger) (*CodeExecutor, error) {
+func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, httpClient *httppkg.HTTPClient, logger logging.Logger) (*CodeExecutor, error) {
 	// Create Docker client with API version compatibility
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -30,7 +31,7 @@ func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, logger logg
 	}
 
 	// Create file manager
-	fileMgr, err := file.NewFileManager(cfg, logger)
+	fileMgr, err := file.NewFileManager(cfg, httpClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file manager: %w", err)
 	}
