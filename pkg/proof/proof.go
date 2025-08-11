@@ -29,7 +29,7 @@ func DefaultTLSProofConfig(host string) *TLSProofConfig {
 	return &TLSProofConfig{
 		TargetHost: host,
 		TargetPort: "443",
-		Timeout:    5 * time.Second,
+		Timeout:    10 * time.Second,
 		VerifyPeer: true,
 		ServerName: host,
 	}
@@ -60,7 +60,7 @@ func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error
 	}
 
 	if config.Timeout == 0 {
-		config.Timeout = 5 * time.Second
+		config.Timeout = 10 * time.Second
 	}
 
 	if config.ServerName == "" {

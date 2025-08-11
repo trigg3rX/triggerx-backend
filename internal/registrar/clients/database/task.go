@@ -55,7 +55,11 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	// Get task cost and job ID
 	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, data.TaskID).Iter()
-	defer iter.Close()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
 
 	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
 		dm.logger.Errorf("Failed to get task fee and job ID for task ID %d: no results found", data.TaskID)
@@ -71,7 +75,11 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	for _, operator_id := range data.AttesterIds {
 		// Use RetryableIter since the query needs parameters
 		iter := dm.db.NewQuery(queries.GetAttesterPointsAndNoOfTasks, operator_id).Iter()
-		defer iter.Close()
+		defer func() {
+			if cerr := iter.Close(); cerr != nil {
+				dm.logger.Errorf("Error closing iterator: %v", cerr)
+			}
+		}()
 
 		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
 			dm.logger.Error(fmt.Sprintf("Failed to get keeper points for operator_id %d: no results found", operator_id))
@@ -97,7 +105,11 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 	// Use RetryableIter since the query needs parameters
 	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId[0]).Iter()
-	defer iter.Close()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
 
 	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
 		dm.logger.Error(fmt.Sprintf("Failed to get keeper points for performer_id %d: no results found", performerId[0]))
@@ -118,7 +130,11 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	// Update the User Points
 	iter = dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
-	defer iter.Close()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
 
 	if !iter.Scan(&userID) {
 		dm.logger.Errorf("Failed to get user ID for job ID %d: no results found", jobID)
@@ -127,7 +143,11 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	var userPoints float64
 	iter = dm.db.NewQuery(queries.GetUserPoints, userID).Iter()
-	defer iter.Close()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
 
 	if !iter.Scan(&userPoints, &userTasks) {
 		dm.logger.Errorf("Failed to get user points for user ID %d: no results found", userID)
@@ -156,7 +176,11 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 
 		// Use RetryableIter since the query needs parameters
 		iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, keeperAddress).Iter()
-		defer iter.Close()
+		defer func() {
+			if cerr := iter.Close(); cerr != nil {
+				dm.logger.Errorf("Error closing iterator: %v", cerr)
+			}
+		}()
 
 		if iter.Scan(&keeperID) {
 			dm.logger.Infof("Keeper ID for address %s: %d", keeperAddress, keeperID)

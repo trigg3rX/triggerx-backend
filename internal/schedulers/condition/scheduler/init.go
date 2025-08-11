@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -15,8 +14,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	rpcclient "github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -33,8 +33,7 @@ type ConditionBasedScheduler struct {
 	chainClients            map[string]*ethclient.Client // chainID -> client
 	HTTPClient              *httppkg.HTTPClient
 	dbClient                *dbserver.DBServerClient
-	httpClient              *http.Client // For Redis API calls
-	redisAPIURL             string
+	taskDispatcherClient    *rpcclient.Client // RPC client for task dispatcher
 	metrics                 *metrics.Collector
 	maxWorkers              int
 	schedulerID             int
@@ -44,15 +43,15 @@ type ConditionBasedScheduler struct {
 func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Initialize HTTP client for Redis API calls
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     30 * time.Second,
-		},
-	}
+	// Initialize RPC client for task dispatcher
+	taskDispatcherClient := rpcclient.NewClient(rpcclient.Config{
+		ServiceName: config.GetTaskDispatcherRPCUrl(),
+		Timeout:     30 * time.Second,
+		MaxRetries:  3,
+		RetryDelay:  time.Second,
+		PoolSize:    10,
+		PoolTimeout: 5 * time.Second,
+	}, logger)
 
 	scheduler := &ConditionBasedScheduler{
 		ctx:                     ctx,
@@ -63,8 +62,7 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		jobDataStore:            make(map[string]*types.ScheduleConditionJobData),
 		chainClients:            make(map[string]*ethclient.Client),
 		dbClient:                dbClient,
-		httpClient:              httpClient,
-		redisAPIURL:             config.GetRedisRPCUrl(),
+		taskDispatcherClient:    taskDispatcherClient,
 		metrics:                 metrics.NewCollector(),
 		maxWorkers:              config.GetMaxWorkers(),
 		schedulerID:             config.GetSchedulerID(),
@@ -87,7 +85,7 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 	scheduler.logger.Info("Condition-based scheduler initialized",
 		"max_workers", scheduler.maxWorkers,
 		"scheduler_id", scheduler.schedulerID,
-		"redis_api_url", scheduler.redisAPIURL,
+		"task_dispatcher_url", config.GetTaskDispatcherRPCUrl(),
 		"connected_chains", len(scheduler.chainClients),
 	)
 
@@ -141,6 +139,15 @@ func (s *ConditionBasedScheduler) Stop() {
 		s.logger.Info("Closed chain client", "chain_id", chainID)
 	}
 	s.chainClients = make(map[string]*ethclient.Client)
+
+	// Close task dispatcher RPC client
+	if s.taskDispatcherClient != nil {
+		if err := s.taskDispatcherClient.Close(); err != nil {
+			s.logger.Error("Failed to close task dispatcher RPC client", "error", err)
+		} else {
+			s.logger.Info("Closed task dispatcher RPC client")
+		}
+	}
 
 	duration := time.Since(startTime)
 

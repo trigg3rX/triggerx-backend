@@ -2,64 +2,62 @@ package scheduler
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TimeBasedScheduler struct {
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	logger              logging.Logger
-	activeTasks         map[int64]*types.ScheduleTimeTaskData
-	dbClient            *dbserver.DBServerClient
-	httpClient          *http.Client
-	redisAPIURL         string
-	metrics             *metrics.Collector
-	schedulerID         int
-	pollingInterval     time.Duration
-	pollingLookAhead    time.Duration
-	taskBatchSize       int
-	performerLockTTL    time.Duration
-	taskCacheTTL        time.Duration
-	duplicateTaskWindow time.Duration
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	logger               logging.Logger
+	activeTasks          map[int64]*types.ScheduleTimeTaskData
+	dbClient             *dbserver.DBServerClient
+	taskDispatcherClient *client.Client // RPC client for task dispatcher
+	metrics              *metrics.Collector
+	schedulerID          int
+	pollingInterval      time.Duration
+	pollingLookAhead     time.Duration
+	taskBatchSize        int
+	performerLockTTL     time.Duration
+	taskCacheTTL         time.Duration
+	duplicateTaskWindow  time.Duration
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
 func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Initialize HTTP client for Redis API calls
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     30 * time.Second,
-		},
-	}
+	// Initialize RPC client for task dispatcher
+	taskDispatcherClient := client.NewClient(client.Config{
+		ServiceName: config.GetTaskDispatcherRPCUrl(),
+		Timeout:     30 * time.Second,
+		MaxRetries:  3,
+		RetryDelay:  time.Second,
+		PoolSize:    10,
+		PoolTimeout: 5 * time.Second,
+	}, logger)
 
 	scheduler := &TimeBasedScheduler{
-		ctx:                 ctx,
-		cancel:              cancel,
-		logger:              logger,
-		activeTasks:         make(map[int64]*types.ScheduleTimeTaskData),
-		dbClient:            dbClient,
-		httpClient:          httpClient,
-		redisAPIURL:         config.GetRedisRPCUrl(),
-		metrics:             metrics.NewCollector(),
-		schedulerID:         config.GetSchedulerID(),
-		pollingInterval:     config.GetPollingInterval(),
-		pollingLookAhead:    config.GetPollingLookAhead(),
-		taskBatchSize:       config.GetTaskBatchSize(),
-		performerLockTTL:    config.GetPerformerLockTTL(),
-		taskCacheTTL:        config.GetTaskCacheTTL(),
-		duplicateTaskWindow: config.GetDuplicateTaskWindow(),
+		ctx:                  ctx,
+		cancel:               cancel,
+		logger:               logger,
+		activeTasks:          make(map[int64]*types.ScheduleTimeTaskData),
+		dbClient:             dbClient,
+		taskDispatcherClient: taskDispatcherClient,
+		metrics:              metrics.NewCollector(),
+		schedulerID:          config.GetSchedulerID(),
+		pollingInterval:      config.GetPollingInterval(),
+		pollingLookAhead:     config.GetPollingLookAhead(),
+		taskBatchSize:        config.GetTaskBatchSize(),
+		performerLockTTL:     config.GetPerformerLockTTL(),
+		taskCacheTTL:         config.GetTaskCacheTTL(),
+		duplicateTaskWindow:  config.GetDuplicateTaskWindow(),
 	}
 
 	// Start metrics collection
@@ -67,7 +65,7 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *db
 
 	scheduler.logger.Info("Time-based scheduler initialized",
 		"scheduler_id", scheduler.schedulerID,
-		"redis_api_url", scheduler.redisAPIURL,
+		"task_dispatcher_url", config.GetTaskDispatcherRPCUrl(),
 		"polling_interval", scheduler.pollingInterval,
 		"polling_look_ahead", scheduler.pollingLookAhead,
 		"task_batch_size", scheduler.taskBatchSize,

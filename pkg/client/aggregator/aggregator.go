@@ -3,7 +3,10 @@ package aggregator
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
+	"net"
+	"syscall"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -14,11 +17,12 @@ import (
 
 // AggregatorClient handles communication with the aggregator service
 type AggregatorClient struct {
-	logger            logging.Logger
-	config            AggregatorClientConfig
-	privateKey        *ecdsa.PrivateKey
-	publicKey         *ecdsa.PublicKey
-	httpClient        *httppkg.HTTPClient
+	logger     logging.Logger
+	config     AggregatorClientConfig
+	privateKey *ecdsa.PrivateKey
+	publicKey  *ecdsa.PublicKey
+	httpClient *httppkg.HTTPClient
+	rpcClient  *rpc.Client
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient
@@ -51,33 +55,53 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
+	// Create RPC client using the HTTP client's underlying http.Client for persistent connections
+	rpcClient, err := rpc.DialHTTP(cfg.AggregatorRPCUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create RPC client: %w", err)
+	}
+
 	return &AggregatorClient{
-		logger:            logger,
-		config:            cfg,
-		privateKey:        privateKey,
-		publicKey:         publicKey,
-		httpClient:        httpClient,
+		logger:     logger,
+		config:     cfg,
+		privateKey: privateKey,
+		publicKey:  publicKey,
+		httpClient: httpClient,
+		rpcClient:  rpcClient,
 	}, nil
 }
 
 // executeWithRetry executes an RPC call with retry logic using the retry package
 func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, result interface{}, params CallParams) error {
-	// Create a new request for each attempt to ensure fresh state
+	// Use the persistent RPC client for all attempts
 	operation := func() (interface{}, error) {
-		rpcClient, err := rpc.Dial(c.config.AggregatorRPCUrl)
-		if err != nil {
-			return nil, fmt.Errorf("failed to dial aggregator RPC: %w", err)
-		}
-		defer rpcClient.Close()
-
+		var err error
 		switch method {
 		case "sendTask":
-			// If this fails, we need to use params individually instead of a single params object, like params.ProofOfTask, params.Data, ... and so on
-			err = rpcClient.Call(result, method, params.ProofOfTask, params.Data, params.TaskDefinitionID, params.PerformerAddress, params.Signature, params.SignatureType, params.TargetChainID)
+			err = c.rpcClient.Call(
+				result,
+				method,
+				params.ProofOfTask,
+				params.Data,
+				params.TaskDefinitionID,
+				params.PerformerAddress,
+				params.Signature,
+				params.SignatureType,
+				params.TargetChainID,
+			)
 		case "sendCustomMessage":
-			err = rpcClient.Call(result, method, params.Data, params.TaskDefinitionID)
+			err = c.rpcClient.Call(
+				result,
+				method,
+				params.Data,
+				params.TaskDefinitionID,
+			)
 		}
 		if err != nil {
+			// Classify network errors as dial failures for clearer diagnostics
+			if isDialError(err) {
+				return nil, fmt.Errorf("failed to dial aggregator RPC: %w", err)
+			}
 			return nil, fmt.Errorf("RPC call failed: %w", err)
 		}
 
@@ -97,5 +121,37 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 }
 
 func (c *AggregatorClient) Close() {
+	if c.rpcClient != nil {
+		c.rpcClient.Close()
+	}
 	c.httpClient.Close()
+}
+
+// isDialError inspects an error to determine if it represents a network dialing error
+// such as connection refused, host unreachable, or DNS resolution failures.
+func isDialError(err error) bool {
+	// Unwrap common network errors
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		// Check for syscall-level connection refused / network unreachable
+		if opErr.Err == syscall.ECONNREFUSED || opErr.Err == syscall.ENETUNREACH || opErr.Err == syscall.EHOSTUNREACH {
+			return true
+		}
+		// Sometimes nested errors wrap syscall.Errno
+		var errno syscall.Errno
+		if errors.As(opErr.Err, &errno) {
+			switch errno {
+			case syscall.ECONNREFUSED, syscall.ENETUNREACH, syscall.EHOSTUNREACH, syscall.ETIMEDOUT:
+				return true
+			}
+		}
+		// DNS resolution failures
+		var dnserr *net.DNSError
+		if errors.As(opErr.Err, &dnserr) {
+			return true
+		}
+	}
+	// Direct DNS errors
+	var dnserr *net.DNSError
+	return errors.As(err, &dnserr)
 }

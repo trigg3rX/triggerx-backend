@@ -215,11 +215,6 @@ func (c *HTTPClient) shouldRetryResponse(statusCode int) bool {
 	return statusCode >= 500 || statusCode == 429 // 429 is rate limit
 }
 
-// isRetryableStatusCode checks if the status code indicates a retryable error (deprecated, use shouldRetryResponse)
-func (c *HTTPClient) isRetryableStatusCode(statusCode int) bool {
-	return c.shouldRetryResponse(statusCode)
-}
-
 // Close closes idle connections
 func (c *HTTPClient) Close() {
 	c.client.CloseIdleConnections()
@@ -233,4 +228,9 @@ func (c *HTTPClient) GetTimeout() time.Duration {
 // GetIdleConnTimeout returns the configured idle connection timeout
 func (c *HTTPClient) GetIdleConnTimeout() time.Duration {
 	return c.HTTPConfig.IdleConnTimeout
+}
+
+// GetClient returns the underlying http.Client for use with other libraries
+func (c *HTTPClient) GetClient() *http.Client {
+	return c.client
 }

@@ -20,8 +20,8 @@ type Config struct {
 	dbServerURL string
 	// Aggregator RPC URL
 	aggregatorRPCUrl string
-	// Redis API URL
-	redisRPCUrl string
+	// Task Dispatcher RPC URL (renamed from Redis API URL)
+	taskDispatcherRPCUrl string
 
 	// Scheduler ID
 	timeSchedulerID int
@@ -42,17 +42,17 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                 env.GetEnvBool("DEV_MODE", false),
-		timeSchedulerRPCPort:    env.GetEnvString("TIME_SCHEDULER_RPC_PORT", "9005"),
-		redisRPCUrl:             env.GetEnvString("REDIS_RPC_URL", "http://localhost:9003"),
-		dbServerURL:             env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:        env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		pollingInterval:         env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
-		pollingLookAhead:        env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
-		taskBatchSize:            env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
-		performerLockTTL:        env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
-		taskCacheTTL:            env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
-		duplicateTaskWindow:     env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		timeSchedulerRPCPort: env.GetEnvString("TIME_SCHEDULER_RPC_PORT", "9005"),
+		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9003"),
+		dbServerURL:          env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCUrl:     env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		pollingInterval:      env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
+		pollingLookAhead:     env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
+		taskBatchSize:        env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
+		performerLockTTL:     env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
+		taskCacheTTL:         env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
+		duplicateTaskWindow:  env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -73,8 +73,8 @@ func validateConfig() error {
 	if !env.IsValidURL(cfg.aggregatorRPCUrl) {
 		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCUrl)
 	}
-	if !env.IsValidURL(cfg.redisRPCUrl) {
-		return fmt.Errorf("invalid Redis API URL: %s", cfg.redisRPCUrl)
+	if !env.IsValidURL(cfg.taskDispatcherRPCUrl) {
+		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
 	}
 	return nil
 }
@@ -95,8 +95,8 @@ func GetAggregatorRPCUrl() string {
 	return cfg.aggregatorRPCUrl
 }
 
-func GetRedisRPCUrl() string {
-	return cfg.redisRPCUrl
+func GetTaskDispatcherRPCUrl() string {
+	return cfg.taskDispatcherRPCUrl
 }
 
 func GetSchedulerID() int {

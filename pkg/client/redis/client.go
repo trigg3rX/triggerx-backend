@@ -48,7 +48,8 @@ func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) 
 		lastHealthCheck: time.Now(),
 	}
 
-	if err := redisClient.CheckConnection(); err != nil {
+	// Use a background context for the initial check. The timeout is handled by the client's config.
+	if err := redisClient.CheckConnection(context.Background()); err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
@@ -90,16 +91,9 @@ func applyConnectionSettings(opt *redis.Options, config RedisConfig) {
 	opt.PoolTimeout = config.ConnectionSettings.PoolTimeout
 }
 
-// CheckConnection validates the Redis connection
-func (c *Client) CheckConnection() error {
-	timeout := c.config.ConnectionSettings.HealthTimeout
-	if timeout == 0 {
-		timeout = 5 * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
+// CheckConnection validates the Redis connection.
+// It now uses the passed context and relies on the client's Read/Write timeouts.
+func (c *Client) CheckConnection(ctx context.Context) error {
 	return c.executeWithRetry(ctx, func() error {
 		_, err := c.redisClient.Ping(ctx).Result()
 		if err != nil {
@@ -110,17 +104,12 @@ func (c *Client) CheckConnection() error {
 	}, "CheckConnection")
 }
 
-// Ping checks if Redis is reachable
-func (c *Client) Ping() error {
-	timeout := c.config.ConnectionSettings.PingTimeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
+// Ping checks if Redis is reachable.
+// It now uses a background context, relying on the client's configured Read/Write timeouts
+// instead of creating its own timeout context.
+func (c *Client) Ping(ctx context.Context) error {
 	start := time.Now()
+	// The timeout for the actual Ping command is now governed by the client's ReadTimeout.
 	err := c.executeWithRetry(ctx, func() error {
 		return c.redisClient.Ping(ctx).Err()
 	}, "Ping")
@@ -132,41 +121,32 @@ func (c *Client) Ping() error {
 	return err
 }
 
-// Stream management functions
-func (c *Client) CreateStreamIfNotExists(ctx context.Context, stream string, ttl time.Duration) error {
-	return c.executeWithRetry(ctx, func() error {
-		exists, err := c.redisClient.Exists(ctx, stream).Result()
-		if err != nil {
-			return err
+// ExecutePipeline executes a series of commands in a single network round-trip.
+// It wraps the entire pipeline execution within the client's retry logic,
+// making batch operations resilient.
+// The provided PipelineFunc is responsible for queuing commands on the pipeline.
+func (c *Client) ExecutePipeline(ctx context.Context, fn PipelineFunc) ([]redis.Cmder, error) {
+	var cmds []redis.Cmder
+
+	// Wrap the entire pipeline execution in our robust retry mechanism.
+	// If the connection drops, it will retry the entire batch of commands.
+	err := c.executeWithRetry(ctx, func() error {
+		pipe := c.redisClient.Pipeline()
+
+		// The user's function queues the commands.
+		if err := fn(pipe); err != nil {
+			// This is a non-retryable error from the user's logic, not a Redis error.
+			return fmt.Errorf("pipeline setup function failed: %w", err)
 		}
 
-		if exists == 0 {
-			// Create empty stream
-			if _, err := c.redisClient.XAdd(ctx, &redis.XAddArgs{
-				Stream: stream,
-				ID:     "*",
-				Values: map[string]interface{}{"init": "stream_created"},
-			}).Result(); err != nil {
-				return err
-			}
+		// Exec sends all queued commands to Redis and returns their results.
+		var execErr error
+		cmds, execErr = pipe.Exec(ctx)
+		// This is the error we check for retry eligibility (e.g., network issues).
+		return execErr
+	}, "ExecutePipeline")
 
-			// Set TTL only once at creation
-			if err := c.redisClient.Expire(ctx, stream, ttl).Err(); err != nil {
-				return err
-			}
-		}
-		return nil
-	}, "CreateStreamIfNotExists")
-}
-
-func (c *Client) CreateConsumerGroup(ctx context.Context, stream, group string) error {
-	return c.executeWithRetry(ctx, func() error {
-		err := c.redisClient.XGroupCreateMkStream(ctx, stream, group, "0").Err()
-		if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-			return err
-		}
-		return nil
-	}, "CreateConsumerGroup")
+	return cmds, err
 }
 
 // Core Redis operations with retry logic and monitoring
@@ -175,8 +155,7 @@ func (c *Client) Get(ctx context.Context, key string) (string, error) {
 	err := c.executeWithRetryAndKey(ctx, func() error {
 		val, err := c.redisClient.Get(ctx, key).Result()
 		if err == redis.Nil {
-			result = ""
-			return nil
+			return redis.Nil
 		}
 		if err != nil {
 			return err
@@ -185,6 +164,29 @@ func (c *Client) Get(ctx context.Context, key string) (string, error) {
 		return nil
 	}, "Get", key)
 	return result, err
+}
+
+// GetWithExists returns both the value and existence status for a key
+// This leverages the GET command's return value to provide existence information
+// without requiring a separate EXISTS check
+func (c *Client) GetWithExists(ctx context.Context, key string) (value string, exists bool, err error) {
+	err = c.executeWithRetryAndKey(ctx, func() error {
+		val, err := c.redisClient.Get(ctx, key).Result()
+		if err == redis.Nil {
+			// Key does not exist
+			value = ""
+			exists = false
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		// Key exists
+		value = val
+		exists = true
+		return nil
+	}, "GetWithExists", key)
+	return value, exists, err
 }
 
 func (c *Client) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
@@ -212,149 +214,19 @@ func (c *Client) Del(ctx context.Context, keys ...string) error {
 	}, "Del")
 }
 
-func (c *Client) XAdd(ctx context.Context, args *redis.XAddArgs) (string, error) {
-	var result string
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.XAdd(ctx, args).Result()
+// DelWithCount deletes keys and returns the number of keys that were deleted
+// This leverages the DEL command's return value to provide deletion count information
+// without requiring separate EXISTS checks
+func (c *Client) DelWithCount(ctx context.Context, keys ...string) (deletedCount int64, err error) {
+	err = c.executeWithRetry(ctx, func() error {
+		count, err := c.redisClient.Del(ctx, keys...).Result()
 		if err != nil {
 			return err
 		}
-		result = val
+		deletedCount = count
 		return nil
-	}, "XAdd")
-	return result, err
-}
-
-func (c *Client) XLen(ctx context.Context, stream string) (int64, error) {
-	var result int64
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.XLen(ctx, stream).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "XLen")
-	return result, err
-}
-
-func (c *Client) XReadGroup(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error) {
-	var result []redis.XStream
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.XReadGroup(ctx, args).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "XReadGroup")
-	return result, err
-}
-
-func (c *Client) XAck(ctx context.Context, stream, group, id string) error {
-	return c.executeWithRetry(ctx, func() error {
-		return c.redisClient.XAck(ctx, stream, group, id).Err()
-	}, "XAck")
-}
-
-func (c *Client) XPending(ctx context.Context, stream, group string) (*redis.XPending, error) {
-	var result *redis.XPending
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.XPending(ctx, stream, group).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "XPending")
-	return result, err
-}
-
-func (c *Client) XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error) {
-	var result []redis.XPendingExt
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.XPendingExt(ctx, args).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "XPendingExt")
-	return result, err
-}
-
-func (c *Client) XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd {
-	return c.redisClient.XClaim(ctx, args)
-}
-
-// ZAdd adds members to a sorted set
-func (c *Client) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error) {
-	var result int64
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.ZAdd(ctx, key, members...).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "ZAdd")
-	return result, err
-}
-
-// ZRevRange returns members from a sorted set in reverse order
-func (c *Client) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
-	var result []string
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.ZRevRange(ctx, key, start, stop).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "ZRevRange")
-	return result, err
-}
-
-// ZRemRangeByScore removes members from a sorted set by score range
-func (c *Client) ZRemRangeByScore(ctx context.Context, key, min, max string) (int64, error) {
-	var result int64
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.ZRemRangeByScore(ctx, key, min, max).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "ZRemRangeByScore")
-	return result, err
-}
-
-// Keys returns all keys matching a pattern
-func (c *Client) Keys(ctx context.Context, pattern string) ([]string, error) {
-	var result []string
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.Keys(ctx, pattern).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "Keys")
-	return result, err
-}
-
-// ZCard returns the number of members in a sorted set
-func (c *Client) ZCard(ctx context.Context, key string) (int64, error) {
-	var result int64
-	err := c.executeWithRetry(ctx, func() error {
-		val, err := c.redisClient.ZCard(ctx, key).Result()
-		if err != nil {
-			return err
-		}
-		result = val
-		return nil
-	}, "ZCard")
-	return result, err
+	}, "DelWithCount")
+	return deletedCount, err
 }
 
 // TTL returns the time-to-live for a key with retry logic
@@ -368,6 +240,20 @@ func (c *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
 		result = val
 		return nil
 	}, "TTL")
+	return result, err
+}
+
+// Eval executes a Lua script on the server.
+func (c *Client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
+	var result interface{}
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.Eval(ctx, script, keys, args...).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "Eval")
 	return result, err
 }
 

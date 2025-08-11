@@ -19,8 +19,8 @@ type Config struct {
 	dbServerURL string
 	// Aggregator RPC URL
 	aggregatorRPCURL string
-	// Redis API URL
-	redisRPCUrl string
+	// Task Dispatcher RPC URL
+	taskDispatcherRPCUrl string
 
 	// Scheduler ID for consumer groups
 	conditionSchedulerID int
@@ -45,14 +45,14 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                          env.GetEnvBool("DEV_MODE", false),
-		conditionSchedulerRPCPort:        env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
-		dbServerURL:                      env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCURL:                 env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		redisRPCUrl:                      env.GetEnvString("REDIS_RPC_URL", "http://localhost:9003"),
-		conditionSchedulerID:             env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
-		maxWorkers:                       env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
-		alchemyAPIKey:                    env.GetEnvString("ALCHEMY_API_KEY", ""),
+		devMode:                   env.GetEnvBool("DEV_MODE", false),
+		conditionSchedulerRPCPort: env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
+		dbServerURL:               env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
+		aggregatorRPCURL:          env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		taskDispatcherRPCUrl:      env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9003"),
+		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
+		maxWorkers:                env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
+		alchemyAPIKey:             env.GetEnvString("ALCHEMY_API_KEY", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -73,8 +73,8 @@ func validateConfig() error {
 	if !env.IsValidURL(cfg.aggregatorRPCURL) {
 		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCURL)
 	}
-	if !env.IsValidURL(cfg.redisRPCUrl) {
-		return fmt.Errorf("invalid Redis API URL: %s", cfg.redisRPCUrl)
+	if !env.IsValidURL(cfg.taskDispatcherRPCUrl) {
+		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
 	}
 	return nil
 }
@@ -99,9 +99,9 @@ func GetAggregatorRPCURL() string {
 	return cfg.aggregatorRPCURL
 }
 
-// GetRedisRPCUrl returns the Redis API URL
-func GetRedisRPCUrl() string {
-	return cfg.redisRPCUrl
+// GetTaskDispatcherRPCUrl returns the task dispatcher RPC URL
+func GetTaskDispatcherRPCUrl() string {
+	return cfg.taskDispatcherRPCUrl
 }
 
 // GetMaxWorkers returns the maximum number of concurrent workers allowed

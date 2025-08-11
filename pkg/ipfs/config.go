@@ -1,26 +1,29 @@
 package ipfs
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Config struct {
-	PinataHost string
+	PinataHost    string
 	PinataJWT     string
 	PinataBaseURL string
 }
 
 func NewConfig(pinataHost string, pinataJWT string) *Config {
 	return &Config{
-		PinataHost: pinataHost,
-		PinataJWT: pinataJWT,
+		PinataHost:    pinataHost,
+		PinataJWT:     pinataJWT,
 		PinataBaseURL: "https://uploads.pinata.cloud/v3/files",
 	}
 }
 
 func (c *Config) Validate() error {
-	if c.PinataHost == "" {
+	if strings.TrimSpace(c.PinataHost) == "" {
 		return fmt.Errorf("PinataHost is required")
 	}
-	if c.PinataJWT == "" {
+	if strings.TrimSpace(c.PinataJWT) == "" {
 		return fmt.Errorf("PinataJWT is required")
 	}
 	return nil
