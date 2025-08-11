@@ -1,10 +1,8 @@
 package scheduler
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -40,7 +38,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 	}
 }
 
-// processBatch processes a batch of tasks by submitting to Redis API
+// processBatch processes a batch of tasks by submitting to task dispatcher
 func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	s.logger.Infof("Processing batch of %d time-based tasks", len(tasks))
 
@@ -105,7 +103,7 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 		ManagerSignature: "",
 	}
 
-	// Create request for Redis API
+	// Create request for task dispatcher
 	request := types.SchedulerTaskRequest{
 		SendTaskDataToKeeper: sendTaskData,
 		Source:               "time_scheduler",
@@ -118,97 +116,56 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	}
 	taskIDs := strings.Join(taskIDStrs, ", ")
 
-	// Submit batch to Redis API
-	success := s.submitBatchToRedis(request, taskIDs, len(validTaskIDs))
+	// Submit batch to task dispatcher
+	success := s.submitBatchToTaskDispatcher(request, taskIDs, len(validTaskIDs))
 
 	if success {
 		s.logger.Infof("Batch processing completed successfully: %d tasks submitted", len(validTaskIDs))
 		metrics.TrackTaskCompletion(true, time.Since(time.Now()))
-		metrics.TrackTaskBroadcast("redis_submitted")
+		metrics.TrackTaskBroadcast("task_dispatcher_submitted")
 	} else {
 		s.logger.Errorf("Batch processing failed: %d tasks", len(validTaskIDs))
 		metrics.TrackTaskBroadcast("failed")
 	}
 }
 
-// submitBatchToRedis submits the batch task data to Redis API
-func (s *TimeBasedScheduler) submitBatchToRedis(request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
+// submitBatchToTaskDispatcher submits the batch task data to Task Dispatcher via RPC
+func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
 	startTime := time.Now()
 
-	// Marshal request to JSON
-	requestBytes, err := json.Marshal(request)
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Make RPC call to task dispatcher
+	var response types.TaskManagerAPIResponse
+	err := s.taskDispatcherClient.Call(ctx, "submit-task", &request, &response)
 	if err != nil {
-		s.logger.Error("Failed to marshal batch request",
+		s.logger.Error("Failed to submit batch to task dispatcher via RPC",
 			"task_ids", taskIDs,
 			"task_count", taskCount,
-			"error", err)
-		return false
-	}
-
-	// Create HTTP request
-	url := fmt.Sprintf("%s/scheduler/submit-task", s.redisAPIURL)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBytes))
-	if err != nil {
-		s.logger.Error("Failed to create HTTP request",
-			"task_ids", taskIDs,
-			"url", url,
-			"error", err)
-		return false
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send request
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		s.logger.Error("Failed to send batch to Redis API",
-			"task_ids", taskIDs,
-			"task_count", taskCount,
-			"url", url,
-			"error", err)
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Parse response
-	var apiResponse types.TaskManagerAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		s.logger.Error("Failed to decode TaskManager response",
-			"task_ids", taskIDs,
-			"status_code", resp.StatusCode,
 			"error", err)
 		return false
 	}
 
 	duration := time.Since(startTime)
 
-	if resp.StatusCode != http.StatusOK {
-		s.logger.Error("TaskManager returned error",
+	if !response.Success {
+		s.logger.Error("Task dispatcher processing failed",
 			"task_ids", taskIDs,
 			"task_count", taskCount,
-			"status_code", resp.StatusCode,
-			"error", apiResponse.Error,
-			"details", apiResponse.Details,
+			"message", response.Message,
+			"error", response.Error,
 			"duration", duration)
 		return false
 	}
 
-	if !apiResponse.Success {
-		s.logger.Error("TaskManager processing failed",
-			"task_ids", taskIDs,
-			"task_count", taskCount,
-			"message", apiResponse.Message,
-			"error", apiResponse.Error,
-			"duration", duration)
-		return false
-	}
-
-	s.logger.Info("Successfully submitted batch to TaskManager",
+	s.logger.Info("Successfully submitted batch to task dispatcher",
 		"task_ids", taskIDs,
 		"task_count", taskCount,
-		"response_task_ids", apiResponse.TaskID,
+		"response_task_ids", response.TaskID,
 		"duration", duration,
-		"message", apiResponse.Message)
+		"message", response.Message)
 
 	return true
 }

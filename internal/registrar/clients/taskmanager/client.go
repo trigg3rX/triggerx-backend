@@ -7,12 +7,13 @@ import (
 	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type Client struct {
 	retryClient *httppkg.HTTPClient
+	logger      logging.Logger
 }
 
 func NewClient(logger logging.Logger) (*Client, error) {
@@ -20,7 +21,7 @@ func NewClient(logger logging.Logger) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{retryClient: retryClient}, nil
+	return &Client{retryClient: retryClient, logger: logger}, nil
 }
 
 func (c *Client) InformTaskManager(taskID int64, isAccepted bool) error {
@@ -47,7 +48,11 @@ func (c *Client) InformTaskManager(taskID int64, isAccepted bool) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			c.logger.Errorf("error closing response body: %v", cerr)
+		}
+	}()
 
 	return nil
 }

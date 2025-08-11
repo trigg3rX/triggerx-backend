@@ -24,7 +24,11 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 
 	// Use RetryableIter since the query needs parameters
 	iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, data.OperatorAddress).Iter()
-	defer iter.Close()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
 
 	if iter.Scan(&keeperID) {
 		err = nil
@@ -78,7 +82,11 @@ func (dm *DatabaseClient) KeeperUnregistered(operatorAddress string) error {
 
 	// Use RetryableIter since the query needs parameters
 	iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, operatorAddress).Iter()
-	defer iter.Close()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
 
 	if !iter.Scan(&currentKeeperID) {
 		dm.logger.Errorf("Error getting keeper ID: no results found")
