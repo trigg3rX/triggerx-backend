@@ -32,7 +32,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 			defer wg.Done()
 
 			// Use the Execute method directly which handles all the Docker-in-Docker compatibility
-				result, err := h.dockerManager.Execute(ctx, url, 10)
+			result, err := h.dockerManager.Execute(ctx, url, 10)
 			if err != nil {
 				h.logger.Errorf("Error executing code: %v", err)
 				return

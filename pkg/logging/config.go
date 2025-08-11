@@ -49,12 +49,12 @@ func getBaseDataDir() string {
 	if err != nil {
 		return "data"
 	}
-	
+
 	for {
 		if _, err := os.Stat(filepath.Join(currentDir, "go.mod")); err == nil {
 			return filepath.Join(currentDir, "data")
 		}
-		
+
 		parent := filepath.Dir(currentDir)
 		if parent == currentDir {
 			break

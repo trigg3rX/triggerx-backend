@@ -47,10 +47,10 @@ type Config struct {
 	metricsUpdateInterval time.Duration
 
 	// Timeout and retry settings
-	retryDelay             time.Duration
-	requestTimeout         time.Duration
-	initializationTimeout  time.Duration
-	maxRetryBackoff        time.Duration
+	retryDelay            time.Duration
+	requestTimeout        time.Duration
+	initializationTimeout time.Duration
+	maxRetryBackoff       time.Duration
 }
 
 var cfg Config
@@ -60,27 +60,27 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                env.GetEnvBool("DEV_MODE", false),
-		taskDispatcherRPCPort:  env.GetEnvInt("TASK_DISPATCHER_RPC_PORT", 9003),
-		healthRPCUrl:           env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
-		aggregatorRPCUrl:       env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		signingKey:             env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
-		signingAddress:         env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
-		upstashURL:             env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashToken:           env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		poolSize:               env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		minIdleConns:           env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		maxRetries:             env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:            env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
-		readTimeout:            env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
-		writeTimeout:           env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
-		poolTimeout:            env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
-		metricsUpdateInterval:  env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
-		retryDelay:             env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
-		requestTimeout:         env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
-		initializationTimeout:  env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
-		maxRetryBackoff:        env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
-		ottempoEndpoint:        env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		devMode:               env.GetEnvBool("DEV_MODE", false),
+		taskDispatcherRPCPort: env.GetEnvInt("TASK_DISPATCHER_RPC_PORT", 9003),
+		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
+		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		signingKey:            env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
+		signingAddress:        env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
+		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashToken:          env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		poolSize:              env.GetEnvInt("REDIS_POOL_SIZE", 10),
+		minIdleConns:          env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+		maxRetries:            env.GetEnvInt("REDIS_MAX_RETRIES", 3),
+		dialTimeout:           env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:           env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:          env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:           env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
+		metricsUpdateInterval: env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
+		retryDelay:            env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
+		requestTimeout:        env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
+		initializationTimeout: env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
+		maxRetryBackoff:       env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
+		ottempoEndpoint:       env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 	}
 
 	if !cfg.devMode {

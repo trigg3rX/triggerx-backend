@@ -1,9 +1,9 @@
 package chainio
 
 import (
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	gethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -32,7 +32,6 @@ type AvsReader interface {
 		taskAddress string,
 		taskID uint64,
 	) (gethcommon.Address, error)
-
 }
 
 type ChainReader struct {

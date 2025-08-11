@@ -8,7 +8,7 @@ import (
 
 func TestGetLanguageFromFile(t *testing.T) {
 	tests := []struct {
-		name string
+		name     string
 		filePath string
 		expected Language
 	}{
@@ -29,9 +29,9 @@ func TestGetLanguageFromFile(t *testing.T) {
 
 func TestGetLanguageFromExtension(t *testing.T) {
 	tests := []struct {
-		name string
+		name      string
 		extension string
-		expected Language
+		expected  Language
 	}{
 		{name: "go extension", extension: ".go", expected: LanguageGo},
 		{name: "py extension", extension: ".py", expected: LanguagePy},

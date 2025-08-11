@@ -81,8 +81,8 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 
 	return map[string]interface{}{
 		"scheduler_info": map[string]interface{}{
-			"max_workers":               s.maxWorkers,
-			"supported_chains":          []string{"11155420", "84532", "11155111"}, // OP Sepolia, Base Sepolia, Ethereum Sepolia
+			"max_workers":      s.maxWorkers,
+			"supported_chains": []string{"11155420", "84532", "11155111"}, // OP Sepolia, Base Sepolia, Ethereum Sepolia
 		},
 
 		"worker_summary": map[string]interface{}{

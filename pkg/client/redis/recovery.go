@@ -41,7 +41,6 @@ func (c *Client) checkAndRecoverConnection(ctx context.Context) {
 	}
 }
 
-
 // performConnectionRecovery attempts to recover the Redis connection
 func (c *Client) performConnectionRecovery() {
 	start := time.Now()
@@ -87,7 +86,6 @@ func (c *Client) performConnectionRecovery() {
 		c.mu.Lock()
 		c.lastHealthCheck = time.Now()
 		c.mu.Unlock()
-
 
 		// Track successful recovery
 		duration := time.Since(start)

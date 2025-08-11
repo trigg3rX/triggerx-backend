@@ -6,7 +6,7 @@ import (
 )
 
 type UpdateJobRequest struct {
-	JobID          *big.Int     `json:"job_id"`
+	JobID          *big.Int  `json:"job_id"`
 	Recurring      bool      `json:"recurring"`
 	TimeFrame      int64     `json:"time_frame"`
 	UpdatedAt      time.Time `json:"updated_at"`

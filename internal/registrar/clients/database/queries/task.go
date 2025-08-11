@@ -60,5 +60,4 @@ const (
 		UPDATE triggerx.user_data 
 		SET user_points = ?, total_tasks = ?, last_updated_at = ?
 		WHERE user_id = ?`
-
 )

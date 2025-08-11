@@ -21,21 +21,21 @@ import (
 )
 
 type Manager struct {
-	Cli        *client.Client
-	config     config.DockerConfig
-	logger     logging.Logger
-	pools      map[types.Language]*ContainerPool
-	lifecycle  *ContainerLifecycle
-	mutex      sync.RWMutex
+	Cli         *client.Client
+	config      config.DockerConfig
+	logger      logging.Logger
+	pools       map[types.Language]*ContainerPool
+	lifecycle   *ContainerLifecycle
+	mutex       sync.RWMutex
 	initialized bool
 }
 
 func NewManager(cli *client.Client, cfg config.ExecutorConfig, logger logging.Logger) (*Manager, error) {
 	manager := &Manager{
-		Cli:        cli,
-		config:     cfg.Docker,
-		logger:     logger,
-		pools:      make(map[types.Language]*ContainerPool),
+		Cli:    cli,
+		config: cfg.Docker,
+		logger: logger,
+		pools:  make(map[types.Language]*ContainerPool),
 	}
 
 	// Create lifecycle manager

@@ -23,8 +23,8 @@ func OptInToAVS(ctx *cli.Context) error {
 
 	// Validate required environment variables
 	requiredVars := map[string]string{
-		"AVS_ADDRESS":       os.Getenv("AVS_ADDRESS"),
-		"IMUA_PRIVATE_KEY":  os.Getenv("IMUA_PRIVATE_KEY"),
+		"AVS_ADDRESS":      os.Getenv("AVS_ADDRESS"),
+		"IMUA_PRIVATE_KEY": os.Getenv("IMUA_PRIVATE_KEY"),
 		"RPC_URL":          os.Getenv("RPC_URL"),
 	}
 
@@ -60,7 +60,7 @@ func OptInToAVS(ctx *cli.Context) error {
 
 	// Execute the cast send command
 	log.Println("\n🚀 Executing registerOperatorToAVS transaction...")
-	
+
 	castCmd := exec.Command("cast", "send",
 		requiredVars["AVS_ADDRESS"],
 		"registerOperatorToAVS()",
@@ -73,7 +73,7 @@ func OptInToAVS(ctx *cli.Context) error {
 	castOutput, err := castCmd.CombinedOutput()
 	if err != nil {
 		log.Printf("❌ Cast send command output: %s", string(castOutput))
-		
+
 		// Handle specific error cases
 		if strings.Contains(string(castOutput), "insufficient funds") {
 			return fmt.Errorf("insufficient ETH balance for gas fees")
@@ -84,7 +84,7 @@ func OptInToAVS(ctx *cli.Context) error {
 		if strings.Contains(string(castOutput), "invalid private key") {
 			return fmt.Errorf("invalid private key format")
 		}
-		
+
 		return fmt.Errorf("failed to execute registerOperatorToAVS: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func OptInToAVS(ctx *cli.Context) error {
 	// Extract transaction hash from output
 	var txHash string
 	outputStr := string(castOutput)
-	
+
 	// Cast typically outputs just the transaction hash
 	lines := strings.Split(strings.TrimSpace(outputStr), "\n")
 	for _, line := range lines {
@@ -141,7 +141,7 @@ func checkCastAvailable() error {
 // verifyTransaction checks if the transaction was successful
 func verifyTransaction(txHash, rpcURL string) error {
 	log.Println("🔍 Verifying transaction status...")
-	
+
 	// Use cast to get transaction receipt
 	receiptCmd := exec.Command("cast", "receipt", txHash, "--rpc-url", rpcURL)
 	receiptOutput, err := receiptCmd.Output()
@@ -150,7 +150,7 @@ func verifyTransaction(txHash, rpcURL string) error {
 	}
 
 	receiptStr := string(receiptOutput)
-	
+
 	// Check if transaction was successful (status: 0x1 means success)
 	if strings.Contains(receiptStr, "status") && strings.Contains(receiptStr, "0x1") {
 		log.Println("🎉 Transaction confirmed successfully!")
@@ -160,7 +160,7 @@ func verifyTransaction(txHash, rpcURL string) error {
 		log.Printf("Receipt: %s", receiptStr)
 		return fmt.Errorf("transaction failed with status 0x0")
 	}
-	
+
 	log.Println("⚠️ Transaction status unclear")
 	log.Printf("Receipt: %s", receiptStr)
 	return nil

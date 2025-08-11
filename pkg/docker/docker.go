@@ -9,8 +9,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/execution"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // DockerManager is the main entry point for the Docker package

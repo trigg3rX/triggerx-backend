@@ -3,8 +3,8 @@ package chainio
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/event"
 	avssub "github.com/trigg3rX/imua-contracts/bindings/contracts"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )

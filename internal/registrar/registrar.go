@@ -15,8 +15,8 @@ import (
 	syncMgr "github.com/trigg3rX/triggerx-backend/internal/registrar/sync"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const (

@@ -19,8 +19,8 @@ type HealthClient struct {
 // PerformerResponse represents the response from health service
 type PerformerResponse struct {
 	Performers []types.PerformerData `json:"performers"`
-	Count      int             `json:"count"`
-	Timestamp  string          `json:"timestamp"`
+	Count      int                   `json:"count"`
+	Timestamp  string                `json:"timestamp"`
 }
 
 // NewHealthClient creates a new health client

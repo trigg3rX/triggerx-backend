@@ -141,7 +141,6 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				return
 			}
 			e.logger.Info("Action execution completed", "task_id", task.TaskID, "trace_id", traceID)
-			
 
 			ipfsData := types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
@@ -220,10 +219,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			e.logger.Info("IPFS data uploaded", "task_id", task.TaskID, "trace_id", traceID)
 
 			aggregatorData := types.BroadcastDataForValidators{
-				ProofOfTask:        proofData.ProofOfTask,
-				Data:               []byte(cid),
-				TaskDefinitionID:   task.TargetData[idx].TaskDefinitionID,
-				PerformerAddress:   config.GetConsensusAddress(),
+				ProofOfTask:      proofData.ProofOfTask,
+				Data:             []byte(cid),
+				TaskDefinitionID: task.TargetData[idx].TaskDefinitionID,
+				PerformerAddress: config.GetConsensusAddress(),
 			}
 
 			success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)

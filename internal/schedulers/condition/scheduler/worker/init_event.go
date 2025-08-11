@@ -16,19 +16,18 @@ import (
 
 // EventWorker monitors blockchain events for specific contracts
 type EventWorker struct {
-	EventWorkerData *types.EventWorkerData
-	ChainClient     *ethclient.Client
-	Logger          logging.Logger
-	Ctx             context.Context
-	Cancel          context.CancelFunc
-	IsActive        bool
-	Mutex           sync.RWMutex
-	LastBlock       uint64
+	EventWorkerData    *types.EventWorkerData
+	ChainClient        *ethclient.Client
+	Logger             logging.Logger
+	Ctx                context.Context
+	Cancel             context.CancelFunc
+	IsActive           bool
+	Mutex              sync.RWMutex
+	LastBlock          uint64
 	LastBlockTimestamp time.Time
-	TriggerCallback WorkerTriggerCallback // Callback to notify scheduler when event is detected
-	CleanupCallback WorkerCleanupCallback // Callback to clean up job data when worker stops
+	TriggerCallback    WorkerTriggerCallback // Callback to notify scheduler when event is detected
+	CleanupCallback    WorkerCleanupCallback // Callback to clean up job data when worker stops
 }
-
 
 // Start begins the event worker's monitoring loop
 func (w *EventWorker) Start() {

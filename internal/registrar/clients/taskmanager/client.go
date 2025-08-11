@@ -26,7 +26,7 @@ func NewClient(logger logging.Logger) (*Client, error) {
 
 func (c *Client) InformTaskManager(taskID int64, isAccepted bool) error {
 	payload := map[string]interface{}{
-		"task_id": taskID,
+		"task_id":     taskID,
 		"is_accepted": isAccepted,
 	}
 

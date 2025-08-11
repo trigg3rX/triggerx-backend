@@ -16,17 +16,17 @@ type Config struct {
 	registrarPort string
 
 	// Contract Addresses to listen for events
-	avsGovernanceAddress      string
+	avsGovernanceAddress string
 	// avsGovernanceLogicAddress string
-	attestationCenterAddress  string
+	attestationCenterAddress string
 	// oblsAddress               string
 	// taskExecutionHubAddress    string
 	// triggerXJobRegistryAddress string
 	// triggerGasRegistryAddress string
 
 	// RPC URLs for Ethereum and Base
-	rpcProvider     string
-	rpcAPIKey       string
+	rpcProvider string
+	rpcAPIKey   string
 
 	// ScyllaDB Host and Port
 	databaseHostAddress string
@@ -37,7 +37,7 @@ type Config struct {
 	upstashRedisRestToken string
 
 	// Sync Configs Update
-	lastRewardsUpdate string
+	lastRewardsUpdate    string
 	lastEthBlockUpdated  uint64
 	lastBaseBlockUpdated uint64
 	lastOptBlockUpdated  uint64
@@ -57,24 +57,24 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                   env.GetEnvBool("DEV_MODE", false),
-		registrarPort:             env.GetEnvString("REGISTRAR_PORT", "9010"),
-		avsGovernanceAddress:      env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		registrarPort:        env.GetEnvString("REGISTRAR_PORT", "9010"),
+		avsGovernanceAddress: env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
 		// avsGovernanceLogicAddress: env.GetEnvString("AVS_GOVERNANCE_LOGIC_ADDRESS", "0x4EbE2f2b7db5B48559167f2be7d760B23b00B427"),
-		attestationCenterAddress:  env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
+		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
 		// oblsAddress:               env.GetEnvString("OBLS_ADDRESS", "0x68853222A6Fc1DAE25Dd58FB184dc4470C98F73C"),
 		// taskExecutionHubAddress:   env.GetEnvString("EIGENLAYER_TASK_EXECUTION_HUB_ADDRESS", "0x2469e89386947535A350EEBccC5F2754fd35F474"),
 		// triggerGasRegistryAddress: env.GetEnvString("TRIGGER_GAS_REGISTRY_ADDRESS", "0x85ea3eB894105bD7e7e2A8D34cf66C8E8163CD2a"),
 		// triggerXJobRegistryAddress: env.GetEnvString("TRIGGERX_JOB_REGISTRY_ADDRESS", "0xdB66c11221234C6B19cCBd29868310c31494C21C"),
-		rpcProvider:               env.GetEnvString("RPC_PROVIDER", ""),
-		rpcAPIKey:                 env.GetEnvString("RPC_API_KEY", ""),
-		databaseHostAddress:       env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:          env.GetEnvString("DATABASE_HOST_PORT", "9042"),
-		upstashRedisUrl:           env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashRedisRestToken:     env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		pinataJWT:                 env.GetEnvString("PINATA_JWT", ""),
-		pinataHost:                env.GetEnvString("PINATA_HOST", ""),
-		taskManagerURL:            env.GetEnvString("TASK_MANAGER_URL", "http://localhost:9003"),
+		rpcProvider:           env.GetEnvString("RPC_PROVIDER", ""),
+		rpcAPIKey:             env.GetEnvString("RPC_API_KEY", ""),
+		databaseHostAddress:   env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:      env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		upstashRedisUrl:       env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		pinataJWT:             env.GetEnvString("PINATA_JWT", ""),
+		pinataHost:            env.GetEnvString("PINATA_HOST", ""),
+		taskManagerURL:        env.GetEnvString("TASK_MANAGER_URL", "http://localhost:9003"),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)

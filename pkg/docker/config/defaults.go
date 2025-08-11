@@ -152,7 +152,7 @@ func DefaultBasePoolConfig() BasePoolConfig {
 func DefaultCacheConfig() CacheConfig {
 	return CacheConfig{
 		CacheDir:          "data/cache",
-		MaxCacheSize:      100 * 1024 * 1024,   // 100MB
+		MaxCacheSize:      100 * 1024 * 1024, // 100MB
 		CleanupInterval:   10 * time.Minute,
 		EnableCompression: true,
 		MaxFileSize:       1 * 1024 * 1024, // 1MB

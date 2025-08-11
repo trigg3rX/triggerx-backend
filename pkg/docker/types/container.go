@@ -9,6 +9,7 @@ import (
 )
 
 type Language string
+
 const (
 	LanguageGo   Language = "go"
 	LanguagePy   Language = "py"
@@ -18,6 +19,7 @@ const (
 )
 
 type ContainerStatus string
+
 const (
 	ContainerStatusPending ContainerStatus = "pending"
 	ContainerStatusRunning ContainerStatus = "running"

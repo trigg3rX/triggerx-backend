@@ -26,7 +26,7 @@ const (
 
 // TaskStreamData represents task information for Redis-managed task streams
 type TaskStreamData struct {
-	JobID            *big.Int     `json:"job_id"`
+	JobID            *big.Int  `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`
 
@@ -38,9 +38,9 @@ type TaskStreamData struct {
 	SendTaskDataToKeeper types.SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
 
 	// Processing status (Redis internal use)
-	DispatchedAt        *time.Time `json:"dispatched_at,omitempty"`
-	CompletedAt         *time.Time `json:"completed_at,omitempty"`
-	LastError           string     `json:"last_error,omitempty"`
+	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	LastError    string     `json:"last_error,omitempty"`
 }
 
 // TaskStatusUpdate represents status updates from performers

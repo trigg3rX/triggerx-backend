@@ -8,13 +8,13 @@ func (s *TimeBasedScheduler) GetStats() map[string]interface{} {
 	totalTasks, successfulTasks, avgTime := metrics.GetTaskStats()
 
 	return map[string]interface{}{
-		"scheduler_id": s.schedulerID,
-		"active_tasks":              len(s.activeTasks),
-		"performer_lock_ttl":        s.performerLockTTL,
-		"task_cache_ttl":            s.taskCacheTTL,
-		"duplicate_task_window":     s.duplicateTaskWindow,
-		"polling_interval":          s.pollingInterval,
-		"polling_look_ahead":        s.pollingLookAhead,
+		"scheduler_id":          s.schedulerID,
+		"active_tasks":          len(s.activeTasks),
+		"performer_lock_ttl":    s.performerLockTTL,
+		"task_cache_ttl":        s.taskCacheTTL,
+		"duplicate_task_window": s.duplicateTaskWindow,
+		"polling_interval":      s.pollingInterval,
+		"polling_look_ahead":    s.pollingLookAhead,
 
 		// Performance metrics
 		"task_stats": map[string]interface{}{

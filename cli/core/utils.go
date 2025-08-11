@@ -16,7 +16,7 @@ const BLSMessageToSign = "BLS12-381 Signed Message\nChainIDWithoutRevision: %s\n
 func ValidateBLSPrivateKey(privateKeyHex string) error {
 	// Remove 0x prefix if present
 	privateKeyHex = strings.TrimPrefix(privateKeyHex, "0x")
-	
+
 	// Check length (BLS private key should be 32 bytes = 64 hex characters)
 	if len(privateKeyHex) != 64 {
 		return fmt.Errorf("BLS private key should be 64 hex characters, got %d", len(privateKeyHex))
@@ -26,19 +26,19 @@ func ValidateBLSPrivateKey(privateKeyHex string) error {
 	if err != nil {
 		return fmt.Errorf("invalid BLS private key format: %w", err)
 	}
-	
+
 	return nil
 }
 
 func GetBLSPublicKeyFromPrivateKey(privateKeyHex string) ([]byte, error) {
 	privateKeyHex = strings.TrimPrefix(privateKeyHex, "0x")
 	privateKeyBytes := common.FromHex(privateKeyHex)
-	
+
 	privateKey, err := bls.SecretKeyFromBytes(privateKeyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse BLS private key: %w", err)
 	}
-	
+
 	publicKey := privateKey.PublicKey()
 	return publicKey.Marshal(), nil
 }
@@ -49,7 +49,7 @@ func FormatChainIDWithoutRevision(chainID string) string {
 	if lastDash == -1 {
 		return chainID
 	}
-	
+
 	// Check if what follows the dash is a number
 	revision := chainID[lastDash+1:]
 	if len(revision) > 0 {
@@ -63,7 +63,7 @@ func FormatChainIDWithoutRevision(chainID string) string {
 		// All characters after dash are numbers, so it's a revision
 		return chainID[:lastDash]
 	}
-	
+
 	return chainID
 }
 

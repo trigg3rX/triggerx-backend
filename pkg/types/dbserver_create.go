@@ -67,13 +67,13 @@ type CreateJobResponse struct {
 // Create New Task
 type CreateTaskRequest struct {
 	JobID            *big.Int `json:"job_id" validate:"required"`
-	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
+	TaskDefinitionID int      `json:"task_definition_id" validate:"required"`
 }
 
 type CreateTaskResponse struct {
-	TaskID           int64 `json:"task_id"`
+	TaskID           int64    `json:"task_id"`
 	JobID            *big.Int `json:"job_id"`
-	TaskDefinitionID int   `json:"task_definition_id"`
+	TaskDefinitionID int      `json:"task_definition_id"`
 }
 
 // Create New Keeper from Contracts (registrar)

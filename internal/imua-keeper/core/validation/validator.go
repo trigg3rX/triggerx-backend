@@ -11,18 +11,18 @@ import (
 )
 
 type TaskValidator struct {
-	alchemyAPIKey    string
-	etherscanAPIKey  string
-	dockerManager    *docker.DockerManager
-	logger           logging.Logger
+	alchemyAPIKey   string
+	etherscanAPIKey string
+	dockerManager   *docker.DockerManager
+	logger          logging.Logger
 }
 
 func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManager *docker.DockerManager, logger logging.Logger) *TaskValidator {
 	return &TaskValidator{
-		alchemyAPIKey:    alchemyAPIKey,
-		etherscanAPIKey:  etherscanAPIKey,
-		dockerManager:    dockerManager,
-		logger:           logger,
+		alchemyAPIKey:   alchemyAPIKey,
+		etherscanAPIKey: etherscanAPIKey,
+		dockerManager:   dockerManager,
+		logger:          logger,
 	}
 }
 

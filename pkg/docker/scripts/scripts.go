@@ -4,7 +4,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 )
 
-
 // getInitializationScript returns the script to initialize a container
 func GetInitializationScript(language types.Language) string {
 	switch language {

@@ -129,7 +129,7 @@ var (
 		Name:      "docker_containers_created_total",
 		Help:      "Docker container creation count",
 	}, []string{"language"})
-	
+
 	DockerContainerDurationSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",

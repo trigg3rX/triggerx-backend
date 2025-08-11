@@ -1,14 +1,14 @@
 package config
 
 import (
-	"fmt"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"time"
+	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	sdkEcdsa "github.com/imua-xyz/imua-avs-sdk/crypto/ecdsa"
+	"github.com/joho/godotenv"
 	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
+	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
@@ -19,8 +19,8 @@ const (
 )
 
 const (
-	avsName = "hello-world-avs-demo"
-	semVer  = "0.0.1"
+	avsName    = "hello-world-avs-demo"
+	semVer     = "0.0.1"
 	maxRetries = 80
 	retryDelay = 1 * time.Second
 )
@@ -29,8 +29,8 @@ type Config struct {
 	devMode bool
 
 	// RPC URLs for Ethereum and Base
-	ethRPCUrl  string
-	ethWsUrl   string
+	ethRPCUrl string
+	ethWsUrl  string
 
 	// API Keys for Alchemy and Etherscan
 	alchemyAPIKey   string
@@ -90,25 +90,25 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnvString("ETH_RPC_URL", ""),
-		ethWsUrl:                 env.GetEnvString("ETH_WS_URL", ""),
-		alchemyAPIKey:           env.GetEnvString("ALCHEMY_API_KEY", ""),
-		publicIPV4Address:        env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
-		peerID:                   env.GetEnvString("PEER_ID", ""),
-		keeperRPCPort:            env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
-		keeperP2PPort:            env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
-		keeperMetricsPort:        env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
-		nodeApiPort:              env.GetEnvString("OPERATOR_NODE_API_PORT", "9014"),
-		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
-		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
-		tlsProofHost:             "www.google.com",
-		tlsProofPort:             "443",
-		l1Chain:                  env.GetEnvString("L1_CHAIN", "17000"),
-		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5"),
-		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		ethRPCUrl:            env.GetEnvString("ETH_RPC_URL", ""),
+		ethWsUrl:             env.GetEnvString("ETH_WS_URL", ""),
+		alchemyAPIKey:        env.GetEnvString("ALCHEMY_API_KEY", ""),
+		publicIPV4Address:    env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
+		peerID:               env.GetEnvString("PEER_ID", ""),
+		keeperRPCPort:        env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
+		keeperP2PPort:        env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
+		keeperMetricsPort:    env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
+		nodeApiPort:          env.GetEnvString("OPERATOR_NODE_API_PORT", "9014"),
+		grafanaPort:          env.GetEnvString("GRAFANA_PORT", "3000"),
+		aggregatorRPCUrl:     env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:         env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
+		tlsProofHost:         "www.google.com",
+		tlsProofPort:         "443",
+		l1Chain:              env.GetEnvString("L1_CHAIN", "17000"),
+		l2Chain:              env.GetEnvString("L2_CHAIN", "84532"),
+		avsGovernanceAddress: env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5"),
+		othenticBootstrapID:  env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 
 	// Load BLS private key from environment variable

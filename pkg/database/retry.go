@@ -26,7 +26,7 @@ func (c *Connection) NewQuery(stmt string, values ...interface{}) *Queryx {
 // The query should be marked as Idempotent() for safe retries on CUD operations.
 func (q *Queryx) Exec() error {
 	// if !q.isIdem {
-		// q.conn.logger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
+	// q.conn.logger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
 	// }
 
 	operation := func() error {

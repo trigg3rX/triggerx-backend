@@ -12,9 +12,9 @@ import (
 
 // DBServerClient handles communication with the DBServer service
 type DBServerClient struct {
-	logger            logging.Logger
-	dbserverUrl       string
-	httpClient        *httppkg.HTTPClient
+	logger      logging.Logger
+	dbserverUrl string
+	httpClient  *httppkg.HTTPClient
 }
 
 // NewDBServerClient creates a new instance of DBServerClient
@@ -32,9 +32,9 @@ func NewDBServerClient(logger logging.Logger, dbserverUrl string) (*DBServerClie
 	}
 
 	return &DBServerClient{
-		logger:            logger,
-		dbserverUrl:       dbserverUrl,
-		httpClient:        httpClient,
+		logger:      logger,
+		dbserverUrl: dbserverUrl,
+		httpClient:  httpClient,
 	}, nil
 }
 

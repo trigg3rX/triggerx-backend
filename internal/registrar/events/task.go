@@ -55,11 +55,11 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 
 	if taskDefinitionId == 10001 || taskDefinitionId == 10002 {
 		taskData := &types.TaskSubmissionData{
-			TaskID:               0,
+			TaskID: 0,
 		}
 		return taskData, nil
 	}
-	
+
 	// Extract task number - it's already parsed as uint32, so we need to handle it as a number
 	var taskNumber int64
 	switch v := parsedData["taskNumber"].(type) {

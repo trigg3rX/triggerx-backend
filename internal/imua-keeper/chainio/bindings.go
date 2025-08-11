@@ -1,7 +1,6 @@
 package chainio
 
 import (
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"

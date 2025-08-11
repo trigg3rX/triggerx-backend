@@ -1,11 +1,11 @@
 package websocket
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"crypto/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"

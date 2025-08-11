@@ -9,9 +9,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 )
 
 type TaskStreamManager struct {
@@ -47,10 +47,10 @@ func (tsm *TaskStreamManager) Initialize() error {
 
 	// Initialize task streams with specific expiration rules
 	streamConfigs := map[string]time.Duration{
-		StreamTaskDispatched:  TasksProcessingTTL,
-		StreamTaskCompleted:   TasksCompletedTTL,
-		StreamTaskFailed:      TasksFailedTTL,
-		StreamTaskRetry:       TasksRetryTTL,
+		StreamTaskDispatched: TasksProcessingTTL,
+		StreamTaskCompleted:  TasksCompletedTTL,
+		StreamTaskFailed:     TasksFailedTTL,
+		StreamTaskRetry:      TasksRetryTTL,
 	}
 
 	for stream, ttl := range streamConfigs {
@@ -132,26 +132,26 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 	streams := []string{StreamTaskDispatched, StreamTaskRetry, StreamTaskCompleted, StreamTaskFailed}
 
 	for _, stream := range streams {
-	length, err := tsm.client.XLen(ctx, stream)
-	if err != nil {
-		tsm.logger.Warn("Failed to get stream length",
-			"stream", stream,
-			"error", err)
-		length = -1
-	}
-	streamLengths[stream] = length
+		length, err := tsm.client.XLen(ctx, stream)
+		if err != nil {
+			tsm.logger.Warn("Failed to get stream length",
+				"stream", stream,
+				"error", err)
+			length = -1
+		}
+		streamLengths[stream] = length
 
-	// Update stream length metrics
-	switch stream {
-	case StreamTaskDispatched:
-		metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(float64(length))
-	case StreamTaskRetry:
-		metrics.TaskStreamLengths.WithLabelValues("retry").Set(float64(length))
-	case StreamTaskCompleted:
-		metrics.TaskStreamLengths.WithLabelValues("completed").Set(float64(length))
-	case StreamTaskFailed:
-		metrics.TaskStreamLengths.WithLabelValues("failed").Set(float64(length))
-	}
+		// Update stream length metrics
+		switch stream {
+		case StreamTaskDispatched:
+			metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(float64(length))
+		case StreamTaskRetry:
+			metrics.TaskStreamLengths.WithLabelValues("retry").Set(float64(length))
+		case StreamTaskCompleted:
+			metrics.TaskStreamLengths.WithLabelValues("completed").Set(float64(length))
+		case StreamTaskFailed:
+			metrics.TaskStreamLengths.WithLabelValues("failed").Set(float64(length))
+		}
 	}
 
 	info := map[string]interface{}{

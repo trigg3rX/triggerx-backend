@@ -9,8 +9,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/websocket"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // ContractEventListener handles listening to contract events across multiple chains
@@ -70,8 +70,8 @@ type OperatorEventHandler struct {
 
 // TaskEventHandler handles task-related events
 type TaskEventHandler struct {
-	logger logging.Logger
-	db     *database.DatabaseClient
+	logger     logging.Logger
+	db         *database.DatabaseClient
 	ipfsClient ipfs.IPFSClient
 }
 
@@ -82,13 +82,13 @@ func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbC
 	client := websocket.NewClient(logger)
 
 	return &ContractEventListener{
-		logger:    logger,
-		client:    client,
-		config:    config,
-		ctx:       ctx,
-		cancel:    cancel,
-		eventChan: make(chan *websocket.ChainEvent, config.EventBufferSize),
-		dbClient:  dbClient,
+		logger:     logger,
+		client:     client,
+		config:     config,
+		ctx:        ctx,
+		cancel:     cancel,
+		eventChan:  make(chan *websocket.ChainEvent, config.EventBufferSize),
+		dbClient:   dbClient,
 		ipfsClient: ipfsClient,
 	}
 }

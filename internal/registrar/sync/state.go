@@ -14,7 +14,7 @@ import (
 const (
 	KeyLastEthBlockUpdated  = "registrar:state:last_eth_block_updated"
 	KeyLastBaseBlockUpdated = "registrar:state:last_base_block_updated"
-	KeyLastRewardsUpdate   = "registrar:state:last_rewards_update"
+	KeyLastRewardsUpdate    = "registrar:state:last_rewards_update"
 )
 
 // StateManager manages blockchain synchronization state in Redis
@@ -27,8 +27,8 @@ type StateManager struct {
 type BlockchainState struct {
 	LastEthBlockUpdated  uint64    `json:"last_eth_block_updated"`
 	LastBaseBlockUpdated uint64    `json:"last_base_block_updated"`
-	LastRewardsUpdate   time.Time `json:"last_rewards_update"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	LastRewardsUpdate    time.Time `json:"last_rewards_update"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // NewStateManager creates a new Redis-backed state manager
@@ -138,8 +138,8 @@ func (sm *StateManager) GetFullState(ctx context.Context) (*BlockchainState, err
 	return &BlockchainState{
 		LastEthBlockUpdated:  ethBlock,
 		LastBaseBlockUpdated: baseBlock,
-		LastRewardsUpdate:   rewardsUpdate,
-		UpdatedAt:           time.Now().UTC(),
+		LastRewardsUpdate:    rewardsUpdate,
+		UpdatedAt:            time.Now().UTC(),
 	}, nil
 }
 

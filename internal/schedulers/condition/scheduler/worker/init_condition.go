@@ -8,25 +8,25 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ConditionWorker represents an individual worker monitoring a specific condition
 type ConditionWorker struct {
 	ConditionWorkerData *types.ConditionWorkerData
-	Logger          logging.Logger
-	HttpClient      *httppkg.HTTPClient
-	Ctx             context.Context
-	Cancel          context.CancelFunc
-	IsActive        bool
-	Mutex           sync.RWMutex
-	LastValue       float64
-	LastCheckTimestamp time.Time
-	ConditionMet       int64 // Count of consecutive condition met checks
-	TriggerCallback    WorkerTriggerCallback
-	CleanupCallback    WorkerCleanupCallback
+	Logger              logging.Logger
+	HttpClient          *httppkg.HTTPClient
+	Ctx                 context.Context
+	Cancel              context.CancelFunc
+	IsActive            bool
+	Mutex               sync.RWMutex
+	LastValue           float64
+	LastCheckTimestamp  time.Time
+	ConditionMet        int64 // Count of consecutive condition met checks
+	TriggerCallback     WorkerTriggerCallback
+	CleanupCallback     WorkerCleanupCallback
 }
 
 // Start begins the condition worker's monitoring loop
@@ -77,8 +77,8 @@ func (w *ConditionWorker) Start() {
 			}
 
 			if err := w.checkCondition(); err != nil {
-				w.Logger.Error("Error checking condition", 
-					"job_id", w.ConditionWorkerData.JobID, 
+				w.Logger.Error("Error checking condition",
+					"job_id", w.ConditionWorkerData.JobID,
 					"error", err)
 				metrics.JobsCompleted.WithLabelValues("failed").Inc()
 			}

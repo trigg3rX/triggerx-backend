@@ -16,8 +16,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 

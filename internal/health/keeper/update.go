@@ -42,7 +42,7 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealth
 
 	// Update database
 	if err := sm.retryWithBackoff(func() error {
-		return sm.updateKeeperStatusInDatabase(keeperHealth, true )
+		return sm.updateKeeperStatusInDatabase(keeperHealth, true)
 	}, maxRetries); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}

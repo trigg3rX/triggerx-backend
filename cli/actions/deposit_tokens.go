@@ -38,7 +38,7 @@ func DepositTokens(ctx *cli.Context) error {
 	// Configuration with official contract addresses
 	const (
 		// Official contract addresses on Ethereum Sepolia
-		IM_ETH_ADDR      = "0xF79F563571f7D8122611D0219A0d5449B5304F79"      
+		IM_ETH_ADDR      = "0xF79F563571f7D8122611D0219A0d5449B5304F79"
 		WST_ETH_ADDR     = "0xB82381A3fBD3FaFA77B3a7bE693342618240067b"
 		GATEWAY_ADDR     = "0x64B5B5A618072C1E4D137f91Af780e3B17A81f3f"
 		ETHEREUM_RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/U67yWPtGvZIz8FwnTcFEfERypsxYzfdR"

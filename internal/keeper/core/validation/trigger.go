@@ -65,7 +65,7 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
 	}
-	
+
 	rpcURL := utils.GetChainRpcUrl(triggerData.EventChainId)
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {

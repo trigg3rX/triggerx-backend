@@ -22,21 +22,21 @@ import (
 
 // ConditionBasedScheduler manages individual job workers for condition monitoring and event watching
 type ConditionBasedScheduler struct {
-	ctx                     context.Context
-	cancel                  context.CancelFunc
-	logger                  logging.Logger
-	conditionWorkers        map[*big.Int]*worker.ConditionWorker         // jobID -> condition worker
-	eventWorkers            map[*big.Int]*worker.EventWorker             // jobID -> event worker
-	jobDataStore            map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
-	workersMutex            sync.RWMutex
-	notificationMutex       sync.Mutex // Protect job data during notification processing
-	chainClients            map[string]*ethclient.Client // chainID -> client
-	HTTPClient              *httppkg.HTTPClient
-	dbClient                *dbserver.DBServerClient
-	taskDispatcherClient    *rpcclient.Client // RPC client for task dispatcher
-	metrics                 *metrics.Collector
-	maxWorkers              int
-	schedulerID             int
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	logger               logging.Logger
+	conditionWorkers     map[*big.Int]*worker.ConditionWorker       // jobID -> condition worker
+	eventWorkers         map[*big.Int]*worker.EventWorker           // jobID -> event worker
+	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
+	workersMutex         sync.RWMutex
+	notificationMutex    sync.Mutex                   // Protect job data during notification processing
+	chainClients         map[string]*ethclient.Client // chainID -> client
+	HTTPClient           *httppkg.HTTPClient
+	dbClient             *dbserver.DBServerClient
+	taskDispatcherClient *rpcclient.Client // RPC client for task dispatcher
+	metrics              *metrics.Collector
+	maxWorkers           int
+	schedulerID          int
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
@@ -54,18 +54,18 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 	}, logger)
 
 	scheduler := &ConditionBasedScheduler{
-		ctx:                     ctx,
-		cancel:                  cancel,
-		logger:                  logger,
-		conditionWorkers:        make(map[*big.Int]*worker.ConditionWorker),
-		eventWorkers:            make(map[*big.Int]*worker.EventWorker),
-		jobDataStore:            make(map[string]*types.ScheduleConditionJobData),
-		chainClients:            make(map[string]*ethclient.Client),
-		dbClient:                dbClient,
-		taskDispatcherClient:    taskDispatcherClient,
-		metrics:                 metrics.NewCollector(),
-		maxWorkers:              config.GetMaxWorkers(),
-		schedulerID:             config.GetSchedulerID(),
+		ctx:                  ctx,
+		cancel:               cancel,
+		logger:               logger,
+		conditionWorkers:     make(map[*big.Int]*worker.ConditionWorker),
+		eventWorkers:         make(map[*big.Int]*worker.EventWorker),
+		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
+		chainClients:         make(map[string]*ethclient.Client),
+		dbClient:             dbClient,
+		taskDispatcherClient: taskDispatcherClient,
+		metrics:              metrics.NewCollector(),
+		maxWorkers:           config.GetMaxWorkers(),
+		schedulerID:          config.GetSchedulerID(),
 	}
 
 	// Initialize chain clients for event workers

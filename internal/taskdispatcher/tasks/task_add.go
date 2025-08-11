@@ -45,7 +45,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		tsm.logger.Warn("Aggregator send returned unsuccessful", "task_id", task.SendTaskDataToKeeper.TaskID[0])
 		return false, fmt.Errorf("aggregator send unsuccessful")
 	}
-    return true, nil
+	return true, nil
 }
 
 func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string, task *TaskStreamData) (bool, error) {

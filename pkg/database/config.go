@@ -9,32 +9,32 @@ import (
 
 // Config holds the configuration for the ScyllaDB connection.
 type Config struct {
-	Hosts       []string
-	Keyspace    string
-	Timeout     time.Duration
-	Retries     int
-	ConnectWait time.Duration
-	Consistency       gocql.Consistency
-	ProtoVersion      int
-	SocketKeepalive   time.Duration
-	MaxPreparedStmts  int
+	Hosts              []string
+	Keyspace           string
+	Timeout            time.Duration
+	Retries            int
+	ConnectWait        time.Duration
+	Consistency        gocql.Consistency
+	ProtoVersion       int
+	SocketKeepalive    time.Duration
+	MaxPreparedStmts   int
 	DefaultIdempotence bool
-	RetryConfig       *retry.RetryConfig
+	RetryConfig        *retry.RetryConfig
 }
 
 func NewConfig(DatabaseHost string, DatabaseHostPort string) *Config {
 	return &Config{
-		Hosts:       []string{DatabaseHost + ":" + DatabaseHostPort},
-		Keyspace:    "triggerx",
-		Timeout:     time.Second * 30,
-		Retries:     5,
-		ConnectWait: time.Second * 10,
-		Consistency:       gocql.Quorum,
-		ProtoVersion:      4,
-		SocketKeepalive:   15 * time.Second,
-		MaxPreparedStmts:  1000,
+		Hosts:              []string{DatabaseHost + ":" + DatabaseHostPort},
+		Keyspace:           "triggerx",
+		Timeout:            time.Second * 30,
+		Retries:            5,
+		ConnectWait:        time.Second * 10,
+		Consistency:        gocql.Quorum,
+		ProtoVersion:       4,
+		SocketKeepalive:    15 * time.Second,
+		MaxPreparedStmts:   1000,
 		DefaultIdempotence: true,
-		RetryConfig:       retry.DefaultRetryConfig(),
+		RetryConfig:        retry.DefaultRetryConfig(),
 	}
 }
 

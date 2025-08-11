@@ -59,7 +59,7 @@ func (v *codeValidator) validateFileContent(filePath string, result *types.Valid
 		return fmt.Errorf("failed to read file for validation: %w", err)
 	}
 
-    // Delegate the actual pattern matching to the function that handles byte slices
+	// Delegate the actual pattern matching to the function that handles byte slices
 	v.validateContentPatterns(content, result)
 
 	return nil

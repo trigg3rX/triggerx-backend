@@ -13,53 +13,53 @@ type MockRedisClient struct {
 	t *testing.T
 
 	// Mock functions allow you to override behavior for each method.
-	MockCheckConnection func(ctx context.Context) error
-	MockPing         func(ctx context.Context) error
-	MockClose        func() error
-	MockNewLock      func(key string, ttl time.Duration, retryStrategy *RetryStrategy) (*Lock, error)
-	MockExecutePipeline func(ctx context.Context, fn PipelineFunc) ([]redis.Cmder, error)
-	MockEval         func(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error)
-	MockGet          func(ctx context.Context, key string) (string, error)
-	MockGetWithExists func(ctx context.Context, key string) (value string, exists bool, err error)
-	MockSet          func(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	MockSetNX        func(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error)
-	MockDel          func(ctx context.Context, keys ...string) error
-	MockDelWithCount func(ctx context.Context, keys ...string) (deletedCount int64, err error)
-	MockScan         func(ctx context.Context, cursor uint64, options *ScanOptions) (*ScanResult, error)
-	MockScanAll      func(ctx context.Context, options *ScanOptions) ([]string, error)
-	MockScanKeysByPattern func(ctx context.Context, pattern string, count int64) (*ScanResult, error)
-	MockScanKeysByType func(ctx context.Context, keyType string, count int64) (*ScanResult, error)
-	MockCreateStreamIfNotExists func(ctx context.Context, stream string, ttl time.Duration) error
-	MockCreateConsumerGroup func(ctx context.Context, stream, group string) error
-	MockCreateConsumerGroupAtomic func(ctx context.Context, stream, group string) (created bool, err error)
+	MockCheckConnection               func(ctx context.Context) error
+	MockPing                          func(ctx context.Context) error
+	MockClose                         func() error
+	MockNewLock                       func(key string, ttl time.Duration, retryStrategy *RetryStrategy) (*Lock, error)
+	MockExecutePipeline               func(ctx context.Context, fn PipelineFunc) ([]redis.Cmder, error)
+	MockEval                          func(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error)
+	MockGet                           func(ctx context.Context, key string) (string, error)
+	MockGetWithExists                 func(ctx context.Context, key string) (value string, exists bool, err error)
+	MockSet                           func(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+	MockSetNX                         func(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error)
+	MockDel                           func(ctx context.Context, keys ...string) error
+	MockDelWithCount                  func(ctx context.Context, keys ...string) (deletedCount int64, err error)
+	MockScan                          func(ctx context.Context, cursor uint64, options *ScanOptions) (*ScanResult, error)
+	MockScanAll                       func(ctx context.Context, options *ScanOptions) ([]string, error)
+	MockScanKeysByPattern             func(ctx context.Context, pattern string, count int64) (*ScanResult, error)
+	MockScanKeysByType                func(ctx context.Context, keyType string, count int64) (*ScanResult, error)
+	MockCreateStreamIfNotExists       func(ctx context.Context, stream string, ttl time.Duration) error
+	MockCreateConsumerGroup           func(ctx context.Context, stream, group string) error
+	MockCreateConsumerGroupAtomic     func(ctx context.Context, stream, group string) (created bool, err error)
 	MockCreateStreamWithConsumerGroup func(ctx context.Context, stream, group string, ttl time.Duration) error
-	MockXAdd func(ctx context.Context, args *redis.XAddArgs) (string, error)
-	MockXLen func(ctx context.Context, stream string) (int64, error)
-	MockXReadGroup func(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error)
-	MockXAck func(ctx context.Context, stream, group, id string) error
-	MockXPending func(ctx context.Context, stream, group string) (*redis.XPending, error)
-	MockXPendingExt func(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error)
-	MockXClaim func(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd
-	MockZAdd func(ctx context.Context, key string, members ...redis.Z) (int64, error)
-	MockZAddWithExists func(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
-	MockZRevRange func(ctx context.Context, key string, start, stop int64) ([]string, error)
-	MockZRemRangeByScore func(ctx context.Context, key, min, max string) (int64, error)
-	MockZCard func(ctx context.Context, key string) (int64, error)
-	MockTTL func(ctx context.Context, key string) (time.Duration, error)
-	MockRefreshTTL func(ctx context.Context, key string, ttl time.Duration) error
-	MockRefreshStreamTTL func(ctx context.Context, stream string, ttl time.Duration) error
-	MockSetTTL func(ctx context.Context, key string, ttl time.Duration) error
-	MockGetTTLStatus func(ctx context.Context, key string) (time.Duration, bool, error)
-	MockGetHealthStatus func(ctx context.Context) *HealthStatus
-	MockIsHealthy func(ctx context.Context) bool
-	MockPerformHealthCheck func(ctx context.Context) (*HealthCheckResult, error)
-	MockGetConnectionStatus func() *ConnectionStatus
-	MockGetOperationMetrics func() map[string]*OperationMetrics
-	MockResetOperationMetrics func()
-	MockSetMonitoringHooks func(hooks *MonitoringHooks)
-	MockSetRetryConfig func(config *RetryConfig)
-	MockSetConnectionRecoveryConfig func(config *ConnectionRecoveryConfig)
-	MockClient func() *redis.Client
+	MockXAdd                          func(ctx context.Context, args *redis.XAddArgs) (string, error)
+	MockXLen                          func(ctx context.Context, stream string) (int64, error)
+	MockXReadGroup                    func(ctx context.Context, args *redis.XReadGroupArgs) ([]redis.XStream, error)
+	MockXAck                          func(ctx context.Context, stream, group, id string) error
+	MockXPending                      func(ctx context.Context, stream, group string) (*redis.XPending, error)
+	MockXPendingExt                   func(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error)
+	MockXClaim                        func(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd
+	MockZAdd                          func(ctx context.Context, key string, members ...redis.Z) (int64, error)
+	MockZAddWithExists                func(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
+	MockZRevRange                     func(ctx context.Context, key string, start, stop int64) ([]string, error)
+	MockZRemRangeByScore              func(ctx context.Context, key, min, max string) (int64, error)
+	MockZCard                         func(ctx context.Context, key string) (int64, error)
+	MockTTL                           func(ctx context.Context, key string) (time.Duration, error)
+	MockRefreshTTL                    func(ctx context.Context, key string, ttl time.Duration) error
+	MockRefreshStreamTTL              func(ctx context.Context, stream string, ttl time.Duration) error
+	MockSetTTL                        func(ctx context.Context, key string, ttl time.Duration) error
+	MockGetTTLStatus                  func(ctx context.Context, key string) (time.Duration, bool, error)
+	MockGetHealthStatus               func(ctx context.Context) *HealthStatus
+	MockIsHealthy                     func(ctx context.Context) bool
+	MockPerformHealthCheck            func(ctx context.Context) (*HealthCheckResult, error)
+	MockGetConnectionStatus           func() *ConnectionStatus
+	MockGetOperationMetrics           func() map[string]*OperationMetrics
+	MockResetOperationMetrics         func()
+	MockSetMonitoringHooks            func(hooks *MonitoringHooks)
+	MockSetRetryConfig                func(config *RetryConfig)
+	MockSetConnectionRecoveryConfig   func(config *ConnectionRecoveryConfig)
+	MockClient                        func() *redis.Client
 }
 
 // NewMockRedisClient creates a new mock client.
@@ -108,11 +108,11 @@ func (m *MockRedisClient) ExecutePipeline(ctx context.Context, fn PipelineFunc) 
 }
 
 func (m *MockRedisClient) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
-    if m.MockEval != nil {
-        return m.MockEval(ctx, script, keys, args...)
-    }
-    m.t.Fatal("unexpected call to MockRedisClient.Eval")
-    return nil, nil
+	if m.MockEval != nil {
+		return m.MockEval(ctx, script, keys, args...)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.Eval")
+	return nil, nil
 }
 
 func (m *MockRedisClient) Get(ctx context.Context, key string) (string, error) {

@@ -8,8 +8,8 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type FileManager struct {

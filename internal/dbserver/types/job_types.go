@@ -85,11 +85,11 @@ type CreateJobData struct {
 	TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
 
 	// Condition job specific fields
-	ConditionType   string  `json:"condition_type,omitempty" validate:"omitempty"`
-	UpperLimit      float64 `json:"upper_limit,omitempty" validate:"omitempty,gt=0"`
-	LowerLimit      float64 `json:"lower_limit,omitempty" validate:"omitempty,gt=0"`
-	ValueSourceType string  `json:"value_source_type,omitempty" validate:"omitempty"`
-	ValueSourceUrl  string  `json:"value_source_url,omitempty" validate:"omitempty"`
+	ConditionType    string  `json:"condition_type,omitempty" validate:"omitempty"`
+	UpperLimit       float64 `json:"upper_limit,omitempty" validate:"omitempty,gt=0"`
+	LowerLimit       float64 `json:"lower_limit,omitempty" validate:"omitempty,gt=0"`
+	ValueSourceType  string  `json:"value_source_type,omitempty" validate:"omitempty"`
+	ValueSourceUrl   string  `json:"value_source_url,omitempty" validate:"omitempty"`
 	SelectedKeyRoute string  `json:"selected_key_route,omitempty" validate:"omitempty"`
 
 	// Target fields (common for all job types)
@@ -140,24 +140,24 @@ type TaskFeeResponse struct {
 
 type JobDataAPI struct {
 	JobID             BigIntString `json:"job_id"`
-	JobTitle          string             `json:"job_title"`
-	TaskDefinitionID  int                `json:"task_definition_id"`
-	UserID            int64              `json:"user_id"`
+	JobTitle          string       `json:"job_title"`
+	TaskDefinitionID  int          `json:"task_definition_id"`
+	UserID            int64        `json:"user_id"`
 	LinkJobID         BigIntString `json:"link_job_id"`
-	ChainStatus       int                `json:"chain_status"`
-	Custom            bool               `json:"custom"`
-	TimeFrame         int64              `json:"time_frame"`
-	Recurring         bool               `json:"recurring"`
-	Status            string             `json:"status"`
-	JobCostPrediction float64            `json:"job_cost_prediction"`
-	JobCostActual     float64            `json:"job_cost_actual"`
-	TaskIDs           []int64            `json:"task_ids"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
-	LastExecutedAt    time.Time          `json:"last_executed_at"`
-	Timezone          string             `json:"timezone"`
-	IsImua            bool               `json:"is_imua"`
-	CreatedChainID    string             `json:"created_chain_id"`
+	ChainStatus       int          `json:"chain_status"`
+	Custom            bool         `json:"custom"`
+	TimeFrame         int64        `json:"time_frame"`
+	Recurring         bool         `json:"recurring"`
+	Status            string       `json:"status"`
+	JobCostPrediction float64      `json:"job_cost_prediction"`
+	JobCostActual     float64      `json:"job_cost_actual"`
+	TaskIDs           []int64      `json:"task_ids"`
+	CreatedAt         time.Time    `json:"created_at"`
+	UpdatedAt         time.Time    `json:"updated_at"`
+	LastExecutedAt    time.Time    `json:"last_executed_at"`
+	Timezone          string       `json:"timezone"`
+	IsImua            bool         `json:"is_imua"`
+	CreatedChainID    string       `json:"created_chain_id"`
 }
 
 type JobResponseAPI struct {
