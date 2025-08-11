@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gocql/gocql"
 	// "github.com/gin-gonic/gin"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
@@ -20,6 +21,7 @@ import (
 	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -45,7 +47,15 @@ func main() {
 		"host", config.GetDatabaseHostAddress(),
 	)
 
-	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
+	dbConfig := &database.Config{
+		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:    "triggerx",
+		Consistency: gocql.Quorum,
+		Timeout:     10 * time.Second,
+		Retries:     3,
+		ConnectWait: 5 * time.Second,
+		RetryConfig: retry.DefaultRetryConfig(),
+	}
 
 	conn, err := database.NewConnection(dbConfig, logger)
 	if err != nil || conn == nil {

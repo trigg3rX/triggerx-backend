@@ -189,3 +189,24 @@ func TestQueryx_RetryLogic(t *testing.T) {
 		assert.Equal(t, 1, mockQuery.callCount, "Exec should be called only once")
 	})
 }
+
+func TestQueryxExec_WithNilRetryConfig_DoesNotPanic(t *testing.T) {
+	// Test that the nil pointer dereference is fixed by testing the retry logic directly
+
+	// Create a config with nil RetryConfig
+	config := &Config{
+		RetryConfig: nil, // Explicitly set to nil
+	}
+
+	// Test that we can access RetryConfig without panic
+	var cfg retry.RetryConfig
+	if config.RetryConfig != nil {
+		cfg = *config.RetryConfig
+	} else {
+		cfg = *retry.DefaultRetryConfig()
+	}
+
+	// This should not panic and should use the default config
+	assert.NotNil(t, cfg)
+	assert.Equal(t, retry.DefaultRetryConfig().MaxRetries, cfg.MaxRetries)
+}

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/events"
@@ -15,11 +16,12 @@ import (
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 const (
-	// defaultConnectTimeout = 30 * time.Second
-	// defaultBlockOverlap   = uint64(5)
+// defaultConnectTimeout = 30 * time.Second
+// defaultBlockOverlap   = uint64(5)
 )
 
 // TaskManager orchestrates all Redis-based task management components
@@ -60,9 +62,11 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	dbCfg := &dbClient.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:    "triggerx",
+		Consistency: gocql.Quorum,
 		Timeout:     10 * time.Second,
 		Retries:     3,
 		ConnectWait: 5 * time.Second,
+		RetryConfig: retry.DefaultRetryConfig(),
 	}
 	dbConn, err := dbClient.NewConnection(dbCfg, logger)
 	if err != nil {

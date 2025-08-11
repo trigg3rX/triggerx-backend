@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health"
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
@@ -49,8 +50,13 @@ func main() {
 
 	// Initialize database connection
 	dbConfig := &database.Config{
-		Hosts:    []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
-		Keyspace: "triggerx",
+		Hosts:        []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:     "triggerx",
+		Consistency:  gocql.Quorum,
+		Timeout:      time.Second * 30,
+		Retries:      5,
+		ConnectWait:  time.Second * 10,
+		ProtoVersion: 4,
 	}
 	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {

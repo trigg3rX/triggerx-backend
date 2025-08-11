@@ -25,15 +25,21 @@ func (c *Connection) NewQuery(stmt string, values ...interface{}) *Queryx {
 // Exec executes a query with retry logic.
 // The query should be marked as Idempotent() for safe retries on CUD operations.
 func (q *Queryx) Exec() error {
-	if !q.isIdem {
-		q.conn.logger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
-	}
+	// if !q.isIdem {
+		// q.conn.logger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
+	// }
 
 	operation := func() error {
 		return q.query.Exec()
 	}
 
-	cfg := *q.conn.config.RetryConfig
+	// Use default retry config if none is provided
+	var cfg retry.RetryConfig
+	if q.conn.config.RetryConfig != nil {
+		cfg = *q.conn.config.RetryConfig
+	} else {
+		cfg = *retry.DefaultRetryConfig()
+	}
 	cfg.ShouldRetry = gocqlShouldRetry
 
 	return retry.RetryFunc(q.query.Context(), operation, &cfg, q.conn.logger)
@@ -45,7 +51,13 @@ func (q *Queryx) Scan(dest ...interface{}) error {
 		return q.query.Scan(dest...)
 	}
 
-	cfg := *q.conn.config.RetryConfig
+	// Use default retry config if none is provided
+	var cfg retry.RetryConfig
+	if q.conn.config.RetryConfig != nil {
+		cfg = *q.conn.config.RetryConfig
+	} else {
+		cfg = *retry.DefaultRetryConfig()
+	}
 	cfg.ShouldRetry = gocqlShouldRetry
 
 	_, err := retry.Retry(q.query.Context(), func() (struct{}, error) {
