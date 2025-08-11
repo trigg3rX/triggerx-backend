@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// JWTClaimsKey is the context key for JWT claims
+	JWTClaimsKey contextKey = "jwt_claims"
+)
+
 // ServiceInfo represents information about an RPC service
 type ServiceInfo struct {
 	Name     string            `json:"name"`

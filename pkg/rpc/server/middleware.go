@@ -4,93 +4,104 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	metricspkg "github.com/trigg3rX/triggerx-backend/pkg/rpc/metrics"
 )
 
-// LoggingMiddleware provides request/response logging
-type LoggingMiddleware struct {
-	logger logging.Logger
-}
+// LoggingInterceptor provides request/response logging for gRPC
+func LoggingInterceptor(logger logging.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		start := time.Now()
 
-// NewLoggingMiddleware creates a new logging middleware
-func NewLoggingMiddleware(logger logging.Logger) *LoggingMiddleware {
-	return &LoggingMiddleware{logger: logger}
-}
+		logger.Debug("gRPC request started",
+			"method", info.FullMethod,
+			"request", req)
 
-// Process implements the middleware interface
-func (m *LoggingMiddleware) Process(ctx context.Context, method string, request interface{}, next rpcpkg.RPCHandler) (interface{}, error) {
-	start := time.Now()
+		response, err := handler(ctx, req)
 
-	m.logger.Debug("RPC request started",
-		"method", method,
-		"request", request)
+		duration := time.Since(start)
 
-	response, err := next.Handle(ctx, method, request)
+		if err != nil {
+			logger.Error("gRPC request failed",
+				"method", info.FullMethod,
+				"duration", duration,
+				"error", err)
+		} else {
+			logger.Debug("gRPC request completed",
+				"method", info.FullMethod,
+				"duration", duration,
+				"response", response)
+		}
 
-	duration := time.Since(start)
-
-	if err != nil {
-		m.logger.Error("RPC request failed",
-			"method", method,
-			"duration", duration,
-			"error", err)
-	} else {
-		m.logger.Debug("RPC request completed",
-			"method", method,
-			"duration", duration,
-			"response", response)
+		return response, err
 	}
-
-	return response, err
 }
 
-// MetricsMiddleware provides metrics collection
-type MetricsMiddleware struct {
-	collector metricspkg.Collector
-	service   string
-}
+// MetricsInterceptor provides metrics collection for gRPC
+func MetricsInterceptor(collector metricspkg.Collector, serviceName string) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if collector == nil {
+			// No-op if no collector configured
+			return handler(ctx, req)
+		}
 
-// NewMetricsMiddleware creates a new metrics middleware
-func NewMetricsMiddleware(collector metricspkg.Collector, serviceName string) *MetricsMiddleware {
-	return &MetricsMiddleware{collector: collector, service: serviceName}
-}
+		start := time.Now()
+		collector.IncRequestsTotal(serviceName, info.FullMethod)
 
-// Process implements the middleware interface
-func (m *MetricsMiddleware) Process(ctx context.Context, method string, request interface{}, next rpcpkg.RPCHandler) (interface{}, error) {
-	if m.collector == nil {
-		// No-op if no collector configured
-		return next.Handle(ctx, method, request)
+		response, err := handler(ctx, req)
+
+		duration := time.Since(start)
+		collector.ObserveRequestDuration(serviceName, info.FullMethod, duration)
+		if err != nil {
+			collector.IncErrorsTotal(serviceName, info.FullMethod)
+		}
+
+		return response, err
 	}
+}
 
-	start := time.Now()
-	m.collector.IncRequestsTotal(m.service, method)
-
-	response, err := next.Handle(ctx, method, request)
-
-	duration := time.Since(start)
-	m.collector.ObserveRequestDuration(m.service, method, duration)
-	if err != nil {
-		m.collector.IncErrorsTotal(m.service, method)
+// AuthInterceptor provides authentication for gRPC
+func AuthInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		// TODO: Add JWT authentication logic here
+		// For now, just pass through
+		return handler(ctx, req)
 	}
-
-	return response, err
 }
 
-// AuthMiddleware provides authentication
-type AuthMiddleware struct {
-	// Add auth logic here
+// RecoveryInterceptor provides panic recovery for gRPC
+func RecoveryInterceptor(logger logging.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("gRPC panic recovered",
+					"method", info.FullMethod,
+					"panic", r)
+				err = status.Errorf(codes.Internal, "internal server error")
+			}
+		}()
+		return handler(ctx, req)
+	}
 }
 
-// NewAuthMiddleware creates a new auth middleware
-func NewAuthMiddleware() *AuthMiddleware {
-	return &AuthMiddleware{}
+// TimeoutInterceptor provides request timeout for gRPC
+func TimeoutInterceptor(timeout time.Duration) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return handler(ctx, req)
+	}
 }
 
-// Process implements the middleware interface
-func (m *AuthMiddleware) Process(ctx context.Context, method string, request interface{}, next rpcpkg.RPCHandler) (interface{}, error) {
-	// Add authentication logic here
-
-	return next.Handle(ctx, method, request)
+// RateLimitInterceptor provides rate limiting for gRPC
+func RateLimitInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		// TODO: Add rate limiting logic here
+		// For now, just pass through
+		return handler(ctx, req)
+	}
 }

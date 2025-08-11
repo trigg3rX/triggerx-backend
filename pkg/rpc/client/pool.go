@@ -3,21 +3,23 @@ package client
 import (
 	"context"
 	"fmt"
-	"net/rpc"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-// ConnectionPool manages a pool of RPC connections
+// ConnectionPool manages a pool of gRPC connections
 type ConnectionPool struct {
-	address     string
-	maxSize     int
-	timeout     time.Duration
-	logger      logging.Logger
+	address string
+	maxSize int
+	timeout time.Duration
+	logger  logging.Logger
 
-	connections chan *rpc.Client
+	connections chan *grpc.ClientConn
 	mu          sync.RWMutex
 	closed      bool
 }
@@ -28,12 +30,12 @@ func NewConnectionPool(maxSize int, timeout time.Duration, logger logging.Logger
 		maxSize:     maxSize,
 		timeout:     timeout,
 		logger:      logger,
-		connections: make(chan *rpc.Client, maxSize),
+		connections: make(chan *grpc.ClientConn, maxSize),
 	}
 }
 
 // GetConnection gets a connection from the pool
-func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*rpc.Client, error) {
+func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*grpc.ClientConn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -54,11 +56,13 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*rp
 			return conn, nil
 		}
 		// Connection is unhealthy, close it and create new one
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			p.logger.Errorf("Failed to close connection: %v", err)
+		}
 	default:
 		// No connection available, create new one if under limit
 		if len(p.connections) < p.maxSize {
-			return p.createConnection(ctx, address)
+			return p.createConnection(address)
 		}
 	}
 
@@ -72,18 +76,22 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*rp
 }
 
 // ReturnConnection returns a connection to the pool
-func (p *ConnectionPool) ReturnConnection(conn *rpc.Client, failed bool) {
+func (p *ConnectionPool) ReturnConnection(conn *grpc.ClientConn, failed bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.closed {
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			p.logger.Errorf("Failed to close connection: %v", err)
+		}
 		return
 	}
 
 	if failed {
 		// Connection failed, close it
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			p.logger.Errorf("Failed to close connection: %v", err)
+		}
 		return
 	}
 
@@ -93,27 +101,30 @@ func (p *ConnectionPool) ReturnConnection(conn *rpc.Client, failed bool) {
 		// Successfully returned to pool
 	default:
 		// Pool is full, close connection
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			p.logger.Errorf("Failed to close connection: %v", err)
+		}
 	}
 }
 
-// createConnection creates a new RPC connection
-func (p *ConnectionPool) createConnection(ctx context.Context, address string) (*rpc.Client, error) {
-	conn, err := rpc.DialHTTP("tcp", address)
+// createConnection creates a new gRPC connection
+func (p *ConnectionPool) createConnection(address string) (*grpc.ClientConn, error) {
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial RPC server: %w", err)
+		return nil, fmt.Errorf("failed to dial gRPC server: %w", err)
 	}
 
-	p.logger.Debug("Created new RPC connection", "address", address)
+	p.logger.Debug("Created new gRPC connection", "address", address)
 	return conn, nil
 }
 
 // isConnectionHealthy checks if a connection is healthy
-func (p *ConnectionPool) isConnectionHealthy(conn *rpc.Client) bool {
-	// Simple health check - try to call a method that should always exist
-	var response interface{}
-	err := conn.Call("HealthCheck", &struct{}{}, &response)
-	return err == nil
+func (p *ConnectionPool) isConnectionHealthy(conn *grpc.ClientConn) bool {
+	// Simple health check - check connection state
+	state := conn.GetState()
+	return state.String() == "READY"
 }
 
 // Close closes the connection pool
@@ -130,7 +141,9 @@ func (p *ConnectionPool) Close() error {
 
 	// Close all connections
 	for conn := range p.connections {
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			p.logger.Errorf("Failed to close connection: %v", err)
+		}
 	}
 
 	return nil
