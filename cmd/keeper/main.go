@@ -16,11 +16,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -50,26 +50,9 @@ func main() {
 	)
 
 	collector := metrics.NewCollector()
-	logger.Info("[1/5] Dependency: Metrics collector Initialised")
+	logger.Info("[1/6] Dependency: Metrics collector Initialised")
 
-	// Initialize clients: ECDSA
-	aggregatorCfg := aggregator.AggregatorClientConfig{
-		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetPrivateKeyConsensus(),
-		SenderAddress:    config.GetKeeperAddress(),
-	}
-	// Initialize clients: BLS
-	// aggregatorCfg := aggregator.AggregatorClientConfig{
-	// 	AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-	// 	SenderPrivateKey: config.GetPrivateKeyConsensus(),
-	// 	SenderAddress:    config.GetKeeperAddress(),
-	// }
-	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
-	if err != nil {
-		logger.Fatal("Failed to initialize aggregator client", "error", err)
-	}
-	logger.Info("[2/5] Dependency: Aggregator client Initialised")
-
+	// Initialize health client first
 	healthCfg := health.Config{
 		HealthServiceURL: config.GetHealthRPCUrl(),
 		PrivateKey:       config.GetPrivateKeyConsensus(),
@@ -82,7 +65,31 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize health client", "error", err)
 	}
-	logger.Info("[3/5] Dependency: Health client Initialised")
+	logger.Info("[2/6] Dependency: Health client Initialised")
+
+	// Perform initial health check-in to get configuration
+	logger.Info("Performing initial health check-in to get configuration...")
+	ctx := context.Background()
+	response, err := healthClient.CheckIn(ctx)
+	if err != nil {
+		if errors.Is(err, health.ErrKeeperNotVerified) {
+			logger.Fatal("Keeper is not verified. Shutting down...", "error", err)
+		}
+		logger.Fatal("Failed initial health check-in", "error", response.Data)
+	}
+	logger.Info("Initial health check-in successful, configuration received")
+
+	// Initialize clients: ECDSA
+	aggregatorCfg := aggregator.AggregatorClientConfig{
+		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
+		SenderPrivateKey: config.GetPrivateKeyController(),
+		SenderAddress:    config.GetKeeperAddress(),
+	}
+	aggregatorClient, err := aggregator.NewAggregatorClient(logger, aggregatorCfg)
+	if err != nil {
+		logger.Fatal("Failed to initialize aggregator client", "error", err)
+	}
+	logger.Info("[3/6] Dependency: Aggregator client Initialised")
 
 	dockerCfg := dockerconfig.DefaultConfig("go")
 	supportedLanguages := []types.Language{
@@ -99,17 +106,17 @@ func main() {
 	}
 
 	// Initialize the Docker manager with language-specific pools
-	ctx := context.Background()
 	if err := dockerManager.Initialize(ctx, supportedLanguages); err != nil {
 		logger.Fatal("Failed to initialize Docker manager", "error", err)
 	}
-	logger.Infof("[4/5] Dependency: Code executor Initialised with %d language pools", len(supportedLanguages))
+	logger.Infof("[4/6] Dependency: Code executor Initialised with %d language pools", len(supportedLanguages))
 
 	ipfsCfg := ipfs.NewConfig(config.GetIpfsHost(), config.GetPinataJWT())
 	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize IPFS client", "error", err)
 	}
+	logger.Info("[5/6] Dependency: IPFS client Initialised")
 
 	// Initialize task executor and validator
 	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger, ipfsClient)
@@ -130,7 +137,7 @@ func main() {
 	}
 
 	server := api.NewServer(serverCfg, deps)
-	logger.Info("[5/5] Dependency: API server Initialised")
+	logger.Info("[6/6] Dependency: API server Initialised")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -171,22 +178,19 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
-	// Initial check-in
-	response, err := healthClient.CheckIn(ctx)
-	if err != nil {
-		if errors.Is(err, health.ErrKeeperNotVerified) {
-			logger.Error("Keeper is not verified. Shutting down...", "error", err)
-			performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
-			return
-		}
-		logger.Error("Failed initial health check-in", "error", response.Data)
-	}
+	// Skip initial check-in since we already did it during startup
+	logger.Debug("Starting periodic health check routine")
 
 	for {
 		select {
 		case <-ticker.C:
 			response, err := healthClient.CheckIn(ctx)
 			if err != nil {
+				if errors.Is(err, health.ErrKeeperNotVerified) {
+					logger.Error("Keeper is not verified. Shutting down...", "error", err)
+					performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
+					return
+				}
 				logger.Error("Failed health check-in", "error", response.Data)
 			}
 		case <-ctx.Done():

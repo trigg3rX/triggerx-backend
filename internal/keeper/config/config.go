@@ -84,7 +84,6 @@ func Init() error {
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
 		ethRPCUrl:                env.GetEnvString("L1_RPC", ""),
 		baseRPCUrl:               env.GetEnvString("L2_RPC", ""),
-		alchemyAPIKey:           env.GetEnvString("ALCHEMY_API_KEY", ""),
 		privateKeyConsensus:      env.GetEnvString("PRIVATE_KEY", ""),
 		privateKeyController:     env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
 		keeperAddress:            env.GetEnvString("OPERATOR_ADDRESS", ""),

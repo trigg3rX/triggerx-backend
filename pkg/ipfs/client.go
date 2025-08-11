@@ -93,6 +93,11 @@ func (c *ipfsClient) Upload(filename string, data []byte) (string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
+	// Add the "network" field and set it to "public" to ensure content is publicly accessible
+	if err := writer.WriteField("network", "public"); err != nil {
+		return "", fmt.Errorf("failed to write network field: %v", err)
+	}
+
 	// Add the file
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
