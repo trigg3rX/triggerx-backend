@@ -1,3 +1,4 @@
+// monitor_condition.go
 package worker
 
 import (
@@ -6,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -76,9 +78,9 @@ func (w *ConditionWorker) checkCondition() error {
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
 			notification := &TriggerNotification{
-				JobID:           w.ConditionWorkerData.JobID,
-				TriggerValue:    currentValue,
-				TriggeredAt:     time.Now(),
+				JobID:        w.ConditionWorkerData.JobID,
+				TriggerValue: currentValue,
+				TriggeredAt:  time.Now(),
 			}
 
 			if err := w.TriggerCallback(notification); err != nil {
@@ -156,6 +158,142 @@ func isTimeoutError(err error) bool {
 		strings.Contains(err.Error(), "deadline exceeded")
 }
 
+// extractValueFromResponse extracts the numeric value from the response
+func (w *ConditionWorker) extractValueFromResponse(body []byte) (float64, error) {
+	// If key path is specified, use it to extract the value
+	if w.ConditionWorkerData.SelectedKeyRoute != "" {
+		value, err := w.extractValueByKeyPath(body, w.ConditionWorkerData.SelectedKeyRoute)
+		if err == nil {
+			return value, nil
+		}
+	}
+
+	// Try to parse response as ValueResponse struct
+	var valueResp ValueResponse
+	if err := json.Unmarshal(body, &valueResp); err == nil {
+		// If key path is specified in response, use it
+		if valueResp.SelectedKeyRoute != "" {
+			return w.extractValueByKeyPath(body, w.ConditionWorkerData.SelectedKeyRoute)
+		}
+
+		// Otherwise, use the original fallback logic
+		if valueResp.Value != 0 {
+			return valueResp.Value, nil
+		}
+		if valueResp.Price != 0 {
+			return valueResp.Price, nil
+		}
+		if valueResp.USD != 0 {
+			return valueResp.USD, nil
+		}
+		if valueResp.Rate != 0 {
+			return valueResp.Rate, nil
+		}
+		if valueResp.Result != 0 {
+			return valueResp.Result, nil
+		}
+		if valueResp.Data != 0 {
+			return valueResp.Data, nil
+		}
+	}
+
+	// If no key is specified or ValueResponse parsing failed, try other parsing methods
+	return w.parseDirectValue(body)
+}
+
+// extractValueByKeyPath extracts a value from JSON response using dot notation path
+func (w *ConditionWorker) extractValueByKeyPath(body []byte, keyPath string) (float64, error) {
+	var jsonData interface{}
+	if err := json.Unmarshal(body, &jsonData); err != nil {
+		return 0, fmt.Errorf("failed to parse JSON response: %w", err)
+	}
+
+	keys := strings.Split(keyPath, ".")
+	var current = jsonData
+
+	for _, k := range keys {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			if val, exists := v[k]; exists {
+				current = val
+			} else {
+				return 0, fmt.Errorf("key '%s' not found in response", k)
+			}
+		case []interface{}:
+			// Handle array indices
+			if idx, err := strconv.Atoi(k); err == nil && idx >= 0 && idx < len(v) {
+				current = v[idx]
+			} else {
+				return 0, fmt.Errorf("invalid array index '%s'", k)
+			}
+		default:
+			return 0, fmt.Errorf("cannot navigate to key '%s': intermediate value is not an object or array", k)
+		}
+	}
+
+	return w.convertToFloat64(current)
+}
+
+// convertToFloat64 converts various types to float64
+func (w *ConditionWorker) convertToFloat64(value interface{}) (float64, error) {
+	switch v := value.(type) {
+	case float64:
+		return v, nil
+	case float32:
+		return float64(v), nil
+	case int:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case string:
+		if floatVal, err := strconv.ParseFloat(v, 64); err == nil {
+			return floatVal, nil
+		}
+		return 0, fmt.Errorf("cannot convert string '%s' to float64", v)
+	default:
+		return 0, fmt.Errorf("cannot convert value of type %s to float64", reflect.TypeOf(value))
+	}
+}
+
+// parseDirectValue tries to parse the response as direct numeric values
+func (w *ConditionWorker) parseDirectValue(body []byte) (float64, error) {
+	// Try to parse as a simple float
+	var floatValue float64
+	if err := json.Unmarshal(body, &floatValue); err == nil {
+		return floatValue, nil
+	}
+
+	// Try to parse as a simple string and convert to float
+	var stringValue string
+	if err := json.Unmarshal(body, &stringValue); err == nil {
+		if floatVal, parseErr := strconv.ParseFloat(stringValue, 64); parseErr == nil {
+			return floatVal, nil
+		}
+	}
+
+	// Try to parse as a generic JSON object and look for common patterns
+	// var jsonObj map[string]interface{}
+	// if err := json.Unmarshal(body, &jsonObj); err == nil {
+	// 	// Look for common nested patterns like {"ethereum":{"usd":3620.84}}
+	// 	for _, value := range jsonObj {
+	// 		if nestedObj, ok := value.(map[string]interface{}); ok {
+	// 			// Check for common price fields in nested objects
+	// 			for fieldName, fieldValue := range nestedObj {
+	// 				if fieldName == "usd" || fieldName == "price" || fieldName == "value" || fieldName == "rate" {
+	// 					if floatVal, err := w.convertToFloat64(fieldValue); err == nil {
+	// 						return floatVal, nil
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	return 0, fmt.Errorf("could not extract numeric value from response: %s", string(body))
+}
+
 // fetchFromAPI fetches value from an HTTP API endpoint
 func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 	req, err := http.NewRequest("GET", w.ConditionWorkerData.ValueSourceUrl, nil)
@@ -168,7 +306,6 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		metrics.TrackHTTPRequest("GET", w.ConditionWorkerData.ValueSourceUrl, "error")
 		metrics.TrackHTTPClientConnectionError()
 
-		// Check if it's a timeout error
 		if isTimeoutError(err) {
 			metrics.TrackTimeout("http_api_request")
 		}
@@ -195,47 +332,14 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 		return 0, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Try to parse response as ValueResponse struct
-	var valueResp ValueResponse
-	if err := json.Unmarshal(body, &valueResp); err == nil {
-		// Check which field has a non-zero value
-		if valueResp.Value != 0 {
-			return valueResp.Value, nil
-		}
-		if valueResp.Price != 0 {
-			return valueResp.Price, nil
-		}
-		if valueResp.USD != 0 {
-			return valueResp.USD, nil
-		}
-		if valueResp.Rate != 0 {
-			return valueResp.Rate, nil
-		}
-		if valueResp.Result != 0 {
-			return valueResp.Result, nil
-		}
-		if valueResp.Data != 0 {
-			return valueResp.Data, nil
-		}
+	value, err := w.extractValueFromResponse(body)
+	if err != nil {
+		metrics.TrackInvalidValue(w.ConditionWorkerData.ValueSourceUrl)
+		metrics.TrackValueParsingError(w.ConditionWorkerData.ValueSourceType)
+		return 0, err
 	}
 
-	// Try to parse as a simple float
-	var floatValue float64
-	if err := json.Unmarshal(body, &floatValue); err == nil {
-		return floatValue, nil
-	}
-
-	// Try to parse as a simple string and convert to float
-	var stringValue string
-	if err := json.Unmarshal(body, &stringValue); err == nil {
-		if floatVal, parseErr := strconv.ParseFloat(stringValue, 64); parseErr == nil {
-			return floatVal, nil
-		}
-	}
-
-	metrics.TrackInvalidValue(w.ConditionWorkerData.ValueSourceUrl)
-	metrics.TrackValueParsingError(w.ConditionWorkerData.ValueSourceType)
-	return 0, fmt.Errorf("could not extract numeric value from response: %s", string(body))
+	return value, nil
 }
 
 // fetchFromOracle fetches value from an oracle (placeholder implementation)
@@ -247,7 +351,6 @@ func (w *ConditionWorker) fetchFromOracle() (float64, error) {
 
 // fetchStaticValue returns a static value (for testing purposes)
 func (w *ConditionWorker) fetchStaticValue() (float64, error) {
-	// Parse URL as the static value
 	value, err := strconv.ParseFloat(w.ConditionWorkerData.ValueSourceUrl, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid static value: %s", w.ConditionWorkerData.ValueSourceUrl)

@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
     last_executed_at timestamp,
     expiration_time timestamp,
     timezone text,
+    selected_key_route text, 
     PRIMARY KEY (job_id)
 );
 
@@ -140,6 +141,7 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
 CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
     task_number bigint,
+    task_status text,
     job_id varint,
     task_definition_id int,
     created_at timestamp,
@@ -153,6 +155,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     tp_signature blob,
     ta_signature blob,
     task_submission_tx_hash text,
+    is_successful boolean,
     is_accepted boolean,
     is_imua boolean,
     PRIMARY KEY (task_id)

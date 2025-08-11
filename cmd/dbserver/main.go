@@ -13,7 +13,7 @@ import (
 	"github.com/gocql/gocql"
 	// "github.com/gin-gonic/gin"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver"
+	dbserver "github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"

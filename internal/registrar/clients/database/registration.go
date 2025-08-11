@@ -65,7 +65,7 @@ func (dm *DatabaseClient) UpdateKeeperRegistrationData(data types.KeeperRegistra
 		return 0, false, err
 	} else {
 		if err := dm.db.NewQuery(queries.UpdateKeeper,
-			data.RewardsReceiver, data.TxHash, data.OperatorID, data.VotingPower, 
+			data.RewardsReceiver, data.TxHash, data.OperatorID, data.VotingPower,
 			data.Strategies, true, booster, keeperID).Exec(); err != nil {
 			dm.logger.Errorf("Error updating keeper with ID %d: %v", keeperID, err)
 			return 0, false, err

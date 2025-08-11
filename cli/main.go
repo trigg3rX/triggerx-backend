@@ -73,6 +73,12 @@ func main() {
 			Usage:  "Associate operator with EVM staker (post-bootstrap phase)",
 			Action: actions.AssociateOperator,
 		},
+		// BLS Key Management
+		{
+			Name:   "register-bls-key",
+			Usage:  "Register BLS public key for AVS operator",
+			Action: actions.RegisterBLSPublicKey,
+		},
 	}
 
 	err = app.Run(os.Args)

@@ -17,10 +17,11 @@ type TaskRepository interface {
 	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
 	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
 	GetTaskDataByID(taskID int64) (types.TaskData, error)
-	GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error)
+	GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobID, error)
 	AddTaskIDToJob(jobID *big.Int, taskID int64) error
 	UpdateTaskFee(taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
+	GetCreatedChainIDByJobID(jobID *big.Int) (string, error)
 }
 
 type taskRepository struct {
@@ -87,10 +88,10 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
 	return task, nil
 }
 
-func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
+func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobID, error) {
 	iter := r.db.Session().Query(queries.GetTasksByJobIDQuery, jobID).Iter()
-	var tasks []types.TasksByJobIDResponse
-	var task types.TasksByJobIDResponse
+	var tasks []types.GetTasksByJobID
+	var task types.GetTasksByJobID
 
 	for iter.Scan(
 		&task.TaskID,
@@ -107,7 +108,7 @@ func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDRe
 	}
 
 	if err := iter.Close(); err != nil {
-		return []types.TasksByJobIDResponse{}, errors.New("error getting tasks by job ID")
+		return []types.GetTasksByJobID{}, errors.New("error getting tasks by job ID: " + err.Error())
 	}
 
 	return tasks, nil
@@ -145,4 +146,13 @@ func (r *taskRepository) GetTaskFee(taskID int64) (float64, error) {
 		return 0, errors.New("error getting task fee")
 	}
 	return fee, nil
+}
+
+func (r *taskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error) {
+	var createdChainID string
+	err := r.db.Session().Query(queries.GetCreatedChainIDByJobIDQuery, jobID).Scan(&createdChainID)
+	if err != nil {
+		return "", errors.New("error getting created chain ID by job ID")
+	}
+	return createdChainID, nil
 }

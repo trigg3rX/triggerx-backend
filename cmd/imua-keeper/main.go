@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
 	"github.com/imua-xyz/imua-avs-sdk/signer"
+	keeper "github.com/trigg3rX/triggerx-backend/internal/imua-keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/api"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/chainio"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/client/health"
@@ -69,13 +70,13 @@ func main() {
 
 	// Setup signer and transaction manager
 	signer, _, err := signer.SignerFromConfig(signer.Config{
-		PrivateKey: config.GetPrivateKeyController(),
+		PrivateKey: config.GetPrivateKeyOwner(),
 	}, chainId)
 	if err != nil {
 		logger.Fatal("Failed to create signer", "error", err)
 	}
 
-	txMgr := txmgr.NewSimpleTxManager(ethClient, logger, signer, common.HexToAddress(config.GetKeeperAddress()))
+	txMgr := txmgr.NewSimpleTxManager(ethClient, logger, signer, common.HexToAddress(config.GetOwnerAddress()))
 
 	// Initialize AVS writer
 	avsWriter, err := chainio.BuildChainWriter(
@@ -166,10 +167,20 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	keeper := keeper.NewKeeper(logger)
+	defer keeper.Close()
+	go func() {
+		err = keeper.Start(ctx)
+		if err != nil {
+			logger.Fatal("Failed to start keeper", "error", err)
+		}
+	}()
+	logger.Info("[1/4] Process: Keeper Started")
+
 	// Start health check routine
-	go startHealthCheckRoutine(ctx, healthClient, dockerManager, logger, server)
+	go startHealthCheckRoutine(ctx, healthClient, dockerManager, logger, server, keeper)
 	logger.Debug("Note: Only first health-check will be logged, subsequent health-checks will not be logged.")
-	logger.Info("[1/3] Process: Health check routine Started")
+	logger.Info("[2/4] Process: Health check routine Started")
 
 	// Start server in a goroutine
 	go func() {
@@ -177,13 +188,13 @@ func main() {
 			logger.Fatal("Failed to start server", "error", err)
 		}
 	}()
-	logger.Info("[2/3] Process: API server Started")
+	logger.Info("[3/4] Process: API server Started")
 
 	// Start metrics collector in a goroutine
 	go func() {
 		collector.Start()
 	}()
-	logger.Info("[3/3] Process: Metrics collector Started")
+	logger.Info("[4/4] Process: Metrics collector Started")
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -193,11 +204,11 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
+	performGracefulShutdown(ctx, healthClient, dockerManager, server, keeper, logger)
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
-func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager *docker.DockerManager, logger logging.Logger, server *api.Server) {
+func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager *docker.DockerManager, logger logging.Logger, server *api.Server, keeper *keeper.Keeper) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
@@ -206,7 +217,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	if err != nil {
 		if errors.Is(err, health.ErrKeeperNotVerified) {
 			logger.Error("Keeper is not verified. Shutting down...", "error", err)
-			performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
+			performGracefulShutdown(ctx, healthClient, dockerManager, server, keeper, logger)
 			return
 		}
 		logger.Error("Failed initial health check-in", "error", response.Data)
@@ -226,7 +237,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager *docker.DockerManager, server *api.Server, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager *docker.DockerManager, server *api.Server, keeper *keeper.Keeper, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -235,19 +246,23 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
 
 	// Close health client
 	healthClient.Close()
-	logger.Info("[1/3] Process: Health client Closed")
+	logger.Info("[1/4] Process: Health client Closed")
 
 	// Close code executor
 	if err := dockerManager.Close(); err != nil {
 		logger.Error("Error closing code executor", "error", err)
 	}
-	logger.Info("[2/3] Process: Code executor Closed")
+	logger.Info("[2/4] Process: Code executor Closed")
 
 	// Shutdown server gracefully
 	if err := server.Stop(shutdownCtx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
 	}
-	logger.Info("[3/3] Process: API server Stopped")
+	logger.Info("[3/4] Process: API server Stopped")
+
+	// Close keeper
+	keeper.Close()
+	logger.Info("[4/4] Process: Keeper Closed")
 
 	logger.Info("Shutdown complete")
 	os.Exit(0)

@@ -1,3 +1,4 @@
+// init_condition.go
 package worker
 
 import (
@@ -23,9 +24,9 @@ type ConditionWorker struct {
 	Mutex           sync.RWMutex
 	LastValue       float64
 	LastCheckTimestamp time.Time
-	ConditionMet    int64 // Count of consecutive condition met checks
-	TriggerCallback WorkerTriggerCallback // Callback to notify scheduler when condition is satisfied
-	CleanupCallback WorkerCleanupCallback // Callback to clean up job data when worker stops
+	ConditionMet       int64 // Count of consecutive condition met checks
+	TriggerCallback    WorkerTriggerCallback
+	CleanupCallback    WorkerCleanupCallback
 }
 
 // Start begins the condition worker's monitoring loop
@@ -36,13 +37,13 @@ func (w *ConditionWorker) Start() {
 	w.IsActive = true
 	w.Mutex.Unlock()
 
-	// Track worker start
 	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
 
 	w.Logger.Info("Starting condition worker",
 		"job_id", w.ConditionWorkerData.JobID,
 		"condition_type", w.ConditionWorkerData.ConditionType,
 		"value_source", w.ConditionWorkerData.ValueSourceUrl,
+		"selected_key_route", w.ConditionWorkerData.SelectedKeyRoute,
 		"upper_limit", w.ConditionWorkerData.UpperLimit,
 		"lower_limit", w.ConditionWorkerData.LowerLimit,
 		"expiration_time", w.ConditionWorkerData.ExpirationTime,
@@ -66,18 +67,19 @@ func (w *ConditionWorker) Start() {
 			metrics.JobsCompleted.WithLabelValues("success").Inc()
 			return
 		case <-ticker.C:
-			// Check if job has expired
 			if time.Now().After(w.ConditionWorkerData.ExpirationTime) {
 				w.Logger.Info("Job has expired, stopping worker",
 					"job_id", w.ConditionWorkerData.JobID,
 					"expiration_time", w.ConditionWorkerData.ExpirationTime,
 				)
-				go w.Stop() // Stop in a goroutine to avoid deadlock
+				go w.Stop()
 				return
 			}
 
 			if err := w.checkCondition(); err != nil {
-				w.Logger.Error("Error checking condition", "job_id", w.ConditionWorkerData.JobID, "error", err)
+				w.Logger.Error("Error checking condition", 
+					"job_id", w.ConditionWorkerData.JobID, 
+					"error", err)
 				metrics.JobsCompleted.WithLabelValues("failed").Inc()
 			}
 		}
@@ -93,10 +95,8 @@ func (w *ConditionWorker) Stop() {
 		w.Cancel()
 		w.IsActive = false
 
-		// Track worker stop
 		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
 
-		// Clean up job data from scheduler store
 		if w.CleanupCallback != nil {
 			if err := w.CleanupCallback(w.ConditionWorkerData.JobID); err != nil {
 				w.Logger.Error("Failed to clean up job data",

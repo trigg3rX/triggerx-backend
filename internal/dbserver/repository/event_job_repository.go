@@ -15,6 +15,7 @@ type EventJobRepository interface {
 	GetEventJobByJobID(jobID *big.Int) (types.EventJobData, error)
 	CompleteEventJob(jobID *big.Int) error
 	UpdateEventJobStatus(jobID *big.Int, isActive bool) error
+	GetActiveEventJobs() ([]types.EventJobData, error)
 }
 
 type eventJobRepository struct {
@@ -78,4 +79,22 @@ func (r *eventJobRepository) UpdateEventJobStatus(jobID *big.Int, isActive bool)
 	}
 
 	return nil
+}
+
+func (r *eventJobRepository) GetActiveEventJobs() ([]types.EventJobData, error) {
+	var eventJobs []types.EventJobData
+	iter := r.db.Session().Query(queries.GetActiveEventJobsQuery).Iter()
+	var eventJob types.EventJobData
+	for iter.Scan(
+		&eventJob.JobID, &eventJob.ExpirationTime, &eventJob.Recurring,
+		&eventJob.TriggerChainID, &eventJob.TriggerContractAddress, &eventJob.TriggerEvent,
+		&eventJob.TargetChainID, &eventJob.TargetContractAddress, &eventJob.TargetFunction,
+		&eventJob.ABI, &eventJob.ArgType, &eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl,
+		&eventJob.IsCompleted, &eventJob.IsActive) {
+		eventJobs = append(eventJobs, eventJob)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, errors.New("failed to fetch active event jobs")
+	}
+	return eventJobs, nil
 }

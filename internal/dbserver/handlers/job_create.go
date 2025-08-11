@@ -248,6 +248,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 				IsCompleted:               false,
 				IsActive:                  true,
+				SelectedKeyRoute:          tempJobs[i].SelectedKeyRoute,
 			}
 
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
@@ -270,14 +271,15 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
-				JobID:           jobID,
-				ExpirationTime:  expirationTime,
-				Recurring:       tempJobs[i].Recurring,
-				ConditionType:   tempJobs[i].ConditionType,
-				UpperLimit:      tempJobs[i].UpperLimit,
-				LowerLimit:      tempJobs[i].LowerLimit,
-				ValueSourceType: tempJobs[i].ValueSourceType,
-				ValueSourceUrl:  tempJobs[i].ValueSourceUrl,
+				JobID:            jobID,
+				ExpirationTime:   expirationTime,
+				Recurring:        tempJobs[i].Recurring,
+				ConditionType:    tempJobs[i].ConditionType,
+				UpperLimit:       tempJobs[i].UpperLimit,
+				LowerLimit:       tempJobs[i].LowerLimit,
+				ValueSourceType:  tempJobs[i].ValueSourceType,
+				ValueSourceUrl:   tempJobs[i].ValueSourceUrl,
+				SelectedKeyRoute: tempJobs[i].SelectedKeyRoute,
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
@@ -288,14 +290,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 
 		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
-			go func() {
-				success, err := h.notifyConditionScheduler(jobID, scheduleConditionJobData)
-				if !success {
-					h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
-				} else {
-					h.logger.Infof("[CreateJobData] Successfully notified condition scheduler for jobID %d", jobID)
-				}
-			}()
+			success, err := h.notifyConditionScheduler(jobID, scheduleConditionJobData)
+			if !success {
+				h.logger.Errorf("[CreateJobData] Error notifying condition scheduler for jobID %d: %v", jobID, err)
+			} else {
+				h.logger.Infof("[CreateJobData] Successfully notified condition scheduler for jobID %d", jobID)
+			}
 		}
 
 		pointsToAdd := 10.0

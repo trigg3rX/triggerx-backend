@@ -8,7 +8,7 @@ import (
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
-	JobID                *big.Int     `json:"job_id"`
+	JobID                *big.Int  `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
 	TaskOpXCost          float64   `json:"task_opx_cost"`
@@ -27,8 +27,8 @@ type TaskData struct {
 
 type CreateTaskDataRequest struct {
 	JobID            *big.Int `json:"job_id" validate:"required"`
-	TaskDefinitionID int   `json:"task_definition_id" validate:"required"`
-	IsImua           bool  `json:"is_imua"`
+	TaskDefinitionID int      `json:"task_definition_id" validate:"required"`
+	IsImua           bool     `json:"is_imua"`
 }
 
 type UpdateTaskExecutionDataRequest struct {
@@ -51,6 +51,19 @@ type UpdateTaskAttestationDataRequest struct {
 }
 
 type TasksByJobIDResponse struct {
+	TaskID             int64     `json:"task_id"`
+	TaskNumber         int64     `json:"task_number"`
+	TaskOpXCost        float64   `json:"task_opx_cost"`
+	ExecutionTimestamp time.Time `json:"execution_timestamp"`
+	ExecutionTxHash    string    `json:"execution_tx_hash"`
+	TaskPerformerID    int64     `json:"task_performer_id"`
+	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
+	IsSuccessful       bool      `json:"is_successful"`
+	TaskStatus         string    `json:"task_status"`
+	TxURL              string    `json:"tx_url"`
+}
+
+type GetTasksByJobID struct {
 	TaskID             int64     `json:"task_id"`
 	TaskNumber         int64     `json:"task_number"`
 	TaskOpXCost        float64   `json:"task_opx_cost"`

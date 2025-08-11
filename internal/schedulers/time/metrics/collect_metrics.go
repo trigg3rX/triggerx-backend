@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 )
 
@@ -16,7 +17,13 @@ func collectSystemMetrics() {
 	MemoryUsageBytes.Set(float64(memStats.Alloc))
 
 	// Update CPU usage (using system memory as a proxy)
-	CPUUsagePercent.Set(float64(memStats.Sys))
+	cpuPercent, err := cpu.Percent(0, false)
+	if err == nil && len(cpuPercent) > 0 {
+		CPUUsagePercent.Set(cpuPercent[0])
+	} else {
+		// Fallback to 0.0 if CPU monitoring fails
+		CPUUsagePercent.Set(0.0)
+	}
 
 	// Update active goroutines count
 	GoroutinesActive.Set(float64(runtime.NumGoroutine()))

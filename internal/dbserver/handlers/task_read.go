@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {
@@ -77,7 +78,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s", jobIDBig.String())
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	tasks, err := h.taskRepository.GetTasksByJobID(jobIDBig)
+	tasksData, err := h.taskRepository.GetTasksByJobID(jobIDBig)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobIDBig.String(), err)
@@ -88,6 +89,55 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
+	// Convert GetTasksByJobID to TasksByJobIDResponse
+	tasks := make([]types.TasksByJobIDResponse, len(tasksData))
+	for i, task := range tasksData {
+		tasks[i] = types.TasksByJobIDResponse{
+			TaskID:             task.TaskID,
+			TaskNumber:         task.TaskNumber,
+			TaskOpXCost:        task.TaskOpXCost,
+			ExecutionTimestamp: task.ExecutionTimestamp,
+			ExecutionTxHash:    task.ExecutionTxHash,
+			TaskPerformerID:    task.TaskPerformerID,
+			TaskAttesterIDs:    task.TaskAttesterIDs,
+			IsSuccessful:       task.IsSuccessful,
+			TaskStatus:         task.TaskStatus,
+		}
+	}
+	//find the created_chain id for the job using jobIDBig from database
+	var createdChainID string
+	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobIDBig)
+	if err != nil {
+		h.logger.Errorf("[GetTasksByJobID] Error retrieving created_chain_id for jobID %s: %v", jobIDBig.String(), err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "No tasks found for this job",
+			"code":  "TASKS_NOT_FOUND",
+		})
+		return
+	}
+
+	// Set tx_url for each task
+	blockscoutBaseURL := getBlockscoutBaseURL(createdChainID)
+	for i := range tasks {
+		if tasks[i].ExecutionTxHash != "" {
+			tasks[i].TxURL = blockscoutBaseURL + tasks[i].ExecutionTxHash
+		}
+	}
+
 	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", len(tasks), jobIDBig.String())
 	c.JSON(http.StatusOK, tasks)
+}
+
+// Helper function to get Blockscout base URL from chain ID
+func getBlockscoutBaseURL(chainID string) string {
+	switch chainID {
+	case "1337":
+		return "https://sepolia.etherscan.io/tx/"
+	case "11155420": // OP Sepolia
+		return "https://sepolia-optimism.etherscan.io/tx/"
+	case "84532": // Base Sepolia
+		return "https://sepolia.basescan.org/tx/"
+	default:
+		return "https://sepolia.etherscan.io/tx/"
+	}
 }

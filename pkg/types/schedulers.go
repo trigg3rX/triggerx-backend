@@ -31,14 +31,15 @@ type EventWorkerData struct {
 	TriggerEvent           string    `json:"trigger_event"`
 }
 type ConditionWorkerData struct {
-	JobID           *big.Int  `json:"job_id"`
-	ExpirationTime  time.Time `json:"expiration_time"`
-	Recurring       bool      `json:"recurring"`
-	ConditionType   string    `json:"condition_type"`
-	UpperLimit      float64   `json:"upper_limit"`
-	LowerLimit      float64   `json:"lower_limit"`
-	ValueSourceType string    `json:"value_source_type"`
-	ValueSourceUrl  string    `json:"value_source_url"`
+	JobID            *big.Int  `json:"job_id"`
+	ExpirationTime   time.Time `json:"expiration_time"`
+	Recurring        bool      `json:"recurring"`
+	ConditionType    string    `json:"condition_type"`
+	SelectedKeyRoute string    `json:"selected_key_route"`
+	UpperLimit       float64   `json:"upper_limit"`
+	LowerLimit       float64   `json:"lower_limit"`
+	ValueSourceType  string    `json:"value_source_type"`
+	ValueSourceUrl   string    `json:"value_source_url"`
 }
 
 // Data to pass to time scheduler
@@ -96,28 +97,28 @@ type TaskTriggerData struct {
 }
 
 type SendTaskDataToKeeper struct {
-	TaskID             []int64                   `json:"task_id"`
-	PerformerData      PerformerData           `json:"performer_data"`
-	TargetData         []TaskTargetData        `json:"target_data"`
-	TriggerData        []TaskTriggerData       `json:"trigger_data"`
-	SchedulerID        int                     `json:"scheduler_id"`
-	ManagerSignature   string                  `json:"manager_signature"`
+	TaskID           []int64           `json:"task_id"`
+	PerformerData    PerformerData     `json:"performer_data"`
+	TargetData       []TaskTargetData  `json:"target_data"`
+	TriggerData      []TaskTriggerData `json:"trigger_data"`
+	SchedulerID      int               `json:"scheduler_id"`
+	ManagerSignature string            `json:"manager_signature"`
 }
 
 // SchedulerTaskRequest represents the request format for TaskManager
 type SchedulerTaskRequest struct {
 	SendTaskDataToKeeper SendTaskDataToKeeper `json:"send_task_data_to_keeper"`
-	Source               string             `json:"source"`
+	Source               string               `json:"source"`
 }
 
 // TaskManagerAPIResponse represents the response from TaskManager
 type TaskManagerAPIResponse struct {
-	Success   bool                `json:"success"`
-	TaskID    []int64             `json:"task_id"`
-	Message   string              `json:"message"`
-	Timestamp string              `json:"timestamp"`
-	Error     string              `json:"error,omitempty"`
-	Details   string              `json:"details,omitempty"`
+	Success   bool    `json:"success"`
+	TaskID    []int64 `json:"task_id"`
+	Message   string  `json:"message"`
+	Timestamp string  `json:"timestamp"`
+	Error     string  `json:"error,omitempty"`
+	Details   string  `json:"details,omitempty"`
 }
 
 type BroadcastDataForPerformer struct {
