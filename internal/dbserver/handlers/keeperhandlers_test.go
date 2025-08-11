@@ -106,9 +106,10 @@ func (m *MockTaskRepository) GetTaskDataByID(taskID int64) (types.TaskData, erro
 	return args.Get(0).(types.TaskData), args.Error(1)
 }
 
-func (m *MockTaskRepository) GetTasksByJobID(jobID *big.Int) ([]types.TasksByJobIDResponse, error) {
+// Update the return type of GetTasksByJobID to match the interface
+func (m *MockTaskRepository) GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobID, error) {
 	args := m.Called(jobID)
-	return args.Get(0).([]types.TasksByJobIDResponse), args.Error(1)
+	return args.Get(0).([]types.GetTasksByJobID), args.Error(1)
 }
 
 func (m *MockTaskRepository) UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error {

@@ -180,6 +180,11 @@ func (m *MockTimeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterv
 	return args.Error(0)
 }
 
+func (m *MockTimeJobRepository) GetActiveTimeJobs() ([]types.TimeJobData, error) {
+	args := m.Called()
+	return args.Get(0).([]types.TimeJobData), args.Error(1)
+}
+
 func (m *MockEventJobRepository) CreateEventJob(job *types.EventJobData) error {
 	args := m.Called(job)
 	return args.Error(0)
