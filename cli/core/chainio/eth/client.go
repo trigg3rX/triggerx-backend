@@ -84,7 +84,7 @@ func (e *Client) WaitForTransactionReceipt(
 ) *types.Receipt {
 	for {
 		// verifying transaction receipt
-		receipt, err := e.Client.TransactionReceipt(ctx, txHash)
+		receipt, err := e.TransactionReceipt(ctx, txHash)
 		if err != nil {
 			time.Sleep(2 * time.Second)
 		} else {
