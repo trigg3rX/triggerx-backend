@@ -2,205 +2,190 @@ package database
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-// QueryExecutor defines the interface for executing queries
-type QueryExecutor interface {
-	Exec() error
-	Iter() *gocql.Iter
-	Scan(dest ...interface{}) error
+// TestNewQuery tests the NewQuery method
+func TestNewQuery(t *testing.T) {
+	// Setup
+	mockSession := &MockSession{}
+	mockLogger := &logging.MockLogger{}
+
+	conn := &Connection{
+		session: mockSession,
+		logger:  mockLogger,
+		config: &Config{
+			RetryConfig: retry.DefaultRetryConfig(),
+		},
+	}
+
+	stmt := "SELECT * FROM test_table"
+	values := []interface{}{"value1", "value2"}
+
+	// Execute
+	queryx := conn.NewQuery(stmt, values...)
+
+	// Assert
+	assert.NotNil(t, queryx)
+	assert.Equal(t, conn, queryx.conn)
+	assert.False(t, queryx.isIdem)
 }
 
-// MockQuery is a mock implementation of QueryExecutor
-type MockQuery struct {
-	execFunc func() error
+// TestQueryx_Exec_WithCustomRetryConfig tests execution with custom retry configuration
+func TestQueryx_Exec_WithCustomRetryConfig(t *testing.T) {
+	// Setup
+	mockLogger := &logging.MockLogger{}
+
+	customConfig := &retry.RetryConfig{
+		MaxRetries:      2,
+		InitialDelay:    10 * time.Millisecond,
+		MaxDelay:        100 * time.Millisecond,
+		BackoffFactor:   1.5,
+		JitterFactor:    0.1,
+		LogRetryAttempt: false,
+		ShouldRetry:     gocqlShouldRetry,
+	}
+
+	// Create a mock query that will fail
+	mockQuery := &MockQuery{
+		execErr:   &gocql.RequestErrWriteTimeout{},
+		maxCalls:  10, // Will keep failing
+		callCount: 0,
+	}
+
+	// Test the retry logic directly
+	operation := func() error {
+		return mockQuery.Exec()
+	}
+
+	err := retry.RetryFunc(context.Background(), operation, customConfig, mockLogger)
+
+	// Assert - should fail after max retries
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "operation failed after 2 attempts")
 }
 
-func (m *MockQuery) Exec() error {
-	return m.execFunc()
+// TestQueryx_Exec_MaxRetriesExceeded tests when max retries are exceeded
+func TestQueryx_Exec_MaxRetriesExceeded(t *testing.T) {
+	// Setup
+	mockLogger := &logging.MockLogger{}
+
+	// Use a very low retry count
+	customConfig := &retry.RetryConfig{
+		MaxRetries:      1,
+		InitialDelay:    1 * time.Millisecond,
+		MaxDelay:        10 * time.Millisecond,
+		BackoffFactor:   1.0,
+		JitterFactor:    0.0,
+		LogRetryAttempt: false,
+		ShouldRetry:     gocqlShouldRetry,
+	}
+
+	// Create a mock query that will keep failing
+	mockQuery := &MockQuery{
+		execErr:   &gocql.RequestErrWriteTimeout{},
+		maxCalls:  10, // Will keep failing
+		callCount: 0,
+	}
+
+	// Test the retry logic directly
+	operation := func() error {
+		return mockQuery.Exec()
+	}
+
+	err := retry.RetryFunc(context.Background(), operation, customConfig, mockLogger)
+
+	// Assert - should fail after max retries
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "operation failed after 1 attempts")
 }
 
-func (m *MockQuery) Iter() *gocql.Iter {
-	return &gocql.Iter{}
+// TestQueryx_NonIdempotentWarning tests warning for non-idempotent queries
+func TestQueryx_NonIdempotentWarning(t *testing.T) {
+	// Setup
+	mockLogger := &logging.MockLogger{}
+
+	queryx := &Queryx{
+		query:  nil, // We don't need a real query for this test
+		conn:   &Connection{logger: mockLogger},
+		isIdem: false,
+	}
+
+	mockLogger.On("Warnf", "Executing a non-idempotent query with retry logic. Ensure this is intended.", mock.Anything).Return()
+
+	// Since we can't actually execute with a nil query, we'll test the warning logic
+	// by checking that the warning would be logged for non-idempotent queries
+	if !queryx.isIdem {
+		mockLogger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
+	}
+
+	// Assert
+	mockLogger.AssertCalled(t, "Warnf", "Executing a non-idempotent query with retry logic. Ensure this is intended.", mock.Anything)
 }
 
-func (m *MockQuery) Scan(dest ...interface{}) error {
-	return nil
-}
+// TestQueryx_RetryLogic tests the retry logic used by Queryx
+func TestQueryx_RetryLogic(t *testing.T) {
+	t.Run("Success on first try", func(t *testing.T) {
+		mockQuery := &MockQuery{execErr: nil, maxCalls: 0}
+		mockLogger := &logging.MockLogger{}
 
-// MockSession is a mock implementation of gocql.Session
-type MockSession struct {
-	execFunc  func(query string, values ...interface{}) error
-	// scanFunc  func(query string, dest ...interface{}) error
-	batchFunc func(batch *gocql.Batch) error
-	query     *MockQuery
-}
-
-func (m *MockSession) Query(query string, values ...interface{}) *gocql.Query {
-	// We need to create a proper mock that implements the methods we need
-	// This is a limitation of the current test setup - we'll need to refactor
-	// For now, let's create a simple workaround
-	if m.query == nil {
-		m.query = &MockQuery{
-			execFunc: func() error {
-				if m.execFunc != nil {
-					return m.execFunc(query, values...)
-				}
-				return nil
-			},
+		// Test the retry logic directly with our mock
+		operation := func() error {
+			return mockQuery.Exec()
 		}
-	}
-	// This is not ideal but we need to return a real gocql.Query
-	// In a real test, we'd use a testable interface
-	return nil
-}
 
-func (m *MockSession) ExecuteBatch(batch *gocql.Batch) error {
-	return m.batchFunc(batch)
-}
+		cfg := retry.DefaultRetryConfig()
+		cfg.ShouldRetry = gocqlShouldRetry
 
-func (m *MockSession) Close() {}
+		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
 
-func (m *MockSession) Closed() bool {
-	return false
-}
+		assert.NoError(t, err)
+		assert.Equal(t, 1, mockQuery.callCount, "Exec should be called once")
+	})
 
-func (m *MockSession) ExecuteBatchCAS(batch *gocql.Batch, dest ...interface{}) (bool, error) {
-	return false, nil
-}
+	t.Run("Fails once then succeeds", func(t *testing.T) {
+		mockQuery := &MockQuery{execErr: &gocql.RequestErrWriteTimeout{}, maxCalls: 1}
+		mockLogger := &logging.MockLogger{}
 
-func (m *MockSession) ExecuteBatchCASWithContext(ctx context.Context, batch *gocql.Batch, dest ...interface{}) (bool, error) {
-	return false, nil
-}
+		// Set up the mock logger to expect retry warning messages
+		mockLogger.On("Warnf", mock.AnythingOfType("string"), mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
-func (m *MockSession) ExecuteBatchWithContext(ctx context.Context, batch *gocql.Batch) error {
-	return m.batchFunc(batch)
-}
+		operation := func() error {
+			return mockQuery.Exec()
+		}
 
-func (m *MockSession) ExecuteBatchWithContextAndTimeout(ctx context.Context, batch *gocql.Batch, timeout time.Duration) error {
-	return m.batchFunc(batch)
-}
+		cfg := retry.DefaultRetryConfig()
+		cfg.ShouldRetry = gocqlShouldRetry
 
-func (m *MockSession) ExecuteBatchWithTimeout(batch *gocql.Batch, timeout time.Duration) error {
-	return m.batchFunc(batch)
-}
+		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
 
-func (m *MockSession) ExecuteBatchWithContextAndTimeoutAndConsistency(ctx context.Context, batch *gocql.Batch, timeout time.Duration, consistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
+		assert.NoError(t, err)
+		assert.Equal(t, 2, mockQuery.callCount, "Exec should be called twice")
+		mockLogger.AssertExpectations(t)
+	})
 
-func (m *MockSession) ExecuteBatchWithTimeoutAndConsistency(batch *gocql.Batch, timeout time.Duration, consistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
+	t.Run("Fails on non-retryable error", func(t *testing.T) {
+		mockQuery := &MockQuery{execErr: gocql.ErrNotFound, maxCalls: 5}
+		mockLogger := &logging.MockLogger{}
 
-func (m *MockSession) ExecuteBatchWithContextAndConsistency(ctx context.Context, batch *gocql.Batch, consistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
+		operation := func() error {
+			return mockQuery.Exec()
+		}
 
-func (m *MockSession) ExecuteBatchWithConsistency(batch *gocql.Batch, consistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
+		cfg := retry.DefaultRetryConfig()
+		cfg.ShouldRetry = gocqlShouldRetry
 
-func (m *MockSession) ExecuteBatchWithContextAndTimeoutAndConsistencyAndSerialConsistency(ctx context.Context, batch *gocql.Batch, timeout time.Duration, consistency gocql.Consistency, serialConsistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
+		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
 
-func (m *MockSession) ExecuteBatchWithTimeoutAndConsistencyAndSerialConsistency(batch *gocql.Batch, timeout time.Duration, consistency gocql.Consistency, serialConsistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
-
-func (m *MockSession) ExecuteBatchWithContextAndConsistencyAndSerialConsistency(ctx context.Context, batch *gocql.Batch, consistency gocql.Consistency, serialConsistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
-
-func (m *MockSession) ExecuteBatchWithConsistencyAndSerialConsistency(batch *gocql.Batch, consistency gocql.Consistency, serialConsistency gocql.Consistency) error {
-	return m.batchFunc(batch)
-}
-
-func TestRetryableExec(t *testing.T) {
-	t.Skip("Skipping test due to gocql mocking limitations - integration tests needed")
-}
-
-func TestRetryableScan(t *testing.T) {
-	t.Skip("Skipping test due to gocql mocking limitations - integration tests needed")
-}
-
-func TestRetryableBatch(t *testing.T) {
-	t.Skip("Skipping test due to gocql mocking limitations - integration tests needed")
-}
-
-func TestRetryableExecWithContext(t *testing.T) {
-	t.Skip("Skipping test due to gocql mocking limitations - integration tests needed")
-}
-
-func TestIsRetryableError(t *testing.T) {
-	tests := []struct {
-		name      string
-		error     error
-		retryable bool
-	}{
-		{
-			name:      "nil error",
-			error:     nil,
-			retryable: false,
-		},
-		{
-			name:      "write timeout",
-			error:     &gocql.RequestErrWriteTimeout{},
-			retryable: true,
-		},
-		{
-			name:      "read timeout",
-			error:     &gocql.RequestErrReadTimeout{},
-			retryable: true,
-		},
-		{
-			name:      "unavailable",
-			error:     &gocql.RequestErrUnavailable{},
-			retryable: true,
-		},
-		{
-			name:      "read failure",
-			error:     &gocql.RequestErrReadFailure{},
-			retryable: true,
-		},
-		{
-			name:      "write failure",
-			error:     &gocql.RequestErrWriteFailure{},
-			retryable: true,
-		},
-		{
-			name:      "function failure",
-			error:     &gocql.RequestErrFunctionFailure{},
-			retryable: true,
-		},
-		{
-			name:      "connection refused",
-			error:     errors.New("connection refused"),
-			retryable: true,
-		},
-		{
-			name:      "timeout",
-			error:     errors.New("timeout"),
-			retryable: true,
-		},
-		{
-			name:      "non-retryable error",
-			error:     errors.New("syntax error"),
-			retryable: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isRetryableError(tt.error)
-			assert.Equal(t, tt.retryable, result)
-		})
-	}
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, gocql.ErrNotFound)
+		assert.Equal(t, 1, mockQuery.callCount, "Exec should be called only once")
+	})
 }

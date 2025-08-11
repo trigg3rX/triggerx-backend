@@ -207,6 +207,19 @@ func TestIsValidURL(t *testing.T) {
 		{"multiple colons", "http://example.com:8080:9090", false},
 		{"spaces in URL", "http://example .com", false},
 		{"invalid IP", "http://999.999.999.999", false},
+		{"invalid domain with port", "http://invalid..domain:8080", false},
+		{"domain starting with hyphen with port", "http://-example.com:8080", false},
+		{"domain ending with hyphen with port", "http://example-.com:8080", false},
+		{"domain with invalid characters with port", "http://exa@mple.com:8080", false},
+		{"domain with spaces with port", "http://exa mple.com:8080", false},
+		{"domain with underscore with port", "http://exa_mple.com:8080", false},
+		{"domain with single character TLD with port", "http://example.a:8080", false},
+		{"domain starting with hyphen with port", "http://-example.com:8080", false},
+		{"domain ending with hyphen with port", "http://example-.com:8080", false},
+		{"domain part ending with hyphen with port", "http://exa-.com:8080", false},
+		{"domain part starting with hyphen with port", "http://-exa.com:8080", false},
+		{"domain with special characters with port", "http://exa#mple.com:8080", false},
+		{"domain with parentheses with port", "http://exa(mple.com:8080", false},
 	}
 
 	for _, tt := range tests {
@@ -242,6 +255,91 @@ func TestIsValidPeerID(t *testing.T) {
 			result := IsValidPeerID(tt.peerID)
 			if result != tt.expected {
 				t.Errorf("IsValidPeerID(%q) = %v, want %v", tt.peerID, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsValidEthKeyPair(t *testing.T) {
+	tests := []struct {
+		name          string
+		privateKey    string
+		publicAddress string
+		expected      bool
+	}{
+		{
+			"invalid private key format",
+			"invalid-private-key",
+			"0x742d35Cc6634C0532925a3b8D322e99c4c8b9c25",
+			false,
+		},
+		{
+			"invalid public address format",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef0123456789",
+			"invalid-address",
+			false,
+		},
+		{
+			"empty private key",
+			"",
+			"0x742d35Cc6634C0532925a3b8D322e99c4c8b9c25",
+			false,
+		},
+		{
+			"empty public address",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef0123456789",
+			"",
+			false,
+		},
+		{
+			"both empty",
+			"",
+			"",
+			false,
+		},
+		{
+			"private key too short",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef012345678",
+			"0x742d35Cc6634C0532925a3b8D322e99c4c8b9c25",
+			false,
+		},
+		{
+			"private key too long",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef01234567890",
+			"0x742d35Cc6634C0532925a3b8D322e99c4c8b9c25",
+			false,
+		},
+		{
+			"public address too short",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef0123456789",
+			"0x742d35Cc6634C0532925a3b8D322e99c4c8b9c2",
+			false,
+		},
+		{
+			"public address too long",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef0123456789",
+			"0x742d35Cc6634C0532925a3b8D322e99c4c8b9c259",
+			false,
+		},
+		{
+			"valid format but mismatched pair",
+			"a0b1c2d3e4f56789abcdef0123456789abcdef0123456789abcdef0123456789",
+			"0x1234567890123456789012345678901234567890",
+			false,
+		},
+		{
+			"valid format and matching pair",
+			"6040fc45236966a31f4643bc1929c715ee9b7576db585f1ce21e51c9d9d512c8",
+			"0x47c5F93A9B771238Cf7f14d97374Ec836639A648",
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsValidEthKeyPair(tt.privateKey, tt.publicAddress)
+			if result != tt.expected {
+				t.Errorf("IsValidEthKeyPair(%q, %q) = %v, want %v", tt.privateKey, tt.publicAddress, result, tt.expected)
 			}
 		})
 	}

@@ -1,9 +1,12 @@
 package logging
 
-// import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+)
 
-const (
-	BaseDataDir = "data"
+var (
+	BaseDataDir = getBaseDataDir()
 	LogsDir     = "logs"
 )
 
@@ -34,6 +37,29 @@ const (
 	colorYellow  = "\x1b[33m"
 	colorBlue    = "\x1b[34m"
 	colorMagenta = "\x1b[35m"
-	colorCyan    = "\x1b[36m"
 	colorWhite   = "\x1b[37m"
 )
+
+func getBaseDataDir() string {
+	if dataDir := os.Getenv("TRIGGERX_DATA_DIR"); dataDir != "" {
+		return dataDir
+	}
+
+	currentDir, err := os.Getwd()
+	if err != nil {
+		return "data"
+	}
+	
+	for {
+		if _, err := os.Stat(filepath.Join(currentDir, "go.mod")); err == nil {
+			return filepath.Join(currentDir, "data")
+		}
+		
+		parent := filepath.Dir(currentDir)
+		if parent == currentDir {
+			break
+		}
+		currentDir = parent
+	}
+	return "data"
+}

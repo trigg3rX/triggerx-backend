@@ -194,6 +194,10 @@ func (c *ipfsClient) Fetch(cid string) (types.IPFSData, error) {
 
 // Delete file by ID using Pinata v3 API
 func (c *ipfsClient) Delete(cid string) error {
+	if cid == "" {
+		return fmt.Errorf("CID cannot be empty")
+	}
+
 	// Find file ID by CID
 	network := c.config.PinataHost // Use configurable network from config
 	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?cid=%s&limit=1", network, cid)
@@ -203,8 +207,10 @@ func (c *ipfsClient) Delete(cid string) error {
 		return fmt.Errorf("failed to search for CID %s: %w", cid, err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.logger.Debugf("failed to close response body: %v", err)
+		if resp != nil && resp.Body != nil {
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Debugf("failed to close response body: %v", err)
+			}
 		}
 	}()
 
@@ -230,8 +236,10 @@ func (c *ipfsClient) Delete(cid string) error {
 		return fmt.Errorf("failed to delete file %s: %w", listResp.Data.Files[0].ID, err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.logger.Debugf("failed to close response body: %v", err)
+		if resp != nil && resp.Body != nil {
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Debugf("failed to close response body: %v", err)
+			}
 		}
 	}()
 
