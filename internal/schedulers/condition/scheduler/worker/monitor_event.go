@@ -81,7 +81,7 @@ func (w *EventWorker) processEvent(log types.Log) error {
 	// Notify scheduler about the event
 	if w.TriggerCallback != nil {
 		notification := &TriggerNotification{
-			JobID:         w.EventWorkerData.JobID,
+			JobID:         w.EventWorkerData.JobID.ToBigInt(),
 			TriggerTxHash: log.TxHash.Hex(),
 			TriggeredAt:   time.Now(),
 		}

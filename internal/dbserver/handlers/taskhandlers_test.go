@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Test setup helper
@@ -366,13 +367,13 @@ func TestGetTaskDataByID(t *testing.T) {
 			name:   "Success - Get Task Data",
 			taskID: "1",
 			setupMocks: func() {
-				mockTaskRepo.On("GetTaskDataByID", int64(1)).Return(types.TaskData{
+				mockTaskRepo.On("GetTaskDataByID", int64(1)).Return(commonTypes.TaskData{
 					TaskID:               1,
 					TaskNumber:           1,
-					JobID:                big.NewInt(1),
+					JobID:                commonTypes.NewBigInt(big.NewInt(1)),
 					TaskDefinitionID:     1,
 					CreatedAt:            fixedTime,
-					TaskOpXCost:          10.5,
+					TaskOpxCost:          10.5,
 					ExecutionTimestamp:   fixedTime,
 					ExecutionTxHash:      "0x123",
 					TaskPerformerID:      1,
@@ -381,7 +382,7 @@ func TestGetTaskDataByID(t *testing.T) {
 					TpSignature:          []byte("tp"),
 					TaSignature:          []byte("ta"),
 					TaskSubmissionTxHash: "0x123",
-					IsSuccessful:         true,
+					IsAccepted:           true,
 				}, nil)
 			},
 			expectedCode: http.StatusOK,
@@ -397,7 +398,7 @@ func TestGetTaskDataByID(t *testing.T) {
 			name:   "Error - Task Not Found",
 			taskID: "1",
 			setupMocks: func() {
-				mockTaskRepo.On("GetTaskDataByID", int64(1)).Return(types.TaskData{}, assert.AnError)
+				mockTaskRepo.On("GetTaskDataByID", int64(1)).Return(commonTypes.TaskData{}, assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,
 			expectedError: assert.AnError.Error(),
@@ -432,14 +433,14 @@ func TestGetTaskDataByID(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Contains(t, response["error"], tt.expectedError)
 			} else {
-				var response types.TaskData
+				var response commonTypes.TaskData
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
 				assert.Equal(t, int64(1), response.TaskID)
 				assert.Equal(t, int64(1), response.TaskNumber)
 				assert.Equal(t, int64(1), response.JobID)
 				assert.Equal(t, 1, response.TaskDefinitionID)
-				assert.Equal(t, 10.5, response.TaskOpXCost)
+				assert.Equal(t, 10.5, response.TaskOpxCost)
 				assert.Equal(t, "0x123", response.ExecutionTxHash)
 				assert.Equal(t, int64(1), response.TaskPerformerID)
 				assert.Equal(t, "proof", response.ProofOfTask)
@@ -447,7 +448,7 @@ func TestGetTaskDataByID(t *testing.T) {
 				assert.Equal(t, []byte("tp"), response.TpSignature)
 				assert.Equal(t, []byte("ta"), response.TaSignature)
 				assert.Equal(t, "0x123", response.TaskSubmissionTxHash)
-				assert.True(t, response.IsSuccessful)
+				assert.True(t, response.IsAccepted)
 			}
 		})
 	}

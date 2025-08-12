@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // MockKeeperRepository is a mock implementation of the KeeperRepository interface
@@ -40,9 +41,9 @@ func (m *MockKeeperRepository) GetKeeperAsPerformer() ([]types.GetPerformerData,
 	return args.Get(0).([]types.GetPerformerData), args.Error(1)
 }
 
-func (m *MockKeeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error) {
+func (m *MockKeeperRepository) GetKeeperDataByID(id int64) (commonTypes.KeeperData, error) {
 	args := m.Called(id)
-	return args.Get(0).(types.KeeperData), args.Error(1)
+	return args.Get(0).(commonTypes.KeeperData), args.Error(1)
 }
 
 func (m *MockKeeperRepository) IncrementKeeperTaskCount(id int64) (int64, error) {
@@ -101,9 +102,9 @@ func (m *MockTaskRepository) CreateTaskDataInDB(taskData *types.CreateTaskDataRe
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockTaskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
+func (m *MockTaskRepository) GetTaskDataByID(taskID int64) (commonTypes.TaskData, error) {
 	args := m.Called(taskID)
-	return args.Get(0).(types.TaskData), args.Error(1)
+	return args.Get(0).(commonTypes.TaskData), args.Error(1)
 }
 
 // Update the return type of GetTasksByJobID to match the interface
@@ -310,7 +311,7 @@ func TestGetKeeperData(t *testing.T) {
 			name:     "Success - Get Keeper Data",
 			keeperID: "1",
 			setupMocks: func() {
-				mockKeeperRepo.On("GetKeeperDataByID", int64(1)).Return(types.KeeperData{
+				mockKeeperRepo.On("GetKeeperDataByID", int64(1)).Return(commonTypes.KeeperData{
 					KeeperID:        1,
 					KeeperAddress:   "0x123",
 					KeeperName:      "Test Keeper",
@@ -332,7 +333,7 @@ func TestGetKeeperData(t *testing.T) {
 			name:     "Error - Keeper Not Found",
 			keeperID: "999",
 			setupMocks: func() {
-				mockKeeperRepo.On("GetKeeperDataByID", int64(999)).Return(types.KeeperData{}, assert.AnError)
+				mockKeeperRepo.On("GetKeeperDataByID", int64(999)).Return(commonTypes.KeeperData{}, assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,
 			expectedError: assert.AnError.Error(),
@@ -365,7 +366,7 @@ func TestGetKeeperData(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Contains(t, response["error"], tt.expectedError)
 			} else {
-				var response types.KeeperData
+				var response commonTypes.KeeperData
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
 				assert.Equal(t, int64(1), response.KeeperID)

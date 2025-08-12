@@ -33,7 +33,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		TaskID:           task.SendTaskDataToKeeper.TaskID[0],
 		TaskDefinitionID: task.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
 		PerformerAddress: task.SendTaskDataToKeeper.PerformerData.KeeperAddress,
-		Data:             jsonData,
+		Data:             []byte(jsonData),
 	}
 
 	success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)

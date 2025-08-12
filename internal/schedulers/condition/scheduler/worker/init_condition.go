@@ -98,7 +98,7 @@ func (w *ConditionWorker) Stop() {
 		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
 
 		if w.CleanupCallback != nil {
-			if err := w.CleanupCallback(w.ConditionWorkerData.JobID); err != nil {
+			if err := w.CleanupCallback(w.ConditionWorkerData.JobID.ToBigInt()); err != nil {
 				w.Logger.Error("Failed to clean up job data",
 					"job_id", w.ConditionWorkerData.JobID,
 					"error", err)

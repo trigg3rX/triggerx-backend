@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	pkgtypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Mock repositories
@@ -34,9 +34,9 @@ type MockEventJobRepository struct {
 }
 
 // Add missing method to satisfy the interface
-func (m *MockEventJobRepository) GetActiveEventJobs() ([]types.EventJobData, error) {
+func (m *MockEventJobRepository) GetActiveEventJobs() ([]commonTypes.EventJobData, error) {
 	args := m.Called()
-	return args.Get(0).([]types.EventJobData), args.Error(1)
+	return args.Get(0).([]commonTypes.EventJobData), args.Error(1)
 }
 
 type MockConditionJobRepository struct {
@@ -44,20 +44,20 @@ type MockConditionJobRepository struct {
 }
 
 // Add missing method to satisfy the interface
-func (m *MockConditionJobRepository) GetActiveConditionJobs() ([]types.ConditionJobData, error) {
+func (m *MockConditionJobRepository) GetActiveConditionJobs() ([]commonTypes.ConditionJobData, error) {
 	args := m.Called()
-	return args.Get(0).([]types.ConditionJobData), args.Error(1)
+	return args.Get(0).([]commonTypes.ConditionJobData), args.Error(1)
 }
 
 // Mock implementations
-func (m *MockUserRepository) GetUserDataByAddress(address string) (int64, types.UserData, error) {
+func (m *MockUserRepository) GetUserDataByAddress(address string) (int64, commonTypes.UserData, error) {
 	args := m.Called(address)
-	return args.Get(0).(int64), args.Get(1).(types.UserData), args.Error(2)
+	return args.Get(0).(int64), args.Get(1).(commonTypes.UserData), args.Error(2)
 }
 
-func (m *MockUserRepository) CreateNewUser(user *types.CreateUserDataRequest) (types.UserData, error) {
+func (m *MockUserRepository) CreateNewUser(user *types.CreateUserDataRequest) (commonTypes.UserData, error) {
 	args := m.Called(user)
-	return args.Get(0).(types.UserData), args.Error(1)
+	return args.Get(0).(commonTypes.UserData), args.Error(1)
 }
 
 func (m *MockUserRepository) UpdateUserTasksAndPoints(userID int64, tasks int64, points float64) error {
@@ -110,7 +110,7 @@ func (m *MockUserRepository) UpdateUserEmail(address, email string) error {
 	return args.Error(0)
 }
 
-func (m *MockJobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
+func (m *MockJobRepository) CreateNewJob(job *commonTypes.JobData) (*big.Int, error) {
 	args := m.Called(job)
 	return args.Get(0).(*big.Int), args.Error(1)
 }
@@ -130,9 +130,9 @@ func (m *MockJobRepository) UpdateJobLastExecutedAt(jobID *big.Int, taskID int64
 	return args.Error(0)
 }
 
-func (m *MockJobRepository) GetJobByID(jobID *big.Int) (*types.JobData, error) {
+func (m *MockJobRepository) GetJobByID(jobID *big.Int) (*commonTypes.JobData, error) {
 	args := m.Called(jobID)
-	return args.Get(0).(*types.JobData), args.Error(1)
+	return args.Get(0).(*commonTypes.JobData), args.Error(1)
 }
 
 func (m *MockJobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) {
@@ -145,14 +145,14 @@ func (m *MockJobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeR
 	return args.Get(0).([]types.TaskFeeResponse), args.Error(1)
 }
 
-func (m *MockTimeJobRepository) CreateTimeJob(job *types.TimeJobData) error {
+func (m *MockTimeJobRepository) CreateTimeJob(job *commonTypes.TimeJobData) error {
 	args := m.Called(job)
 	return args.Error(0)
 }
 
-func (m *MockTimeJobRepository) GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error) {
+func (m *MockTimeJobRepository) GetTimeJobByJobID(jobID *big.Int) (commonTypes.TimeJobData, error) {
 	args := m.Called(jobID)
-	return args.Get(0).(types.TimeJobData), args.Error(1)
+	return args.Get(0).(commonTypes.TimeJobData), args.Error(1)
 }
 
 func (m *MockTimeJobRepository) UpdateTimeJobStatus(jobID *big.Int, isActive bool) error {
@@ -165,9 +165,9 @@ func (m *MockTimeJobRepository) CompleteTimeJob(jobID *big.Int) error {
 	return args.Error(0)
 }
 
-func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp time.Time) ([]pkgtypes.ScheduleTimeTaskData, error) {
+func (m *MockTimeJobRepository) GetTimeJobsByNextExecutionTimestamp(timestamp time.Time) ([]commonTypes.ScheduleTimeTaskData, error) {
 	args := m.Called(timestamp)
-	return args.Get(0).([]pkgtypes.ScheduleTimeTaskData), args.Error(1)
+	return args.Get(0).([]commonTypes.ScheduleTimeTaskData), args.Error(1)
 }
 
 func (m *MockTimeJobRepository) UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error {
@@ -180,19 +180,19 @@ func (m *MockTimeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterv
 	return args.Error(0)
 }
 
-func (m *MockTimeJobRepository) GetActiveTimeJobs() ([]types.TimeJobData, error) {
+func (m *MockTimeJobRepository) GetActiveTimeJobs() ([]commonTypes.TimeJobData, error) {
 	args := m.Called()
-	return args.Get(0).([]types.TimeJobData), args.Error(1)
+	return args.Get(0).([]commonTypes.TimeJobData), args.Error(1)
 }
 
-func (m *MockEventJobRepository) CreateEventJob(job *types.EventJobData) error {
+func (m *MockEventJobRepository) CreateEventJob(job *commonTypes.EventJobData) error {
 	args := m.Called(job)
 	return args.Error(0)
 }
 
-func (m *MockEventJobRepository) GetEventJobByJobID(jobID *big.Int) (types.EventJobData, error) {
+func (m *MockEventJobRepository) GetEventJobByJobID(jobID *big.Int) (commonTypes.EventJobData, error) {
 	args := m.Called(jobID)
-	return args.Get(0).(types.EventJobData), args.Error(1)
+	return args.Get(0).(commonTypes.EventJobData), args.Error(1)
 }
 
 func (m *MockEventJobRepository) UpdateEventJobStatus(jobID *big.Int, isActive bool) error {
@@ -205,14 +205,14 @@ func (m *MockEventJobRepository) CompleteEventJob(jobID *big.Int) error {
 	return args.Error(0)
 }
 
-func (m *MockConditionJobRepository) CreateConditionJob(job *types.ConditionJobData) error {
+func (m *MockConditionJobRepository) CreateConditionJob(job *commonTypes.ConditionJobData) error {
 	args := m.Called(job)
 	return args.Error(0)
 }
 
-func (m *MockConditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error) {
+func (m *MockConditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (commonTypes.ConditionJobData, error) {
 	args := m.Called(jobID)
-	return args.Get(0).(types.ConditionJobData), args.Error(1)
+	return args.Get(0).(commonTypes.ConditionJobData), args.Error(1)
 }
 
 func (m *MockConditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActive bool) error {
@@ -271,13 +271,13 @@ func TestCreateJobData(t *testing.T) {
 				},
 			},
 			setupMocks: func() {
-				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(1), types.UserData{
+				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(1), commonTypes.UserData{
 					UserID:       1,
 					UserAddress:  "0x123",
-					EtherBalance: big.NewInt(1),
-					TokenBalance: big.NewInt(100),
+					EtherBalance: commonTypes.NewBigInt(big.NewInt(1)),
+					TokenBalance: commonTypes.NewBigInt(big.NewInt(100)),
 					UserPoints:   0.0,
-					JobIDs:       []*big.Int{},
+					JobIDs:       []*commonTypes.BigInt{},
 				}, nil)
 
 				mockJobRepo.On("CreateNewJob", mock.Anything).Return(big.NewInt(1), nil)
@@ -302,7 +302,7 @@ func TestCreateJobData(t *testing.T) {
 				},
 			},
 			setupMocks: func() {
-				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(0), types.UserData{}, assert.AnError)
+				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(0), commonTypes.UserData{}, assert.AnError)
 			},
 			expectedCode:  http.StatusBadRequest,
 			expectedError: "Invalid task definition ID",
@@ -495,16 +495,16 @@ func TestGetJobsByUserAddress(t *testing.T) {
 			userAddress: "0x123",
 			setupMocks: func() {
 				mockUserRepo.On("GetUserJobIDsByAddress", "0x123").Return(int64(1), []*big.Int{big.NewInt(1), big.NewInt(2)}, nil)
-				mockJobRepo.On("GetJobByID", big.NewInt(1)).Return(&types.JobData{
-					JobID:            big.NewInt(1),
+				mockJobRepo.On("GetJobByID", big.NewInt(1)).Return(&commonTypes.JobData{
+					JobID:            commonTypes.NewBigInt(big.NewInt(1)),
 					TaskDefinitionID: 1,
 				}, nil)
-				mockJobRepo.On("GetJobByID", big.NewInt(2)).Return(&types.JobData{
-					JobID:            big.NewInt(2),
+				mockJobRepo.On("GetJobByID", big.NewInt(2)).Return(&commonTypes.JobData{
+					JobID:            commonTypes.NewBigInt(big.NewInt(2)),
 					TaskDefinitionID: 3,
 				}, nil)
-				mockTimeJobRepo.On("GetTimeJobByJobID", big.NewInt(1)).Return(types.TimeJobData{}, nil)
-				mockEventJobRepo.On("GetEventJobByJobID", big.NewInt(2)).Return(types.EventJobData{}, nil)
+				mockTimeJobRepo.On("GetTimeJobByJobID", big.NewInt(1)).Return(commonTypes.TimeJobData{}, nil)
+				mockEventJobRepo.On("GetEventJobByJobID", big.NewInt(2)).Return(commonTypes.EventJobData{}, nil)
 			},
 			expectedCode: http.StatusOK,
 		},

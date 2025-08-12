@@ -7,21 +7,20 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TimeJobRepository interface {
-	CreateTimeJob(timeJob *types.TimeJobData) error
-	GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error)
+	CreateTimeJob(timeJob *commonTypes.TimeJobData) error
+	GetTimeJobByJobID(jobID *big.Int) (commonTypes.TimeJobData, error)
 	CompleteTimeJob(jobID *big.Int) error
 	UpdateTimeJobStatus(jobID *big.Int, isActive bool) error
 	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]commonTypes.ScheduleTimeTaskData, error)
 	UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error
 	UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error
-	GetActiveTimeJobs() ([]types.TimeJobData, error)
+	GetActiveTimeJobs() ([]commonTypes.TimeJobData, error)
 }
 
 type timeJobRepository struct {
@@ -34,9 +33,9 @@ func NewTimeJobRepository(db *database.Connection) TimeJobRepository {
 	}
 }
 
-func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
+func (r *timeJobRepository) CreateTimeJob(timeJob *commonTypes.TimeJobData) error {
 	err := r.db.Session().Query(queries.CreateTimeJobDataQuery,
-		timeJob.JobID, timeJob.TaskDefinitionID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
+		timeJob.JobID.ToBigInt(), timeJob.TaskDefinitionID, timeJob.ExpirationTime, timeJob.NextExecutionTimestamp,
 		timeJob.ScheduleType, timeJob.TimeInterval, timeJob.CronExpression, timeJob.SpecificSchedule,
 		timeJob.Timezone, timeJob.TargetChainID, timeJob.TargetContractAddress, timeJob.TargetFunction,
 		timeJob.ABI, timeJob.ArgType, timeJob.Arguments, timeJob.DynamicArgumentsScriptUrl,
@@ -49,18 +48,19 @@ func (r *timeJobRepository) CreateTimeJob(timeJob *types.TimeJobData) error {
 	return nil
 }
 
-func (r *timeJobRepository) GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error) {
-	var timeJob types.TimeJobData
+func (r *timeJobRepository) GetTimeJobByJobID(jobID *big.Int) (commonTypes.TimeJobData, error) {
+	var timeJob commonTypes.TimeJobData
+	var temp *big.Int
 	err := r.db.Session().Query(queries.GetTimeJobDataByJobIDQuery, jobID).Scan(
-		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp,
+		&temp, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp,
 		&timeJob.ScheduleType, &timeJob.TimeInterval, &timeJob.CronExpression,
 		&timeJob.SpecificSchedule, &timeJob.Timezone, &timeJob.TargetChainID,
 		&timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
 		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive)
 	if err != nil {
-		return types.TimeJobData{}, fmt.Errorf("failed to get time job by job ID: %v", err)
+		return commonTypes.TimeJobData{}, fmt.Errorf("failed to get time job by job ID: %v", err)
 	}
-
+	timeJob.JobID = commonTypes.NewBigInt(jobID)
 	return timeJob, nil
 }
 
@@ -93,13 +93,14 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 
 	var timeJobs []commonTypes.ScheduleTimeTaskData
 	var timeJob commonTypes.ScheduleTimeTaskData
-
+	var jobIDBigInt *big.Int
 	for iter.Scan(
-		&timeJob.TaskTargetData.JobID, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
+		&jobIDBigInt, &timeJob.LastExecutedAt, &timeJob.ExpirationTime, &timeJob.TimeInterval,
 		&timeJob.ScheduleType, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.NextExecutionTimestamp,
 		&timeJob.TaskTargetData.TargetChainID, &timeJob.TaskTargetData.TargetContractAddress, &timeJob.TaskTargetData.TargetFunction, &timeJob.TaskTargetData.ABI, &timeJob.TaskTargetData.ArgType,
 		&timeJob.TaskTargetData.Arguments, &timeJob.TaskTargetData.DynamicArgumentsScriptUrl,
 	) {
+		timeJob.TaskTargetData.JobID = commonTypes.NewBigInt(jobIDBigInt)
 		if timeJob.TaskTargetData.DynamicArgumentsScriptUrl != "" {
 			timeJob.TaskDefinitionID = 2
 			timeJob.TaskTargetData.TaskDefinitionID = 2
@@ -109,7 +110,7 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 		}
 
 		var isImua bool
-		err := r.db.Session().Query(queries.IsJobImuaQuery, timeJob.TaskTargetData.JobID).Scan(&isImua)
+		err := r.db.Session().Query(queries.IsJobImuaQuery, jobIDBigInt).Scan(&isImua)
 		if err != nil {
 			return nil, err
 		}
@@ -123,16 +124,16 @@ func (r *timeJobRepository) GetTimeJobsByNextExecutionTimestamp(lookAheadTime ti
 
 		// If the next execution time is after the expiration time, That means the job will be completed after current execution time that is being passed
 		if nextExecutionTime.After(timeJob.ExpirationTime) {
-			err = r.CompleteTimeJob(timeJob.TaskTargetData.JobID)
+			err = r.CompleteTimeJob(timeJob.TaskTargetData.JobID.Int)
 			if err != nil {
 				return nil, err
 			}
-			err = r.UpdateTimeJobStatus(timeJob.TaskTargetData.JobID, false)
+			err = r.UpdateTimeJobStatus(timeJob.TaskTargetData.JobID.Int, false)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			err = r.UpdateTimeJobNextExecutionTimestamp(timeJob.TaskTargetData.JobID, nextExecutionTime)
+			err = r.UpdateTimeJobNextExecutionTimestamp(timeJob.TaskTargetData.JobID.Int, nextExecutionTime)
 			if err != nil {
 				return nil, err
 			}
@@ -164,15 +165,17 @@ func (r *timeJobRepository) UpdateTimeJobInterval(jobID *big.Int, timeInterval i
 	return nil
 }
 
-func (r *timeJobRepository) GetActiveTimeJobs() ([]types.TimeJobData, error) {
-	var timeJobs []types.TimeJobData
+func (r *timeJobRepository) GetActiveTimeJobs() ([]commonTypes.TimeJobData, error) {
+	var timeJobs []commonTypes.TimeJobData
 	iter := r.db.Session().Query(queries.GetActiveTimeJobsQuery).Iter()
-	var timeJob types.TimeJobData
+	var timeJob commonTypes.TimeJobData
+	var jobIDBigInt *big.Int
 	for iter.Scan(
-		&timeJob.JobID, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp, &timeJob.ScheduleType,
+		&jobIDBigInt, &timeJob.ExpirationTime, &timeJob.NextExecutionTimestamp, &timeJob.ScheduleType,
 		&timeJob.TimeInterval, &timeJob.CronExpression, &timeJob.SpecificSchedule, &timeJob.Timezone,
 		&timeJob.TargetChainID, &timeJob.TargetContractAddress, &timeJob.TargetFunction, &timeJob.ABI, &timeJob.ArgType,
 		&timeJob.Arguments, &timeJob.DynamicArgumentsScriptUrl, &timeJob.IsCompleted, &timeJob.IsActive) {
+		timeJob.JobID = commonTypes.NewBigInt(jobIDBigInt)
 		timeJobs = append(timeJobs, timeJob)
 	}
 	if err := iter.Close(); err != nil {

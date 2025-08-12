@@ -7,10 +7,10 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
-func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskRequest) (int64, error) {
+func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskDataRequest) (int64, error) {
 	url := fmt.Sprintf("%s/api/tasks", c.dbserverUrl)
 
 	jsonPayload, err := json.Marshal(createTaskData)

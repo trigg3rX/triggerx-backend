@@ -1,14 +1,13 @@
 package types
 
 import (
-	"math/big"
 	"time"
 )
 
 // Target Data for all task types
 // DEVNOTE: I separated this from all schedule data types to accomodate multiple target calls on same trigger in future
 type TaskTargetData struct {
-	JobID                     *big.Int `json:"job_id"`
+	JobID                     *BigInt `json:"job_id"`
 	TaskID                    int64    `json:"task_id"`
 	TaskDefinitionID          int      `json:"task_definition_id"`
 	TargetChainID             string   `json:"target_chain_id"`
@@ -23,7 +22,7 @@ type TaskTargetData struct {
 
 // Monitoring Data for even and condition workers
 type EventWorkerData struct {
-	JobID                  *big.Int  `json:"job_id"`
+	JobID                  *BigInt  `json:"job_id"`
 	ExpirationTime         time.Time `json:"expiration_time"`
 	Recurring              bool      `json:"recurring"`
 	TriggerChainID         string    `json:"trigger_chain_id"`
@@ -31,7 +30,7 @@ type EventWorkerData struct {
 	TriggerEvent           string    `json:"trigger_event"`
 }
 type ConditionWorkerData struct {
-	JobID            *big.Int  `json:"job_id"`
+	JobID            *BigInt  `json:"job_id"`
 	ExpirationTime   time.Time `json:"expiration_time"`
 	Recurring        bool      `json:"recurring"`
 	ConditionType    string    `json:"condition_type"`
@@ -59,7 +58,7 @@ type ScheduleTimeTaskData struct {
 
 // Data to pass to condition scheduler
 type ScheduleConditionJobData struct {
-	JobID               *big.Int            `json:"job_id"`
+	JobID               *BigInt            `json:"job_id"`
 	TaskDefinitionID    int                 `json:"task_definition_id"`
 	LastExecutedAt      time.Time           `json:"last_executed_at"`
 	TaskTargetData      TaskTargetData      `json:"task_target_data"`
@@ -94,6 +93,12 @@ type TaskTriggerData struct {
 	ConditionUpperLimit     int    `json:"condition_upper_limit"`
 	ConditionLowerLimit     int    `json:"condition_lower_limit"`
 	ConditionSatisfiedValue int    `json:"condition_satisfied_value"`
+}
+
+type PerformerData struct {
+	OperatorID    int64  `json:"operator_id"`
+	KeeperAddress string `json:"keeper_address"`
+	IsImua        bool   `json:"is_imua"`
 }
 
 type SendTaskDataToKeeper struct {

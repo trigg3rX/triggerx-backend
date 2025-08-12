@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type EventJobRepository interface {
-	CreateEventJob(eventJob *types.EventJobData) error
-	GetEventJobByJobID(jobID *big.Int) (types.EventJobData, error)
+	CreateEventJob(eventJob *commonTypes.EventJobData) error
+	GetEventJobByJobID(jobID *big.Int) (commonTypes.EventJobData, error)
 	CompleteEventJob(jobID *big.Int) error
 	UpdateEventJobStatus(jobID *big.Int, isActive bool) error
-	GetActiveEventJobs() ([]types.EventJobData, error)
+	GetActiveEventJobs() ([]commonTypes.EventJobData, error)
 }
 
 type eventJobRepository struct {
@@ -28,9 +28,9 @@ func NewEventJobRepository(db *database.Connection) EventJobRepository {
 	}
 }
 
-func (r *eventJobRepository) CreateEventJob(eventJob *types.EventJobData) error {
+func (r *eventJobRepository) CreateEventJob(eventJob *commonTypes.EventJobData) error {
 	err := r.db.Session().Query(queries.CreateEventJobDataQuery,
-		eventJob.JobID, eventJob.TaskDefinitionID, eventJob.ExpirationTime, eventJob.Recurring,
+		eventJob.JobID.ToBigInt(), eventJob.TaskDefinitionID, eventJob.ExpirationTime, eventJob.Recurring,
 		eventJob.TriggerChainID, eventJob.TriggerContractAddress, eventJob.TriggerEvent,
 		eventJob.TargetChainID, eventJob.TargetContractAddress, eventJob.TargetFunction,
 		eventJob.ABI, eventJob.ArgType, eventJob.Arguments, eventJob.DynamicArgumentsScriptUrl,
@@ -43,16 +43,17 @@ func (r *eventJobRepository) CreateEventJob(eventJob *types.EventJobData) error 
 	return nil
 }
 
-func (r *eventJobRepository) GetEventJobByJobID(jobID *big.Int) (types.EventJobData, error) {
-	var eventJob types.EventJobData
+func (r *eventJobRepository) GetEventJobByJobID(jobID *big.Int) (commonTypes.EventJobData, error) {
+	var eventJob commonTypes.EventJobData
+	var temp *big.Int
+	eventJob.JobID = commonTypes.NewBigInt(jobID)
 	err := r.db.Session().Query(queries.GetEventJobDataByJobIDQuery, jobID).Scan(
-		&eventJob.JobID, &eventJob.ExpirationTime, &eventJob.Recurring, &eventJob.TriggerChainID,
+		&temp, &eventJob.ExpirationTime, &eventJob.Recurring, &eventJob.TriggerChainID,
 		&eventJob.TriggerContractAddress, &eventJob.TriggerEvent, &eventJob.TargetChainID,
 		&eventJob.TargetContractAddress, &eventJob.TargetFunction, &eventJob.ABI, &eventJob.ArgType,
-		&eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl, &eventJob.IsCompleted, &eventJob.IsActive,
-	)
+		&eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl, &eventJob.IsCompleted, &eventJob.IsActive)
 	if err != nil {
-		return types.EventJobData{}, errors.New("failed to get event job by job ID")
+		return commonTypes.EventJobData{}, errors.New("failed to get event job by job ID")
 	}
 
 	return eventJob, nil
@@ -81,10 +82,10 @@ func (r *eventJobRepository) UpdateEventJobStatus(jobID *big.Int, isActive bool)
 	return nil
 }
 
-func (r *eventJobRepository) GetActiveEventJobs() ([]types.EventJobData, error) {
-	var eventJobs []types.EventJobData
+func (r *eventJobRepository) GetActiveEventJobs() ([]commonTypes.EventJobData, error) {
+	var eventJobs []commonTypes.EventJobData
 	iter := r.db.Session().Query(queries.GetActiveEventJobsQuery).Iter()
-	var eventJob types.EventJobData
+	var eventJob commonTypes.EventJobData
 	for iter.Scan(
 		&eventJob.JobID, &eventJob.ExpirationTime, &eventJob.Recurring,
 		&eventJob.TriggerChainID, &eventJob.TriggerContractAddress, &eventJob.TriggerEvent,

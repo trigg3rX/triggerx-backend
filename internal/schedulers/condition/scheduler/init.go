@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
@@ -25,8 +23,8 @@ type ConditionBasedScheduler struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	logger               logging.Logger
-	conditionWorkers     map[*big.Int]*worker.ConditionWorker       // jobID -> condition worker
-	eventWorkers         map[*big.Int]*worker.EventWorker           // jobID -> event worker
+	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker       // jobID -> condition worker
+	eventWorkers         map[*types.BigInt]*worker.EventWorker           // jobID -> event worker
 	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	workersMutex         sync.RWMutex
 	notificationMutex    sync.Mutex                   // Protect job data during notification processing
@@ -57,8 +55,8 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		ctx:                  ctx,
 		cancel:               cancel,
 		logger:               logger,
-		conditionWorkers:     make(map[*big.Int]*worker.ConditionWorker),
-		eventWorkers:         make(map[*big.Int]*worker.EventWorker),
+		conditionWorkers:     make(map[*types.BigInt]*worker.ConditionWorker),
+		eventWorkers:         make(map[*types.BigInt]*worker.EventWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
 		chainClients:         make(map[string]*ethclient.Client),
 		dbClient:             dbClient,
@@ -128,8 +126,8 @@ func (s *ConditionBasedScheduler) Stop() {
 		worker.Stop()
 		s.logger.Info("Stopped event worker", "job_id", jobID)
 	}
-	s.conditionWorkers = make(map[*big.Int]*worker.ConditionWorker)
-	s.eventWorkers = make(map[*big.Int]*worker.EventWorker)
+	s.conditionWorkers = make(map[*types.BigInt]*worker.ConditionWorker)
+	s.eventWorkers = make(map[*types.BigInt]*worker.EventWorker)
 	s.jobDataStore = make(map[string]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
 

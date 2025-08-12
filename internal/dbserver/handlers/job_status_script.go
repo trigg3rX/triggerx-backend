@@ -91,7 +91,7 @@ func (c *JobStatusChecker) checkEventJobs(currentTime time.Time) {
 
 	for _, job := range eventJobs {
 		if job.ExpirationTime.Before(currentTime) {
-			if err := c.eventJobRepo.UpdateEventJobStatus(job.JobID, false); err != nil {
+			if err := c.eventJobRepo.UpdateEventJobStatus(job.JobID.Int, false); err != nil {
 				c.logger.Error(fmt.Sprintf("Failed to update event job status for job ID %s", job.JobID.String()), err)
 				continue
 			}
@@ -110,7 +110,7 @@ func (c *JobStatusChecker) checkConditionJobs(currentTime time.Time) {
 
 	for _, job := range conditionJobs {
 		if job.ExpirationTime.Before(currentTime) {
-			if err := c.conditionJobRepo.UpdateConditionJobStatus(job.JobID, false); err != nil {
+			if err := c.conditionJobRepo.UpdateConditionJobStatus(job.JobID.Int, false); err != nil {
 				c.logger.Error(fmt.Sprintf("Failed to update condition job status for job ID %s", job.JobID.String()), err)
 				continue
 			}
@@ -129,7 +129,7 @@ func (c *JobStatusChecker) checkTimeJobs(currentTime time.Time) {
 
 	for _, job := range timeJobs {
 		if job.ExpirationTime.Before(currentTime) {
-			if err := c.timeJobRepo.UpdateTimeJobStatus(job.JobID, false); err != nil {
+			if err := c.timeJobRepo.UpdateTimeJobStatus(job.JobID.Int, false); err != nil {
 				c.logger.Error(fmt.Sprintf("Failed to update time job status for job ID %s", job.JobID.String()), err)
 				continue
 			}

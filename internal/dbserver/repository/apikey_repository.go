@@ -8,12 +8,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ApiKeysRepository interface {
-	CreateApiKey(apiKey *types.ApiKeyData) error
-	GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyData, error) // changed to return slice
-	GetApiKeyDataByKey(key string) (*types.ApiKeyData, error)
+	CreateApiKey(apiKey *commonTypes.ApiKey) error
+	GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) // changed to return slice
+	GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error)
 	GetApiKeyCounters(key string) (*types.ApiKeyCounters, error)
 	GetApiKeyByOwner(owner string) (key string, err error)
 	GetApiOwnerByApiKey(key string) (owner string, err error)
@@ -33,7 +34,7 @@ func NewApiKeysRepository(db *database.Connection) ApiKeysRepository {
 	}
 }
 
-func (r *apiKeysRepository) CreateApiKey(apiKey *types.ApiKeyData) error {
+func (r *apiKeysRepository) CreateApiKey(apiKey *commonTypes.ApiKey) error {
 	err := r.db.Session().Query(queries.CreateApiKeyQuery, apiKey.Key, apiKey.Owner, apiKey.IsActive, apiKey.RateLimit, apiKey.LastUsed, apiKey.CreatedAt).Exec()
 	if err != nil {
 		return err
@@ -41,16 +42,16 @@ func (r *apiKeysRepository) CreateApiKey(apiKey *types.ApiKeyData) error {
 	return nil
 }
 
-func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyData, error) {
+func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) {
 	iter := r.db.Session().Query(queries.GetApiKeyDataByOwnerQuery, owner).Iter()
-	var apiKeys []*types.ApiKeyData
+	var apiKeys []*commonTypes.ApiKey
 	var key, ownerVal string
 	var isActive bool
 	var rateLimit int
 	var successCount, failedCount int64
 	var lastUsed, createdAt time.Time
 	for iter.Scan(&key, &ownerVal, &isActive, &rateLimit, &successCount, &failedCount, &lastUsed, &createdAt) {
-		apiKeys = append(apiKeys, &types.ApiKeyData{
+		apiKeys = append(apiKeys, &commonTypes.ApiKey{
 			Key:          key,
 			Owner:        ownerVal,
 			IsActive:     isActive,
@@ -70,8 +71,8 @@ func (r *apiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyD
 	return apiKeys, nil
 }
 
-func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*types.ApiKeyData, error) {
-	apiKey := &types.ApiKeyData{}
+func (r *apiKeysRepository) GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error) {
+	apiKey := &commonTypes.ApiKey{}
 	var successCount, failedCount int64
 	err := r.db.Session().Query(queries.GetApiKeyDataByApiKeyQuery, key).Scan(&apiKey.Key, &apiKey.Owner, &apiKey.IsActive, &apiKey.RateLimit, &successCount, &failedCount, &apiKey.LastUsed, &apiKey.CreatedAt)
 	apiKey.SuccessCount = successCount

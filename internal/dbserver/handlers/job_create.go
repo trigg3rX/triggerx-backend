@@ -37,7 +37,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	}
 
 	var existingUserID int64
-	var existingUser types.UserData
+	var existingUser commonTypes.UserData
 	var err error
 
 	// Track user lookup
@@ -56,8 +56,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	if err == gocql.ErrNotFound {
 		var newUser types.CreateUserDataRequest
 		newUser.UserAddress = strings.ToLower(tempJobs[0].UserAddress)
-		newUser.EtherBalance = tempJobs[0].EtherBalance
-		newUser.TokenBalance = tempJobs[0].TokenBalance
+		newUser.EtherBalance = commonTypes.NewBigInt(tempJobs[0].EtherBalance)
+		newUser.TokenBalance = commonTypes.NewBigInt(tempJobs[0].TokenBalance)
 		newUser.UserPoints = 0.0
 
 		// Track user creation
@@ -76,9 +76,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 	createdJobs := types.CreateJobResponse{
 		UserID:            existingUser.UserID,
-		AccountBalance:    existingUser.EtherBalance,
-		TokenBalance:      existingUser.TokenBalance,
-		JobIDs:            make([]*big.Int, len(tempJobs)),
+		AccountBalance:    existingUser.EtherBalance.ToBigInt(),
+		TokenBalance:      existingUser.TokenBalance.ToBigInt(),
+		JobIDs:            make([]*commonTypes.BigInt, len(tempJobs)),
 		TaskDefinitionIDs: make([]int, len(tempJobs)),
 		TimeFrames:        make([]int64, len(tempJobs)),
 	}
@@ -91,7 +91,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			chainStatus = 0
 		}
 		if i < len(tempJobs)-1 {
-			linkJobID = createdJobs.JobIDs[i+1]
+			linkJobID = createdJobs.JobIDs[i+1].ToBigInt()
 		}
 
 		jobID := new(big.Int)
@@ -100,12 +100,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			return
 		}
 
-		jobData := &types.JobData{
-			JobID:             jobID,
+		jobData := &commonTypes.JobData{
+			JobID:             commonTypes.FromBigInt(jobID),
 			JobTitle:          tempJobs[i].JobTitle,
 			TaskDefinitionID:  tempJobs[i].TaskDefinitionID,
 			UserID:            existingUser.UserID,
-			LinkJobID:         linkJobID,
+			LinkJobID:         commonTypes.FromBigInt(linkJobID),
 			ChainStatus:       chainStatus,
 			Custom:            tempJobs[i].Custom,
 			TimeFrame:         tempJobs[i].TimeFrame,
@@ -128,7 +128,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			return
 		}
 
-		createdJobs.JobIDs[i] = jobID
+		createdJobs.JobIDs[i] = commonTypes.NewBigInt(jobID)
 		expirationTime := time.Now().Add(time.Duration(tempJobs[i].TimeFrame) * time.Second)
 		var scheduleConditionJobData commonTypes.ScheduleConditionJobData
 
@@ -143,8 +143,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				nextExecutionTimestamp = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
 			}
 
-			timeJobData := types.TimeJobData{
-				JobID:            jobID,
+			timeJobData := commonTypes.TimeJobData{
+				JobID:            commonTypes.NewBigInt(jobID),
 				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
 				ExpirationTime:   expirationTime,
 				// Recurring:                 tempJobs[i].Recurring,
@@ -178,8 +178,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		case 3, 4:
 			// Event-based job
-			eventJobData := types.EventJobData{
-				JobID:                     jobID,
+			eventJobData := commonTypes.EventJobData{
+				JobID:                     commonTypes.NewBigInt(jobID),
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
@@ -202,11 +202,11 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
-			scheduleConditionJobData.JobID = jobID
+			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
 			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
-				JobID:                     jobID,
+				JobID:                     commonTypes.NewBigInt(jobID),
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
@@ -217,7 +217,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.EventWorkerData = commonTypes.EventWorkerData{
-				JobID:                  jobID,
+				JobID:                  commonTypes.NewBigInt(jobID),
 				ExpirationTime:         expirationTime,
 				Recurring:              tempJobs[i].Recurring,
 				TriggerChainID:         tempJobs[i].TriggerChainID,
@@ -229,8 +229,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		case 5, 6:
 			// Condition-based job
-			conditionJobData := types.ConditionJobData{
-				JobID:                     jobID,
+			conditionJobData := commonTypes.ConditionJobData{
+				JobID:                     commonTypes.NewBigInt(jobID),
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				ExpirationTime:            expirationTime,
 				Recurring:                 tempJobs[i].Recurring,
@@ -256,11 +256,11 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
-			scheduleConditionJobData.JobID = jobID
+			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
 			scheduleConditionJobData.TaskTargetData = commonTypes.TaskTargetData{
-				JobID:                     jobID,
+				JobID:                     commonTypes.NewBigInt(jobID),
 				TaskDefinitionID:          tempJobs[i].TaskDefinitionID,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
@@ -271,7 +271,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				DynamicArgumentsScriptUrl: tempJobs[i].DynamicArgumentsScriptUrl,
 			}
 			scheduleConditionJobData.ConditionWorkerData = commonTypes.ConditionWorkerData{
-				JobID:            jobID,
+				JobID:            commonTypes.NewBigInt(jobID),
 				ExpirationTime:   expirationTime,
 				Recurring:        tempJobs[i].Recurring,
 				ConditionType:    tempJobs[i].ConditionType,
@@ -314,15 +314,20 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 		trackDBOp(nil)
 
-		createdJobs.JobIDs[i] = jobID
+		createdJobs.JobIDs[i] = commonTypes.NewBigInt(jobID)
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
 		createdJobs.TimeFrames[i] = tempJobs[i].TimeFrame
 	}
 
 	// Update user's job_ids
 	allJobIDs := append(existingUser.JobIDs, createdJobs.JobIDs...)
+	// Convert BigInt slice to big.Int slice for repository
+	bigIntJobIDs := make([]*big.Int, len(allJobIDs))
+	for i, jobID := range allJobIDs {
+		bigIntJobIDs[i] = jobID.ToBigInt()
+	}
 	trackDBOp = metrics.TrackDBOperation("update", "users")
-	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, allJobIDs); err != nil {
+	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, bigIntJobIDs); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[CreateJobData] Error updating user job IDs for userID %d: %v", existingUser.UserID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})

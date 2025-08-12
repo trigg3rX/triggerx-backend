@@ -8,6 +8,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type TaskRepository interface {
@@ -16,7 +17,7 @@ type TaskRepository interface {
 	UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error
 	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
 	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
-	GetTaskDataByID(taskID int64) (types.TaskData, error)
+	GetTaskDataByID(taskID int64) (commonTypes.TaskData, error)
 	GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobID, error)
 	AddTaskIDToJob(jobID *big.Int, taskID int64) error
 	UpdateTaskFee(taskID int64, fee float64) error
@@ -79,12 +80,14 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int6
 	return nil
 }
 
-func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
-	var task types.TaskData
-	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &task.JobID, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpXCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsSuccessful, &task.TaskStatus, &task.IsImua)
+func (r *taskRepository) GetTaskDataByID(taskID int64) (commonTypes.TaskData, error) {
+	var task commonTypes.TaskData
+	var jobIDBigInt *big.Int
+	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpxCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsAccepted, &task.TaskStatus, &task.IsImua)
 	if err != nil {
-		return types.TaskData{}, errors.New("error getting task data by ID")
+		return commonTypes.TaskData{}, errors.New("error getting task data by ID")
 	}
+	task.JobID = commonTypes.NewBigInt(jobIDBigInt)
 	return task, nil
 }
 

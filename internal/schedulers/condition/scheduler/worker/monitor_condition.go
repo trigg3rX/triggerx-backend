@@ -78,7 +78,7 @@ func (w *ConditionWorker) checkCondition() error {
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
 			notification := &TriggerNotification{
-				JobID:        w.ConditionWorkerData.JobID,
+				JobID:        w.ConditionWorkerData.JobID.ToBigInt(),
 				TriggerValue: currentValue,
 				TriggeredAt:  time.Now(),
 			}

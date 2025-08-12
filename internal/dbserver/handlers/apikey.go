@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // MaskApiKey masks the API key except for the first 4 and last 4 characters
@@ -42,7 +43,7 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 
 	// No longer check for existing API key for this owner; allow multiple API keys per owner
 
-	apiKey := types.ApiKeyData{
+	apiKey := commonTypes.ApiKey{
 		Key:       "TGRX-" + uuid.New().String(),
 		Owner:     req.Owner,
 		IsActive:  true,

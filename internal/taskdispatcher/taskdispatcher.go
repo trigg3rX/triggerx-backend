@@ -100,7 +100,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 			}
 
 			taskStreamData := tasks.TaskStreamData{
-				JobID:                individualTaskData.TargetData[0].JobID,
+				JobID:                individualTaskData.TargetData[0].JobID.ToBigInt(),
 				TaskDefinitionID:     individualTaskData.TargetData[0].TaskDefinitionID,
 				CreatedAt:            time.Now(),
 				RetryCount:           0,
@@ -126,7 +126,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	} else {
 		// This is a single task request (likely from condition scheduler)
 		taskStreamData := tasks.TaskStreamData{
-			JobID:                req.SendTaskDataToKeeper.TargetData[0].JobID,
+			JobID:                req.SendTaskDataToKeeper.TargetData[0].JobID.ToBigInt(),
 			TaskDefinitionID:     req.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
 			CreatedAt:            time.Now(),
 			RetryCount:           0,

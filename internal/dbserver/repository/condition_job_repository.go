@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ConditionJobRepository interface {
-	CreateConditionJob(conditionJob *types.ConditionJobData) error
-	GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error)
+	CreateConditionJob(conditionJob *commonTypes.ConditionJobData) error
+	GetConditionJobByJobID(jobID *big.Int) (commonTypes.ConditionJobData, error)
 	CompleteConditionJob(jobID *big.Int) error
 	UpdateConditionJobStatus(jobID *big.Int, isActive bool) error
-	GetActiveConditionJobs() ([]types.ConditionJobData, error)
+	GetActiveConditionJobs() ([]commonTypes.ConditionJobData, error)
 }
 
 type conditionJobRepository struct {
@@ -28,9 +28,9 @@ func NewConditionJobRepository(db *database.Connection) ConditionJobRepository {
 	}
 }
 
-func (r *conditionJobRepository) CreateConditionJob(conditionJob *types.ConditionJobData) error {
+func (r *conditionJobRepository) CreateConditionJob(conditionJob *commonTypes.ConditionJobData) error {
 	err := r.db.Session().Query(queries.CreateConditionJobDataQuery,
-		conditionJob.JobID, conditionJob.TaskDefinitionID, conditionJob.ExpirationTime, conditionJob.Recurring,
+		conditionJob.JobID.ToBigInt(), conditionJob.TaskDefinitionID, conditionJob.ExpirationTime, conditionJob.Recurring,
 		conditionJob.ConditionType, conditionJob.UpperLimit, conditionJob.LowerLimit,
 		conditionJob.ValueSourceType, conditionJob.ValueSourceUrl, conditionJob.TargetChainID,
 		conditionJob.TargetContractAddress, conditionJob.TargetFunction,
@@ -45,10 +45,12 @@ func (r *conditionJobRepository) CreateConditionJob(conditionJob *types.Conditio
 	return nil
 }
 
-func (r *conditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error) {
-	var conditionJob types.ConditionJobData
+func (r *conditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (commonTypes.ConditionJobData, error) {
+	var conditionJob commonTypes.ConditionJobData
+	var temp *big.Int
+	conditionJob.JobID = commonTypes.NewBigInt(jobID)
 	err := r.db.Session().Query(queries.GetConditionJobDataByJobIDQuery, jobID).Scan(
-		&conditionJob.JobID, &conditionJob.ExpirationTime, &conditionJob.Recurring, &conditionJob.ConditionType,
+		&temp, &conditionJob.ExpirationTime, &conditionJob.Recurring, &conditionJob.ConditionType,
 		&conditionJob.UpperLimit, &conditionJob.LowerLimit, &conditionJob.ValueSourceType,
 		&conditionJob.ValueSourceUrl, &conditionJob.TargetChainID, &conditionJob.TargetContractAddress,
 		&conditionJob.TargetFunction, &conditionJob.ABI, &conditionJob.ArgType, &conditionJob.Arguments,
@@ -56,7 +58,7 @@ func (r *conditionJobRepository) GetConditionJobByJobID(jobID *big.Int) (types.C
 		&conditionJob.SelectedKeyRoute,
 	)
 	if err != nil {
-		return types.ConditionJobData{}, errors.New("failed to get condition job by job ID")
+		return commonTypes.ConditionJobData{}, errors.New("failed to get condition job by job ID")
 	}
 
 	return conditionJob, nil
@@ -85,10 +87,10 @@ func (r *conditionJobRepository) UpdateConditionJobStatus(jobID *big.Int, isActi
 	return nil
 }
 
-func (r *conditionJobRepository) GetActiveConditionJobs() ([]types.ConditionJobData, error) {
-	var conditionJobs []types.ConditionJobData
+func (r *conditionJobRepository) GetActiveConditionJobs() ([]commonTypes.ConditionJobData, error) {
+	var conditionJobs []commonTypes.ConditionJobData
 	iter := r.db.Session().Query(queries.GetActiveConditionJobsQuery).Iter()
-	var conditionJob types.ConditionJobData
+	var conditionJob commonTypes.ConditionJobData
 	for iter.Scan(
 		&conditionJob.JobID, &conditionJob.ExpirationTime, &conditionJob.Recurring,
 		&conditionJob.ConditionType, &conditionJob.UpperLimit, &conditionJob.LowerLimit,

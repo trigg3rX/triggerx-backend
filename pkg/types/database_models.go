@@ -1,18 +1,17 @@
 package types
 
 import (
-	"math/big"
 	"time"
 )
 
 type UserData struct {
 	UserID      int64   `json:"user_id"`
 	UserAddress string  `json:"user_address"`
-	JobIDs      []int64 `json:"job_ids"`
+	JobIDs      []*BigInt `json:"job_ids"`
 	// Current staked ether balance on TriggerGasRegistry
-	EtherBalance *big.Int `json:"ether_balance"`
+	EtherBalance *BigInt `json:"ether_balance"`
 	// Current TG balance in User Account
-	TokenBalance *big.Int `json:"token_balance"`
+	TokenBalance *BigInt `json:"token_balance"`
 	// User points for creating jobs, for Leaderboard
 	UserPoints    float64   `json:"user_points"`
 	TotalJobs     int64     `json:"total_jobs"`
@@ -22,11 +21,11 @@ type UserData struct {
 }
 
 type JobData struct {
-	JobID            *big.Int `json:"job_id"`
+	JobID            *BigInt `json:"job_id"`
 	JobTitle         string   `json:"job_title"`
 	TaskDefinitionID int      `json:"task_definition_id"`
 	UserID           int64    `json:"user_id"`
-	LinkJobID        *big.Int `json:"link_job_id"`
+	LinkJobID        *BigInt `json:"link_job_id"`
 	ChainStatus      int      `json:"chain_status"`
 	Custom           bool     `json:"custom"`
 	TimeFrame        int64    `json:"time_frame"`
@@ -47,9 +46,10 @@ type JobData struct {
 }
 
 type TimeJobData struct {
-	JobID            *big.Int `json:"job_id"`
+	JobID            *BigInt `json:"job_id"`
 	TaskDefinitionID int      `json:"task_definition_id"`
 	// Time based job specific fields
+	Timezone               string    `json:"timezone"`
 	ScheduleType           string    `json:"schedule_type"`
 	TimeInterval           int64     `json:"time_interval"`
 	CronExpression         string    `json:"cron_expression"`
@@ -73,7 +73,7 @@ type TimeJobData struct {
 }
 
 type EventJobData struct {
-	JobID            *big.Int `json:"job_id"`
+	JobID            *BigInt `json:"job_id"`
 	TaskDefinitionID int      `json:"task_definition_id"`
 	Recurring        bool     `json:"recurring"`
 	// Event based job specific fields
@@ -97,7 +97,7 @@ type EventJobData struct {
 }
 
 type ConditionJobData struct {
-	JobID            *big.Int `json:"job_id"`
+	JobID            *BigInt `json:"job_id"`
 	TaskDefinitionID int      `json:"task_definition_id"`
 	Recurring        bool     `json:"recurring"`
 	// Condition based job specific fields
@@ -106,6 +106,7 @@ type ConditionJobData struct {
 	LowerLimit      float64 `json:"lower_limit"`
 	ValueSourceType string  `json:"value_source_type"`
 	ValueSourceUrl  string  `json:"value_source_url"`
+	SelectedKeyRoute string    `json:"selected_key_route"`
 	// Target fields (common for all job types)
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
@@ -125,10 +126,9 @@ type ConditionJobData struct {
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
-	JobID                int64     `json:"job_id"`
+	JobID                *BigInt   `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
-	TaskOpxPredictedCost float64   `json:"task_opx_predicted_cost"`
 	TaskOpxCost          float64   `json:"task_opx_cost"`
 	ExecutionTimestamp   time.Time `json:"execution_timestamp"`
 	ExecutionTxHash      string    `json:"execution_tx_hash"`
@@ -139,6 +139,7 @@ type TaskData struct {
 	TpSignature          []byte    `json:"tp_signature"`
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
+	TaskStatus           string    `json:"task_status"`
 	IsAccepted           bool      `json:"is_accepted"`
 	IsImua               bool      `json:"is_imua"`
 }

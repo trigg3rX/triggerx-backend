@@ -67,8 +67,8 @@ const (
 	GetKeeperDataByIDQuery = `
 		SELECT keeper_id, keeper_name, keeper_address, consensus_address, registered_tx, operator_id,
 			rewards_address, rewards_booster, voting_power, keeper_points, connection_address,
-			peer_id, strategies, whitelisted, registered, online, version, no_executed_tasks,
-			no_attested_tasks, chat_id, email_id, last_checked_in, on_imua
+			peer_id, whitelisted, registered, online, version, no_executed_tasks,
+			no_attested_tasks, chat_id, email_id, last_checked_in, on_imua, uptime
 		FROM triggerx.keeper_data 
 		WHERE keeper_id = ?`
 

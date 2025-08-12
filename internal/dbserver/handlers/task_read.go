@@ -54,8 +54,8 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	traceID := h.getTraceID(c)
 	h.logger.Infof("[GetTasksByJobID] trace_id=%s - Retrieving tasks for job", traceID)
-	jobID := c.Param("job_id")
-	if jobID == "" {
+	jobIDStr := c.Param("job_id")
+	if jobIDStr == "" {
 		h.logger.Error("[GetTasksByJobID] No job ID provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No job ID provided",
@@ -64,24 +64,19 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	jobIDBig := new(big.Int)
-	_, ok := jobIDBig.SetString(jobID, 10)
-	if !ok {
-		h.logger.Errorf("[GetTasksByJobID] Invalid job ID format: %v", jobID)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid job ID format",
-			"code":  "INVALID_JOB_ID",
-		})
+	jobID := new(big.Int)
+	if _, ok := jobID.SetString(jobIDStr, 10); !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
 		return
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s", jobIDBig.String())
+	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s | %s", jobIDStr, jobID.String())
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	tasksData, err := h.taskRepository.GetTasksByJobID(jobIDBig)
+	tasksData, err := h.taskRepository.GetTasksByJobID(jobID)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobIDBig.String(), err)
+		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobID.String(), err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for this job",
 			"code":  "TASKS_NOT_FOUND",
@@ -106,9 +101,9 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	}
 	//find the created_chain id for the job using jobIDBig from database
 	var createdChainID string
-	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobIDBig)
+	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobID)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving created_chain_id for jobID %s: %v", jobIDBig.String(), err)
+		h.logger.Errorf("[GetTasksByJobID] Error retrieving created_chain_id for jobID %s: %v", jobID.String(), err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for this job",
 			"code":  "TASKS_NOT_FOUND",
@@ -117,26 +112,39 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	}
 
 	// Set tx_url for each task
-	blockscoutBaseURL := getBlockscoutBaseURL(createdChainID)
+	explorerBaseURL := getExplorerBaseURL(createdChainID)
 	for i := range tasks {
 		if tasks[i].ExecutionTxHash != "" {
-			tasks[i].TxURL = blockscoutBaseURL + tasks[i].ExecutionTxHash
+			tasks[i].TxURL = explorerBaseURL + tasks[i].ExecutionTxHash
 		}
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", len(tasks), jobIDBig.String())
+	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", len(tasks), jobID.String())
 	c.JSON(http.StatusOK, tasks)
 }
 
-// Helper function to get Blockscout base URL from chain ID
-func getBlockscoutBaseURL(chainID string) string {
+// Helper function to get Explorer base URL from chain ID
+func getExplorerBaseURL(chainID string) string {
 	switch chainID {
-	case "1337":
+	// Testnets
+	case "11155111":
 		return "https://sepolia.etherscan.io/tx/"
 	case "11155420": // OP Sepolia
 		return "https://sepolia-optimism.etherscan.io/tx/"
 	case "84532": // Base Sepolia
 		return "https://sepolia.basescan.org/tx/"
+	case "421614": // Arbitrum Sepolia
+		return "https://sepolia.arbiscan.io/tx/"
+
+	// Mainnets
+	case "1": // Ethereum Mainnet
+		return "https://etherscan.io/tx/"
+	case "10": // Optimism Mainnet
+		return "https://optimistic.etherscan.io/tx/"
+	case "8453": // Base Mainnet
+		return "https://basescan.org/tx/"
+	case "42161": // Arbitrum Mainnet
+		return "https://arbiscan.io/tx/"
 	default:
 		return "https://sepolia.etherscan.io/tx/"
 	}

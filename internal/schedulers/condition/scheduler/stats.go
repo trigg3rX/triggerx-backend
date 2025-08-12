@@ -3,6 +3,8 @@ package scheduler
 import (
 	"fmt"
 	"math/big"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // GetStats returns current scheduler statistics
@@ -141,7 +143,7 @@ func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID *big.Int) (map[s
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 
-	worker, exists := s.conditionWorkers[jobID]
+	worker, exists := s.conditionWorkers[types.NewBigInt(jobID)]
 	if !exists {
 		return nil, fmt.Errorf("condition worker for job %d not found", jobID)
 	}
@@ -167,7 +169,7 @@ func (s *ConditionBasedScheduler) GetEventWorkerStats(jobID *big.Int) (map[strin
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 
-	worker, exists := s.eventWorkers[jobID]
+	worker, exists := s.eventWorkers[types.NewBigInt(jobID)]
 	if !exists {
 		return nil, fmt.Errorf("event worker for job %d not found", jobID)
 	}

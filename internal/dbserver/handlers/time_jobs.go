@@ -34,7 +34,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	for i := range tasks {
 		trackDBOp = metrics.TrackDBOperation("create", "task_data")
 		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
-			JobID:            tasks[i].TaskTargetData.JobID,
+			JobID:            tasks[i].TaskTargetData.JobID.Int,
 			TaskDefinitionID: tasks[i].TaskDefinitionID,
 		})
 		trackDBOp(err)
@@ -48,7 +48,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		}
 
 		trackDBOp = metrics.TrackDBOperation("update", "add_task_id")
-		err = h.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID, taskID)
+		err = h.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID.Int, taskID)
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetTimeBasedJobs] Error adding task ID: %v", err)

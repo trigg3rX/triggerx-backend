@@ -10,13 +10,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type KeeperRepository interface {
 	CheckKeeperExists(address string) (int64, error)
 	CreateKeeper(keeperData types.CreateKeeperData) (int64, error)
 	GetKeeperAsPerformer() ([]types.GetPerformerData, error)
-	GetKeeperDataByID(id int64) (types.KeeperData, error)
+	GetKeeperDataByID(id int64) (commonTypes.KeeperData, error)
 	IncrementKeeperTaskCount(id int64) (int64, error)
 	GetKeeperTaskCount(id int64) (int64, error)
 	UpdateKeeperPoints(id int64, taskFee float64) (float64, error)
@@ -75,8 +76,8 @@ func (r *keeperRepository) GetKeeperAsPerformer() ([]types.GetPerformerData, err
 	return performers, nil
 }
 
-func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error) {
-	var keeperData types.KeeperData
+func (r *keeperRepository) GetKeeperDataByID(id int64) (commonTypes.KeeperData, error) {
+	var keeperData commonTypes.KeeperData
 	err := r.db.Session().Query(queries.GetKeeperDataByIDQuery, id).Scan(
 		&keeperData.KeeperID,
 		&keeperData.KeeperName,
@@ -90,7 +91,6 @@ func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error)
 		&keeperData.KeeperPoints,
 		&keeperData.ConnectionAddress,
 		&keeperData.PeerID,
-		&keeperData.Strategies,
 		&keeperData.Whitelisted,
 		&keeperData.Registered,
 		&keeperData.Online,
@@ -101,9 +101,10 @@ func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error)
 		&keeperData.EmailID,
 		&keeperData.LastCheckedIn,
 		&keeperData.OnImua,
+		&keeperData.Uptime,
 	)
 	if err != nil {
-		return types.KeeperData{}, err
+		return commonTypes.KeeperData{}, err
 	}
 	return keeperData, nil
 }

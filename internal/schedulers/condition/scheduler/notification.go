@@ -8,6 +8,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
+	dbserverTypes "github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -36,8 +37,8 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 		return fmt.Errorf("job data not found for job %d", notification.JobID)
 	}
 
-	createTaskRequest := types.CreateTaskRequest{
-		JobID:            jobData.JobID,
+	createTaskRequest := dbserverTypes.CreateTaskDataRequest{
+		JobID:            jobData.JobID.ToBigInt(),
 		TaskDefinitionID: jobData.TaskDefinitionID,
 	}
 

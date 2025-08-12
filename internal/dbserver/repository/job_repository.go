@@ -8,14 +8,15 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type JobRepository interface {
-	CreateNewJob(job *types.JobData) (*big.Int, error)
+	CreateNewJob(job *commonTypes.JobData) (*big.Int, error)
 	UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error
 	UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
 	UpdateJobStatus(jobID *big.Int, status string) error
-	GetJobByID(jobID *big.Int) (*types.JobData, error)
+	GetJobByID(jobID *big.Int) (*commonTypes.JobData, error)
 	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
 	GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error)
 }
@@ -31,7 +32,7 @@ func NewJobRepository(db *database.Connection) JobRepository {
 	}
 }
 
-func (r *jobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
+func (r *jobRepository) CreateNewJob(job *commonTypes.JobData) (*big.Int, error) {
 	// var lastJobID int64
 	// err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
 	// if err == gocql.ErrNotFound {
@@ -39,14 +40,14 @@ func (r *jobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
 	// }
 
 	err := r.db.Session().Query(queries.CreateJobDataQuery,
-		job.JobID, job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID, job.ChainStatus,
+		job.JobID.ToBigInt(), job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID.ToBigInt(), job.ChainStatus,
 		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua, job.CreatedChainID).Exec()
 
 	if err != nil {
 		return nil, err
 	}
 
-	return job.JobID, nil
+	return job.JobID.Int, nil
 }
 
 func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error {
@@ -83,11 +84,12 @@ func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
 	return nil
 }
 
-func (r *jobRepository) GetJobByID(jobID *big.Int) (*types.JobData, error) {
-	var jobData types.JobData
+func (r *jobRepository) GetJobByID(jobID *big.Int) (*commonTypes.JobData, error) {
+	var jobData commonTypes.JobData
+	var jobIDBigInt, linkJobIDBigInt *big.Int
 	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
-		&jobData.JobID, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
-		&jobData.LinkJobID, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
+		&jobIDBigInt, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
+		&linkJobIDBigInt, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
 		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.JobCostActual,
 		&jobData.TaskIDs, &jobData.CreatedAt, &jobData.UpdatedAt, &jobData.LastExecutedAt,
 		&jobData.Timezone, &jobData.IsImua, &jobData.CreatedChainID)
@@ -95,6 +97,8 @@ func (r *jobRepository) GetJobByID(jobID *big.Int) (*types.JobData, error) {
 	if err != nil {
 		return nil, err
 	}
+	jobData.JobID = commonTypes.NewBigInt(jobIDBigInt)
+	jobData.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
 	return &jobData, nil
 }
 

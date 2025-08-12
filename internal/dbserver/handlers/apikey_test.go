@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // MockApiKeysRepository is a mock implementation of the API keys repository
@@ -33,20 +34,20 @@ func setupApiKeyTestRouter() (*gin.Engine, *MockApiKeysRepository) {
 	return router, mockRepo
 }
 
-func (m *MockApiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyData, error) {
+func (m *MockApiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) {
 	args := m.Called(owner)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*types.ApiKeyData), args.Error(1)
+	return args.Get(0).([]*commonTypes.ApiKey), args.Error(1)
 }
 
-func (m *MockApiKeysRepository) GetApiKeyDataByKey(key string) (*types.ApiKeyData, error) {
+func (m *MockApiKeysRepository) GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error) {
 	args := m.Called(key)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.ApiKeyData), args.Error(1)
+	return args.Get(0).(*commonTypes.ApiKey), args.Error(1)
 }
 
 func (m *MockApiKeysRepository) GetApiKeyCounters(key string) (*types.ApiKeyCounters, error) {
@@ -67,7 +68,7 @@ func (m *MockApiKeysRepository) GetApiOwnerByApiKey(key string) (string, error) 
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockApiKeysRepository) CreateApiKey(apiKey *types.ApiKeyData) error {
+func (m *MockApiKeysRepository) CreateApiKey(apiKey *commonTypes.ApiKey) error {
 	args := m.Called(apiKey)
 	return args.Error(0)
 }
@@ -109,8 +110,8 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*types.ApiKeyData{}, nil)
-				mockRepo.On("CreateApiKey", mock.AnythingOfType("*types.ApiKeyData")).Return(nil)
+				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*commonTypes.ApiKey{}, nil)
+				mockRepo.On("CreateApiKey", mock.AnythingOfType("*commonTypes.ApiKey")).Return(nil)
 			},
 			expectedStatus: http.StatusCreated,
 			expectedBody: func() interface{} {
@@ -127,8 +128,8 @@ func TestCreateApiKey(t *testing.T) {
 				Owner: "test-owner",
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*types.ApiKeyData{}, nil)
-				mockRepo.On("CreateApiKey", mock.AnythingOfType("*types.ApiKeyData")).Return(nil)
+				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*commonTypes.ApiKey{}, nil)
+				mockRepo.On("CreateApiKey", mock.AnythingOfType("*commonTypes.ApiKey")).Return(nil)
 			},
 			expectedStatus: http.StatusCreated,
 			expectedBody: func() interface{} {
@@ -166,7 +167,7 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				existingKey := &types.ApiKeyData{
+				existingKey := &commonTypes.ApiKey{
 					Key:       "existing-key",
 					Owner:     "existing-owner",
 					IsActive:  true,
@@ -174,7 +175,7 @@ func TestCreateApiKey(t *testing.T) {
 					LastUsed:  time.Now().UTC(),
 					CreatedAt: time.Now().UTC(),
 				}
-				mockRepo.On("GetApiKeyDataByOwner", "existing-owner").Return([]*types.ApiKeyData{existingKey}, nil)
+				mockRepo.On("GetApiKeyDataByOwner", "existing-owner").Return([]*commonTypes.ApiKey{existingKey}, nil)
 			},
 			expectedStatus: http.StatusConflict,
 			expectedBody: map[string]interface{}{
@@ -202,8 +203,8 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*types.ApiKeyData{}, nil)
-				mockRepo.On("CreateApiKey", mock.AnythingOfType("*types.ApiKeyData")).Return(assert.AnError)
+				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*commonTypes.ApiKey{}, nil)
+				mockRepo.On("CreateApiKey", mock.AnythingOfType("*commonTypes.ApiKey")).Return(assert.AnError)
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody: map[string]interface{}{
@@ -268,7 +269,7 @@ func TestUpdateApiKey(t *testing.T) {
 				RateLimit: ptr(int(200)),
 			},
 			mockSetup: func() {
-				existingKey := &types.ApiKeyData{
+				existingKey := &commonTypes.ApiKey{
 					Key:       "test-key",
 					Owner:     "test-owner",
 					IsActive:  true,
@@ -320,7 +321,7 @@ func TestUpdateApiKey(t *testing.T) {
 				RateLimit: ptr(int(200)),
 			},
 			mockSetup: func() {
-				existingKey := &types.ApiKeyData{
+				existingKey := &commonTypes.ApiKey{
 					Key:       "test-key",
 					Owner:     "test-owner",
 					IsActive:  true,

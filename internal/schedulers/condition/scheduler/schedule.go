@@ -220,13 +220,13 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 	defer s.workersMutex.Unlock()
 
 	// Try condition workers first
-	if conditionWorker, exists := s.conditionWorkers[jobID]; exists {
+	if conditionWorker, exists := s.conditionWorkers[types.NewBigInt(jobID)]; exists {
 		conditionWorker.Stop()
-		delete(s.conditionWorkers, jobID)
+		delete(s.conditionWorkers, types.NewBigInt(jobID))
 		delete(s.jobDataStore, jobID.String()) // Clean up job data
-	} else if eventWorker, exists := s.eventWorkers[jobID]; exists {
+	} else if eventWorker, exists := s.eventWorkers[types.NewBigInt(jobID)]; exists {
 		eventWorker.Stop()
-		delete(s.eventWorkers, jobID)
+		delete(s.eventWorkers, types.NewBigInt(jobID))
 		delete(s.jobDataStore, jobID.String()) // Clean up job data
 	} else {
 		metrics.TrackCriticalError("job_not_found")

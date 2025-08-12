@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func setupTestUserHandler() (*Handler, *MockUserRepository) {
@@ -35,18 +35,18 @@ func TestGetUserDataByAddress(t *testing.T) {
 		expectedCode   int
 		expectedError  string
 		expectedUserID int64
-		expectedData   types.UserData
+		expectedData   commonTypes.UserData
 	}{
 		{
 			name:        "Success - Get User Data",
 			userAddress: "0x123",
 			setupMocks: func() {
-				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(1), types.UserData{
+				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(1), commonTypes.UserData{
 					UserID:        1,
 					UserAddress:   "0x123",
-					JobIDs:        []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3)},
-					EtherBalance:  big.NewInt(1000000000000000000), // 1 ETH
-					TokenBalance:  big.NewInt(1000000),             // 1M tokens
+					JobIDs:        []*commonTypes.BigInt{commonTypes.NewBigInt(big.NewInt(1)), commonTypes.NewBigInt(big.NewInt(2)), commonTypes.NewBigInt(big.NewInt(3))},
+					EtherBalance:  commonTypes.NewBigInt(big.NewInt(1000000000000000000)), // 1 ETH
+					TokenBalance:  commonTypes.NewBigInt(big.NewInt(1000000)),             // 1M tokens
 					UserPoints:    100.0,
 					TotalJobs:     3,
 					TotalTasks:    10,
@@ -56,12 +56,12 @@ func TestGetUserDataByAddress(t *testing.T) {
 			},
 			expectedCode:   http.StatusOK,
 			expectedUserID: 1,
-			expectedData: types.UserData{
+			expectedData: commonTypes.UserData{
 				UserID:        1,
 				UserAddress:   "0x123",
-				JobIDs:        []*big.Int{big.NewInt(1), big.NewInt(2), big.NewInt(3)},
-				EtherBalance:  big.NewInt(1000000000000000000), // 1 ETH
-				TokenBalance:  big.NewInt(1000000),             // 1M tokens
+				JobIDs:        []*commonTypes.BigInt{commonTypes.NewBigInt(big.NewInt(1)), commonTypes.NewBigInt(big.NewInt(2)), commonTypes.NewBigInt(big.NewInt(3))},
+				EtherBalance:  commonTypes.NewBigInt(big.NewInt(1000000000000000000)), // 1 ETH
+				TokenBalance:  commonTypes.NewBigInt(big.NewInt(1000000)),             // 1M tokens
 				UserPoints:    100.0,
 				TotalJobs:     3,
 				TotalTasks:    10,
@@ -80,7 +80,7 @@ func TestGetUserDataByAddress(t *testing.T) {
 			name:        "Error - Database Error",
 			userAddress: "0x123",
 			setupMocks: func() {
-				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(0), types.UserData{}, assert.AnError)
+				mockUserRepo.On("GetUserDataByAddress", "0x123").Return(int64(0), commonTypes.UserData{}, assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,
 			expectedError: assert.AnError.Error(),
@@ -115,7 +115,7 @@ func TestGetUserDataByAddress(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Contains(t, response["error"], tt.expectedError)
 			} else {
-				var response types.UserData
+				var response commonTypes.UserData
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedData, response)

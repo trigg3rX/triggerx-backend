@@ -109,7 +109,7 @@ func (w *EventWorker) Stop() {
 
 		// Clean up job data from scheduler store
 		if w.CleanupCallback != nil {
-			if err := w.CleanupCallback(w.EventWorkerData.JobID); err != nil {
+			if err := w.CleanupCallback(w.EventWorkerData.JobID.ToBigInt()); err != nil {
 				w.Logger.Error("Failed to clean up job data",
 					"job_id", w.EventWorkerData.JobID,
 					"error", err)
