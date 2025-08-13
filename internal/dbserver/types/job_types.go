@@ -111,25 +111,25 @@ type TaskFeeResponse struct {
 }
 
 type JobDataAPI struct {
-	JobID             *big.Int  `json:"job_id"`
-	JobTitle          string    `json:"job_title"`
-	TaskDefinitionID  int       `json:"task_definition_id"`
-	UserID            int64     `json:"user_id"`
-	LinkJobID         *big.Int  `json:"link_job_id"`
-	ChainStatus       int       `json:"chain_status"`
-	Custom            bool      `json:"custom"`
-	TimeFrame         int64     `json:"time_frame"`
-	Recurring         bool      `json:"recurring"`
-	Status            string    `json:"status"`
-	JobCostPrediction float64   `json:"job_cost_prediction"`
-	JobCostActual     float64   `json:"job_cost_actual"`
-	TaskIDs           []int64   `json:"task_ids"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	LastExecutedAt    time.Time `json:"last_executed_at"`
-	Timezone          string    `json:"timezone"`
-	IsImua            bool      `json:"is_imua"`
-	CreatedChainID    string    `json:"created_chain_id"`
+	JobID             *commonTypes.BigInt `json:"job_id"`
+	JobTitle          string             `json:"job_title"`
+	TaskDefinitionID  int                `json:"task_definition_id"`
+	UserID            int64              `json:"user_id"`
+	LinkJobID         *commonTypes.BigInt `json:"link_job_id"`
+	ChainStatus       int                `json:"chain_status"`
+	Custom            bool               `json:"custom"`
+	TimeFrame         int64              `json:"time_frame"`
+	Recurring         bool               `json:"recurring"`
+	Status            string             `json:"status"`
+	JobCostPrediction float64            `json:"job_cost_prediction"`
+	JobCostActual     float64            `json:"job_cost_actual"`
+	TaskIDs           []int64            `json:"task_ids"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	LastExecutedAt    time.Time          `json:"last_executed_at"`
+	Timezone          string             `json:"timezone"`
+	IsImua            bool               `json:"is_imua"`
+	CreatedChainID    string             `json:"created_chain_id"`
 }
 
 type TimeJobDataAPI struct {
@@ -211,28 +211,20 @@ type JobResponse struct {
 }
 
 type JobResponseAPI struct {
-	JobData          JobDataAPI                    `json:"job_data"`
-	TimeJobData      *TimeJobDataAPI      `json:"time_job_data,omitempty"`
-	EventJobData     *EventJobDataAPI     `json:"event_job_data,omitempty"`
-	ConditionJobData *ConditionJobDataAPI `json:"condition_job_data,omitempty"`
+	JobData          JobDataAPI        			   `json:"job_data"`
+	TimeJobData      *commonTypes.TimeJobData      `json:"time_job_data,omitempty"`
+	EventJobData     *commonTypes.EventJobData     `json:"event_job_data,omitempty"`
+	ConditionJobData *commonTypes.ConditionJobData `json:"condition_job_data,omitempty"`
 }
 
 func ConvertJobResponseToAPI(j JobResponse) JobResponseAPI {
-	// Helper function to safely get *big.Int from *BigInt
-	getBigInt := func(b *commonTypes.BigInt) *big.Int {
-		if b == nil {
-			return nil
-		}
-		return b.Int
-	}
-
 	return JobResponseAPI{
 		JobData: JobDataAPI{
-			JobID:             getBigInt(j.JobData.JobID),
+			JobID:             j.JobData.JobID,
 			JobTitle:          j.JobData.JobTitle,
 			TaskDefinitionID:  j.JobData.TaskDefinitionID,
 			UserID:            j.JobData.UserID,
-			LinkJobID:         getBigInt(j.JobData.LinkJobID),
+			LinkJobID:         j.JobData.LinkJobID,
 			ChainStatus:       j.JobData.ChainStatus,
 			Custom:            j.JobData.Custom,
 			TimeFrame:         j.JobData.TimeFrame,
@@ -248,64 +240,8 @@ func ConvertJobResponseToAPI(j JobResponse) JobResponseAPI {
 			IsImua:            j.JobData.IsImua,
 			CreatedChainID:    j.JobData.CreatedChainID,
 		},
-		TimeJobData: &TimeJobDataAPI{
-			JobID:            getBigInt(j.TimeJobData.JobID),
-			TaskDefinitionID: j.TimeJobData.TaskDefinitionID,
-			Timezone:         j.TimeJobData.Timezone,
-			ScheduleType:     j.TimeJobData.ScheduleType,
-			TimeInterval:     j.TimeJobData.TimeInterval,
-			CronExpression:   j.TimeJobData.CronExpression,
-			SpecificSchedule: j.TimeJobData.SpecificSchedule,
-			NextExecutionTimestamp: j.TimeJobData.NextExecutionTimestamp,
-			TargetChainID:          j.TimeJobData.TargetChainID,
-			TargetContractAddress:  j.TimeJobData.TargetContractAddress,
-			TargetFunction:         j.TimeJobData.TargetFunction,
-			ABI:                    j.TimeJobData.ABI,
-			ArgType:                j.TimeJobData.ArgType,
-			Arguments:              j.TimeJobData.Arguments,
-			DynamicArgumentsScriptUrl: j.TimeJobData.DynamicArgumentsScriptUrl,
-		},
-		EventJobData: &EventJobDataAPI{
-			JobID:            getBigInt(j.EventJobData.JobID),
-			TaskDefinitionID: j.EventJobData.TaskDefinitionID,
-			Recurring:        j.EventJobData.Recurring,
-			TriggerChainID:   j.EventJobData.TriggerChainID,
-			TriggerContractAddress: j.EventJobData.TriggerContractAddress,
-			TriggerEvent:           j.EventJobData.TriggerEvent,
-			TargetChainID:          j.EventJobData.TargetChainID,
-			TargetContractAddress:  j.EventJobData.TargetContractAddress,
-			TargetFunction:         j.EventJobData.TargetFunction,
-			ABI:                    j.EventJobData.ABI,
-			ArgType:                j.EventJobData.ArgType,
-			Arguments:              j.EventJobData.Arguments,
-			DynamicArgumentsScriptUrl: j.EventJobData.DynamicArgumentsScriptUrl,
-			IsCompleted:              j.EventJobData.IsCompleted,
-			IsActive:                 j.EventJobData.IsActive,
-			CreatedAt:                j.EventJobData.CreatedAt,
-			UpdatedAt:                j.EventJobData.UpdatedAt,
-			LastExecutedAt:           j.EventJobData.LastExecutedAt,
-			ExpirationTime:           j.EventJobData.ExpirationTime,
-		},
-		ConditionJobData: &ConditionJobDataAPI{
-			JobID:            getBigInt(j.ConditionJobData.JobID),
-			TaskDefinitionID: j.ConditionJobData.TaskDefinitionID,
-			Recurring:        j.ConditionJobData.Recurring,
-			ConditionType:    j.ConditionJobData.ConditionType,
-			UpperLimit:       j.ConditionJobData.UpperLimit,
-			LowerLimit:       j.ConditionJobData.LowerLimit,
-			ValueSourceType:  j.ConditionJobData.ValueSourceType,
-			ValueSourceUrl:   j.ConditionJobData.ValueSourceUrl,
-			SelectedKeyRoute: j.ConditionJobData.SelectedKeyRoute,
-			TargetChainID:    j.ConditionJobData.TargetChainID,
-			TargetContractAddress: j.ConditionJobData.TargetContractAddress,
-			TargetFunction:         j.ConditionJobData.TargetFunction,
-			ABI:                    j.ConditionJobData.ABI,
-			ArgType:                j.ConditionJobData.ArgType,
-			Arguments:              j.ConditionJobData.Arguments,
-			DynamicArgumentsScriptUrl: j.ConditionJobData.DynamicArgumentsScriptUrl,
-			IsCompleted:              j.ConditionJobData.IsCompleted,
-			IsActive:                 j.ConditionJobData.IsActive,
-			CreatedAt:                j.ConditionJobData.CreatedAt,
-		},
+		TimeJobData:      j.TimeJobData,
+		EventJobData:     j.EventJobData,
+		ConditionJobData: j.ConditionJobData,
 	}
 }
