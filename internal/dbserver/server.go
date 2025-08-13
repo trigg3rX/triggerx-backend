@@ -3,6 +3,9 @@ package db
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
@@ -13,8 +16,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -254,6 +255,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerManager *docker.Docker
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
 	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
 	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
 	protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)

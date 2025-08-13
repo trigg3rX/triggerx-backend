@@ -145,6 +145,11 @@ func (m *MockJobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeR
 	return args.Get(0).([]types.TaskFeeResponse), args.Error(1)
 }
 
+func (m *MockJobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error) {
+	args := m.Called(userID, createdChainID)
+	return args.Get(0).([]commonTypes.JobData), args.Error(1)
+}
+
 func (m *MockTimeJobRepository) CreateTimeJob(job *commonTypes.TimeJobData) error {
 	args := m.Called(job)
 	return args.Error(0)

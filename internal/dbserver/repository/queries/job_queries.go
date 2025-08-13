@@ -58,4 +58,12 @@ const (
 	GetTaskFeesByJobIDQuery = `
 			SELECT task_id, task_opx_cost FROM triggerx.task_data
 			WHERE job_id = ? ALLOW FILTERING`
+
+	// New query: get jobs for a user and a specific created_chain_id
+	GetJobsByUserIDAndChainIDQuery = `
+			SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
+				custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
+				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id
+			FROM triggerx.job_data
+			WHERE user_id = ? AND created_chain_id = ? ALLOW FILTERING`
 )

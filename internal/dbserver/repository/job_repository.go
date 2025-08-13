@@ -19,6 +19,7 @@ type JobRepository interface {
 	GetJobByID(jobID *big.Int) (*commonTypes.JobData, error)
 	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
 	GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error)
+	GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error)
 }
 
 type jobRepository struct {
@@ -128,4 +129,35 @@ func (r *jobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeRespo
 		return nil, err
 	}
 	return results, nil
+}
+
+func (r *jobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error) {
+	session := r.db.Session()
+	iter := session.Query(queries.GetJobsByUserIDAndChainIDQuery, userID, createdChainID).Iter()
+
+	var jobs []commonTypes.JobData
+	for {
+		var (
+			jobIDBigInt     *big.Int
+			linkJobIDBigInt *big.Int
+			job             commonTypes.JobData
+		)
+		if !iter.Scan(
+			&jobIDBigInt, &job.JobTitle, &job.TaskDefinitionID, &job.UserID,
+			&linkJobIDBigInt, &job.ChainStatus, &job.Custom, &job.TimeFrame,
+			&job.Recurring, &job.Status, &job.JobCostPrediction, &job.JobCostActual,
+			&job.TaskIDs, &job.CreatedAt, &job.UpdatedAt, &job.LastExecutedAt,
+			&job.Timezone, &job.IsImua, &job.CreatedChainID,
+		) {
+			break
+		}
+		job.JobID = commonTypes.NewBigInt(jobIDBigInt)
+		job.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
+		jobs = append(jobs, job)
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }
