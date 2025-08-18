@@ -1,6 +1,6 @@
 module github.com/trigg3rX/triggerx-backend
 
-go 1.24.2
+go 1.24.6
 
 // resolve the issue with the docker client
 require (
