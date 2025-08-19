@@ -57,13 +57,13 @@ func (hc *HealthClient) GetPerformerData(isImua bool) (types.PerformerData, erro
 		hc.logger.Warn("No performers available from health service, using fallback")
 		fallbackPerformers := []types.PerformerData{
 			{
-				OperatorID:    1,
-				KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
+				OperatorID:    4,
+				KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 				IsImua:        false,
 			},
 			{
-				OperatorID:    4,
-				KeeperAddress: "0x80ce5df21ef5e7c7bdaf52534f0e05e72fcfb9be",
+				OperatorID:    1,
+				KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
 				IsImua:        true,
 			},
 		}

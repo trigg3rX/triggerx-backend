@@ -303,12 +303,12 @@ func (h *Handler) GetActivePerformers(c *gin.Context) {
 	// Temporary fix for taskmanager
 	fallbackPerformers := []commonTypes.PerformerData{
 		{
-			OperatorID:    1,
-			KeeperAddress: "0x011fcbae5f306cd793456ab7d4c0cc86756c693d",
+			OperatorID:    4,
+			KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
 			IsImua:        false,
 		},
 		{
-			OperatorID:    4,
+			OperatorID:    1,
 			KeeperAddress: "0xcacce39134e3b9d5d9220d87fc546c6f0fb9cc37",
 			IsImua:        true,
 		},
