@@ -35,10 +35,10 @@ type AvsWriter interface {
 	Challenge(
 		ctx context.Context,
 		taskID uint64,
-		taskResponse []byte,
-		blsSignature []byte,
-		taskContractAddress string,
-		phase uint8,
+		actualThreshold uint8,
+		isExpected bool,
+		eligibleRewardOperators []gethcommon.Address,
+		eligibleSlashOperators []gethcommon.Address,
 	) (*gethtypes.Receipt, error)
 }
 
@@ -166,22 +166,22 @@ func (w *ChainWriter) OperatorSubmitTask(
 func (w *ChainWriter) Challenge(
 	ctx context.Context,
 	taskID uint64,
-	taskResponse []byte,
-	blsSignature []byte,
-	taskContractAddress string,
-	phase uint8,
+	actualThreshold uint8,
+	isExpected bool,
+	eligibleRewardOperators []gethcommon.Address,
+	eligibleSlashOperators []gethcommon.Address,
 ) (*gethtypes.Receipt, error) {
 	noSendTxOpts, err := w.txMgr.GetNoSendTxOpts()
 	if err != nil {
 		return nil, err
 	}
-	tx, err := w.avsManager.RaiseAndResolveChallenge(
+	tx, err := w.avsManager.Challenge(
 		noSendTxOpts,
 		taskID,
-		taskResponse,
-		blsSignature,
-		gethcommon.HexToAddress(taskContractAddress),
-		phase)
+		actualThreshold,
+		isExpected,
+		eligibleRewardOperators,
+		eligibleSlashOperators)
 	if err != nil {
 		return nil, err
 	}

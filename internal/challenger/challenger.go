@@ -12,11 +12,11 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
-	"github.com/imua-xyz/imua-avs-sdk/nodeapi"
+	// "github.com/imua-xyz/imua-avs-sdk/nodeapi"
 	"github.com/imua-xyz/imua-avs-sdk/signer"
 	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"
-	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/chainio"
-	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
+	"github.com/trigg3rX/triggerx-backend/internal/challenger/chainio"
+	"github.com/trigg3rX/triggerx-backend/internal/challenger/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -24,11 +24,11 @@ type Challenger struct {
 	logger      logging.Logger
 	ethClient   *ethclient.Client
 	ethWsClient *ethclient.Client
-	nodeApi     *nodeapi.NodeApi
-	avsReader   chainio.AvsReader
-	avsWriter   chainio.AvsWriter
-	ctx         context.Context
-	cancel      context.CancelFunc
+	//nodeApi     *nodeapi.NodeApi
+	avsReader chainio.AvsReader
+	avsWriter chainio.AvsWriter
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 func NewChallenger(logger logging.Logger) *Challenger {
@@ -49,16 +49,16 @@ func NewChallenger(logger logging.Logger) *Challenger {
 	}
 
 	// Setup Node Api
-	nodeApi := nodeapi.NewNodeApi(config.GetAvsName(), config.GetSemVer(), config.GetOperatorNodeApiPort(), logger)
+	//nodeApi := nodeapi.NewNodeApi(config.GetAvsName(), config.GetSemVer(), config.GetOperatorNodeApiPort(), logger)
 	signer, _, err := signer.SignerFromConfig(signer.Config{
-		PrivateKey: config.GetPrivateKeyController(),
+		PrivateKey: config.GetPrivateKeyOwner(),
 	},
 		chainId,
 	)
 	if err != nil {
 		panic(err)
 	}
-	txMgr := txmgr.NewSimpleTxManager(ethClient, logger, signer, common.HexToAddress(config.GetKeeperAddress()))
+	txMgr := txmgr.NewSimpleTxManager(ethClient, logger, signer, common.HexToAddress(config.GetOwnerAddress()))
 	avsReader, _ := chainio.BuildChainReader(
 		common.HexToAddress(config.GetAvsGovernanceAddress()),
 		ethClient,
@@ -77,11 +77,11 @@ func NewChallenger(logger logging.Logger) *Challenger {
 		logger:      logger,
 		ethClient:   ethClient,
 		ethWsClient: ethWsClient,
-		nodeApi:     nodeApi,
-		avsReader:   avsReader,
-		avsWriter:   avsWriter,
-		ctx:         ctx,
-		cancel:      cancel,
+		// nodeApi:     nodeApi,
+		avsReader: avsReader,
+		avsWriter: avsWriter,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -177,13 +177,13 @@ func (c *Challenger) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 // ProcessTaskSubmittedLog processes task submission events from operators
 func (c *Challenger) ProcessTaskSubmittedLog(e *avs.TriggerXAvsTaskSubmitted) {
 	c.logger.Info("Processing task submitted event for challenge monitoring",
-		"taskID", e.TaskId.Uint64(),
+		"taskID", e.TaskID,
 		"operator", e.Operator.String(),
 		"phase", e.Phase)
 
 	// Here you could implement immediate challenge logic based on the submitted response
 	// For example, if you detect suspicious patterns in the submission, you could trigger a challenge
-	
+
 	// This event-driven approach allows for faster challenge responses compared to polling
 	// The actual challenge logic would still be handled by the MonitorForChallenge function
 	// which is already running for each task
@@ -223,7 +223,7 @@ func (c *Challenger) MonitorForChallenge(
 			}
 
 			currentEpoch := uint64(num)
-			
+
 			if currentEpoch > startingEpoch+taskResponsePeriod+taskStatisticalPeriod {
 				c.logger.Info("Exiting challenge monitoring: Task period has passed",
 					"Task", taskInfo.TaskContractAddress.String()+"--"+strconv.FormatUint(taskId, 10))
@@ -240,7 +240,7 @@ func (c *Challenger) MonitorForChallenge(
 				if !phaseOneSubmitted {
 					c.logger.Info("Monitoring Phase One submissions", "currentEpoch", currentEpoch,
 						"startingEpoch", startingEpoch, "taskResponsePeriod", taskResponsePeriod, "taskId", taskId)
-					
+
 					// Check if operators have submitted for phase one by querying contract
 					operatorResponses, err := c.avsReader.GetOperatorTaskResponseList(&bind.CallOpts{}, taskInfo.TaskContractAddress.String(), taskId)
 					if err != nil {
@@ -248,7 +248,7 @@ func (c *Challenger) MonitorForChallenge(
 						time.Sleep(config.GetRetryDelay())
 						continue
 					}
-					
+
 					// Check if any operators have submitted for phase 1
 					phase1Submissions := 0
 					for _, response := range operatorResponses {
@@ -256,7 +256,7 @@ func (c *Challenger) MonitorForChallenge(
 							phase1Submissions++
 						}
 					}
-					
+
 					if phase1Submissions > 0 {
 						phaseOneSubmitted = true
 						c.logger.Info("Phase One submissions detected", "taskId", taskId, "submissionCount", phase1Submissions)
@@ -272,7 +272,7 @@ func (c *Challenger) MonitorForChallenge(
 				if !phaseTwoSubmitted {
 					c.logger.Info("Monitoring Phase Two submissions", "currentEpoch", currentEpoch,
 						"startingEpoch", startingEpoch, "taskResponsePeriod", taskResponsePeriod, "taskStatisticalPeriod", taskStatisticalPeriod, "taskId", taskId)
-					
+
 					// Check if operators have submitted for phase two by querying contract
 					operatorResponses, err := c.avsReader.GetOperatorTaskResponseList(&bind.CallOpts{}, taskInfo.TaskContractAddress.String(), taskId)
 					if err != nil {
@@ -280,7 +280,7 @@ func (c *Challenger) MonitorForChallenge(
 						time.Sleep(config.GetRetryDelay())
 						continue
 					}
-					
+
 					// Check if any operators have submitted for phase 2
 					phase2Submissions := 0
 					for _, response := range operatorResponses {
@@ -288,7 +288,7 @@ func (c *Challenger) MonitorForChallenge(
 							phase2Submissions++
 						}
 					}
-					
+
 					if phase2Submissions > 0 {
 						phaseTwoSubmitted = true
 						c.logger.Info("Phase Two submissions detected - triggering challenge function", "taskId", taskId, "submissionCount", phase2Submissions)
@@ -329,8 +329,8 @@ func (c *Challenger) CallChallengeFunction(
 	taskId uint64,
 	taskInfo avs.TaskInfo) error {
 
-	c.logger.Info("Calling challenge function for task", 
-		"taskId", taskId, 
+	c.logger.Info("Calling challenge function for task",
+		"taskId", taskId,
 		"taskAddr", taskInfo.TaskContractAddress.String())
 
 	// Get all operator responses for phase 2 to determine which ones to challenge
@@ -340,56 +340,40 @@ func (c *Challenger) CallChallengeFunction(
 		return fmt.Errorf("failed to get operator responses: %w", err)
 	}
 
-	// Find phase 2 responses to potentially challenge
-	var targetResponse *avs.OperatorResInfo
-	for i, response := range operatorResponses {
+	// Build eligible operators lists and challenge decision
+	var eligibleRewardOperators []common.Address
+	var eligibleSlashOperators []common.Address
+	isExpected := false // example: assume results were not as expected → triggers slash
+	actualThreshold := uint8(taskInfo.ThresholdPercentage)
+
+	for _, response := range operatorResponses {
 		if response.Phase == 2 {
-			// Here you would implement logic to determine which response to challenge
-			// For now, we'll challenge the first phase 2 response as an example
-			targetResponse = &operatorResponses[i]
-			c.logger.Info("Found phase 2 response to challenge", 
-				"taskId", taskId, 
-				"operator", response.Operator.String(),
-				"phase", response.Phase)
-			break
+			// Example policy: everyone who submitted in phase 2 is considered eligible for slashing
+			eligibleSlashOperators = append(eligibleSlashOperators, response.OperatorAddress)
 		}
 	}
 
-	if targetResponse == nil {
+	if len(eligibleSlashOperators) == 0 {
 		c.logger.Warn("No phase 2 responses found to challenge", "taskId", taskId)
 		return fmt.Errorf("no phase 2 responses found to challenge for task %d", taskId)
 	}
 
-	// Create a challenge task response based on the operator response we want to challenge
-	taskResponse := TaskResponse{
-		TaskID:  taskId,
-		IsValid: false, // Challenging as invalid
-	}
-
-	signature, responseBytes, err := c.SignTaskResponse(taskResponse)
-	if err != nil {
-		c.logger.Error("Failed to sign challenge response", "err", err)
-		return fmt.Errorf("failed to sign challenge response: %w", err)
-	}
-
-	// Call the Challenge function from avsWriter
 	receipt, err := c.avsWriter.Challenge(
 		ctx,
 		taskId,
-		responseBytes,
-		signature,
-		taskInfo.TaskContractAddress.String(),
-		2, // Phase 2
+		actualThreshold,
+		isExpected,
+		eligibleRewardOperators,
+		eligibleSlashOperators,
 	)
-	
 	if err != nil {
 		c.logger.Error("Failed to submit challenge", "err", err, "taskId", taskId)
 		return fmt.Errorf("failed to submit challenge: %w", err)
 	}
 
-	c.logger.Info("Successfully submitted challenge", 
-		"taskId", taskId, 
-		"targetOperator", targetResponse.Operator.String(),
+	c.logger.Info("Successfully submitted challenge",
+		"taskId", taskId,
+		"slashCount", len(eligibleSlashOperators),
 		"txHash", receipt.TxHash.String(),
 		"gasUsed", receipt.GasUsed)
 
@@ -425,7 +409,7 @@ func (c *Challenger) SendSignedTaskResponseToChain(
 
 	// This function contained OperatorSubmitTask calls with transaction sending
 	// All transaction-related code is commented out per requirements
-	
+
 	return "Transaction functionality disabled in challenger", nil
 }
 */

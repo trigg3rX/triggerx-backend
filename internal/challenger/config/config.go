@@ -36,10 +36,7 @@ type Config struct {
 	alchemyAPIKey   string
 	etherscanAPIKey string
 
-	// Controller Key and Keeper Address
-	privateKeyController *ecdsa.PrivateKey
-	keeperAddress        string
-
+	// Owner Key and Address (for Challenger)
 	privateKeyOwner *ecdsa.PrivateKey
 	ownerAddress    string
 
@@ -50,12 +47,12 @@ type Config struct {
 	publicIPV4Address string
 	peerID            string
 
-	// Ports for Keeper API server, P2P connections, metrics and Grafana
-	keeperRPCPort     string
-	keeperP2PPort     string
-	keeperMetricsPort string
-	grafanaPort       string
-	nodeApiPort       string
+	// Ports for API server, P2P connections, metrics and Grafana
+	challengerRPCPort     string
+	challengerP2PPort     string
+	challengerMetricsPort string
+	grafanaPort           string
+	nodeApiPort           string
 
 	// IPFS configuration
 	ipfsHost  string
@@ -90,25 +87,25 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:              env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:            env.GetEnvString("ETH_RPC_URL", ""),
-		ethWsUrl:             env.GetEnvString("ETH_WS_URL", ""),
-		alchemyAPIKey:        env.GetEnvString("ALCHEMY_API_KEY", ""),
-		publicIPV4Address:    env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
-		peerID:               env.GetEnvString("PEER_ID", ""),
-		keeperRPCPort:        env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
-		keeperP2PPort:        env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
-		keeperMetricsPort:    env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
-		nodeApiPort:          env.GetEnvString("OPERATOR_NODE_API_PORT", "9014"),
-		grafanaPort:          env.GetEnvString("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:     env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
-		healthRPCUrl:         env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
-		tlsProofHost:         "www.google.com",
-		tlsProofPort:         "443",
-		l1Chain:              env.GetEnvString("L1_CHAIN", "17000"),
-		l2Chain:              env.GetEnvString("L2_CHAIN", "84532"),
-		avsGovernanceAddress: env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5"),
-		othenticBootstrapID:  env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		devMode:               env.GetEnvBool("DEV_MODE", false),
+		ethRPCUrl:             env.GetEnvString("ETH_RPC_URL", ""),
+		ethWsUrl:              env.GetEnvString("ETH_WS_URL", ""),
+		alchemyAPIKey:         env.GetEnvString("ALCHEMY_API_KEY", ""),
+		publicIPV4Address:     env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
+		peerID:                env.GetEnvString("PEER_ID", ""),
+		challengerRPCPort:     env.GetEnvString("CHALLENGER_RPC_PORT", "9011"),
+		challengerP2PPort:     env.GetEnvString("CHALLENGER_P2P_PORT", "9012"),
+		challengerMetricsPort: env.GetEnvString("CHALLENGER_METRICS_PORT", "9013"),
+		nodeApiPort:           env.GetEnvString("CHALLENGER_NODE_API_PORT", "9014"),
+		grafanaPort:           env.GetEnvString("GRAFANA_PORT", "3000"),
+		aggregatorRPCUrl:      env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:          env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
+		tlsProofHost:          "www.google.com",
+		tlsProofPort:          "443",
+		l1Chain:               env.GetEnvString("L1_CHAIN", "17000"),
+		l2Chain:               env.GetEnvString("L2_CHAIN", "84532"),
+		avsGovernanceAddress:  env.GetEnvString("TRIGGERX_AVS_ADDRESS", "0x72A5016ECb9EB01d7d54ae48bFFB62CA0B8e57a5"),
+		othenticBootstrapID:   env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 
 	// Load BLS private key from environment variable
@@ -135,31 +132,18 @@ func Init() error {
 	}
 	cfg.consensusKeyPair = blsKeyPair
 
-	ecdsaKeyPassword := env.GetEnvString("OPERATOR_ECDSA_KEY_PASSWORD", "")
-	ecdsaKeyStorePath := env.GetEnvString("OPERATOR_ECDSA_KEY_STORE_PATH", "")
-	ecdsaPrivateKey, err := sdkEcdsa.ReadKey(ecdsaKeyStorePath, ecdsaKeyPassword)
-	if err != nil {
-		return fmt.Errorf("invalid ecdsa key password: %s", err)
-	}
-	cfg.privateKeyController = ecdsaPrivateKey
-
-	ecdsaAddress, err := sdkEcdsa.GetAddressFromKeyStoreFile(ecdsaKeyStorePath)
-	if err != nil {
-		return fmt.Errorf("invalid ecdsa key password: %s", err)
-	}
-	cfg.keeperAddress = ecdsaAddress.Hex()
-
+	// Load owner ECDSA key (for Challenger)
 	ownerEcdsaKeyPassword := env.GetEnvString("OWNER_ECDSA_KEY_PASSWORD", "")
 	ownerEcdsaKeyStorePath := env.GetEnvString("OWNER_ECDSA_KEY_STORE_PATH", "")
 	ownerEcdsaPrivateKey, err := sdkEcdsa.ReadKey(ownerEcdsaKeyStorePath, ownerEcdsaKeyPassword)
 	if err != nil {
-		return fmt.Errorf("invalid ecdsa key password: %s", err)
+		return fmt.Errorf("invalid owner ecdsa key password: %s", err)
 	}
 	cfg.privateKeyOwner = ownerEcdsaPrivateKey
 
 	ownerAddress, err := sdkEcdsa.GetAddressFromKeyStoreFile(ownerEcdsaKeyStorePath)
 	if err != nil {
-		return fmt.Errorf("invalid ecdsa key password: %s", err)
+		return fmt.Errorf("invalid owner ecdsa key password: %s", err)
 	}
 	cfg.ownerAddress = ownerAddress.Hex()
 
@@ -169,11 +153,6 @@ func Init() error {
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	// isRegistered := checkKeeperRegistration()
-	// if !isRegistered {
-	// 	log.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
-	// 	log.Fatal("Keeper address is not registered on L2")
-	// }
 	return nil
 }
 
@@ -187,9 +166,6 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidIPAddress(cfg.publicIPV4Address) {
 		return fmt.Errorf("invalid public ipv4 address: %s", cfg.publicIPV4Address)
 	}
-	// if !env.IsValidEthAddress(cfg.keeperAddress) {
-	// 	return fmt.Errorf("invalid keeper address: %s", cfg.keeperAddress)
-	// }
 	if !env.IsValidPeerID(cfg.peerID) {
 		return fmt.Errorf("invalid peer id: %s", cfg.peerID)
 	}
@@ -224,20 +200,12 @@ func GetEtherscanAPIKey() string {
 	return cfg.etherscanAPIKey
 }
 
-func GetPrivateKeyController() *ecdsa.PrivateKey {
-	return cfg.privateKeyController
-}
-
 func GetPrivateKeyOwner() *ecdsa.PrivateKey {
 	return cfg.privateKeyOwner
 }
 
 func GetOwnerAddress() string {
 	return cfg.ownerAddress
-}
-
-func GetKeeperAddress() string {
-	return cfg.keeperAddress
 }
 
 func GetConsensusKeyPair() bls.SecretKey {
@@ -252,20 +220,16 @@ func GetPeerID() string {
 	return cfg.peerID
 }
 
-func GetOperatorRPCPort() string {
-	return cfg.keeperRPCPort
+func GetChallengerRPCPort() string {
+	return cfg.challengerRPCPort
 }
 
-func GetOperatorNodeApiPort() string {
+func GetChallengerNodeApiPort() string {
 	return cfg.nodeApiPort
 }
 
 func IsDevMode() bool {
 	return cfg.devMode
-}
-
-func GetKeeperRPCPort() string {
-	return cfg.keeperRPCPort
 }
 
 func GetAggregatorRPCUrl() string {

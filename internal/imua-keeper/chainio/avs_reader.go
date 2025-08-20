@@ -32,6 +32,11 @@ type AvsReader interface {
 		taskAddress string,
 		taskID uint64,
 	) (gethcommon.Address, error)
+	GetOperatorTaskResponseList(
+		opts *bind.CallOpts,
+		taskAddress string,
+		taskID uint64,
+	) ([]avs.OperatorResInfo, error)
 }
 
 type ChainReader struct {
@@ -129,4 +134,17 @@ func (r *ChainReader) GetChallengeInfo(opts *bind.CallOpts, taskAddress string, 
 		return gethcommon.Address{}, err
 	}
 	return address, nil
+}
+
+func (r *ChainReader) GetOperatorTaskResponseList(opts *bind.CallOpts, taskAddress string, taskID uint64) ([]avs.OperatorResInfo, error) {
+	res, err := r.avsManager.GetOperatorTaskResponseList(
+		opts,
+		gethcommon.HexToAddress(taskAddress),
+		taskID,
+	)
+	if err != nil {
+		r.logger.Error("Failed to GetOperatorTaskResponseList ", "err", err)
+		return nil, err
+	}
+	return res, nil
 }

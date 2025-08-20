@@ -23,6 +23,7 @@ const (
 	TimeSchedulerProcess      ProcessName = "schedulers-time"
 	ConditionSchedulerProcess ProcessName = "schedulers-condition"
 	TestProcess               ProcessName = "test"
+	ChallengerProcess		  ProcessName = "challenger"
 )
 
 type LoggerConfig struct {

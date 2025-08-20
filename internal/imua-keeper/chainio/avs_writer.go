@@ -32,6 +32,14 @@ type AvsWriter interface {
 		taskContractAddress string,
 		phase uint8,
 	) (*gethtypes.Receipt, error)
+	Challenge(
+		ctx context.Context,
+		taskID uint64,
+		actualThreshold uint8,
+		isExpected bool,
+		eligibleRewardOperators []gethcommon.Address,
+		eligibleSlashOperators []gethcommon.Address,
+	) (*gethtypes.Receipt, error)
 }
 
 type ChainWriter struct {
@@ -144,6 +152,38 @@ func (w *ChainWriter) OperatorSubmitTask(
 		blsSignature,
 		gethcommon.HexToAddress(taskContractAddress),
 		phase)
+	if err != nil {
+		return nil, err
+	}
+	receipt, err := w.txMgr.Send(ctx, tx)
+	if err != nil {
+		return nil, errors.New("failed to send tx with err: " + err.Error())
+	}
+	w.logger.Infof("tx hash: %s", tx.Hash().String())
+
+	return receipt, nil
+}
+
+func (w *ChainWriter) Challenge(
+	ctx context.Context,
+	taskID uint64,
+	actualThreshold uint8,
+	isExpected bool,
+	eligibleRewardOperators []gethcommon.Address,
+	eligibleSlashOperators []gethcommon.Address,
+) (*gethtypes.Receipt, error) {
+	noSendTxOpts, err := w.txMgr.GetNoSendTxOpts()
+	if err != nil {
+		return nil, err
+	}
+	tx, err := w.avsManager.Challenge(
+		noSendTxOpts,
+		taskID,
+		actualThreshold,
+		isExpected,
+		eligibleRewardOperators,
+		eligibleSlashOperators,
+	)
 	if err != nil {
 		return nil, err
 	}
