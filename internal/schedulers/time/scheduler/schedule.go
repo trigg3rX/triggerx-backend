@@ -27,14 +27,44 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 	metrics.TasksScheduled.Set(float64(len(tasks)))
 	metrics.TaskBatchSize.Set(float64(s.taskBatchSize))
 
-	for i := 0; i < len(tasks); i += s.taskBatchSize {
-		end := i + s.taskBatchSize
-		if end > len(tasks) {
-			end = len(tasks)
-		}
+	// Separate tasks based on is_imua flag
+	var imuaTasks []types.ScheduleTimeTaskData
+	var nonImuaTasks []types.ScheduleTimeTaskData
 
-		batch := tasks[i:end]
-		s.processBatch(batch)
+	for _, task := range tasks {
+		if task.IsImua {
+			imuaTasks = append(imuaTasks, task)
+		} else {
+			nonImuaTasks = append(nonImuaTasks, task)
+		}
+	}
+
+	// Process non-imua tasks in batches
+	if len(nonImuaTasks) > 0 {
+		s.logger.Infof("Processing %d non-imua tasks in batches", len(nonImuaTasks))
+		for i := 0; i < len(nonImuaTasks); i += s.taskBatchSize {
+			end := i + s.taskBatchSize
+			if end > len(nonImuaTasks) {
+				end = len(nonImuaTasks)
+			}
+
+			batch := nonImuaTasks[i:end]
+			s.processBatch(batch)
+		}
+	}
+
+	// Process imua tasks in separate batches
+	if len(imuaTasks) > 0 {
+		s.logger.Infof("Processing %d imua tasks in separate batches", len(imuaTasks))
+		for i := 0; i < len(imuaTasks); i += s.taskBatchSize {
+			end := i + s.taskBatchSize
+			if end > len(imuaTasks) {
+				end = len(imuaTasks)
+			}
+
+			batch := imuaTasks[i:end]
+			s.processBatch(batch)
+		}
 	}
 }
 
