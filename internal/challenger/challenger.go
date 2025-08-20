@@ -3,6 +3,7 @@ package challenger
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/imua-xyz/imua-avs-sdk/client/txmgr"
+
 	// "github.com/imua-xyz/imua-avs-sdk/nodeapi"
 	"github.com/imua-xyz/imua-avs-sdk/signer"
 	avs "github.com/trigg3rX/imua-contracts/bindings/contracts"
@@ -21,9 +23,9 @@ import (
 )
 
 type Challenger struct {
-	logger      logging.Logger
-	ethClient   *ethclient.Client
-	ethWsClient *ethclient.Client
+	logger    logging.Logger
+	ethClient *ethclient.Client
+	// ethWsClient *ethclient.Client
 	//nodeApi     *nodeapi.NodeApi
 	avsReader chainio.AvsReader
 	avsWriter chainio.AvsWriter
@@ -37,11 +39,11 @@ func NewChallenger(logger logging.Logger) *Challenger {
 		logger.Errorf("Failed to connect to Ethereum: %v", err)
 		return nil
 	}
-	ethWsClient, err := ethclient.Dial(config.GetEthWsUrl())
-	if err != nil {
-		logger.Errorf("Failed to connect to Ethereum: %v", err)
-		return nil
-	}
+	// ethWsClient, err := ethclient.Dial(config.GetEthWsUrl())
+	// if err != nil {
+	// 	logger.Errorf("Failed to connect to Ethereum: %v", err)
+	// 	return nil
+	// }
 	chainId, err := ethClient.ChainID(context.Background())
 	if err != nil {
 		logger.Error("Cannot get chainId", "err", err)
@@ -74,9 +76,9 @@ func NewChallenger(logger logging.Logger) *Challenger {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Challenger{
-		logger:      logger,
-		ethClient:   ethClient,
-		ethWsClient: ethWsClient,
+		logger:    logger,
+		ethClient: ethClient,
+		// ethWsClient: ethWsClient,
 		// nodeApi:     nodeApi,
 		avsReader: avsReader,
 		avsWriter: avsWriter,
@@ -91,38 +93,85 @@ func (c *Challenger) Start(ctx context.Context) error {
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{common.HexToAddress(config.GetAvsGovernanceAddress())},
 	}
-	logs := make(chan ethtypes.Log)
+	// logs := make(chan ethtypes.Log)
 
-	sub, err := c.ethWsClient.SubscribeFilterLogs(context.Background(), query, logs)
-	if err != nil {
-		c.logger.Error("Subscribe failed", "err", err)
-		return err
-	}
-	defer sub.Unsubscribe()
+	// sub, err := c.ethWsClient.SubscribeFilterLogs(context.Background(), query, logs)
+	// if err != nil {
+	// 	c.logger.Error("Subscribe failed", "err", err)
+	// 	return err
+	// }
+	// defer sub.Unsubscribe()
 
-	c.logger.Infof("Starting challenger event monitoring...")
+	c.logger.Infof("Starting challenger block polling event monitoring...")
+
+	// Poll every 3 seconds
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			c.logger.Info("Shutdown signal received, stopping challenger")
 			return ctx.Err()
-		case err := <-sub.Err():
-			c.logger.Error("Subscription error:", err)
-		case vLog := <-logs:
-			event, err := c.parseEvent(vLog)
+		// case err := <-sub.Err():
+		// 	c.logger.Error("Subscription error:", err)
+		// case vLog := <-logs:
+		// 	event, err := c.parseEvent(vLog)
+		// 	if err != nil {
+		// 		c.logger.Info("Not as expected TaskCreated or TaskSubmitted log, parse err:", "err", err)
+		// 		continue
+		// 	}
+		// 	if event != nil {
+		// 		switch e := event.(type) {
+		// 		case *avs.TriggerXAvsTaskCreated:
+		// 			// Process the task creation event for challenge monitoring
+		// 			c.ProcessNewTaskCreatedLog(e)
+		// 		case *avs.TriggerXAvsTaskSubmitted:
+		// 			// Process task submission events (operators submitting responses)
+		// 			c.ProcessTaskSubmittedLog(e)
+		// 		}
+		// 	}
+		case <-ticker.C:
+			// Get the latest block number
+			latestBlock, err := c.ethClient.BlockNumber(ctx)
 			if err != nil {
-				c.logger.Info("Not as expected TaskCreated or TaskSubmitted log, parse err:", "err", err)
+				c.logger.Error("Failed to get latest block number", "err", err)
 				continue
 			}
-			if event != nil {
-				switch e := event.(type) {
-				case *avs.TriggerXAvsTaskCreated:
-					// Process the task creation event for challenge monitoring
-					c.ProcessNewTaskCreatedLog(e)
-				case *avs.TriggerXAvsTaskSubmitted:
-					// Process task submission events (operators submitting responses)
-					c.ProcessTaskSubmittedLog(e)
+
+			// Query for logs from the latest block
+			query.FromBlock = big.NewInt(int64(latestBlock))
+			query.ToBlock = big.NewInt(int64(latestBlock))
+
+			logs, err := c.ethClient.FilterLogs(ctx, query)
+			if err != nil {
+				c.logger.Error("Failed to filter logs, retrying once", "err", err)
+
+				// Simple retry with single reattempt
+				time.Sleep(1 * time.Second)
+				logs, err = c.ethClient.FilterLogs(ctx, query)
+				if err != nil {
+					c.logger.Error("Failed to filter logs after retry", "err", err)
+					continue
+				}
+			}
+
+			// Process any logs found
+			for _, vLog := range logs {
+				event, err := c.parseEvent(vLog)
+				if err != nil {
+					c.logger.Info("Not as expected TaskCreated or TaskSubmitted log, parse err:", "err", err)
+					continue
+				}
+				if event != nil {
+					switch e := event.(type) {
+					case *avs.TriggerXAvsTaskCreated:
+						// Process the task creation event for challenge monitoring
+						c.ProcessNewTaskCreatedLog(e)
+					case *avs.TriggerXAvsTaskSubmitted:
+						// Process task submission events (operators submitting responses)
+						c.ProcessTaskSubmittedLog(e)
+					}
 				}
 			}
 		}

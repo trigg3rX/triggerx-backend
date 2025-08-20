@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -26,14 +27,14 @@ import (
 )
 
 type Keeper struct {
-	logger      logging.Logger
-	ethClient   *ethclient.Client
-	ethWsClient *ethclient.Client
-	nodeApi     *nodeapi.NodeApi
-	avsReader   chainio.AvsReader
-	avsWriter   chainio.AvsWriter
-	ctx         context.Context
-	cancel      context.CancelFunc
+	logger    logging.Logger
+	ethClient *ethclient.Client
+	// ethWsClient *ethclient.Client
+	nodeApi   *nodeapi.NodeApi
+	avsReader chainio.AvsReader
+	avsWriter chainio.AvsWriter
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 func NewKeeper(logger logging.Logger) *Keeper {
@@ -42,11 +43,11 @@ func NewKeeper(logger logging.Logger) *Keeper {
 		logger.Errorf("Failed to connect to Ethereum: %v", err)
 		return nil
 	}
-	ethWsClient, err := ethclient.Dial(config.GetEthWsUrl())
-	if err != nil {
-		logger.Errorf("Failed to connect to Ethereum: %v", err)
-		return nil
-	}
+	// ethWsClient, err := ethclient.Dial(config.GetEthWsUrl())
+	// if err != nil {
+	// 	logger.Errorf("Failed to connect to Ethereum: %v", err)
+	// 	return nil
+	// }
 	chainId, err := ethClient.ChainID(context.Background())
 	if err != nil {
 		logger.Error("Cannot get chainId", "err", err)
@@ -79,14 +80,14 @@ func NewKeeper(logger logging.Logger) *Keeper {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Keeper{
-		logger:      logger,
-		ethClient:   ethClient,
-		ethWsClient: ethWsClient,
-		nodeApi:     nodeApi,
-		avsReader:   avsReader,
-		avsWriter:   avsWriter,
-		ctx:         ctx,
-		cancel:      cancel,
+		logger:    logger,
+		ethClient: ethClient,
+		// ethWsClient: ethWsClient,
+		nodeApi:   nodeApi,
+		avsReader: avsReader,
+		avsWriter: avsWriter,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -97,34 +98,75 @@ func (k *Keeper) Start(ctx context.Context) error {
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{common.HexToAddress(config.GetAvsGovernanceAddress())},
 	}
-	logs := make(chan ethtypes.Log)
+	// logs := make(chan ethtypes.Log)
 
-	sub, err := k.ethWsClient.SubscribeFilterLogs(context.Background(), query, logs)
-	if err != nil {
-		k.logger.Error("Subscribe failed", "err", err)
-		return err
-	}
-	defer sub.Unsubscribe()
+	// sub, err := k.ethWsClient.SubscribeFilterLogs(context.Background(), query, logs)
+	// if err != nil {
+	// 	k.logger.Error("Subscribe failed", "err", err)
+	// 	return err
+	// }
+	// defer sub.Unsubscribe()
 
-	k.logger.Infof("Starting event monitoring...")
+	k.logger.Infof("Starting block polling event monitoring...")
+	// Poll every 3 seconds
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			k.logger.Info("Shutdown signal received, stopping keeper")
 			return ctx.Err()
-		case err := <-sub.Err():
-			k.logger.Error("Subscription error:", err)
-		case vLog := <-logs:
-			event, err := k.parseEvent(vLog)
+		// case err := <-sub.Err():
+		// 	k.logger.Error("Subscription error:", err)
+		// case vLog := <-logs:
+		// 	event, err := k.parseEvent(vLog)
+		// 	if err != nil {
+		// 		k.logger.Info("Not as expected TaskCreated log, parse err:", "err", err)
+		// 		continue
+		// 	}
+		// 	if event != nil {
+		// 		e := event.(*avs.TriggerXAvsTaskCreated)
+		// 		// Process the task creation event
+		// 		k.ProcessNewTaskCreatedLog(e)
+		// 	}
+		case <-ticker.C:
+			// Get the latest block number
+			latestBlock, err := k.ethClient.BlockNumber(ctx)
 			if err != nil {
-				k.logger.Info("Not as expected TaskCreated log, parse err:", "err", err)
+				k.logger.Error("Failed to get latest block number", "err", err)
 				continue
 			}
-			if event != nil {
-				e := event.(*avs.TriggerXAvsTaskCreated)
-				// Process the task creation event
-				k.ProcessNewTaskCreatedLog(e)
+
+			// Query for logs from the latest block
+			query.FromBlock = big.NewInt(int64(latestBlock))
+			query.ToBlock = big.NewInt(int64(latestBlock))
+
+			logs, err := k.ethClient.FilterLogs(ctx, query)
+			if err != nil {
+				k.logger.Error("Failed to filter logs, retrying once", "err", err)
+
+				// Simple retry with single reattempt
+				time.Sleep(1 * time.Second)
+				logs, err = k.ethClient.FilterLogs(ctx, query)
+				if err != nil {
+					k.logger.Error("Failed to filter logs after retry", "err", err)
+					continue
+				}
+			}
+
+			// Process any logs found
+			for _, vLog := range logs {
+				event, err := k.parseEvent(vLog)
+				if err != nil {
+					k.logger.Info("Not as expected TaskCreated log, parse err:", "err", err)
+					continue
+				}
+				if event != nil {
+					e := event.(*avs.TriggerXAvsTaskCreated)
+					// Process the task creation event
+					k.ProcessNewTaskCreatedLog(e)
+				}
 			}
 		}
 	}
