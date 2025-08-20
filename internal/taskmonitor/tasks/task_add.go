@@ -19,7 +19,8 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	// Find and move task from processing to completed
 	task, err := tsm.findTaskInDispatched(taskID)
 	if err != nil {
-		return fmt.Errorf("failed to find task in processing: %w", err)
+		tsm.logger.Error("failed to find task in processing", "error", err)
+		// return err
 	}
 
 	task.CompletedAt = &[]time.Time{time.Now()}[0]
@@ -27,7 +28,8 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	// Add to completed stream
 	err = tsm.addTaskToStream(ctx, StreamTaskCompleted, task)
 	if err != nil {
-		return fmt.Errorf("failed to add to completed stream: %w", err)
+		tsm.logger.Error("failed to add to completed stream", "error", err)
+		// return err
 	}
 
 	// Remove from processing stream (acknowledge)

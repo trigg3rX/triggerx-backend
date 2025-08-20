@@ -33,12 +33,17 @@ const (
 		SELECT user_points, total_tasks 
 		FROM triggerx.user_data 
 		WHERE user_id = ?`
+	GetJobCostActual = `
+		SELECT job_cost_actual 
+		FROM triggerx.job_data 
+		WHERE job_id = ?`
 
 	// Setters
 	UpdateTaskSubmissionData = `
 		UPDATE triggerx.task_data 
 		SET task_number = ?, 
 			is_accepted = ?, 
+			is_successful = ?,
 			task_submission_tx_hash = ?, 
 			task_performer_id = ?, 
 			task_attester_ids = ?, 
@@ -61,4 +66,8 @@ const (
 		UPDATE triggerx.user_data 
 		SET user_points = ?, total_tasks = ?, last_updated_at = ?
 		WHERE user_id = ?`
+	UpdateJobCostActual = `
+		UPDATE triggerx.job_data 
+		SET job_cost_actual = ?
+		WHERE job_id = ?`
 )

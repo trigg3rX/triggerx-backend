@@ -24,6 +24,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
+		data.IsAccepted,
 		data.TaskSubmissionTxHash,
 		performerId[0],
 		attesterIds,
@@ -163,6 +164,27 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
 	}
+
+	var jobCostActual float64
+	iter = dm.db.NewQuery(queries.GetJobCostActual, jobID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&jobCostActual) {
+		dm.logger.Errorf("Failed to get job cost actual for job ID %d: no results found", jobID)
+		return fmt.Errorf("job not found for job ID %d", jobID)
+	}
+
+	jobCostActual = jobCostActual + data.TaskOpxCost
+
+	if err := dm.db.NewQuery(queries.UpdateJobCostActual, jobCostActual, jobID).Exec(); err != nil {
+		dm.logger.Errorf("Failed to update job cost actual for job ID %d: %v", jobID, err)
+		return err
+	}
+
 	dm.logger.Infof("Successfully updated points for user ID %d: added %.2f points", userID, data.TaskOpxCost)
 	return nil
 }
