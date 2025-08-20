@@ -12,7 +12,7 @@ import (
 )
 
 func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64) (*TaskStreamData, error) {
-	taskStreamData, _, err := tsm.ReadTasksFromStream(stream, "task_stream_manager", "task_stream_manager", 10)
+	taskStreamData, _, err := tsm.ReadTasksFromStream(stream, "task_stream_manager", "task_stream_manager", 1000)
 	if err != nil {
 		tsm.logger.Error("Failed to read task stream data",
 			"task_id", taskID,

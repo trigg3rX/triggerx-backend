@@ -184,7 +184,7 @@ func (tsm *TaskStreamManager) GetDatabaseClient() *database.DatabaseClient {
 
 // FindTaskInDispatched finds a specific task in the dispatched stream
 func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*TaskStreamData, error) {
-	tasks, _, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "task-finder", "finder", 100)
+	tasks, _, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "task-finder", "finder", 1000)
 	if err != nil {
 		return nil, err
 	}

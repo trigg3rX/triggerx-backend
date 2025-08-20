@@ -32,7 +32,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	// tsm.logger.Debug("Checking for dispatched timeouts")
 
 	// Read all dispatched tasks (simplified - in production would use consumer groups)
-	tasks, messageIDs, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "timeout-checker", "timeout-worker", 100)
+	tasks, messageIDs, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "timeout-checker", "timeout-worker", 1000)
 	if err != nil {
 		tsm.logger.Error("Failed to read dispatched tasks for timeout check", "error", err)
 		return

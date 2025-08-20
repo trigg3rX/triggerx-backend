@@ -40,7 +40,7 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 
 // findTaskInDispatched finds a specific task in the dispatched stream
 func (tsm *TaskStreamManager) findTaskInDispatched(taskID int64) (*TaskStreamData, error) {
-	tasks, _, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "task-finder", "finder", 100)
+	tasks, _, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "task-finder", "finder", 1000)
 	if err != nil {
 		return nil, err
 	}

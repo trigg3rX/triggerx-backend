@@ -287,8 +287,8 @@ func (c *Challenger) MonitorForChallenge(
 			case currentEpoch <= startingEpoch+taskResponsePeriod:
 				// Phase One period - monitor for submissions
 				if !phaseOneSubmitted {
-					c.logger.Info("Monitoring Phase One submissions", "currentEpoch", currentEpoch,
-						"startingEpoch", startingEpoch, "taskResponsePeriod", taskResponsePeriod, "taskId", taskId)
+					// c.logger.Info("Monitoring Phase One submissions", "currentEpoch", currentEpoch,
+					// 	"startingEpoch", startingEpoch, "taskResponsePeriod", taskResponsePeriod, "taskId", taskId)
 
 					// Check if operators have submitted for phase one by querying contract
 					operatorResponses, err := c.avsReader.GetOperatorTaskResponseList(&bind.CallOpts{}, taskInfo.TaskContractAddress.String(), taskId)
@@ -319,8 +319,8 @@ func (c *Challenger) MonitorForChallenge(
 			case currentEpoch <= startingEpoch+taskResponsePeriod+taskStatisticalPeriod && currentEpoch > startingEpoch+taskResponsePeriod:
 				// Phase Two period - monitor for submissions and call challenge when phaseTwoSubmitted is true
 				if !phaseTwoSubmitted {
-					c.logger.Info("Monitoring Phase Two submissions", "currentEpoch", currentEpoch,
-						"startingEpoch", startingEpoch, "taskResponsePeriod", taskResponsePeriod, "taskStatisticalPeriod", taskStatisticalPeriod, "taskId", taskId)
+					// c.logger.Info("Monitoring Phase Two submissions", "currentEpoch", currentEpoch,
+					// 	"startingEpoch", startingEpoch, "taskResponsePeriod", taskResponsePeriod, "taskStatisticalPeriod", taskStatisticalPeriod, "taskId", taskId)
 
 					// Check if operators have submitted for phase two by querying contract
 					operatorResponses, err := c.avsReader.GetOperatorTaskResponseList(&bind.CallOpts{}, taskInfo.TaskContractAddress.String(), taskId)
