@@ -8,13 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/imua-xyz/imua-avs-sdk/logging"
 	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
@@ -377,74 +375,6 @@ func getPasswordSecurely(prompt string) (string, error) {
 	}
 	fmt.Println() // Print newline after password input
 	return string(bytePassword), nil
-}
-
-// equalBytes compares two byte slices in constant time
-func equalBytes(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	var result byte
-	for i := 0; i < len(a); i++ {
-		result |= a[i] ^ b[i]
-	}
-	return result == 0
-}
-
-func parseBLSPrivateKey(hexKey string) (bls.SecretKey, error) {
-	hexKey = strings.TrimPrefix(hexKey, "0x")
-
-	keyBytes := common.FromHex(hexKey)
-	if len(keyBytes) != 32 {
-		return nil, fmt.Errorf("BLS private key must be 32 bytes, got %d", len(keyBytes))
-	}
-
-	curveOrder := new(big.Int)
-	curveOrder.SetString(BLS12381_CURVE_ORDER, 10)
-
-	keyInt := new(big.Int).SetBytes(keyBytes)
-	if keyInt.Cmp(curveOrder) >= 0 {
-		return nil, fmt.Errorf("private key is too large for BLS12-381 curve")
-	}
-
-	if keyInt.Sign() == 0 {
-		return nil, fmt.Errorf("private key cannot be zero")
-	}
-
-	return bls.SecretKeyFromBytes(keyBytes)
-}
-
-func validateAndFixBLSKey(currentKey string) (string, error) {
-	currentKey = strings.TrimPrefix(currentKey, "0x")
-
-	if len(currentKey) != 64 {
-		return "", fmt.Errorf("BLS key must be 64 hex characters, got %d", len(currentKey))
-	}
-
-	keyBytes := common.FromHex(currentKey)
-	if len(keyBytes) != 32 {
-		return "", fmt.Errorf("invalid hex encoding")
-	}
-
-	curveOrder := new(big.Int)
-	curveOrder.SetString(BLS12381_CURVE_ORDER, 10)
-
-	keyInt := new(big.Int).SetBytes(keyBytes)
-
-	if keyInt.Cmp(curveOrder) >= 0 {
-		reducedKey := new(big.Int).Mod(keyInt, curveOrder)
-		if reducedKey.Sign() == 0 {
-			reducedKey.SetInt64(1)
-		}
-
-		reducedBytes := make([]byte, 32)
-		reducedKeyBytes := reducedKey.Bytes()
-		copy(reducedBytes[32-len(reducedKeyBytes):], reducedKeyBytes)
-
-		return hex.EncodeToString(reducedBytes), nil
-	}
-
-	return currentKey, nil
 }
 
 func formatChainIDWithoutRevision(chainID string) string {
