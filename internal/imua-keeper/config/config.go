@@ -2,10 +2,10 @@ package config
 
 import (
 	"crypto/ecdsa"
-	"encoding/hex"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	sdkEcdsa "github.com/imua-xyz/imua-avs-sdk/crypto/ecdsa"
+	"github.com/trigg3rX/triggerx-backend/cli/core"
 	"github.com/joho/godotenv"
 	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 	"time"
@@ -111,29 +111,14 @@ func Init() error {
 		othenticBootstrapID:  env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 
-	// Load BLS private key from environment variable
-	blsPrivateKeyHex := env.GetEnvString("BLS_PRIVATE_KEY", "")
-	if blsPrivateKeyHex == "" {
-		return fmt.Errorf("BLS_PRIVATE_KEY environment variable not set")
-	}
-
-	// Remove 0x prefix if present
-	if len(blsPrivateKeyHex) >= 2 && blsPrivateKeyHex[:2] == "0x" {
-		blsPrivateKeyHex = blsPrivateKeyHex[2:]
-	}
-
-	// Convert hex to bytes
-	blsKeyBytes, err := hex.DecodeString(blsPrivateKeyHex)
+	// Load BLS private key from keystore
+	blsKeyStorePath := env.GetEnvString("OPERATOR_BLS_KEY_STORE_PATH", "")
+	blsKeyPassword := env.GetEnvString("OPERATOR_BLS_KEY_PASSWORD", "")
+	blsPrivateKey, err := core.LoadBLSKeystore(blsKeyStorePath, blsKeyPassword)
 	if err != nil {
-		return fmt.Errorf("invalid BLS private key format: %s", err)
+		return fmt.Errorf("invalid bls key password: %s", err)
 	}
-
-	// Create BLS secret key from bytes
-	blsKeyPair, err := bls.SecretKeyFromBytes(blsKeyBytes)
-	if err != nil {
-		return fmt.Errorf("invalid bls key: %s", err)
-	}
-	cfg.consensusKeyPair = blsKeyPair
+	cfg.consensusKeyPair = blsPrivateKey
 
 	ecdsaKeyPassword := env.GetEnvString("OPERATOR_ECDSA_KEY_PASSWORD", "")
 	ecdsaKeyStorePath := env.GetEnvString("OPERATOR_ECDSA_KEY_STORE_PATH", "")
