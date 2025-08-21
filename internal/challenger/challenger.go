@@ -170,7 +170,7 @@ func (c *Challenger) Start(ctx context.Context) error {
 						c.ProcessNewTaskCreatedLog(e)
 					case *avs.TriggerXAvsTaskSubmitted:
 						// Process task submission events (operators submitting responses)
-						c.ProcessTaskSubmittedLog(e)
+						// c.ProcessTaskSubmittedLog(e)
 					}
 				}
 			}
@@ -224,11 +224,11 @@ func (c *Challenger) ProcessNewTaskCreatedLog(e *avs.TriggerXAvsTaskCreated) {
 }
 
 // ProcessTaskSubmittedLog processes task submission events from operators
-func (c *Challenger) ProcessTaskSubmittedLog(e *avs.TriggerXAvsTaskSubmitted) {
-	c.logger.Info("Processing task submitted event for challenge monitoring",
-		"taskID", e.TaskID,
-		"operator", e.Operator.String(),
-		"phase", e.Phase)
+// func (c *Challenger) ProcessTaskSubmittedLog(e *avs.TriggerXAvsTaskSubmitted) {
+// 	c.logger.Info("Processing task submitted event for challenge monitoring",
+// 		"taskID", e.TaskID,
+// 		"operator", e.Operator.String(),
+// 		"phase", e.Phase)
 
 	// Here you could implement immediate challenge logic based on the submitted response
 	// For example, if you detect suspicious patterns in the submission, you could trigger a challenge
@@ -236,7 +236,7 @@ func (c *Challenger) ProcessTaskSubmittedLog(e *avs.TriggerXAvsTaskSubmitted) {
 	// This event-driven approach allows for faster challenge responses compared to polling
 	// The actual challenge logic would still be handled by the MonitorForChallenge function
 	// which is already running for each task
-}
+// }
 
 // MonitorForChallenge monitors a task and calls challenge function when phaseTwoSubmitted is true
 func (c *Challenger) MonitorForChallenge(

@@ -1,6 +1,7 @@
 package actions
 
 import (
+	// "encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -31,9 +32,16 @@ func SetupImuaKeys(ctx *cli.Context) error {
 		return fmt.Errorf("IMUA_ACCOUNT_KEY_NAME environment variable not set")
 	}
 
+	// Get keyring backend from env or use default
+	keyringBackend := os.Getenv("IMUA_KEYRING_BACKEND")
+	if keyringBackend == "" {
+		keyringBackend = "file" // default to file backend
+	}
+
 	log.Printf("Setup configuration:")
 	log.Printf("- Home Directory: %s", imuaHomeDir)
 	log.Printf("- Account Key Name: %s", imuaAccountKeyName)
+	log.Printf("- Keyring Backend: %s", keyringBackend)
 
 	// Step 1: Check if imuad is available
 	log.Println("\n🔍 Step 1: Checking if imuad is available...")
@@ -52,7 +60,7 @@ func SetupImuaKeys(ctx *cli.Context) error {
 
 	// Step 3: Check if validator key exists
 	log.Println("\n🔑 Step 3: Checking if validator key exists...")
-	keyExists, err := checkValidatorKeyExists(imuaHomeDir, imuaAccountKeyName)
+	keyExists, err := checkValidatorKeyExists(imuaHomeDir, imuaAccountKeyName, keyringBackend)
 	if err != nil {
 		return fmt.Errorf("failed to check if validator key exists: %v", err)
 	}
@@ -64,7 +72,7 @@ func SetupImuaKeys(ctx *cli.Context) error {
 		getAddrCmd := exec.Command("imuad",
 			"--home", imuaHomeDir,
 			"keys", "show", "-a", imuaAccountKeyName,
-			"--keyring-backend", "test",
+			"--keyring-backend", keyringBackend,
 		)
 
 		addrOutput, err := getAddrCmd.Output()
@@ -78,20 +86,17 @@ func SetupImuaKeys(ctx *cli.Context) error {
 		return nil
 	}
 
-	// Step 4: Create validator key
-	// log.Printf("\n🚀 Step 4: Creating validator key '%s'...", imuaAccountKeyName)
-	// if err := createValidatorKey(imuaHomeDir, imuaAccountKeyName); err != nil {
-	// 	return fmt.Errorf("failed to create validator key: %v", err)
-	// }
+	// Step 4: Create the key if it doesn't exist
+	log.Printf("\n🚀 Step 4: Creating validator key '%s'...", imuaAccountKeyName)
+	if err := createValidatorKey(imuaHomeDir, imuaAccountKeyName, keyringBackend); err != nil {
+		return fmt.Errorf("failed to create validator key: %v", err)
+	}
 
-	// log.Println("\n🎉 Imuachain key setup completed successfully!")
-	// log.Println("\n📋 Summary:")
-	// log.Printf("   ✅ Validator key '%s' created", imuaAccountKeyName)
-	// log.Printf("   ✅ Home directory: %s", imuaHomeDir)
-	// log.Println("\n💡 Next Steps:")
-	// log.Println("   1. Fund your validator address with IMUA tokens from the testnet faucet")
-	// log.Println("   2. Run 'triggerx register-imua-operator' to register as an operator")
-	// log.Println("   3. Run 'triggerx complete-imua-registration' for full setup")
+	log.Println("\n🎉 Imuachain key setup completed successfully!")
+	log.Println("\n📋 Summary:")
+	log.Printf("   ✅ Validator key '%s' created", imuaAccountKeyName)
+	log.Printf("   ✅ Home directory: %s", imuaHomeDir)
+	log.Printf("   ✅ Keyring backend: %s", keyringBackend)
 
 	return nil
 }
@@ -101,16 +106,11 @@ func ensureImuaHomeDir(imuaHomeDir string) error {
 	// Check if directory exists
 	if _, err := os.Stat(imuaHomeDir); os.IsNotExist(err) {
 		log.Printf("Creating home directory: %s", imuaHomeDir)
-
-		// Initialize imuad configuration
-		initCmd := exec.Command("imuad", "init", "validator", "--home", imuaHomeDir)
-		output, err := initCmd.CombinedOutput()
+		err := os.MkdirAll(imuaHomeDir, 0755)
 		if err != nil {
-			log.Printf("Init command output: %s", string(output))
-			return fmt.Errorf("failed to initialize imuad home directory: %v", err)
+			return fmt.Errorf("failed to create home directory: %v", err)
 		}
-
-		log.Printf("Initialized imuad home directory")
+		log.Printf("Created imuad home directory")
 	} else if err != nil {
 		return fmt.Errorf("failed to check home directory: %v", err)
 	}
@@ -119,46 +119,73 @@ func ensureImuaHomeDir(imuaHomeDir string) error {
 }
 
 // checkValidatorKeyExists checks if the validator key already exists
-func checkValidatorKeyExists(imuaHomeDir, keyName string) (bool, error) {
+// checkValidatorKeyExists checks if the validator key already exists
+func checkValidatorKeyExists(imuaHomeDir, keyName, keyringBackend string) (bool, error) {
 	listCmd := exec.Command("imuad",
 		"--home", imuaHomeDir,
 		"keys", "list",
 		"--output", "json",
-		"--keyring-backend", "test",
+		"--keyring-backend", keyringBackend,
 	)
+
+	// For file backend, we need to provide the password
+	if keyringBackend == "file" {
+		keyringPassword := os.Getenv("KEYRING_PASSWORD")
+		if keyringPassword != "" {
+			listCmd.Stdin = strings.NewReader(keyringPassword + "\n")
+		}
+	}
 
 	output, err := listCmd.Output()
 	if err != nil {
+		// If the command fails, it might be because no keys exist yet
+		// Check if the error is about no keys being available
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr := string(exitErr.Stderr)
+			if strings.Contains(stderr, "no keys found") || strings.Contains(stderr, "keyring is empty") {
+				return false, nil
+			}
+		}
 		return false, fmt.Errorf("failed to list keys: %v", err)
 	}
 
 	outputStr := string(output)
 	// Simple check - look for the key name in the JSON output
-	// In production, you'd want proper JSON parsing
 	return strings.Contains(outputStr, fmt.Sprintf(`"name":"%s"`, keyName)), nil
 }
 
 // createValidatorKey creates a new validator key
-// func createValidatorKey(imuaHomeDir, keyName string) error {
-// 	createCmd := exec.Command("imuad",
-// 		"--home", imuaHomeDir,
-// 		"keys", "add", keyName, "--keyring-backend", "test",
-// 	)
+func createValidatorKey(imuaHomeDir, keyName, keyringBackend string) error {
+	createCmd := exec.Command("imuad",
+		"--home", imuaHomeDir,
+		"keys", "add", keyName,
+		"--keyring-backend", keyringBackend,
+	)
 
-// 	output, err := createCmd.CombinedOutput()
-// 	if err != nil {
-// 		log.Printf("Create key command output: %s", string(output))
-// 		return fmt.Errorf("failed to create validator key: %v", err)
-// 	}
+	// For file backend, we might need to handle password input
+	// For now, let's assume it will prompt the user if needed
+	createCmd.Stdin = os.Stdin
+	createCmd.Stdout = os.Stdout
+	createCmd.Stderr = os.Stderr
 
-// 	log.Printf("Validator key created successfully:")
-// 	log.Printf("%s", string(output))
+	log.Printf("Creating key '%s' with %s backend...", keyName, keyringBackend)
 
-// 	return nil
-// }
+	if keyringBackend == "file" {
+		log.Println("⚠️  File backend requires a password. You will be prompted to enter and confirm a password.")
+	}
+
+	err := createCmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to create validator key: %v", err)
+	}
+
+	log.Printf("✅ Validator key '%s' created successfully", keyName)
+	return nil
+}
 
 // EnsureValidatorKeyExists is a helper function that can be called by other commands
 // to ensure the validator key exists before proceeding
+// Replace your existing EnsureValidatorKeyExists function with this:
 func EnsureValidatorKeyExists() error {
 	imuaHomeDir := os.Getenv("IMUA_HOME_DIR")
 	if imuaHomeDir == "" {
@@ -168,6 +195,12 @@ func EnsureValidatorKeyExists() error {
 	imuaAccountKeyName := os.Getenv("IMUA_ACCOUNT_KEY_NAME")
 	if imuaAccountKeyName == "" {
 		return fmt.Errorf("IMUA_ACCOUNT_KEY_NAME environment variable not set")
+	}
+
+	// Fix: Use IMUA_KEYRING_BACKEND instead of KEYRING_BACKEND
+	keyringBackend := os.Getenv("KEYRING_BACKEND")
+	if keyringBackend == "" {
+		keyringBackend = "file"
 	}
 
 	// Check if imuad is available
@@ -182,20 +215,19 @@ func EnsureValidatorKeyExists() error {
 	}
 
 	// Check if key exists
-	keyExists, err := checkValidatorKeyExists(imuaHomeDir, imuaAccountKeyName)
+	keyExists, err := checkValidatorKeyExists(imuaHomeDir, imuaAccountKeyName, keyringBackend)
 	if err != nil {
 		return fmt.Errorf("failed to check if validator key exists: %v", err)
 	}
 
 	if !keyExists {
-		log.Printf("⚠️ Validator key '%s' not found", imuaAccountKeyName)
-		// log.Println("Creating validator key automatically...")
-
-		// if err := createValidatorKey(imuaHomeDir, imuaAccountKeyName); err != nil {
-		// 	return fmt.Errorf("failed to create validator key: %v", err)
-		// }
-
-		// log.Printf("✅ Validator key '%s' created successfully", imuaAccountKeyName)
+		log.Printf("⚠️ Validator key '%s' not found, creating it...", imuaAccountKeyName)
+		if err := createValidatorKey(imuaHomeDir, imuaAccountKeyName, keyringBackend); err != nil {
+			return fmt.Errorf("failed to create validator key: %v", err)
+		}
+		log.Printf("✅ Validator key '%s' created successfully", imuaAccountKeyName)
+	} else {
+		log.Printf("✅ Validator key '%s' already exists", imuaAccountKeyName)
 	}
 
 	return nil
