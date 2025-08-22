@@ -87,7 +87,7 @@ func (dm *DockerManager) Execute(ctx context.Context, fileURL string, noOfAttest
 
 	dm.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
 
-	result, err := dm.executor.Execute(ctx, fileURL, noOfAttesters)
+	result, err := dm.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters)
 	if err != nil {
 		dm.logger.Errorf("Execution failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)

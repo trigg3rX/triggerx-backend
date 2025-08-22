@@ -7,6 +7,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -45,10 +46,10 @@ func newDownloader(cfg config.FileCacheConfig, validationCfg config.ValidationCo
 	}, nil
 }
 
-func (d *downloader) downloadFile(key string, url string) (*downloadResult, error) {
+func (d *downloader) downloadFile(key string, url string, fileLanguage string) (*downloadResult, error) {
 	// Get file from cache or download it
 	var isCached bool
-	filePath, err := d.cache.getOrDownloadFile(key, func() ([]byte, error) {
+	filePath, err := d.cache.getOrDownloadFile(key, fileLanguage, func() ([]byte, error) {
 		return d.downloadContent(url)
 	})
 	if err != nil {

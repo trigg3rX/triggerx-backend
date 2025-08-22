@@ -37,6 +37,7 @@ type ExecutionResult struct {
 
 type ExecutionContext struct {
 	FileURL       string            `json:"file_url"`
+	FileLanguage  string            `json:"file_language"`
 	NoOfAttesters int               `json:"no_of_attesters"`
 	TraceID       string            `json:"trace_id"`
 	StartedAt     time.Time         `json:"started_at"`

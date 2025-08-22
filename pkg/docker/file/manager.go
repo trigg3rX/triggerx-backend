@@ -44,12 +44,12 @@ func NewFileManager(cfg config.ExecutorConfig, httpClient *httppkg.HTTPClient, l
 	}, nil
 }
 
-func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string) (*types.ExecutionContext, error) {
+func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLanguage string) (*types.ExecutionContext, error) {
 	startTime := time.Now()
 	fm.logger.Debugf("Processing file: %s", fileURL)
 
 	// Download and validate file
-	result, err := fm.downloader.downloadFile(fileURL, fileURL)
+	result, err := fm.downloader.downloadFile(fileURL, fileURL, fileLanguage)
 	if err != nil {
 		fm.updateStats(false, time.Since(startTime), 0.0)
 		return nil, fmt.Errorf("failed to download file: %w", err)

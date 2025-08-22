@@ -62,11 +62,11 @@ func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, httpClient 
 	}, nil
 }
 
-func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
 	e.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
 
 	// Execute through pipeline
-	result, err := e.pipeline.Execute(ctx, fileURL, noOfAttesters)
+	result, err := e.pipeline.Execute(ctx, fileURL, fileLanguage, noOfAttesters)
 	if err != nil {
 		e.logger.Errorf("Execution failed: %v", err)
 		return nil, err

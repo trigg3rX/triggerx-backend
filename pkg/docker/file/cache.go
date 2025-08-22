@@ -77,7 +77,7 @@ func newFileCache(cfg config.FileCacheConfig, logger logging.Logger, fs fs.FileS
 }
 
 // GetOrDownload checks if the file is in the cache by key (CID or URL). If not, it calls downloadFunc to get the content and stores it.
-func (c *fileCache) getOrDownloadFile(key string, downloadFunc func() ([]byte, error)) (string, error) {
+func (c *fileCache) getOrDownloadFile(key string, fileLanguage string, downloadFunc func() ([]byte, error)) (string, error) {
 	c.mutex.RLock()
 	if cachedFile, exists := c.fileCache[key]; exists {
 		c.mutex.RUnlock()
@@ -93,9 +93,9 @@ func (c *fileCache) getOrDownloadFile(key string, downloadFunc func() ([]byte, e
 
 	content, err := downloadFunc()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("download failed: %w", err)
 	}
-	return c.storeFile(key, content)
+	return c.storeFile(key, fileLanguage, content)
 }
 
 func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
@@ -127,13 +127,13 @@ func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
 }
 
 // storeFile now uses the key (CID or URL) as the filename (with .go extension)
-func (c *fileCache) storeFile(key string, content []byte) (string, error) {
+func (c *fileCache) storeFile(key string, fileLanguage string, content []byte) (string, error) {
 	if err := c.ensureSpace(int64(len(content))); err != nil {
 		return "", fmt.Errorf("failed to ensure cache space: %w", err)
 	}
 
 	// Sanitize key for filename (replace / and :)
-	filename := strings.ReplaceAll(strings.ReplaceAll(key, "/", "_"), ":", "_") + ".go"
+	filename := strings.ReplaceAll(strings.ReplaceAll(key, "/", "_"), ":", "_") + "." + getFileExtension(fileLanguage)
 	filePath := filepath.Join(c.cacheDir, filename)
 
 	if err := c.fs.WriteFile(filePath, content, 0644); err != nil {
@@ -166,6 +166,21 @@ func (c *fileCache) storeFile(key string, content []byte) (string, error) {
 
 	c.logger.Infof("Stored file in cache (size: %d bytes)", fileInfo.Size())
 	return filePath, nil
+}
+
+func getFileExtension(fileLanguage string) string {
+	switch fileLanguage {
+	case "ts":
+		return "ts"
+	case "node":
+		return "mjs"	
+	case "py":
+		return "py"
+	case "js":
+		return "js"
+	default:
+		return "go"
+	}
 }
 
 func (c *fileCache) ensureSpace(requiredSize int64) error {

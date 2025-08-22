@@ -44,7 +44,7 @@ func NewExecutionPipeline(cfg config.ExecutorConfig, fileMgr *file.FileManager, 
 	}
 }
 
-func (ep *ExecutionPipeline) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (ep *ExecutionPipeline) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
@@ -53,6 +53,7 @@ func (ep *ExecutionPipeline) Execute(ctx context.Context, fileURL string, noOfAt
 	// Create execution context
 	execCtx := &types.ExecutionContext{
 		FileURL:       fileURL,
+		FileLanguage:  fileLanguage,
 		NoOfAttesters: noOfAttesters,
 		TraceID:       executionID,
 		StartedAt:     startTime,
@@ -93,7 +94,7 @@ func (ep *ExecutionPipeline) Execute(ctx context.Context, fileURL string, noOfAt
 func (ep *ExecutionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
 	// Stage 1: Download and Validate
 	ep.logger.Debugf("Stage 1: Downloading and validating file")
-	fileCtx, err := ep.fileManager.GetOrDownload(ctx, execCtx.FileURL)
+	fileCtx, err := ep.fileManager.GetOrDownload(ctx, execCtx.FileURL, execCtx.FileLanguage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
