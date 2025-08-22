@@ -6,8 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +15,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 

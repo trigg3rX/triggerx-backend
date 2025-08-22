@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
@@ -17,6 +16,7 @@ type downloader struct {
 	cache     *fileCache
 	validator *codeValidator
 	logger    logging.Logger
+	fs        fs.FileSystemAPI
 }
 
 type downloadResult struct {
@@ -28,19 +28,20 @@ type downloadResult struct {
 	Validation *types.ValidationResult
 }
 
-func newDownloader(cfg config.CacheConfig, validationCfg config.ValidationConfig, httpClient *httppkg.HTTPClient, logger logging.Logger) (*downloader, error) {
-	cache, err := newFileCache(cfg, logger)
+func newDownloader(cfg config.FileCacheConfig, validationCfg config.ValidationConfig, httpClient httppkg.HTTPClientInterface, logger logging.Logger, fs fs.FileSystemAPI) (*downloader, error) {
+	cache, err := newFileCache(cfg, logger, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file cache: %w", err)
 	}
 
-	validator := newCodeValidator(validationCfg, logger)
+	validator := newCodeValidator(validationCfg, logger, fs)
 
 	return &downloader{
 		client:    httpClient,
 		cache:     cache,
 		validator: validator,
 		logger:    logger,
+		fs:        fs,
 	}, nil
 }
 
@@ -54,7 +55,7 @@ func (d *downloader) downloadFile(key string, url string) (*downloadResult, erro
 		return nil, fmt.Errorf("failed to download or store file in cache: %w", err)
 	}
 	isCached = true
-	content, err := os.ReadFile(filePath)
+	content, err := d.fs.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read downloaded file: %w", err)
 	}
@@ -74,7 +75,7 @@ func (d *downloader) downloadFile(key string, url string) (*downloadResult, erro
 		}, nil
 	}
 
-	fileInfo, err := os.Stat(filePath)
+	fileInfo, err := d.fs.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}

@@ -2,24 +2,26 @@ package file
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type codeValidator struct {
 	config config.ValidationConfig
 	logger logging.Logger
+	fs     fs.FileSystemAPI
 }
 
-func newCodeValidator(cfg config.ValidationConfig, logger logging.Logger) *codeValidator {
+func newCodeValidator(cfg config.ValidationConfig, logger logging.Logger, fs fs.FileSystemAPI) *codeValidator {
 	return &codeValidator{
 		config: cfg,
 		logger: logger,
+		fs:     fs,
 	}
 }
 
@@ -34,17 +36,17 @@ func (v *codeValidator) validateFile(filePath string) (*types.ValidationResult, 
 
 	// Check file size
 	if err := v.validateFileSize(filePath, result); err != nil {
-		return result, err
+		return nil, err
 	}
 
 	// Check file extension
 	if err := v.validateFileExtension(filePath, result); err != nil {
-		return result, err
+		return nil, err
 	}
 
 	// Read and validate file content
 	if err := v.validateFileContent(filePath, result); err != nil {
-		return result, err
+		return nil, err
 	}
 
 	// Calculate complexity
@@ -54,7 +56,7 @@ func (v *codeValidator) validateFile(filePath string) (*types.ValidationResult, 
 }
 
 func (v *codeValidator) validateFileContent(filePath string, result *types.ValidationResult) error {
-	content, err := os.ReadFile(filePath) // Read the entire file into memory
+	content, err := v.fs.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read file for validation: %w", err)
 	}
@@ -66,7 +68,7 @@ func (v *codeValidator) validateFileContent(filePath string, result *types.Valid
 }
 
 func (v *codeValidator) validateFileSize(filePath string, result *types.ValidationResult) error {
-	fileInfo, err := os.Stat(filePath)
+	fileInfo, err := v.fs.Stat(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
@@ -108,7 +110,7 @@ func (v *codeValidator) validateContentPatterns(content []byte, result *types.Va
 
 		// Check for dangerous patterns
 		for _, pattern := range v.config.BlockedPatterns {
-			if strings.Contains(line, pattern) {
+			if v.containsPattern(line, pattern) {
 				result.IsValid = false
 				result.Errors = append(result.Errors,
 					fmt.Sprintf("dangerous pattern found at line %d: %s", lineNumber, pattern))
@@ -118,6 +120,34 @@ func (v *codeValidator) validateContentPatterns(content []byte, result *types.Va
 		// Check for suspicious patterns (warnings)
 		v.checkSuspiciousPatterns(line, lineNumber, result)
 	}
+}
+
+// containsPattern checks if a line contains a dangerous pattern, handling cases where
+// the pattern might be split across function arguments or have different formatting
+func (v *codeValidator) containsPattern(line, pattern string) bool {
+	// First check for exact match
+	if strings.Contains(line, pattern) {
+		return true
+	}
+
+	// Handle patterns that might be split across function arguments
+	// For example: "rm -rf" should match "exec.Command("rm", "-rf", "/")"
+	patternParts := strings.Fields(pattern)
+	if len(patternParts) > 1 {
+		// Check if all parts of the pattern are present in the line
+		allPartsPresent := true
+		for _, part := range patternParts {
+			if !strings.Contains(line, part) {
+				allPartsPresent = false
+				break
+			}
+		}
+		if allPartsPresent {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (v *codeValidator) checkSuspiciousPatterns(line string, lineNumber int, result *types.ValidationResult) {
@@ -145,27 +175,7 @@ func (v *codeValidator) checkSuspiciousPatterns(line string, lineNumber int, res
 }
 
 func (v *codeValidator) calculateComplexity(filePath string) float64 {
-	file, err := os.Open(filePath)
-	if err != nil {
-		v.logger.Warnf("Failed to open file for complexity calculation: %v", err)
-		return 0.0
-	}
-	defer func() {
-		err := file.Close()
-		if err != nil {
-			v.logger.Errorf("Failed to close file: %v", err)
-		}
-	}()
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		v.logger.Warnf("Failed to get file info for complexity calculation: %v", err)
-		return 0.0
-	}
-
-	// Read file content for complexity calculation
-	content := make([]byte, fileInfo.Size())
-	_, err = file.Read(content)
+	content, err := v.fs.ReadFile(filePath)
 	if err != nil {
 		v.logger.Warnf("Failed to read file for complexity calculation: %v", err)
 		return 0.0
@@ -175,6 +185,11 @@ func (v *codeValidator) calculateComplexity(filePath string) float64 {
 }
 
 func (v *codeValidator) calculateContentComplexity(content []byte) float64 {
+	// Handle empty content
+	if len(content) == 0 {
+		return 0.0
+	}
+
 	contentStr := string(content)
 
 	// Basic complexity calculation based on:

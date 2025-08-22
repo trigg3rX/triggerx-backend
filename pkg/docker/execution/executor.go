@@ -9,6 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/container"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/file"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -37,7 +38,7 @@ func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, httpClient 
 	}
 
 	// Create container manager
-	containerMgr, err := container.NewManager(cli, cfg, logger)
+	containerMgr, err := container.NewContainerManager(cli, &fs.OSFileSystem{}, cfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container manager: %w", err)
 	}

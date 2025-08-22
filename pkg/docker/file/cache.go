@@ -11,6 +11,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -32,9 +33,10 @@ type fileCache struct {
 	stopCleanup   chan struct{}
 	stats         *types.CacheStats
 	statsMutex    sync.RWMutex
+	fs            fs.FileSystemAPI
 }
 
-func newFileCache(cfg config.CacheConfig, logger logging.Logger) (*fileCache, error) {
+func newFileCache(cfg config.FileCacheConfig, logger logging.Logger, fs fs.FileSystemAPI) (*fileCache, error) {
 	// Use configured cache directory or fallback to persistent location
 	cacheDir := cfg.CacheDir
 	if cacheDir == "" {
@@ -42,7 +44,7 @@ func newFileCache(cfg config.CacheConfig, logger logging.Logger) (*fileCache, er
 	}
 
 	// Ensure the cache directory exists with proper permissions
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := fs.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory %s: %w", cacheDir, err)
 	}
 
@@ -52,6 +54,7 @@ func newFileCache(cfg config.CacheConfig, logger logging.Logger) (*fileCache, er
 		config:      cfg,
 		logger:      logger,
 		stopCleanup: make(chan struct{}),
+		fs:          fs,
 		stats: &types.CacheStats{
 			HitCount:      0,
 			MissCount:     0,
@@ -97,7 +100,7 @@ func (c *fileCache) getOrDownloadFile(key string, downloadFunc func() ([]byte, e
 
 func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
 	// Check if file still exists on disk
-	if _, err := os.Stat(cachedFile.Path); os.IsNotExist(err) {
+	if _, err := c.fs.Stat(cachedFile.Path); os.IsNotExist(err) {
 		// File was deleted, remove from cache
 		c.mutex.Lock()
 		delete(c.fileCache, cachedFile.Hash)
@@ -133,11 +136,11 @@ func (c *fileCache) storeFile(key string, content []byte) (string, error) {
 	filename := strings.ReplaceAll(strings.ReplaceAll(key, "/", "_"), ":", "_") + ".go"
 	filePath := filepath.Join(c.cacheDir, filename)
 
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
+	if err := c.fs.WriteFile(filePath, content, 0644); err != nil {
 		return "", fmt.Errorf("failed to write cached file: %w", err)
 	}
 
-	fileInfo, err := os.Stat(filePath)
+	fileInfo, err := c.fs.Stat(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get file info: %w", err)
 	}
@@ -205,7 +208,7 @@ func (c *fileCache) ensureSpace(requiredSize int64) error {
 		}
 
 		// Remove file from disk
-		if err := os.Remove(entry.file.Path); err != nil {
+		if err := c.fs.Remove(entry.file.Path); err != nil {
 			c.logger.Warnf("Failed to remove cached file: %v", err)
 			continue
 		}
@@ -233,14 +236,14 @@ func (c *fileCache) ensureSpace(requiredSize int64) error {
 func (c *fileCache) loadExistingFiles() error {
 	// Load metadata file if it exists
 	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
-	if _, err := os.Stat(metadataPath); err == nil {
+	if _, err := c.fs.Stat(metadataPath); err == nil {
 		if err := c.loadMetadata(metadataPath); err != nil {
 			c.logger.Warnf("Failed to load cache metadata: %v", err)
 		}
 	}
 
 	// Also scan directory for any files not in metadata
-	entries, err := os.ReadDir(c.cacheDir)
+	entries, err := c.fs.ReadDir(c.cacheDir)
 	if err != nil {
 		return err
 	}
@@ -259,7 +262,7 @@ func (c *fileCache) loadExistingFiles() error {
 			continue
 		}
 
-		fileInfo, err := os.Stat(filePath)
+		fileInfo, err := c.fs.Stat(filePath)
 		if err != nil {
 			c.logger.Warnf("Failed to stat cached file %s: %v", filePath, err)
 			continue
@@ -283,7 +286,7 @@ func (c *fileCache) loadExistingFiles() error {
 }
 
 func (c *fileCache) loadMetadata(metadataPath string) error {
-	data, err := os.ReadFile(metadataPath)
+	data, err := c.fs.ReadFile(metadataPath)
 	if err != nil {
 		return err
 	}
@@ -295,7 +298,7 @@ func (c *fileCache) loadMetadata(metadataPath string) error {
 
 	for key, cachedFile := range metadata {
 		// Verify file still exists
-		if _, err := os.Stat(cachedFile.Path); err == nil {
+		if _, err := c.fs.Stat(cachedFile.Path); err == nil {
 			c.fileCache[key] = cachedFile
 			c.stats.ItemCount++
 			c.stats.Size += cachedFile.Size
@@ -312,7 +315,7 @@ func (c *fileCache) saveMetadata() error {
 		return err
 	}
 
-	return os.WriteFile(metadataPath, data, 0644)
+	return c.fs.WriteFile(metadataPath, data, 0644)
 }
 
 func (c *fileCache) updateHitRate() {
