@@ -562,3 +562,20 @@ func TestMockHTTPClient_Integration_WithMockResponseBuilder(t *testing.T) {
 
 	mockClient.AssertExpectations(t)
 }
+
+func TestMockHTTPClient_Fluent(t *testing.T) {
+    mockClient := &MockHTTPClient{}
+
+    // Use the helper + builder for a very readable setup
+    mockClient.OnGet("http://example.com/api").Return(
+        NewMockResponseBuilder().
+            WithStatusCode(200).
+            WithBody(`{"ok":true}`).
+            Build(),
+        nil,
+    )
+
+    resp, err := mockClient.Get("http://example.com/api")
+    assert.NoError(t, err)
+    assert.Equal(t, 200, resp.StatusCode)
+}

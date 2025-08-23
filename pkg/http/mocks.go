@@ -14,6 +14,10 @@ type MockHTTPClient struct {
 	mock.Mock
 }
 
+func (m *MockHTTPClient) OnGet(url string) *mock.Call {
+    return m.On("Get", url)
+}
+
 // DoWithRetry mocks the DoWithRetry method
 func (m *MockHTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 	args := m.Called(req)

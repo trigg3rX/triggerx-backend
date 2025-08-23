@@ -505,7 +505,7 @@ func TestHTTPClient_DoWithRetry_CustomShouldRetry_RespectsCustomLogic(t *testing
 
 	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
-	config.RetryConfig.ShouldRetry = func(err error) bool {
+	config.RetryConfig.ShouldRetry = func(err error, attempt int) bool {
 		// Custom logic: only retry on specific errors
 		return false // Don't retry on any error
 	}
@@ -653,7 +653,7 @@ func TestHTTPClient_DoWithRetry_InvalidURL_ReturnsError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "http request failed")
+	assert.Contains(t, err.Error(), "operation failed after")
 }
 
 // TestHTTPClient_DoWithRetry_RequestBodyCloseError_LogsWarning tests body close error handling
