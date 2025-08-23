@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
+	mathrand "math/rand"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -14,13 +14,13 @@ import (
 
 // Config holds the configuration for retry operations
 type RetryConfig struct {
-	MaxRetries      int              // Maximum number of retry attempts
-	InitialDelay    time.Duration    // Initial delay between retries
-	MaxDelay        time.Duration    // Maximum delay between retries
-	BackoffFactor   float64          // Multiplier for exponential backoff
-	JitterFactor    float64          // Factor for adding jitter to delays (% of delay)
-	LogRetryAttempt bool             // Whether to log retry attempts
-	ShouldRetry     func(error) bool // Custom function to determine if error should be retried
+	MaxRetries      int                   // Maximum number of retry attempts
+	InitialDelay    time.Duration         // Initial delay between retries
+	MaxDelay        time.Duration         // Maximum delay between retries
+	BackoffFactor   float64               // Multiplier for exponential backoff
+	JitterFactor    float64               // Factor for adding jitter to delays (% of delay)
+	LogRetryAttempt bool                  // Whether to log retry attempts
+	ShouldRetry     func(error, int) bool // Custom function to determine if error should be retried (error, attempt number)
 }
 
 // DefaultConfig returns a default configuration for retry operations
@@ -61,8 +61,8 @@ func SecureFloat64() float64 {
 	var b [8]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
-		// Fallback to a less random source if crypto/rand fails
-		return math.Mod(float64(time.Now().UnixNano()), 1000) / 1000.0
+		// Fallback to math/rand if crypto/rand fails
+		return mathrand.Float64()
 	}
 	return float64(binary.BigEndian.Uint64(b[:])) / (1 << 64)
 }
@@ -114,7 +114,7 @@ func Retry[T any](ctx context.Context, operation func() (T, error), retryConfig 
 		err = opErr
 
 		// Check if we should retry based on custom predicate
-		if retryConfig.ShouldRetry != nil && !retryConfig.ShouldRetry(err) {
+		if retryConfig.ShouldRetry != nil && !retryConfig.ShouldRetry(err, attempt+1) {
 			return zero, err
 		}
 

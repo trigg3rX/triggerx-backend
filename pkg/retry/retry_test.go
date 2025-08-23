@@ -181,7 +181,7 @@ func TestRetry(t *testing.T) {
 		logger := logging.NewNoOpLogger()
 
 		config := retry.DefaultRetryConfig()
-		config.ShouldRetry = func(err error) bool {
+		config.ShouldRetry = func(err error, attempt int) bool {
 			return !errors.Is(err, nonRetryableError)
 		}
 
