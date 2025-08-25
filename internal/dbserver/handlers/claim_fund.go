@@ -51,6 +51,8 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		rpcURL = fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "base_sepolia":
 		rpcURL = fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "arbitrum_sepolia":
+		rpcURL = fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid network specified"})
 		return
@@ -138,6 +140,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
+	h.logger.Infof("[ClaimFund] trace_id=%s - Fund sent successfully", traceID)
 	c.JSON(http.StatusOK, ClaimFundResponse{
 		Success:         true,
 		Message:         "Funds sent successfully",
