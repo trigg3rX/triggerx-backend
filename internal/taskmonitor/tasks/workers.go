@@ -31,8 +31,9 @@ func (tsm *TaskStreamManager) StartTimeoutWorker(ctx context.Context) {
 func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	// tsm.logger.Debug("Checking for dispatched timeouts")
 
-	// Read all dispatched tasks (simplified - in production would use consumer groups)
-	tasks, messageIDs, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "timeout-checker", "timeout-worker", 1000)
+	// Read dispatched tasks with a smaller limit for better performance
+	// The index will help us find specific tasks efficiently when needed
+	tasks, messageIDs, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "timeout-checker", "timeout-worker", 100)
 	if err != nil {
 		tsm.logger.Error("Failed to read dispatched tasks for timeout check", "error", err)
 		return
@@ -44,8 +45,12 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 
 	now := time.Now()
 	timeoutCount := 0
+	acknowledgedCount := 0
 
 	for i, task := range tasks {
+		shouldAcknowledge := false
+		acknowledgeReason := ""
+
 		if task.DispatchedAt != nil {
 			dispatchedDuration := now.Sub(*task.DispatchedAt)
 			if dispatchedDuration > TasksProcessingTTL {
@@ -62,18 +67,8 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 					continue // Don't acknowledge if we failed to move to failed stream
 				}
 
-				// Acknowledge the timed-out task
-				err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageIDs[i])
-				if err != nil {
-					tsm.logger.Error("Failed to acknowledge timed-out task",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"error", err)
-				} else {
-					timeoutCount++
-					tsm.logger.Info("Task timeout processed successfully",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"message_id", messageIDs[i])
-				}
+				shouldAcknowledge = true
+				acknowledgeReason = "timeout"
 			}
 		} else {
 			// If task has no DispatchedAt timestamp, it might be a stale task
@@ -92,24 +87,60 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 					continue
 				}
 
-				// Acknowledge the timed-out task
-				err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageIDs[i])
+				shouldAcknowledge = true
+				acknowledgeReason = "stale timeout"
+			}
+		}
+
+		// Always acknowledge the message to prevent PEL growth
+		// If the task was processed (moved to failed stream), acknowledge it
+		// If the task is still valid, acknowledge it to remove from PEL
+		if shouldAcknowledge {
+			// Acknowledge the timed-out task
+			err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageIDs[i])
+			if err != nil {
+				tsm.logger.Error("Failed to acknowledge timed-out task",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"message_id", messageIDs[i],
+					"error", err)
+			} else {
+				// Remove the task from the index since it's been processed
+				err = tsm.taskIndex.RemoveTaskIndex(ctx, task.SendTaskDataToKeeper.TaskID[0])
 				if err != nil {
-					tsm.logger.Error("Failed to acknowledge stale timed-out task",
+					tsm.logger.Warn("failed to remove timed-out task from index",
 						"task_id", task.SendTaskDataToKeeper.TaskID[0],
 						"error", err)
-				} else {
-					timeoutCount++
-					tsm.logger.Info("Stale task timeout processed successfully",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"message_id", messageIDs[i])
 				}
+
+				timeoutCount++
+				acknowledgedCount++
+				tsm.logger.Info("Task timeout processed and acknowledged successfully",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"message_id", messageIDs[i],
+					"reason", acknowledgeReason)
+			}
+		} else {
+			// Acknowledge valid tasks to prevent PEL growth
+			err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageIDs[i])
+			if err != nil {
+				tsm.logger.Error("Failed to acknowledge valid task",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"message_id", messageIDs[i],
+					"error", err)
+			} else {
+				acknowledgedCount++
+				tsm.logger.Debug("Valid task acknowledged successfully",
+					"task_id", task.SendTaskDataToKeeper.TaskID[0],
+					"message_id", messageIDs[i])
 			}
 		}
 	}
 
 	if timeoutCount > 0 {
 		tsm.logger.Info("Processed task timeouts", "timeout_count", timeoutCount)
+	}
+	if acknowledgedCount > 0 {
+		tsm.logger.Debug("Acknowledged messages", "acknowledged_count", acknowledgedCount)
 	}
 }
 

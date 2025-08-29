@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
@@ -20,6 +21,7 @@ type TaskStreamManager struct {
 	consumerGroups map[string]bool
 	mu             sync.RWMutex
 	startTime      time.Time
+	taskIndex      *TaskIndexManager
 }
 
 func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger logging.Logger) (*TaskStreamManager, error) {
@@ -30,6 +32,9 @@ func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient
 		consumerGroups: make(map[string]bool),
 		startTime:      time.Now(),
 	}
+
+	// Initialize the task index manager
+	tsm.taskIndex = NewTaskIndexManager(tsm)
 
 	logger.Info("TaskStreamManager initialized successfully")
 	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
@@ -182,20 +187,117 @@ func (tsm *TaskStreamManager) GetDatabaseClient() *database.DatabaseClient {
 	return tsm.dbClient
 }
 
-// FindTaskInDispatched finds a specific task in the dispatched stream
-func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*TaskStreamData, error) {
-	tasks, _, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "task-finder", "finder", 1000)
-	if err != nil {
-		return nil, err
-	}
+// GetTaskIndexManager returns the task index manager
+func (tsm *TaskStreamManager) GetTaskIndexManager() *TaskIndexManager {
+	return tsm.taskIndex
+}
 
-	for _, task := range tasks {
-		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
-			return &task, nil
+// GetPendingEntriesInfo returns information about pending entries in consumer groups
+func (tsm *TaskStreamManager) GetPendingEntriesInfo() map[string]interface{} {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	pendingInfo := make(map[string]interface{})
+	consumerGroups := []string{"task-processors", "timeout-checker", "task-finder"}
+
+	for _, group := range consumerGroups {
+		pending, err := tsm.redisClient.XPending(ctx, StreamTaskDispatched, group)
+		if err != nil {
+			tsm.logger.Warn("Failed to get pending entries info",
+				"consumer_group", group,
+				"error", err)
+			pendingInfo[group] = map[string]interface{}{
+				"error": err.Error(),
+			}
+			continue
+		}
+
+		pendingInfo[group] = map[string]interface{}{
+			"count":     pending.Count,
+			"min_id":    pending.Lower,
+			"max_id":    pending.Higher,
+			"consumers": pending.Consumers,
+		}
+
+		// Log warning if there are too many pending entries
+		if pending.Count > 100 {
+			tsm.logger.Warn("High number of pending entries detected",
+				"consumer_group", group,
+				"pending_count", pending.Count,
+				"min_id", pending.Lower,
+				"max_id", pending.Higher)
 		}
 	}
 
-	return nil, fmt.Errorf("task %d not found in dispatched stream", taskID)
+	return pendingInfo
+}
+
+// CleanupPendingEntries attempts to acknowledge old pending entries
+func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
+	consumerGroups := []string{"task-processors", "timeout-checker", "task-finder"}
+	totalCleaned := 0
+
+	for _, group := range consumerGroups {
+		// Get pending entries for this group
+		pendingExt, err := tsm.redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
+			Stream: StreamTaskDispatched,
+			Group:  group,
+			Start:  "-",
+			End:    "+",
+			Count:  100, // Limit to 100 entries per cleanup
+		})
+		if err != nil {
+			tsm.logger.Warn("Failed to get pending entries for cleanup",
+				"consumer_group", group,
+				"error", err)
+			continue
+		}
+
+		cleaned := 0
+		for _, entry := range pendingExt {
+			// If the entry is older than 1 hour, acknowledge it to prevent PEL growth
+			if entry.Idle > time.Hour {
+				err := tsm.redisClient.XAck(ctx, StreamTaskDispatched, group, entry.ID)
+				if err != nil {
+					tsm.logger.Error("Failed to acknowledge old pending entry",
+						"consumer_group", group,
+						"message_id", entry.ID,
+						"idle_time", entry.Idle,
+						"error", err)
+				} else {
+					cleaned++
+					tsm.logger.Debug("Cleaned up old pending entry",
+						"consumer_group", group,
+						"message_id", entry.ID,
+						"idle_time", entry.Idle)
+				}
+			}
+		}
+
+		if cleaned > 0 {
+			tsm.logger.Info("Cleaned up pending entries",
+				"consumer_group", group,
+				"cleaned_count", cleaned)
+			totalCleaned += cleaned
+		}
+	}
+
+	if totalCleaned > 0 {
+		tsm.logger.Info("Pending entries cleanup completed",
+			"total_cleaned", totalCleaned)
+	}
+
+	return nil
+}
+
+// FindTaskInDispatched finds a specific task in the dispatched stream
+func (tsm *TaskStreamManager) FindTaskInDispatched(taskID int64) (*TaskStreamData, error) {
+	ctx := context.Background()
+	task, _, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return task, nil
 }
 
 // AddTaskToStream adds a task to a specific stream
@@ -220,8 +322,10 @@ func (tsm *TaskStreamManager) Close() error {
 func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 	tsm.logger.Info("Starting stream health monitor")
 
-	ticker := time.NewTicker(30 * time.Second) // Check health every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)       // Check health every 30 seconds
+	cleanupTicker := time.NewTicker(5 * time.Minute) // Cleanup every 5 minutes
 	defer ticker.Stop()
+	defer cleanupTicker.Stop()
 
 	for {
 		select {
@@ -241,6 +345,25 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 							"length", length)
 					}
 				}
+			}
+
+			// Check pending entries
+			pendingInfo := tsm.GetPendingEntriesInfo()
+			for group, info := range pendingInfo {
+				if infoMap, ok := info.(map[string]interface{}); ok {
+					if count, exists := infoMap["count"]; exists {
+						if countInt, ok := count.(int64); ok && countInt > 50 {
+							tsm.logger.Warn("High number of pending entries detected",
+								"consumer_group", group,
+								"pending_count", countInt)
+						}
+					}
+				}
+			}
+		case <-cleanupTicker.C:
+			// Periodic cleanup of old pending entries
+			if err := tsm.CleanupPendingEntries(ctx); err != nil {
+				tsm.logger.Error("Failed to cleanup pending entries", "error", err)
 			}
 		}
 	}

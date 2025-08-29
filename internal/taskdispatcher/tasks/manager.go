@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -182,6 +183,41 @@ func (tsm *TaskStreamManager) Close() error {
 	}
 
 	tsm.logger.Info("TaskStreamManager closed successfully")
+	return nil
+}
+
+// storeTaskIndex stores the mapping from taskID to messageID in Redis hash
+func (tsm *TaskStreamManager) storeTaskIndex(ctx context.Context, taskID int64, messageID string) error {
+	start := time.Now()
+
+	taskIDStr := strconv.FormatInt(taskID, 10)
+
+	err := tsm.client.HSet(ctx, "task_id_to_message_id", taskIDStr, messageID)
+	duration := time.Since(start)
+
+	if err != nil {
+		tsm.logger.Error("Failed to store task index",
+			"task_id", taskID,
+			"message_id", messageID,
+			"duration", duration,
+			"error", err)
+		return fmt.Errorf("failed to store task index: %w", err)
+	}
+
+	// Set TTL on the hash to ensure it expires (2 hours)
+	err = tsm.client.SetTTL(ctx, "task_id_to_message_id", 2*time.Hour)
+	if err != nil {
+		tsm.logger.Warn("Failed to set TTL on task index",
+			"task_id", taskID,
+			"error", err)
+		// Don't return error as the main operation succeeded
+	}
+
+	tsm.logger.Debug("Task index stored successfully",
+		"task_id", taskID,
+		"message_id", messageID,
+		"duration", duration)
+
 	return nil
 }
 

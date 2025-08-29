@@ -12,7 +12,13 @@ import (
 )
 
 func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64) (*TaskStreamData, error) {
-	taskStreamData, err := tsm.ReadTasksFromStream(stream, "task_stream_manager", "task_stream_manager", 1000)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, config.GetRequestTimeout())
+	defer cancel()
+
+	// Use XRANGE to read recent messages without adding to PEL
+	// This is more efficient for lookup operations
+	streams, err := tsm.client.Client().XRange(ctx, stream, "-", "+").Result()
 	if err != nil {
 		tsm.logger.Error("Failed to read task stream data",
 			"task_id", taskID,
@@ -20,7 +26,27 @@ func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64)
 		return nil, fmt.Errorf("failed to read task stream data: %w", err)
 	}
 
-	for _, task := range taskStreamData {
+	// Limit the search to the most recent 100 messages to avoid performance issues
+	startIndex := 0
+	if len(streams) > 100 {
+		startIndex = len(streams) - 100
+	}
+
+	for i := startIndex; i < len(streams); i++ {
+		message := streams[i]
+		taskJSON, exists := message.Values["task"].(string)
+		if !exists {
+			continue
+		}
+
+		var task TaskStreamData
+		if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
+			tsm.logger.Error("Failed to unmarshal task data",
+				"message_id", message.ID,
+				"error", err)
+			continue
+		}
+
 		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
 			return &task, nil
 		}
