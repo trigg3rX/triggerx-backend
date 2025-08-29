@@ -88,18 +88,72 @@ func TestDelWithCount(t *testing.T) {
 func TestSetNX(t *testing.T) {
 	flushDB(t)
 	ctx := context.Background()
-	key := "test:setnx"
-	value := "unique"
+	key := "test:set-nx"
+	value := "unique value"
 
-	// First SetNX should succeed
-	acquired, err := testClient.SetNX(ctx, key, value, 1*time.Minute)
+	// First set should succeed
+	success, err := testClient.SetNX(ctx, key, value, 1*time.Minute)
 	require.NoError(t, err)
-	assert.True(t, acquired)
+	assert.True(t, success)
 
-	// Second SetNX should fail
-	acquired, err = testClient.SetNX(ctx, key, "another-value", 1*time.Minute)
+	// Second set should fail
+	success, err = testClient.SetNX(ctx, key, "another value", 1*time.Minute)
 	require.NoError(t, err)
-	assert.False(t, acquired)
+	assert.False(t, success)
+
+	// Verify original value is still there
+	retrieved, err := testClient.Get(ctx, key)
+	require.NoError(t, err)
+	assert.Equal(t, value, retrieved)
+}
+
+func TestHashOperations(t *testing.T) {
+	flushDB(t)
+	ctx := context.Background()
+	key := "test:hash"
+	field1 := "field1"
+	value1 := "value1"
+	field2 := "field2"
+	value2 := "value2"
+
+	// Test HSet
+	err := testClient.HSet(ctx, key, field1, value1, field2, value2)
+	require.NoError(t, err)
+
+	// Test HGet
+	retrieved1, err := testClient.HGet(ctx, key, field1)
+	require.NoError(t, err)
+	assert.Equal(t, value1, retrieved1)
+
+	retrieved2, err := testClient.HGet(ctx, key, field2)
+	require.NoError(t, err)
+	assert.Equal(t, value2, retrieved2)
+
+	// Test HGetWithExists
+	val, exists, err := testClient.HGetWithExists(ctx, key, field1)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, value1, val)
+
+	// Test non-existent field
+	val, exists, err = testClient.HGetWithExists(ctx, key, "non-existent")
+	require.NoError(t, err)
+	assert.False(t, exists)
+	assert.Equal(t, "", val)
+
+	// Test HDelWithCount
+	deleted, err := testClient.HDelWithCount(ctx, key, field1, "non-existent")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), deleted) // Only field1 was deleted
+
+	// Verify field1 is gone
+	_, err = testClient.HGet(ctx, key, field1)
+	assert.ErrorIs(t, err, redis.Nil)
+
+	// Verify field2 still exists
+	retrieved2, err = testClient.HGet(ctx, key, field2)
+	require.NoError(t, err)
+	assert.Equal(t, value2, retrieved2)
 }
 
 func TestTTL(t *testing.T) {
