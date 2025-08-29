@@ -48,6 +48,7 @@ type MockRedisClient struct {
 	MockZAdd                          func(ctx context.Context, key string, members ...redis.Z) (int64, error)
 	MockZAddWithExists                func(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
 	MockZRevRange                     func(ctx context.Context, key string, start, stop int64) ([]string, error)
+	MockZRangeByScore                 func(ctx context.Context, key, min, max string) ([]string, error)
 	MockZRemRangeByScore              func(ctx context.Context, key, min, max string) (int64, error)
 	MockZCard                         func(ctx context.Context, key string) (int64, error)
 	MockTTL                           func(ctx context.Context, key string) (time.Duration, error)
@@ -350,6 +351,14 @@ func (m *MockRedisClient) ZRevRange(ctx context.Context, key string, start, stop
 		return m.MockZRevRange(ctx, key, start, stop)
 	}
 	m.t.Fatal("unexpected call to MockRedisClient.ZRevRange")
+	return nil, nil
+}
+
+func (m *MockRedisClient) ZRangeByScore(ctx context.Context, key, min, max string) ([]string, error) {
+	if m.MockZRangeByScore != nil {
+		return m.MockZRangeByScore(ctx, key, min, max)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.ZRangeByScore")
 	return nil, nil
 }
 

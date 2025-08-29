@@ -22,6 +22,7 @@ type TaskStreamManager struct {
 	mu             sync.RWMutex
 	startTime      time.Time
 	taskIndex      *TaskIndexManager
+	timeoutManager *TimeoutManager
 }
 
 func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger logging.Logger) (*TaskStreamManager, error) {
@@ -35,6 +36,9 @@ func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient
 
 	// Initialize the task index manager
 	tsm.taskIndex = NewTaskIndexManager(tsm)
+
+	// Initialize the timeout manager
+	tsm.timeoutManager = NewTimeoutManager(tsm)
 
 	logger.Info("TaskStreamManager initialized successfully")
 	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
@@ -190,6 +194,11 @@ func (tsm *TaskStreamManager) GetDatabaseClient() *database.DatabaseClient {
 // GetTaskIndexManager returns the task index manager
 func (tsm *TaskStreamManager) GetTaskIndexManager() *TaskIndexManager {
 	return tsm.taskIndex
+}
+
+// GetTimeoutManager returns the timeout manager
+func (tsm *TaskStreamManager) GetTimeoutManager() *TimeoutManager {
+	return tsm.timeoutManager
 }
 
 // GetPendingEntriesInfo returns information about pending entries in consumer groups

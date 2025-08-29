@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 
@@ -216,6 +217,47 @@ func (tsm *TaskStreamManager) storeTaskIndex(ctx context.Context, taskID int64, 
 	tsm.logger.Debug("Task index stored successfully",
 		"task_id", taskID,
 		"message_id", messageID,
+		"duration", duration)
+
+	return nil
+}
+
+// addTaskToTimeoutTracking adds a task to the timeout tracking sorted set
+func (tsm *TaskStreamManager) addTaskToTimeoutTracking(ctx context.Context, taskID int64) error {
+	start := time.Now()
+
+	// Calculate timeout timestamp (1 hour from now)
+	timeoutTimestamp := float64(time.Now().Add(TasksProcessingTTL).Unix())
+	taskIDStr := strconv.FormatInt(taskID, 10)
+
+	// Add to sorted set with timeout timestamp as score
+	_, err := tsm.client.ZAdd(ctx, "dispatched_timeouts", redis.Z{
+		Score:  timeoutTimestamp,
+		Member: taskIDStr,
+	})
+	duration := time.Since(start)
+
+	if err != nil {
+		tsm.logger.Error("Failed to add task to timeout tracking",
+			"task_id", taskID,
+			"timeout_timestamp", timeoutTimestamp,
+			"duration", duration,
+			"error", err)
+		return fmt.Errorf("failed to add task to timeout tracking: %w", err)
+	}
+
+	// Set TTL on the sorted set to ensure it expires (2 hours)
+	err = tsm.client.SetTTL(ctx, "dispatched_timeouts", 2*time.Hour)
+	if err != nil {
+		tsm.logger.Warn("Failed to set TTL on timeout tracking",
+			"task_id", taskID,
+			"error", err)
+		// Don't return error as the main operation succeeded
+	}
+
+	tsm.logger.Debug("Task added to timeout tracking successfully",
+		"task_id", taskID,
+		"timeout_timestamp", timeoutTimestamp,
 		"duration", duration)
 
 	return nil

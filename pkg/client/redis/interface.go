@@ -59,6 +59,7 @@ type RedisClientInterface interface {
 	ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error)
 	ZAddWithExists(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
 	ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error)
+	ZRangeByScore(ctx context.Context, key, min, max string) ([]string, error)
 	ZRemRangeByScore(ctx context.Context, key, min, max string) (int64, error)
 	ZCard(ctx context.Context, key string) (int64, error)
 

@@ -48,6 +48,14 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 					"task_id", taskID,
 					"error", err)
 			}
+
+			// Remove the task from timeout tracking since it's been completed
+			err = tsm.timeoutManager.RemoveTaskTimeout(ctx, taskID)
+			if err != nil {
+				tsm.logger.Warn("failed to remove task from timeout tracking",
+					"task_id", taskID,
+					"error", err)
+			}
 		}
 	}
 

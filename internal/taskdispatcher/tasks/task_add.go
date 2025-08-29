@@ -99,6 +99,15 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 				"error", err)
 			// Don't fail the entire operation if index storage fails
 		}
+
+		// Add task to timeout tracking
+		err = tsm.addTaskToTimeoutTracking(ctx, taskID)
+		if err != nil {
+			tsm.logger.Warn("Failed to add task to timeout tracking, but task was added to stream",
+				"task_id", taskID,
+				"error", err)
+			// Don't fail the entire operation if timeout tracking fails
+		}
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
