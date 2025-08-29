@@ -215,6 +215,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		config.SetPinataJWT(parts[3])
 		config.SetManagerSigningAddress(parts[4])
 		config.SetTaskExecutionAddress(parts[5])
+		// config.SetTaskExecutionAddress("0x3509F38e10eB3cDcE7695743cB7e81446F4d8A33")
 
 		return types.KeeperHealthCheckInResponse{
 			Status: true,

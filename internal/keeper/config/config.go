@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "0.2.0"
+	version = "1.0.0"
 	isImua  = false
 )
 
@@ -102,6 +102,10 @@ func Init() error {
 		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
 		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x12f45551f11Df20b3EcBDf329138Bdc65cc58Ec0"),
 		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x9725fB95B5ec36c062A49ca2712b3B1ff66F04eD"),
+		// l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
+		// l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
+		// avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
+		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
 		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 	if err := validateConfig(cfg); err != nil {
@@ -134,9 +138,9 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidEthAddress(cfg.keeperAddress) {
 		return fmt.Errorf("invalid keeper address: %s", cfg.keeperAddress)
 	}
-	if !env.IsValidPeerID(cfg.peerID) {
-		return fmt.Errorf("invalid peer id: %s", cfg.peerID)
-	}
+	// if !env.IsValidPeerID(cfg.peerID) {
+	// 	return fmt.Errorf("invalid peer id: %s", cfg.peerID)
+	// }
 	return nil
 }
 
