@@ -61,9 +61,11 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		"task_count", taskCount,
 		"scheduler_id", req.SendTaskDataToKeeper.SchedulerID,
 		"source", req.Source)
+	
+	isMainnet := req.SendTaskDataToKeeper.TargetData[0].TargetChainID == "42161"
 
 	// Use dynamic performer selection instead of hardcoded selection
-	performer, err := d.healthClient.GetPerformerData(req.SendTaskDataToKeeper.TargetData[0].IsImua)
+	performer, err := d.healthClient.GetPerformerData(req.SendTaskDataToKeeper.TargetData[0].IsImua, isMainnet)
 	if err != nil {
 		d.logger.Error("Failed to get performer data dynamically",
 			"task_id", req.SendTaskDataToKeeper.TaskID[0],
@@ -105,6 +107,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 				CreatedAt:            time.Now(),
 				RetryCount:           0,
 				SendTaskDataToKeeper: individualTaskData,
+				IsMainnet:            isMainnet,
 			}
 
 			// Add individual task to batch processor

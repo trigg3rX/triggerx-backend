@@ -20,6 +20,7 @@ type Config struct {
 	healthRPCUrl string
 	// Aggregator RPC URL
 	aggregatorRPCUrl string
+	testAggregatorRPCUrl string
 
 	// Task Dispatcher signing key
 	signingKey     string
@@ -64,6 +65,7 @@ func Init() error {
 		taskDispatcherRPCPort: env.GetEnvInt("TASK_DISPATCHER_RPC_PORT", 9003),
 		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
 		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "http://localhost:9001"),
 		signingKey:            env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
 		signingAddress:        env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
 		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
@@ -103,6 +105,10 @@ func GetTaskDispatcherRPCPort() int {
 
 func GetAggregatorRPCUrl() string {
 	return cfg.aggregatorRPCUrl
+}
+
+func GetTestAggregatorRPCUrl() string {
+	return cfg.testAggregatorRPCUrl
 }
 
 func GetTaskDispatcherSigningKey() string {

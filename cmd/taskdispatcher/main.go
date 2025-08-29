@@ -71,11 +71,22 @@ func main() {
 	}
 	logger.Info("[3/5] Aggregator client Initialised")
 
+	testAggCfg := aggregator.AggregatorClientConfig{
+		AggregatorRPCUrl: config.GetTestAggregatorRPCUrl(),
+		SenderPrivateKey: config.GetTaskDispatcherSigningKey(),
+		SenderAddress:    config.GetTaskDispatcherSigningAddress(),
+	}
+	testAggClient, err := aggregator.NewAggregatorClient(logger, testAggCfg)
+	if err != nil {
+		logger.Fatal("Failed to create aggregator client", "error", err)
+	}
+	logger.Info("[3/5] Test Aggregator client Initialised")
+
 	healthClient := taskdispatcher.NewHealthClient(logger, config.GetHealthRPCUrl())
 	logger.Info("[4/5] Health client Initialised")
 
 	// Initialize task stream manager for orchestration
-	taskStreamMgr, err := tasks.NewTaskStreamManager(redisClient, aggClient, logger)
+	taskStreamMgr, err := tasks.NewTaskStreamManager(redisClient, aggClient, testAggClient, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize TaskStreamManager", "error", err)
 	}

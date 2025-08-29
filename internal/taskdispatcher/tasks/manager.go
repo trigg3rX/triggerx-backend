@@ -21,9 +21,10 @@ type TaskStreamManager struct {
 	mu               sync.RWMutex
 	startTime        time.Time
 	aggregatorClient *aggregator.AggregatorClient
+	testAggregatorClient *aggregator.AggregatorClient
 }
 
-func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, logger logging.Logger) (*TaskStreamManager, error) {
+func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, testAggregatorClient *aggregator.AggregatorClient, logger logging.Logger) (*TaskStreamManager, error) {
 	logger.Info("Initializing TaskStreamManager...")
 
 	tsm := &TaskStreamManager{
@@ -31,7 +32,8 @@ func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *ag
 		logger:           logger,
 		consumerGroups:   make(map[string]bool),
 		startTime:        time.Now(),
-		aggregatorClient: aggClient,
+		aggregatorClient:  aggClient,
+		testAggregatorClient: testAggregatorClient,
 	}
 
 	logger.Info("TaskStreamManager initialized successfully")

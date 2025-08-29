@@ -36,7 +36,11 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		Data:             []byte(jsonData),
 	}
 
-	success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	if task.IsMainnet {
+		success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	} else {
+		success, err = tsm.testAggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	}
 	if err != nil {
 		tsm.logger.Error("Failed to send task to aggregator", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
 		return false, err

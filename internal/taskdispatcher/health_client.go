@@ -35,8 +35,16 @@ func NewHealthClient(logger logging.Logger, baseURL string) *HealthClient {
 }
 
 // GetPerformerData gets a performer using the dynamic selection system
-func (hc *HealthClient) GetPerformerData(isImua bool) (types.PerformerData, error) {
+func (hc *HealthClient) GetPerformerData(isImua bool, isMainnet bool) (types.PerformerData, error) {
 	hc.logger.Debug("Getting performer data from health service", "is_imua", isImua)
+
+	if isMainnet {
+		return types.PerformerData			{
+			OperatorID:    1002,
+			KeeperAddress: "0x235813b36eea7e48b7069821a78c0bc8384a3c79",
+			IsImua:        false,
+		}, nil
+	}
 
 	// Refresh performers if needed
 	// if time.Since(pm.lastRefresh) > PerformerRefreshTTL {
