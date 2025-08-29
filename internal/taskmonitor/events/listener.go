@@ -343,8 +343,8 @@ func (l *ContractEventListener) GetStatus() map[string]interface{} {
 	return status
 }
 
-// GetDefaultConfig returns a default configuration for the event listener
-func GetDefaultConfig() *ListenerConfig {
+// GetTestnetConfig returns a testnet configuration for the event listener
+func GetTestnetConfig() *ListenerConfig {
 	return &ListenerConfig{
 		Chains: []ChainConfig{
 			{
@@ -366,6 +366,34 @@ func GetDefaultConfig() *ListenerConfig {
 		ProcessingTimeout: 30 * time.Second,
 		ContractAddresses: map[string]map[string]string{
 			"84532": { // Base Sepolia
+				"attestation_center": config.GetAttestationCenterAddress(),
+			},
+		},
+	}
+}
+
+func GetMainnetConfig() *ListenerConfig {
+	return &ListenerConfig{
+		Chains: []ChainConfig{
+			{
+				ChainID:      "8453",
+				Name:         "Base",
+				RPCURL:       config.GetChainRPCUrl(true, "8453"),
+				WebSocketURL: config.GetChainRPCUrl(false, "8453"),
+				Enabled:      true,
+			},
+		},
+		ReconnectConfig: ReconnectConfig{
+			MaxRetries:    10,
+			BaseDelay:     5 * time.Second,
+			MaxDelay:      5 * time.Minute,
+			BackoffFactor: 2.0,
+		},
+		ProcessingWorkers: 4,
+		EventBufferSize:   1000,
+		ProcessingTimeout: 30 * time.Second,
+		ContractAddresses: map[string]map[string]string{
+			"8453": { // Base Mainnet
 				"attestation_center": config.GetAttestationCenterAddress(),
 			},
 		},
