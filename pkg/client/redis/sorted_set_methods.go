@@ -87,6 +87,20 @@ func (c *Client) ZRemRangeByScore(ctx context.Context, key, min, max string) (in
 	return result, err
 }
 
+// ZRem removes one or more members from a sorted set
+func (c *Client) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	var result int64
+	err := c.executeWithRetryAndKey(ctx, func() error {
+		val, err := c.redisClient.ZRem(ctx, key, members...).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZRem", key)
+	return result, err
+}
+
 // ZCard returns the sorted set cardinality (number of elements) of the sorted set stored at key
 func (c *Client) ZCard(ctx context.Context, key string) (int64, error) {
 	var result int64

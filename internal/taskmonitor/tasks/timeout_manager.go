@@ -128,7 +128,7 @@ func (tm *TimeoutManager) RemoveTaskTimeout(ctx context.Context, taskID int64) e
 	taskIDStr := strconv.FormatInt(taskID, 10)
 
 	// Remove from sorted set
-	removed, err := tm.tsm.redisClient.ZRemRangeByScore(ctx, DispatchedTimeoutsKey, taskIDStr, taskIDStr)
+	removed, err := tm.tsm.redisClient.ZRem(ctx, DispatchedTimeoutsKey, taskIDStr)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -173,7 +173,7 @@ func (tm *TimeoutManager) RemoveMultipleTaskTimeouts(ctx context.Context, taskID
 	// Use pipeline to remove multiple tasks efficiently
 	_, err := tm.tsm.redisClient.ExecutePipeline(ctx, func(pipe redis.Pipeliner) error {
 		for _, taskIDStr := range taskIDStrs {
-			pipe.ZRemRangeByScore(ctx, DispatchedTimeoutsKey, taskIDStr, taskIDStr)
+			pipe.ZRem(ctx, DispatchedTimeoutsKey, taskIDStr)
 		}
 		return nil
 	})
@@ -191,6 +191,7 @@ func (tm *TimeoutManager) RemoveMultipleTaskTimeouts(ctx context.Context, taskID
 	metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove_multiple", "success").Inc()
 	tm.tsm.logger.Debug("Multiple task timeouts removed successfully",
 		"task_count", len(taskIDs),
+		"task_ids", taskIDs,
 		"duration", duration)
 
 	return nil

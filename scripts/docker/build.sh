@@ -173,37 +173,6 @@ if [[ "$SERVICE" == "all" ]]; then
         exit 1
     fi
     
-    echo "Starting parallel builds for ${#services[@]} services..."
-    
-    # Start all builds in parallel
-    for service in "${services[@]}"; do
-        build_service "$service" "$VERSION" &
-        build_pids+=($!)
-    done
-    
-    # Wait for all builds to complete and collect results
-    echo "Waiting for all builds to complete..."
-    for i in "${!build_pids[@]}"; do
-        if ! wait "${build_pids[$i]}"; then
-            failed_services+=("${services[$i]}")
-        fi
-    done
-    
-    # Report results
-    echo ""
-    echo "=== Build Summary ==="
-    if [[ ${#failed_services[@]} -eq 0 ]]; then
-        echo "✅ All ${#services[@]} services built successfully!"
-    else
-        echo "❌ ${#failed_services[@]} service(s) failed to build:"
-        for service in "${failed_services[@]}"; do
-            echo "  - $service"
-        done
-        echo ""
-        echo "Check individual log files (build_*.log) for detailed error information."
-        exit 1
-    fi
-    
     # Clean up log files on success
     for service in "${services[@]}"; do
         docker_name=$(echo $service | sed 's/\//-/g')

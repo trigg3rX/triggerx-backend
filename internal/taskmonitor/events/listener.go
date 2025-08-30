@@ -357,7 +357,7 @@ func GetTestnetConfig() *ListenerConfig {
 		},
 		ReconnectConfig: ReconnectConfig{
 			MaxRetries:    10,
-			BaseDelay:     5 * time.Second,
+			BaseDelay:     1 * time.Second,
 			MaxDelay:      5 * time.Minute,
 			BackoffFactor: 2.0,
 		},
@@ -385,7 +385,7 @@ func GetMainnetConfig() *ListenerConfig {
 		},
 		ReconnectConfig: ReconnectConfig{
 			MaxRetries:    10,
-			BaseDelay:     5 * time.Second,
+			BaseDelay:     1 * time.Second,
 			MaxDelay:      5 * time.Minute,
 			BackoffFactor: 2.0,
 		},
