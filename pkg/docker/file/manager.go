@@ -8,27 +8,26 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 type FileManager struct {
 	downloader *downloader
-	config     config.ExecutorConfig
 	logger     logging.Logger
 	mutex      sync.RWMutex
 	stats      *types.PerformanceMetrics
 }
 
-func NewFileManager(cfg config.ExecutorConfig, httpClient *httppkg.HTTPClient, logger logging.Logger) (*FileManager, error) {
-	downloader, err := newDownloader(cfg.Cache, cfg.Validation, httpClient, logger)
+func NewFileManager(cfg config.ConfigProviderInterface, httpClient httppkg.HTTPClientInterface, logger logging.Logger) (*FileManager, error) {
+	downloader, err := newDownloader(cfg.GetCacheConfig(), cfg.GetValidationConfig(), httpClient, logger, &fs.OSFileSystem{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create downloader: %w", err)
 	}
 
 	return &FileManager{
 		downloader: downloader,
-		config:     cfg,
 		logger:     logger,
 		stats: &types.PerformanceMetrics{
 			TotalExecutions:      0,
@@ -51,14 +50,14 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLa
 	// Download and validate file
 	result, err := fm.downloader.downloadFile(fileURL, fileURL, fileLanguage)
 	if err != nil {
-		fm.updateStats(false, time.Since(startTime), 0.0)
+		fm.updateStats(false, time.Since(startTime))
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 
 	// Check validation results
 	if !result.Validation.IsValid {
 		fm.logger.Warnf("File validation failed: %v", result.Validation.Errors)
-		fm.updateStats(false, time.Since(startTime), 0.0)
+		fm.updateStats(false, time.Since(startTime))
 		return &types.ExecutionContext{
 			FileURL:   fileURL,
 			StartedAt: startTime,
@@ -84,7 +83,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLa
 	}
 
 	// Update statistics
-	fm.updateStats(true, time.Since(startTime), result.Validation.Complexity)
+	fm.updateStats(true, time.Since(startTime))
 
 	fm.logger.Debugf("File processed successfully (cached: %v, size: %d bytes)", result.IsCached, result.Size)
 
@@ -104,7 +103,7 @@ func (fm *FileManager) GetCacheStats() *types.CacheStats {
 	return fm.downloader.cache.getCacheStats()
 }
 
-func (fm *FileManager) updateStats(success bool, duration time.Duration, complexity float64) {
+func (fm *FileManager) updateStats(success bool, duration time.Duration) {
 	fm.mutex.Lock()
 	defer fm.mutex.Unlock()
 
@@ -133,22 +132,6 @@ func (fm *FileManager) updateStats(success bool, duration time.Duration, complex
 	} else {
 		fm.stats.AverageExecutionTime = duration
 	}
-
-	// Update cost statistics (basic calculation)
-	cost := fm.calculateCost(duration, complexity)
-	fm.stats.TotalCost += cost
-	if fm.stats.SuccessfulExecutions > 0 {
-		fm.stats.AverageCost = fm.stats.TotalCost / float64(fm.stats.SuccessfulExecutions)
-	} else {
-		fm.stats.AverageCost = cost
-	}
-}
-
-func (fm *FileManager) calculateCost(duration time.Duration, complexity float64) float64 {
-	// Basic cost calculation based on execution time and complexity
-	timeCost := duration.Seconds() * fm.config.Fees.PricePerTG
-	complexityCost := complexity * fm.config.Fees.PricePerTG
-	return timeCost + complexityCost + fm.config.Fees.FixedCost
 }
 
 func (fm *FileManager) Close() error {

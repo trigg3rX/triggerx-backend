@@ -13,7 +13,7 @@ import (
 )
 
 type downloader struct {
-	client    *httppkg.HTTPClient
+	client    httppkg.HTTPClientInterface
 	cache     *fileCache
 	validator *codeValidator
 	logger    logging.Logger

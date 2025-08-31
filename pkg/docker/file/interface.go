@@ -1,5 +1,7 @@
 package file
 
+//go:generate mockgen -source=interface.go -destination=mock_file_manager.go -package=file
+
 import (
 	"context"
 

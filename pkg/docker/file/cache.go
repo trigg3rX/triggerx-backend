@@ -15,6 +15,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+// Events for cache hits, misses, evictions
+type CacheEvent struct {
+	Type      string // "hit", "miss", "eviction", "cleanup"
+	Key       string
+	Size      int64
+	Timestamp time.Time
+}
+
 type cachedFile struct {
 	Path         string    `json:"path"`
 	Hash         string    `json:"hash"`
@@ -27,7 +35,7 @@ type fileCache struct {
 	cacheDir      string
 	fileCache     map[string]*cachedFile
 	mutex         sync.RWMutex
-	config        config.CacheConfig
+	config        config.FileCacheConfig
 	logger        logging.Logger
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
@@ -115,6 +123,12 @@ func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
 
 		return "", fmt.Errorf("cached file not found on disk: %s", cachedFile.Path)
 	}
+
+	// Update hit count and hit rate
+	c.statsMutex.Lock()
+	c.stats.HitCount++
+	c.updateHitRate()
+	c.statsMutex.Unlock()
 
 	cachedFile.LastAccessed = time.Now()
 
