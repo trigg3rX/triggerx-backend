@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"time"
 )
 
@@ -35,14 +36,21 @@ type ExecutionResult struct {
 	Warnings []string            `json:"warnings,omitempty"`
 }
 
+type ExecutionState struct {
+    CancelFunc  context.CancelFunc
+    ExecID      string
+    ContainerID string
+}
+
 type ExecutionContext struct {
-	FileURL       string            `json:"file_url"`
-	FileLanguage  string            `json:"file_language"`
-	NoOfAttesters int               `json:"no_of_attesters"`
-	TraceID       string            `json:"trace_id"`
-	StartedAt     time.Time         `json:"started_at"`
-	CompletedAt   time.Time         `json:"completed_at,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
+    FileURL       string            `json:"file_url"`
+    FileLanguage  string            `json:"file_language"`
+    NoOfAttesters int               `json:"no_of_attesters"`
+    TraceID       string            `json:"trace_id"`
+    StartedAt     time.Time         `json:"started_at"`
+    CompletedAt   time.Time         `json:"completed_at,omitempty"`
+    Metadata      map[string]string `json:"metadata,omitempty"`
+    State         ExecutionState    `json:"state"`
 }
 
 type ExecutionStage string
