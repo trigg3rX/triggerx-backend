@@ -13,11 +13,27 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
+// CodeExecutor defines what the DockerManager needs from a code executor
+type CodeExecutor interface {
+	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
+	GetHealthStatus() *execution.HealthStatus
+	GetStats() *types.PerformanceMetrics
+	GetPoolStats() map[types.Language]*types.PoolStats
+	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
+	GetSupportedLanguages() []types.Language
+	IsLanguageSupported(language types.Language) bool
+	GetActiveExecutions() []*types.ExecutionContext
+	GetAlerts(severity string, limit int) []execution.Alert
+	ClearAlerts()
+	CancelExecution(executionID string) error
+	Close() error
+}
+
 // DockerManager is the main entry point for the Docker package
 // It provides a unified interface for all Docker operations
 type DockerManager struct {
-	executor    *execution.CodeExecutor
-	config      config.ExecutorConfig
+	executor    CodeExecutor
+	config      config.ConfigProviderInterface
 	logger      logging.Logger
 	mutex       sync.RWMutex
 	initialized bool
@@ -25,21 +41,57 @@ type DockerManager struct {
 }
 
 // NewDockerManager creates a new Docker manager with the specified configuration
-func NewDockerManager(cfg config.ExecutorConfig, logger logging.Logger) (*DockerManager, error) {
+func NewDockerManager(
+	executor CodeExecutor,
+	cfg config.ConfigProviderInterface,
+	logger logging.Logger,
+) (*DockerManager, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
+	if cfg == nil {
+		return nil, fmt.Errorf("config provider cannot be nil")
+	}
+	if executor == nil {
+		return nil, fmt.Errorf("executor cannot be nil")
+	}
 
 	dm := &DockerManager{
-		config: cfg,
-		logger: logger,
+		executor: executor,
+		config:   cfg,
+		logger:   logger,
 	}
 
 	return dm, nil
 }
 
+// NewDockerManagerFromFile creates a new Docker manager from a configuration file
+// This is a convenience function for backward compatibility
+func NewDockerManagerFromFile(configFilePath string, logger logging.Logger) (*DockerManager, error) {
+	if logger == nil {
+		return nil, fmt.Errorf("logger cannot be nil")
+	}
+
+	configProvider, err := config.NewConfigProvider(configFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create config provider: %w", err)
+	}
+
+	// Create default implementations
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+	executor, err := execution.NewCodeExecutor(context.Background(), configProvider, httpClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create default executor: %w", err)
+	}
+
+	return NewDockerManager(executor, configProvider, logger)
+}
+
 // Initialize sets up the Docker manager and all its components
-func (dm *DockerManager) Initialize(ctx context.Context, languages []types.Language) error {
+func (dm *DockerManager) Initialize(ctx context.Context) error {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -49,31 +101,20 @@ func (dm *DockerManager) Initialize(ctx context.Context, languages []types.Langu
 
 	dm.logger.Info("Initializing Docker manager")
 
-	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), dm.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-
-	// Create the code executor
-	executor, err := execution.NewCodeExecutor(ctx, dm.config, httpClient, dm.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create code executor: %w", err)
-	}
-
 	// Initialize language-specific container pools
-	if err := executor.InitializeLanguagePools(ctx, languages); err != nil {
+	supportedLanguages := dm.config.GetSupportedLanguages()
+	if err := dm.executor.InitializeLanguagePools(ctx, supportedLanguages); err != nil {
 		return fmt.Errorf("failed to initialize language pools: %w", err)
 	}
 
-	dm.executor = executor
 	dm.initialized = true
 
-	dm.logger.Infof("Docker manager initialized successfully with %d language pools", len(languages))
+	dm.logger.Infof("Docker manager initialized successfully with %d language pools", len(supportedLanguages))
 	return nil
 }
 
 // Execute runs code from the specified URL with the given number of attestations
-func (dm *DockerManager) Execute(ctx context.Context, fileURL string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (dm *DockerManager) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
 	dm.mutex.RLock()
 	if !dm.initialized {
 		dm.mutex.RUnlock()
@@ -210,18 +251,6 @@ func (dm *DockerManager) GetActiveExecutions() []*types.ExecutionContext {
 	return dm.executor.GetActiveExecutions()
 }
 
-// GetExecutionByID returns a specific execution by its ID
-func (dm *DockerManager) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-
-	if !dm.initialized || dm.closed {
-		return nil, false
-	}
-
-	return dm.executor.GetExecutionByID(executionID)
-}
-
 // CancelExecution cancels a running execution
 func (dm *DockerManager) CancelExecution(executionID string) error {
 	dm.mutex.RLock()
@@ -261,39 +290,11 @@ func (dm *DockerManager) ClearAlerts() {
 	dm.executor.ClearAlerts()
 }
 
-// IsInitialized returns whether the Docker manager is initialized
-func (dm *DockerManager) IsInitialized() bool {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-	return dm.initialized
-}
-
-// IsClosed returns whether the Docker manager is closed
-func (dm *DockerManager) IsClosed() bool {
-	dm.mutex.RLock()
-	defer dm.mutex.RUnlock()
-	return dm.closed
-}
-
-// GetConfig returns a copy of the current configuration
-func (dm *DockerManager) GetConfig() config.ExecutorConfig {
+// GetConfig returns the current configuration provider
+func (dm *DockerManager) GetConfig() config.ConfigProviderInterface {
 	dm.mutex.RLock()
 	defer dm.mutex.RUnlock()
 	return dm.config
-}
-
-// UpdateConfig updates the configuration (requires reinitialization)
-func (dm *DockerManager) UpdateConfig(newConfig config.ExecutorConfig) error {
-	dm.mutex.Lock()
-	defer dm.mutex.Unlock()
-
-	if dm.initialized {
-		return fmt.Errorf("cannot update config while initialized, close manager first")
-	}
-
-	dm.config = newConfig
-	dm.logger.Info("Configuration updated")
-	return nil
 }
 
 // Close shuts down the Docker manager and cleans up resources
