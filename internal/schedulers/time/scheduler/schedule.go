@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -163,39 +164,63 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
 	startTime := time.Now()
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Make RPC call to task dispatcher
-	var response types.TaskManagerAPIResponse
-	err := s.taskDispatcherClient.Call(ctx, "submit-task", &request, &response)
-	if err != nil {
-		s.logger.Error("Failed to submit batch to task dispatcher via RPC",
-			"task_ids", taskIDs,
-			"task_count", taskCount,
-			"error", err)
-		return false
+	// Create retry configuration for task dispatcher calls
+	retryConfig := &retry.RetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    1 * time.Second,
+		MaxDelay:        10 * time.Second,
+		BackoffFactor:   2.0,
+		JitterFactor:    0.2,
+		LogRetryAttempt: true,
+		ShouldRetry: func(err error) bool {
+			// Retry on network errors, timeouts, and temporary failures
+			// Don't retry on permanent errors like invalid requests
+			return err != nil && !strings.Contains(err.Error(), "invalid") &&
+				!strings.Contains(err.Error(), "permission denied")
+		},
 	}
 
-	duration := time.Since(startTime)
+	// Create context with timeout for the entire retry operation
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
-	if !response.Success {
-		s.logger.Error("Task dispatcher processing failed",
+	// Define the operation to retry
+	operation := func() (bool, error) {
+		// Create context with timeout for individual RPC call
+		rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer rpcCancel()
+
+		// Make RPC call to task dispatcher
+		var response types.TaskManagerAPIResponse
+		err := s.taskDispatcherClient.Call(rpcCtx, "submit-task", &request, &response)
+		if err != nil {
+			return false, fmt.Errorf("RPC call failed: %w", err)
+		}
+
+		if !response.Success {
+			return false, fmt.Errorf("task dispatcher processing failed: %s - %s", response.Message, response.Error)
+		}
+
+		return true, nil
+	}
+
+	// Execute with retry logic
+	success, err := retry.Retry(ctx, operation, retryConfig, s.logger)
+	if err != nil {
+		duration := time.Since(startTime)
+		s.logger.Error("Failed to submit batch to task dispatcher after retries",
 			"task_ids", taskIDs,
 			"task_count", taskCount,
-			"message", response.Message,
-			"error", response.Error,
+			"error", err,
 			"duration", duration)
 		return false
 	}
 
+	duration := time.Since(startTime)
 	s.logger.Info("Successfully submitted batch to task dispatcher",
 		"task_ids", taskIDs,
 		"task_count", taskCount,
-		"response_task_ids", response.TaskID,
-		"duration", duration,
-		"message", response.Message)
+		"duration", duration)
 
-	return true
+	return success
 }
