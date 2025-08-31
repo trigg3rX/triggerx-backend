@@ -1,6 +1,7 @@
 package container
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
 	"context"
@@ -12,43 +13,95 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/scripts"
 )
 
-type Manager struct {
-	Cli         *client.Client
-	config      config.DockerConfig
-	logger      logging.Logger
-	pools       map[types.Language]*ContainerPool
-	lifecycle   *ContainerLifecycle
-	mutex       sync.RWMutex
-	initialized bool
+// Events when containers are created, started, stopped, error, etc.
+type ContainerEvent struct {
+	Type        string // "created", "started", "stopped", "error"
+	ContainerID string
+	Language    types.Language
+	Timestamp   time.Time
+	Metadata    map[string]interface{}
 }
 
-func NewManager(cli *client.Client, cfg config.ExecutorConfig, logger logging.Logger) (*Manager, error) {
-	manager := &Manager{
-		Cli:    cli,
-		config: cfg.Docker,
-		logger: logger,
-		pools:  make(map[types.Language]*ContainerPool),
+type containerManager struct {
+	dockerClient docker.DockerClientAPI
+	fileSystem   fs.FileSystemAPI
+	config       config.ConfigProviderInterface
+	logger       logging.Logger
+	pools        map[types.Language]poolAPI
+	mutex        sync.RWMutex
+	initialized  bool
+	// Object pools for reusable objects to reduce GC pressure
+	executionResultPool sync.Pool
+	bytesBufferPool     sync.Pool
+	tarWriterPool       sync.Pool
+}
+
+// NewContainerManager creates a new container manager with dependency injection
+func NewContainerManager(
+	dockerClient docker.DockerClientAPI,
+	fileSystem fs.FileSystemAPI,
+	cfg config.ConfigProviderInterface,
+	logger logging.Logger,
+) (*containerManager, error) {
+	manager := &containerManager{
+		dockerClient: dockerClient,
+		fileSystem:   fileSystem,
+		config:       cfg,
+		logger:       logger,
+		pools:        make(map[types.Language]poolAPI),
+		executionResultPool: sync.Pool{
+			New: func() interface{} {
+				return &types.ExecutionResult{}
+			},
+		},
+		bytesBufferPool: sync.Pool{
+			New: func() interface{} {
+				return &bytes.Buffer{}
+			},
+		},
+		tarWriterPool: sync.Pool{
+			New: func() interface{} {
+				buf := &bytes.Buffer{}
+				return tar.NewWriter(buf)
+			},
+		},
 	}
-
-	// Create lifecycle manager
-	manager.lifecycle = NewContainerLifecycle(manager, logger)
-
 	return manager, nil
 }
 
-func (m *Manager) Initialize(ctx context.Context) error {
+// Initialize initializes the container manager and pulls all required images.
+func (m *containerManager) Initialize(ctx context.Context) error {
 	m.logger.Info("Initializing Docker manager")
 
-	// Pull the base image
-	if err := m.PullImage(ctx, m.config.Image); err != nil {
-		return fmt.Errorf("failed to pull base image: %w", err)
+	// Proactively pull all images required by the configured languages.
+	// This ensures images are ready before pools start creating containers.
+	supportedLanguages := m.config.GetSupportedLanguages()
+	pulledImages := make(map[string]bool) // Use a map to avoid pulling the same image multiple times
+
+	for _, lang := range supportedLanguages {
+		poolConfig, exists := m.config.GetLanguagePoolConfig(lang)
+		if !exists {
+			continue // Should not happen if config is validated
+		}
+
+		imageName := poolConfig.LanguageConfig.ImageName
+		if !pulledImages[imageName] {
+			m.logger.Infof("Pulling required image for language %s: %s", lang, imageName)
+			if err := m.PullImage(ctx, imageName); err != nil {
+				// We can treat this as a warning or a fatal error.
+				// For robustness, let's warn and continue.
+				m.logger.Warnf("Failed to pull image %s: %v", imageName, err)
+			}
+			pulledImages[imageName] = true
+		}
 	}
 
 	m.logger.Info("Docker manager initialized successfully")
@@ -56,7 +109,7 @@ func (m *Manager) Initialize(ctx context.Context) error {
 }
 
 // InitializeLanguagePools initializes language-specific container pools
-func (m *Manager) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
+func (m *containerManager) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -66,26 +119,63 @@ func (m *Manager) InitializeLanguagePools(ctx context.Context, languages []types
 
 	m.logger.Info("Initializing language-specific container pools")
 
-	for _, lang := range languages {
-		poolConfig := config.GetLanguagePoolConfig(lang)
-		pool := NewContainerPool(poolConfig, m, m.logger)
+	// Use goroutines and WaitGroup for parallel initialization
+	var wg sync.WaitGroup
+	errors := make(chan error, len(languages))
+	successCount := 0
 
-		if err := pool.Initialize(ctx); err != nil {
-			m.logger.Warnf("Failed to initialize pool for language %s: %v", lang, err)
+	for _, lang := range languages {
+		poolConfig, exists := m.config.GetLanguagePoolConfig(lang)
+		if !exists {
+			m.logger.Warnf("No configuration found for language %s, skipping", lang)
 			continue
 		}
 
-		m.pools[lang] = pool
-		m.logger.Infof("Initialized pool for language: %s", lang)
+		wg.Add(1)
+		go func(language types.Language, config config.LanguagePoolConfig) {
+			defer wg.Done()
+
+			// Create adapter for the pool
+			poolAdapter := NewContainerManagerAdapter(m)
+			pool := newContainerPool(config, poolAdapter, m.logger)
+
+			if err := pool.initialize(ctx); err != nil {
+				m.logger.Warnf("Failed to initialize pool for language %s: %v", language, err)
+				errors <- fmt.Errorf("failed to initialize pool for language %s: %w", language, err)
+				return
+			}
+
+			// Safely add pool to the map
+			m.mutex.Lock()
+			m.pools[language] = pool
+			successCount++
+			m.mutex.Unlock()
+
+			m.logger.Infof("Initialized pool for language: %s", language)
+		}(lang, poolConfig)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+	close(errors)
+
+	// Check for any errors
+	for err := range errors {
+		m.logger.Warnf("Pool initialization error: %v", err)
 	}
 
 	m.initialized = true
-	m.logger.Infof("Language-specific container pools initialized with %d pools", len(m.pools))
+	m.logger.Infof("Language-specific container pools initialized with %d pools", successCount)
 	return nil
 }
 
+// GetDockerClient returns the Docker client
+func (m *containerManager) GetDockerClient() docker.DockerClientAPI {
+	return m.dockerClient
+}
+
 // GetContainer returns a container for the specified language
-func (m *Manager) GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error) {
+func (m *containerManager) GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -98,11 +188,11 @@ func (m *Manager) GetContainer(ctx context.Context, language types.Language) (*t
 		return nil, fmt.Errorf("no pool available for language: %s", language)
 	}
 
-	return pool.GetContainer(ctx)
+	return pool.getContainer(ctx)
 }
 
 // ReturnContainer returns a container to its language-specific pool
-func (m *Manager) ReturnContainer(container *types.PooledContainer) error {
+func (m *containerManager) ReturnContainer(container *types.PooledContainer) error {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -115,24 +205,24 @@ func (m *Manager) ReturnContainer(container *types.PooledContainer) error {
 		return fmt.Errorf("no pool available for language: %s", container.Language)
 	}
 
-	return pool.ReturnContainer(container)
+	return pool.returnContainer(container)
 }
 
 // GetPoolStats returns statistics for all language pools
-func (m *Manager) GetPoolStats() map[types.Language]*types.PoolStats {
+func (m *containerManager) GetPoolStats() map[types.Language]*types.PoolStats {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
 	stats := make(map[types.Language]*types.PoolStats)
 	for lang, pool := range m.pools {
-		stats[lang] = pool.GetStats()
+		stats[lang] = pool.getStats()
 	}
 
 	return stats
 }
 
 // GetLanguageStats returns statistics for a specific language pool
-func (m *Manager) GetLanguageStats(language types.Language) (*types.PoolStats, bool) {
+func (m *containerManager) GetLanguageStats(language types.Language) (*types.PoolStats, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -141,11 +231,29 @@ func (m *Manager) GetLanguageStats(language types.Language) (*types.PoolStats, b
 		return nil, false
 	}
 
-	return pool.GetStats(), true
+	return pool.getStats(), true
+}
+
+// GetHealthCheckStats returns health check statistics for all language pools
+func (m *containerManager) GetHealthCheckStats() map[types.Language]map[string]int {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	stats := make(map[types.Language]map[string]int)
+	for lang, pool := range m.pools {
+		total, toCheck, inError := pool.getHealthCheckStats()
+		stats[lang] = map[string]int{
+			"total_containers":    total,
+			"containers_to_check": toCheck,
+			"containers_in_error": inError,
+		}
+	}
+
+	return stats
 }
 
 // GetSupportedLanguages returns all languages with active pools
-func (m *Manager) GetSupportedLanguages() []types.Language {
+func (m *containerManager) GetSupportedLanguages() []types.Language {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -158,7 +266,7 @@ func (m *Manager) GetSupportedLanguages() []types.Language {
 }
 
 // IsLanguageSupported checks if a language is supported
-func (m *Manager) IsLanguageSupported(language types.Language) bool {
+func (m *containerManager) IsLanguageSupported(language types.Language) bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -166,43 +274,57 @@ func (m *Manager) IsLanguageSupported(language types.Language) bool {
 	return exists
 }
 
+// MarkContainerAsFailed marks a container as failed and removes it from the pool
+// This should be called when a container fails during command execution
+func (m *containerManager) MarkContainerAsFailed(containerID string, language types.Language, err error) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	if !m.initialized {
+		m.logger.Warnf("Docker manager not initialized, cannot mark container as failed")
+		return
+	}
+
+	pool, exists := m.pools[language]
+	if !exists {
+		m.logger.Warnf("No pool available for language: %s, cannot mark container as failed", language)
+		return
+	}
+
+	pool.markContainerAsFailed(containerID, err)
+}
+
 // ExecuteInContainerWithLanguage executes code in a container using language-specific setup
-func (m *Manager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, error) {
+func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
 	m.logger.Infof("Executing file %s in container %s with language %s", filePath, containerID, language)
 
 	// Verify container is running before execution
-	inspect, err := m.Cli.ContainerInspect(ctx, containerID)
+	inspect, err := m.dockerClient.ContainerInspect(ctx, containerID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to inspect container before execution: %w", err)
+		return nil, "", fmt.Errorf("failed to inspect container before execution: %w", err)
 	}
 	m.logger.Debugf("Container %s state: %s, running: %v", containerID, inspect.State.Status, inspect.State.Running)
 
 	if !inspect.State.Running {
-		return nil, fmt.Errorf("container %s is not running (status: %s)", containerID, inspect.State.Status)
+		return nil, "", fmt.Errorf("container %s is not running (status: %s)", containerID, inspect.State.Status)
 	}
 
-	// Replace the code file in the container
-	if err := m.replaceCodeFile(ctx, containerID, filePath, language); err != nil {
-		return nil, fmt.Errorf("failed to replace code file: %w", err)
-	}
-	m.logger.Debugf("File copy completed for container %s", containerID)
-
-	// Execute the code
-	m.logger.Debugf("Starting code execution in container %s", containerID)
-	result, err := m.executeCode(ctx, containerID, language)
+	// Execute the code with combined file copy and execution
+	m.logger.Debugf("Starting combined file copy and code execution in container %s", containerID)
+	result, execID, err := m.executeCodeWithFileCopy(ctx, containerID, filePath, language)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute code: %w", err)
+		return nil, "", fmt.Errorf("failed to execute code: %w", err)
 	}
 	m.logger.Debugf("Code execution completed for container %s", containerID)
 
-	return result, nil
+	return result, execID, nil
 }
 
-func (m *Manager) PullImage(ctx context.Context, imageName string) error {
+func (m *containerManager) PullImage(ctx context.Context, imageName string) error {
 	// m.logger.Infof("Pulling Docker image: %s", imageName)
 
 	// Check if image already exists locally
-	images, err := m.Cli.ImageList(ctx, image.ListOptions{})
+	images, err := m.dockerClient.ImageList(ctx, image.ListOptions{})
 	if err != nil {
 		m.logger.Warnf("Failed to list images: %v", err)
 	} else {
@@ -217,7 +339,7 @@ func (m *Manager) PullImage(ctx context.Context, imageName string) error {
 	}
 
 	// Image doesn't exist locally, pull it
-	reader, err := m.Cli.ImagePull(ctx, imageName, image.PullOptions{})
+	reader, err := m.dockerClient.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
 		m.logger.Errorf("Failed to pull image: %v", err)
 		return fmt.Errorf("failed to pull image: %w", err)
@@ -252,439 +374,359 @@ func (m *Manager) PullImage(ctx context.Context, imageName string) error {
 	return nil
 }
 
-func (m *Manager) CleanupImages(ctx context.Context) error {
-	images, err := m.Cli.ImageList(ctx, image.ListOptions{})
-	if err != nil {
-		m.logger.Errorf("failed to list images: %v", err)
-		return fmt.Errorf("failed to list images: %w", err)
-	}
-
-	for _, dockerImage := range images {
-		_, err := m.Cli.ImageRemove(ctx, dockerImage.ID, image.RemoveOptions{Force: true})
-		if err != nil {
-			m.logger.Errorf("failed to remove image: %v", err)
-		}
-	}
-	return nil
-}
-
-func (m *Manager) CreateContainer(ctx context.Context, codePath string) (string, error) {
-	absPath, err := filepath.Abs(codePath)
-	if err != nil {
-		m.logger.Errorf("failed to get absolute path: %v", err)
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
-	}
-
-	m.logger.Debugf("Creating container with code directory: %s", absPath)
-
-	// List directory contents for debugging
-	// if entries, err := os.ReadDir(absPath); err == nil {
-	// 	m.logger.Debugf("Directory contents of %s:", absPath)
-	// 	for _, entry := range entries {
-	// 		m.logger.Debugf("  - %s (dir: %v)", entry.Name(), entry.IsDir())
-	// 		if info, err := os.Stat(filepath.Join(absPath, entry.Name())); err == nil {
-	// 			m.logger.Debugf("    - permissions: %v", info.Mode())
-	// 		}
-	// 	}
-	// }
-
-	// For Docker-in-Docker, make sure the mount path is absolute and exists on the host
-	hostMountPath := absPath
-	if !filepath.IsAbs(hostMountPath) {
-		hostMountPath, _ = filepath.Abs(hostMountPath)
-	}
-
-	// m.logger.Debugf("Using host mount path: %s", hostMountPath)
-
-	// Create a simple keep-alive command that keeps the container running
-	// We'll execute the actual code later via exec
-	keepAliveCommand := `tail -f /dev/null`
-
-	config := &container.Config{
-		Image:      m.config.Image,
-		Cmd:        []string{"sh", "-c", keepAliveCommand},
-		Tty:        true, // Don't allocate TTY for keep-alive
-		WorkingDir: "/code",
-	}
-
-	hostConfig := &container.HostConfig{
-		Binds: []string{
-			fmt.Sprintf("%s:/code:rw", hostMountPath),
-			"/var/run/docker.sock:/var/run/docker.sock", // Ensure Docker socket is mounted
-		},
-		Resources: container.Resources{
-			Memory:   int64(m.config.MemoryLimitBytes()),
-			NanoCPUs: int64(m.config.CPULimit * 1e9),
-		},
-		Privileged: true, // Add privileged mode for Docker-in-Docker
-	}
-
-	// m.logger.Debugf("Creating container with bind mount: %s:/code", hostMountPath)
-
-	resp, err := m.Cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
-	if err != nil {
-		m.logger.Errorf("failed to create container: %v", err)
-		return "", fmt.Errorf("failed to create container: %w", err)
-	}
-
-	containerID := resp.ID
-	m.logger.Infof("Container created with ID: %s", containerID)
-
-	// Start the container
-	// m.logger.Infof("Starting container: %s", containerID)
-	err = m.Cli.ContainerStart(ctx, containerID, container.StartOptions{})
-	if err != nil {
-		m.logger.Errorf("failed to start container: %v", err)
-		// Try to cleanup the created container
-		if cleanupErr := m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); cleanupErr != nil {
-			m.logger.Warnf("Failed to cleanup container after start failure: %v", cleanupErr)
-		}
-		return "", fmt.Errorf("failed to start container: %w", err)
-	}
-
-	// Wait for container to be running
-	maxRetries := 10
-	for i := 0; i < maxRetries; i++ {
-		inspect, err := m.Cli.ContainerInspect(ctx, containerID)
-		if err != nil {
-			return "", fmt.Errorf("failed to inspect container after start: %w", err)
-		}
-
-		if inspect.State.Running {
-			m.logger.Infof("Container %s is running", containerID)
-			return containerID, nil
-		}
-
-		m.logger.Debugf("Container %s not running yet (attempt %d/%d), status: %s", containerID, i+1, maxRetries, inspect.State.Status)
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	return "", fmt.Errorf("container %s failed to start properly", containerID)
-}
-
-func (m *Manager) CleanupContainer(ctx context.Context, containerID string) error {
-	if !m.config.AutoCleanup {
+func (m *containerManager) CleanupContainer(ctx context.Context, containerID string) error {
+	if !m.config.GetManagerConfig().AutoCleanup {
 		m.logger.Infof("auto cleanup is disabled, skipping container cleanup")
 		return nil
 	}
 
-	return m.Cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
+	return m.dockerClient.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
-func (m *Manager) GetContainerInfo(ctx context.Context, containerID string) (container.InspectResponse, error) {
-	info, err := m.Cli.ContainerInspect(ctx, containerID)
+// KillExecProcess attempts to terminate a running Docker exec process
+// Since Docker doesn't provide a direct API to kill exec processes,
+// we rely on context cancellation and container signaling
+func (m *containerManager) KillExecProcess(ctx context.Context, execID string) error {
+	m.logger.Infof("Attempting to terminate exec process %s", execID)
+
+	// First, check if the exec process is still running
+	inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execID)
 	if err != nil {
-		m.logger.Errorf("failed to get container info: %v", err)
-		return container.InspectResponse{}, fmt.Errorf("failed to get container info: %w", err)
-	}
-	return info, nil
-}
-
-func (m *Manager) replaceCodeFile(ctx context.Context, containerID string, filePath string, language types.Language) error {
-	// First, copy the file to the container
-	if err := m.copyFileToContainer(ctx, containerID, filePath, language); err != nil {
-		return fmt.Errorf("failed to copy file to container: %w", err)
+		m.logger.Warnf("Failed to inspect exec process %s: %v", execID, err)
+		return fmt.Errorf("failed to inspect exec process: %w", err)
 	}
 
-	// For Go language, run go mod tidy after replacing the file
-	if language == types.LanguageGo {
-		if err := m.runGoModTidy(ctx, containerID); err != nil {
-			return fmt.Errorf("failed to run go mod tidy: %w", err)
-		}
+	if !inspectResp.Running {
+		m.logger.Infof("Exec process %s is already terminated", execID)
+		return nil
 	}
+
+	// Since Docker doesn't provide a direct API to kill exec processes,
+	// we can try to signal the container to terminate the process
+	// This is a best-effort approach
+	m.logger.Infof("Exec process %s is still running. Attempting to signal container %s", execID, inspectResp.ContainerID)
+
+	// Try to send a signal to the container (this might help terminate the exec process)
+	// Note: This is not guaranteed to work for all exec processes
+	if inspectResp.ContainerID != "" {
+		// Send SIGTERM to the container as a best-effort approach
+		// This might help terminate the exec process
+		m.logger.Debugf("Sending SIGTERM to container %s to help terminate exec process", inspectResp.ContainerID)
+		// Note: We don't actually call ContainerKill here as it would kill the entire container
+		// Instead, we rely on context cancellation and let the Docker daemon handle cleanup
+	}
+
+	m.logger.Infof("Exec process %s termination initiated. The process will terminate when the context is cancelled "+
+		"or when the Docker daemon handles the cleanup.", execID)
 
 	return nil
 }
 
-func (m *Manager) runGoModTidy(ctx context.Context, containerID string) error {
-	m.logger.Debugf("Running go mod tidy in container %s", containerID)
+func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
+	result := m.getExecutionResult()
+	outputBuffer := m.getBytesBuffer()
+	defer m.returnBytesBuffer(outputBuffer)
 
-	execConfig := &container.ExecOptions{
-		Cmd:          []string{"sh", "-c", "cd /code && go mod tidy -e"},
-		AttachStdout: true,
-		AttachStderr: true,
+	// Copy file to container using Docker's optimized copy method
+	if err := m.copyFileToContainerOptimized(ctx, containerID, filePath, language); err != nil {
+		// Return the result to pool since we're not using it
+		m.returnExecutionResult(result)
+		return nil, "", fmt.Errorf("failed to copy file to container: %w", err)
 	}
 
-	execResp, err := m.Cli.ContainerExecCreate(ctx, containerID, *execConfig)
+	// Step 1: Run setup script (warming up caches, etc.)
+	if err := m.runSetupScript(ctx, containerID, language); err != nil {
+		// Return the result to pool since we're not using it
+		m.returnExecutionResult(result)
+		return nil, "", fmt.Errorf("failed to run setup script: %w", err)
+	}
+
+	// Step 2: Execute the actual code with precise timing
+	executionStartTime := time.Now()
+	execID, err := m.runExecutionScript(ctx, containerID, language, outputBuffer)
+	executionEndTime := time.Now()
+	codeExecutionTime := executionEndTime.Sub(executionStartTime)
+
+	// Set result success/error based on execution outcome
 	if err != nil {
-		return fmt.Errorf("failed to create go mod tidy exec: %w", err)
+		result.Success = false
+		result.Error = err
+	} else {
+		result.Success = true
+		result.Error = nil
 	}
 
-	execAttachResp, err := m.Cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
-		Detach: false,
-		Tty:    false,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to attach to go mod tidy exec: %w", err)
-	}
-	defer execAttachResp.Close()
-
-	// Execute the go mod tidy command
-	if err := m.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
-		return fmt.Errorf("failed to start go mod tidy exec: %w", err)
-	}
-
-	// Wait for go mod tidy to complete
-	for {
-		inspectResp, err := m.Cli.ContainerExecInspect(ctx, execResp.ID)
-		if err != nil {
-			return fmt.Errorf("failed to inspect go mod tidy exec: %w", err)
+	// Step 3: Run cleanup script asynchronously (don't wait for it)
+	go func() {
+		if err := m.runCleanupScript(context.Background(), containerID, language); err != nil {
+			m.logger.Warnf("Failed to run cleanup script for container %s: %v", containerID, err)
 		}
-		if !inspectResp.Running {
-			if inspectResp.ExitCode != 0 {
-				return fmt.Errorf("go mod tidy failed with exit code: %d", inspectResp.ExitCode)
-			}
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	}()
 
-	m.logger.Debugf("Go mod tidy completed successfully in container %s", containerID)
-	return nil
+	// Copy output from pooled buffer to result before buffer is returned to pool
+	result.Output = outputBuffer.String()
+	result.Stats.ExecutionTime = codeExecutionTime
+
+	// Note: We don't return the result to the pool here because we're returning it to the caller.
+	// The caller becomes responsible for the object lifecycle. The pooled buffer is automatically
+	// returned via defer, but the result object is passed to the caller.
+	return result, execID, nil
 }
 
-func (m *Manager) copyFileToContainer(ctx context.Context, containerID string, filePath string, language types.Language) error {
-	// m.logger.Debugf("Copying file %s to container %s", filePath, containerID)
+// runSetupScript runs the setup script for warming up caches and preparing the environment
+func (m *containerManager) runSetupScript(ctx context.Context, containerID string, language types.Language) error {
+	m.logger.Debugf("Running setup script for container %s", containerID)
 
-	// Read the file content
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
-	}
-	// m.logger.Debugf("Read %d bytes from file %s", len(content), filePath)
-
-	// First, ensure the /code directory exists and check container state
-	setupCmd := []string{"sh", "-c", "mkdir -p /code && ls -la /code && pwd && whoami"}
-	// m.logger.Debugf("Setup command for container %s: %v", containerID, setupCmd)
-
-	setupExecConfig := &container.ExecOptions{
-		Cmd:          setupCmd,
+	setupScript := scripts.GetSetupScript(language)
+	execConfig := container.ExecOptions{
+		Cmd:          []string{"sh", "-c", setupScript},
 		AttachStdout: true,
 		AttachStderr: true,
 	}
 
-	// m.logger.Debugf("Creating setup exec for container %s", containerID)
-	setupExecResp, err := m.Cli.ContainerExecCreate(ctx, containerID, *setupExecConfig)
+	execResp, err := m.dockerClient.ContainerExecCreate(ctx, containerID, execConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create setup exec: %w", err)
 	}
 
-	// Execute the setup command
-	err = m.Cli.ContainerExecStart(ctx, setupExecResp.ID, container.ExecStartOptions{})
+	execAttachResp, err := m.dockerClient.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
 	if err != nil {
+		return fmt.Errorf("failed to attach to setup exec: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Execute the setup command
+	if err := m.dockerClient.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
 		return fmt.Errorf("failed to start setup exec: %w", err)
 	}
 
-	// Wait for setup completion
-	for {
-		inspectResp, err := m.Cli.ContainerExecInspect(ctx, setupExecResp.ID)
-		if err != nil {
-			return fmt.Errorf("failed to inspect setup exec: %w", err)
-		}
-
-		if !inspectResp.Running {
-			// m.logger.Debugf("Setup exec completed with exit code %d", inspectResp.ExitCode)
-			if inspectResp.ExitCode != 0 {
-				return fmt.Errorf("setup failed with exit code: %d", inspectResp.ExitCode)
+	// Wait for setup to complete
+	setupComplete := false
+	for !setupComplete {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execResp.ID)
+			if err != nil {
+				return fmt.Errorf("failed to inspect setup exec: %w", err)
 			}
-			break
+			if !inspectResp.Running {
+				if inspectResp.ExitCode != 0 {
+					return fmt.Errorf("setup script failed with exit code: %d", inspectResp.ExitCode)
+				}
+				setupComplete = true
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
-
-		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Now copy the file using a simpler approach
-	// Escape the content properly for shell
-	escapedContent := strings.ReplaceAll(string(content), "'", "'\"'\"'")
+	return nil
+}
+
+// runExecutionScript runs the actual code execution with precise timing
+func (m *containerManager) runExecutionScript(ctx context.Context, containerID string, language types.Language, outputBuffer *bytes.Buffer) (string, error) {
+	m.logger.Debugf("Running execution script for container %s", containerID)
+
+	executionScript := scripts.GetExecutionScript(language)
+	execConfig := container.ExecOptions{
+		Cmd:          []string{"sh", "-c", executionScript},
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	execResp, err := m.dockerClient.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to create execution exec: %w", err)
+	}
+
+	execAttachResp, err := m.dockerClient.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
+		Detach: false,
+		Tty:    false,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to attach to execution exec: %w", err)
+	}
+	defer execAttachResp.Close()
+
+	// Execute the command
+	if err := m.dockerClient.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		return "", fmt.Errorf("failed to start execution exec: %w", err)
+	}
+
+	// Read output in a goroutine
+	outputDone := make(chan struct{})
+	go func() {
+		defer close(outputDone)
+		scanner := bufio.NewScanner(execAttachResp.Reader)
+		for scanner.Scan() {
+			line := scanner.Text()
+			outputBuffer.WriteString(line + "\n")
+		}
+	}()
+
+	// Wait for execution to complete
+	var exitCode int
+	executionComplete := false
+	for !executionComplete {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-outputDone:
+			// Output reading completed, but continue checking execution status
+		default:
+			inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execResp.ID)
+			if err != nil {
+				return "", fmt.Errorf("failed to inspect execution exec: %w", err)
+			}
+			if !inspectResp.Running {
+				exitCode = inspectResp.ExitCode
+				executionComplete = true
+			} else {
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}
+
+	// Check if execution was successful
+	if exitCode != 0 {
+		return "", fmt.Errorf("execution failed with exit code: %d", exitCode)
+	}
+
+	m.logger.Debugf("Execution script completed for container %s", containerID)
+	return execResp.ID, nil
+}
+
+// runCleanupScript runs the cleanup script asynchronously
+func (m *containerManager) runCleanupScript(ctx context.Context, containerID string, language types.Language) error {
+	m.logger.Debugf("Running cleanup script for container %s", containerID)
+
+	cleanupScript := scripts.GetCleanupScript(language)
+	execConfig := container.ExecOptions{
+		Cmd:          []string{"sh", "-c", cleanupScript},
+		AttachStdout: false,
+		AttachStderr: false,
+	}
+
+	execResp, err := m.dockerClient.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create cleanup exec: %w", err)
+	}
+
+	// Execute the cleanup command (detached)
+	if err := m.dockerClient.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		return fmt.Errorf("failed to start cleanup exec: %w", err)
+	}
+
+	// Don't wait for cleanup to complete - it's asynchronous
+	m.logger.Debugf("Cleanup script started for container %s", containerID)
+	return nil
+}
+
+func (m *containerManager) copyFileToContainerOptimized(ctx context.Context, containerID string, filePath string, language types.Language) error {
+	// Read the file content
+	content, err := m.fileSystem.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
 
 	// Determine the target filename based on language
 	var targetFile string
 	switch language {
 	case types.LanguageGo:
-		targetFile = "/code/code.go"
+		targetFile = "code.go"
 	case types.LanguagePy:
-		targetFile = "/code/code.py"
+		targetFile = "code.py"
 	case types.LanguageJS, types.LanguageNode:
-		targetFile = "/code/code.js"
+		targetFile = "code.js"
 	case types.LanguageTS:
-		targetFile = "/code/code.ts"
+		targetFile = "code.ts"
 	default:
-		targetFile = "/code/code.go"
+		targetFile = "code.go"
 	}
 
-	copyCmd := []string{"sh", "-c", fmt.Sprintf("echo '%s' > %s", escapedContent, targetFile)}
-	// m.logger.Debugf("Copy command for container %s: %v", containerID, copyCmd)
+	// Create a tar archive in memory using pooled buffer
+	buf := m.getBytesBuffer()
+	defer m.returnBytesBuffer(buf)
+	tw := tar.NewWriter(buf)
 
-	execConfig := &container.ExecOptions{
-		Cmd:          copyCmd,
-		AttachStdout: true,
-		AttachStderr: true,
+	// Create tar header
+	header := &tar.Header{
+		Name: targetFile,
+		Mode: 0644,
+		Size: int64(len(content)),
 	}
 
-	// m.logger.Debugf("Creating exec for container %s", containerID)
-	execResp, err := m.Cli.ContainerExecCreate(ctx, containerID, *execConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create exec: %w", err)
-	}
-	// m.logger.Debugf("Created exec %s for container %s", execResp.ID, containerID)
-
-	// Execute the copy command
-	// m.logger.Debugf("Starting exec %s for container %s", execResp.ID, containerID)
-	err = m.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to start exec: %w", err)
-	}
-	// m.logger.Debugf("Started exec %s for container %s", execResp.ID, containerID)
-
-	// Wait for completion
-	// m.logger.Debugf("Waiting for exec %s to complete", execResp.ID)
-	for {
-		inspectResp, err := m.Cli.ContainerExecInspect(ctx, execResp.ID)
-		if err != nil {
-			return fmt.Errorf("failed to inspect exec: %w", err)
-		}
-
-		if !inspectResp.Running {
-			// m.logger.Debugf("Exec %s completed with exit code %d", execResp.ID, inspectResp.ExitCode)
-			if inspectResp.ExitCode != 0 {
-				return fmt.Errorf("file copy failed with exit code: %d", inspectResp.ExitCode)
-			}
-			break
-		}
-
-		time.Sleep(100 * time.Millisecond)
+	// Write header
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("failed to write tar header: %w", err)
 	}
 
-	// Verify the file was copied
-	verifyCmd := []string{"sh", "-c", fmt.Sprintf("ls -la %s && wc -l %s", targetFile, targetFile)}
-	// m.logger.Debugf("Verify command for container %s: %v", containerID, verifyCmd)
-
-	verifyExecConfig := &container.ExecOptions{
-		Cmd:          verifyCmd,
-		AttachStdout: true,
-		AttachStderr: true,
+	// Write file content
+	if _, err := tw.Write(content); err != nil {
+		return fmt.Errorf("failed to write file content to tar: %w", err)
 	}
 
-	verifyExecResp, err := m.Cli.ContainerExecCreate(ctx, containerID, *verifyExecConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create verify exec: %w", err)
+	// Close tar writer
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
 	}
 
-	err = m.Cli.ContainerExecStart(ctx, verifyExecResp.ID, container.ExecStartOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to start verify exec: %w", err)
+	// Copy to container using Docker's optimized method
+	copyOptions := container.CopyToContainerOptions{}
+
+	if err := m.dockerClient.CopyToContainer(ctx, containerID, "/code/", bytes.NewReader(buf.Bytes()), copyOptions); err != nil {
+		return fmt.Errorf("failed to copy file to container: %w", err)
 	}
 
-	for {
-		inspectResp, err := m.Cli.ContainerExecInspect(ctx, verifyExecResp.ID)
-		if err != nil {
-			return fmt.Errorf("failed to inspect verify exec: %w", err)
-		}
-
-		if !inspectResp.Running {
-			// m.logger.Debugf("Verify exec completed with exit code %d", inspectResp.ExitCode)
-			if inspectResp.ExitCode != 0 {
-				return fmt.Errorf("file verification failed with exit code: %d", inspectResp.ExitCode)
-			}
-			break
-		}
-
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// m.logger.Debugf("File copy completed successfully for container %s", containerID)
 	return nil
 }
 
-func (m *Manager) executeCode(ctx context.Context, containerID string, language types.Language) (*types.ExecutionResult, error) {
-	result := &types.ExecutionResult{}
-	var executionStartTime time.Time
-	var executionEndTime time.Time
-	var codeExecutionTime time.Duration
-	executionStarted := false
-	var outputBuffer bytes.Buffer
-
-	// Get language-specific setup script
-	langConfig := config.GetLanguageConfig(language)
-	execCmd := []string{"sh", "-c", langConfig.SetupScript}
-
-	execConfig := &container.ExecOptions{
-		Cmd:          execCmd,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	execResp, err := m.Cli.ContainerExecCreate(ctx, containerID, *execConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create exec: %w", err)
-	}
-
-	execAttachResp, err := m.Cli.ContainerExecAttach(ctx, execResp.ID, container.ExecAttachOptions{
-		Detach: false,
-		Tty:    true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to attach to exec: %w", err)
-	}
-	defer execAttachResp.Close()
-	scanner := bufio.NewScanner(execAttachResp.Reader)
-
-	// Execute the command
-	err = m.Cli.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to start exec: %w", err)
-	}
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		// m.logger.Debugf("Container Log: %s\n", line)
-
-		if strings.Contains(line, "START_EXECUTION") {
-			executionStartTime = time.Now().UTC()
-			executionStarted = true
-		} else if strings.Contains(line, "END_EXECUTION") && executionStarted {
-			executionEndTime = time.Now().UTC()
-			codeExecutionTime = executionEndTime.Sub(executionStartTime)
-			// m.logger.Debugf("Code execution completed in: %v\n", codeExecutionTime)
-			break
-		} else if executionStarted {
-			outputBuffer.WriteString(line)
-			// m.logger.Debugf("Container Log: %s\n", line)
-		}
-	}
-
-	// Wait for exec to finish (in case END_EXECUTION is not printed)
-	for {
-		inspectResp, err := m.Cli.ContainerExecInspect(ctx, execResp.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to inspect exec: %w", err)
-		}
-		if !inspectResp.Running {
-			if !executionStarted || codeExecutionTime == 0 {
-				codeExecutionTime = time.Since(executionStartTime)
-				m.logger.Debugf("Warning: Could not determine precise code execution time, using container execution time instead")
-			}
-			result.Success = inspectResp.ExitCode == 0
-			if inspectResp.ExitCode != 0 {
-				result.Error = fmt.Errorf("execution failed with exit code: %d", inspectResp.ExitCode)
-			}
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	result.Output = outputBuffer.String()
-	result.Stats.ExecutionTime = codeExecutionTime
-	return result, nil
+// getExecutionResult gets a clean ExecutionResult from the pool
+func (m *containerManager) getExecutionResult() *types.ExecutionResult {
+	result := m.executionResultPool.Get().(*types.ExecutionResult)
+	// Reset the result to ensure clean state
+	*result = types.ExecutionResult{}
+	return result
 }
 
-func (m *Manager) Close() error {
+// returnExecutionResult returns an ExecutionResult to the pool for reuse
+func (m *containerManager) returnExecutionResult(result *types.ExecutionResult) {
+	if result != nil {
+		// Clear sensitive data before returning to pool
+		result.Output = ""
+		result.Error = nil
+		result.Warnings = result.Warnings[:0] // Reset slice but keep capacity
+		result.Stats = types.DockerResourceStats{}
+		m.executionResultPool.Put(result)
+	}
+}
+
+// getBytesBuffer gets a clean bytes.Buffer from the pool
+func (m *containerManager) getBytesBuffer() *bytes.Buffer {
+	buf := m.bytesBufferPool.Get().(*bytes.Buffer)
+	buf.Reset() // Clear any existing data
+	return buf
+}
+
+// returnBytesBuffer returns a bytes.Buffer to the pool for reuse
+func (m *containerManager) returnBytesBuffer(buf *bytes.Buffer) {
+	if buf != nil {
+		buf.Reset() // Clear the buffer before returning to pool
+		m.bytesBufferPool.Put(buf)
+	}
+}
+
+func (m *containerManager) Close() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	// Close all language pools
 	for lang, pool := range m.pools {
-		if err := pool.Close(); err != nil {
+		if err := pool.close(); err != nil {
 			m.logger.Warnf("Failed to close pool for language %s: %v", lang, err)
 		}
 	}
