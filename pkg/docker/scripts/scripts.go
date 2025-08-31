@@ -1,249 +1,251 @@
 package scripts
 
-import (
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
-)
+import "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 
-// getInitializationScript returns the script to initialize a container
+// GetInitializationScript returns the script to initialize a container.
 func GetInitializationScript(language types.Language) string {
 	switch language {
 	case types.LanguageGo:
-		return `#!/bin/sh
-set -e
-mkdir -p /code
-cd /code
-echo 'package main
-
-import "fmt"
-
-func main() {
-    fmt.Println("Hello, World!")
-}' > code.go
-go mod init code
-go mod download
-echo "Container initialized successfully"
-`
+		return goInitializationScript
 	case types.LanguagePy:
-		return `#!/bin/sh
-set -e
-mkdir -p /code
-cd /code
-echo 'print("Hello, World!")' > code.py
-echo "Container initialized successfully"
-`
-	case types.LanguageJS, types.LanguageNode:
-		return `#!/bin/sh
-set -e
-mkdir -p /code
-cd /code
-echo 'console.log("Hello, World!");' > code.js
-echo "Container initialized successfully"
-`
+		return pythonInitializationScript
+	case types.LanguageJS, types.LanguageNode: // JS and Node have the same init
+		return javascriptInitializationScript
 	case types.LanguageTS:
-		return `#!/bin/sh
-set -e
-mkdir -p /code
-cd /code
-npm install -g typescript
-echo 'console.log("Hello, World!");' > code.ts
-echo "Container initialized successfully"
-`
+		return typescriptInitializationScript
 	default:
-		return `#!/bin/sh
-set -e
-mkdir -p /code
-cd /code
-echo "Container initialized successfully"
-`
+		// Return a generic script to ensure /code exists, even for unknown types.
+		return genericInitializationScript
 	}
 }
 
-func GetGoSetupScript() string {
-	return `#!/bin/sh
+// GetSetupScript returns the script to prepare a container for execution.
+func GetSetupScript(language types.Language) string {
+	switch language {
+	case types.LanguageGo:
+		return goSetupScript
+	case types.LanguagePy:
+		return pythonSetupScript
+	case types.LanguageJS, types.LanguageNode: // JS and Node have the same setup
+		return javascriptSetupScript
+	case types.LanguageTS:
+		return typescriptSetupScript
+	default:
+		return "" // No setup for unknown types
+	}
+}
+
+// GetExecutionScript returns the script that runs the user's code.
+func GetExecutionScript(language types.Language) string {
+	switch language {
+	case types.LanguageGo:
+		return goExecutionScript
+	case types.LanguagePy:
+		return pythonExecutionScript
+	case types.LanguageJS, types.LanguageNode: // JS and Node have the same execution
+		return javascriptExecutionScript
+	case types.LanguageTS:
+		return typescriptExecutionScript
+	default:
+		// Return a failing script for unsupported languages.
+		return `echo "Error: Unsupported language." >&2; exit 1`
+	}
+}
+
+// GetCleanupScript returns the script to clean a container after execution.
+// It is now language-specific to handle different artifacts.
+func GetCleanupScript(language types.Language) string {
+	switch language {
+	case types.LanguageGo:
+		return goCleanupScript
+	case types.LanguagePy:
+		return pythonCleanupScript
+	case types.LanguageJS, types.LanguageNode:
+		return javascriptCleanupScript
+	case types.LanguageTS:
+		return typescriptCleanupScript
+	default:
+		return genericCleanupScript
+	}
+}
+
+// --- INITIALIZATION SCRIPTS ---
+
+const genericInitializationScript = `#!/bin/sh
+set -e
+mkdir -p /code
+cd /code
+echo "Container initialized successfully"
+`
+
+const goInitializationScript = `#!/bin/sh
+set -e
+mkdir -p /code
+cd /code
+# A minimal hello world for a valid initial state.
+echo 'package main; import "fmt"; func main() { fmt.Println("init") }' > code.go
+go mod init code
+echo "Go container initialized successfully"
+`
+
+const pythonInitializationScript = `#!/bin/sh
+set -e
+mkdir -p /code
+cd /code
+echo 'print("init")' > code.py
+echo "Python container initialized successfully"
+`
+
+const javascriptInitializationScript = `#!/bin/sh
+set -e
+mkdir -p /code
+cd /code
+echo 'console.log("init");' > code.js
+echo "JavaScript container initialized successfully"
+`
+
+const typescriptInitializationScript = `#!/bin/sh
+set -e
+mkdir -p /code
+cd /code
+# Install TypeScript globally in the container during init.
+npm install -g typescript
+echo 'console.log("init");' > code.ts
+echo "TypeScript container initialized successfully"
+`
+
+// --- SETUP SCRIPTS (Warming up, dependency installation) ---
+
+const goSetupScript = `#!/bin/sh
 set -e
 cd /code
-
-# One-time warm-up of Go build cache (if not already done)
+# One-time warm-up of Go build cache.
 if [ ! -f /code/.warm ]; then
-    # Create a minimal Go program to warm up the compiler
     echo 'package main; func main(){}' > warm.go
-    
-    # Build with optimized flags to populate cache
     GOFLAGS='-buildvcs=false -trimpath' go build -o /tmp/warm warm.go
-    
-    # Clean up warm-up artifacts
     rm warm.go /tmp/warm
     touch /code/.warm
 fi
-
-echo "START_EXECUTION"
-# Run with optimized flags
-GOFLAGS='-buildvcs=false -trimpath' go run code.go 2>&1 || {
-    echo "Error executing Go program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
+# This is a critical step for Go Modules. It downloads dependencies.
+go mod tidy
 `
-}
 
-func GetPythonSetupScript() string {
-	return `#!/bin/sh
+const pythonSetupScript = `#!/bin/sh
 set -e
 cd /code
-
-# One-time warm-up of Python bytecode cache
+# One-time warm-up of Python bytecode cache.
 if [ ! -f /code/.warm ]; then
-    # Create a minimal Python program to warm up common imports
     cat > warm.py << 'EOF'
-import json
-import os
-import sys
-import time
-import datetime
-import requests
-import web3
+import json, os, sys, time, datetime, requests, web3
 EOF
-    
-    # Pre-compile to bytecode
     python -m py_compile warm.py
-    # Run once to warm up imports
     python -c "import warm"
-    rm warm.py warm.pyc
+    rm warm.py __pycache__/warm.cpython-*.pyc
     touch /code/.warm
 fi
-
-echo "START_EXECUTION"
-# Run with bytecode compilation enabled (default)
-python -B code.py 2>&1 || {
-    echo "Error executing Python program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
+# Install dependencies from requirements.txt if it exists.
+if [ -f requirements.txt ]; then
+    pip install -r requirements.txt
+fi
 `
-}
 
-func GetJavaScriptSetupScript() string {
-	return `#!/bin/sh
+const javascriptSetupScript = `#!/bin/sh
 set -e
 cd /code
-
-# One-time warm-up of V8 engine and common modules
+# One-time warm-up of V8 engine.
 if [ ! -f /code/.warm ]; then
-    # Create a minimal JS program to warm up common modules
     cat > warm.js << 'EOF'
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const https = require('https');
-const crypto = require('crypto');
-const { Web3 } = require('web3');
-const { ethers } = require('ethers');
+require('fs'); require('path'); require('http'); require('https'); require('crypto');
 EOF
-    
-    # Run once to warm up V8 and modules
-    NODE_OPTIONS='--no-warnings' node warm.js || true
+    node warm.js || true
     rm warm.js
     touch /code/.warm
 fi
-
-echo "START_EXECUTION"
-# Run with optimized Node options
-NODE_OPTIONS='--no-warnings --max-old-space-size=256' node code.js 2>&1 || {
-    echo "Error executing JavaScript program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
+# Install dependencies from package.json if it exists.
+if [ -f package.json ]; then
+    npm install
+fi
 `
-}
 
-func GetTypeScriptSetupScript() string {
-	return `#!/bin/sh
+const typescriptSetupScript = `#!/bin/sh
 set -e
 cd /code
-
-# One-time warm-up of TypeScript compiler and V8 engine
+# One-time warm-up of TypeScript compiler.
 if [ ! -f /code/.warm ]; then
-    # Create a minimal TS program to warm up compiler
-    cat > warm.ts << 'EOF'
-import * as fs from 'fs';
-import * as path from 'path';
-import * as http from 'http';
-import * as https from 'https';
-import * as crypto from 'crypto';
-import { Web3 } from 'web3';
-import { ethers } from 'ethers';
-
-interface WarmupTest {
-    id: number;
-    name: string;
-}
-
-const test: WarmupTest = { id: 1, name: "test" };
-console.log(test);
-EOF
-    
-    # Create tsconfig for faster compilation
-    cat > tsconfig.json << 'EOF'
-{
-    "compilerOptions": {
-        "target": "ES2020",
-        "module": "commonjs",
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "outDir": "./dist",
-        "incremental": true
-    }
-}
-EOF
-    
-    # Warm up TypeScript compiler and V8
-    NODE_OPTIONS='--no-warnings' tsc warm.ts && node warm.js || true
-    rm warm.ts warm.js tsconfig.json
+    echo 'const a: string = "warm";' > warm.ts
+    tsc warm.ts
+    rm warm.ts warm.js
     touch /code/.warm
 fi
-
-echo "START_EXECUTION"
-# Run with optimized options
-NODE_OPTIONS='--no-warnings --max-old-space-size=256' tsc code.ts --incremental && node code.js 2>&1 || {
-    echo "Error executing TypeScript program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
+# Install dependencies from package.json if it exists.
+if [ -f package.json ]; then
+    npm install
+fi
 `
-}
 
-func GetNodeSetupScript() string {
-	return `#!/bin/sh
+// --- EXECUTION SCRIPTS (Running the code) ---
+
+const goExecutionScript = `#!/bin/sh
 set -e
 cd /code
-
-# One-time warm-up of V8 engine and common modules
-if [ ! -f /code/.warm ]; then
-    # Create a minimal Node program to warm up common modules
-    cat > warm.js << 'EOF'
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const https = require('https');
-const crypto = require('crypto');
-const { Web3 } = require('web3');
-const { ethers } = require('ethers');
-EOF
-    
-    # Run once to warm up V8 and modules
-    NODE_OPTIONS='--no-warnings' node warm.js || true
-    rm warm.js
-    touch /code/.warm
-fi
-
-echo "START_EXECUTION"
-# Run with optimized Node options
-NODE_OPTIONS='--no-warnings --max-old-space-size=256' node code.js 2>&1 || {
-    echo "Error executing Node.js program. Exit code: $?"
-    exit 1
-}
-echo "END_EXECUTION"
+# Execute the code. Logs go to stdout/stderr. The result is written to result.json.
+GOFLAGS='-buildvcs=false -trimpath' go run code.go
 `
-}
+
+const pythonExecutionScript = `#!/bin/sh
+set -e
+cd /code
+# Execute with unbuffered output for real-time logging.
+python -u -B code.py
+`
+
+const javascriptExecutionScript = `#!/bin/sh
+set -e
+cd /code
+V8_MEMORY_LIMIT=${V8_MEMORY_LIMIT:-256}
+NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js
+`
+
+const typescriptExecutionScript = `#!/bin/sh
+set -e
+cd /code
+V8_MEMORY_LIMIT=${V8_MEMORY_LIMIT:-256}
+# First, compile the user's code.
+tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck
+# Then, execute the compiled JavaScript.
+NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js
+`
+
+// --- CLEANUP SCRIPTS (Resetting the container state) ---
+
+const genericCleanupScript = `#!/bin/sh
+# This script is non-critical, so we don't use 'set -e'.
+# It attempts to clean everything to return the container to a pristine state.
+cd /code
+rm -f code.* result.json go.mod go.sum package.json package-lock.json requirements.txt tsconfig.json
+rm -rf /tmp/go-build* __pycache__ node_modules dist .warm
+`
+
+const goCleanupScript = `#!/bin/sh
+cd /code
+rm -f code.go result.json go.mod go.sum
+rm -rf /tmp/go-build*
+`
+
+const pythonCleanupScript = `#!/bin/sh
+cd /code
+rm -f code.py result.json requirements.txt
+rm -rf __pycache__
+`
+
+const javascriptCleanupScript = `#!/bin/sh
+cd /code
+rm -f code.js result.json package.json package-lock.json
+rm -rf node_modules
+`
+
+const typescriptCleanupScript = `#!/bin/sh
+cd /code
+rm -f code.ts code.js result.json package.json package-lock.json tsconfig.json
+rm -rf node_modules dist
+`
