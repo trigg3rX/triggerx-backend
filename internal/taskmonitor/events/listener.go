@@ -366,7 +366,7 @@ func GetTestnetConfig() *ListenerConfig {
 		ProcessingTimeout: 30 * time.Second,
 		ContractAddresses: map[string]map[string]string{
 			"84532": { // Base Sepolia
-				"attestation_center": config.GetAttestationCenterAddress(),
+				"attestation_center": config.GetTestAttestationCenterAddress(),
 			},
 		},
 	}

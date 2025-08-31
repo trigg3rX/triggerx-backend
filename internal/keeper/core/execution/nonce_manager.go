@@ -57,7 +57,7 @@ func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceMana
 		logger:       logger,
 		syncInterval: 15 * time.Second, // More frequent sync for low latency
 		maxRetries:   5,                // More retries for reliability
-		baseTimeout:  3 * time.Second,  // Shorter timeout for faster retries
+		baseTimeout:  5 * time.Second,  // Shorter timeout for faster retries
 		pendingTxs:   make(map[uint64]*PendingTransaction),
 	}
 }
