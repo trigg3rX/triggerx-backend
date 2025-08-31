@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/docker/docker/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
@@ -14,14 +15,24 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-type CodeExecutor struct {
-	pipeline *ExecutionPipeline
-	monitor  *ExecutionMonitor
-	config   config.ExecutorConfig
+// Events during code execution pipeline
+type ExecutionEvent struct {
+	Type     string // "started", "completed", "failed", "timeout"
+	TraceID  string
+	Stage    types.ExecutionStage
+	Duration time.Duration
+	Error    error
+	Metadata map[string]interface{}
+}
+
+type codeExecutor struct {
+	pipeline *executionPipeline
+	monitor  *executionMonitor
+	config   config.ConfigProviderInterface
 	logger   logging.Logger
 }
 
-func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, httpClient *httppkg.HTTPClient, logger logging.Logger) (*CodeExecutor, error) {
+func NewCodeExecutor(ctx context.Context, cfg config.ConfigProviderInterface, httpClient *httppkg.HTTPClient, logger logging.Logger) (*codeExecutor, error) {
 	// Create Docker client with API version compatibility
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -48,13 +59,17 @@ func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, httpClient 
 		return nil, fmt.Errorf("failed to initialize container manager: %w", err)
 	}
 
+	// Create adapters for the pipeline
+	fileManagerAdapter := NewFileManagerAdapter(fileMgr)
+	containerManagerAdapter := NewContainerManagerAdapter(containerMgr)
+
 	// Create execution pipeline
-	pipeline := NewExecutionPipeline(cfg, fileMgr, containerMgr, logger)
+	pipeline := newExecutionPipeline(cfg, fileManagerAdapter, containerManagerAdapter, logger)
 
 	// Create execution monitor
-	monitor := NewExecutionMonitor(pipeline, cfg, logger)
+	monitor := newExecutionMonitor(pipeline, cfg, logger)
 
-	return &CodeExecutor{
+	return &codeExecutor{
 		pipeline: pipeline,
 		monitor:  monitor,
 		config:   cfg,
@@ -62,11 +77,11 @@ func NewCodeExecutor(ctx context.Context, cfg config.ExecutorConfig, httpClient 
 	}, nil
 }
 
-func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
 	e.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
 
 	// Execute through pipeline
-	result, err := e.pipeline.Execute(ctx, fileURL, fileLanguage, noOfAttesters)
+	result, err := e.pipeline.execute(ctx, fileURL, fileLanguage, noOfAttesters)
 	if err != nil {
 		e.logger.Errorf("Execution failed: %v", err)
 		return nil, err
@@ -76,59 +91,62 @@ func (e *CodeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage
 	return result, nil
 }
 
-func (e *CodeExecutor) GetHealthStatus() *HealthStatus {
-	return e.monitor.GetHealthStatus()
+func (e *codeExecutor) GetHealthStatus() *HealthStatus {
+	return e.monitor.getHealthStatus()
 }
 
-func (e *CodeExecutor) GetStats() *types.PerformanceMetrics {
-	return e.pipeline.GetStats()
+func (e *codeExecutor) GetStats() *types.PerformanceMetrics {
+	return e.pipeline.getStats()
 }
 
-func (e *CodeExecutor) GetPoolStats() map[types.Language]*types.PoolStats {
+func (e *codeExecutor) GetPoolStats() map[types.Language]*types.PoolStats {
 	return e.pipeline.containerMgr.GetPoolStats()
 }
 
 // InitializeLanguagePools initializes language-specific container pools
-func (e *CodeExecutor) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
+func (e *codeExecutor) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
 	return e.pipeline.containerMgr.InitializeLanguagePools(ctx, languages)
 }
 
 // GetSupportedLanguages returns all languages with active pools
-func (e *CodeExecutor) GetSupportedLanguages() []types.Language {
+func (e *codeExecutor) GetSupportedLanguages() []types.Language {
 	return e.pipeline.containerMgr.GetSupportedLanguages()
 }
 
 // IsLanguageSupported checks if a language is supported
-func (e *CodeExecutor) IsLanguageSupported(language types.Language) bool {
+func (e *codeExecutor) IsLanguageSupported(language types.Language) bool {
 	return e.pipeline.containerMgr.IsLanguageSupported(language)
 }
 
-func (e *CodeExecutor) GetActiveExecutions() []*types.ExecutionContext {
-	return e.monitor.GetActiveExecutions()
+func (e *codeExecutor) GetActiveExecutions() []*types.ExecutionContext {
+	return e.monitor.getActiveExecutions()
 }
 
-func (e *CodeExecutor) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
-	return e.monitor.GetExecutionByID(executionID)
+func (e *codeExecutor) CancelExecution(executionID string) error {
+	return e.monitor.cancelExecution(executionID)
 }
 
-func (e *CodeExecutor) CancelExecution(executionID string) error {
-	return e.monitor.CancelExecution(executionID)
+func (e *codeExecutor) GetAlerts(severity string, limit int) []Alert {
+	return e.monitor.getAlerts(severity, limit)
 }
 
-func (e *CodeExecutor) GetAlerts(severity string, limit int) []Alert {
-	return e.monitor.GetAlerts(severity, limit)
+func (e *codeExecutor) ClearAlerts() {
+	e.monitor.clearAlerts()
 }
 
-func (e *CodeExecutor) ClearAlerts() {
-	e.monitor.ClearAlerts()
-}
-
-func (e *CodeExecutor) Close() error {
+func (e *codeExecutor) Close() error {
 	e.logger.Info("Closing code executor")
+
+	// Close pipeline first to ensure all active executions complete
+	if e.pipeline != nil {
+		if err := e.pipeline.close(); err != nil {
+			e.logger.Warnf("Failed to close pipeline: %v", err)
+		}
+	}
 
 	// Close monitor
 	if e.monitor != nil {
-		if err := e.monitor.Close(); err != nil {
+		if err := e.monitor.close(); err != nil {
 			e.logger.Warnf("Failed to close monitor: %v", err)
 		}
 	}

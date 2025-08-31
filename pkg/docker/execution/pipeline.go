@@ -7,29 +7,51 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/container"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/file"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-type ExecutionPipeline struct {
-	fileManager      *file.FileManager
-	containerMgr     *container.Manager
-	config           config.ExecutorConfig
-	logger           logging.Logger
-	mutex            sync.RWMutex
-	activeExecutions map[string]*types.ExecutionContext
-	stats            *types.PerformanceMetrics
+// ContainerManager defines what the execution pipeline needs from a container manager
+type ContainerManager interface {
+	GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error)
+	ReturnContainer(container *types.PooledContainer) error
+	ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error)
+	MarkContainerAsFailed(containerID string, language types.Language, err error)
+	KillExecProcess(ctx context.Context, execID string) error
+	GetPoolStats() map[types.Language]*types.PoolStats
+	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
+	GetSupportedLanguages() []types.Language
+	IsLanguageSupported(language types.Language) bool
+	Close() error
 }
 
-func NewExecutionPipeline(cfg config.ExecutorConfig, fileMgr *file.FileManager, containerMgr *container.Manager, logger logging.Logger) *ExecutionPipeline {
-	return &ExecutionPipeline{
+// FileManager defines what the execution pipeline needs from a file manager
+type FileManager interface {
+	GetOrDownload(ctx context.Context, fileURL string, fileLanguage string) (*types.ExecutionContext, error)
+	Close() error
+}
+
+type executionPipeline struct {
+	fileManager        FileManager
+	containerMgr       ContainerManager
+	config             config.ConfigProviderInterface
+	logger             logging.Logger
+	mutex              sync.RWMutex
+	activeExecutions   map[string]*types.ExecutionContext
+	stats              *types.PerformanceMetrics
+	activeExecutionsWG sync.WaitGroup // Track active executions for graceful shutdown
+	shutdownChan       chan struct{}  // Signal for shutdown
+	closed             bool
+}
+
+func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManager, containerMgr ContainerManager, logger logging.Logger) *executionPipeline {
+	return &executionPipeline{
 		fileManager:      fileMgr,
 		containerMgr:     containerMgr,
 		config:           cfg,
 		logger:           logger,
 		activeExecutions: make(map[string]*types.ExecutionContext),
+		shutdownChan:     make(chan struct{}),
 		stats: &types.PerformanceMetrics{
 			TotalExecutions:      0,
 			SuccessfulExecutions: 0,
@@ -44,25 +66,43 @@ func NewExecutionPipeline(cfg config.ExecutorConfig, fileMgr *file.FileManager, 
 	}
 }
 
-func (ep *ExecutionPipeline) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
 	ep.logger.Infof("Starting execution %s for file: %s", executionID, fileURL)
 
+	// Check if pipeline is shutting down
+	select {
+	case <-ep.shutdownChan:
+		return nil, fmt.Errorf("execution pipeline is shutting down")
+	default:
+	}
+
+	// Create a cancellable context for this execution
+	execCtx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc() // Ensure cleanup
+
 	// Create execution context
-	execCtx := &types.ExecutionContext{
+	executionContext := &types.ExecutionContext{
 		FileURL:       fileURL,
 		FileLanguage:  fileLanguage,
 		NoOfAttesters: noOfAttesters,
 		TraceID:       executionID,
 		StartedAt:     startTime,
 		Metadata:      make(map[string]string),
+		State: types.ExecutionState{
+			CancelFunc: cancelFunc,
+		},
 	}
+
+	// Track execution with WaitGroup for graceful shutdown
+	ep.activeExecutionsWG.Add(1)
+	defer ep.activeExecutionsWG.Done()
 
 	// Track execution
 	ep.mutex.Lock()
-	ep.activeExecutions[executionID] = execCtx
+	ep.activeExecutions[executionID] = executionContext
 	ep.mutex.Unlock()
 
 	defer func() {
@@ -77,21 +117,21 @@ func (ep *ExecutionPipeline) Execute(ctx context.Context, fileURL string, fileLa
 	}()
 
 	// Execute pipeline stages
-	result, err := ep.executeStages(ctx, execCtx)
+	result, err := ep.executeStages(execCtx, executionContext)
 	if err != nil {
-		execCtx.CompletedAt = time.Now()
+		executionContext.CompletedAt = time.Now()
 		ep.updateStats(false, time.Since(startTime), 0.0)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 
-	execCtx.CompletedAt = time.Now()
+	executionContext.CompletedAt = time.Now()
 	duration := time.Since(startTime)
 
 	ep.logger.Infof("Execution %s completed successfully in %v", executionID, duration)
 	return result, nil
 }
 
-func (ep *ExecutionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
 	// Stage 1: Download and Validate
 	ep.logger.Debugf("Stage 1: Downloading and validating file")
 	fileCtx, err := ep.fileManager.GetOrDownload(ctx, execCtx.FileURL, execCtx.FileLanguage)
@@ -127,21 +167,33 @@ func (ep *ExecutionPipeline) executeStages(ctx context.Context, execCtx *types.E
 
 	ep.logger.Debugf("Got container %s from %s pool", container.ID, container.Language)
 
-	// Return container to pool asynchronously
+	// Return container to pool synchronously for proper cleanup during shutdown
 	defer func() {
-		go func(containerID string, container *types.PooledContainer) {
-			ep.logger.Debugf("Returning container %s to pool (async)", containerID)
-			if err := ep.containerMgr.ReturnContainer(container); err != nil {
-				ep.logger.Warnf("Failed to return container to pool: %v", err)
-			}
-		}(container.ID, container)
+		ep.logger.Debugf("Returning container %s to pool (sync)", container.ID)
+		if err := ep.containerMgr.ReturnContainer(container); err != nil {
+			ep.logger.Warnf("Failed to return container to pool: %v", err)
+		}
 	}()
 
 	// Stage 3: Execute Code
 	ep.logger.Debugf("Stage 3: Executing code in container %s", container.ID)
-	result, err := ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language)
+	result, execID, err := ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language)
 	if err != nil {
+		// Mark container as failed if execution fails
+		ep.logger.Warnf("Execution failed in container %s, marking as failed: %v", container.ID, err)
+		ep.containerMgr.MarkContainerAsFailed(container.ID, container.Language, err)
 		return nil, fmt.Errorf("failed to execute code: %w", err)
+	}
+
+	// Store exec ID and container ID for potential cancellation
+	execCtx.State.ExecID = execID
+	execCtx.State.ContainerID = container.ID
+
+	// Check if execution was successful
+	if !result.Success {
+		// Mark container as failed if execution returned non-zero exit code
+		ep.logger.Warnf("Execution failed in container %s with error: %v", container.ID, result.Error)
+		ep.containerMgr.MarkContainerAsFailed(container.ID, container.Language, result.Error)
 	}
 
 	// Stage 4: Process Results
@@ -157,7 +209,7 @@ func (ep *ExecutionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	return finalResult, nil
 }
 
-func (ep *ExecutionPipeline) processResults(result *types.ExecutionResult, execCtx *types.ExecutionContext) *types.ExecutionResult {
+func (ep *executionPipeline) processResults(result *types.ExecutionResult, execCtx *types.ExecutionContext) *types.ExecutionResult {
 	// Add execution metadata
 	execCtx.Metadata["execution_time"] = result.Stats.ExecutionTime.String()
 	execCtx.Metadata["static_complexity"] = fmt.Sprintf("%.6f", result.Stats.StaticComplexity)
@@ -171,11 +223,11 @@ func (ep *ExecutionPipeline) processResults(result *types.ExecutionResult, execC
 	return result
 }
 
-func (ep *ExecutionPipeline) calculateFees(execCtx *types.ExecutionContext) float64 {
+func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) float64 {
 	// Basic fee calculation
 	duration := time.Since(execCtx.StartedAt)
-	baseFee := ep.config.Fees.FixedCost
-	timeFee := duration.Seconds() * ep.config.Fees.PricePerTG
+	baseFee := ep.config.GetFeesConfig().FixedCost
+	timeFee := duration.Seconds() * ep.config.GetFeesConfig().PricePerTG
 
 	// Add complexity factor if available
 	complexityFee := 0.0
@@ -188,13 +240,13 @@ func (ep *ExecutionPipeline) calculateFees(execCtx *types.ExecutionContext) floa
 	return baseFee + timeFee + complexityFee
 }
 
-// func (ep *ExecutionPipeline) cleanupExecution(execCtx *types.ExecutionContext) error {
+// func (ep *executionPipeline) cleanupExecution(execCtx *types.ExecutionContext) error {
 // 	// Cleanup any temporary files
 // 	// In this implementation, the file manager handles cleanup
 // 	return nil
 // }
 
-func (ep *ExecutionPipeline) GetActiveExecutions() []*types.ExecutionContext {
+func (ep *executionPipeline) getActiveExecutions() []*types.ExecutionContext {
 	ep.mutex.RLock()
 	defer ep.mutex.RUnlock()
 
@@ -206,15 +258,48 @@ func (ep *ExecutionPipeline) GetActiveExecutions() []*types.ExecutionContext {
 	return executions
 }
 
-func (ep *ExecutionPipeline) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
-	ep.mutex.RLock()
-	defer ep.mutex.RUnlock()
+// Close gracefully shuts down the execution pipeline
+func (ep *executionPipeline) close() error {
+	ep.mutex.Lock()
+	defer ep.mutex.Unlock()
 
-	exec, exists := ep.activeExecutions[executionID]
-	return exec, exists
+	if ep.closed {
+		return nil
+	}
+
+	ep.logger.Info("Closing execution pipeline")
+
+	// Signal shutdown to prevent new executions
+	close(ep.shutdownChan)
+	ep.closed = true
+
+	// Cancel all active executions
+	for executionID, execCtx := range ep.activeExecutions {
+		ep.logger.Infof("Cancelling active execution: %s", executionID)
+		if execCtx.State.CancelFunc != nil {
+			execCtx.State.CancelFunc()
+		}
+	}
+
+	// Wait for all active executions to complete with timeout
+	done := make(chan struct{})
+	go func() {
+		ep.activeExecutionsWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		ep.logger.Info("All active executions completed")
+	case <-time.After(30 * time.Second):
+		ep.logger.Warn("Timeout waiting for active executions to complete")
+	}
+
+	ep.logger.Info("Execution pipeline closed")
+	return nil
 }
 
-func (ep *ExecutionPipeline) CancelExecution(executionID string) error {
+func (ep *executionPipeline) cancelExecution(executionID string) error {
 	ep.mutex.Lock()
 	defer ep.mutex.Unlock()
 
@@ -223,13 +308,29 @@ func (ep *ExecutionPipeline) CancelExecution(executionID string) error {
 		return fmt.Errorf("execution not found: %s", executionID)
 	}
 
+	// Actually cancel the execution by calling the cancel function
+	if exec.State.CancelFunc != nil {
+		exec.State.CancelFunc()
+		ep.logger.Infof("Execution %s cancelled - context cancellation will terminate Docker processes", executionID)
+	} else {
+		ep.logger.Warnf("Execution %s has no cancel function - marking as cancelled", executionID)
+	}
+
+	// Attempt to terminate the Docker exec process if we have the exec ID
+	if exec.State.ExecID != "" {
+		ep.logger.Infof("Attempting to terminate Docker exec process %s for execution %s", exec.State.ExecID, executionID)
+		if err := ep.containerMgr.KillExecProcess(context.Background(), exec.State.ExecID); err != nil {
+			ep.logger.Warnf("Failed to terminate exec process %s: %v", exec.State.ExecID, err)
+		}
+	}
+
 	exec.CompletedAt = time.Now()
 
 	ep.logger.Infof("Execution %s cancelled", executionID)
 	return nil
 }
 
-func (ep *ExecutionPipeline) GetStats() *types.PerformanceMetrics {
+func (ep *executionPipeline) getStats() *types.PerformanceMetrics {
 	ep.mutex.RLock()
 	defer ep.mutex.RUnlock()
 
@@ -238,7 +339,7 @@ func (ep *ExecutionPipeline) GetStats() *types.PerformanceMetrics {
 	return &stats
 }
 
-func (ep *ExecutionPipeline) updateStats(success bool, duration time.Duration, complexity float64) {
+func (ep *executionPipeline) updateStats(success bool, duration time.Duration, complexity float64) {
 	ep.mutex.Lock()
 	defer ep.mutex.Unlock()
 
@@ -282,11 +383,11 @@ func (ep *ExecutionPipeline) updateStats(success bool, duration time.Duration, c
 	}
 }
 
-func (ep *ExecutionPipeline) calculateCost(duration time.Duration, complexity float64) float64 {
+func (ep *executionPipeline) calculateCost(duration time.Duration, complexity float64) float64 {
 	// Basic cost calculation based on execution time and complexity
-	timeCost := duration.Seconds() * ep.config.Fees.PricePerTG
-	complexityCost := complexity * ep.config.Fees.PricePerTG
-	return timeCost + complexityCost + ep.config.Fees.FixedCost
+	timeCost := duration.Seconds() * ep.config.GetFeesConfig().PricePerTG
+	complexityCost := complexity * ep.config.GetFeesConfig().PricePerTG
+	return timeCost + complexityCost + ep.config.GetFeesConfig().FixedCost
 }
 
 func generateExecutionID() string {

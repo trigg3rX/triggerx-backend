@@ -25,9 +25,9 @@ type HealthStatus struct {
 	Metrics   *types.PerformanceMetrics `json:"metrics"`
 }
 
-type ExecutionMonitor struct {
-	pipeline         *ExecutionPipeline
-	config           config.ExecutorConfig
+type executionMonitor struct {
+	pipeline         *executionPipeline
+	config           config.ConfigProviderInterface
 	logger           logging.Logger
 	mutex            sync.RWMutex
 	alerts           []Alert
@@ -36,8 +36,8 @@ type ExecutionMonitor struct {
 	stopMonitoring   chan struct{}
 }
 
-func NewExecutionMonitor(pipeline *ExecutionPipeline, cfg config.ExecutorConfig, logger logging.Logger) *ExecutionMonitor {
-	monitor := &ExecutionMonitor{
+func newExecutionMonitor(pipeline *executionPipeline, cfg config.ConfigProviderInterface, logger logging.Logger) *executionMonitor {
+	monitor := &executionMonitor{
 		pipeline: pipeline,
 		config:   cfg,
 		logger:   logger,
@@ -62,9 +62,10 @@ func NewExecutionMonitor(pipeline *ExecutionPipeline, cfg config.ExecutorConfig,
 	return monitor
 }
 
-func (em *ExecutionMonitor) startMonitoring() {
-	// Use a default interval since Monitoring config doesn't exist
-	interval := 30 * time.Second
+func (em *executionMonitor) startMonitoring() {
+	// Get monitoring configuration
+	monitoringConfig := em.config.GetMonitoringConfig()
+	interval := monitoringConfig.HealthCheckInterval
 	em.monitoringTicker = time.NewTicker(interval)
 
 	go func() {
@@ -80,14 +81,17 @@ func (em *ExecutionMonitor) startMonitoring() {
 	}()
 }
 
-func (em *ExecutionMonitor) performHealthCheck() {
+func (em *executionMonitor) performHealthCheck() {
 	em.logger.Debugf("Performing health check")
 
-	// Check active executions
-	activeExecutions := em.pipeline.GetActiveExecutions()
+	// Get monitoring configuration
+	monitoringConfig := em.config.GetMonitoringConfig()
 
-	// Check for stuck executions (default max time: 5 minutes)
-	maxExecutionTime := 5 * time.Minute
+	// Check active executions
+	activeExecutions := em.pipeline.getActiveExecutions()
+
+	// Check for stuck executions
+	maxExecutionTime := monitoringConfig.MaxExecutionTime
 	for _, exec := range activeExecutions {
 		duration := time.Since(exec.StartedAt)
 		if duration > maxExecutionTime {
@@ -96,10 +100,10 @@ func (em *ExecutionMonitor) performHealthCheck() {
 	}
 
 	// Check pipeline statistics
-	stats := em.pipeline.GetStats()
+	stats := em.pipeline.getStats()
 
-	// Check success rate (default min: 80%)
-	minSuccessRate := 0.8
+	// Check success rate
+	minSuccessRate := monitoringConfig.MinSuccessRate
 	if stats.TotalExecutions > 0 {
 		successRate := float64(stats.SuccessfulExecutions) / float64(stats.TotalExecutions)
 		if successRate < minSuccessRate {
@@ -107,8 +111,8 @@ func (em *ExecutionMonitor) performHealthCheck() {
 		}
 	}
 
-	// Check average execution time (default max: 2 minutes)
-	maxAverageTime := 2 * time.Minute
+	// Check average execution time
+	maxAverageTime := monitoringConfig.MaxAverageExecutionTime
 	if stats.AverageExecutionTime > maxAverageTime {
 		em.createAlert("high_execution_time", fmt.Sprintf("Average execution time is high: %v", stats.AverageExecutionTime), "warning")
 	}
@@ -117,7 +121,7 @@ func (em *ExecutionMonitor) performHealthCheck() {
 	em.updateMetrics(stats)
 }
 
-func (em *ExecutionMonitor) createAlert(alertType, message, severity string) {
+func (em *executionMonitor) createAlert(alertType, message, severity string) {
 	alert := Alert{
 		Type:      alertType,
 		Message:   message,
@@ -128,8 +132,9 @@ func (em *ExecutionMonitor) createAlert(alertType, message, severity string) {
 	em.mutex.Lock()
 	em.alerts = append(em.alerts, alert)
 
-	// Keep only recent alerts (max 100)
-	maxAlerts := 100
+	// Keep only recent alerts based on configuration
+	monitoringConfig := em.config.GetMonitoringConfig()
+	maxAlerts := monitoringConfig.MaxAlerts
 	if len(em.alerts) > maxAlerts {
 		em.alerts = em.alerts[len(em.alerts)-maxAlerts:]
 	}
@@ -138,16 +143,19 @@ func (em *ExecutionMonitor) createAlert(alertType, message, severity string) {
 	em.logger.Warnf("Alert: %s - %s", alertType, message)
 }
 
-func (em *ExecutionMonitor) updateMetrics(stats *types.PerformanceMetrics) {
+func (em *executionMonitor) updateMetrics(stats *types.PerformanceMetrics) {
 	em.mutex.Lock()
 	defer em.mutex.Unlock()
 
 	em.metrics = stats
 }
 
-func (em *ExecutionMonitor) GetHealthStatus() *HealthStatus {
+func (em *executionMonitor) getHealthStatus() *HealthStatus {
 	em.mutex.RLock()
 	defer em.mutex.RUnlock()
+
+	// Get monitoring configuration
+	monitoringConfig := em.config.GetMonitoringConfig()
 
 	// Calculate overall health score
 	healthScore := 100.0
@@ -157,7 +165,7 @@ func (em *ExecutionMonitor) GetHealthStatus() *HealthStatus {
 	warningAlerts := 0
 
 	for _, alert := range em.alerts {
-		if time.Since(alert.Timestamp) < time.Hour { // Only consider recent alerts
+		if time.Since(alert.Timestamp) < monitoringConfig.AlertRetentionTime { // Only consider recent alerts
 			switch alert.Severity {
 			case "error":
 				criticalAlerts++
@@ -167,17 +175,17 @@ func (em *ExecutionMonitor) GetHealthStatus() *HealthStatus {
 		}
 	}
 
-	healthScore -= float64(criticalAlerts) * 20 // Each critical alert reduces score by 20
-	healthScore -= float64(warningAlerts) * 5   // Each warning alert reduces score by 5
+	healthScore -= float64(criticalAlerts) * monitoringConfig.CriticalAlertPenalty
+	healthScore -= float64(warningAlerts) * monitoringConfig.WarningAlertPenalty
 
 	if healthScore < 0 {
 		healthScore = 0
 	}
 
 	status := "healthy"
-	if healthScore < 50 {
+	if healthScore < monitoringConfig.HealthScoreThresholds.Critical {
 		status = "critical"
-	} else if healthScore < 80 {
+	} else if healthScore < monitoringConfig.HealthScoreThresholds.Warning {
 		status = "warning"
 	}
 
@@ -190,9 +198,10 @@ func (em *ExecutionMonitor) GetHealthStatus() *HealthStatus {
 	}
 }
 
-func (em *ExecutionMonitor) getRecentAlerts() []Alert {
+func (em *executionMonitor) getRecentAlerts() []Alert {
 	recentAlerts := make([]Alert, 0)
-	cutoff := time.Now().Add(-time.Hour) // Last hour
+	monitoringConfig := em.config.GetMonitoringConfig()
+	cutoff := time.Now().Add(-monitoringConfig.AlertRetentionTime)
 
 	for _, alert := range em.alerts {
 		if alert.Timestamp.After(cutoff) {
@@ -203,7 +212,7 @@ func (em *ExecutionMonitor) getRecentAlerts() []Alert {
 	return recentAlerts
 }
 
-func (em *ExecutionMonitor) GetAlerts(severity string, limit int) []Alert {
+func (em *executionMonitor) getAlerts(severity string, limit int) []Alert {
 	em.mutex.RLock()
 	defer em.mutex.RUnlock()
 
@@ -232,7 +241,7 @@ func (em *ExecutionMonitor) GetAlerts(severity string, limit int) []Alert {
 	return filteredAlerts
 }
 
-func (em *ExecutionMonitor) ClearAlerts() {
+func (em *executionMonitor) clearAlerts() {
 	em.mutex.Lock()
 	defer em.mutex.Unlock()
 
@@ -240,7 +249,7 @@ func (em *ExecutionMonitor) ClearAlerts() {
 	em.logger.Info("All alerts cleared")
 }
 
-func (em *ExecutionMonitor) GetMetrics() *types.PerformanceMetrics {
+func (em *executionMonitor) getMetrics() *types.PerformanceMetrics {
 	em.mutex.RLock()
 	defer em.mutex.RUnlock()
 
@@ -249,19 +258,15 @@ func (em *ExecutionMonitor) GetMetrics() *types.PerformanceMetrics {
 	return &metrics
 }
 
-func (em *ExecutionMonitor) GetActiveExecutions() []*types.ExecutionContext {
-	return em.pipeline.GetActiveExecutions()
+func (em *executionMonitor) getActiveExecutions() []*types.ExecutionContext {
+	return em.pipeline.getActiveExecutions()
 }
 
-func (em *ExecutionMonitor) GetExecutionByID(executionID string) (*types.ExecutionContext, bool) {
-	return em.pipeline.GetExecutionByID(executionID)
+func (em *executionMonitor) cancelExecution(executionID string) error {
+	return em.pipeline.cancelExecution(executionID)
 }
 
-func (em *ExecutionMonitor) CancelExecution(executionID string) error {
-	return em.pipeline.CancelExecution(executionID)
-}
-
-func (em *ExecutionMonitor) Close() error {
+func (em *executionMonitor) close() error {
 	em.logger.Info("Closing execution monitor")
 
 	if em.monitoringTicker != nil {
