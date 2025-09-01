@@ -219,10 +219,17 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	// Initialize WebSocket components
 	s.hub = websocket.NewHub(logger)
+
+	// Create the task repository with publisher for WebSocket events
+	taskRepo := repository.NewTaskRepositoryWithPublisher(db, nil) // publisher will be set later if needed
+
+	// Create and set the initial data handler for the hub
+	initialDataHandler := handlers.NewInitialDataHandler(taskRepo, logger)
+	s.hub.SetInitialDataCallback(initialDataHandler.HandleInitialData)
 	s.wsConnectionManager = websocket.NewWebSocketConnectionManager(
 		websocket.NewWebSocketUpgrader(logger),
 		websocket.NewWebSocketAuthMiddleware(s.apiKeyAuth, logger),
-		websocket.NewWebSocketRateLimiter(s.rateLimiter, 10, logger), // Max 10 connections per IP
+		websocket.NewWebSocketRateLimiter(s.rateLimiter, 100, logger), // Max 100 connections per IP
 		s.hub,
 		logger,
 	)

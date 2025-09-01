@@ -14,6 +14,7 @@ const (
 	MessageTypeTaskUpdated       MessageType = "TASK_UPDATED"
 	MessageTypeTaskStatusChanged MessageType = "TASK_STATUS_CHANGED"
 	MessageTypeTaskFeeUpdated    MessageType = "TASK_FEE_UPDATED"
+	MessageTypeJobTasksSnapshot  MessageType = "JOB_TASKS_SNAPSHOT"
 
 	// System message types
 	MessageTypeSubscribe   MessageType = "SUBSCRIBE"
@@ -61,6 +62,25 @@ type SuccessData struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
+// JobTasksSnapshot represents a snapshot of all tasks for a job
+type JobTasksSnapshot struct {
+	JobID string                `json:"job_id"`
+	Tasks []JobTaskSnapshotData `json:"tasks"`
+}
+
+// JobTaskSnapshotData represents a single task in the snapshot
+type JobTaskSnapshotData struct {
+	TaskID             int64     `json:"task_id"`
+	TaskNumber         int64     `json:"task_number"`
+	TaskOpXCost        float64   `json:"task_opx_cost"`
+	ExecutionTimestamp time.Time `json:"execution_timestamp"`
+	ExecutionTxHash    string    `json:"execution_tx_hash"`
+	TaskPerformerID    int64     `json:"task_performer_id"`
+	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
+	IsSuccessful       bool      `json:"is_successful"`
+	TaskStatus         string    `json:"task_status"`
+}
+
 // NewMessage creates a new WebSocket message
 func NewMessage(msgType MessageType, data interface{}) *Message {
 	return &Message{
@@ -98,6 +118,18 @@ func NewSuccessMessage(message string, data interface{}) *Message {
 		Data: &SuccessData{
 			Message: message,
 			Data:    data,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+// NewJobTasksSnapshotMessage creates a new job tasks snapshot message
+func NewJobTasksSnapshotMessage(jobID string, tasks []JobTaskSnapshotData) *Message {
+	return &Message{
+		Type: MessageTypeJobTasksSnapshot,
+		Data: &JobTasksSnapshot{
+			JobID: jobID,
+			Tasks: tasks,
 		},
 		Timestamp: time.Now(),
 	}

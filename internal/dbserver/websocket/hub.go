@@ -34,6 +34,9 @@ type Hub struct {
 	// Task event channel
 	taskEvents chan *TaskEventData
 
+	// Initial data callback
+	initialDataCallback InitialDataCallback
+
 	// Context for graceful shutdown
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -56,6 +59,9 @@ type Subscription struct {
 	Room   string
 }
 
+// InitialDataCallback is a function type for fetching initial data when subscribing to a room
+type InitialDataCallback func(room string, client *Client) error
+
 // NewHub creates a new WebSocket hub
 func NewHub(logger logging.Logger) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,6 +79,11 @@ func NewHub(logger logging.Logger) *Hub {
 		cancel:      cancel,
 		logger:      logger,
 	}
+}
+
+// SetInitialDataCallback sets the callback function for fetching initial data
+func (h *Hub) SetInitialDataCallback(callback InitialDataCallback) {
+	h.initialDataCallback = callback
 }
 
 // Run starts the hub's main loop
@@ -152,6 +163,15 @@ func (h *Hub) subscribeToRoom(subscription *Subscription) {
 
 	h.rooms[room][client] = true
 	h.logger.Infof("Client %s subscribed to room %s", client.ID, room)
+
+	// Call initial data callback if set
+	if h.initialDataCallback != nil {
+		go func() {
+			if err := h.initialDataCallback(room, client); err != nil {
+				h.logger.Errorf("Error fetching initial data for room %s: %v", room, err)
+			}
+		}()
+	}
 }
 
 // unsubscribeFromRoom unsubscribes a client from a room
