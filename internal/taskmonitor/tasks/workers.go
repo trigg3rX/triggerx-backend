@@ -99,6 +99,13 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 
 		processedCount++
 		processedTaskIDs = append(processedTaskIDs, taskID)
+
+		err = tsm.dbClient.UpdateTaskFailed(taskID)
+		if err != nil {
+			tsm.logger.Error("Failed to update task failed",
+				"task_id", taskID,
+				"error", err)
+		}
 	}
 
 	// Remove all processed tasks from timeout tracking in batch

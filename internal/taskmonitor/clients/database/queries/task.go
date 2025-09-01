@@ -43,7 +43,8 @@ const (
 		UPDATE triggerx.task_data 
 		SET task_number = ?, 
 			is_accepted = ?, 
-			is_successful = ?,
+			is_successful = true,
+			task_status = 'completed',
 			task_submission_tx_hash = ?, 
 			task_performer_id = ?, 
 			task_attester_ids = ?, 
@@ -51,6 +52,11 @@ const (
 			execution_timestamp = ?,
 			task_opx_cost = ?,
 			proof_of_task = ?
+		WHERE task_id = ?`
+	UpdateTaskFailed = `
+		UPDATE triggerx.task_data 
+		SET is_successful = false,
+			task_status = 'failed'
 		WHERE task_id = ?`
 	UpdateAttesterPointsAndNoOfTasks = `
 		UPDATE triggerx.keeper_data 

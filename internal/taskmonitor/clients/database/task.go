@@ -24,7 +24,6 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
-		data.IsAccepted,
 		data.TaskSubmissionTxHash,
 		performerId[0],
 		attesterIds,
@@ -38,6 +37,15 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	}
 
 	dm.logger.Infof("Successfully updated task %d with submission details", data.TaskID)
+	return nil
+}
+
+func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
+	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
+		return err
+	}
+	dm.logger.Infof("Successfully updated task %d as failed", taskID)
 	return nil
 }
 
