@@ -42,18 +42,60 @@ func NewClient(id string, conn *websocket.Conn, hub *Hub, logger logging.Logger)
 	}
 }
 
+// closeCodeName returns a human-readable name for a WebSocket close code
+func closeCodeName(code int) string {
+	switch code {
+	case websocket.CloseNormalClosure:
+		return "Normal Closure"
+	case websocket.CloseGoingAway:
+		return "Going Away"
+	case websocket.CloseProtocolError:
+		return "Protocol Error"
+	case websocket.CloseUnsupportedData:
+		return "Unsupported Data"
+	case websocket.CloseNoStatusReceived:
+		return "No Status Received"
+	case websocket.CloseAbnormalClosure:
+		return "Abnormal Closure"
+	case websocket.CloseInvalidFramePayloadData:
+		return "Invalid Frame Payload Data"
+	case websocket.ClosePolicyViolation:
+		return "Policy Violation"
+	case websocket.CloseMessageTooBig:
+		return "Message Too Big"
+	case websocket.CloseMandatoryExtension:
+		return "Mandatory Extension"
+	case websocket.CloseInternalServerErr:
+		return "Internal Server Error"
+	case websocket.CloseServiceRestart:
+		return "Service Restart"
+	case websocket.CloseTryAgainLater:
+		return "Try Again Later"
+	case websocket.CloseTLSHandshake:
+		return "TLS Handshake"
+	default:
+		return "Unknown"
+	}
+}
+
 // ReadPump handles reading messages from the WebSocket connection
 func (c *Client) ReadPump() {
 	defer func() {
 		c.Hub.unregister <- c
-		c.Conn.Close()
+		if err := c.Conn.Close(); err != nil {
+			c.logger.Warnf("Error closing WebSocket for client %s: %v", c.ID, err)
+		}
 	}()
 
 	// Set read limits and timeouts
 	c.Conn.SetReadLimit(512)
-	c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err := c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		c.logger.Warnf("Failed to set read deadline for client %s: %v", c.ID, err)
+	}
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if err := c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+			c.logger.Warnf("Failed to refresh read deadline on pong for client %s: %v", c.ID, err)
+		}
 		c.mu.Lock()
 		c.LastPing = time.Now()
 		c.mu.Unlock()
@@ -68,8 +110,19 @@ func (c *Client) ReadPump() {
 			var msg Message
 			err := c.Conn.ReadJSON(&msg)
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				if ce, ok := err.(*websocket.CloseError); ok {
+					name := closeCodeName(ce.Code)
+					// Downgrade logging for normal/benign closes
+					switch ce.Code {
+					case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived:
+						c.logger.Infof("WebSocket closed for client %s: code=%d (%s), text=%s", c.ID, ce.Code, name, ce.Text)
+					default:
+						c.logger.Errorf("WebSocket closed unexpectedly for client %s: code=%d (%s), text=%s", c.ID, ce.Code, name, ce.Text)
+					}
+				} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					c.logger.Errorf("WebSocket error for client %s: %v", c.ID, err)
+				} else {
+					c.logger.Infof("WebSocket read ended for client %s: %v", c.ID, err)
 				}
 				return
 			}
@@ -84,15 +137,21 @@ func (c *Client) WritePump() {
 	ticker := time.NewTicker(54 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c.Conn.Close()
+		if err := c.Conn.Close(); err != nil {
+			c.logger.Warnf("Error closing WebSocket for client %s: %v", c.ID, err)
+		}
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.Send:
-			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				c.logger.Warnf("Failed to set write deadline for client %s: %v", c.ID, err)
+			}
 			if !ok {
-				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					c.logger.Warnf("Failed to write close message for client %s: %v", c.ID, err)
+				}
 				return
 			}
 
@@ -102,7 +161,9 @@ func (c *Client) WritePump() {
 			}
 
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				c.logger.Warnf("Failed to set write deadline (ping) for client %s: %v", c.ID, err)
+			}
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

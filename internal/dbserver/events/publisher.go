@@ -2,7 +2,6 @@ package events
 
 import (
 	"context"
-	"sync"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -14,7 +13,6 @@ type Publisher struct {
 	logger logging.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
-	mu     sync.RWMutex
 }
 
 // NewPublisher creates a new task event publisher
