@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TriggerX WebSocket Task Data Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .message {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .message.task-created {
+            border-left: 4px solid #28a745;
+        }
+        .message.task-updated {
+            border-left: 4px solid #007bff;
+        }
+        .message.task-status-changed {
+            border-left: 4px solid #ffc107;
+        }
+        .message.task-fee-updated {
+            border-left: 4px solid #17a2b8;
+        }
+        .message.error {
+            border-left: 4px solid #dc3545;
+        }
+        .message.success {
+            border-left: 4px solid #28a745;
+        }
+        input, button {
+            padding: 8px 12px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .subscriptions {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .subscription-item {
+            background-color: #e9ecef;
+            padding: 5px 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .remove-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>TriggerX WebSocket Task Data Client</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Connection</h2>
+            <div id="status" class="status disconnected">Disconnected</div>
+            
+            <div>
+                <label for="apiKey">API Key:</label><br>
+                <input type="text" id="apiKey" placeholder="Enter your API key" style="width: 100%;">
+            </div>
+            
+            <div>
+                <label for="serverUrl">Server URL:</label><br>
+                <input type="text" id="serverUrl" value="ws://localhost:9002/api/ws/tasks" style="width: 100%;">
+            </div>
+            
+            <div>
+                <button id="connectBtn" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            </div>
+            
+            <h3>Subscriptions</h3>
+            <div>
+                <input type="text" id="roomInput" placeholder="Room (e.g., job:123, task:456, user:user_123)">
+                <button onclick="subscribe()">Subscribe</button>
+            </div>
+            
+            <div id="subscriptions" class="subscriptions">
+                <!-- Subscriptions will be listed here -->
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Messages</h2>
+            <div>
+                <button onclick="clearMessages()">Clear Messages</button>
+                <button onclick="sendPing()">Send Ping</button>
+            </div>
+            <div id="messages">
+                <!-- Messages will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let subscriptions = new Set();
+
+        function connect() {
+            const apiKey = document.getElementById('apiKey').value;
+            const serverUrl = document.getElementById('serverUrl').value;
+            
+            if (!apiKey) {
+                alert('Please enter an API key');
+                return;
+            }
+            
+            const url = `${serverUrl}?api_key=${encodeURIComponent(apiKey)}`;
+            
+            try {
+                ws = new WebSocket(url);
+                
+                ws.onopen = function() {
+                    updateStatus('Connected', true);
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    addMessage('Connection established', 'success');
+                };
+                
+                ws.onmessage = function(event) {
+                    const message = JSON.parse(event.data);
+                    handleMessage(message);
+                };
+                
+                ws.onclose = function() {
+                    updateStatus('Disconnected', false);
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                    addMessage('Connection closed', 'error');
+                };
+                
+                ws.onerror = function(error) {
+                    addMessage(`Connection error: ${error}`, 'error');
+                };
+                
+            } catch (error) {
+                addMessage(`Failed to connect: ${error}`, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function subscribe() {
+            const room = document.getElementById('roomInput').value;
+            if (!room) {
+                alert('Please enter a room');
+                return;
+            }
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected to WebSocket');
+                return;
+            }
+            
+            const message = {
+                type: 'SUBSCRIBE',
+                data: {
+                    room: room
+                }
+            };
+            
+            ws.send(JSON.stringify(message));
+            document.getElementById('roomInput').value = '';
+        }
+
+        function unsubscribe(room) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected to WebSocket');
+                return;
+            }
+            
+            const message = {
+                type: 'UNSUBSCRIBE',
+                data: {
+                    room: room
+                }
+            };
+            
+            ws.send(JSON.stringify(message));
+        }
+
+        function sendPing() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected to WebSocket');
+                return;
+            }
+            
+            const message = {
+                type: 'PING',
+                data: {}
+            };
+            
+            ws.send(JSON.stringify(message));
+        }
+
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'TASK_CREATED':
+                    addMessage(`Task Created: ${JSON.stringify(message.data, null, 2)}`, 'task-created');
+                    break;
+                case 'TASK_UPDATED':
+                    addMessage(`Task Updated: ${JSON.stringify(message.data, null, 2)}`, 'task-updated');
+                    break;
+                case 'TASK_STATUS_CHANGED':
+                    addMessage(`Task Status Changed: ${JSON.stringify(message.data, null, 2)}`, 'task-status-changed');
+                    break;
+                case 'TASK_FEE_UPDATED':
+                    addMessage(`Task Fee Updated: ${JSON.stringify(message.data, null, 2)}`, 'task-fee-updated');
+                    break;
+                case 'SUCCESS':
+                    if (message.data.message.includes('Subscribed')) {
+                        const room = message.data.data.room;
+                        subscriptions.add(room);
+                        updateSubscriptions();
+                    } else if (message.data.message.includes('Unsubscribed')) {
+                        const room = message.data.data.room;
+                        subscriptions.delete(room);
+                        updateSubscriptions();
+                    }
+                    addMessage(`Success: ${message.data.message}`, 'success');
+                    break;
+                case 'ERROR':
+                    addMessage(`Error: ${message.data.message}`, 'error');
+                    break;
+                case 'PONG':
+                    addMessage('Pong received', 'success');
+                    break;
+                default:
+                    addMessage(`Unknown message type: ${message.type}`, 'error');
+            }
+        }
+
+        function addMessage(text, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = `${new Date().toLocaleTimeString()}: ${text}`;
+            messagesDiv.insertBefore(messageDiv, messagesDiv.firstChild);
+            
+            // Keep only last 50 messages
+            while (messagesDiv.children.length > 50) {
+                messagesDiv.removeChild(messagesDiv.lastChild);
+            }
+        }
+
+        function updateStatus(text, connected) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = text;
+            statusDiv.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        function updateSubscriptions() {
+            const subscriptionsDiv = document.getElementById('subscriptions');
+            subscriptionsDiv.innerHTML = '';
+            
+            subscriptions.forEach(room => {
+                const item = document.createElement('div');
+                item.className = 'subscription-item';
+                item.innerHTML = `
+                    <span>${room}</span>
+                    <button class="remove-btn" onclick="unsubscribe('${room}')">Remove</button>
+                `;
+                subscriptionsDiv.appendChild(item);
+            });
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Handle Enter key in room input
+        document.getElementById('roomInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                subscribe();
+            }
+        });
+
+        // Handle Enter key in API key input
+        document.getElementById('apiKey').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                connect();
+            }
+        });
+    </script>
+</body>
+</html>
