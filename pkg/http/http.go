@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -95,11 +96,13 @@ func NewHTTPClient(httpConfig *HTTPRetryConfig, logger logging.Logger) (*HTTPCli
 
 // DoWithRetry performs an HTTP request with retry logic using the retry package.
 // The caller is responsible for closing the response body.
-func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
+func (c *HTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
 	// Prepare request body for retries
 	var getBody func() (io.ReadCloser, error)
 	if req.GetBody != nil {
-		getBody = req.GetBody
+		getBody = func() (io.ReadCloser, error) {
+			return req.GetBody()
+		}
 	} else if req.Body != nil {
 		// Fallback for requests without GetBody
 		bodyBytes, err := io.ReadAll(req.Body)
@@ -118,7 +121,7 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 	// Create operation function for retry package
 	operation := func() (*http.Response, error) {
 		// Clone the request for each attempt
-		reqClone := req.Clone(req.Context())
+		reqClone := req.Clone(ctx)
 		if getBody != nil {
 			body, err := getBody()
 			if err != nil {
@@ -149,45 +152,45 @@ func (c *HTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
 	}
 
 	// Use retry package to execute the operation
-	return retry.Retry(req.Context(), operation, c.HTTPConfig.RetryConfig, c.logger)
+	return retry.Retry(ctx, operation, c.HTTPConfig.RetryConfig, c.logger)
 }
 
 // Get performs a GET request with retry logic
-func (c *HTTPClient) Get(url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (c *HTTPClient) Get(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GET request: %w", err)
 	}
-	return c.DoWithRetry(req)
+	return c.DoWithRetry(ctx, req)
 }
 
 // Post performs a POST request with retry logic
-func (c *HTTPClient) Post(url, contentType string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest("POST", url, body)
+func (c *HTTPClient) Post(ctx context.Context, url, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create POST request: %w", err)
 	}
 	req.Header.Set("Content-Type", contentType)
-	return c.DoWithRetry(req)
+	return c.DoWithRetry(ctx, req)
 }
 
 // Put performs a PUT request with retry logic
-func (c *HTTPClient) Put(url, contentType string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest("PUT", url, body)
+func (c *HTTPClient) Put(ctx context.Context, url, contentType string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PUT request: %w", err)
 	}
 	req.Header.Set("Content-Type", contentType)
-	return c.DoWithRetry(req)
+	return c.DoWithRetry(ctx, req)
 }
 
 // Delete performs a DELETE request with retry logic
-func (c *HTTPClient) Delete(url string) (*http.Response, error) {
-	req, err := http.NewRequest("DELETE", url, nil)
+func (c *HTTPClient) Delete(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create DELETE request: %w", err)
 	}
-	return c.DoWithRetry(req)
+	return c.DoWithRetry(ctx, req)
 }
 
 // truncate shortens a string to maxLen, adding "..." if truncated

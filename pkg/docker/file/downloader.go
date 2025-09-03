@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,11 +45,11 @@ func newDownloader(cfg config.CacheConfig, validationCfg config.ValidationConfig
 	}, nil
 }
 
-func (d *downloader) downloadFile(key string, url string) (*downloadResult, error) {
+func (d *downloader) downloadFile(ctx context.Context, key string, url string) (*downloadResult, error) {
 	// Get file from cache or download it
 	var isCached bool
 	filePath, err := d.cache.getOrDownloadFile(key, func() ([]byte, error) {
-		return d.downloadContent(url)
+		return d.downloadContent(ctx, url)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to download or store file in cache: %w", err)
@@ -89,8 +90,8 @@ func (d *downloader) downloadFile(key string, url string) (*downloadResult, erro
 	}, nil
 }
 
-func (d *downloader) downloadContent(url string) ([]byte, error) {
-	resp, err := d.client.Get(url)
+func (d *downloader) downloadContent(ctx context.Context, url string) ([]byte, error) {
+	resp, err := d.client.Get(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}

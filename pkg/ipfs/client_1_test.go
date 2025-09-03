@@ -2,6 +2,7 @@ package ipfs
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -302,13 +303,13 @@ func TestUpload_ValidData_ReturnsCID(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
+	mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
 	mockLogger.On("Info", "Successfully uploaded to IPFS", mock.Anything, mock.Anything).Return()
 
 	filename := "test.txt"
 	data := []byte("test data")
 
-	cid, err := client.Upload(filename, data)
+	cid, err := client.Upload(context.Background(), filename, data)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "QmTestCID123", cid)
@@ -319,7 +320,7 @@ func TestUpload_ValidData_ReturnsCID(t *testing.T) {
 func TestUpload_EmptyFilename_ReturnsError(t *testing.T) {
 	client, _, _ := createTestClient()
 
-	cid, err := client.Upload("", []byte("test data"))
+	cid, err := client.Upload(context.Background(), "", []byte("test data"))
 
 	assert.Error(t, err)
 	assert.Empty(t, cid)
@@ -329,7 +330,7 @@ func TestUpload_EmptyFilename_ReturnsError(t *testing.T) {
 func TestUpload_EmptyData_ReturnsError(t *testing.T) {
 	client, _, _ := createTestClient()
 
-	cid, err := client.Upload("test.txt", []byte{})
+	cid, err := client.Upload(context.Background(), "test.txt", []byte{})
 
 	assert.Error(t, err)
 	assert.Empty(t, cid)
@@ -339,9 +340,9 @@ func TestUpload_EmptyData_ReturnsError(t *testing.T) {
 func TestUpload_HTTPError_ReturnsError(t *testing.T) {
 	client, mockHTTP, _ := createTestClient()
 
-	mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(nil, fmt.Errorf("network error"))
+	mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(nil, fmt.Errorf("network error"))
 
-	cid, err := client.Upload("test.txt", []byte("test data"))
+	cid, err := client.Upload(context.Background(), "test.txt", []byte("test data"))
 
 	assert.Error(t, err)
 	assert.Empty(t, cid)
@@ -357,9 +358,9 @@ func TestUpload_NonOKStatus_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader("error")),
 	}
 
-	mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
+	mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
 
-	cid, err := client.Upload("test.txt", []byte("test data"))
+	cid, err := client.Upload(context.Background(), "test.txt", []byte("test data"))
 
 	assert.Error(t, err)
 	assert.Empty(t, cid)
@@ -376,9 +377,9 @@ func TestUpload_InvalidJSONResponse_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
+	mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
 
-	cid, err := client.Upload("test.txt", []byte("test data"))
+	cid, err := client.Upload(context.Background(), "test.txt", []byte("test data"))
 
 	assert.Error(t, err)
 	assert.Empty(t, cid)
@@ -395,9 +396,9 @@ func TestUpload_EmptyCID_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
+	mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
 
-	cid, err := client.Upload("test.txt", []byte("test data"))
+	cid, err := client.Upload(context.Background(), "test.txt", []byte("test data"))
 
 	assert.Error(t, err)
 	assert.Empty(t, cid)
@@ -422,9 +423,9 @@ func TestFetch_ValidCID_ReturnsIPFSData(t *testing.T) {
 		Body:       io.NopCloser(bytes.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("Get", "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(mockResponse, nil)
 
-	result, err := client.Fetch("QmTestCID")
+	result, err := client.Fetch(context.Background(), "QmTestCID")
 
 	assert.NoError(t, err)
 	assert.Equal(t, ipfsData.TaskData.TaskID, result.TaskData.TaskID)
@@ -434,7 +435,7 @@ func TestFetch_ValidCID_ReturnsIPFSData(t *testing.T) {
 func TestFetch_EmptyCID_ReturnsError(t *testing.T) {
 	client, _, _ := createTestClient()
 
-	result, err := client.Fetch("")
+	result, err := client.Fetch(context.Background(), "")
 
 	assert.Error(t, err)
 	assert.Equal(t, types.IPFSData{}, result)
@@ -444,9 +445,9 @@ func TestFetch_EmptyCID_ReturnsError(t *testing.T) {
 func TestFetch_HTTPError_ReturnsError(t *testing.T) {
 	client, mockHTTP, _ := createTestClient()
 
-	mockHTTP.On("Get", "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(nil, fmt.Errorf("network error"))
+	mockHTTP.On("Get", mock.Anything, "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(nil, fmt.Errorf("network error"))
 
-	result, err := client.Fetch("QmTestCID")
+	result, err := client.Fetch(context.Background(), "QmTestCID")
 
 	assert.Error(t, err)
 	assert.Equal(t, types.IPFSData{}, result)
@@ -462,9 +463,9 @@ func TestFetch_NonOKStatus_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader("not found")),
 	}
 
-	mockHTTP.On("Get", "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(mockResponse, nil)
 
-	result, err := client.Fetch("QmTestCID")
+	result, err := client.Fetch(context.Background(), "QmTestCID")
 
 	assert.Error(t, err)
 	assert.Equal(t, types.IPFSData{}, result)
@@ -481,9 +482,9 @@ func TestFetch_InvalidJSONResponse_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("Get", "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://gateway.pinata.cloud/ipfs/QmTestCID").Return(mockResponse, nil)
 
-	result, err := client.Fetch("QmTestCID")
+	result, err := client.Fetch(context.Background(), "QmTestCID")
 
 	assert.Error(t, err)
 	assert.Equal(t, types.IPFSData{}, result)
@@ -520,10 +521,10 @@ func BenchmarkUpload_SmallFile(b *testing.B) {
 			Body:       io.NopCloser(strings.NewReader(responseBody)),
 		}
 
-		mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
+		mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
 		mockLogger.On("Info", "Successfully uploaded to IPFS", mock.Anything, mock.Anything).Return()
 
-		_, err := client.Upload(filename, data)
+		_, err := client.Upload(context.Background(), filename, data)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -549,9 +550,9 @@ func BenchmarkFetch_SmallData(b *testing.B) {
 			Body:       io.NopCloser(bytes.NewReader(responseBody)),
 		}
 
-		mockHTTP.On("Get", "https://gateway.pinata.cloud/ipfs/QmBenchmarkCID").Return(mockResponse, nil)
+		mockHTTP.On("Get", mock.Anything, "https://gateway.pinata.cloud/ipfs/QmBenchmarkCID").Return(mockResponse, nil)
 
-		_, err := client.Fetch("QmBenchmarkCID")
+		_, err := client.Fetch(context.Background(), "QmBenchmarkCID")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -598,11 +599,11 @@ func TestUpload_EdgeCases(t *testing.T) {
 					StatusCode: http.StatusOK,
 					Body:       io.NopCloser(strings.NewReader(responseBody)),
 				}
-				mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
+				mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(mockResponse, nil)
 				mockLogger.On("Info", "Successfully uploaded to IPFS", mock.Anything, mock.Anything).Return()
 			}
 
-			cid, err := client.Upload(tt.filename, tt.data)
+			cid, err := client.Upload(context.Background(), tt.filename, tt.data)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -658,10 +659,10 @@ func TestFetch_EdgeCases(t *testing.T) {
 					StatusCode: http.StatusOK,
 					Body:       io.NopCloser(bytes.NewReader(responseBody)),
 				}
-				mockHTTP.On("Get", "https://gateway.pinata.cloud/ipfs/"+tt.cid).Return(mockResponse, nil)
+				mockHTTP.On("Get", mock.Anything, "https://gateway.pinata.cloud/ipfs/"+tt.cid).Return(mockResponse, nil)
 			}
 
-			result, err := client.Fetch(tt.cid)
+			result, err := client.Fetch(context.Background(), tt.cid)
 
 			if tt.expectError {
 				assert.Error(t, err)

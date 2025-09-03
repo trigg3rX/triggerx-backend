@@ -167,10 +167,10 @@ func TestHTTPClient_DoWithRetry_SuccessfulRequest_ReturnsResponse(t *testing.T) 
 	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", server.URL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -208,10 +208,10 @@ func TestHTTPClient_DoWithRetry_RetryableError_RetriesAndSucceeds(t *testing.T) 
 	client, err := NewHTTPClient(config, logger)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", server.URL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -237,10 +237,10 @@ func TestHTTPClient_DoWithRetry_NonRetryableError_ReturnsError(t *testing.T) {
 	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", server.URL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -267,14 +267,14 @@ func TestHTTPClient_DoWithRetry_ContextCancelled_ReturnsError(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequest("GET", server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
 	require.NoError(t, err)
 	req = req.WithContext(ctx)
 
 	// Cancel context immediately
 	cancel()
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(ctx, req)
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -295,7 +295,7 @@ func TestHTTPClient_Get_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
 	require.NoError(t, err)
 
-	resp, err := client.Get(server.URL)
+	resp, err := client.Get(context.Background(), server.URL)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -327,7 +327,7 @@ func TestHTTPClient_Post_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	body := strings.NewReader(`{"test":"data"}`)
-	resp, err := client.Post(server.URL, "application/json", body)
+	resp, err := client.Post(context.Background(), server.URL, "application/json", body)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -359,7 +359,7 @@ func TestHTTPClient_Put_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	body := strings.NewReader(`{"test":"data"}`)
-	resp, err := client.Put(server.URL, "application/json", body)
+	resp, err := client.Put(context.Background(), server.URL, "application/json", body)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -385,7 +385,7 @@ func TestHTTPClient_Delete_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
 	require.NoError(t, err)
 
-	resp, err := client.Delete(server.URL)
+	resp, err := client.Delete(context.Background(), server.URL)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -413,10 +413,10 @@ func TestHTTPClient_DoWithRetry_RequestWithBody_HandlesBodyCorrectly(t *testing.
 	require.NoError(t, err)
 
 	body := strings.NewReader("test body")
-	req, err := http.NewRequest("POST", server.URL, body)
+	req, err := http.NewRequestWithContext(context.Background(), "POST", server.URL, body)
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -469,10 +469,10 @@ func TestHTTPClient_DoWithRetry_RequestBodyReadError_ReturnsError(t *testing.T) 
 	require.NoError(t, err)
 
 	// Create a request with a body that will fail to read
-	req, err := http.NewRequest("POST", "http://example.com", &errorReader{})
+	req, err := http.NewRequestWithContext(context.Background(), "POST", "http://example.com", &errorReader{})
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -515,10 +515,10 @@ func TestHTTPClient_DoWithRetry_CustomShouldRetry_RespectsCustomLogic(t *testing
 	client, err := NewHTTPClient(config, logger)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", server.URL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -563,13 +563,13 @@ func TestHTTPClient_DoWithRetry_RequestWithoutGetBody_UsesFallback(t *testing.T)
 
 	// Create a request with a body but without GetBody function
 	body := strings.NewReader("test body")
-	req, err := http.NewRequest("POST", server.URL, body)
+	req, err := http.NewRequestWithContext(context.Background(), "POST", server.URL, body)
 	require.NoError(t, err)
 
 	// Ensure GetBody is nil initially to trigger fallback
 	// Note: DoWithRetry will create a fallback GetBody function internally
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	// The test should succeed even though the request initially had no GetBody
 	// The DoWithRetry method should create a fallback GetBody function internally
@@ -616,7 +616,7 @@ func TestHTTPClient_DoWithRetry_RequestWithGetBody_UsesGetBody(t *testing.T) {
 
 	// Create a request with a body and GetBody function
 	bodyBytes := []byte("test body")
-	req, err := http.NewRequest("POST", server.URL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", server.URL, bytes.NewReader(bodyBytes))
 	require.NoError(t, err)
 
 	// Set GetBody function
@@ -627,7 +627,7 @@ func TestHTTPClient_DoWithRetry_RequestWithGetBody_UsesGetBody(t *testing.T) {
 	// Ensure GetBody is not nil
 	assert.NotNil(t, req.GetBody)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -646,10 +646,10 @@ func TestHTTPClient_DoWithRetry_InvalidURL_ReturnsError(t *testing.T) {
 	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", "http://invalid.localhost:99999", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "http://invalid.localhost:99999", nil)
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -670,10 +670,10 @@ func TestHTTPClient_DoWithRetry_RequestBodyCloseError_LogsWarning(t *testing.T) 
 	require.NoError(t, err)
 
 	// Create a request with a body that will fail to close
-	req, err := http.NewRequest("POST", server.URL, &errorCloseReader{})
+	req, err := http.NewRequestWithContext(context.Background(), "POST", server.URL, &errorCloseReader{})
 	require.NoError(t, err)
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 
 	// Should still succeed despite body close error
 	assert.NoError(t, err)

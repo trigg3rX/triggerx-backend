@@ -1,6 +1,7 @@
 package ipfs
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,11 +43,11 @@ func TestDelete_ValidCID_ReturnsNoError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(deleteResponse)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
-	mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
+	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
 	mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"test-file-id-123"}).Return()
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.NoError(t, err)
 	mockHTTP.AssertExpectations(t)
@@ -56,7 +57,7 @@ func TestDelete_ValidCID_ReturnsNoError(t *testing.T) {
 func TestDelete_EmptyCID_ReturnsError(t *testing.T) {
 	client, _, _ := createTestClient()
 
-	err := client.Delete("")
+	err := client.Delete(context.Background(), "")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "CID cannot be empty")
@@ -65,9 +66,9 @@ func TestDelete_EmptyCID_ReturnsError(t *testing.T) {
 func TestDelete_SearchHTTPError_ReturnsError(t *testing.T) {
 	client, mockHTTP, _ := createTestClient()
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(nil, fmt.Errorf("network error"))
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(nil, fmt.Errorf("network error"))
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search for CID QmTestCID123")
@@ -82,9 +83,9 @@ func TestDelete_SearchNonOKStatus_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader("bad request")),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockResponse, nil)
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search for CID QmTestCID123: status 400")
@@ -100,9 +101,9 @@ func TestDelete_InvalidSearchJSON_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockResponse, nil)
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decode search response for CID QmTestCID123")
@@ -122,9 +123,9 @@ func TestDelete_NoFileFound_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(searchResponse)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockResponse, nil)
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no file found with CID QmTestCID123")
@@ -151,10 +152,10 @@ func TestDelete_DeleteHTTPError_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(searchResponse)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
-	mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(nil, fmt.Errorf("delete network error"))
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
+	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(nil, fmt.Errorf("delete network error"))
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to delete file test-file-id-123")
@@ -187,10 +188,10 @@ func TestDelete_DeleteNonOKStatus_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader("file not found")),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
-	mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
+	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to delete file test-file-id-123: status 404")
@@ -224,11 +225,11 @@ func TestDelete_AcceptedStatus_ReturnsNoError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(deleteResponse)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
-	mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
+	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
 	mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"test-file-id-123"}).Return()
 
-	err := client.Delete("QmTestCID123")
+	err := client.Delete(context.Background(), "QmTestCID123")
 
 	assert.NoError(t, err)
 	mockHTTP.AssertExpectations(t)
@@ -266,9 +267,9 @@ func TestListFiles_SinglePage_ReturnsFiles(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.NoError(t, err)
 	assert.Len(t, files, 2)
@@ -328,10 +329,10 @@ func TestListFiles_MultiplePages_ReturnsAllFiles(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(secondPageResponse)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockFirstPageResp, nil)
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000&pageToken=page2").Return(mockSecondPageResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockFirstPageResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000&pageToken=page2").Return(mockSecondPageResp, nil)
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.NoError(t, err)
 	assert.Len(t, files, 2)
@@ -353,9 +354,9 @@ func TestListFiles_EmptyResponse_ReturnsEmptySlice(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.NoError(t, err)
 	assert.Len(t, files, 0)
@@ -365,9 +366,9 @@ func TestListFiles_EmptyResponse_ReturnsEmptySlice(t *testing.T) {
 func TestListFiles_HTTPError_ReturnsError(t *testing.T) {
 	client, mockHTTP, _ := createTestClient()
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(nil, fmt.Errorf("network error"))
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(nil, fmt.Errorf("network error"))
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.Error(t, err)
 	assert.Nil(t, files)
@@ -383,9 +384,9 @@ func TestListFiles_NonOKStatus_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader("unauthorized")),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.Error(t, err)
 	assert.Nil(t, files)
@@ -402,9 +403,9 @@ func TestListFiles_InvalidJSONResponse_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(responseBody)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.Error(t, err)
 	assert.Nil(t, files)
@@ -433,10 +434,10 @@ func TestListFiles_SecondPageHTTPError_ReturnsError(t *testing.T) {
 		Body:       io.NopCloser(strings.NewReader(firstPageResponse)),
 	}
 
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockFirstPageResp, nil)
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000&pageToken=page2").Return(nil, fmt.Errorf("second page error"))
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockFirstPageResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000&pageToken=page2").Return(nil, fmt.Errorf("second page error"))
 
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 
 	assert.Error(t, err)
 	assert.Nil(t, files)
@@ -498,12 +499,12 @@ func TestDelete_EdgeCases(t *testing.T) {
 				}
 
 				expectedSearchURL := fmt.Sprintf("https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=%s&limit=1", tt.cid)
-				mockHTTP.On("Get", expectedSearchURL).Return(mockSearchResp, nil)
-				mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id").Return(mockDeleteResp, nil)
+				mockHTTP.On("Get", mock.Anything, expectedSearchURL).Return(mockSearchResp, nil)
+				mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id").Return(mockDeleteResp, nil)
 				mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"test-file-id"}).Return()
 			}
 
-			err := client.Delete(tt.cid)
+			err := client.Delete(context.Background(), tt.cid)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -545,9 +546,9 @@ func TestListFiles_EdgeCases(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(responseBody)),
 		}
 
-		mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+		mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-		files, err := client.ListFiles()
+		files, err := client.ListFiles(context.Background())
 
 		assert.NoError(t, err)
 		assert.Len(t, files, 2)
@@ -586,9 +587,9 @@ func TestListFiles_EdgeCases(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(responseBody)),
 		}
 
-		mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+		mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-		files, err := client.ListFiles()
+		files, err := client.ListFiles(context.Background())
 
 		assert.NoError(t, err)
 		assert.Len(t, files, 1)
@@ -612,7 +613,7 @@ func TestIPFSClientIntegration_UploadDeleteList_CompleteWorkflow(t *testing.T) {
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader(`{"data": {"cid": "QmIntegrationTestCID"}}`)),
 	}
-	mockHTTP.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(uploadResponse, nil)
+	mockHTTP.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(uploadResponse, nil)
 	mockLogger.On("Info", "Successfully uploaded to IPFS", mock.Anything, mock.Anything).Return()
 
 	// Mock search response for delete
@@ -660,24 +661,24 @@ func TestIPFSClientIntegration_UploadDeleteList_CompleteWorkflow(t *testing.T) {
 	mockHTTP.On("Close").Return()
 
 	// Set up expectations
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmIntegrationTestCID&limit=1").Return(mockSearchResp, nil)
-	mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/integration-file-id").Return(mockDeleteResp, nil)
-	mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockListResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmIntegrationTestCID&limit=1").Return(mockSearchResp, nil)
+	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/integration-file-id").Return(mockDeleteResp, nil)
+	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockListResp, nil)
 	mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"integration-file-id"}).Return()
 
 	// Test upload
 	filename := "integration-test.txt"
 	data := []byte("integration test data")
-	cid, err := client.Upload(filename, data)
+	cid, err := client.Upload(context.Background(), filename, data)
 	assert.NoError(t, err)
 	assert.Equal(t, "QmIntegrationTestCID", cid)
 
 	// Test delete
-	err = client.Delete(cid)
+	err = client.Delete(context.Background(), cid)
 	assert.NoError(t, err)
 
 	// Test list files
-	files, err := client.ListFiles()
+	files, err := client.ListFiles(context.Background())
 	assert.NoError(t, err)
 	assert.Len(t, files, 1)
 	assert.Equal(t, "other-file-id", files[0].ID)
@@ -719,11 +720,11 @@ func BenchmarkDelete_SingleFile(b *testing.B) {
 			Body:       io.NopCloser(strings.NewReader(deleteResponse)),
 		}
 
-		mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmBenchmarkCID&limit=1").Return(mockSearchResp, nil)
-		mockHTTP.On("Delete", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/benchmark-file-id").Return(mockDeleteResp, nil)
+		mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmBenchmarkCID&limit=1").Return(mockSearchResp, nil)
+		mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/benchmark-file-id").Return(mockDeleteResp, nil)
 		mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"benchmark-file-id"}).Return()
 
-		err := client.Delete("QmBenchmarkCID")
+		err := client.Delete(context.Background(), "QmBenchmarkCID")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -753,9 +754,9 @@ func BenchmarkListFiles_SinglePage(b *testing.B) {
 			Body:       io.NopCloser(strings.NewReader(responseBody)),
 		}
 
-		mockHTTP.On("Get", "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
+		mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockResponse, nil)
 
-		_, err := client.ListFiles()
+		_, err := client.ListFiles(context.Background())
 		if err != nil {
 			b.Fatal(err)
 		}

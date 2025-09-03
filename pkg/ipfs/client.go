@@ -2,6 +2,7 @@ package ipfs
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,16 +18,16 @@ import (
 // Client interface defines the methods for IPFS operations
 type IPFSClient interface {
 	// Upload uploads data to IPFS and returns the CID
-	Upload(filename string, data []byte) (string, error)
+	Upload(ctx context.Context, filename string, data []byte) (string, error)
 
 	// Fetch retrieves content from IPFS by CID
-	Fetch(cid string) (types.IPFSData, error)
+	Fetch(ctx context.Context, cid string) (types.IPFSData, error)
 
 	// Delete deletes a file from IPFS by CID
-	Delete(cid string) error
+	Delete(ctx context.Context, cid string) error
 
 	// ListFiles lists all files from Pinata v3 API
-	ListFiles() ([]PinataFile, error)
+	ListFiles(ctx context.Context) ([]PinataFile, error)
 
 	// Close closes the client and cleans up resources
 	Close() error
@@ -81,7 +82,7 @@ func NewClient(config *Config, logger logging.Logger) (IPFSClient, error) {
 }
 
 // Upload uploads data to IPFS using Pinata and returns the CID
-func (c *ipfsClient) Upload(filename string, data []byte) (string, error) {
+func (c *ipfsClient) Upload(ctx context.Context, filename string, data []byte) (string, error) {
 	if filename == "" {
 		return "", fmt.Errorf("filename cannot be empty")
 	}
@@ -113,7 +114,7 @@ func (c *ipfsClient) Upload(filename string, data []byte) (string, error) {
 	}
 
 	// Create request
-	req, err := http.NewRequest("POST", c.config.PinataBaseURL, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", c.config.PinataBaseURL, body)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
@@ -122,7 +123,7 @@ func (c *ipfsClient) Upload(filename string, data []byte) (string, error) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	// Send request
-	resp, err := c.httpClient.DoWithRetry(req)
+	resp, err := c.httpClient.DoWithRetry(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %v", err)
 	}
@@ -163,14 +164,14 @@ func (c *ipfsClient) Upload(filename string, data []byte) (string, error) {
 }
 
 // Fetch retrieves content from IPFS by CID
-func (c *ipfsClient) Fetch(cid string) (types.IPFSData, error) {
+func (c *ipfsClient) Fetch(ctx context.Context, cid string) (types.IPFSData, error) {
 	if cid == "" {
 		return types.IPFSData{}, fmt.Errorf("CID cannot be empty")
 	}
 
 	ipfsURL := "https://" + c.config.PinataHost + "/ipfs/" + cid
 
-	resp, err := c.httpClient.Get(ipfsURL)
+	resp, err := c.httpClient.Get(ctx, ipfsURL)
 	if err != nil {
 		return types.IPFSData{}, fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}
@@ -198,7 +199,7 @@ func (c *ipfsClient) Fetch(cid string) (types.IPFSData, error) {
 }
 
 // Delete file by ID using Pinata v3 API
-func (c *ipfsClient) Delete(cid string) error {
+func (c *ipfsClient) Delete(ctx context.Context, cid string) error {
 	if cid == "" {
 		return fmt.Errorf("CID cannot be empty")
 	}
@@ -207,7 +208,7 @@ func (c *ipfsClient) Delete(cid string) error {
 	network := c.config.PinataHost // Use configurable network from config
 	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?cid=%s&limit=1", network, cid)
 
-	resp, err := c.httpClient.Get(url)
+	resp, err := c.httpClient.Get(ctx, url)
 	if err != nil {
 		return fmt.Errorf("failed to search for CID %s: %w", cid, err)
 	}
@@ -236,7 +237,7 @@ func (c *ipfsClient) Delete(cid string) error {
 
 	url = fmt.Sprintf("https://api.pinata.cloud/v3/files/%s/%s", network, listResp.Data.Files[0].ID)
 
-	resp, err = c.httpClient.Delete(url)
+	resp, err = c.httpClient.Delete(ctx, url)
 	if err != nil {
 		return fmt.Errorf("failed to delete file %s: %w", listResp.Data.Files[0].ID, err)
 	}
@@ -266,7 +267,7 @@ func (c *ipfsClient) Delete(cid string) error {
 }
 
 // List all files from Pinata v3 API
-func (c *ipfsClient) ListFiles() ([]PinataFile, error) {
+func (c *ipfsClient) ListFiles(ctx context.Context) ([]PinataFile, error) {
 	network := c.config.PinataHost // Use configurable network from config
 	url := fmt.Sprintf("https://api.pinata.cloud/v3/files/%s?limit=1000", network)
 
@@ -279,7 +280,7 @@ func (c *ipfsClient) ListFiles() ([]PinataFile, error) {
 			requestURL = fmt.Sprintf("%s&pageToken=%s", url, nextPageToken)
 		}
 
-		resp, err := c.httpClient.Get(requestURL)
+		resp, err := c.httpClient.Get(ctx, requestURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list files: %w", err)
 		}

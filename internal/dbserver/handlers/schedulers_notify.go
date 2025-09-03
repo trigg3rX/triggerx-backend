@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,14 +57,14 @@ func (h *Handler) sendDataToScheduler(route string, data commonTypes.ScheduleCon
 		return false, fmt.Errorf("error creating HTTP client: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return false, fmt.Errorf("error creating request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Close = true
 
-	resp, err := client.DoWithRetry(req)
+	resp, err := client.DoWithRetry(context.Background(), req)
 	if err != nil {
 		return false, fmt.Errorf("error sending data to condition scheduler: %v", err)
 	}

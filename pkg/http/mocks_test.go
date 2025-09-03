@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -21,14 +22,14 @@ func TestMockHTTPClient_DoWithRetry_Success(t *testing.T) {
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader(`{"status": "success"}`)),
 	}
-	mockClient.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(expectedResp, nil)
+	mockClient.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(expectedResp, nil)
 
 	// Create test request
 	req, err := http.NewRequest("GET", "http://example.com", nil)
 	require.NoError(t, err)
 
 	// Execute
-	resp, err := mockClient.DoWithRetry(req)
+	resp, err := mockClient.DoWithRetry(context.Background(), req)
 
 	// Assert
 	assert.NoError(t, err)
@@ -41,14 +42,14 @@ func TestMockHTTPClient_DoWithRetry_Error(t *testing.T) {
 
 	// Setup mock expectations
 	expectedErr := errors.New("network error")
-	mockClient.On("DoWithRetry", mock.AnythingOfType("*http.Request")).Return(nil, expectedErr)
+	mockClient.On("DoWithRetry", mock.Anything, mock.AnythingOfType("*http.Request")).Return(nil, expectedErr)
 
 	// Create test request
 	req, err := http.NewRequest("GET", "http://example.com", nil)
 	require.NoError(t, err)
 
 	// Execute
-	resp, err := mockClient.DoWithRetry(req)
+	resp, err := mockClient.DoWithRetry(context.Background(), req)
 
 	// Assert
 	assert.Error(t, err)
@@ -84,10 +85,10 @@ func TestMockHTTPClient_Get_Success(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &MockHTTPClient{}
-			mockClient.On("Get", tt.url).Return(tt.expectedResp, tt.expectedErr)
+			mockClient.On("Get", mock.Anything, tt.url).Return(tt.expectedResp, tt.expectedErr)
 
 			// Execute
-			resp, err := mockClient.Get(tt.url)
+			resp, err := mockClient.Get(context.Background(), tt.url)
 
 			// Assert
 			if tt.expectedErr != nil {
@@ -139,10 +140,10 @@ func TestMockHTTPClient_Post_Success(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &MockHTTPClient{}
-			mockClient.On("Post", tt.url, tt.contentType, tt.body).Return(tt.expectedResp, tt.expectedErr)
+			mockClient.On("Post", mock.Anything, tt.url, tt.contentType, tt.body).Return(tt.expectedResp, tt.expectedErr)
 
 			// Execute
-			resp, err := mockClient.Post(tt.url, tt.contentType, tt.body)
+			resp, err := mockClient.Post(context.Background(), tt.url, tt.contentType, tt.body)
 
 			// Assert
 			if tt.expectedErr != nil {
@@ -191,10 +192,10 @@ func TestMockHTTPClient_Put_Success(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &MockHTTPClient{}
-			mockClient.On("Put", tt.url, tt.contentType, tt.body).Return(tt.expectedResp, tt.expectedErr)
+			mockClient.On("Put", mock.Anything, tt.url, tt.contentType, tt.body).Return(tt.expectedResp, tt.expectedErr)
 
 			// Execute
-			resp, err := mockClient.Put(tt.url, tt.contentType, tt.body)
+			resp, err := mockClient.Put(context.Background(), tt.url, tt.contentType, tt.body)
 
 			// Assert
 			if tt.expectedErr != nil {
@@ -237,10 +238,10 @@ func TestMockHTTPClient_Delete_Success(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &MockHTTPClient{}
-			mockClient.On("Delete", tt.url).Return(tt.expectedResp, tt.expectedErr)
+			mockClient.On("Delete", mock.Anything, tt.url).Return(tt.expectedResp, tt.expectedErr)
 
 			// Execute
-			resp, err := mockClient.Delete(tt.url)
+			resp, err := mockClient.Delete(context.Background(), tt.url)
 
 			// Assert
 			if tt.expectedErr != nil {
@@ -544,10 +545,10 @@ func TestMockHTTPClient_Integration_WithMockResponseBuilder(t *testing.T) {
 		Build()
 
 	// Setup mock expectations
-	mockClient.On("Get", "http://example.com/api").Return(mockResp, nil)
+	mockClient.On("Get", mock.Anything, "http://example.com/api").Return(mockResp, nil)
 
 	// Execute
-	resp, err := mockClient.Get("http://example.com/api")
+	resp, err := mockClient.Get(context.Background(), "http://example.com/api")
 
 	// Assert
 	assert.NoError(t, err)

@@ -49,7 +49,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string) (*type
 	fm.logger.Debugf("Processing file: %s", fileURL)
 
 	// Download and validate file
-	result, err := fm.downloader.downloadFile(fileURL, fileURL)
+	result, err := fm.downloader.downloadFile(ctx, fileURL, fileURL)
 	if err != nil {
 		fm.updateStats(false, time.Since(startTime), 0.0)
 		return nil, fmt.Errorf("failed to download file: %w", err)

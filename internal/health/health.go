@@ -186,7 +186,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 				config.GetPinataHost(),
 				config.GetPinataJWT(),
 				config.GetManagerSigningAddress(),
-				config.GetEigenlayerTaskExecutionAddress(),
+				config.GetTaskExecutionAddress(),
 			)
 		}
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)

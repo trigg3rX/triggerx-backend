@@ -152,7 +152,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.DoWithRetry(req)
+	resp, err := c.httpClient.DoWithRetry(context.Background(), req)
 	if err != nil {
 		return types.KeeperHealthCheckInResponse{
 			Status: false,

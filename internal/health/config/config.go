@@ -39,8 +39,9 @@ type Config struct {
 	alchemyAPIKey string
 
 	// Task Execution Address
-	eigenlayerTaskExecutionAddress string
-	imuaTaskExecutionAddress       string
+	taskExecutionAddress string
+	testTaskExecutionAddress string
+	imuaTaskExecutionAddress string
 }
 
 var cfg Config
@@ -62,7 +63,8 @@ func Init() error {
 		managerSigningAddress:          env.GetEnvString("MANAGER_SIGNING_ADDRESS", ""),
 		etherscanAPIKey:                env.GetEnvString("ETHERSCAN_API_KEY", ""),
 		alchemyAPIKey:                  env.GetEnvString("ALCHEMY_API_KEY", ""),
-		eigenlayerTaskExecutionAddress: env.GetEnvString("EIGENLAYER_TASK_EXECUTION_ADDRESS", ""),
+		taskExecutionAddress:            env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
+		testTaskExecutionAddress:        env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
 		imuaTaskExecutionAddress:       env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
 	}
 	if err := validateConfig(); err != nil {
@@ -96,8 +98,11 @@ func validateConfig() error {
 	if !env.IsValidPort(cfg.databaseHostPort) {
 		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
 	}
-	if !env.IsValidEthAddress(cfg.eigenlayerTaskExecutionAddress) {
-		return fmt.Errorf("invalid Eigenlayer task execution address: %s", cfg.eigenlayerTaskExecutionAddress)
+	if !env.IsValidEthAddress(cfg.taskExecutionAddress) {
+		return fmt.Errorf("invalid task execution address: %s", cfg.taskExecutionAddress)
+	}
+	if !env.IsValidEthAddress(cfg.testTaskExecutionAddress) {
+		return fmt.Errorf("invalid test task execution address: %s", cfg.testTaskExecutionAddress)
 	}
 	if !env.IsValidEthAddress(cfg.imuaTaskExecutionAddress) {
 		return fmt.Errorf("invalid Imua task execution address: %s", cfg.imuaTaskExecutionAddress)
@@ -160,8 +165,12 @@ func GetAlchemyAPIKey() string {
 	return cfg.alchemyAPIKey
 }
 
-func GetEigenlayerTaskExecutionAddress() string {
-	return cfg.eigenlayerTaskExecutionAddress
+func GetTaskExecutionAddress() string {
+	return cfg.taskExecutionAddress
+}
+
+func GetTestTaskExecutionAddress() string {
+	return cfg.testTaskExecutionAddress
 }
 
 func GetImuaTaskExecutionAddress() string {

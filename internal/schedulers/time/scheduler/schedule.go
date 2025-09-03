@@ -13,7 +13,7 @@ import (
 
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleTasks() {
-	tasks, err := s.dbClient.GetTimeBasedTasks()
+	tasks, err := s.dbClient.GetTimeBasedTasks(context.Background())
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based tasks: %v", err)
 		metrics.TrackDBConnectionError()

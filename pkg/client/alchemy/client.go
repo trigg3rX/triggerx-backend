@@ -2,6 +2,7 @@ package alchemy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,11 +51,15 @@ func (c *Client) makeRequest(method string, params interface{}, chainID string) 
 	}
 
 	endpoint := c.config.GetEndpoint(chainID)
-	resp, err := c.httpClient.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
+	resp, err := c.httpClient.Post(context.Background(), endpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			return
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -45,7 +45,7 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 	}
 
 	// Create Task in Database
-	taskID, err := s.dbClient.CreateTask(createTaskRequest)
+	taskID, err := s.dbClient.CreateTask(context.Background(), createTaskRequest)
 	if err != nil {
 		s.logger.Error("Failed to create task in database", "job_id", notification.JobID, "error", err)
 		return fmt.Errorf("failed to create task in database: %w", err)
