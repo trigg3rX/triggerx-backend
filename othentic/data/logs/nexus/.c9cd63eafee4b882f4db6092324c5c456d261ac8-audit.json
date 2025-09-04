@@ -1,0 +1,40 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/logs/nexus/.c9cd63eafee4b882f4db6092324c5c456d261ac8-audit.json",
+    "files": [
+        {
+            "date": 1754107524215,
+            "name": "/logs/nexus/2025-08-02-attester-output.log",
+            "hash": "351f1a12d1bb48c916c72a63ed70a64cafaaf2bdeb65277f3ed51d7322a83962"
+        },
+        {
+            "date": 1754279597105,
+            "name": "/logs/nexus/2025-08-04-attester-output.log",
+            "hash": "a137be9312119e367a7db0adb7cb683825c3304d0d59a90771c2bc22a7a5e7a0"
+        },
+        {
+            "date": 1754366254630,
+            "name": "/logs/nexus/2025-08-05-attester-output.log",
+            "hash": "e187c1e3cb475b06998d853203524c62b8b950b99d1560228544f15db33d331c"
+        },
+        {
+            "date": 1754459378201,
+            "name": "/logs/nexus/2025-08-06-attester-output.log",
+            "hash": "1103aa8f2d397642f98935dfb62f33e9f771e402065ad2e81fa9350d43dde92c"
+        },
+        {
+            "date": 1754539311193,
+            "name": "/logs/nexus/2025-08-07-attester-output.log",
+            "hash": "e000ae761aa329f8e66f783868f02f3e91169f8a5ff3cb83b7923fa3f90a1439"
+        },
+        {
+            "date": 1754884507208,
+            "name": "/logs/nexus/2025-08-11-attester-output.log",
+            "hash": "c6ab82667d17ba1a35043734e1f6a8fa5d0e3f03293bf760dc2e7b07d6254d84"
+        }
+    ],
+    "hashType": "sha256"
+}

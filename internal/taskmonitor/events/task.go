@@ -2,20 +2,17 @@ package events
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
-	"math/big"
 	"strconv"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/websocket"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 )
 
 // ProcessTaskEvent processes task-related events
-func (h *TaskEventHandler) ProcessTaskEvent(event *websocket.ChainEvent) {
-	if eventData, ok := event.Data.(*websocket.ContractEventData); ok {
+func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
+	if eventData, ok := event.Data.(*ContractEventData); ok {
 		// Parse the event data to TaskSubmissionData
 		taskData, err := h.parseTaskSubmissionData(eventData.ParsedData, event.TxHash)
 		if err != nil {
@@ -39,7 +36,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *websocket.ChainEvent) {
 				return
 			}
 
-			// Then update the database with parsed data (like registrar was doing)
+			// Update task submission data in database
 			if err := h.db.UpdateTaskSubmissionData(*taskData); err != nil {
 				h.logger.Errorf("Failed to update task submission data in database: %v", err)
 				return
@@ -151,52 +148,35 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 	var attestersIds []int64
 	switch v := attestersIdsInterface.(type) {
 	case []interface{}:
-		for _, id := range v {
-			switch idVal := id.(type) {
-			case *big.Int:
-				attestersIds = append(attestersIds, idVal.Int64())
-			default:
-				return nil, fmt.Errorf("invalid attester ID type: %T", id)
+		for _, av := range v {
+			switch vv := av.(type) {
+			case float64:
+				attestersIds = append(attestersIds, int64(vv))
+			case string:
+				// attempt parse decimal
+				if n, err := strconv.ParseInt(vv, 10, 64); err == nil {
+					attestersIds = append(attestersIds, n)
+				}
 			}
 		}
-	case []*big.Int:
-		for _, id := range v {
-			attestersIds = append(attestersIds, id.Int64())
-		}
-	default:
-		return nil, fmt.Errorf("attestersIds is not a slice: %T", v)
 	}
 
-	data, ok := parsedData["data"].(string)
-	if !ok {
-		return nil, fmt.Errorf("data not found or invalid type")
-	}
-
-	var decodedData string
-	dataBytes, err := hex.DecodeString(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hex-decode data: %v", err)
-	}
-	decodedData = string(dataBytes)
-
-	ipfsData, err := h.ipfsClient.Fetch(context.Background(), decodedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch IPFS content: %v", err)
-	}
-
-	taskData := &types.TaskSubmissionData{
-		TaskID:               ipfsData.ActionData.TaskID,
+	// Create task submission data
+	return &types.TaskSubmissionData{
+		TaskID:               0,
 		TaskNumber:           taskNumber,
 		TaskDefinitionID:     taskDefinitionId,
 		IsAccepted:           true,
 		TaskSubmissionTxHash: txHash,
 		PerformerAddress:     performerAddress,
 		AttesterIds:          attestersIds,
-		ExecutionTxHash:      ipfsData.ActionData.ActionTxHash,
-		ExecutionTimestamp:   ipfsData.ActionData.ExecutionTimestamp,
-		TaskOpxCost:          ipfsData.ActionData.TotalFee,
 		ProofOfTask:          proofOfTask,
-	}
-
-	return taskData, nil
+	}, nil
 }
+
+// func trim0x(s string) string {
+// 	if len(s) >= 2 && s[0:2] == "0x" {
+// 		return s[2:]
+// 	}
+// 	return s
+// }
