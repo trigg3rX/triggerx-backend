@@ -19,7 +19,7 @@ type poolAPI interface {
 	getStats() *types.PoolStats
 	getHealthCheckStats() (total, toCheck, inError int)
 	markContainerAsFailed(containerID string, err error)
-	close() error
+	close(ctx context.Context) error
 }
 
 // ContainerManagerAPI is the primary interface for interacting with the container management system.
@@ -40,7 +40,7 @@ type ContainerManagerAPI interface {
 	CleanupContainer(ctx context.Context, containerID string) error
 	KillExecProcess(ctx context.Context, execID string) error
 	MarkContainerAsFailed(containerID string, language types.Language, err error)
-	Close() error
+	Close(ctx context.Context) error
 }
 
 // Ensure ContainerManager implements the interface at compile time.

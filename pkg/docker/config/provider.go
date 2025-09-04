@@ -17,8 +17,7 @@ type ConfigProvider struct {
 // If the file does not exist, it is ignored and defaults are used without error.
 // An error is returned for any other file reading issue, YAML parsing error, or validation failure.
 func NewConfigProvider(yamlFilePath string) (*ConfigProvider, error) {
-	cfg := GetDefaultConfig()
-
+	var cfg CodeExecutorConfig
 	if yamlFilePath != "" {
 		yamlFile, err := os.ReadFile(yamlFilePath)
 		if err != nil {
@@ -83,16 +82,4 @@ func (cp *ConfigProvider) GetSupportedLanguages() []types.Language {
 		languages = append(languages, types.Language(langStr))
 	}
 	return languages
-}
-
-// GetLanguagePoolConfig is a global function for backward compatibility
-// It returns the default configuration for a specific language
-func GetLanguagePoolConfig(language types.Language) LanguagePoolConfig {
-	defaultConfig := GetDefaultConfig()
-	langStr := string(language)
-	if config, exists := defaultConfig.Languages[langStr]; exists {
-		return config
-	}
-	// Return Go config as fallback
-	return defaultConfig.Languages["go"]
 }

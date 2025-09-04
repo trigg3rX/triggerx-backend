@@ -22,7 +22,7 @@ type ContainerManager interface {
 	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
 	GetSupportedLanguages() []types.Language
 	IsLanguageSupported(language types.Language) bool
-	Close() error
+	Close(ctx context.Context) error
 }
 
 // FileManager defines what the execution pipeline needs from a file manager

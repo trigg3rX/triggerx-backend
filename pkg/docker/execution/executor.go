@@ -54,11 +54,6 @@ func NewCodeExecutor(ctx context.Context, cfg config.ConfigProviderInterface, ht
 		return nil, fmt.Errorf("failed to create container manager: %w", err)
 	}
 
-	// Initialize container manager
-	if err := containerMgr.Initialize(ctx); err != nil {
-		return nil, fmt.Errorf("failed to initialize container manager: %w", err)
-	}
-
 	// Create adapters for the pipeline
 	fileManagerAdapter := NewFileManagerAdapter(fileMgr)
 	containerManagerAdapter := NewContainerManagerAdapter(containerMgr)
@@ -134,7 +129,7 @@ func (e *codeExecutor) ClearAlerts() {
 	e.monitor.clearAlerts()
 }
 
-func (e *codeExecutor) Close() error {
+func (e *codeExecutor) Close(ctx context.Context) error {
 	e.logger.Info("Closing code executor")
 
 	// Close pipeline first to ensure all active executions complete
@@ -158,7 +153,7 @@ func (e *codeExecutor) Close() error {
 	}
 
 	if e.pipeline.containerMgr != nil {
-		if err := e.pipeline.containerMgr.Close(); err != nil {
+		if err := e.pipeline.containerMgr.Close(ctx); err != nil {
 			e.logger.Warnf("Failed to close container manager: %v", err)
 		}
 	}

@@ -9,13 +9,12 @@ func GetInitializationScript(language types.Language) string {
 		return goInitializationScript
 	case types.LanguagePy:
 		return pythonInitializationScript
-	case types.LanguageJS, types.LanguageNode: // JS and Node have the same init
+	case types.LanguageJS, types.LanguageNode:
 		return javascriptInitializationScript
 	case types.LanguageTS:
 		return typescriptInitializationScript
 	default:
-		// Return a generic script to ensure /code exists, even for unknown types.
-		return genericInitializationScript
+		return ""
 	}
 }
 
@@ -26,12 +25,12 @@ func GetSetupScript(language types.Language) string {
 		return goSetupScript
 	case types.LanguagePy:
 		return pythonSetupScript
-	case types.LanguageJS, types.LanguageNode: // JS and Node have the same setup
+	case types.LanguageJS, types.LanguageNode:
 		return javascriptSetupScript
 	case types.LanguageTS:
 		return typescriptSetupScript
 	default:
-		return "" // No setup for unknown types
+		return ""
 	}
 }
 
@@ -42,13 +41,12 @@ func GetExecutionScript(language types.Language) string {
 		return goExecutionScript
 	case types.LanguagePy:
 		return pythonExecutionScript
-	case types.LanguageJS, types.LanguageNode: // JS and Node have the same execution
+	case types.LanguageJS, types.LanguageNode:
 		return javascriptExecutionScript
 	case types.LanguageTS:
 		return typescriptExecutionScript
 	default:
-		// Return a failing script for unsupported languages.
-		return `echo "Error: Unsupported language." >&2; exit 1`
+		return ""
 	}
 }
 
@@ -65,20 +63,13 @@ func GetCleanupScript(language types.Language) string {
 	case types.LanguageTS:
 		return typescriptCleanupScript
 	default:
-		return genericCleanupScript
+		return ""
 	}
 }
 
 // --- INITIALIZATION SCRIPTS ---
-
-const genericInitializationScript = `#!/bin/sh
-set -e
-mkdir -p /code
-cd /code
-echo "Container initialized successfully"
-`
-
 const goInitializationScript = `#!/bin/sh
+
 set -e
 mkdir -p /code
 cd /code
@@ -189,21 +180,29 @@ const goExecutionScript = `#!/bin/sh
 set -e
 cd /code
 # Execute the code. Logs go to stdout/stderr. The result is written to result.json.
-GOFLAGS='-buildvcs=false -trimpath' go run code.go
+GOFLAGS='-buildvcs=false -trimpath' go run code.go > result.json 2>&1
+# Create a completion marker file
+echo "done" > execution_complete.flag
 `
 
 const pythonExecutionScript = `#!/bin/sh
 set -e
 cd /code
-# Execute with unbuffered output for real-time logging.
-python -u -B code.py
+# Execute with unbuffered output and redirect to result.json
+python -u -B code.py > result.json 2>&1
+# Create a completion marker file
+echo "done" > execution_complete.flag
 `
 
 const javascriptExecutionScript = `#!/bin/sh
 set -e
 cd /code
 V8_MEMORY_LIMIT=${V8_MEMORY_LIMIT:-256}
-NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js
+NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}"
+# Execute and redirect output to result.json
+node code.js > result.json 2>&1
+# Create a completion marker file
+echo "done" > execution_complete.flag
 `
 
 const typescriptExecutionScript = `#!/bin/sh
@@ -212,40 +211,49 @@ cd /code
 V8_MEMORY_LIMIT=${V8_MEMORY_LIMIT:-256}
 # First, compile the user's code.
 tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck
-# Then, execute the compiled JavaScript.
-NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js
+# Then, execute the compiled JavaScript and redirect output to result.json
+NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js > result.json 2>&1
+# Create a completion marker file
+echo "done" > execution_complete.flag
 `
 
 // --- CLEANUP SCRIPTS (Resetting the container state) ---
 
-const genericCleanupScript = `#!/bin/sh
-# This script is non-critical, so we don't use 'set -e'.
-# It attempts to clean everything to return the container to a pristine state.
-cd /code
-rm -f code.* result.json go.mod go.sum package.json package-lock.json requirements.txt tsconfig.json
-rm -rf /tmp/go-build* __pycache__ node_modules dist .warm
-`
-
 const goCleanupScript = `#!/bin/sh
 cd /code
-rm -f code.go result.json go.mod go.sum
+rm -f code.go
+rm -f result.json
+rm -f execution_complete.flag
 rm -rf /tmp/go-build*
 `
 
 const pythonCleanupScript = `#!/bin/sh
 cd /code
-rm -f code.py result.json requirements.txt
+rm -f code.py
+rm -f result.json
+rm -f execution_complete.flag
+rm -f requirements.txt
 rm -rf __pycache__
 `
 
 const javascriptCleanupScript = `#!/bin/sh
 cd /code
-rm -f code.js result.json package.json package-lock.json
+rm -f code.js
+rm -f result.json
+rm -f execution_complete.flag
+rm -f package.json
+rm -f package-lock.json
 rm -rf node_modules
 `
 
 const typescriptCleanupScript = `#!/bin/sh
 cd /code
-rm -f code.ts code.js result.json package.json package-lock.json tsconfig.json
+rm -f code.ts
+rm -f code.js
+rm -f result.json
+rm -f execution_complete.flag
+rm -f package.json
+rm -f package-lock.json
+rm -f tsconfig.json
 rm -rf node_modules dist
 `

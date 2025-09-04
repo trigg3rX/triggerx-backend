@@ -20,5 +20,5 @@ type ExecutionAPI interface {
 	GetAlerts(severity string, limit int) []Alert
 	ClearAlerts()
 	CancelExecution(executionID string) error
-	Close() error
+	Close(ctx context.Context) error
 }

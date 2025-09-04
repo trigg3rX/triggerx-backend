@@ -26,7 +26,7 @@ type CodeExecutor interface {
 	GetAlerts(severity string, limit int) []execution.Alert
 	ClearAlerts()
 	CancelExecution(executionID string) error
-	Close() error
+	Close(ctx context.Context) error
 }
 
 // DockerManager is the main entry point for the Docker package
@@ -298,7 +298,7 @@ func (dm *DockerManager) GetConfig() config.ConfigProviderInterface {
 }
 
 // Close shuts down the Docker manager and cleans up resources
-func (dm *DockerManager) Close() error {
+func (dm *DockerManager) Close(ctx context.Context) error {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -309,7 +309,7 @@ func (dm *DockerManager) Close() error {
 	dm.logger.Info("Closing Docker manager")
 
 	if dm.executor != nil {
-		if err := dm.executor.Close(); err != nil {
+		if err := dm.executor.Close(ctx); err != nil {
 			dm.logger.Warnf("Failed to close executor: %v", err)
 		}
 	}

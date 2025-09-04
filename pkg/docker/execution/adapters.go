@@ -66,8 +66,8 @@ func (a *ContainerManagerAdapter) IsLanguageSupported(language types.Language) b
 }
 
 // Close implements execution.ContainerManager.Close
-func (a *ContainerManagerAdapter) Close() error {
-	return a.manager.Close()
+func (a *ContainerManagerAdapter) Close(ctx context.Context) error {
+	return a.manager.Close(ctx)
 }
 
 // FileManagerAdapter adapts file.FileManagerAPI to execution.FileManager

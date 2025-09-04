@@ -743,7 +743,7 @@ func (p *containerPool) getStats() *types.PoolStats {
 	return &stats
 }
 
-func (p *containerPool) close() error {
+func (p *containerPool) close(ctx context.Context) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -752,7 +752,7 @@ func (p *containerPool) close() error {
 
 	// Cleanup all containers
 	for id := range p.containers {
-		if err := p.manager.CleanupContainer(context.Background(), id); err != nil {
+		if err := p.manager.CleanupContainer(ctx, id); err != nil {
 			p.logger.Warnf("Failed to cleanup container %s: %v", id, err)
 		}
 	}

@@ -15,10 +15,10 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/docker/scripts"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/scripts"
 )
 
 // Events when containers are created, started, stopped, error, etc.
@@ -111,11 +111,11 @@ func (m *containerManager) Initialize(ctx context.Context) error {
 // InitializeLanguagePools initializes language-specific container pools
 func (m *containerManager) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
 	if m.initialized {
+		m.mutex.Unlock()
 		return fmt.Errorf("docker manager already initialized")
 	}
+	m.mutex.Unlock()
 
 	m.logger.Info("Initializing language-specific container pools")
 
@@ -123,6 +123,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 	var wg sync.WaitGroup
 	errors := make(chan error, len(languages))
 	successCount := 0
+	var successCountMutex sync.Mutex
 
 	for _, lang := range languages {
 		poolConfig, exists := m.config.GetLanguagePoolConfig(lang)
@@ -145,10 +146,13 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 				return
 			}
 
-			// Safely add pool to the map
+			// Safely add pool to the map and update success count
+			successCountMutex.Lock()
+			successCount++
+			successCountMutex.Unlock()
+
 			m.mutex.Lock()
 			m.pools[language] = pool
-			successCount++
 			m.mutex.Unlock()
 
 			m.logger.Infof("Initialized pool for language: %s", language)
@@ -456,7 +460,23 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 		result.Error = nil
 	}
 
-	// Step 3: Run cleanup script asynchronously (don't wait for it)
+	// Step 3: Read the result file if execution was successful
+	if result.Success {
+		resultContent, err := m.readResultFile(ctx, containerID)
+		if err != nil {
+			m.logger.Warnf("Failed to read result file from container %s: %v", containerID, err)
+			// Fall back to stdout/stderr output
+			result.Output = outputBuffer.String()
+		} else {
+			// Use the result file content
+			result.Output = resultContent
+		}
+	} else {
+		// Use stdout/stderr output for error cases
+		result.Output = outputBuffer.String()
+	}
+
+	// Step 4: Run cleanup script asynchronously (don't wait for it)
 	go func() {
 		if err := m.runCleanupScript(context.Background(), containerID, language); err != nil {
 			m.logger.Warnf("Failed to run cleanup script for container %s: %v", containerID, err)
@@ -464,7 +484,6 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 	}()
 
 	// Copy output from pooled buffer to result before buffer is returned to pool
-	result.Output = outputBuffer.String()
 	result.Stats.ExecutionTime = codeExecutionTime
 
 	// Note: We don't return the result to the pool here because we're returning it to the caller.
@@ -571,20 +590,25 @@ func (m *containerManager) runExecutionScript(ctx context.Context, containerID s
 	// Wait for execution to complete
 	var exitCode int
 	executionComplete := false
+	timeout := time.After(60 * time.Second)
+
 	for !executionComplete {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
+		case <-timeout:
+			return "", fmt.Errorf("execution timeout after 60 seconds")
 		case <-outputDone:
-			// Output reading completed, but continue checking execution status
-		default:
-			inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execResp.ID)
-			if err != nil {
-				return "", fmt.Errorf("failed to inspect execution exec: %w", err)
-			}
-			if !inspectResp.Running {
-				exitCode = inspectResp.ExitCode
+			// Output reading completed, check for completion file
+			if m.checkExecutionComplete(ctx, containerID) {
 				executionComplete = true
+				exitCode = 0 // Assume success if we have output and completion file
+			}
+		default:
+			// Check for completion file periodically
+			if m.checkExecutionComplete(ctx, containerID) {
+				executionComplete = true
+				exitCode = 0
 			} else {
 				time.Sleep(100 * time.Millisecond)
 			}
@@ -598,6 +622,71 @@ func (m *containerManager) runExecutionScript(ctx context.Context, containerID s
 
 	m.logger.Debugf("Execution script completed for container %s", containerID)
 	return execResp.ID, nil
+}
+
+// Helper function to check if execution is complete
+func (m *containerManager) checkExecutionComplete(ctx context.Context, containerID string) bool {
+	// Check if result.json and execution_complete.flag exist
+	execConfig := container.ExecOptions{
+		Cmd:          []string{"sh", "-c", "test -f /code/result.json && test -f /code/execution_complete.flag"},
+		AttachStdout: false,
+		AttachStderr: false,
+	}
+
+	execResp, err := m.dockerClient.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return false
+	}
+
+	if err := m.dockerClient.ContainerExecStart(ctx, execResp.ID, container.ExecStartOptions{}); err != nil {
+		return false
+	}
+
+	// Wait for the test command to complete
+	for {
+		inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execResp.ID)
+		if err != nil {
+			return false
+		}
+		if !inspectResp.Running {
+			return inspectResp.ExitCode == 0
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// readResultFile reads the result.json file from the container
+func (m *containerManager) readResultFile(ctx context.Context, containerID string) (string, error) {
+	m.logger.Debugf("Reading result file from container %s", containerID)
+
+	// Copy result.json from container to host
+	reader, _, err := m.dockerClient.CopyFromContainer(ctx, containerID, "/code/result.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to copy result.json from container: %w", err)
+	}
+	defer reader.Close()
+
+    // Create a tar reader to extract the file content
+    tarReader := tar.NewReader(reader)
+    
+    // Read the tar header
+    header, err := tarReader.Next()
+    if err != nil {
+        return "", fmt.Errorf("failed to read tar header: %w", err)
+    }
+    
+    // Verify it's the expected file
+    if header.Name != "result.json" {
+        return "", fmt.Errorf("unexpected file in tar: %s", header.Name)
+    }
+    
+    // Read the file content
+    content, err := io.ReadAll(tarReader)
+    if err != nil {
+        return "", fmt.Errorf("failed to read file content from tar: %w", err)
+    }
+
+	return string(content), nil
 }
 
 // runCleanupScript runs the cleanup script asynchronously
@@ -720,13 +809,13 @@ func (m *containerManager) returnBytesBuffer(buf *bytes.Buffer) {
 	}
 }
 
-func (m *containerManager) Close() error {
+func (m *containerManager) Close(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	// Close all language pools
 	for lang, pool := range m.pools {
-		if err := pool.close(); err != nil {
+		if err := pool.close(ctx); err != nil {
 			m.logger.Warnf("Failed to close pool for language %s: %v", lang, err)
 		}
 	}

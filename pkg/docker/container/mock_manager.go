@@ -42,7 +42,7 @@ func (m *MockpoolAPI) EXPECT() *MockpoolAPIMockRecorder {
 }
 
 // close mocks base method.
-func (m *MockpoolAPI) close() error {
+func (m *MockpoolAPI) close(ctx context.Context) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "close")
 	ret0, _ := ret[0].(error)
@@ -50,7 +50,7 @@ func (m *MockpoolAPI) close() error {
 }
 
 // close indicates an expected call of close.
-func (mr *MockpoolAPIMockRecorder) close() *gomock.Call {
+func (mr *MockpoolAPIMockRecorder) close(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "close", reflect.TypeOf((*MockpoolAPI)(nil).close))
 }
@@ -181,7 +181,7 @@ func (mr *MockContainerManagerAPIMockRecorder) KillExecProcess(ctx, execID any) 
 }
 
 // Close mocks base method.
-func (m *MockContainerManagerAPI) Close() error {
+func (m *MockContainerManagerAPI) Close(ctx context.Context) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
@@ -189,7 +189,7 @@ func (m *MockContainerManagerAPI) Close() error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockContainerManagerAPIMockRecorder) Close() *gomock.Call {
+func (mr *MockContainerManagerAPIMockRecorder) Close(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockContainerManagerAPI)(nil).Close))
 }
