@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"os"
+	"time"
 )
 
 type CoinGeckoResponse struct {
@@ -40,7 +42,15 @@ func checker() string {
 
 func main() {
 	result := checker()
-
-	jsonValue, _ := json.Marshal(result)
-	fmt.Println(string(jsonValue))
+	response := map[string]interface{}{
+		"Satisfied": true,
+		"Timestamp": time.Now().Format(time.RFC3339),
+		"Response":  []string{result},
+	}
+	jsonResult, err := json.Marshal(response)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to marshal result: %v", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(jsonResult))
 }

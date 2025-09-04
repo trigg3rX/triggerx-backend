@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -20,7 +20,7 @@ type Handler struct {
 	db                     *database.Connection
 	logger                 logging.Logger
 	config                 NotificationConfig
-	dockerManager          *docker.DockerManager
+	dockerExecutor         dockerexecutor.DockerExecutorAPI
 	jobRepository          repository.JobRepository
 	timeJobRepository      repository.TimeJobRepository
 	eventJobRepository     repository.EventJobRepository
@@ -33,12 +33,12 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerManager *docker.DockerManager) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
 		config:                 config,
-		dockerManager:          dockerManager,
+		dockerExecutor:         dockerExecutor,
 		jobRepository:          repository.NewJobRepository(db),
 		timeJobRepository:      repository.NewTimeJobRepository(db),
 		eventJobRepository:     repository.NewEventJobRepository(db),
@@ -49,19 +49,6 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		apiKeysRepository:      repository.NewApiKeysRepository(db),
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
-
-	// Log Docker manager status
-	if dockerManager != nil {
-		if dockerManager.IsInitialized() {
-			logger.Info("Docker manager is initialized and ready")
-			supportedLanguages := dockerManager.GetSupportedLanguages()
-			logger.Infof("Supported languages: %v", supportedLanguages)
-		} else {
-			logger.Warn("Docker manager is not initialized")
-		}
-	} else {
-		logger.Warn("Docker manager is nil")
-	}
 
 	return h
 }

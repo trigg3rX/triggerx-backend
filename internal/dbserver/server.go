@@ -14,7 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
 	"github.com/gin-gonic/gin"
@@ -228,8 +228,8 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	return s
 }
 
-func (s *Server) RegisterRoutes(router *gin.Engine, dockerManager *docker.DockerManager) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerManager)
+func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecutor.DockerExecutorAPI) {
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

@@ -12,7 +12,17 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// TestMockAggregatorClientBuilder validates that the builder correctly sets up mock expectations.
+// TestNewMockAggregatorClient ensures the basic constructor works as expected.
+func TestNewMockAggregatorClient(t *testing.T) {
+	logger := logging.NewNoOpLogger()
+	cfg := NewMockAggregatorClientConfig()
+
+	client, err := NewMockAggregatorClient(logger, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
+// TestMockAggregatorClientBuilder validates that the builder correctly sets up specific mock expectations.
 func TestMockAggregatorClientBuilder(t *testing.T) {
 	ctx := context.Background()
 	taskData := &types.BroadcastDataForPerformer{TaskID: 123}
@@ -47,6 +57,29 @@ func TestMockAggregatorClientBuilder(t *testing.T) {
 	builder.AssertNumberOfCalls(t, "Close", 1)
 }
 
+// TestMockAggregatorClientBuilder_AnyMatchers validates the builder methods using mock.Anything.
+func TestMockAggregatorClientBuilder_AnyMatchers(t *testing.T) {
+	expectedErr := errors.New("any call fails")
+
+	builder := NewMockAggregatorClientBuilder().
+		ExpectSendTaskToPerformerAny(true, nil).
+		ExpectSendTaskToValidatorsAny(false, expectedErr)
+
+	mockClient := builder.Build()
+	require.NotNil(t, mockClient)
+
+	// Call methods with arbitrary arguments to ensure "Anything" matcher works
+	success, err := mockClient.SendTaskToPerformer(context.TODO(), &types.BroadcastDataForPerformer{TaskID: 999})
+	assert.True(t, success)
+	assert.NoError(t, err)
+
+	success, err = mockClient.SendTaskToValidators(context.Background(), nil)
+	assert.False(t, success)
+	assert.Equal(t, expectedErr, err)
+
+	builder.AssertExpectations(t)
+}
+
 // TestNewNoOpAggregatorClient checks that the client does nothing and returns success.
 func TestNewNoOpAggregatorClient(t *testing.T) {
 	client := NewNoOpAggregatorClient()
@@ -63,11 +96,13 @@ func TestNewNoOpAggregatorClient(t *testing.T) {
 
 	// Close should not panic
 	assert.NotPanics(t, func() { client.Close() })
+
+	// Verify the mock calls were made
+	client.AssertExpectations(t)
 }
 
 // TestNewFailingAggregatorClient checks that the client always returns a specified error.
 func TestNewFailingAggregatorClient(t *testing.T) {
-	// Define a specific error to check against.
 	failErr := errors.New("simulated network failure")
 	client := NewFailingAggregatorClient(failErr)
 	require.NotNil(t, client)
@@ -83,13 +118,15 @@ func TestNewFailingAggregatorClient(t *testing.T) {
 
 	// Close should not panic
 	assert.NotPanics(t, func() { client.Close() })
+
+	// Verify the mock calls were made
+	client.AssertExpectations(t)
 }
 
 // TestMockAggregatorClientFactory validates the mock factory for creating clients.
 func TestMockAggregatorClientFactory(t *testing.T) {
 	logger := logging.NewNoOpLogger()
-	// As recommended, use the actual config struct for testing purposes.
-	cfg := AggregatorClientConfig{}
+	cfg := AggregatorClientConfig{} // Use an empty config as the value doesn't matter here.
 
 	t.Run("Success: Factory returns a mock client", func(t *testing.T) {
 		factory := NewMockAggregatorClientFactory()
@@ -125,13 +162,79 @@ func TestMockAggregatorClientFactory(t *testing.T) {
 	})
 }
 
+// TestNewMockAggregatorClientConfig verifies the content of the mock config.
 func TestNewMockAggregatorClientConfig(t *testing.T) {
 	cfg := NewMockAggregatorClientConfig()
-	require.NotNil(t, cfg)
+
 	assert.Equal(t, "http://localhost:9007", cfg.AggregatorRPCUrl)
 	assert.Equal(t, "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", cfg.SenderPrivateKey)
 	assert.Equal(t, "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6", cfg.SenderAddress)
 	assert.Equal(t, 3, cfg.RetryAttempts)
 	assert.Equal(t, 1000*time.Millisecond, cfg.RetryDelay)
 	assert.Equal(t, 10000*time.Millisecond, cfg.RequestTimeout)
+}
+
+// TestHTTPMockHelpers validates the constructors intended for HTTP integration tests.
+func TestHTTPMockHelpers(t *testing.T) {
+	logger := logging.NewNoOpLogger()
+	cfg := NewMockAggregatorClientConfig()
+
+	t.Run("NewMockAggregatorClientWithHTTP", func(t *testing.T) {
+		client, err := NewMockAggregatorClientWithHTTP(logger, cfg)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+
+		// This client should default to success.
+		success, err := client.SendTaskToPerformer(context.Background(), nil)
+		assert.True(t, success)
+		assert.NoError(t, err)
+
+		success, err = client.SendTaskToValidators(context.Background(), nil)
+		assert.True(t, success)
+		assert.NoError(t, err)
+
+		// Call Close() as expected by the mock
+		client.Close()
+
+		client.AssertExpectations(t)
+	})
+
+	t.Run("NewMockAggregatorClientForHTTPTest - Success", func(t *testing.T) {
+		client, err := NewMockAggregatorClientForHTTPTest(logger, cfg, true, nil)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+
+		success, err := client.SendTaskToPerformer(context.Background(), nil)
+		assert.True(t, success)
+		assert.NoError(t, err)
+
+		success, err = client.SendTaskToValidators(context.Background(), nil)
+		assert.True(t, success)
+		assert.NoError(t, err)
+
+		// Call Close() as expected by the mock
+		client.Close()
+
+		client.AssertExpectations(t)
+	})
+
+	t.Run("NewMockAggregatorClientForHTTPTest - Failure", func(t *testing.T) {
+		expectedErr := errors.New("http test failure")
+		client, err := NewMockAggregatorClientForHTTPTest(logger, cfg, false, expectedErr)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+
+		success, err := client.SendTaskToPerformer(context.Background(), nil)
+		assert.False(t, success)
+		assert.Equal(t, expectedErr, err)
+
+		success, err = client.SendTaskToValidators(context.Background(), nil)
+		assert.False(t, success)
+		assert.Equal(t, expectedErr, err)
+
+		// Call Close() as expected by the mock
+		client.Close()
+
+		client.AssertExpectations(t)
+	})
 }

@@ -1,0 +1,66 @@
+manager:
+  auto_cleanup: true
+
+fees:
+  price_per_tg: 0.0001  # Price per TG in ether
+  fixed_cost: 1.0       # Fixed fee
+  transaction_cost: 1.0 # Cost of the action transaction
+  overhead_cost: 0.1    # Overhead cost for running scripts
+
+languages:
+  go:
+    base_config:
+      max_containers: 5
+      min_containers: 2
+      max_wait_time: 60s
+      health_check_interval: 10m
+    docker_config:
+      image: "golang:1.21-alpine"
+      timeout_seconds: 300
+      auto_cleanup: true
+      memory_limit: "1024m"
+      cpu_limit: 1.0
+      network_mode: "bridge"
+      security_opt:
+        - "no-new-privileges"
+      read_only_root_fs: false
+      environment:
+        - "GODEBUG=http2client=0"
+        - "GOCACHE=/tmp/go-cache"
+        - "GOPROXY=direct"
+      binds:
+        - "/var/run/docker.sock:/var/run/docker.sock"
+        - "/tmp/go-cache:/tmp/go-cache"
+    language_config:
+      language: "go"
+      image_name: "golang:1.21-alpine"
+      setup_script: "apk add --no-cache git && go mod init test && go mod tidy"
+      run_command: "go run code.go"
+      extensions: [".go"]
+      environment: []
+
+cache:
+  cache_dir: "data/cache"
+  max_cache_size: 104857600  # 100MB
+  eviction_size: 26214400    # 25MB
+  enable_compression: true
+  max_file_size: 1048576     # 1MB
+
+validation:
+  max_file_size: 1048576     # 1MB
+  allowed_extensions: [".go", ".py", ".js", ".ts"]
+  max_complexity: 50.0
+  timeout_seconds: 30
+
+monitoring:
+  health_check_interval: 30s
+  max_execution_time: 5m
+  min_success_rate: 0.8      # 80%
+  max_average_execution_time: 2m
+  max_alerts: 100
+  alert_retention_time: 1h
+  critical_alert_penalty: 20.0
+  warning_alert_penalty: 5.0
+  health_score_thresholds:
+    critical: 50.0
+    warning: 80.0

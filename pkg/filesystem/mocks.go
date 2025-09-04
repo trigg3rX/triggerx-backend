@@ -373,3 +373,38 @@ func (m *mockDirEntry) Type() os.FileMode { return 0644 }
 func (m *mockDirEntry) Info() (os.FileInfo, error) {
 	return &mockFileInfo{name: m.name, isDir: m.isDir, size: 0}, nil
 }
+
+// FailingMockFS is a mock filesystem that always fails operations
+type FailingMockFS struct{}
+
+func (fs *FailingMockFS) ReadFile(filename string) ([]byte, error) {
+	return nil, os.ErrPermission
+}
+
+func (fs *FailingMockFS) WriteFile(filename string, data []byte, perm os.FileMode) error {
+	return os.ErrPermission
+}
+
+func (fs *FailingMockFS) MkdirAll(path string, perm os.FileMode) error {
+	return os.ErrPermission
+}
+
+func (fs *FailingMockFS) Stat(name string) (os.FileInfo, error) {
+	return nil, os.ErrPermission
+}
+
+func (fs *FailingMockFS) Remove(name string) error {
+	return os.ErrPermission
+}
+
+func (fs *FailingMockFS) RemoveAll(path string) error {
+	return os.ErrPermission
+}
+
+func (fs *FailingMockFS) Abs(path string) (string, error) {
+	return "", os.ErrPermission
+}
+
+func (fs *FailingMockFS) ReadDir(dirname string) ([]os.DirEntry, error) {
+	return nil, os.ErrPermission
+}

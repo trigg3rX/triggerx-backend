@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -53,7 +53,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	case 2, 4, 6:
 		var execErr error
 		// Use the DockerManager from the validator to execute the code
-		result, execErr = e.validator.GetDockerManager().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, 1)
+		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1)
 		if execErr != nil {
 			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", execErr)
 		}
