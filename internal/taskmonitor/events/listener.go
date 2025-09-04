@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
+	// "github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -446,51 +446,62 @@ func (l *ContractEventListener) parseAttestationCenterEvent(eventName string, lg
 		return nil, fmt.Errorf("event %s not found in AttestationCenter ABI", eventName)
 	}
 
-	// Decode non-indexed fields
-	nonIndexedArgs := make(abi.Arguments, 0)
-	for _, input := range ev.Inputs {
-		if !input.Indexed {
-			nonIndexedArgs = append(nonIndexedArgs, input)
-		}
-	}
-	nonIndexed := make(map[string]interface{})
-	if len(nonIndexedArgs) > 0 {
-		// UnpackIntoMap expects the full arguments set, so build it accordingly
-		if err := ev.Inputs.UnpackIntoMap(nonIndexed, lg.Data); err != nil {
-			return nil, fmt.Errorf("failed to unpack event data: %w", err)
-		}
-	}
-
-	// Decode indexed fields from topics (skip topics[0] which is the signature)
-	indexedArgs := make(abi.Arguments, 0)
-	for _, input := range ev.Inputs {
-		if input.Indexed {
-			indexedArgs = append(indexedArgs, input)
-		}
-	}
-	indexedVals := make([]interface{}, 0)
-	if len(indexedArgs) > 0 && len(lg.Topics) > 1 {
-		var out []interface{}
-		if err := abi.ParseTopics(&out, indexedArgs, lg.Topics[1:]); err != nil {
-			return nil, fmt.Errorf("failed to parse indexed topics: %w", err)
-		}
-		indexedVals = out
-	}
-
-	// Merge into parsedData map using input names
+	// Create a map to hold all parsed data
 	parsedData := make(map[string]interface{})
-	// Start with non-indexed values
-	for k, v := range nonIndexed {
-		parsedData[k] = v
+
+	// Parse non-indexed fields from log data using UnpackIntoMap
+	if len(lg.Data) > 0 {
+		nonIndexedData := make(map[string]interface{})
+		err := ev.Inputs.UnpackIntoMap(nonIndexedData, lg.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unpack non-indexed data: %w", err)
+		}
+		
+		// Copy non-indexed data to parsedData
+		for k, v := range nonIndexedData {
+			parsedData[k] = v
+		}
 	}
-	// Then add indexed with correct ordering
-	idx := 0
-	for _, input := range ev.Inputs {
-		if input.Indexed {
-			if idx < len(indexedVals) {
-				parsedData[input.Name] = indexedVals[idx]
+
+	// Parse indexed fields from topics manually (skip topics[0] which is the event signature)
+	if len(lg.Topics) > 1 {
+		topicIndex := 1 // Start from index 1 (skip event signature)
+		for _, input := range ev.Inputs {
+			if !input.Indexed {
+				continue
 			}
-			idx++
+			
+			if topicIndex >= len(lg.Topics) {
+				break
+			}
+
+			topic := lg.Topics[topicIndex]
+			
+			// Parse the topic based on the argument type
+			var value interface{}
+			switch input.Type.String() {
+			case "address":
+				value = common.BytesToAddress(topic.Bytes()).Hex()
+			case "uint256":
+				value = topic.Big().String()
+			case "uint128", "uint64", "uint32", "uint16", "uint8":
+				value = topic.Big().String()
+			case "int256", "int128", "int64", "int32", "int16", "int8":
+				value = topic.Big().String()
+			case "bytes32":
+				value = topic.Hex()
+			case "string":
+				// For indexed strings, we get the keccak256 hash, not the actual string
+				value = topic.Hex()
+			case "bool":
+				value = topic.Big().Uint64() != 0
+			default:
+				// For arrays and other complex types, they are hashed when indexed
+				value = topic.Hex()
+			}
+			
+			parsedData[input.Name] = value
+			topicIndex++
 		}
 	}
 
