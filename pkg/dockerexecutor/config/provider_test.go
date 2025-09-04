@@ -60,11 +60,15 @@ validation:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 
@@ -109,11 +113,15 @@ invalid: yaml: content: [with: invalid: syntax
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(invalidYAML)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 
@@ -140,11 +148,15 @@ validation:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(invalidConfig)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 
@@ -164,11 +176,15 @@ fees:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(partialConfig)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 
@@ -255,11 +271,15 @@ validation:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(complexConfig)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 
@@ -366,11 +386,15 @@ fees:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 	require.NoError(t, err)
@@ -475,11 +499,15 @@ docker:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 	require.NoError(t, err)
@@ -519,11 +547,15 @@ fees:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 	require.NoError(t, err)
@@ -564,11 +596,15 @@ cache:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 	require.NoError(t, err)
@@ -611,11 +647,15 @@ validation:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 	require.NoError(t, err)
@@ -690,11 +730,15 @@ languages:
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		require.NoError(t, err)
+	}()
 
 	_, err = tmpFile.WriteString(yamlContent)
 	require.NoError(t, err)
-	tmpFile.Close()
+	err = tmpFile.Close()
+	require.NoError(t, err)
 
 	provider, err := NewConfigProvider(tmpFile.Name())
 	require.NoError(t, err)

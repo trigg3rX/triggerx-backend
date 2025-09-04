@@ -3,9 +3,11 @@ package tasks
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 
@@ -21,9 +23,10 @@ type TaskStreamManager struct {
 	mu               sync.RWMutex
 	startTime        time.Time
 	aggregatorClient *aggregator.AggregatorClient
+	testAggregatorClient *aggregator.AggregatorClient
 }
 
-func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, logger logging.Logger) (*TaskStreamManager, error) {
+func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, testAggregatorClient *aggregator.AggregatorClient, logger logging.Logger) (*TaskStreamManager, error) {
 	logger.Info("Initializing TaskStreamManager...")
 
 	tsm := &TaskStreamManager{
@@ -31,7 +34,8 @@ func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *ag
 		logger:           logger,
 		consumerGroups:   make(map[string]bool),
 		startTime:        time.Now(),
-		aggregatorClient: aggClient,
+		aggregatorClient:  aggClient,
+		testAggregatorClient: testAggregatorClient,
 	}
 
 	logger.Info("TaskStreamManager initialized successfully")
@@ -180,6 +184,82 @@ func (tsm *TaskStreamManager) Close() error {
 	}
 
 	tsm.logger.Info("TaskStreamManager closed successfully")
+	return nil
+}
+
+// storeTaskIndex stores the mapping from taskID to messageID in Redis hash
+func (tsm *TaskStreamManager) storeTaskIndex(ctx context.Context, taskID int64, messageID string) error {
+	start := time.Now()
+
+	taskIDStr := strconv.FormatInt(taskID, 10)
+
+	err := tsm.client.HSet(ctx, "task_id_to_message_id", taskIDStr, messageID)
+	duration := time.Since(start)
+
+	if err != nil {
+		tsm.logger.Error("Failed to store task index",
+			"task_id", taskID,
+			"message_id", messageID,
+			"duration", duration,
+			"error", err)
+		return fmt.Errorf("failed to store task index: %w", err)
+	}
+
+	// Set TTL on the hash to ensure it expires (2 hours)
+	err = tsm.client.SetTTL(ctx, "task_id_to_message_id", 2*time.Hour)
+	if err != nil {
+		tsm.logger.Warn("Failed to set TTL on task index",
+			"task_id", taskID,
+			"error", err)
+		// Don't return error as the main operation succeeded
+	}
+
+	tsm.logger.Debug("Task index stored successfully",
+		"task_id", taskID,
+		"message_id", messageID,
+		"duration", duration)
+
+	return nil
+}
+
+// addTaskToTimeoutTracking adds a task to the timeout tracking sorted set
+func (tsm *TaskStreamManager) addTaskToTimeoutTracking(ctx context.Context, taskID int64) error {
+	start := time.Now()
+
+	// Calculate timeout timestamp (1 hour from now)
+	timeoutTimestamp := float64(time.Now().Add(TasksProcessingTTL).Unix())
+	taskIDStr := strconv.FormatInt(taskID, 10)
+
+	// Add to sorted set with timeout timestamp as score
+	_, err := tsm.client.ZAdd(ctx, "dispatched_timeouts", redis.Z{
+		Score:  timeoutTimestamp,
+		Member: taskIDStr,
+	})
+	duration := time.Since(start)
+
+	if err != nil {
+		tsm.logger.Error("Failed to add task to timeout tracking",
+			"task_id", taskID,
+			"timeout_timestamp", timeoutTimestamp,
+			"duration", duration,
+			"error", err)
+		return fmt.Errorf("failed to add task to timeout tracking: %w", err)
+	}
+
+	// Set TTL on the sorted set to ensure it expires (2 hours)
+	err = tsm.client.SetTTL(ctx, "dispatched_timeouts", 2*time.Hour)
+	if err != nil {
+		tsm.logger.Warn("Failed to set TTL on timeout tracking",
+			"task_id", taskID,
+			"error", err)
+		// Don't return error as the main operation succeeded
+	}
+
+	tsm.logger.Debug("Task added to timeout tracking successfully",
+		"task_id", taskID,
+		"timeout_timestamp", timeoutTimestamp,
+		"duration", duration)
+
 	return nil
 }
 

@@ -21,7 +21,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-const shutdownTimeout = 10 * time.Second
+const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
@@ -153,10 +153,11 @@ func main() {
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Block until signal is received
-	<-shutdown
+	sig := <-shutdown
+	logger.Info("Received shutdown signal", "signal", sig.String())
 
 	// Perform graceful shutdown
 	performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
@@ -196,9 +197,14 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	// Close health client
-	healthClient.Close()
-	logger.Info("[1/3] Process: Health client Closed")
+    // Start shutdown in a goroutine to handle timeout
+    done := make(chan struct{})
+    go func() {
+        defer close(done)
+        
+        // Close health client
+        healthClient.Close()
+        logger.Info("[1/3] Process: Health client Closed")
 
 	// Close code executor
 	if err := dockerManager.Close(ctx); err != nil {
@@ -206,12 +212,21 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
 	}
 	logger.Info("[2/3] Process: Code executor Closed")
 
-	// Shutdown server gracefully
-	if err := server.Stop(shutdownCtx); err != nil {
-		logger.Error("Server forced to shutdown", "error", err)
-	}
-	logger.Info("[3/3] Process: API server Stopped")
+        // Shutdown server gracefully
+        if err := server.Stop(shutdownCtx); err != nil {
+            logger.Error("Server forced to shutdown", "error", err)
+        }
+        logger.Info("[3/3] Process: API server Stopped")
+    }()
 
-	logger.Info("Shutdown complete")
-	os.Exit(0)
+    // Wait for shutdown to complete or timeout
+    select {
+    case <-done:
+        logger.Info("Graceful shutdown completed successfully")
+    case <-shutdownCtx.Done():
+        logger.Warn("Shutdown timeout reached, forcing exit")
+    }
+
+    logger.Info("Shutdown complete")
+    os.Exit(0)
 }

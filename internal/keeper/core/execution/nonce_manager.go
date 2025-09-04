@@ -34,7 +34,6 @@ type NonceManager struct {
 	// Retry configuration
 	maxRetries  int
 	baseTimeout time.Duration
-	priorityFee *big.Int // Base priority fee for EIP-1559
 }
 
 type PendingTransaction struct {
@@ -58,8 +57,7 @@ func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceMana
 		logger:       logger,
 		syncInterval: 15 * time.Second, // More frequent sync for low latency
 		maxRetries:   5,                // More retries for reliability
-		baseTimeout:  3 * time.Second,  // Shorter timeout for faster retries
-		priorityFee:  big.NewInt(2e9),  // 2 Gwei base priority fee
+		baseTimeout:  5 * time.Second,  // Shorter timeout for faster retries
 		pendingTxs:   make(map[uint64]*PendingTransaction),
 	}
 }
@@ -108,8 +106,8 @@ func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
 	return nil
 }
 
-// SubmitTransactionWithSmartRetry submits a transaction with intelligent retry logic
-func (nm *NonceManager) SubmitTransactionWithSmartRetry(
+// SubmitTransaction submits a transaction with intelligent retry logic
+func (nm *NonceManager) SubmitTransaction(
 	ctx context.Context,
 	nonce uint64,
 	to common.Address,
@@ -147,56 +145,26 @@ func (nm *NonceManager) submitNewTransaction(
 	privateKey *ecdsa.PrivateKey,
 ) (*types.Receipt, string, error) {
 
-	// Get current gas parameters
-	gasPrice, maxFeePerGas, maxPriorityFeePerGas, err := nm.getOptimalGasParams(ctx)
+	// Get current gas price
+	gasPrice, err := nm.getOptimalGasParams(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get gas parameters: %w", err)
+		return nil, "", fmt.Errorf("failed to get gas price: %w", err)
 	}
 
-	// Create transaction (prefer EIP-1559 if supported)
-	var tx *types.Transaction
-	var signedTx *types.Transaction
-	var signErr error
-
-	// Try EIP-1559 first if supported
-	if maxFeePerGas != nil && maxPriorityFeePerGas != nil {
-		nm.logger.Debugf("Attempting EIP-1559 transaction with nonce %d", nonce)
-		tx = types.NewTx(&types.DynamicFeeTx{
-			ChainID:   chainID,
-			Nonce:     nonce,
-			GasTipCap: maxPriorityFeePerGas,
-			GasFeeCap: maxFeePerGas,
-			Gas:       300000,
-			To:        &to,
-			Value:     big.NewInt(0),
-			Data:      data,
-		})
-
-		// Try to sign EIP-1559 transaction
-		signedTx, signErr = types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-		if signErr != nil {
-			nm.logger.Warnf("EIP-1559 transaction signing failed, falling back to legacy: %v", signErr)
-		}
+	// Create and sign transaction
+	if gasPrice == nil {
+		return nil, "", fmt.Errorf("gas price is required for transaction")
 	}
 
-	// Fallback to legacy transaction if EIP-1559 failed or not supported
-	if signedTx == nil || signErr != nil {
-		nm.logger.Debugf("Using legacy transaction with nonce %d", nonce)
-		if gasPrice == nil {
-			return nil, "", fmt.Errorf("gas price is required for legacy transaction")
-		}
-
-		tx = types.NewTransaction(nonce, to, big.NewInt(0), 300000, gasPrice, data)
-		signedTx, signErr = types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-		if signErr != nil {
-			return nil, "", fmt.Errorf("failed to sign legacy transaction: %w", signErr)
-		}
+	tx := types.NewTransaction(nonce, to, big.NewInt(0), 300000, gasPrice, data)
+	signedTx, signErr := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if signErr != nil {
+		return nil, "", fmt.Errorf("failed to sign transaction: %w", signErr)
 	}
 
 	// Track the transaction
 	nm.trackTransaction(nonce, signedTx.Hash().Hex(), data, to, chainID, privateKey, gasPrice)
 
-	// Submit with retry logic
 	return nm.submitWithRetry(ctx, signedTx, nonce, privateKey)
 }
 
@@ -212,64 +180,21 @@ func (nm *NonceManager) replaceTransaction(
 
 	nm.logger.Infof("Replacing stuck transaction with nonce %d", existingTx.Nonce)
 
-	// Get higher gas parameters for replacement
-	gasPrice, maxFeePerGas, maxPriorityFeePerGas, err := nm.getOptimalGasParams(ctx)
+	// Get higher gas price for replacement
+	gasPrice, err := nm.getOptimalGasParams(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get gas parameters: %w", err)
+		return nil, "", fmt.Errorf("failed to get gas price: %w", err)
 	}
 
 	// Increase fees by 20% for replacement
-	if gasPrice != nil {
-		gasPrice = new(big.Int).Mul(gasPrice, big.NewInt(120))
-		gasPrice = new(big.Int).Div(gasPrice, big.NewInt(100))
-	}
-	if maxFeePerGas != nil {
-		maxFeePerGas = new(big.Int).Mul(maxFeePerGas, big.NewInt(120))
-		maxFeePerGas = new(big.Int).Div(maxFeePerGas, big.NewInt(100))
-	}
-	if maxPriorityFeePerGas != nil {
-		maxPriorityFeePerGas = new(big.Int).Mul(maxPriorityFeePerGas, big.NewInt(120))
-		maxPriorityFeePerGas = new(big.Int).Div(maxPriorityFeePerGas, big.NewInt(100))
-	}
+	gasPrice = new(big.Int).Mul(gasPrice, big.NewInt(120))
+	gasPrice = new(big.Int).Div(gasPrice, big.NewInt(100))
 
-	// Create replacement transaction with fallback logic
-	var tx *types.Transaction
-	var signedTx *types.Transaction
-	var signErr error
-
-	// Try EIP-1559 first if supported
-	if maxFeePerGas != nil && maxPriorityFeePerGas != nil {
-		nm.logger.Debugf("Attempting EIP-1559 replacement transaction with nonce %d", existingTx.Nonce)
-		tx = types.NewTx(&types.DynamicFeeTx{
-			ChainID:   chainID,
-			Nonce:     existingTx.Nonce,
-			GasTipCap: maxPriorityFeePerGas,
-			GasFeeCap: maxFeePerGas,
-			Gas:       300000,
-			To:        &to,
-			Value:     big.NewInt(0),
-			Data:      data,
-		})
-
-		// Try to sign EIP-1559 transaction
-		signedTx, signErr = types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-		if signErr != nil {
-			nm.logger.Warnf("EIP-1559 replacement transaction signing failed, falling back to legacy: %v", signErr)
-		}
-	}
-
-	// Fallback to legacy transaction if EIP-1559 failed or not supported
-	if signedTx == nil || signErr != nil {
-		nm.logger.Debugf("Using legacy replacement transaction with nonce %d", existingTx.Nonce)
-		if gasPrice == nil {
-			return nil, "", fmt.Errorf("gas price is required for legacy replacement transaction")
-		}
-
-		tx = types.NewTransaction(existingTx.Nonce, to, big.NewInt(0), 300000, gasPrice, data)
-		signedTx, signErr = types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-		if signErr != nil {
-			return nil, "", fmt.Errorf("failed to sign legacy replacement transaction: %w", signErr)
-		}
+	// Create legacy replacement transaction
+	tx := types.NewTransaction(existingTx.Nonce, to, big.NewInt(0), 300000, gasPrice, data)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to sign replacement transaction: %w", err)
 	}
 
 	// Update tracking
@@ -334,11 +259,13 @@ func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Tra
 			nm.logger.Warnf("Transaction %s timed out after %v, creating replacement", txHash, timeout)
 
 			// Create replacement transaction with higher fees
-			replacementTx, err := nm.createReplacementTransaction(signedTx, attempt+1, privateKey)
+			signedReplacementTx, err := nm.createReplacementTransaction(signedTx, attempt+1, privateKey)
 			if err != nil {
 				return nil, "", fmt.Errorf("failed to create replacement transaction: %w", err)
 			}
-			signedTx = replacementTx
+			signedTx = signedReplacementTx
+
+			nm.updateTransactionStatus(nonce, signedTx.Hash().Hex(), signedTx.GasPrice())
 			continue
 		}
 
@@ -352,47 +279,20 @@ func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Tra
 	return nil, "", fmt.Errorf("transaction failed after %d attempts", nm.maxRetries)
 }
 
-// getOptimalGasParams gets optimal gas parameters for current network conditions
-func (nm *NonceManager) getOptimalGasParams(ctx context.Context) (*big.Int, *big.Int, *big.Int, error) {
-
-	// Always get legacy gas price as fallback
+// getOptimalGasParams gets optimal gas price for current network conditions
+func (nm *NonceManager) getOptimalGasParams(ctx context.Context) (*big.Int, error) {
+	// Get legacy gas price
 	gasPrice, err := nm.client.SuggestGasPrice(ctx)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get gas price: %w", err)
+		return nil, fmt.Errorf("failed to get gas price: %w", err)
 	}
 
 	// Add 20% buffer for network congestion
 	gasPrice.Mul(gasPrice, big.NewInt(120))
 	gasPrice.Div(gasPrice, big.NewInt(100))
 
-	// Try to get EIP-1559 parameters
-	head, err := nm.client.HeaderByNumber(ctx, nil)
-	if err != nil {
-		nm.logger.Warnf("Failed to get latest header for EIP-1559 detection: %v", err)
-		return gasPrice, nil, nil, nil
-	}
-
-	// Check if EIP-1559 is supported and base fee is reasonable
-	if head.BaseFee != nil && head.BaseFee.Cmp(big.NewInt(0)) > 0 {
-		nm.logger.Debugf("EIP-1559 detected with base fee: %s", head.BaseFee.String())
-
-		// Calculate optimal EIP-1559 parameters
-		baseFee := head.BaseFee
-		maxPriorityFeePerGas := new(big.Int).Set(nm.priorityFee)
-
-		// Calculate max fee per gas (base fee + 2x priority fee for safety)
-		maxFeePerGas := new(big.Int).Mul(maxPriorityFeePerGas, big.NewInt(2))
-		maxFeePerGas.Add(maxFeePerGas, baseFee)
-
-		// Add 20% buffer for network congestion
-		maxFeePerGas.Mul(maxFeePerGas, big.NewInt(120))
-		maxFeePerGas.Div(maxFeePerGas, big.NewInt(100))
-
-		return gasPrice, maxFeePerGas, maxPriorityFeePerGas, nil
-	}
-
-	nm.logger.Debugf("EIP-1559 not supported, using legacy gas price: %s", gasPrice.String())
-	return gasPrice, nil, nil, nil
+	nm.logger.Debugf("Using legacy gas price: %s", gasPrice.String())
+	return gasPrice, nil
 }
 
 // createReplacementTransaction creates a replacement transaction with higher fees
@@ -407,7 +307,7 @@ func (nm *NonceManager) createReplacementTransaction(originalTx *types.Transacti
 		to = *originalTx.To()
 		data = originalTx.Data()
 		chainID = originalTx.ChainId()
-	case 2: // EIP-1559 transaction
+	case 2: // EIP-1559 transaction - convert to legacy
 		to = *originalTx.To()
 		data = originalTx.Data()
 		chainID = originalTx.ChainId()
@@ -415,54 +315,30 @@ func (nm *NonceManager) createReplacementTransaction(originalTx *types.Transacti
 		return nil, fmt.Errorf("unsupported transaction type: %d", tx)
 	}
 
-	// Get higher gas parameters
+	// Get higher gas price
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	gasPrice, maxFeePerGas, maxPriorityFeePerGas, err := nm.getOptimalGasParams(ctx)
+	gasPrice, err := nm.getOptimalGasParams(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get gas parameters for replacement: %w", err)
+		return nil, fmt.Errorf("failed to get gas price for replacement: %w", err)
 	}
 
 	// Increase fees by 20% for each attempt
 	feeMultiplier := big.NewInt(int64(120 + (attempt * 20))) // 120%, 140%, 160%, etc.
 	feeDivisor := big.NewInt(100)
 
-	if maxFeePerGas != nil && maxPriorityFeePerGas != nil {
-		// EIP-1559 replacement
-		maxFeePerGas.Mul(maxFeePerGas, feeMultiplier)
-		maxFeePerGas.Div(maxFeePerGas, feeDivisor)
-		maxPriorityFeePerGas.Mul(maxPriorityFeePerGas, feeMultiplier)
-		maxPriorityFeePerGas.Div(maxPriorityFeePerGas, feeDivisor)
-
-		tx := types.NewTx(&types.DynamicFeeTx{
-			ChainID:   chainID,
-			Nonce:     originalTx.Nonce(),
-			GasTipCap: maxPriorityFeePerGas,
-			GasFeeCap: maxFeePerGas,
-			Gas:       300000,
-			To:        &to,
-			Value:     big.NewInt(0),
-			Data:      data,
-		})
-
-		// Test if we can sign this transaction type
-		_, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-		if err == nil {
-			return tx, nil
-		}
-		nm.logger.Warnf("EIP-1559 replacement transaction signing failed, falling back to legacy: %v", err)
-	}
-
-	// Legacy replacement
-	if gasPrice == nil {
-		return nil, fmt.Errorf("gas price is required for legacy replacement transaction")
-	}
-
 	gasPrice.Mul(gasPrice, feeMultiplier)
 	gasPrice.Div(gasPrice, feeDivisor)
 
-	return types.NewTransaction(originalTx.Nonce(), to, big.NewInt(0), 300000, gasPrice, data), nil
+	// Create and sign the replacement transaction
+	tx := types.NewTransaction(originalTx.Nonce(), to, big.NewInt(0), 300000, gasPrice, data)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign replacement transaction: %w", err)
+	}
+
+	return signedTx, nil
 }
 
 // Helper methods for transaction tracking

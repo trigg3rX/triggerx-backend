@@ -166,3 +166,15 @@ func (a *ApiKeyAuth) isKeeperApiKey(key string) (bool, error) {
 
 	return isKeeper, nil
 }
+
+// Public wrapper methods for WebSocket authentication
+
+// GetApiKey validates and retrieves API key data (public wrapper for getApiKey)
+func (a *ApiKeyAuth) GetApiKey(key string) (*types.ApiKey, error) {
+	return a.getApiKey(key)
+}
+
+// UpdateLastUsed updates the last used timestamp for an API key (public wrapper for updateLastUsed)
+func (a *ApiKeyAuth) UpdateLastUsed(key string) {
+	a.updateLastUsed(key)
+}

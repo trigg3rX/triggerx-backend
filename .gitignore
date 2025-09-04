@@ -9,17 +9,11 @@ release/*
 .cursor 
 .keystore
 
-# othentic
-othentic/.keystore/*
-othentic/data/peerstore/*
-!othentic/data/peerstore/.gitkeep
-othentic/data/logs/*
-!othentic/data/logs/.gitkeep
-
 # data
 data/cache/*
 !data/cache/.gitkeep
-data/logs/*/*.log
+data/logs/*/*.log*
+data/logs/*/*.json
 !data/logs/*/.gitkeep
 
 # Signing keys

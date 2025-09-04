@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
+	dbserverTypes "github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	dbserverTypes "github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -43,7 +45,7 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 	}
 
 	// Create Task in Database
-	taskID, err := s.dbClient.CreateTask(createTaskRequest)
+	taskID, err := s.dbClient.CreateTask(context.Background(), createTaskRequest)
 	if err != nil {
 		s.logger.Error("Failed to create task in database", "job_id", notification.JobID, "error", err)
 		return fmt.Errorf("failed to create task in database: %w", err)
@@ -158,36 +160,61 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID *big.Int) (bool, error) {
 	startTime := time.Now()
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create retry configuration for task dispatcher calls
+	retryConfig := &retry.RetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    1 * time.Second,
+		MaxDelay:        10 * time.Second,
+		BackoffFactor:   2.0,
+		JitterFactor:    0.2,
+		LogRetryAttempt: true,
+		ShouldRetry: func(err error, attempt int) bool {
+			// Retry on network errors, timeouts, and temporary failures
+			// Don't retry on permanent errors like invalid requests
+			return err != nil && !strings.Contains(err.Error(), "invalid") &&
+				!strings.Contains(err.Error(), "permission denied")
+		},
+	}
+
+	// Create context with timeout for the entire retry operation
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Make RPC call to task dispatcher
-	var response types.TaskManagerAPIResponse
-	err := s.taskDispatcherClient.Call(ctx, "submit-task", &request, &response)
+	// Define the operation to retry
+	operation := func() (bool, error) {
+		// Create context with timeout for individual RPC call
+		rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer rpcCancel()
+
+		// Make RPC call to task dispatcher
+		var response types.TaskManagerAPIResponse
+		err := s.taskDispatcherClient.Call(rpcCtx, "submit-task", &request, &response)
+		if err != nil {
+			return false, fmt.Errorf("RPC call failed: %w", err)
+		}
+
+		if !response.Success {
+			return false, fmt.Errorf("task dispatcher processing failed: %s - %s", response.Message, response.Error)
+		}
+
+		return true, nil
+	}
+
+	// Execute with retry logic
+	success, err := retry.Retry(ctx, operation, retryConfig, s.logger)
 	if err != nil {
-		s.logger.Error("Failed to submit task to task dispatcher via RPC",
+		duration := time.Since(startTime)
+		s.logger.Error("Failed to submit task to task dispatcher after retries",
 			"task_id", taskID,
-			"error", err)
-		return false, fmt.Errorf("failed to submit task to task dispatcher: %w", err)
+			"error", err,
+			"duration", duration)
+		return false, err
 	}
 
 	duration := time.Since(startTime)
-
-	if !response.Success {
-		s.logger.Error("Task dispatcher processing failed",
-			"task_id", taskID,
-			"message", response.Message,
-			"error", response.Error,
-			"duration", duration)
-		return false, fmt.Errorf("task dispatcher processing failed: %s", response.Error)
-	}
-
 	s.logger.Info("Successfully submitted task to task dispatcher",
 		"task_id", taskID,
-		"response_task_ids", response.TaskID,
-		"duration", duration,
-		"message", response.Message)
+		"duration", duration)
 
-	return true, nil
+	return success, nil
 }

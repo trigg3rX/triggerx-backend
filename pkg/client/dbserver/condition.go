@@ -2,6 +2,7 @@ package dbserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +11,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
-func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskDataRequest) (int64, error) {
+func (c *DBServerClient) CreateTask(ctx context.Context, createTaskData types.CreateTaskDataRequest) (int64, error) {
 	url := fmt.Sprintf("%s/api/tasks", c.dbserverUrl)
 
 	jsonPayload, err := json.Marshal(createTaskData)
@@ -18,13 +19,13 @@ func (c *DBServerClient) CreateTask(createTaskData types.CreateTaskDataRequest) 
 		return -1, fmt.Errorf("failed to marshal create task data: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return -1, fmt.Errorf("failed to create task: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.DoWithRetry(req)
+	resp, err := c.httpClient.DoWithRetry(ctx, req)
 	if err != nil {
 		return -1, fmt.Errorf("failed to create task: %v", err)
 	}

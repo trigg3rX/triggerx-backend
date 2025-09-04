@@ -228,13 +228,17 @@ func decryptBLS(keystore BLSKeystore, password string) ([]byte, error) {
 }
 
 // GenerateBLSKeystore creates an encrypted BLS keystore in EIP-2335 format
+// GenerateBLSKeystore creates an encrypted BLS keystore in EIP-2335 format
 func GenerateBLSKeystore(keystorePath string) (string, error) {
-	// Generate random 32 bytes for the private key scalar
-	privateKeyBytes := make([]byte, 32)
-	_, err := rand.Read(privateKeyBytes)
+	// Generate a valid BLS private key using the BLS library
+	// This ensures the key is within the valid range
+	secretKey, err := bls.RandKey()
 	if err != nil {
-		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+		return "", fmt.Errorf("failed to generate BLS private key: %w", err)
 	}
+
+	// Get the raw bytes from the secret key
+	privateKeyBytes := secretKey.Marshal()
 
 	// Get password for encryption
 	password, err := getPasswordSecurely("Enter password for BLS keystore: ")

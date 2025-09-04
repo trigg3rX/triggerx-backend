@@ -13,15 +13,6 @@ import (
 )
 
 func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, task TaskStreamData) (bool, error) {
-	success, err := tsm.addTaskToStream(ctx, StreamTaskDispatched, &task)
-	if err != nil {
-		return false, err
-	}
-
-	if !success {
-		return false, fmt.Errorf("failed to add task to stream")
-	}
-
 	// Prepare payload identical to previous implementation
 	jsonData, err := json.Marshal(task.SendTaskDataToKeeper)
 	if err != nil {
@@ -36,7 +27,12 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		Data:             []byte(jsonData),
 	}
 
-	success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	var success bool
+	if task.IsMainnet {
+		success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	} else {
+		success, err = tsm.testAggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	}
 	if err != nil {
 		tsm.logger.Error("Failed to send task to aggregator", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
 		return false, err
@@ -44,6 +40,15 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	if !success {
 		tsm.logger.Warn("Aggregator send returned unsuccessful", "task_id", task.SendTaskDataToKeeper.TaskID[0])
 		return false, fmt.Errorf("aggregator send unsuccessful")
+	}
+
+	success, err = tsm.addTaskToStream(ctx, StreamTaskDispatched, &task)
+	if err != nil {
+		return false, err
+	}
+
+	if !success {
+		return false, fmt.Errorf("failed to add task to stream")
 	}
 	return true, nil
 }
@@ -81,6 +86,28 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 			"duration", duration,
 			"error", err)
 		return false, fmt.Errorf("failed to add task to stream: %w", err)
+	}
+
+	// Store the task index mapping for efficient lookup
+	if stream == StreamTaskDispatched {
+		taskID := task.SendTaskDataToKeeper.TaskID[0]
+		err = tsm.storeTaskIndex(ctx, taskID, res)
+		if err != nil {
+			tsm.logger.Warn("Failed to store task index, but task was added to stream",
+				"task_id", taskID,
+				"message_id", res,
+				"error", err)
+			// Don't fail the entire operation if index storage fails
+		}
+
+		// Add task to timeout tracking
+		err = tsm.addTaskToTimeoutTracking(ctx, taskID)
+		if err != nil {
+			tsm.logger.Warn("Failed to add task to timeout tracking, but task was added to stream",
+				"task_id", taskID,
+				"error", err)
+			// Don't fail the entire operation if timeout tracking fails
+		}
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()

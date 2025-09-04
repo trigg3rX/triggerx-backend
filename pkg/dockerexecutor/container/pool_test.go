@@ -370,7 +370,8 @@ func TestContainerPool_createTempDirectory_Success(t *testing.T) {
 	assert.Contains(t, tmpDir, "docker-container-go")
 
 	// Cleanup
-	os.RemoveAll(tmpDir)
+	err = os.RemoveAll(tmpDir)
+	assert.NoError(t, err)
 }
 
 // TestContainerPool_ConcurrentAccess tests concurrent access to the container pool
@@ -561,7 +562,8 @@ func TestContainerPool_ReturnContainer_SignalsWaiter(t *testing.T) {
 	}
 	pool := newContainerPool(cfg, mockManager, mockLogger)
 	ctx := context.Background()
-	pool.initialize(ctx) // Creates one container
+	err := pool.initialize(ctx) // Creates one container
+	assert.NoError(t, err)
 
 	// Get the only container, making the pool busy
 	c1, err := pool.getContainer(ctx)
@@ -580,7 +582,8 @@ func TestContainerPool_ReturnContainer_SignalsWaiter(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	// Act: Return the container. This should unblock the waiter.
-	pool.returnContainer(c1)
+	err = pool.returnContainer(c1)
+	assert.NoError(t, err)
 
 	// Assert: The waiter goroutine should complete
 	select {
@@ -697,6 +700,7 @@ func BenchmarkContainerPool_GetContainer(b *testing.B) {
 			b.Fatal("Container is nil")
 		}
 		// Return container for next iteration
-		pool.returnContainer(container)
+		err = pool.returnContainer(container)
+		assert.NoError(b, err)
 	}
 }

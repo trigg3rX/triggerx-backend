@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"time"
@@ -19,8 +20,8 @@ func (m *MockHTTPClient) OnGet(url string) *mock.Call {
 }
 
 // DoWithRetry mocks the DoWithRetry method
-func (m *MockHTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) {
-	args := m.Called(req)
+func (m *MockHTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
+	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -28,8 +29,8 @@ func (m *MockHTTPClient) DoWithRetry(req *http.Request) (*http.Response, error) 
 }
 
 // Get mocks the Get method
-func (m *MockHTTPClient) Get(url string) (*http.Response, error) {
-	args := m.Called(url)
+func (m *MockHTTPClient) Get(ctx context.Context, url string) (*http.Response, error) {
+	args := m.Called(ctx, url)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -37,8 +38,8 @@ func (m *MockHTTPClient) Get(url string) (*http.Response, error) {
 }
 
 // Post mocks the Post method
-func (m *MockHTTPClient) Post(url, contentType string, body io.Reader) (*http.Response, error) {
-	args := m.Called(url, contentType, body)
+func (m *MockHTTPClient) Post(ctx context.Context, url, contentType string, body io.Reader) (*http.Response, error) {
+	args := m.Called(ctx, url, contentType, body)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -46,8 +47,8 @@ func (m *MockHTTPClient) Post(url, contentType string, body io.Reader) (*http.Re
 }
 
 // Put mocks the Put method
-func (m *MockHTTPClient) Put(url, contentType string, body io.Reader) (*http.Response, error) {
-	args := m.Called(url, contentType, body)
+func (m *MockHTTPClient) Put(ctx context.Context, url, contentType string, body io.Reader) (*http.Response, error) {
+	args := m.Called(ctx, url, contentType, body)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -55,8 +56,8 @@ func (m *MockHTTPClient) Put(url, contentType string, body io.Reader) (*http.Res
 }
 
 // Delete mocks the Delete method
-func (m *MockHTTPClient) Delete(url string) (*http.Response, error) {
-	args := m.Called(url)
+func (m *MockHTTPClient) Delete(ctx context.Context, url string) (*http.Response, error) {
+	args := m.Called(ctx, url)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

@@ -2,6 +2,7 @@
 package worker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -296,12 +297,12 @@ func (w *ConditionWorker) parseDirectValue(body []byte) (float64, error) {
 
 // fetchFromAPI fetches value from an HTTP API endpoint
 func (w *ConditionWorker) fetchFromAPI() (float64, error) {
-	req, err := http.NewRequest("GET", w.ConditionWorkerData.ValueSourceUrl, nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", w.ConditionWorkerData.ValueSourceUrl, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := w.HttpClient.DoWithRetry(req)
+	resp, err := w.HttpClient.DoWithRetry(context.Background(), req)
 	if err != nil {
 		metrics.TrackHTTPRequest("GET", w.ConditionWorkerData.ValueSourceUrl, "error")
 		metrics.TrackHTTPClientConnectionError()

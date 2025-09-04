@@ -50,7 +50,7 @@ func (c *DBServerClient) HealthCheck() error {
 		return fmt.Errorf("failed to create health check request: %v", err)
 	}
 
-	resp, err := c.httpClient.DoWithRetry(req)
+	resp, err := c.httpClient.DoWithRetry(ctx, req)
 	if err != nil {
 		return fmt.Errorf("health check request failed: %v", err)
 	}

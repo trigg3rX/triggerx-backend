@@ -30,6 +30,7 @@ type TaskManager struct {
 	redisClient         *redisClient.Client
 	taskStreamManager   *tasks.TaskStreamManager
 	eventListener       *events.ContractEventListener
+	testEventListener   *events.ContractEventListener
 	metricsUpdateTicker *time.Ticker
 	ctx                 context.Context
 	cancel              context.CancelFunc
@@ -98,13 +99,15 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	}
 
 	// Initialize event listener
-	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig(), databaseClient, ipfsClient, taskStreamManager)
+	eventListener := events.NewContractEventListener(logger, events.GetMainnetConfig(), databaseClient, ipfsClient, taskStreamManager)
+	testEventListener := events.NewContractEventListener(logger, events.GetTestnetConfig(), databaseClient, ipfsClient, taskStreamManager)
 
 	tm := &TaskManager{
 		logger:              logger,
 		redisClient:         client,
 		taskStreamManager:   taskStreamManager,
 		eventListener:       eventListener,
+		testEventListener:   testEventListener,
 		metricsUpdateTicker: time.NewTicker(config.GetMetricsUpdateInterval()),
 		ctx:                 ctx,
 		cancel:              cancel,
@@ -133,8 +136,13 @@ func (tm *TaskManager) Initialize() error {
 		tm.logger.Info("Falling back to polling mode")
 	}
 
+	if err := tm.testEventListener.Start(); err != nil {
+		tm.logger.Errorf("Failed to start test event listener: %v", err)
+		tm.logger.Info("Falling back to polling mode")
+	}
+
 	// Start background workers with proper synchronization
-	tm.shutdownWg.Add(2) // Track all background goroutines
+	tm.shutdownWg.Add(3) // Track all background goroutines
 
 	go func() {
 		defer tm.shutdownWg.Done()
@@ -269,6 +277,10 @@ func (tm *TaskManager) Close() error {
 	// Stop event listener
 	if err := tm.eventListener.Stop(); err != nil {
 		tm.logger.Errorf("Error stopping event listener: %v", err)
+	}
+
+	if err := tm.testEventListener.Stop(); err != nil {
+		tm.logger.Errorf("Error stopping test event listener: %v", err)
 	}
 
 	// Stop metrics ticker

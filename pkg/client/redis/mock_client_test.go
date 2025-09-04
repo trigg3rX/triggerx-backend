@@ -25,6 +25,11 @@ type MockRedisClient struct {
 	MockSetNX                         func(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error)
 	MockDel                           func(ctx context.Context, keys ...string) error
 	MockDelWithCount                  func(ctx context.Context, keys ...string) (deletedCount int64, err error)
+	MockHSet                          func(ctx context.Context, key string, values ...interface{}) error
+	MockHGet                          func(ctx context.Context, key, field string) (string, error)
+	MockHGetWithExists                func(ctx context.Context, key, field string) (value string, exists bool, err error)
+	MockHDel                          func(ctx context.Context, key string, fields ...string) error
+	MockHDelWithCount                 func(ctx context.Context, key string, fields ...string) (deletedCount int64, err error)
 	MockScan                          func(ctx context.Context, cursor uint64, options *ScanOptions) (*ScanResult, error)
 	MockScanAll                       func(ctx context.Context, options *ScanOptions) ([]string, error)
 	MockScanKeysByPattern             func(ctx context.Context, pattern string, count int64) (*ScanResult, error)
@@ -43,6 +48,7 @@ type MockRedisClient struct {
 	MockZAdd                          func(ctx context.Context, key string, members ...redis.Z) (int64, error)
 	MockZAddWithExists                func(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
 	MockZRevRange                     func(ctx context.Context, key string, start, stop int64) ([]string, error)
+	MockZRangeByScore                 func(ctx context.Context, key, min, max string) ([]string, error)
 	MockZRemRangeByScore              func(ctx context.Context, key, min, max string) (int64, error)
 	MockZCard                         func(ctx context.Context, key string) (int64, error)
 	MockTTL                           func(ctx context.Context, key string) (time.Duration, error)
@@ -160,6 +166,47 @@ func (m *MockRedisClient) DelWithCount(ctx context.Context, keys ...string) (del
 		return m.MockDelWithCount(ctx, keys...)
 	}
 	m.t.Fatal("unexpected call to MockRedisClient.DelWithCount")
+	return 0, nil
+}
+
+// Hash operation mock implementations
+func (m *MockRedisClient) HSet(ctx context.Context, key string, values ...interface{}) error {
+	if m.MockHSet != nil {
+		return m.MockHSet(ctx, key, values...)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.HSet")
+	return nil
+}
+
+func (m *MockRedisClient) HGet(ctx context.Context, key, field string) (string, error) {
+	if m.MockHGet != nil {
+		return m.MockHGet(ctx, key, field)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.HGet")
+	return "", nil
+}
+
+func (m *MockRedisClient) HGetWithExists(ctx context.Context, key, field string) (value string, exists bool, err error) {
+	if m.MockHGetWithExists != nil {
+		return m.MockHGetWithExists(ctx, key, field)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.HGetWithExists")
+	return "", false, nil
+}
+
+func (m *MockRedisClient) HDel(ctx context.Context, key string, fields ...string) error {
+	if m.MockHDel != nil {
+		return m.MockHDel(ctx, key, fields...)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.HDel")
+	return nil
+}
+
+func (m *MockRedisClient) HDelWithCount(ctx context.Context, key string, fields ...string) (deletedCount int64, err error) {
+	if m.MockHDelWithCount != nil {
+		return m.MockHDelWithCount(ctx, key, fields...)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.HDelWithCount")
 	return 0, nil
 }
 
@@ -304,6 +351,14 @@ func (m *MockRedisClient) ZRevRange(ctx context.Context, key string, start, stop
 		return m.MockZRevRange(ctx, key, start, stop)
 	}
 	m.t.Fatal("unexpected call to MockRedisClient.ZRevRange")
+	return nil, nil
+}
+
+func (m *MockRedisClient) ZRangeByScore(ctx context.Context, key, min, max string) ([]string, error) {
+	if m.MockZRangeByScore != nil {
+		return m.MockZRangeByScore(ctx, key, min, max)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.ZRangeByScore")
 	return nil, nil
 }
 

@@ -2,9 +2,11 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -26,12 +28,21 @@ type TaskRepository interface {
 }
 
 type taskRepository struct {
-	db *database.Connection
+	db        *database.Connection
+	publisher *events.Publisher
 }
 
 func NewTaskRepository(db *database.Connection) TaskRepository {
 	return &taskRepository{
 		db: db,
+	}
+}
+
+// NewTaskRepositoryWithPublisher creates a new task repository with WebSocket publisher
+func NewTaskRepositoryWithPublisher(db *database.Connection, publisher *events.Publisher) TaskRepository {
+	return &taskRepository{
+		db:        db,
+		publisher: publisher,
 	}
 }
 
@@ -41,11 +52,21 @@ func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (
 	if err != nil {
 		return -1, errors.New("error getting max task ID")
 	}
-	err = r.db.Session().Query(queries.CreateTaskDataQuery, maxTaskID+1, task.JobID, task.TaskDefinitionID, time.Now(), task.IsImua).Exec()
+
+	taskID := maxTaskID + 1
+	err = r.db.Session().Query(queries.CreateTaskDataQuery, taskID, task.JobID, task.TaskDefinitionID, time.Now(), task.IsImua).Exec()
 	if err != nil {
 		return -1, errors.New("error creating task data")
 	}
-	return maxTaskID + 1, nil
+
+	// Emit WebSocket event for task creation
+	if r.publisher != nil {
+		// Extract user ID from job data if available
+		userID := r.getUserIDFromJobID(task.JobID)
+		r.publisher.PublishTaskCreated(taskID, task.JobID.String(), int64(task.TaskDefinitionID), task.IsImua, userID)
+	}
+
+	return taskID, nil
 }
 
 func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) error {
@@ -61,6 +82,22 @@ func (r *taskRepository) UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecu
 	if err != nil {
 		return errors.New("error updating task execution data")
 	}
+
+	// Emit WebSocket event for task update
+	if r.publisher != nil {
+		jobID := r.getJobIDFromTaskID(task.TaskID)
+		userID := r.getUserIDFromJobID(jobID)
+
+		updateEvent := &events.TaskUpdatedEvent{
+			TaskPerformerID:    &task.TaskPerformerID,
+			ExecutionTimestamp: &task.ExecutionTimestamp,
+			ExecutionTxHash:    &task.ExecutionTxHash,
+			ProofOfTask:        &task.ProofOfTask,
+			TaskOpXCost:        &task.TaskOpXCost,
+		}
+		r.publisher.PublishTaskUpdated(task.TaskID, jobID.String(), userID, updateEvent)
+	}
+
 	return nil
 }
 
@@ -69,14 +106,58 @@ func (r *taskRepository) UpdateTaskAttestationDataInDB(task *types.UpdateTaskAtt
 	if err != nil {
 		return errors.New("error updating task attestation data")
 	}
+
+	// Emit WebSocket event for task attestation update
+	if r.publisher != nil {
+		jobID := r.getJobIDFromTaskID(task.TaskID)
+		userID := r.getUserIDFromJobID(jobID)
+
+		// Convert types for WebSocket event
+		taskAttesterIDsStr := ""
+		if len(task.TaskAttesterIDs) > 0 {
+			// Convert []int64 to string representation
+			taskAttesterIDsStr = fmt.Sprintf("%v", task.TaskAttesterIDs)
+		}
+		tpSignatureStr := ""
+		if len(task.TpSignature) > 0 {
+			tpSignatureStr = string(task.TpSignature)
+		}
+		taSignatureStr := ""
+		if len(task.TaSignature) > 0 {
+			taSignatureStr = string(task.TaSignature)
+		}
+
+		updateEvent := &events.TaskUpdatedEvent{
+			TaskNumber:           &task.TaskNumber,
+			TaskAttesterIDs:      &taskAttesterIDsStr,
+			TpSignature:          &tpSignatureStr,
+			TaSignature:          &taSignatureStr,
+			TaskSubmissionTxHash: &task.TaskSubmissionTxHash,
+			IsSuccessful:         &task.IsSuccessful,
+		}
+		r.publisher.PublishTaskUpdated(task.TaskID, jobID.String(), userID, updateEvent)
+	}
+
 	return nil
 }
 
 func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error {
+	// Get old status for comparison
+	oldStatus := r.getTaskStatus(taskID)
+
 	err := r.db.Session().Query(queries.UpdateTaskNumberAndStatusQuery, taskNumber, status, txHash, taskID).Exec()
 	if err != nil {
 		return errors.New("error updating task number and status")
 	}
+
+	// Emit WebSocket event for task status change
+	if r.publisher != nil {
+		jobID := r.getJobIDFromTaskID(taskID)
+		userID := r.getUserIDFromJobID(jobID)
+
+		r.publisher.PublishTaskStatusChanged(taskID, jobID.String(), oldStatus, status, userID, &taskNumber, &txHash)
+	}
+
 	return nil
 }
 
@@ -135,10 +216,22 @@ func (r *taskRepository) AddTaskIDToJob(jobID *big.Int, taskID int64) error {
 }
 
 func (r *taskRepository) UpdateTaskFee(taskID int64, fee float64) error {
+	// Get old fee for comparison
+	oldFee, _ := r.GetTaskFee(taskID)
+
 	err := r.db.Session().Query(queries.UpdateTaskFeeQuery, fee, taskID).Exec()
 	if err != nil {
 		return errors.New("error updating task fee")
 	}
+
+	// Emit WebSocket event for task fee update
+	if r.publisher != nil {
+		jobID := r.getJobIDFromTaskID(taskID)
+		userID := r.getUserIDFromJobID(jobID)
+
+		r.publisher.PublishTaskFeeUpdated(taskID, jobID.String(), oldFee, fee, userID)
+	}
+
 	return nil
 }
 
@@ -158,4 +251,32 @@ func (r *taskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error
 		return "", errors.New("error getting created chain ID by job ID")
 	}
 	return createdChainID, nil
+}
+
+// Helper methods for WebSocket event emission
+
+// getJobIDFromTaskID retrieves job ID for a given task ID
+func (r *taskRepository) getJobIDFromTaskID(taskID int64) *big.Int {
+	taskData, err := r.GetTaskDataByID(taskID)
+	if err != nil {
+		return big.NewInt(0)
+	}
+	return taskData.JobID.ToBigInt()
+}
+
+// getUserIDFromJobID retrieves user ID for a given job ID
+func (r *taskRepository) getUserIDFromJobID(jobID *big.Int) string {
+	// This is a simplified implementation
+	// In production, you would query the job_data table to get the user_id
+	// For now, we'll return a default value
+	return "system"
+}
+
+// getTaskStatus retrieves the current status of a task
+func (r *taskRepository) getTaskStatus(taskID int64) string {
+	taskData, err := r.GetTaskDataByID(taskID)
+	if err != nil {
+		return ""
+	}
+	return taskData.TaskStatus
 }

@@ -368,7 +368,8 @@ func TestManager_ExecuteInContainer_FileReadFailure(t *testing.T) {
 	// Create a running mock container
 	resp, _ := mockDockerClient.ContainerCreate(ctx, &container.Config{}, &container.HostConfig{}, nil, nil, "")
 	containerID := resp.ID
-	mockDockerClient.ContainerStart(ctx, containerID, container.StartOptions{})
+	err := mockDockerClient.ContainerStart(ctx, containerID, container.StartOptions{})
+	require.NoError(t, err)
 
 	// Mock file read failure
 	mockFileSystem.SetReadFileResultFunc(func(filename string) ([]byte, error) {
@@ -478,7 +479,8 @@ func TestManager_ExecuteInContainer_Success(t *testing.T) {
 	// Create a running mock container
 	resp, _ := mockDockerClient.ContainerCreate(ctx, &container.Config{}, &container.HostConfig{}, nil, nil, "")
 	containerID := resp.ID
-	mockDockerClient.ContainerStart(ctx, containerID, container.StartOptions{})
+	err := mockDockerClient.ContainerStart(ctx, containerID, container.StartOptions{})
+	require.NoError(t, err)
 
 	// Mock file read
 	mockFileSystem.SetReadFileResultFunc(func(filename string) ([]byte, error) {
@@ -514,7 +516,8 @@ func TestManager_ExecuteInContainer_ExecFailure(t *testing.T) {
 	// Create a running mock container
 	resp, _ := mockDockerClient.ContainerCreate(ctx, &container.Config{}, &container.HostConfig{}, nil, nil, "")
 	containerID := resp.ID
-	mockDockerClient.ContainerStart(ctx, containerID, container.StartOptions{})
+	err := mockDockerClient.ContainerStart(ctx, containerID, container.StartOptions{})
+	require.NoError(t, err)
 
 	// Mock file read
 	mockFileSystem.SetReadFileResultFunc(func(filename string) ([]byte, error) {
@@ -583,8 +586,10 @@ func TestManager_Close_CallsPoolClose(t *testing.T) {
 	ctx := context.Background()
 
 	// Initialize to create pools
-	manager.Initialize(ctx)
-	manager.InitializeLanguagePools(ctx, []types.Language{types.LanguageGo})
+	err := manager.Initialize(ctx)
+	require.NoError(t, err)
+	err = manager.InitializeLanguagePools(ctx, []types.Language{types.LanguageGo})
+	require.NoError(t, err)
 
 	// Get the pool to check its state later
 	pool := manager.pools[types.LanguageGo]
@@ -592,7 +597,8 @@ func TestManager_Close_CallsPoolClose(t *testing.T) {
 	// Add a container to the pool to verify it gets cleaned up
 	container, err := pool.getContainer(ctx)
 	require.NoError(t, err)
-	pool.returnContainer(container)
+	err = pool.returnContainer(container)
+	require.NoError(t, err)
 	assert.Equal(t, 1, pool.getStats().TotalContainers)
 
 	// Close the manager

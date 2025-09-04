@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 
+	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -45,12 +46,16 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	// Track database operation for checking wallet balance
 	trackDBOp := metrics.TrackDBOperation("read", "wallet_balance")
 
+	h.logger.Infof("[ClaimFund] trace_id=%s - Network: %s", traceID, req.Network)
+
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
 		rpcURL = fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "base_sepolia":
 		rpcURL = fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "arbitrum_sepolia":
+		rpcURL = fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid network specified"})
 		return
@@ -109,14 +114,34 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	// Estimate gas limit for the transfer to avoid hardcoded 21000
+	callMsg := ethereum.CallMsg{From: fromAddress, To: &address, Value: thresholdWei}
+	gasLimit, err := client.EstimateGas(context.Background(), callMsg)
 	if err != nil {
-		h.logger.Errorf("Failed to get gas price: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gas price"})
+		h.logger.Errorf("Failed to estimate gas, falling back to 21000: %v", err)
+		gasLimit = 21000
+	}
+
+	// Use EIP-1559 dynamic fees
+	maxPriorityFeePerGas, err := client.SuggestGasTipCap(context.Background())
+	if err != nil {
+		h.logger.Errorf("Failed to get gas tip cap: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gas tip cap"})
 		return
 	}
 
-	tx := types.NewTransaction(nonce, address, thresholdWei, 21000, gasPrice, nil)
+	header, err := client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		h.logger.Errorf("Failed to get latest header: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest header"})
+		return
+	}
+	baseFee := big.NewInt(0)
+	if header.BaseFee != nil {
+		baseFee = new(big.Int).Set(header.BaseFee)
+	}
+	maxFeePerGas := new(big.Int).Add(new(big.Int).Mul(baseFee, big.NewInt(2)), maxPriorityFeePerGas)
+
 	chainID, err := client.NetworkID(context.Background())
 	if err != nil {
 		h.logger.Errorf("Failed to get chain ID: %v", err)
@@ -124,7 +149,18 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		GasTipCap: maxPriorityFeePerGas,
+		GasFeeCap: maxFeePerGas,
+		Gas:       gasLimit,
+		To:        &address,
+		Value:     thresholdWei,
+		Data:      nil,
+	})
+
+	signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(chainID), privateKey)
 	if err != nil {
 		h.logger.Errorf("Failed to sign transaction: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign transaction"})
@@ -138,6 +174,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
+	h.logger.Infof("[ClaimFund] trace_id=%s - Fund sent successfully", traceID)
 	c.JSON(http.StatusOK, ClaimFundResponse{
 		Success:         true,
 		Message:         "Funds sent successfully",

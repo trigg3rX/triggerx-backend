@@ -179,7 +179,7 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 	}
 	decodedData = string(dataBytes)
 
-	ipfsData, err := h.ipfsClient.Fetch(decodedData)
+	ipfsData, err := h.ipfsClient.Fetch(context.Background(), decodedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch IPFS content: %v", err)
 	}

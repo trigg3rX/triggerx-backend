@@ -167,7 +167,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 
 	// Handle different versions according to requirements
 	switch keeperHealth.Version {
-	case "0.1.6", "0.2.0":
+	case "0.1.6", "0.2.0", "1.0.0":
 		// Latest version - return msgData with no warning
 		var message string
 		if keeperHealth.IsImua {
@@ -186,7 +186,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 				config.GetPinataHost(),
 				config.GetPinataJWT(),
 				config.GetManagerSigningAddress(),
-				config.GetEigenlayerTaskExecutionAddress(),
+				config.GetTaskExecutionAddress(),
 			)
 		}
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)

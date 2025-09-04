@@ -29,10 +29,10 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	switch targetData.TaskDefinitionID {
 	case 1:
 		timeToNextTrigger = time.Until(triggerData.NextTriggerTimestamp)
-		timeToNextTrigger = timeToNextTrigger - 2*time.Second
+		timeToNextTrigger = timeToNextTrigger - 4*time.Second
 	case 2:
 		timeToNextTrigger = time.Until(triggerData.NextTriggerTimestamp)
-		timeToNextTrigger = timeToNextTrigger - 4*time.Second
+		timeToNextTrigger = timeToNextTrigger - 6*time.Second
 		if timeToNextTrigger < 0 {
 			timeToNextTrigger = 0
 		}
@@ -137,7 +137,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 
 	// Submit transaction with smart retry
-	receipt, finalTxHash, err := nonceManager.SubmitTransactionWithSmartRetry(
+	receipt, finalTxHash, err := nonceManager.SubmitTransaction(
 		context.Background(),
 		nonce,
 		ethcommon.HexToAddress(executionContractAddress),

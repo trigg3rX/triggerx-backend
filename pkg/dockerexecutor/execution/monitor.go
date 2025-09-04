@@ -249,15 +249,6 @@ func (em *executionMonitor) clearAlerts() {
 	em.logger.Info("All alerts cleared")
 }
 
-func (em *executionMonitor) getMetrics() *types.PerformanceMetrics {
-	em.mutex.RLock()
-	defer em.mutex.RUnlock()
-
-	// Create a copy to avoid race conditions
-	metrics := *em.metrics
-	return &metrics
-}
-
 func (em *executionMonitor) getActiveExecutions() []*types.ExecutionContext {
 	return em.pipeline.getActiveExecutions()
 }

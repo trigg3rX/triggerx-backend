@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -113,7 +114,7 @@ func main() {
 	url := "https://example.com/test.go"
 
 	// Act
-	result, err := downloader.downloadFile(key, url, "go")
+	result, err := downloader.downloadFile(context.Background(), key, url, "go")
 
 	// Assert
 	assert.NoError(t, err)
@@ -161,7 +162,7 @@ func TestDownloader_DownloadFile_HTTPError_ReturnsError(t *testing.T) {
 	url := "https://example.com/error.go"
 
 	// Act
-	result, err := downloader.downloadFile(key, url, "go")
+	result, err := downloader.downloadFile(context.Background(), key, url, "go")
 
 	// Assert
 	assert.Error(t, err)
@@ -203,7 +204,7 @@ func TestDownloader_DownloadFile_HTTPStatusError_ReturnsError(t *testing.T) {
 	url := "https://example.com/notfound.go"
 
 	// Act
-	result, err := downloader.downloadFile(key, url, "go")
+	result, err := downloader.downloadFile(context.Background(), key, url, "go")
 
 	// Assert
 	assert.Error(t, err)
@@ -246,7 +247,7 @@ func TestDownloader_DownloadFile_ValidationFails_ReturnsResultWithErrors(t *test
 	url := "https://example.com/large.go"
 
 	// Act
-	result, err := downloader.downloadFile(key, url, "go")
+	result, err := downloader.downloadFile(context.Background(), key, url, "go")
 
 	// Assert
 	assert.NoError(t, err) // Download succeeds
@@ -298,7 +299,7 @@ func main() {
 	url := "https://example.com/dangerous.go"
 
 	// Act
-	result, err := downloader.downloadFile(key, url, "go")
+	result, err := downloader.downloadFile(context.Background(), key, url, "go")
 
 	// Assert
 	assert.NoError(t, err) // Download succeeds
@@ -349,12 +350,12 @@ func main() {
 	httpClient.On("Get", url).Return(mockResponse, nil).Once()
 
 	// First call to populate cache
-	result1, err := downloader.downloadFile(key, url, "go")
+	result1, err := downloader.downloadFile(context.Background(), key, url, "go")
 	require.NoError(t, err)
 	require.NotNil(t, result1)
 
 	// Second call should hit cache (no HTTP call)
-	result2, err := downloader.downloadFile(key, url, "go")
+	result2, err := downloader.downloadFile(context.Background(), key, url, "go")
 
 	// Assert
 	assert.NoError(t, err)
@@ -397,7 +398,7 @@ func TestDownloader_DownloadContent_ValidResponse_ReturnsContent(t *testing.T) {
 	httpClient.On("Get", "https://example.com/test.txt").Return(mockResponse, nil)
 
 	// Act
-	content, err := downloader.downloadContent("https://example.com/test.txt")
+	content, err := downloader.downloadContent(context.Background(), "https://example.com/test.txt")
 
 	// Assert
 	assert.NoError(t, err)
@@ -430,7 +431,7 @@ func TestDownloader_DownloadContent_HTTPError_ReturnsError(t *testing.T) {
 	httpClient.On("Get", "https://example.com/error.txt").Return(nil, assert.AnError)
 
 	// Act
-	content, err := downloader.downloadContent("https://example.com/error.txt")
+	content, err := downloader.downloadContent(context.Background(), "https://example.com/error.txt")
 
 	// Assert
 	assert.Error(t, err)
@@ -468,7 +469,7 @@ func TestDownloader_DownloadContent_NonOKStatus_ReturnsError(t *testing.T) {
 	httpClient.On("Get", "https://example.com/server-error.txt").Return(mockResponse, nil)
 
 	// Act
-	content, err := downloader.downloadContent("https://example.com/server-error.txt")
+	content, err := downloader.downloadContent(context.Background(), "https://example.com/server-error.txt")
 
 	// Assert
 	assert.Error(t, err)
@@ -507,7 +508,7 @@ func TestDownloader_DownloadContent_ReadBodyError_ReturnsError(t *testing.T) {
 	httpClient.On("Get", "https://example.com/failing.txt").Return(mockResponse, nil)
 
 	// Act
-	content, err := downloader.downloadContent("https://example.com/failing.txt")
+	content, err := downloader.downloadContent(context.Background(), "https://example.com/failing.txt")
 
 	// Assert
 	assert.Error(t, err)
@@ -599,7 +600,7 @@ func main() {
 	// Act
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := downloader.downloadFile(key, url, "go")
+		_, err := downloader.downloadFile(context.Background(), key, url, "go")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -637,7 +638,7 @@ func BenchmarkDownloader_DownloadContent_SmallFile(b *testing.B) {
 	// Act
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := downloader.downloadContent("https://example.com/small.txt")
+		_, err := downloader.downloadContent(context.Background(), "https://example.com/small.txt")
 		if err != nil {
 			b.Fatal(err)
 		}

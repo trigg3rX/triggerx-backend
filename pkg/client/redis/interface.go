@@ -29,6 +29,13 @@ type RedisClientInterface interface {
 	Del(ctx context.Context, keys ...string) error
 	DelWithCount(ctx context.Context, keys ...string) (deletedCount int64, err error)
 
+	// Hash operations
+	HSet(ctx context.Context, key string, values ...interface{}) error
+	HGet(ctx context.Context, key, field string) (string, error)
+	HGetWithExists(ctx context.Context, key, field string) (value string, exists bool, err error)
+	HDel(ctx context.Context, key string, fields ...string) error
+	HDelWithCount(ctx context.Context, key string, fields ...string) (deletedCount int64, err error)
+
 	// Safe key scanning operations (alternatives to KEYS command)
 	Scan(ctx context.Context, cursor uint64, options *ScanOptions) (*ScanResult, error)
 	ScanAll(ctx context.Context, options *ScanOptions) ([]string, error)
@@ -52,6 +59,8 @@ type RedisClientInterface interface {
 	ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error)
 	ZAddWithExists(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
 	ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error)
+	ZRangeByScore(ctx context.Context, key, min, max string) ([]string, error)
+	ZRem(ctx context.Context, key string, members ...interface{}) (int64, error)
 	ZRemRangeByScore(ctx context.Context, key, min, max string) (int64, error)
 	ZCard(ctx context.Context, key string) (int64, error)
 

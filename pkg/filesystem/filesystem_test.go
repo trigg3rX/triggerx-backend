@@ -21,7 +21,12 @@ func TestOSFileSystem_ReadWriteFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	testFile := filepath.Join(tempDir, "test.txt")
 	testData := []byte("Hello, World!")
@@ -63,7 +68,12 @@ func TestOSFileSystem_MkdirAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	testPath := filepath.Join(tempDir, "nested", "dir", "structure")
 
@@ -91,7 +101,12 @@ func TestOSFileSystem_Stat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	// Test Stat on directory
 	info, err := fs.Stat(tempDir)
@@ -141,7 +156,12 @@ func TestOSFileSystem_Remove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	testFile := filepath.Join(tempDir, "test.txt")
 	err = fs.WriteFile(testFile, []byte("test"), 0644)
@@ -173,7 +193,12 @@ func TestOSFileSystem_RemoveAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir) // Fallback cleanup
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	// Create nested structure
 	nestedDir := filepath.Join(tempDir, "nested")
@@ -236,7 +261,12 @@ func TestOSFileSystem_ReadDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	// Create some files and directories
 	err = fs.WriteFile(filepath.Join(tempDir, "file1.txt"), []byte("test1"), 0644)
@@ -299,7 +329,12 @@ func TestOSFileSystem_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	// Create nested directory structure
 	nestedPath := filepath.Join(tempDir, "level1", "level2")

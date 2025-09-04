@@ -2,6 +2,7 @@ package taskmanager
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -44,7 +45,7 @@ func (c *Client) InformTaskManager(taskID int64, isAccepted bool) error {
 		return err
 	}
 
-	resp, err := c.retryClient.DoWithRetry(req)
+	resp, err := c.retryClient.DoWithRetry(context.Background(), req)
 	if err != nil {
 		return err
 	}

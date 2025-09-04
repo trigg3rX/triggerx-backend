@@ -56,6 +56,23 @@ func (c *Client) ZRevRange(ctx context.Context, key string, start, stop int64) (
 	return result, err
 }
 
+// ZRangeByScore returns a range of members in a sorted set, by score
+func (c *Client) ZRangeByScore(ctx context.Context, key, min, max string) ([]string, error) {
+	var result []string
+	err := c.executeWithRetryAndKey(ctx, func() error {
+		val, err := c.redisClient.ZRangeByScore(ctx, key, &redis.ZRangeBy{
+			Min: min,
+			Max: max,
+		}).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZRangeByScore", key)
+	return result, err
+}
+
 // ZRemRangeByScore removes all members in a sorted set within the given scores
 func (c *Client) ZRemRangeByScore(ctx context.Context, key, min, max string) (int64, error) {
 	var result int64
@@ -67,6 +84,20 @@ func (c *Client) ZRemRangeByScore(ctx context.Context, key, min, max string) (in
 		result = val
 		return nil
 	}, "ZRemRangeByScore", key)
+	return result, err
+}
+
+// ZRem removes one or more members from a sorted set
+func (c *Client) ZRem(ctx context.Context, key string, members ...interface{}) (int64, error) {
+	var result int64
+	err := c.executeWithRetryAndKey(ctx, func() error {
+		val, err := c.redisClient.ZRem(ctx, key, members...).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "ZRem", key)
 	return result, err
 }
 

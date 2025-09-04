@@ -4,7 +4,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -30,10 +32,14 @@ type Handler struct {
 	keeperRepository       repository.KeeperRepository
 	apiKeysRepository      repository.ApiKeysRepository
 
+	// WebSocket components
+	hub       *websocket.Hub
+	publisher *events.Publisher
+
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
@@ -47,6 +53,8 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		userRepository:         repository.NewUserRepository(db),
 		keeperRepository:       repository.NewKeeperRepository(db),
 		apiKeysRepository:      repository.NewApiKeysRepository(db),
+		hub:                    hub,
+		publisher:              publisher,
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
 

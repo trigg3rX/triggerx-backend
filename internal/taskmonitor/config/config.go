@@ -18,6 +18,7 @@ type Config struct {
 
 	// Contract Addresses to listen for events
 	attestationCenterAddress string
+	testAttestationCenterAddress string
 
 	// RPC URLs for Ethereum and Base
 	rpcProvider string
@@ -79,6 +80,7 @@ func Init() error {
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
 		taskMonitorRPCPort:       env.GetEnvString("TASK_MONITOR_RPC_PORT", "9003"),
 		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
+		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
 		rpcProvider:              env.GetEnvString("RPC_PROVIDER", ""),
 		rpcAPIKey:                env.GetEnvString("RPC_API_KEY", ""),
 		databaseHostAddress:      env.GetEnvString("DATABASE_HOST_ADDRESS", ""),
@@ -135,6 +137,10 @@ func GetLastBaseBlockUpdated() uint64 {
 
 func GetAttestationCenterAddress() string {
 	return cfg.attestationCenterAddress
+}
+
+func GetTestAttestationCenterAddress() string {
+	return cfg.testAttestationCenterAddress
 }
 
 func GetRPCProvider() string {

@@ -48,7 +48,7 @@ func (v *TaskValidator) ValidateTask(ctx context.Context, data string, traceID s
 		return false, err
 	}
 	decodedData := string(dataBytes)
-	ipfsData, err := v.IpfsClient.Fetch(decodedData)
+	ipfsData, err := v.IpfsClient.Fetch(ctx, decodedData)
 	if err != nil {
 		v.logger.Error("Failed to fetch IPFS content", "trace_id", traceID, "error", err)
 		return false, err

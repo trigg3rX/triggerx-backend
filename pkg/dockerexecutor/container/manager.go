@@ -664,7 +664,12 @@ func (m *containerManager) readResultFile(ctx context.Context, containerID strin
 	if err != nil {
 		return "", fmt.Errorf("failed to copy result.json from container: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		err := reader.Close()
+		if err != nil {
+			m.logger.Warnf("Failed to close reader: %v", err)
+		}
+	}()
 
 	// Create a tar reader to extract the file content
 	tarReader := tar.NewReader(reader)

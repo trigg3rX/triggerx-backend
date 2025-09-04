@@ -29,6 +29,7 @@ type TaskStreamData struct {
 	JobID            *big.Int  `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`
+	IsMainnet        bool      `json:"is_mainnet"`
 
 	// Execution tracking
 	RetryCount    int        `json:"retry_count"`

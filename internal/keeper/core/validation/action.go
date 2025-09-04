@@ -11,8 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-const timeTolerance = 2200 * time.Millisecond
-const expirationTimeTolerance = 5 * time.Second
+const timeTolerance = 5 * time.Second
+const expirationTimeTolerance = 8 * time.Second
 
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
 	// v.logger.Infof("txHash: %s", actionData.ActionTxHash)

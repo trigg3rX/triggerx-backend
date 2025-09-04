@@ -16,8 +16,8 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	tsm.logger.Info("Marking task as completed",
 		"task_id", taskID)
 
-	// Find and move task from processing to completed
-	task, err := tsm.findTaskInDispatched(taskID)
+	// Find and move task from processing to completed using efficient lookup
+	task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
 	if err != nil {
 		tsm.logger.Error("failed to find task in processing", "error", err)
 		// return err
@@ -32,8 +32,33 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 		// return err
 	}
 
-	// Remove from processing stream (acknowledge)
-	// Note: In a real implementation, we'd need to track the processing message ID
+	// Remove from processing stream (acknowledge) using the messageID
+	if messageID != "" {
+		err = tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
+		if err != nil {
+			tsm.logger.Error("failed to acknowledge task",
+				"task_id", taskID,
+				"message_id", messageID,
+				"error", err)
+		} else {
+			// Remove the task from the index since it's been processed
+			err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
+			if err != nil {
+				tsm.logger.Warn("failed to remove task from index",
+					"task_id", taskID,
+					"error", err)
+			}
+
+			// Remove the task from timeout tracking since it's been completed
+			err = tsm.timeoutManager.RemoveTaskTimeout(ctx, taskID)
+			if err != nil {
+				tsm.logger.Warn("failed to remove task from timeout tracking",
+					"task_id", taskID,
+					"error", err)
+			}
+		}
+	}
+
 	tsm.logger.Info("Task marked as completed successfully", "task_id", taskID)
 	metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
 
@@ -42,12 +67,38 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 
 // findTaskInDispatched finds a specific task in the dispatched stream
 func (tsm *TaskStreamManager) findTaskInDispatched(taskID int64) (*TaskStreamData, error) {
-	tasks, _, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "task-finder", "finder", 1000)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, config.GetReadTimeout())
+	defer cancel()
+
+	// Use XRANGE to read recent messages without adding to PEL
+	// This is a fallback method when the index is not available
+	streams, err := tsm.redisClient.Client().XRange(ctx, StreamTaskDispatched, "-", "+").Result()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read from stream: %w", err)
 	}
 
-	for _, task := range tasks {
+	// Limit the search to the most recent 1000 messages to avoid performance issues
+	startIndex := 0
+	if len(streams) > 1000 {
+		startIndex = len(streams) - 1000
+	}
+
+	for i := startIndex; i < len(streams); i++ {
+		message := streams[i]
+		taskJSON, exists := message.Values["task"].(string)
+		if !exists {
+			continue
+		}
+
+		var task TaskStreamData
+		if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
+			tsm.logger.Error("Failed to unmarshal task data",
+				"message_id", message.ID,
+				"error", err)
+			continue
+		}
+
 		if task.SendTaskDataToKeeper.TaskID[0] == taskID {
 			return &task, nil
 		}

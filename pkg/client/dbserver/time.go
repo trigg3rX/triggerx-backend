@@ -1,6 +1,7 @@
 package dbserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,15 +11,15 @@ import (
 )
 
 // GetTimeBasedTasks fetches tasks that need to be executed in the next window
-func (c *DBServerClient) GetTimeBasedTasks() ([]types.ScheduleTimeTaskData, error) {
+func (c *DBServerClient) GetTimeBasedTasks(ctx context.Context) ([]types.ScheduleTimeTaskData, error) {
 	url := fmt.Sprintf("%s/api/jobs/time", c.dbserverUrl)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch time-based tasks: %v", err)
 	}
 
-	resp, err := c.httpClient.DoWithRetry(req)
+	resp, err := c.httpClient.DoWithRetry(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch time-based tasks: %v", err)
 	}

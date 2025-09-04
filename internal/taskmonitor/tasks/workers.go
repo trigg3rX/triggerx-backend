@@ -31,85 +31,98 @@ func (tsm *TaskStreamManager) StartTimeoutWorker(ctx context.Context) {
 func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	// tsm.logger.Debug("Checking for dispatched timeouts")
 
-	// Read all dispatched tasks (simplified - in production would use consumer groups)
-	tasks, messageIDs, err := tsm.ReadTasksFromStream(StreamTaskDispatched, "timeout-checker", "timeout-worker", 1000)
+	// Get expired tasks efficiently using sorted set
+	expiredTaskIDs, err := tsm.timeoutManager.GetExpiredTasks(ctx)
 	if err != nil {
-		tsm.logger.Error("Failed to read dispatched tasks for timeout check", "error", err)
+		tsm.logger.Error("Failed to get expired tasks", "error", err)
 		return
 	}
 
-	if len(tasks) > 0 {
-		tsm.logger.Debug("Timeout worker found tasks to check", "task_count", len(tasks))
+	if len(expiredTaskIDs) == 0 {
+		// tsm.logger.Debug("No expired tasks found")
+		return
 	}
 
-	now := time.Now()
-	timeoutCount := 0
+	tsm.logger.Info("Found expired tasks", "expired_count", len(expiredTaskIDs))
 
-	for i, task := range tasks {
-		if task.DispatchedAt != nil {
-			dispatchedDuration := now.Sub(*task.DispatchedAt)
-			if dispatchedDuration > TasksProcessingTTL {
-				tsm.logger.Warn("Task dispatched timeout detected",
-					"task_id", task.SendTaskDataToKeeper.TaskID[0],
-					"dispatched_duration", dispatchedDuration,
-					"timeout_threshold", TasksProcessingTTL)
+	// Process each expired task
+	processedCount := 0
+	var processedTaskIDs []int64
 
-				// Move to failed stream
-				if err := tsm.moveTaskToFailed(ctx, task, "dispatched timeout"); err != nil {
-					tsm.logger.Error("Failed to handle timeout task",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"error", err)
-					continue // Don't acknowledge if we failed to move to failed stream
-				}
+	for _, taskID := range expiredTaskIDs {
+		// Find the task using the efficient index lookup
+		task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
+		if err != nil {
+			tsm.logger.Error("Failed to find expired task",
+				"task_id", taskID,
+				"error", err)
+			// Still remove from timeout tracking to prevent reprocessing
+			processedTaskIDs = append(processedTaskIDs, taskID)
+			continue
+		}
 
-				// Acknowledge the timed-out task
-				err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageIDs[i])
-				if err != nil {
-					tsm.logger.Error("Failed to acknowledge timed-out task",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"error", err)
-				} else {
-					timeoutCount++
-					tsm.logger.Info("Task timeout processed successfully",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"message_id", messageIDs[i])
-				}
+		tsm.logger.Warn("Task timeout detected",
+			"task_id", taskID,
+			"dispatched_at", task.DispatchedAt,
+			"created_at", task.CreatedAt)
+
+		// Move to failed stream
+		if err := tsm.moveTaskToFailed(ctx, *task, "dispatched timeout"); err != nil {
+			tsm.logger.Error("Failed to handle timeout task",
+				"task_id", taskID,
+				"error", err)
+			continue // Don't acknowledge if we failed to move to failed stream
+		}
+
+		// Acknowledge the timed-out task if we have the messageID
+		if messageID != "" {
+			err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageID)
+			if err != nil {
+				tsm.logger.Error("Failed to acknowledge timed-out task",
+					"task_id", taskID,
+					"message_id", messageID,
+					"error", err)
+			} else {
+				tsm.logger.Info("Task timeout processed and acknowledged successfully",
+					"task_id", taskID,
+					"message_id", messageID)
 			}
-		} else {
-			// If task has no DispatchedAt timestamp, it might be a stale task
-			// Check if it's been in the stream for too long based on CreatedAt
-			if task.CreatedAt.Add(TasksProcessingTTL).Before(now) {
-				tsm.logger.Warn("Task without dispatched timestamp timed out",
-					"task_id", task.SendTaskDataToKeeper.TaskID[0],
-					"created_at", task.CreatedAt,
-					"age", now.Sub(task.CreatedAt))
+		}
 
-				// Move to failed stream
-				if err := tsm.moveTaskToFailed(ctx, task, "stale task timeout"); err != nil {
-					tsm.logger.Error("Failed to handle stale timeout task",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"error", err)
-					continue
-				}
+		// Remove from task index since it's been processed
+		err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
+		if err != nil {
+			tsm.logger.Warn("failed to remove timed-out task from index",
+				"task_id", taskID,
+				"error", err)
+		}
 
-				// Acknowledge the timed-out task
-				err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageIDs[i])
-				if err != nil {
-					tsm.logger.Error("Failed to acknowledge stale timed-out task",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"error", err)
-				} else {
-					timeoutCount++
-					tsm.logger.Info("Stale task timeout processed successfully",
-						"task_id", task.SendTaskDataToKeeper.TaskID[0],
-						"message_id", messageIDs[i])
-				}
-			}
+		processedCount++
+		processedTaskIDs = append(processedTaskIDs, taskID)
+
+		err = tsm.dbClient.UpdateTaskFailed(taskID)
+		if err != nil {
+			tsm.logger.Error("Failed to update task failed",
+				"task_id", taskID,
+				"error", err)
 		}
 	}
 
-	if timeoutCount > 0 {
-		tsm.logger.Info("Processed task timeouts", "timeout_count", timeoutCount)
+	// Remove all processed tasks from timeout tracking in batch
+	if len(processedTaskIDs) > 0 {
+		err = tsm.timeoutManager.RemoveMultipleTaskTimeouts(ctx, processedTaskIDs)
+		if err != nil {
+			tsm.logger.Error("Failed to remove processed tasks from timeout tracking",
+				"task_count", len(processedTaskIDs),
+				"error", err)
+		} else {
+			tsm.logger.Info("Removed processed tasks from timeout tracking",
+				"task_count", len(processedTaskIDs))
+		}
+	}
+
+	if processedCount > 0 {
+		tsm.logger.Info("Processed task timeouts", "processed_count", processedCount)
 	}
 }
 
