@@ -3,28 +3,73 @@ package events
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/websocket"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+
+	// Contract bindings
+	contractAttestationCenter "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
 )
+
+// ContractType represents the type of contract
+// Kept as string to minimize coupling
+
+type ContractType string
+
+const (
+	ContractTypeAttestationCenter ContractType = "attestation_center"
+)
+
+// ContractEventData represents parsed contract event data used downstream
+
+type ContractEventData struct {
+	EventType    string                 `json:"event_type"`
+	ContractType ContractType           `json:"contract_type"`
+	ParsedData   map[string]interface{} `json:"parsed_data"`
+	RawData      []byte                 `json:"raw_data"`
+	Topics       []string               `json:"topics"`
+	BlockNumber  uint64                 `json:"block_number"`
+	TxHash       string                 `json:"tx_hash"`
+	LogIndex     uint                   `json:"log_index"`
+}
+
+// ChainEvent represents an event from any blockchain
+
+type ChainEvent struct {
+	ChainID      string       `json:"chain_id"`
+	ChainName    string       `json:"chain_name"`
+	ContractAddr string       `json:"contract_address"`
+	ContractType ContractType `json:"contract_type"`
+	EventName    string       `json:"event_name"`
+	BlockNumber  uint64       `json:"block_number"`
+	TxHash       string       `json:"tx_hash"`
+	LogIndex     uint         `json:"log_index"`
+	Data         interface{}  `json:"data"`
+	RawLog       types.Log    `json:"raw_log"`
+	ProcessedAt  time.Time    `json:"processed_at"`
+}
 
 // ContractEventListener handles listening to contract events across multiple chains
 type ContractEventListener struct {
 	logger            logging.Logger
-	client            *websocket.Client
 	config            *ListenerConfig
 	ctx               context.Context
 	cancel            context.CancelFunc
 	wg                sync.WaitGroup
 	isRunning         bool
 	mu                sync.RWMutex
-	eventChan         chan *websocket.ChainEvent
+	eventChan         chan *ChainEvent
 	processingWg      sync.WaitGroup
 	dbClient          *database.DatabaseClient
 	ipfsClient        ipfs.IPFSClient
@@ -43,11 +88,10 @@ type ListenerConfig struct {
 
 // ChainConfig represents blockchain configuration for event listening
 type ChainConfig struct {
-	ChainID      string `json:"chain_id"`
-	Name         string `json:"name"`
-	RPCURL       string `json:"rpc_url"`
-	WebSocketURL string `json:"websocket_url"`
-	Enabled      bool   `json:"enabled"`
+	ChainID string `json:"chain_id"`
+	Name    string `json:"name"`
+	RPCURL  string `json:"rpc_url"`
+	Enabled bool   `json:"enabled"`
 }
 
 // ReconnectConfig holds reconnection settings
@@ -82,15 +126,12 @@ type TaskEventHandler struct {
 func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbClient *database.DatabaseClient, ipfsClient ipfs.IPFSClient, taskStreamManager *tasks.TaskStreamManager) *ContractEventListener {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	client := websocket.NewClient(logger)
-
 	return &ContractEventListener{
 		logger:            logger,
-		client:            client,
 		config:            config,
 		ctx:               ctx,
 		cancel:            cancel,
-		eventChan:         make(chan *websocket.ChainEvent, config.EventBufferSize),
+		eventChan:         make(chan *ChainEvent, config.EventBufferSize),
 		dbClient:          dbClient,
 		ipfsClient:        ipfsClient,
 		taskStreamManager: taskStreamManager,
@@ -106,27 +147,16 @@ func (l *ContractEventListener) Start() error {
 		return fmt.Errorf("event listener is already running")
 	}
 
-	// l.logger.Info("Starting contract event listener")
-
-	// Set up chain connections and subscriptions
+	// Set up chain polling workers
 	if err := l.setupChainConnections(); err != nil {
 		return fmt.Errorf("failed to setup chain connections: %w", err)
-	}
-
-	// Start the websocket client
-	if err := l.client.Start(); err != nil {
-		return fmt.Errorf("failed to start websocket client: %w", err)
 	}
 
 	// Start event processing workers
 	l.startEventProcessors()
 
-	// Start the main event listening loop
-	l.wg.Add(1)
-	go l.eventListeningLoop()
-
 	l.isRunning = true
-	l.logger.Info("Contract event listener started successfully")
+	l.logger.Info("Contract event listener (polling) started successfully")
 
 	return nil
 }
@@ -145,11 +175,6 @@ func (l *ContractEventListener) Stop() error {
 	// Cancel context to stop all goroutines
 	l.cancel()
 
-	// Stop the websocket client
-	if err := l.client.Stop(); err != nil {
-		l.logger.Errorf("Error stopping websocket client: %v", err)
-	}
-
 	// Wait for all goroutines to finish
 	l.wg.Wait()
 	l.processingWg.Wait()
@@ -164,81 +189,18 @@ func (l *ContractEventListener) Stop() error {
 func (l *ContractEventListener) setupChainConnections() error {
 	for _, chainConfig := range l.config.Chains {
 		if !chainConfig.Enabled {
-			// l.logger.Infof("Skipping disabled chain: %s", chainConfig.Name)
 			continue
 		}
 
-		// Add chain to websocket client
-		wsConfig := websocket.ChainConfig{
-			ChainID:      chainConfig.ChainID,
-			Name:         chainConfig.Name,
-			RPCURL:       chainConfig.RPCURL,
-			WebSocketURL: chainConfig.WebSocketURL,
-			Contracts:    l.getContractConfigsForChain(chainConfig.ChainID),
-			Reconnect: websocket.ReconnectConfig{
-				MaxRetries:    l.config.ReconnectConfig.MaxRetries,
-				BaseDelay:     l.config.ReconnectConfig.BaseDelay,
-				MaxDelay:      l.config.ReconnectConfig.MaxDelay,
-				BackoffFactor: l.config.ReconnectConfig.BackoffFactor,
-				Jitter:        true,
-			},
-		}
-
-		if err := l.client.AddChain(wsConfig); err != nil {
-			return fmt.Errorf("failed to add chain %s: %w", chainConfig.Name, err)
-		}
-
-		// Set up specific contract subscriptions
-		if err := l.setupContractSubscriptions(chainConfig.ChainID); err != nil {
-			return fmt.Errorf("failed to setup subscriptions for chain %s: %w", chainConfig.Name, err)
-		}
-
-		// l.logger.Infof("Successfully configured chain: %s (%s)", chainConfig.Name, chainConfig.ChainID)
-	}
-
-	return nil
-}
-
-// getContractConfigsForChain returns contract configurations for a specific chain
-func (l *ContractEventListener) getContractConfigsForChain(chainID string) []websocket.ContractConfig {
-	var configs []websocket.ContractConfig
-
-	chainAddresses, exists := l.config.ContractAddresses[chainID]
-	if !exists {
-		l.logger.Warnf("No contract addresses configured for chain %s", chainID)
-		return configs
-	}
-
-	// AttestationCenter contract
-	if addr, exists := chainAddresses["attestation_center"]; exists {
-		configs = append(configs, websocket.ContractConfig{
-			Address:      addr,
-			ContractType: websocket.ContractTypeAttestationCenter,
-			Events:       []string{"TaskSubmitted", "TaskRejected"},
-		})
-	}
-
-	return configs
-}
-
-// setupContractSubscriptions sets up specific contract event subscriptions
-func (l *ContractEventListener) setupContractSubscriptions(chainID string) error {
-	chainAddresses, exists := l.config.ContractAddresses[chainID]
-	if !exists {
-		return fmt.Errorf("no contract addresses configured for chain %s", chainID)
-	}
-
-	// Subscribe to AttestationCenter events
-	if addr, exists := chainAddresses["attestation_center"]; exists {
-		if err := l.client.SubscribeToContract(
-			chainID,
-			addr,
-			websocket.ContractTypeAttestationCenter,
-			[]string{"TaskSubmitted", "TaskRejected"},
-		); err != nil {
-			return fmt.Errorf("failed to subscribe to AttestationCenter events: %w", err)
-		}
-		// l.logger.Infof("Subscribed to AttestationCenter events on chain %s", chainID)
+		// Launch a poller per chain
+		cc := chainConfig
+		l.wg.Add(1)
+		go func() {
+			defer l.wg.Done()
+			if err := l.startChainPoller(cc); err != nil {
+				l.logger.Errorf("Chain poller error for %s: %v", cc.Name, err)
+			}
+		}()
 	}
 
 	return nil
@@ -257,33 +219,6 @@ func (l *ContractEventListener) startEventProcessors() {
 		l.processingWg.Add(1)
 		go l.eventProcessorWorker(processor, i)
 	}
-
-	// l.logger.Infof("Started %d event processing workers", l.config.ProcessingWorkers)
-}
-
-// eventListeningLoop is the main event listening loop
-func (l *ContractEventListener) eventListeningLoop() {
-	defer l.wg.Done()
-
-	l.logger.Info("Starting event listening loop")
-
-	for {
-		select {
-		case <-l.ctx.Done():
-			l.logger.Info("Event listening loop stopped")
-			return
-		case event := <-l.client.EventChannel():
-			// Forward event to processing workers
-			select {
-			case l.eventChan <- event:
-				// Event queued successfully
-			default:
-				// Event channel is full, log warning
-				l.logger.Warnf("Event channel full, dropping event: %s from %s",
-					event.EventName, event.ContractAddr)
-			}
-		}
-	}
 }
 
 // eventProcessorWorker processes events from the event channel
@@ -295,7 +230,6 @@ func (l *ContractEventListener) eventProcessorWorker(processor *EventProcessor, 
 	for {
 		select {
 		case <-l.ctx.Done():
-			// l.logger.Infof("Event processor worker %d stopped", workerID)
 			return
 		case event := <-l.eventChan:
 			l.processEvent(processor, event)
@@ -304,17 +238,9 @@ func (l *ContractEventListener) eventProcessorWorker(processor *EventProcessor, 
 }
 
 // processEvent processes a single contract event
-func (l *ContractEventListener) processEvent(processor *EventProcessor, event *websocket.ChainEvent) {
-	// Set processing timeout
-	// ctx, cancel := context.WithTimeout(l.ctx, l.config.ProcessingTimeout)
-	// defer cancel()
-
-	// l.logger.Debugf("Worker %d processing %s event from %s contract at %s",
-	// 	workerID, event.EventName, event.ContractType, event.ContractAddr)
-
-	// Process event based on contract type
+func (l *ContractEventListener) processEvent(processor *EventProcessor, event *ChainEvent) {
 	switch event.ContractType {
-	case websocket.ContractTypeAttestationCenter:
+	case ContractTypeAttestationCenter:
 		l.logger.Debugf("Processing %s event from AttestationCenter contract on chain %s", event.EventName, event.ChainID)
 		processor.taskHandler.ProcessTaskEvent(event)
 	default:
@@ -333,14 +259,261 @@ func (l *ContractEventListener) GetStatus() map[string]interface{} {
 		"processing_workers": l.config.ProcessingWorkers,
 		"event_buffer_size":  l.config.EventBufferSize,
 		"event_buffer_used":  len(l.eventChan),
-		"chains":             make(map[string]interface{}),
 	}
 
-	// Get chain-specific status
-	chainStatus := l.client.GetChainStatus()
-	status["chains"] = chainStatus
-
 	return status
+}
+
+// pollSubscription describes one event filter to poll
+// It intentionally avoids any websocket client types
+// and only carries what's needed for RPC log filtering
+
+type pollSubscription struct {
+	ContractAddr common.Address
+	ContractType ContractType
+	EventName    string
+	EventSig     common.Hash
+	FilterQuery  ethereum.FilterQuery
+}
+
+// startChainPoller starts a polling loop for a given chain
+func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error {
+	client, err := ethclient.Dial(chainConfig.RPCURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s RPC: %w", chainConfig.Name, err)
+	}
+	defer client.Close()
+
+	// Build polling subscriptions from configured addresses
+	subs := make([]pollSubscription, 0)
+	chainAddresses := l.config.ContractAddresses[chainConfig.ChainID]
+	if addr, ok := chainAddresses["attestation_center"]; ok {
+		attABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi()
+		if err != nil {
+			return fmt.Errorf("failed to load AttestationCenter ABI: %w", err)
+		}
+		addrHex := common.HexToAddress(addr)
+		for _, evName := range []string{"TaskSubmitted", "TaskRejected"} {
+			ev, exists := attABI.Events[evName]
+			if !exists {
+				l.logger.Errorf("Event %s not in AttestationCenter ABI", evName)
+				continue
+			}
+			fq := ethereum.FilterQuery{
+				Addresses: []common.Address{addrHex},
+				Topics:    [][]common.Hash{{ev.ID}},
+			}
+			subs = append(subs, pollSubscription{
+				ContractAddr: addrHex,
+				ContractType: ContractTypeAttestationCenter,
+				EventName:    evName,
+				EventSig:     ev.ID,
+				FilterQuery:  fq,
+			})
+		}
+	}
+
+	if len(subs) == 0 {
+		l.logger.Warnf("[%s] No subscriptions configured for polling (chainID=%s)", chainConfig.Name, chainConfig.ChainID)
+	} else {
+		for _, s := range subs {
+			l.logger.Infof("[%s] Polling subscription added: %s.%s at %s", chainConfig.Name, s.ContractType, s.EventName, s.ContractAddr.Hex())
+		}
+	}
+
+	// Initialize from the current block
+	lastBlock, err := client.BlockNumber(l.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current block number: %w", err)
+	}
+	l.logger.Infof("[%s] Starting poller at block %d", chainConfig.Name, lastBlock)
+
+	// poll every 1 minute
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-l.ctx.Done():
+			return nil
+		case <-ticker.C:
+			currentBlock, err := client.BlockNumber(l.ctx)
+			if err != nil {
+				l.logger.Errorf("[%s] Failed to get current block number: %v", chainConfig.Name, err)
+				continue
+			}
+			if currentBlock <= lastBlock {
+				l.logger.Debugf("[%s] No new blocks to process (last=%d, current=%d)", chainConfig.Name, lastBlock, currentBlock)
+				continue
+			}
+			l.logger.Infof("[%s] Polling block range [%d, %d] (span=%d)", chainConfig.Name, lastBlock+1, currentBlock, currentBlock-(lastBlock+1)+1)
+
+			from := new(big.Int).SetUint64(lastBlock + 1)
+			to := new(big.Int).SetUint64(currentBlock)
+
+			for _, sub := range subs {
+				start := from.Uint64()
+				end := to.Uint64()
+				const maxRange uint64 = 10
+				for cur := start; cur <= end; {
+					chunkEnd := cur + maxRange - 1
+					if chunkEnd > end {
+						chunkEnd = end
+					}
+
+					l.logger.Debugf("[%s] Querying %s.%s logs in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
+
+					fq := sub.FilterQuery
+					fq.FromBlock = new(big.Int).SetUint64(cur)
+					fq.ToBlock = new(big.Int).SetUint64(chunkEnd)
+
+					logs, err := client.FilterLogs(l.ctx, fq)
+					if err != nil {
+						l.logger.Errorf("[%s] FilterLogs failed for %s.%s range [%#x, %#x]: %v", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd, err)
+						// proceed to next chunk to avoid blocking entire range
+						cur = chunkEnd + 1
+						continue
+					}
+					if len(logs) == 0 {
+						l.logger.Debugf("[%s] No logs for %s.%s in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
+					} else {
+						l.logger.Infof("[%s] Fetched %d logs for %s.%s in chunk [%d, %d]", chainConfig.Name, len(logs), sub.ContractType, sub.EventName, cur, chunkEnd)
+					}
+					for _, lg := range logs {
+						if err := l.emitChainEventFromLog(chainConfig, sub, lg); err != nil {
+							l.logger.Errorf("[%s] Failed to emit event for %s.%s: %v", chainConfig.Name, sub.ContractType, sub.EventName, err)
+						}
+					}
+
+					cur = chunkEnd + 1
+				}
+			}
+
+			lastBlock = currentBlock
+			l.logger.Debugf("[%s] Updated last processed block to %d", chainConfig.Name, lastBlock)
+		}
+	}
+}
+
+// emitChainEventFromLog parses a log and emits a ChainEvent into eventChan
+func (l *ContractEventListener) emitChainEventFromLog(chainConfig ChainConfig, sub pollSubscription, lg types.Log) error {
+	var parsed interface{}
+	var err error
+
+	switch sub.ContractType {
+	case ContractTypeAttestationCenter:
+		parsed, err = l.parseAttestationCenterEvent(sub.EventName, lg)
+	default:
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	evt := &ChainEvent{
+		ChainID:      chainConfig.ChainID,
+		ChainName:    chainConfig.Name,
+		ContractAddr: lg.Address.Hex(),
+		ContractType: sub.ContractType,
+		EventName:    sub.EventName,
+		BlockNumber:  lg.BlockNumber,
+		TxHash:       lg.TxHash.Hex(),
+		LogIndex:     lg.Index,
+		Data:         parsed,
+		RawLog:       lg,
+		ProcessedAt:  time.Now(),
+	}
+
+	l.logger.Debugf("[%s] Emitting event %s.%s block=%d tx=%s idx=%d", chainConfig.Name, sub.ContractType, sub.EventName, lg.BlockNumber, lg.TxHash.Hex(), lg.Index)
+
+	select {
+	case l.eventChan <- evt:
+		return nil
+	default:
+		l.logger.Warnf("[%s] Event channel full, dropping event %s.%s at block %d", chainConfig.Name, sub.ContractType, sub.EventName, lg.BlockNumber)
+		return fmt.Errorf("event channel full")
+	}
+}
+
+// parseAttestationCenterEvent parses AttestationCenter events into ContractEventData
+func (l *ContractEventListener) parseAttestationCenterEvent(eventName string, lg types.Log) (interface{}, error) {
+	attABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AttestationCenter ABI: %w", err)
+	}
+	ev, ok := attABI.Events[eventName]
+	if !ok {
+		return nil, fmt.Errorf("event %s not found in AttestationCenter ABI", eventName)
+	}
+
+	// Decode non-indexed fields
+	nonIndexedArgs := make(abi.Arguments, 0)
+	for _, input := range ev.Inputs {
+		if !input.Indexed {
+			nonIndexedArgs = append(nonIndexedArgs, input)
+		}
+	}
+	nonIndexed := make(map[string]interface{})
+	if len(nonIndexedArgs) > 0 {
+		// UnpackIntoMap expects the full arguments set, so build it accordingly
+		if err := ev.Inputs.UnpackIntoMap(nonIndexed, lg.Data); err != nil {
+			return nil, fmt.Errorf("failed to unpack event data: %w", err)
+		}
+	}
+
+	// Decode indexed fields from topics (skip topics[0] which is the signature)
+	indexedArgs := make(abi.Arguments, 0)
+	for _, input := range ev.Inputs {
+		if input.Indexed {
+			indexedArgs = append(indexedArgs, input)
+		}
+	}
+	indexedVals := make([]interface{}, 0)
+	if len(indexedArgs) > 0 && len(lg.Topics) > 1 {
+		var out []interface{}
+		if err := abi.ParseTopics(&out, indexedArgs, lg.Topics[1:]); err != nil {
+			return nil, fmt.Errorf("failed to parse indexed topics: %w", err)
+		}
+		indexedVals = out
+	}
+
+	// Merge into parsedData map using input names
+	parsedData := make(map[string]interface{})
+	// Start with non-indexed values
+	for k, v := range nonIndexed {
+		parsedData[k] = v
+	}
+	// Then add indexed with correct ordering
+	idx := 0
+	for _, input := range ev.Inputs {
+		if input.Indexed {
+			if idx < len(indexedVals) {
+				parsedData[input.Name] = indexedVals[idx]
+			}
+			idx++
+		}
+	}
+
+	// Build ContractEventData compatible with downstream handler
+	ced := &ContractEventData{
+		EventType:    eventName,
+		ContractType: ContractTypeAttestationCenter,
+		ParsedData:   parsedData,
+		RawData:      lg.Data,
+		Topics:       topicsToHex(lg.Topics),
+		BlockNumber:  lg.BlockNumber,
+		TxHash:       lg.TxHash.Hex(),
+		LogIndex:     lg.Index,
+	}
+	return ced, nil
+}
+
+func topicsToHex(topics []common.Hash) []string {
+	out := make([]string, len(topics))
+	for i, t := range topics {
+		out[i] = t.Hex()
+	}
+	return out
 }
 
 // GetTestnetConfig returns a testnet configuration for the event listener
@@ -348,11 +521,10 @@ func GetTestnetConfig() *ListenerConfig {
 	return &ListenerConfig{
 		Chains: []ChainConfig{
 			{
-				ChainID:      "84532",
-				Name:         "Base Sepolia",
-				RPCURL:       config.GetChainRPCUrl(true, "84532"),
-				WebSocketURL: config.GetChainRPCUrl(false, "84532"),
-				Enabled:      true,
+				ChainID: "84532",
+				Name:    "Base Sepolia",
+				RPCURL:  config.GetChainRPCUrl(true, "84532"),
+				Enabled: true,
 			},
 		},
 		ReconnectConfig: ReconnectConfig{
@@ -376,11 +548,10 @@ func GetMainnetConfig() *ListenerConfig {
 	return &ListenerConfig{
 		Chains: []ChainConfig{
 			{
-				ChainID:      "8453",
-				Name:         "Base",
-				RPCURL:       config.GetChainRPCUrl(true, "8453"),
-				WebSocketURL: config.GetChainRPCUrl(false, "8453"),
-				Enabled:      true,
+				ChainID: "8453",
+				Name:    "Base",
+				RPCURL:  config.GetChainRPCUrl(true, "8453"),
+				Enabled: true,
 			},
 		},
 		ReconnectConfig: ReconnectConfig{
