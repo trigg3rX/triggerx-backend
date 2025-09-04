@@ -14,6 +14,7 @@ func TestGetInitializationScript(t *testing.T) {
 		language          types.Language
 		expectedSubstring string
 		notExpected       string
+		shouldReturnEmpty bool
 	}{
 		{
 			name:              "Go Language",
@@ -48,14 +49,18 @@ func TestGetInitializationScript(t *testing.T) {
 		{
 			name:              "Unknown Language",
 			language:          "unknown",
-			expectedSubstring: "Container initialized successfully",
-			notExpected:       "go mod init",
+			shouldReturnEmpty: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			script := GetInitializationScript(tc.language)
+
+			if tc.shouldReturnEmpty {
+				assert.Empty(t, script)
+				return
+			}
 
 			// All scripts should have this basic setup
 			assert.Contains(t, script, "#!/bin/sh")
@@ -138,7 +143,7 @@ func TestGetExecutionScript(t *testing.T) {
 		name              string
 		language          types.Language
 		expectedSubstring string
-		shouldReturnError bool
+		shouldReturnEmpty bool
 	}{
 		{
 			name:              "Go Language",
@@ -168,7 +173,7 @@ func TestGetExecutionScript(t *testing.T) {
 		{
 			name:              "Unknown Language",
 			language:          "unknown",
-			shouldReturnError: true,
+			shouldReturnEmpty: true,
 		},
 	}
 
@@ -176,18 +181,22 @@ func TestGetExecutionScript(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			script := GetExecutionScript(tc.language)
 
-			if tc.shouldReturnError {
-				assert.Contains(t, script, "Error: Unsupported language.")
-				assert.Contains(t, script, "exit 1")
-			} else {
-				// All execution scripts should have this basic structure
-				assert.Contains(t, script, "#!/bin/sh")
-				assert.Contains(t, script, "set -e")
-				assert.Contains(t, script, "cd /code")
-
-				// Check for language-specific content
-				assert.Contains(t, script, tc.expectedSubstring)
+			if tc.shouldReturnEmpty {
+				assert.Empty(t, script)
+				return
 			}
+
+			// All execution scripts should have this basic structure
+			assert.Contains(t, script, "#!/bin/sh")
+			assert.Contains(t, script, "set -e")
+			assert.Contains(t, script, "cd /code")
+
+			// Check for output redirection and completion flag
+			assert.Contains(t, script, "> result.json 2>&1")
+			assert.Contains(t, script, "echo \"done\" > execution_complete.flag")
+
+			// Check for language-specific content
+			assert.Contains(t, script, tc.expectedSubstring)
 		})
 	}
 }
@@ -199,6 +208,7 @@ func TestGetCleanupScript(t *testing.T) {
 		language          types.Language
 		expectedSubstring string
 		notExpected       string
+		shouldReturnEmpty bool
 	}{
 		{
 			name:              "Go Language",
@@ -233,8 +243,7 @@ func TestGetCleanupScript(t *testing.T) {
 		{
 			name:              "Unknown Language",
 			language:          "unknown",
-			expectedSubstring: "rm -f code.*",
-			notExpected:       "go mod init",
+			shouldReturnEmpty: true,
 		},
 	}
 
@@ -242,9 +251,18 @@ func TestGetCleanupScript(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			script := GetCleanupScript(tc.language)
 
+			if tc.shouldReturnEmpty {
+				assert.Empty(t, script)
+				return
+			}
+
 			// All cleanup scripts should have this basic structure
 			assert.Contains(t, script, "#!/bin/sh")
 			assert.Contains(t, script, "cd /code")
+
+			// Check for result files cleanup
+			assert.Contains(t, script, "rm -f result.json")
+			assert.Contains(t, script, "rm -f execution_complete.flag")
 
 			// Check for language-specific content
 			assert.Contains(t, script, tc.expectedSubstring)
@@ -275,16 +293,38 @@ func TestScriptConstants(t *testing.T) {
 	assert.Contains(t, javascriptExecutionScript, "node code.js")
 	assert.Contains(t, typescriptExecutionScript, "tsc code.ts")
 
+	// Test result file handling in execution scripts
+	for _, script := range []string{
+		goExecutionScript,
+		pythonExecutionScript,
+		javascriptExecutionScript,
+		typescriptExecutionScript,
+	} {
+		assert.Contains(t, script, "> result.json 2>&1")
+		assert.Contains(t, script, "echo \"done\" > execution_complete.flag")
+	}
+
 	// Test cleanup scripts
 	assert.Contains(t, goCleanupScript, "rm -f code.go")
 	assert.Contains(t, pythonCleanupScript, "rm -f code.py")
 	assert.Contains(t, javascriptCleanupScript, "rm -f code.js")
 	assert.Contains(t, typescriptCleanupScript, "rm -f code.ts")
+
+	// Test result file cleanup in cleanup scripts
+	for _, script := range []string{
+		goCleanupScript,
+		pythonCleanupScript,
+		javascriptCleanupScript,
+		typescriptCleanupScript,
+	} {
+		assert.Contains(t, script, "rm -f result.json")
+		assert.Contains(t, script, "rm -f execution_complete.flag")
+	}
 }
 
 // TestScriptConsistency tests that scripts for the same language are consistent across functions.
 func TestScriptConsistency(t *testing.T) {
-	// Test that JS and Node have the same scripts (as mentioned in comments)
+	// Test that JS and Node have the same scripts
 	jsInit := GetInitializationScript(types.LanguageJS)
 	nodeInit := GetInitializationScript(types.LanguageNode)
 	assert.Equal(t, jsInit, nodeInit)
@@ -324,10 +364,14 @@ func TestScriptSafety(t *testing.T) {
 			execScript := GetExecutionScript(lang)
 			assert.Contains(t, execScript, "set -e")
 			assert.Contains(t, execScript, "cd /code")
+			assert.Contains(t, execScript, "> result.json 2>&1")
+			assert.Contains(t, execScript, "echo \"done\" > execution_complete.flag")
 
 			// Test cleanup script safety
 			cleanupScript := GetCleanupScript(lang)
 			assert.Contains(t, cleanupScript, "cd /code")
+			assert.Contains(t, cleanupScript, "rm -f result.json")
+			assert.Contains(t, cleanupScript, "rm -f execution_complete.flag")
 		})
 	}
 }
@@ -355,6 +399,25 @@ func TestWarmupMechanism(t *testing.T) {
 				assert.Contains(t, setupScript, "if [ ! -f /code/.warm ]")
 				assert.Contains(t, setupScript, "touch /code/.warm")
 			}
+		})
+	}
+}
+
+// TestResultFileHandling tests that all execution scripts handle result files properly.
+func TestResultFileHandling(t *testing.T) {
+	languages := []types.Language{types.LanguageGo, types.LanguagePy, types.LanguageJS, types.LanguageNode, types.LanguageTS}
+
+	for _, lang := range languages {
+		t.Run(string(lang), func(t *testing.T) {
+			// Test execution script result handling
+			execScript := GetExecutionScript(lang)
+			assert.Contains(t, execScript, "> result.json 2>&1")
+			assert.Contains(t, execScript, "echo \"done\" > execution_complete.flag")
+
+			// Test cleanup script result handling
+			cleanupScript := GetCleanupScript(lang)
+			assert.Contains(t, cleanupScript, "rm -f result.json")
+			assert.Contains(t, cleanupScript, "rm -f execution_complete.flag")
 		})
 	}
 }

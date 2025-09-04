@@ -119,6 +119,20 @@ func (m *MockConfigProviderInterface) GetMonitoringConfig() MonitoringConfig {
 	return ret0
 }
 
+// GetManagerConfig mocks base method.
+func (m *MockConfigProviderInterface) GetManagerConfig() ManagerConfig {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetManagerConfig")
+	ret0, _ := ret[0].(ManagerConfig)
+	return ret0
+}
+
+// GetManagerConfig indicates an expected call of GetManagerConfig.
+func (mr *MockConfigProviderInterfaceMockRecorder) GetManagerConfig() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagerConfig", reflect.TypeOf((*MockConfigProviderInterface)(nil).GetManagerConfig))
+}
+
 // GetMonitoringConfig indicates an expected call of GetMonitoringConfig.
 func (mr *MockConfigProviderInterfaceMockRecorder) GetMonitoringConfig() *gomock.Call {
 	mr.mock.ctrl.T.Helper()

@@ -1,6 +1,6 @@
 package docker
 
-//go:generate mockgen -source=interface.go -destination=mock_docker.go -package=docker . DockerManagerAPI
+//go:generate mockgen -source=interface.go -destination=mock_docker_executor.go -package=dockerexecutor . DockerExecutorAPI
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 )
 
-type DockerManagerAPI interface {
+type DockerExecutorAPI interface {
 	Initialize(ctx context.Context) error
 	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
