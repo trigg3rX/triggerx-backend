@@ -18,8 +18,6 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
@@ -72,31 +70,21 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
-	// Initialize Docker manager with language support
-	dockerConfig := dockerconfig.DefaultConfig("go")
-	supportedLanguages := []types.Language{
-		types.LanguageGo,
-		// types.LanguagePy,
-		// types.LanguageJS,
-		// types.LanguageTS,
-		// types.LanguageNode,
-	}
-
-	dockerManager, err := docker.NewDockerManager(dockerConfig, logger)
+	dockerExecutor, err := docker.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Errorf("Failed to create Docker manager: %v", err)
 	} else {
 		// Initialize Docker manager with language-specific pools
-		if err := dockerManager.Initialize(context.Background(), supportedLanguages); err != nil {
+		if err := dockerExecutor.Initialize(context.Background()); err != nil {
 			logger.Errorf("Failed to initialize Docker manager: %v", err)
 		} else {
-			logger.Infof("Docker manager initialized successfully with %d language pools", len(supportedLanguages))
+			logger.Infof("Docker manager initialized successfully")
 		}
 	}
 
 	dbServer := dbserver.NewServer(conn, logger)
 
-	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerManager)
+	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerExecutor)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
@@ -125,10 +113,10 @@ func main() {
 		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(srv, &wg, logger, dockerManager)
+	performGracefulShutdown(srv, &wg, logger, dockerExecutor)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerManager *docker.DockerManager) {
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerExecutor docker.DockerExecutorAPI) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -141,8 +129,8 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		}
 	}
 
-	if dockerManager != nil {
-		if err := dockerManager.Close(); err != nil {
+	if dockerExecutor != nil {
+		if err := dockerExecutor.Close(ctx); err != nil {
 			logger.Error("Failed to close Docker manager", "error", err)
 		}
 	}

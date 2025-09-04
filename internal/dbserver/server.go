@@ -228,8 +228,8 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	return s
 }
 
-func (s *Server) RegisterRoutes(router *gin.Engine, dockerManager *docker.DockerManager) {
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerManager)
+func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor docker.DockerExecutorAPI) {
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

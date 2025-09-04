@@ -23,5 +23,5 @@ type DockerExecutorAPI interface {
 	CancelExecution(executionID string) error
 	GetAlerts(severity string, limit int) []execution.Alert
 	ClearAlerts()
-	Close() error
+	Close(ctx context.Context) error
 }

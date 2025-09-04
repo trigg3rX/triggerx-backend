@@ -40,7 +40,9 @@ func (q *Queryx) Exec() error {
 	} else {
 		cfg = *retry.DefaultRetryConfig()
 	}
-	cfg.ShouldRetry = gocqlShouldRetry
+	cfg.ShouldRetry = func(err error, attempt int) bool {
+		return gocqlShouldRetry(err)
+	}
 
 	return retry.RetryFunc(q.query.Context(), operation, &cfg, q.conn.logger)
 }
@@ -58,7 +60,9 @@ func (q *Queryx) Scan(dest ...interface{}) error {
 	} else {
 		cfg = *retry.DefaultRetryConfig()
 	}
-	cfg.ShouldRetry = gocqlShouldRetry
+	cfg.ShouldRetry = func(err error, attempt int) bool {
+		return gocqlShouldRetry(err)
+	}
 
 	_, err := retry.Retry(q.query.Context(), func() (struct{}, error) {
 		return struct{}{}, operation()

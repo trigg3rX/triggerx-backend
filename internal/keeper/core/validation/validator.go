@@ -16,7 +16,7 @@ import (
 type TaskValidator struct {
 	alchemyAPIKey    string
 	etherscanAPIKey  string
-	dockerManager    *docker.DockerManager
+	dockerExecutor   docker.DockerExecutorAPI
 	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
 	IpfsClient       ipfs.IPFSClient
@@ -25,7 +25,7 @@ type TaskValidator struct {
 func NewTaskValidator(
 	alchemyAPIKey string,
 	etherscanAPIKey string,
-	dockerManager *docker.DockerManager,
+	dockerExecutor docker.DockerExecutorAPI,
 	aggregatorClient *aggregator.AggregatorClient,
 	logger logging.Logger,
 	ipfsClient ipfs.IPFSClient,
@@ -33,7 +33,7 @@ func NewTaskValidator(
 	return &TaskValidator{
 		alchemyAPIKey:    alchemyAPIKey,
 		etherscanAPIKey:  etherscanAPIKey,
-		dockerManager:    dockerManager,
+		dockerExecutor:   dockerExecutor,
 		aggregatorClient: aggregatorClient,
 		logger:           logger,
 		IpfsClient:       ipfsClient,
@@ -112,6 +112,6 @@ func (v *TaskValidator) ValidateTarget(targetData *types.TaskTargetData, traceID
 }
 
 // GetDockerManager returns the DockerManager instance
-func (v *TaskValidator) GetDockerManager() *docker.DockerManager {
-	return v.dockerManager
+func (v *TaskValidator) GetDockerExecutor() docker.DockerExecutorAPI {
+	return v.dockerExecutor
 }

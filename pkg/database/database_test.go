@@ -82,7 +82,7 @@ func TestQueryxExec(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = func(err error) bool {
+		cfg.ShouldRetry = func(err error, attempt int) bool {
 			// Import the gocqlShouldRetry function logic here
 			if err == nil {
 				return false
@@ -106,7 +106,7 @@ func TestQueryxExec(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = func(err error) bool {
+		cfg.ShouldRetry = func(err error, attempt int) bool {
 			if err == nil {
 				return false
 			}
@@ -128,7 +128,7 @@ func TestQueryxExec(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = func(err error) bool {
+		cfg.ShouldRetry = func(err error, attempt int) bool {
 			if err == nil {
 				return false
 			}
@@ -160,7 +160,7 @@ func TestQueryxScan(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = func(err error) bool {
+		cfg.ShouldRetry = func(err error, attempt int) bool {
 			if err == nil {
 				return false
 			}
@@ -193,7 +193,7 @@ func TestQueryxScan(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = func(err error) bool {
+		cfg.ShouldRetry = func(err error, attempt int) bool {
 			if err == nil {
 				return false
 			}
