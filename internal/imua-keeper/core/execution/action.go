@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
-	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 

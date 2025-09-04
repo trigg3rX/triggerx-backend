@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -16,7 +16,7 @@ import (
 type TaskValidator struct {
 	alchemyAPIKey    string
 	etherscanAPIKey  string
-	dockerExecutor   docker.DockerExecutorAPI
+	dockerExecutor   dockerexecutor.DockerExecutorAPI
 	aggregatorClient *aggregator.AggregatorClient
 	logger           logging.Logger
 	IpfsClient       ipfs.IPFSClient
@@ -25,7 +25,7 @@ type TaskValidator struct {
 func NewTaskValidator(
 	alchemyAPIKey string,
 	etherscanAPIKey string,
-	dockerExecutor docker.DockerExecutorAPI,
+	dockerExecutor dockerexecutor.DockerExecutorAPI,
 	aggregatorClient *aggregator.AggregatorClient,
 	logger logging.Logger,
 	ipfsClient ipfs.IPFSClient,
@@ -112,6 +112,6 @@ func (v *TaskValidator) ValidateTarget(targetData *types.TaskTargetData, traceID
 }
 
 // GetDockerManager returns the DockerManager instance
-func (v *TaskValidator) GetDockerExecutor() docker.DockerExecutorAPI {
+func (v *TaskValidator) GetDockerExecutor() dockerexecutor.DockerExecutorAPI {
 	return v.dockerExecutor
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -20,7 +20,7 @@ type Handler struct {
 	db                     *database.Connection
 	logger                 logging.Logger
 	config                 NotificationConfig
-	dockerExecutor         docker.DockerExecutorAPI
+	dockerExecutor         dockerexecutor.DockerExecutorAPI
 	jobRepository          repository.JobRepository
 	timeJobRepository      repository.TimeJobRepository
 	eventJobRepository     repository.EventJobRepository
@@ -33,7 +33,7 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor docker.DockerExecutorAPI) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,

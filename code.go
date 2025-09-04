@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -30,7 +30,7 @@ func main() {
 
 	// Initialize DockerManager from config file
 	configFilePath := "config.yaml"
-	dockerManager, err := docker.NewDockerExecutorFromFile(configFilePath, logger)
+	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile(configFilePath, logger)
 	if err != nil {
 		logger.Fatal("Failed to create DockerManager", "error", err)
 	}
@@ -71,7 +71,7 @@ func main() {
 	performGracefulShutdown(ctx, logger, dockerManager)
 }
 
-func performGracefulShutdown(ctx context.Context, logger logging.Logger, dockerManager *docker.DockerExecutor) {
+func performGracefulShutdown(ctx context.Context, logger logging.Logger, dockerManager *dockerexecutor.DockerExecutor) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout

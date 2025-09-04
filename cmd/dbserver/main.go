@@ -17,7 +17,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
@@ -70,7 +70,7 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
-	dockerExecutor, err := docker.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
+	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Errorf("Failed to create Docker manager: %v", err)
 	} else {
@@ -116,7 +116,7 @@ func main() {
 	performGracefulShutdown(srv, &wg, logger, dockerExecutor)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerExecutor docker.DockerExecutorAPI) {
+func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerExecutor dockerexecutor.DockerExecutorAPI) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)

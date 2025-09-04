@@ -22,7 +22,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -119,7 +119,7 @@ func main() {
 	}
 	logger.Info("[3/5] Dependency: Health client Initialised")
 
-	dockerManager, err := docker.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
+	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize code executor", "error", err)
 	}
@@ -197,7 +197,7 @@ func main() {
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
-func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager docker.DockerExecutorAPI, logger logging.Logger, server *api.Server, keeper *keeper.Keeper) {
+func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, logger logging.Logger, server *api.Server, keeper *keeper.Keeper) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
@@ -226,7 +226,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager docker.DockerExecutorAPI, server *api.Server, keeper *keeper.Keeper, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, keeper *keeper.Keeper, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout

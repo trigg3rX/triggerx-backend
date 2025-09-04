@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 )
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {

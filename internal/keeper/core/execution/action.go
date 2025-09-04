@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
