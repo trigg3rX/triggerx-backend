@@ -2,10 +2,11 @@ manager:
   auto_cleanup: true
 
 fees:
-  price_per_tg: 0.0001  # Price per TG in ether
-  fixed_cost: 1.0       # Fixed fee
-  transaction_cost: 1.0 # Cost of the action transaction
-  overhead_cost: 0.1    # Overhead cost for running scripts
+  price_per_tg: 0.001  # Price per TG in ether
+  transaction_cost: 0.001 # Cost of the action transaction
+  fixed_cost: 0.0001       # TriggerX fee - 0.1%
+  static_complexity_factor: 0.001 # Static complexity factor
+  dynamic_complexity_factor: 0.01 # Dynamic complexity factor
 
 languages:
   go:

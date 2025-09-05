@@ -25,7 +25,6 @@ type poolAPI interface {
 // ContainerManagerAPI is the primary interface for interacting with the container management system.
 // NOTE: CreateContainer has been removed as it's now an internal detail of the pools.
 type ContainerManagerAPI interface {
-	Initialize(ctx context.Context) error
 	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
 	GetDockerClient() docker.DockerClientAPI
 	GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error)

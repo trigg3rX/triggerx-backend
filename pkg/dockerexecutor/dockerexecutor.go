@@ -138,6 +138,13 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	return result, nil
 }
 
+// GetExecutionFeeConfig returns the execution fee configuration
+func (de *DockerExecutor) GetExecutionFeeConfig() config.ExecutionFeeConfig {
+	de.mutex.RLock()
+	defer de.mutex.RUnlock()
+	return de.config.GetFeesConfig()
+}
+
 // GetHealthStatus returns the current health status of the Docker manager
 func (de *DockerExecutor) GetHealthStatus() *execution.HealthStatus {
 	de.mutex.RLock()

@@ -92,8 +92,11 @@ func (c *ExecutionFeeConfig) Validate() error {
 	if c.TransactionCost < 0 {
 		errors = append(errors, "transaction_cost cannot be negative")
 	}
-	if c.OverheadCost < 0 {
-		errors = append(errors, "overhead_cost cannot be negative")
+	if c.StaticComplexityFactor < 0 {
+		errors = append(errors, "static_complexity_factor cannot be negative")
+	}
+	if c.DynamicComplexityFactor < 0 {
+		errors = append(errors, "dynamic_complexity_factor cannot be negative")
 	}
 
 	if len(errors) > 0 {

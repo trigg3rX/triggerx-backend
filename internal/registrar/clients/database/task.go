@@ -53,6 +53,9 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	var noAttestedTasks int64
 	var noExecutedTasks int64
 
+	taskOpxCost := data.TaskOpxCost.Div(data.TaskOpxCost, big.NewInt(1000000000000000))
+	taskOpxCostFloat, _ := taskOpxCost.Float64()
+
 	// Get task cost and job ID
 	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, data.TaskID).Iter()
 	defer func() {
@@ -85,7 +88,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 			dm.logger.Error(fmt.Sprintf("Failed to get keeper points for operator_id %d: no results found", operator_id))
 			return fmt.Errorf("keeper not found for operator_id %d", operator_id)
 		}
-		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
+		keeperPoints = keeperPoints + float64(rewardsBooster)*taskOpxCostFloat
 		noAttestedTasks = noAttestedTasks + 1
 
 		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeperPoints, rewardsBooster, noAttestedTasks)
@@ -116,9 +119,9 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
 	}
 	if data.IsAccepted {
-		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
+		keeperPoints = keeperPoints + float64(rewardsBooster)*taskOpxCostFloat
 	} else {
-		keeperPoints = keeperPoints - float64(rewardsBooster)*data.TaskOpxCost*0.1
+		keeperPoints = keeperPoints - float64(rewardsBooster)*taskOpxCostFloat*0.1
 	}
 	noExecutedTasks = noExecutedTasks + 1
 
@@ -155,7 +158,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 
 	userTasks = userTasks + 1
-	userPoints = userPoints + data.TaskOpxCost
+	userPoints = userPoints + taskOpxCostFloat
 	lastUpdatedAt := time.Now().UTC()
 
 	if err := dm.db.NewQuery(queries.UpdateUserPoints,

@@ -51,7 +51,7 @@ func TestContainerPool_Initialize_Success(t *testing.T) {
 	pool, mockDockerClient, _ := setupPoolTest(t)
 
 	// Add mock image to simulate existing image
-	mockDockerClient.AddMockImage("golang:1.21")
+	mockDockerClient.AddMockImage("golang:1.21-alpine")
 
 	// Act
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestContainerPool_Initialize_Success(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockDockerClient.ImageListCalls))
-	assert.Equal(t, 2, len(mockDockerClient.ContainerCreateCalls))
+	assert.Equal(t, 1, len(mockDockerClient.ContainerCreateCalls))
 }
 
 // TestContainerPool_Initialize_ImagePullFailure tests initialization failure when image pull fails

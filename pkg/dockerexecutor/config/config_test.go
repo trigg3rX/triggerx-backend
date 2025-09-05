@@ -53,7 +53,8 @@ func TestExecutionFeeConfig_JSONMarshaling(t *testing.T) {
 		PricePerTG:      0.0001,
 		FixedCost:       1.0,
 		TransactionCost: 1.0,
-		OverheadCost:    0.1,
+		StaticComplexityFactor: 0.1,
+		DynamicComplexityFactor: 0.1,
 	}
 
 	// Test marshaling
@@ -69,7 +70,8 @@ func TestExecutionFeeConfig_JSONMarshaling(t *testing.T) {
 	assert.Equal(t, config.PricePerTG, unmarshaled.PricePerTG)
 	assert.Equal(t, config.FixedCost, unmarshaled.FixedCost)
 	assert.Equal(t, config.TransactionCost, unmarshaled.TransactionCost)
-	assert.Equal(t, config.OverheadCost, unmarshaled.OverheadCost)
+	assert.Equal(t, config.StaticComplexityFactor, unmarshaled.StaticComplexityFactor)
+	assert.Equal(t, config.DynamicComplexityFactor, unmarshaled.DynamicComplexityFactor)
 }
 
 func TestBasePoolConfig_JSONMarshaling(t *testing.T) {
@@ -219,7 +221,8 @@ func TestCodeExecutorConfig_JSONMarshaling(t *testing.T) {
 			PricePerTG:      0.0001,
 			FixedCost:       1.0,
 			TransactionCost: 1.0,
-			OverheadCost:    0.1,
+			StaticComplexityFactor: 0.1,
+			DynamicComplexityFactor: 0.1,
 		},
 		Languages: map[string]LanguagePoolConfig{
 			"go": {

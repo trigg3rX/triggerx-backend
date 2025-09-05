@@ -23,10 +23,11 @@ type DockerContainerConfig struct {
 
 // ExecutionFeeConfig is the configuration for the execution fee
 type ExecutionFeeConfig struct {
-	PricePerTG      float64 `yaml:"price_per_tg"`         // Price per TG in ether
-	FixedCost       float64 `yaml:"fixed_cost"`             // Fixed fee, to be charged by us
+	PricePerTG      float64 `yaml:"price_per_tg"`     // Price per TG in ether
 	TransactionCost float64 `yaml:"transaction_cost"` // Cost of the action transaction
-	OverheadCost    float64 `yaml:"overhead_cost"`       // Overhead cost incured while running scripts (0 for static jobs)
+	FixedCost       float64 `yaml:"fixed_cost"`       // TriggerX fee - 0.1%
+	StaticComplexityFactor    float64 `yaml:"static_complexity_factor"`    // Static complexity factor
+	DynamicComplexityFactor   float64 `yaml:"dynamic_complexity_factor"`   // Dynamic complexity factor
 }
 
 type BasePoolConfig struct {

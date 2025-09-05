@@ -47,48 +47,6 @@ func TestNewManager_Success(t *testing.T) {
 	assert.False(t, manager.initialized)
 }
 
-// Test Initialize method
-func TestManager_Initialize_Success(t *testing.T) {
-	manager, mockDockerClient, _, _ := setupManagerTest(t)
-	ctx := context.Background()
-
-	// Don't add mock image so that ImagePull gets called
-
-	err := manager.Initialize(ctx)
-
-	require.NoError(t, err)
-	assert.Len(t, mockDockerClient.ImagePullCalls, 1)
-	assert.Equal(t, "golang:1.21-alpine", mockDockerClient.ImagePullCalls[0].Ref)
-}
-
-func TestManager_Initialize_ImageExists(t *testing.T) {
-	manager, mockDockerClient, _, _ := setupManagerTest(t)
-	ctx := context.Background()
-
-	// Mock image already exists locally
-	mockDockerClient.AddMockImage("golang:1.21-alpine")
-
-	err := manager.Initialize(ctx)
-
-	require.NoError(t, err)
-	assert.Len(t, mockDockerClient.ImageListCalls, 1)
-	assert.Len(t, mockDockerClient.ImagePullCalls, 0) // Should not pull if image exists
-}
-
-func TestManager_Initialize_ImagePullFailure(t *testing.T) {
-	manager, mockDockerClient, _, _ := setupManagerTest(t)
-	ctx := context.Background()
-
-	// Mock image pull failure
-	mockDockerClient.ShouldFailImagePull = true
-
-	err := manager.Initialize(ctx)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to pull base image")
-	assert.Len(t, mockDockerClient.ImagePullCalls, 1)
-}
-
 // Test InitializeLanguagePools method
 func TestManager_InitializeLanguagePools_Success(t *testing.T) {
 	manager, _, _, _ := setupManagerTest(t)
@@ -430,7 +388,7 @@ func TestManager_InitializationFlow(t *testing.T) {
 	// Don't add mock image so that ImagePull gets called during Initialize
 
 	// 1. Initialize manager
-	err := manager.Initialize(ctx)
+	err := manager.InitializeLanguagePools(ctx, []types.Language{types.LanguageGo, types.LanguagePy})
 	require.NoError(t, err)
 
 	// 2. Initialize language pools
@@ -545,12 +503,12 @@ func TestManager_PoolInteraction_Success(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Initialize manager
-	err := manager.Initialize(ctx)
-	require.NoError(t, err)
+	// err := manager.Initialize(ctx)
+	// require.NoError(t, err)
 
 	// 2. Initialize language pool
 	languages := []types.Language{types.LanguageGo}
-	err = manager.InitializeLanguagePools(ctx, languages)
+	err := manager.InitializeLanguagePools(ctx, languages)
 	require.NoError(t, err)
 
 	// 3. Get a container
@@ -586,9 +544,7 @@ func TestManager_Close_CallsPoolClose(t *testing.T) {
 	ctx := context.Background()
 
 	// Initialize to create pools
-	err := manager.Initialize(ctx)
-	require.NoError(t, err)
-	err = manager.InitializeLanguagePools(ctx, []types.Language{types.LanguageGo})
+	err := manager.InitializeLanguagePools(ctx, []types.Language{types.LanguageGo})
 	require.NoError(t, err)
 
 	// Get the pool to check its state later

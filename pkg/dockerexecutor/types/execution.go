@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"math/big"
 	"time"
 )
 
@@ -22,7 +23,7 @@ type DockerResourceStats struct {
 	TxErrors          uint64        `json:"tx_errors"`
 	TxDropped         uint64        `json:"tx_dropped"`
 	BandwidthRate     float64       `json:"bandwidth_rate"`
-	TotalCost         float64       `json:"total_cost"`
+	TotalCost         *big.Int      `json:"total_cost"`
 	StaticComplexity  float64       `json:"static_complexity"`
 	DynamicComplexity float64       `json:"dynamic_complexity"`
 	ExecutionTime     time.Duration `json:"execution_time"`

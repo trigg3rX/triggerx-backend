@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/docker/docker/api/types/container"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
@@ -324,7 +325,10 @@ func (p *containerPool) createContainer(ctx context.Context, codePath string) (s
 		Privileged: true,
 	}
 
-	resp, err := p.manager.GetDockerClient().ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	// Generate a meaningful container name
+	containerName := p.generateContainerName()
+
+	resp, err := p.manager.GetDockerClient().ContainerCreate(ctx, config, hostConfig, nil, nil, containerName)
 	if err != nil {
 		p.logger.Errorf("failed to create container: %v", err)
 		return "", fmt.Errorf("failed to create container: %w", err)
@@ -362,6 +366,13 @@ func (p *containerPool) createContainer(ctx context.Context, codePath string) (s
 	}
 
 	return "", fmt.Errorf("container %s failed to start properly", containerID)
+}
+
+// generateContainerName creates a meaningful name for the container
+func (p *containerPool) generateContainerName() string {
+	// Use atomic counter to ensure uniqueness even in parallel scenarios
+	uuid := uuid.New().String()
+	return fmt.Sprintf("triggerx-executor-%s-%s", p.language, uuid[:8])
 }
 
 func (p *containerPool) populateReadyQueue() {

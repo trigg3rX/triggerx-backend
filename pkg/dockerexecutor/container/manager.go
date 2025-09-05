@@ -77,37 +77,6 @@ func NewContainerManager(
 	return manager, nil
 }
 
-// Initialize initializes the container manager and pulls all required images.
-func (m *containerManager) Initialize(ctx context.Context) error {
-	m.logger.Info("Initializing Docker manager")
-
-	// Proactively pull all images required by the configured languages.
-	// This ensures images are ready before pools start creating containers.
-	supportedLanguages := m.config.GetSupportedLanguages()
-	pulledImages := make(map[string]bool) // Use a map to avoid pulling the same image multiple times
-
-	for _, lang := range supportedLanguages {
-		poolConfig, exists := m.config.GetLanguagePoolConfig(lang)
-		if !exists {
-			continue // Should not happen if config is validated
-		}
-
-		imageName := poolConfig.LanguageConfig.ImageName
-		if !pulledImages[imageName] {
-			m.logger.Infof("Pulling required image for language %s: %s", lang, imageName)
-			if err := m.PullImage(ctx, imageName); err != nil {
-				// We can treat this as a warning or a fatal error.
-				// For robustness, let's warn and continue.
-				m.logger.Warnf("Failed to pull image %s: %v", imageName, err)
-			}
-			pulledImages[imageName] = true
-		}
-	}
-
-	m.logger.Info("Docker manager initialized successfully")
-	return nil
-}
-
 // InitializeLanguagePools initializes language-specific container pools
 func (m *containerManager) InitializeLanguagePools(ctx context.Context, languages []types.Language) error {
 	m.mutex.Lock()

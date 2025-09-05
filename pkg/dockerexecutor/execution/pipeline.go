@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -217,27 +218,60 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 
 	// Calculate fees
 	fees := ep.calculateFees(execCtx)
-	execCtx.Metadata["fees"] = fmt.Sprintf("%.6f", fees)
+	execCtx.Metadata["fees"] = fees.String()
 	result.Stats.TotalCost = fees
 
 	return result
 }
 
-func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) float64 {
-	// Basic fee calculation
-	duration := time.Since(execCtx.StartedAt)
-	baseFee := ep.config.GetFeesConfig().FixedCost
-	timeFee := duration.Seconds() * ep.config.GetFeesConfig().PricePerTG
+func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big.Int {
+	feesConfig := ep.config.GetFeesConfig()
 
-	// Add complexity factor if available
-	complexityFee := 0.0
-	if _, ok := execCtx.Metadata["complexity"]; ok {
-		// Parse complexity and apply factor
-		// This is a simplified calculation
-		complexityFee = 0.1 // Placeholder
+	// Get complexity values from execution result
+	// We need to get these from the execution result, but since we don't have direct access here,
+	// we'll need to pass them through the execution context or get them from metadata
+	var staticComplexity, dynamicComplexity float64
+
+	// Try to get complexity from metadata first (set in processResults)
+	if staticStr, ok := execCtx.Metadata["static_complexity"]; ok {
+		if parsed, err := fmt.Sscanf(staticStr, "%f", &staticComplexity); err != nil || parsed != 1 {
+			ep.logger.Warnf("Failed to parse static complexity: %s", staticStr)
+			staticComplexity = 0.0
+		}
 	}
 
-	return baseFee + timeFee + complexityFee
+	if dynamicStr, ok := execCtx.Metadata["dynamic_complexity"]; ok {
+		if parsed, err := fmt.Sscanf(dynamicStr, "%f", &dynamicComplexity); err != nil || parsed != 1 {
+			ep.logger.Warnf("Failed to parse dynamic complexity: %s", dynamicStr)
+			dynamicComplexity = 0.0
+		}
+	}
+
+	// Calculate x = static_complexity * factor + dynamic_complexity * factor + transaction_cost
+	x := (staticComplexity * feesConfig.StaticComplexityFactor) +
+		(dynamicComplexity * feesConfig.DynamicComplexityFactor) +
+		feesConfig.TransactionCost
+
+	// Calculate fee = [(0.1% of x) + x] TG
+	// 0.1% = 0.001
+	feeInTG := (feesConfig.FixedCost*x + x)
+
+	// Convert TG to Ether using price per TG
+	feeInEther := feeInTG * feesConfig.PricePerTG
+
+	// Convert Ether to Wei (1 Ether = 10^18 Wei)
+	// Use big.Float for precision
+	feeFloat := big.NewFloat(feeInEther)
+	weiMultiplier := big.NewFloat(1e18) // 10^18
+	feeFloat.Mul(feeFloat, weiMultiplier)
+
+	// Convert to big.Int (Wei)
+	feeWei, _ := feeFloat.Int(nil)
+
+	ep.logger.Debugf("Fee calculation: static_complexity=%.6f, dynamic_complexity=%.6f, x=%.6f, fee_in_tg=%.6f, fee_in_ether=%.6f, fee_in_wei=%s",
+		staticComplexity, dynamicComplexity, x, feeInTG, feeInEther, feeWei.String())
+
+	return feeWei
 }
 
 // func (ep *executionPipeline) cleanupExecution(execCtx *types.ExecutionContext) error {
@@ -384,10 +418,28 @@ func (ep *executionPipeline) updateStats(success bool, duration time.Duration, c
 }
 
 func (ep *executionPipeline) calculateCost(duration time.Duration, complexity float64) float64 {
-	// Basic cost calculation based on execution time and complexity
-	timeCost := duration.Seconds() * ep.config.GetFeesConfig().PricePerTG
-	complexityCost := complexity * ep.config.GetFeesConfig().PricePerTG
-	return timeCost + complexityCost + ep.config.GetFeesConfig().FixedCost
+	feesConfig := ep.config.GetFeesConfig()
+
+	// Use the same formula as calculateFees but return as float64 for statistics
+	// For statistics, we'll use a simplified version with just the complexity parameter
+	// In a real scenario, you might want to pass both static and dynamic complexity separately
+
+	// Calculate x = complexity * factor + transaction_cost
+	// Note: This is a simplified version for statistics. The actual fee calculation
+	// uses separate static and dynamic complexity values
+	x := (complexity * feesConfig.StaticComplexityFactor) + feesConfig.TransactionCost
+
+	// Calculate TG (execution time in seconds)
+	tg := duration.Seconds()
+
+	// Calculate fee = [(0.1% of x) + x] * TG
+	// 0.1% = 0.001
+	feeInTG := (0.001*x + x) * tg
+
+	// Convert TG to Ether using price per TG
+	feeInEther := feeInTG * feesConfig.PricePerTG
+
+	return feeInEther
 }
 
 func generateExecutionID() string {

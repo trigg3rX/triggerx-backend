@@ -16,9 +16,10 @@ func NewDefaultMockConfigProvider(t gomock.TestReporter) *MockConfigProviderInte
 	defaultConfig := CodeExecutorConfig{
 		Fees: ExecutionFeeConfig{
 			PricePerTG:      0.001,
-			FixedCost:       0.01,
-			TransactionCost: 0.005,
-			OverheadCost:    0.002,
+			FixedCost:       0.0001,
+			TransactionCost: 0.001,
+			StaticComplexityFactor: 0.001,
+			DynamicComplexityFactor: 0.01,
 		},
 		Languages: map[string]LanguagePoolConfig{
 			"go": {

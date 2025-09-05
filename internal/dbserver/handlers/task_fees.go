@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,14 +13,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 )
 
-func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
+func (h *Handler) CalculateTaskFees(ipfsURLs string) (*big.Int, error) {
 	if ipfsURLs == "" {
-		return 0, fmt.Errorf("missing IPFS URLs")
+		return big.NewInt(0), fmt.Errorf("missing IPFS URLs")
 	}
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_fees")
 	urlList := strings.Split(ipfsURLs, ",")
-	totalFee := 0.0
+	totalFee := big.NewInt(0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -45,7 +46,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (float64, error) {
 			}
 
 			mu.Lock()
-			totalFee += result.Stats.TotalCost
+			totalFee.Add(totalFee, result.Stats.TotalCost)
 			mu.Unlock()
 		}(ipfsURL)
 	}

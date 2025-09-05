@@ -238,7 +238,8 @@ fees:
   price_per_tg: 0.0005
   fixed_cost: 5.0
   transaction_cost: 2.0
-  overhead_cost: 0.5
+  static_complexity_factor: 0.5
+  dynamic_complexity_factor: 0.5
 languages:
   go:
     language: "go"
@@ -307,7 +308,8 @@ validation:
 	assert.Equal(t, 0.0005, provider.cfg.Fees.PricePerTG)
 	assert.Equal(t, 5.0, provider.cfg.Fees.FixedCost)
 	assert.Equal(t, 2.0, provider.cfg.Fees.TransactionCost)
-	assert.Equal(t, 0.5, provider.cfg.Fees.OverheadCost)
+	assert.Equal(t, 0.5, provider.cfg.Fees.StaticComplexityFactor)
+	assert.Equal(t, 0.5, provider.cfg.Fees.DynamicComplexityFactor)
 
 	// Test complex cache config
 	assert.Equal(t, "/var/cache/custom", provider.cfg.Cache.CacheDir)
@@ -533,7 +535,8 @@ func TestConfigProvider_GetFeesConfig(t *testing.T) {
 	assert.Equal(t, 0.0001, feesConfig.PricePerTG)
 	assert.Equal(t, 1.0, feesConfig.FixedCost)
 	assert.Equal(t, 1.0, feesConfig.TransactionCost)
-	assert.Equal(t, 0.1, feesConfig.OverheadCost)
+	assert.Equal(t, 0.1, feesConfig.StaticComplexityFactor)
+	assert.Equal(t, 0.1, feesConfig.DynamicComplexityFactor)
 }
 
 func TestConfigProvider_GetFeesConfig_WithCustomValues(t *testing.T) {
@@ -542,7 +545,8 @@ fees:
   price_per_tg: 0.0005
   fixed_cost: 2.5
   transaction_cost: 3.0
-  overhead_cost: 0.5
+  static_complexity_factor: 0.5
+  dynamic_complexity_factor: 0.5
 `
 
 	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
@@ -566,7 +570,8 @@ fees:
 	assert.Equal(t, 0.0005, feesConfig.PricePerTG)
 	assert.Equal(t, 2.5, feesConfig.FixedCost)
 	assert.Equal(t, 3.0, feesConfig.TransactionCost)
-	assert.Equal(t, 0.5, feesConfig.OverheadCost)
+	assert.Equal(t, 0.5, feesConfig.StaticComplexityFactor)
+	assert.Equal(t, 0.5, feesConfig.DynamicComplexityFactor)
 }
 
 // Test GetCacheConfig method
