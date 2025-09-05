@@ -6,14 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
-
-const shutdownTimeout = 10 * time.Second
 
 func main() {
 	// Initialize configuration
@@ -48,7 +45,7 @@ func main() {
 	logger.Info("[2/5] TaskManager components initialized successfully")
 
 	// Create context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Log service status
@@ -62,31 +59,18 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, taskManager, logger)
+	performGracefulShutdown(taskManager, logger)
 }
 
-func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskManager, logger logging.Logger) {
+func performGracefulShutdown(taskManager *taskmonitor.TaskManager, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
-
-	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-	defer cancel()
 
 	// Close TaskManager (handles all components)
 	logger.Info("Closing TaskManager...")
 	if err := taskManager.Close(); err != nil {
-		logger.Error("Error closing TaskManager", "error", err)
+		logger.Warn("Non-critical errors during TaskManager shutdown", "error", err)
 	} else {
 		logger.Info("TaskManager closed successfully")
 	}
 	logger.Info("Task Monitor service shutdown complete")
-
-	// Ensure we exit cleanly
-	select {
-	case <-shutdownCtx.Done():
-		logger.Error("Shutdown timeout exceeded")
-		os.Exit(1)
-	default:
-		os.Exit(0)
-	}
 }

@@ -53,7 +53,7 @@ func RetryWithBackoff(ctx context.Context, fn func() error, config *RetryConfig,
 		BackoffFactor:   config.BackoffFactor,
 		JitterFactor:    config.JitterFactor,
 		LogRetryAttempt: true,
-		ShouldRetry: func(err error) bool {
+		ShouldRetry: func(err error, attempt int) bool {
 			return isRetryableError(err, config.RetryableCodes)
 		},
 	}

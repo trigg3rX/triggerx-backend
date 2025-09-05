@@ -8,7 +8,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -22,7 +22,7 @@ type Handler struct {
 	db                     *database.Connection
 	logger                 logging.Logger
 	config                 NotificationConfig
-	dockerManager          *docker.DockerManager
+	dockerExecutor         dockerexecutor.DockerExecutorAPI
 	jobRepository          repository.JobRepository
 	timeJobRepository      repository.TimeJobRepository
 	eventJobRepository     repository.EventJobRepository
@@ -39,12 +39,12 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerManager *docker.DockerManager, hub *websocket.Hub) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
 		config:                 config,
-		dockerManager:          dockerManager,
+		dockerExecutor:         dockerExecutor,
 		jobRepository:          repository.NewJobRepository(db),
 		timeJobRepository:      repository.NewTimeJobRepository(db),
 		eventJobRepository:     repository.NewEventJobRepository(db),
@@ -54,58 +54,9 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		keeperRepository:       repository.NewKeeperRepository(db),
 		apiKeysRepository:      repository.NewApiKeysRepository(db),
 		hub:                    hub,
-		publisher:              events.NewPublisher(hub, logger),
-	}
-	h.scanNowQuery = h.defaultScanNowQuery
-
-	// Log Docker manager status
-	if dockerManager != nil {
-		if dockerManager.IsInitialized() {
-			logger.Info("Docker manager is initialized and ready")
-			supportedLanguages := dockerManager.GetSupportedLanguages()
-			logger.Infof("Supported languages: %v", supportedLanguages)
-		} else {
-			logger.Warn("Docker manager is not initialized")
-		}
-	} else {
-		logger.Warn("Docker manager is nil")
-	}
-
-	return h
-}
-
-// NewHandlerWithPublisher creates a new handler with WebSocket-enabled repositories
-func NewHandlerWithPublisher(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerManager *docker.DockerManager, hub *websocket.Hub, publisher *events.Publisher) *Handler {
-	h := &Handler{
-		db:                     db,
-		logger:                 logger,
-		config:                 config,
-		dockerManager:          dockerManager,
-		jobRepository:          repository.NewJobRepository(db),
-		timeJobRepository:      repository.NewTimeJobRepository(db),
-		eventJobRepository:     repository.NewEventJobRepository(db),
-		conditionJobRepository: repository.NewConditionJobRepository(db),
-		taskRepository:         repository.NewTaskRepositoryWithPublisher(db, publisher),
-		userRepository:         repository.NewUserRepository(db),
-		keeperRepository:       repository.NewKeeperRepository(db),
-		apiKeysRepository:      repository.NewApiKeysRepository(db),
-		hub:                    hub,
 		publisher:              publisher,
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
-
-	// Log Docker manager status
-	if dockerManager != nil {
-		if dockerManager.IsInitialized() {
-			logger.Info("Docker manager is initialized and ready")
-			supportedLanguages := dockerManager.GetSupportedLanguages()
-			logger.Infof("Supported languages: %v", supportedLanguages)
-		} else {
-			logger.Warn("Docker manager is not initialized")
-		}
-	} else {
-		logger.Warn("Docker manager is nil")
-	}
 
 	return h
 }

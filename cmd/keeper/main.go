@@ -16,9 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
-	dockerconfig "github.com/trigg3rX/triggerx-backend/pkg/docker/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -91,25 +89,16 @@ func main() {
 	}
 	logger.Info("[3/6] Dependency: Aggregator client Initialised")
 
-	dockerCfg := dockerconfig.DefaultConfig("go")
-	supportedLanguages := []types.Language{
-		types.LanguageGo,
-		// types.LanguagePy,
-		// types.LanguageJS,
-		// types.LanguageTS,
-		// types.LanguageNode,
-	}
-
-	dockerManager, err := docker.NewDockerManager(dockerCfg, logger)
+	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize code executor", "error", err)
 	}
 
 	// Initialize the Docker manager with language-specific pools
-	if err := dockerManager.Initialize(ctx, supportedLanguages); err != nil {
+	if err := dockerManager.Initialize(ctx); err != nil {
 		logger.Fatal("Failed to initialize Docker manager", "error", err)
 	}
-	logger.Infof("[4/6] Dependency: Code executor Initialised with %d language pools", len(supportedLanguages))
+	logger.Infof("[4/6] Dependency: Code executor Initialised")
 
 	ipfsCfg := ipfs.NewConfig(config.GetIpfsHost(), config.GetPinataJWT())
 	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
@@ -175,7 +164,7 @@ func main() {
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
-func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager *docker.DockerManager, logger logging.Logger, server *api.Server) {
+func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, logger logging.Logger, server *api.Server) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
@@ -201,7 +190,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager *docker.DockerManager, server *api.Server, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -217,11 +206,11 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
         healthClient.Close()
         logger.Info("[1/3] Process: Health client Closed")
 
-        // Close code executor (this will clean up Docker containers)
-        if err := dockerManager.Close(); err != nil {
-            logger.Error("Error closing code executor", "error", err)
-        }
-        logger.Info("[2/3] Process: Code executor Closed")
+	// Close code executor
+	if err := dockerManager.Close(ctx); err != nil {
+		logger.Error("Error closing code executor", "error", err)
+	}
+	logger.Info("[2/3] Process: Code executor Closed")
 
         // Shutdown server gracefully
         if err := server.Stop(shutdownCtx); err != nil {

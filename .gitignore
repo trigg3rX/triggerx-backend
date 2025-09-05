@@ -12,7 +12,7 @@ release/*
 # data
 data/cache/*
 !data/cache/.gitkeep
-data/logs/*/*.log
+data/logs/*/*.log*
 data/logs/*/*.json
 !data/logs/*/.gitkeep
 

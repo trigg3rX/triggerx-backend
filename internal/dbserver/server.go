@@ -16,7 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
 	"github.com/gin-gonic/gin"
@@ -255,12 +255,12 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	return s
 }
 
-func (s *Server) RegisterRoutes(router *gin.Engine, dockerManager *docker.DockerManager) {
+func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecutor.DockerExecutorAPI) {
 	// Create event publisher
 	publisher := events.NewPublisher(s.hub, s.logger)
 
 	// Create handler with WebSocket-enabled repository
-	handler := handlers.NewHandlerWithPublisher(s.db, s.logger, s.notificationConfig, dockerManager, s.hub, publisher)
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

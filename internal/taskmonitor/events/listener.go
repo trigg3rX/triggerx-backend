@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
-	// "github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -346,7 +346,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 				l.logger.Debugf("[%s] No new blocks to process (last=%d, current=%d)", chainConfig.Name, lastBlock, currentBlock)
 				continue
 			}
-			l.logger.Infof("[%s] Polling block range [%d, %d] (span=%d)", chainConfig.Name, lastBlock+1, currentBlock, currentBlock-(lastBlock+1)+1)
+			// l.logger.Infof("[%s] Polling block range [%d, %d] (span=%d)", chainConfig.Name, lastBlock+1, currentBlock, currentBlock-(lastBlock+1)+1)
 
 			from := new(big.Int).SetUint64(lastBlock + 1)
 			to := new(big.Int).SetUint64(currentBlock)
@@ -361,7 +361,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 						chunkEnd = end
 					}
 
-					l.logger.Debugf("[%s] Querying %s.%s logs in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
+					// l.logger.Debugf("[%s] Querying %s.%s logs in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
 
 					fq := sub.FilterQuery
 					fq.FromBlock = new(big.Int).SetUint64(cur)
@@ -374,11 +374,11 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 						cur = chunkEnd + 1
 						continue
 					}
-					if len(logs) == 0 {
-						l.logger.Debugf("[%s] No logs for %s.%s in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
-					} else {
-						l.logger.Infof("[%s] Fetched %d logs for %s.%s in chunk [%d, %d]", chainConfig.Name, len(logs), sub.ContractType, sub.EventName, cur, chunkEnd)
-					}
+					// if len(logs) == 0 {
+					// 	l.logger.Debugf("[%s] No logs for %s.%s in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
+					// } else {
+					// l.logger.Infof("[%s] Fetched %d logs for %s.%s in chunk [%d, %d]", chainConfig.Name, len(logs), sub.ContractType, sub.EventName, cur, chunkEnd)
+					// }
 					for _, lg := range logs {
 						if err := l.emitChainEventFromLog(chainConfig, sub, lg); err != nil {
 							l.logger.Errorf("[%s] Failed to emit event for %s.%s: %v", chainConfig.Name, sub.ContractType, sub.EventName, err)
@@ -390,7 +390,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 			}
 
 			lastBlock = currentBlock
-			l.logger.Debugf("[%s] Updated last processed block to %d", chainConfig.Name, lastBlock)
+			// l.logger.Debugf("[%s] Updated last processed block to %d", chainConfig.Name, lastBlock)
 		}
 	}
 }
@@ -446,62 +446,65 @@ func (l *ContractEventListener) parseAttestationCenterEvent(eventName string, lg
 		return nil, fmt.Errorf("event %s not found in AttestationCenter ABI", eventName)
 	}
 
-	// Create a map to hold all parsed data
-	parsedData := make(map[string]interface{})
+	// Debug: Log event structure and raw data
+	// l.logger.Debug("Event structure", "event_name", eventName, "input_count", len(ev.Inputs), "data_length", len(lg.Data))
+	// for i, input := range ev.Inputs {
+		// l.logger.Debug("Event input", "index", i, "name", input.Name, "type", input.Type.String(), "indexed", input.Indexed)
+	// }
+	// l.logger.Debug("Raw event data", "data_hex", fmt.Sprintf("%x", lg.Data))
 
-	// Parse non-indexed fields from log data using UnpackIntoMap
-	if len(lg.Data) > 0 {
-		nonIndexedData := make(map[string]interface{})
-		err := ev.Inputs.UnpackIntoMap(nonIndexedData, lg.Data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unpack non-indexed data: %w", err)
-		}
-		
-		// Copy non-indexed data to parsedData
-		for k, v := range nonIndexedData {
-			parsedData[k] = v
+	// Decode non-indexed fields
+	nonIndexedArgs := make(abi.Arguments, 0)
+	for _, input := range ev.Inputs {
+		if !input.Indexed {
+			nonIndexedArgs = append(nonIndexedArgs, input)
 		}
 	}
+	nonIndexed := make(map[string]interface{})
+	if len(nonIndexedArgs) > 0 {
+		// Try to unpack all inputs first
+		allUnpacked := make(map[string]interface{})
+		if err := ev.Inputs.UnpackIntoMap(allUnpacked, lg.Data); err != nil {
+			return nil, fmt.Errorf("failed to unpack event data: %w", err)
+		}
 
-	// Parse indexed fields from topics manually (skip topics[0] which is the event signature)
-	if len(lg.Topics) > 1 {
-		topicIndex := 1 // Start from index 1 (skip event signature)
+		// Filter to only non-indexed fields
 		for _, input := range ev.Inputs {
 			if !input.Indexed {
-				continue
+				if value, exists := allUnpacked[input.Name]; exists {
+					nonIndexed[input.Name] = value
+				}
 			}
-			
-			if topicIndex >= len(lg.Topics) {
-				break
-			}
+		}
 
-			topic := lg.Topics[topicIndex]
-			
-			// Parse the topic based on the argument type
-			var value interface{}
-			switch input.Type.String() {
-			case "address":
-				value = common.BytesToAddress(topic.Bytes()).Hex()
-			case "uint256":
-				value = topic.Big().String()
-			case "uint128", "uint64", "uint32", "uint16", "uint8":
-				value = topic.Big().String()
-			case "int256", "int128", "int64", "int32", "int16", "int8":
-				value = topic.Big().String()
-			case "bytes32":
-				value = topic.Hex()
-			case "string":
-				// For indexed strings, we get the keccak256 hash, not the actual string
-				value = topic.Hex()
-			case "bool":
-				value = topic.Big().Uint64() != 0
-			default:
-				// For arrays and other complex types, they are hashed when indexed
-				value = topic.Hex()
+		// Debug: Log what was unpacked from non-indexed data
+		// l.logger.Debug("Unpacked non-indexed data", "count", len(nonIndexed))
+		// for k, v := range nonIndexed {
+		// 	l.logger.Debug("Non-indexed field", "key", k, "type", fmt.Sprintf("%T", v), "value", v)
+		// }
+
+		// Debug: Log all unpacked data for comparison
+		// l.logger.Debug("All unpacked data", "count", len(allUnpacked))
+		// for k, v := range allUnpacked {
+		// 	l.logger.Debug("All field", "key", k, "type", fmt.Sprintf("%T", v), "value", v)
+		// }
+	}
+
+	// Parse indexed parameters from topics
+	parsedData := make(map[string]interface{})
+	// Start with non-indexed values
+	for k, v := range nonIndexed {
+		parsedData[k] = v
+	}
+
+	// Parse indexed parameters from topics (skip topics[0] which is the signature)
+	topicIndex := 1
+	for _, input := range ev.Inputs {
+		if input.Indexed {
+			if topicIndex < len(lg.Topics) {
+				parsedData[input.Name] = l.parseTopicData(input, lg.Topics[topicIndex])
+				topicIndex++
 			}
-			
-			parsedData[input.Name] = value
-			topicIndex++
 		}
 	}
 
@@ -579,5 +582,30 @@ func GetMainnetConfig() *ListenerConfig {
 				"attestation_center": config.GetAttestationCenterAddress(),
 			},
 		},
+	}
+}
+
+// parseTopicData parses topic data based on the input type
+func (l *ContractEventListener) parseTopicData(input abi.Argument, topic common.Hash) interface{} {
+	switch input.Type.String() {
+	case "address":
+		return common.HexToAddress(topic.Hex()).Hex()
+	case "uint256", "uint128", "uint64", "uint32", "uint16", "uint8":
+		return new(big.Int).SetBytes(topic.Bytes()).String()
+	case "int256", "int128", "int64", "int32", "int16", "int8":
+		// For signed integers, we need to handle two's complement
+		value := new(big.Int).SetBytes(topic.Bytes())
+		if value.Bit(255) == 1 { // Check if the sign bit is set
+			// Convert from two's complement
+			max := new(big.Int).Lsh(big.NewInt(1), 256)
+			value.Sub(value, max)
+		}
+		return value.String()
+	case "bytes32":
+		return topic.Hex()
+	case "bool":
+		return topic.Big().Cmp(big.NewInt(0)) != 0
+	default:
+		return topic.Hex()
 	}
 }

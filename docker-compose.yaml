@@ -9,5 +9,11 @@ services:
     logging:
       driver: "json-file"
 
+  # redis:
+  #   image: "redis:7-alpine"
+  #   container_name: triggerx-redis
+  #   ports:
+  #     - "6379:6379"
+
 volumes:
   scylla_data: 

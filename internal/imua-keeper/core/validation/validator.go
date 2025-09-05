@@ -5,7 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/docker"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -13,15 +13,15 @@ import (
 type TaskValidator struct {
 	alchemyAPIKey   string
 	etherscanAPIKey string
-	dockerManager   *docker.DockerManager
+	dockerExecutor  dockerexecutor.DockerExecutorAPI
 	logger          logging.Logger
 }
 
-func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerManager *docker.DockerManager, logger logging.Logger) *TaskValidator {
+func NewTaskValidator(alchemyAPIKey string, etherscanAPIKey string, dockerExecutor dockerexecutor.DockerExecutorAPI, logger logging.Logger) *TaskValidator {
 	return &TaskValidator{
 		alchemyAPIKey:   alchemyAPIKey,
 		etherscanAPIKey: etherscanAPIKey,
-		dockerManager:   dockerManager,
+		dockerExecutor:  dockerExecutor,
 		logger:          logger,
 	}
 }
@@ -84,7 +84,7 @@ func (v *TaskValidator) ValidateTarget(targetData *types.TaskTargetData, traceID
 	return true, nil
 }
 
-// GetDockerManager returns the DockerManager instance
-func (v *TaskValidator) GetDockerManager() *docker.DockerManager {
-	return v.dockerManager
+// GetDockerExecutor returns the DockerExecutor instance
+func (v *TaskValidator) GetDockerExecutor() dockerexecutor.DockerExecutorAPI {
+	return v.dockerExecutor
 }

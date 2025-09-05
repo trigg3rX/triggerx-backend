@@ -232,14 +232,23 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 		return
 	}
 
+	// Check if the request context is still valid before attempting upgrade
+	select {
+	case <-c.Request.Context().Done():
+		wcm.rateLimit.ReleaseConnection(clientIP)
+		wcm.logger.Warnf("Request context cancelled before WebSocket upgrade for client %s", clientIP)
+		return
+	default:
+		// Context is still valid, proceed with upgrade
+	}
+
 	// Upgrade to WebSocket
 	conn, err := wcm.upgrader.UpgradeConnection(c)
 	if err != nil {
 		wcm.rateLimit.ReleaseConnection(clientIP)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to upgrade connection",
-			"code":  "UPGRADE_FAILED",
-		})
+		// Don't try to send JSON response after failed upgrade attempt
+		// as the connection may already be hijacked or closed
+		wcm.logger.Errorf("Failed to upgrade WebSocket connection for client %s: %v", clientIP, err)
 		return
 	}
 

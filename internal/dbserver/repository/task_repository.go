@@ -185,7 +185,7 @@ func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobI
 		&task.ExecutionTxHash,
 		&task.TaskPerformerID,
 		&task.TaskAttesterIDs,
-		&task.IsSuccessful,
+		&task.IsAccepted,
 		&task.TaskStatus,
 	) {
 		tasks = append(tasks, task)

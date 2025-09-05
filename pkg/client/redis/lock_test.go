@@ -379,10 +379,10 @@ func TestShouldRetryLockAcquisition_OnlyRetriesOnContention(t *testing.T) {
 	}
 
 	// Test that it retries on lock contention
-	assert.True(t, lock.shouldRetryLockAcquisition(ErrLockContention))
+	assert.True(t, lock.shouldRetryLockAcquisition(ErrLockContention, 1))
 
 	// Test that it doesn't retry on other errors
-	assert.False(t, lock.shouldRetryLockAcquisition(fmt.Errorf("network error")))
-	assert.False(t, lock.shouldRetryLockAcquisition(redis.Nil))
-	assert.False(t, lock.shouldRetryLockAcquisition(nil))
+	assert.False(t, lock.shouldRetryLockAcquisition(fmt.Errorf("network error"), 1))
+	assert.False(t, lock.shouldRetryLockAcquisition(redis.Nil, 1))
+	assert.False(t, lock.shouldRetryLockAcquisition(nil, 1))
 }

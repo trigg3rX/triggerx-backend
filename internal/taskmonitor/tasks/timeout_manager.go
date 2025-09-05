@@ -111,10 +111,10 @@ func (tm *TimeoutManager) GetExpiredTasks(ctx context.Context) ([]int64, error) 
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_query", "success").Inc()
-	tm.tsm.logger.Debug("Expired tasks retrieved successfully",
-		"expired_count", len(taskIDs),
-		"current_timestamp", currentTimestamp,
-		"duration", duration)
+	// tm.tsm.logger.Debug("Expired tasks retrieved successfully",
+	// 	"expired_count", len(taskIDs),
+	// 	"current_timestamp", currentTimestamp,
+	// 	"duration", duration)
 
 	return taskIDs, nil
 }

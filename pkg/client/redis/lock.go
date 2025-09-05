@@ -119,7 +119,7 @@ func (l *Lock) Acquire(ctx context.Context) (bool, error) {
 }
 
 // shouldRetryLockAcquisition determines if we should retry lock acquisition
-func (l *Lock) shouldRetryLockAcquisition(err error) bool {
+func (l *Lock) shouldRetryLockAcquisition(err error, attempt int) bool {
 	// Only retry on lock contention, not on network errors
 	return errors.Is(err, ErrLockContention)
 }

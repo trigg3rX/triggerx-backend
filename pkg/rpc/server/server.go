@@ -130,7 +130,7 @@ func (s *Server) Start(ctx context.Context) error {
 		retryCfg.BackoffFactor = 2.0
 		retryCfg.JitterFactor = 0.2
 		retryCfg.LogRetryAttempt = true
-		retryCfg.ShouldRetry = func(err error) bool { return err != nil }
+		retryCfg.ShouldRetry = func(err error, attempt int) bool { return err != nil }
 
 		if err := retry.RetryFunc(ctx, func() error {
 			return s.registry.Register(ctx, s.serviceInfo)
@@ -174,7 +174,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		retryCfg.BackoffFactor = 2.0
 		retryCfg.JitterFactor = 0.2
 		retryCfg.LogRetryAttempt = false
-		retryCfg.ShouldRetry = func(err error) bool { return err != nil }
+		retryCfg.ShouldRetry = func(err error, attempt int) bool { return err != nil }
 
 		if err := retry.RetryFunc(ctx, func() error {
 			return s.registry.Deregister(ctx, s.config.Name)

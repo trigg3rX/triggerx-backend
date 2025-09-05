@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 type KeeperRegistrationData struct {
 	OperatorAddress string
@@ -21,7 +24,7 @@ type TaskSubmissionData struct {
 	AttesterIds          []int64
 	ExecutionTxHash      string
 	ExecutionTimestamp   time.Time
-	TaskOpxCost          float64
+	TaskOpxCost          *big.Int
 	ProofOfTask          string
 }
 

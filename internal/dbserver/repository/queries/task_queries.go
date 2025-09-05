@@ -57,7 +57,7 @@ const (
 
 	GetTasksByJobIDQuery = `
 		SELECT task_id, task_number, task_opx_cost, execution_timestamp, execution_tx_hash, task_performer_id, 
-			   task_attester_ids, is_successful, task_status
+			   task_attester_ids, is_accepted, task_status
 		FROM triggerx.task_data
 		WHERE job_id = ? ALLOW FILTERING`
 

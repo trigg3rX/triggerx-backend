@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"math/big"
+	"fmt"
 	"strings"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
@@ -70,8 +71,25 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 			ExecutionTxHash:    task.ExecutionTxHash,
 			TaskPerformerID:    task.TaskPerformerID,
 			TaskAttesterIDs:    task.TaskAttesterIDs,
-			IsSuccessful:       task.IsSuccessful,
+			IsAccepted:         task.IsAccepted,
+			TxURL:              task.TxURL,
 			TaskStatus:         task.TaskStatus,
+		}
+	}
+
+	//find the created_chain id for the job using jobIDBig from database
+	var createdChainID string
+	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobID)
+	if err != nil {
+		h.logger.Errorf("Error retrieving created_chain_id for jobID %s: %v", jobID.String(), err)
+		return err
+	}
+
+	// Set tx_url for each task
+	explorerBaseURL := getExplorerBaseURL(createdChainID)
+	for i := range snapshotTasks {
+		if snapshotTasks[i].ExecutionTxHash != "" {
+			snapshotTasks[i].TxURL = fmt.Sprintf("%s%s", explorerBaseURL, snapshotTasks[i].ExecutionTxHash)
 		}
 	}
 

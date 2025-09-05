@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/imua-keeper/metrics"
-	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/docker/types"
+	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -52,7 +52,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	case 2, 4, 6:
 		var execErr error
 		// Use the DockerManager from the validator to execute the code
-		result, execErr = e.validator.GetDockerManager().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, 1)
+		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1)
 		if execErr != nil {
 			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", execErr)
 		}
@@ -67,7 +67,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		argData = e.parseStaticArgs(targetData.Arguments)
 		result = &dockertypes.ExecutionResult{
 			Stats: dockertypes.DockerResourceStats{
-				TotalCost: 0.1,
+				TotalCost: big.NewInt(int64(e.validator.GetDockerExecutor().GetExecutionFeeConfig().TransactionCost * 1e18)),
 			},
 		}
 	default:
@@ -97,15 +97,6 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		return types.PerformerActionData{}, fmt.Errorf("failed to parse execution contract ABI: %v", err)
 	}
 
-	// According to the ABI, the function signature is:
-	// executeFunction(uint256 jobId, uint256 tgAmount, address target, bytes data)
-	// We use jobId from targetData.JobID, and tgAmount is determined by the execution result's total cost.
-	var tgAmountBigInt = big.NewInt(0)
-	if result != nil {
-		// Assuming TotalCost is in float64 and needs to be converted to wei (1e18 multiplier) if it's in ETH
-		tgAmountBigInt = new(big.Int).SetInt64(int64(result.Stats.TotalCost * 1e18))
-	}
-
 	// Convert *BigInt to *big.Int for ABI packing
 	var jobIDBigInt *big.Int
 	if targetData.JobID != nil {
@@ -114,7 +105,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		jobIDBigInt = big.NewInt(0)
 	}
 
-	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, tgAmountBigInt, targetContractAddress, callData)
+	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, result.Stats.TotalCost, targetContractAddress, callData)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
@@ -163,7 +154,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
 	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
-	metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(result.Stats.TotalCost)
+	metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
 
 	e.logger.Infof("Task ID %d executed successfully. Transaction: %s", targetData.TaskID, finalTxHash)
 

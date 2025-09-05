@@ -172,7 +172,7 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.Scheduler
 		BackoffFactor:   2.0,
 		JitterFactor:    0.2,
 		LogRetryAttempt: true,
-		ShouldRetry: func(err error) bool {
+		ShouldRetry: func(err error, attempt int) bool {
 			// Retry on network errors, timeouts, and temporary failures
 			// Don't retry on permanent errors like invalid requests
 			return err != nil && !strings.Contains(err.Error(), "invalid") &&

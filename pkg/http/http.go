@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -72,6 +73,20 @@ func NewHTTPClient(httpConfig *HTTPRetryConfig, logger logging.Logger) (*HTTPCli
 		return nil, fmt.Errorf("invalid HTTP retry config: %w", err)
 	}
 
+	// Set up default HTTP retry predicate if none provided
+	if httpConfig.RetryConfig.ShouldRetry == nil {
+		httpConfig.RetryConfig.ShouldRetry = func(err error, attempt int) bool {
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				// This is an error we created from a status code.
+				// Retry on 5xx and 429.
+				return httpErr.StatusCode >= 500 || httpErr.StatusCode == 429
+			}
+			// For all other errors (network errors, etc.), assume they are retryable.
+			return true
+		}
+	}
+
 	client := &http.Client{
 		Timeout: httpConfig.Timeout,
 		Transport: &http.Transport{
@@ -107,15 +122,19 @@ func (c *HTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.
 		// Fallback for requests without GetBody
 		bodyBytes, err := io.ReadAll(req.Body)
 		if err != nil {
-			return nil, fmt.Errorf("error reading request body: %w", err)
+			return nil, fmt.Errorf("error reading request body for retry: %w", err)
 		}
 		if err := req.Body.Close(); err != nil {
 			c.logger.Warnf("Failed to close request body: %v", err)
 		}
-		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		getBody = func() (io.ReadCloser, error) {
+		req.GetBody = func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewBuffer(bodyBytes)), nil
 		}
+	}
+
+	// Also reset the body for the *first* attempt if GetBody is available.
+	if req.GetBody != nil {
+		req.Body, _ = req.GetBody()
 	}
 
 	// Create operation function for retry package
@@ -132,20 +151,38 @@ func (c *HTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.
 
 		resp, err := c.client.Do(reqClone)
 		if err != nil {
-			return nil, fmt.Errorf("http request failed: %w", err)
+			// Network errors are now handled directly by the retry predicate.
+			return nil, err
 		}
 
-		// Check if response status code indicates retryable error
-		if c.shouldRetryResponse(resp.StatusCode) {
-			// Read and close body for retryable responses
-			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, c.HTTPConfig.MaxResponseSize))
-			_ = resp.Body.Close()
-
-			bodyPreview := fmt.Sprintf(", body preview: %q", truncate(string(bodyBytes), 200))
-			return nil, &HTTPError{
+		// Check if status code indicates a potentially retryable error (5xx or 429)
+		if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+			// Create a test error to check if this should be retried
+			testErr := &HTTPError{
 				StatusCode: resp.StatusCode,
-				Message:    fmt.Sprintf("retryable status code%s", bodyPreview),
+				Message:    "test error for retry check",
 			}
+
+			// Check if the custom retry logic would retry this error
+			shouldRetry := true // Default behavior
+			if c.HTTPConfig.RetryConfig.ShouldRetry != nil {
+				shouldRetry = c.HTTPConfig.RetryConfig.ShouldRetry(testErr, 1)
+			}
+
+			if shouldRetry {
+				// Convert to error for retry logic
+				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, c.HTTPConfig.MaxResponseSize))
+				err := resp.Body.Close()
+				if err != nil {
+					c.logger.Warnf("Failed to close response body: %v", err)
+				}
+
+				return nil, &HTTPError{
+					StatusCode: resp.StatusCode,
+					Message:    fmt.Sprintf("received retryable status code, body: %q", truncate(string(bodyBytes), 200)),
+				}
+			}
+			// If not retryable, return the response as-is
 		}
 
 		return resp, nil
@@ -199,23 +236,6 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
-}
-
-// shouldRetryResponse checks if the status code should be retried based on default logic and custom retry function
-func (c *HTTPClient) shouldRetryResponse(statusCode int) bool {
-	// Create a mock error to test with custom retry function
-	mockErr := &HTTPError{
-		StatusCode: statusCode,
-		Message:    "mock error for retry check",
-	}
-
-	// If custom retry function is set, use it
-	if c.HTTPConfig.RetryConfig.ShouldRetry != nil {
-		return c.HTTPConfig.RetryConfig.ShouldRetry(mockErr)
-	}
-
-	// Default logic: retry on server errors (5xx) and some specific client errors
-	return statusCode >= 500 || statusCode == 429 // 429 is rate limit
 }
 
 // Close closes idle connections

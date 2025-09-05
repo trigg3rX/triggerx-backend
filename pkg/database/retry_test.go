@@ -50,7 +50,9 @@ func TestQueryx_Exec_WithCustomRetryConfig(t *testing.T) {
 		BackoffFactor:   1.5,
 		JitterFactor:    0.1,
 		LogRetryAttempt: false,
-		ShouldRetry:     gocqlShouldRetry,
+		ShouldRetry:     func(err error, attempt int) bool {
+			return gocqlShouldRetry(err)
+		},
 	}
 
 	// Create a mock query that will fail
@@ -85,7 +87,9 @@ func TestQueryx_Exec_MaxRetriesExceeded(t *testing.T) {
 		BackoffFactor:   1.0,
 		JitterFactor:    0.0,
 		LogRetryAttempt: false,
-		ShouldRetry:     gocqlShouldRetry,
+		ShouldRetry:     func(err error, attempt int) bool {
+			return gocqlShouldRetry(err)
+		},
 	}
 
 	// Create a mock query that will keep failing
@@ -142,7 +146,9 @@ func TestQueryx_RetryLogic(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = gocqlShouldRetry
+		cfg.ShouldRetry = func(err error, attempt int) bool {
+			return gocqlShouldRetry(err)
+		}
 
 		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
 
@@ -162,7 +168,9 @@ func TestQueryx_RetryLogic(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = gocqlShouldRetry
+		cfg.ShouldRetry = func(err error, attempt int) bool {
+			return gocqlShouldRetry(err)
+		}
 
 		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
 
@@ -180,7 +188,9 @@ func TestQueryx_RetryLogic(t *testing.T) {
 		}
 
 		cfg := retry.DefaultRetryConfig()
-		cfg.ShouldRetry = gocqlShouldRetry
+		cfg.ShouldRetry = func(err error, attempt int) bool {
+			return gocqlShouldRetry(err)
+		}
 
 		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
 
