@@ -226,6 +226,17 @@ func (sm *SubscriptionManager) formatValue(value interface{}) interface{} {
 	switch v := value.(type) {
 	case *big.Int:
 		return v.String()
+	case []*big.Int:
+		// Handle arrays of big.Int (like uint256[] attestersIds)
+		result := make([]string, len(v))
+		for i, bi := range v {
+			if bi != nil {
+				result[i] = bi.String()
+			} else {
+				result[i] = "0"
+			}
+		}
+		return result
 	case common.Address:
 		return v.Hex()
 	case common.Hash:

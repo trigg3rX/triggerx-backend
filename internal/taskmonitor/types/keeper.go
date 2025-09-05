@@ -14,4 +14,5 @@ type TaskSubmissionData struct {
 	ExecutionTimestamp   time.Time
 	TaskOpxCost          float64
 	ProofOfTask          string
+	Data                 string
 }

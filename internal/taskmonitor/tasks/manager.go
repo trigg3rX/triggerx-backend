@@ -182,7 +182,7 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 		"consumer_groups":      len(tsm.consumerGroups),
 	}
 
-	tsm.logger.Debug("Stream information retrieved", "info", info)
+	// tsm.logger.Debug("Stream information retrieved", "info", info)
 	return info
 }
 
