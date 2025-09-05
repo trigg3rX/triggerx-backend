@@ -70,12 +70,10 @@ test-short: ## Run tests in short mode
 test-race: ## Run tests with race detection
 	go test -v -race ./...
 
-test-coverage: ## Get the coverage of tests
-	./scripts/tests/coverage.sh
-
-test-coverage-short: ## Get test coverage in short mode
-	go test -v -short -coverprofile=coverage.out ./...
-	go tool cover -func=coverage.out
+test-coverage: ## Run tests with coverage
+	echo "Use the cmd: ./scripts/tests/coverage.sh <FOLDER_PATH>"
+	echo "Example: make test-coverage ./internal/keeper/..."
+	echo "Note: If no folder path is provided, it will run all tests"
 
 test-unit: ## Run unit tests only
 	go test -v -short ./internal/... ./pkg/...
@@ -96,8 +94,10 @@ benchmark: ## Run benchmarks
 -------------------------GITHUB-ACTIONS-------------------------: ## 
 
 install-tools: ## Install the tools for GitHub Actions
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
-	
+	go install github.com/golang/mock/mockgen@latest
+	go install github.com/axw/gocov/gocov@latest
+	go install github.com/matm/gocov-html/cmd/gocov-html@latest
+# curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
 
 format-go: ## Format the Go code (active)
 	@which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
