@@ -480,7 +480,6 @@ func TestGetTasksByJobID(t *testing.T) {
 						ExecutionTxHash:    "0x123",
 						TaskPerformerID:    1,
 						TaskAttesterIDs:    []int64{1, 2},
-						IsSuccessful:       true,
 					},
 					{
 						TaskID:             2,
@@ -490,7 +489,6 @@ func TestGetTasksByJobID(t *testing.T) {
 						ExecutionTxHash:    "0x456",
 						TaskPerformerID:    2,
 						TaskAttesterIDs:    []int64{3, 4},
-						IsSuccessful:       true,
 					},
 				}, nil)
 			},
@@ -552,14 +550,12 @@ func TestGetTasksByJobID(t *testing.T) {
 				assert.Equal(t, "0x123", response[0].ExecutionTxHash)
 				assert.Equal(t, int64(1), response[0].TaskPerformerID)
 				assert.Equal(t, []int64{1, 2}, response[0].TaskAttesterIDs)
-				assert.True(t, response[0].IsSuccessful)
 				assert.Equal(t, int64(2), response[1].TaskID)
 				assert.Equal(t, int64(2), response[1].TaskNumber)
 				assert.Equal(t, 20.5, response[1].TaskOpXCost)
 				assert.Equal(t, "0x456", response[1].ExecutionTxHash)
 				assert.Equal(t, int64(2), response[1].TaskPerformerID)
 				assert.Equal(t, []int64{3, 4}, response[1].TaskAttesterIDs)
-				assert.True(t, response[1].IsSuccessful)
 			}
 		})
 	}

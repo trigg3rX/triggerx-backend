@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"math/big"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -95,7 +96,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 			ExecutionTxHash:    task.ExecutionTxHash,
 			TaskPerformerID:    task.TaskPerformerID,
 			TaskAttesterIDs:    task.TaskAttesterIDs,
-			IsSuccessful:       task.IsSuccessful,
+			IsAccepted:         task.IsAccepted,
 			TaskStatus:         task.TaskStatus,
 		}
 	}
@@ -115,7 +116,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	explorerBaseURL := getExplorerBaseURL(createdChainID)
 	for i := range tasks {
 		if tasks[i].ExecutionTxHash != "" {
-			tasks[i].TxURL = explorerBaseURL + tasks[i].ExecutionTxHash
+			tasks[i].TxURL = fmt.Sprintf("%s%s", explorerBaseURL, tasks[i].ExecutionTxHash)
 		}
 	}
 
@@ -128,23 +129,23 @@ func getExplorerBaseURL(chainID string) string {
 	switch chainID {
 	// Testnets
 	case "11155111":
-		return "https://sepolia.etherscan.io/tx/"
+		return "https://eth-sepolia.blockscout.com/tx/"
 	case "11155420": // OP Sepolia
-		return "https://sepolia-optimism.etherscan.io/tx/"
+		return "https://testnet-explorer.optimism.io/tx/"
 	case "84532": // Base Sepolia
-		return "https://sepolia.basescan.org/tx/"
+		return "https:/base-sepolia.blockscout.com/tx/"
 	case "421614": // Arbitrum Sepolia
-		return "https://sepolia.arbiscan.io/tx/"
+		return "https://arbitrum-sepolia.blockscout.com/tx/"
 
 	// Mainnets
 	case "1": // Ethereum Mainnet
-		return "https://etherscan.io/tx/"
+		return "https://eth.blockscout.com/tx/"
 	case "10": // Optimism Mainnet
-		return "https://optimistic.etherscan.io/tx/"
+		return "https://explorer.optimism.io/tx/"
 	case "8453": // Base Mainnet
-		return "https://basescan.org/tx/"
+		return "https://base.blockscout.com/tx/"
 	case "42161": // Arbitrum Mainnet
-		return "https://arbiscan.io/tx/"
+		return "https:/arbitrum.blockscout.com/tx/"
 	default:
 		return "https://sepolia.etherscan.io/tx/"
 	}
