@@ -51,7 +51,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 			}
 
 			taskOpxCostFloat, _ := ipfsData.ActionData.TotalFee.Float64()
-			taskOpxCostFloat = taskOpxCostFloat / 1e15
+			taskOpxCostFloat = taskOpxCostFloat / 1e18
 
 			taskData.TaskID = ipfsData.ActionData.TaskID
 			taskData.ExecutionTxHash = ipfsData.ActionData.ActionTxHash
