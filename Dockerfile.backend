@@ -51,6 +51,11 @@ WORKDIR /home/appuser/
 ARG DOCKER_NAME
 COPY --from=builder /app/${DOCKER_NAME} .
 
+# Copy the config files
+RUN mkdir -p /home/appuser/config/
+COPY ./config/ /home/appuser/config/
+RUN chown -R appuser:appgroup /home/appuser/config/
+
 COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /home/appuser/start.sh
 
 # Make sure the script is executable by everyone and set proper ownership

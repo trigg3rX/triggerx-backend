@@ -45,6 +45,12 @@ WORKDIR /home/triggerx
 # Copy the built binary from the builder stage
 COPY --from=builder /app/triggerx-keeper .
 
+# Copy the config files
+RUN mkdir -p /home/triggerx/config/
+COPY ./config/ /home/triggerx/config/
+RUN chown -R triggerx:triggerx /home/triggerx/config/
+
+
 # Copy the startup script and set proper permissions
 COPY ./scripts/docker/services/start-keeper.sh /home/triggerx/start-keeper.sh
 RUN chmod +x /home/triggerx/start-keeper.sh \
