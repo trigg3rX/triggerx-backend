@@ -7,18 +7,13 @@ release/*
 
 # cursor
 .cursor 
-
-# othentic
-othentic/.keystore/*
-othentic/data/peerstore/*
-!othentic/data/peerstore/.gitkeep
-othentic/data/logs/*
-!othentic/data/logs/.gitkeep
+.keystore
 
 # data
 data/cache/*
 !data/cache/.gitkeep
-data/logs/*/*.log
+data/logs/*/*.log*
+data/logs/*/*.json
 !data/logs/*/.gitkeep
 
 # Signing keys
@@ -27,5 +22,7 @@ data/logs/*/*.log
 
 # peerstore
 peerstore/
+
+reference/
 
 .log

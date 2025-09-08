@@ -29,7 +29,7 @@ func DefaultTLSProofConfig(host string) *TLSProofConfig {
 	return &TLSProofConfig{
 		TargetHost: host,
 		TargetPort: "443",
-		Timeout:    5 * time.Second,
+		Timeout:    10 * time.Second,
 		VerifyPeer: true,
 		ServerName: host,
 	}
@@ -60,7 +60,7 @@ func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error
 	}
 
 	if config.Timeout == 0 {
-		config.Timeout = 5 * time.Second
+		config.Timeout = 10 * time.Second
 	}
 
 	if config.ServerName == "" {
@@ -142,7 +142,7 @@ func GenerateProof(ipfsData types.IPFSData, connState *tls.ConnectionState) (typ
 
 	// Create enhanced proof with additional TLS information
 	proofData := types.ProofData{
-		TaskID:               ipfsData.TaskData.TaskID,
+		TaskID:               ipfsData.TaskData.TaskID[0],
 		ProofOfTask:          proofHashStr,
 		CertificateHash:      certHashStr,
 		CertificateTimestamp: time.Now().UTC(),

@@ -6,11 +6,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/config"
 	"github.com/trigg3rX/triggerx-backend/internal/registrar/events"
+	"github.com/trigg3rX/triggerx-backend/internal/registrar/rewards"
+	syncMgr "github.com/trigg3rX/triggerx-backend/internal/registrar/sync"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
+	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -19,204 +24,192 @@ const (
 	defaultBlockOverlap   = uint64(5)
 )
 
-// BlockState tracks the last processed block numbers
-type BlockState struct {
-	lastProcessedBlockEth  uint64
-	lastProcessedBlockBase uint64
-	mu                     sync.RWMutex
-}
-
-func (bs *BlockState) updateEthBlock(block uint64) {
-	bs.mu.Lock()
-	defer bs.mu.Unlock()
-	bs.lastProcessedBlockEth = block
-}
-
-func (bs *BlockState) updateBaseBlock(block uint64) {
-	bs.mu.Lock()
-	defer bs.mu.Unlock()
-	bs.lastProcessedBlockBase = block
-}
-
-func (bs *BlockState) getEthBlock() uint64 {
-	bs.mu.RLock()
-	defer bs.mu.RUnlock()
-	return bs.lastProcessedBlockEth
-}
-
-func (bs *BlockState) getBaseBlock() uint64 {
-	bs.mu.RLock()
-	defer bs.mu.RUnlock()
-	return bs.lastProcessedBlockBase
-}
-
-// RegistrarService manages the event polling and processing
+// RegistrarService manages the event polling and WebSocket listening
 type RegistrarService struct {
-	logger     logging.Logger
-	ethClient  *ethclient.Client
-	baseClient *ethclient.Client
-	blockState *BlockState
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
+	logger logging.Logger
+
+	// Event listener
+	eventListener *events.ContractEventListener
+
+	// State management
+	stateManager *syncMgr.StateManager
+
+	// Rewards service
+	rewardsService *rewards.RewardsService
+
+	// Lifecycle management
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	stopChan chan struct{}
 }
 
 // NewRegistrarService creates a new instance of RegistrarService
 func NewRegistrarService(logger logging.Logger) (*RegistrarService, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultConnectTimeout)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
 
-	ethClient, err := ethclient.Dial(config.GetEthRPCURL())
+	// Initialize HTTP clients for fallback polling
+	ethClient, err := ethclient.Dial(config.GetChainRPCUrl(true, "17000"))
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("failed to connect to Ethereum node: %w", err)
 	}
 
-	baseClient, err := ethclient.Dial(config.GetBaseRPCURL())
+	baseClient, err := ethclient.Dial(config.GetChainRPCUrl(true, "84532"))
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("failed to connect to Base node: %w", err)
 	}
 
-	lastEthBlock, err := ethClient.BlockNumber(ctx)
+	// Initialize Redis client first
+	redis, err := redis.NewRedisClient(logger, redis.RedisConfig{
+		UpstashConfig: redis.UpstashConfig{
+			URL:   config.GetUpstashRedisUrl(),
+			Token: config.GetUpstashRedisRestToken(),
+		},
+		ConnectionSettings: redis.ConnectionSettings{
+			PoolSize:      10,
+			MaxIdleConns:  10,
+			MinIdleConns:  1,
+			MaxRetries:    3,
+			DialTimeout:   5 * time.Second,
+			ReadTimeout:   5 * time.Second,
+			WriteTimeout:  5 * time.Second,
+			PoolTimeout:   5 * time.Second,
+			PingTimeout:   5 * time.Second,
+			HealthTimeout: 5 * time.Second,
+		},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ETH latest block: %w", err)
+		cancel()
+		return nil, fmt.Errorf("failed to initialize Redis client: %w", err)
 	}
 
-	lastBaseBlock, err := baseClient.BlockNumber(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get BASE latest block: %w", err)
+	// Initialize state manager
+	stateManager := syncMgr.NewStateManager(redis, logger)
+
+	// Try to load existing state from Redis first
+	initCtx, initCancel := context.WithTimeout(ctx, defaultConnectTimeout)
+	lastEthBlock, err := stateManager.GetLastEthBlockUpdated(initCtx)
+	if err != nil || lastEthBlock == 0 {
+		// Fallback to current blockchain block if Redis is empty
+		logger.Info("No ETH block found in Redis, getting current block from blockchain")
+		lastEthBlock, err = ethClient.BlockNumber(initCtx)
+		if err != nil {
+			initCancel()
+			cancel()
+			return nil, fmt.Errorf("failed to get ETH latest block: %w", err)
+		}
+	} else {
+		logger.Infof("Loaded ETH block %d from Redis", lastEthBlock)
 	}
+
+	lastBaseBlock, err := stateManager.GetLastBaseBlockUpdated(initCtx)
+	if err != nil || lastBaseBlock == 0 {
+		logger.Info("No BASE block found in Redis, getting current block from blockchain")
+		lastBaseBlock, err = baseClient.BlockNumber(initCtx)
+		if err != nil {
+			initCancel()
+			cancel()
+			return nil, fmt.Errorf("failed to get BASE latest block: %w", err)
+		}
+	} else {
+		logger.Infof("Loaded BASE block %d from Redis", lastBaseBlock)
+	}
+	initCancel()
+
+	// Ensure state is initialized in Redis (will only set if not already present)
+	if err := stateManager.InitializeState(ctx, lastEthBlock, lastBaseBlock, 0, time.Now().UTC()); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize blockchain state: %w", err)
+	}
+
+	dbCfg := &dbClient.Config{
+		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:    "triggerx",
+		Timeout:     10 * time.Second,
+		Retries:     3,
+		ConnectWait: 5 * time.Second,
+	}
+	dbConn, err := dbClient.NewConnection(dbCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize database client: %w", err)
+	}
+
+	// Initialize database client
+	databaseClient := database.NewDatabaseClient(logger, dbConn)
+
+	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())
+	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize IPFS client: %w", err)
+	}
+	eventListener := events.NewContractEventListener(logger, events.GetDefaultConfig(), databaseClient, ipfsClient)
+
+	// Initialize rewards service
+	rewardsService := rewards.NewRewardsService(logger, stateManager, databaseClient)
 
 	return &RegistrarService{
-		logger:     logger,
-		ethClient:  ethClient,
-		baseClient: baseClient,
-		blockState: &BlockState{
-			lastProcessedBlockEth:  lastEthBlock,
-			lastProcessedBlockBase: lastBaseBlock,
-		},
-		stopChan: make(chan struct{}),
+		logger:         logger,
+		eventListener:  eventListener,
+		stateManager:   stateManager,
+		rewardsService: rewardsService,
+		ctx:            ctx,
+		cancel:         cancel,
+		stopChan:       make(chan struct{}),
 	}, nil
 }
 
-// Start begins the event polling service
-func (s *RegistrarService) Start() {
+// Start begins the event monitoring service
+func (s *RegistrarService) Start() error {
 	s.logger.Info("Starting registrar service...")
 
-	s.wg.Add(1)
-	go s.pollEvents()
-}
-
-// Stop gracefully stops the service
-func (s *RegistrarService) Stop() {
-	s.logger.Info("Stopping registrar service...")
-	close(s.stopChan)
-	s.wg.Wait()
-
-	if s.ethClient != nil {
-		s.ethClient.Close()
-	}
-	if s.baseClient != nil {
-		s.baseClient.Close()
+	// Start Rewards Service (if initialized)
+	if s.rewardsService != nil {
+		go s.rewardsService.StartDailyRewardsPoints()
+	} else {
+		s.logger.Info("Rewards service not initialized (database client not available)")
 	}
 
-	s.logger.Info("Registrar service stopped")
-}
-
-func (s *RegistrarService) pollEvents() {
-	defer s.wg.Done()
-
-	s.logger.Info("Polling for new events...")
-	s.logger.Infof("Polling interval: %s", config.GetPollingInterval())
-
-	ticker := time.NewTicker(config.GetPollingInterval())
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			s.processPendingEvents()
-		}
-	}
-}
-
-func (s *RegistrarService) processPendingEvents() {
-	s.logger.Debug("Polling for new events...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), defaultConnectTimeout)
-	defer cancel()
-
-	if err := s.processEthEvents(ctx); err != nil {
-		s.logger.Error("Failed to process ETH events", "error", err)
+	// Start event listener
+	if err := s.eventListener.Start(); err != nil {
+		s.logger.Errorf("Failed to start event listener: %v", err)
+		s.logger.Info("Falling back to polling mode")
 	}
 
-	if err := s.processBaseEvents(ctx); err != nil {
-		s.logger.Error("Failed to process BASE events", "error", err)
-	}
-}
-
-func (s *RegistrarService) processEthEvents(ctx context.Context) error {
-	ethLatestBlock, err := s.ethClient.BlockNumber(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get ETH latest block: %w", err)
-	}
-
-	lastProcessed := s.blockState.getEthBlock()
-	if ethLatestBlock <= lastProcessed {
-		return nil
-	}
-
-	fromBlock := lastProcessed + 1
-	s.logger.Debug("Processing ETH events",
-		"fromBlock", fromBlock,
-		"toBlock", ethLatestBlock,
-	)
-
-	avsAddr := common.HexToAddress(config.GetAvsGovernanceAddress())
-
-	if err := events.ProcessOperatorRegisteredEvents(s.ethClient, avsAddr, fromBlock, ethLatestBlock, s.logger); err != nil {
-		return fmt.Errorf("failed to process OperatorRegistered events: %w", err)
-	}
-
-	if err := events.ProcessOperatorUnregisteredEvents(s.ethClient, avsAddr, fromBlock, ethLatestBlock, s.logger); err != nil {
-		return fmt.Errorf("failed to process OperatorUnregistered events: %w", err)
-	}
-
-	s.blockState.updateEthBlock(ethLatestBlock)
+	s.logger.Info("Registrar service started successfully")
 	return nil
 }
 
-func (s *RegistrarService) processBaseEvents(ctx context.Context) error {
-	baseLatestBlock, err := s.baseClient.BlockNumber(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get BASE latest block: %w", err)
+// Stop gracefully stops the service
+func (s *RegistrarService) Stop() error {
+	s.logger.Info("Stopping registrar service...")
+
+	// Signal all goroutines to stop
+	s.cancel()
+	close(s.stopChan)
+
+	// Wait for all goroutines with timeout
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.Info("All goroutines stopped successfully")
+	case <-time.After(30 * time.Second):
+		s.logger.Warn("Timeout waiting for goroutines to stop")
 	}
 
-	lastProcessed := s.blockState.getBaseBlock()
-	if baseLatestBlock <= lastProcessed {
-		return nil
+	// Stop event listener
+	if err := s.eventListener.Stop(); err != nil {
+		s.logger.Errorf("Error stopping event listener: %v", err)
 	}
 
-	fromBlock := lastProcessed
-	if fromBlock > defaultBlockOverlap {
-		fromBlock -= defaultBlockOverlap
-	}
-
-	s.logger.Debug("Processing BASE events",
-		"fromBlock", fromBlock,
-		"toBlock", baseLatestBlock,
-	)
-
-	attAddr := common.HexToAddress(config.GetAttestationCenterAddress())
-
-	if err := events.ProcessTaskSubmittedEvents(s.baseClient, attAddr, fromBlock, baseLatestBlock, s.logger); err != nil {
-		return fmt.Errorf("failed to process TaskSubmitted events: %w", err)
-	}
-
-	if err := events.ProcessTaskRejectedEvents(s.baseClient, attAddr, fromBlock, baseLatestBlock, s.logger); err != nil {
-		return fmt.Errorf("failed to process TaskRejected events: %w", err)
-	}
-
-	s.blockState.updateBaseBlock(baseLatestBlock)
+	s.logger.Info("Registrar service stopped")
 	return nil
 }

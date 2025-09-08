@@ -2,7 +2,7 @@
 # Make sure the help command stays first, so that it's printed by default when `make` is called without arguments
 
 GO_LINES_IGNORED_DIRS=./othentic/... ./data/... ./docs/... ./scripts/...
-GO_PACKAGES=./cmd/... ./internal/... ./pkg/... ./checker/...
+GO_PACKAGES=./cmd/... ./internal/... ./pkg/... ./checker/... ./cli/...
 GO_FOLDERS=$(shell echo ${GO_PACKAGES} | sed -e "s/\.\///g" | sed -e "s/\/\.\.\.//g")
 GO_LINES_IGNORED=$(shell echo ${GO_LINES_IGNORED_DIRS} | sed -e "s/\.\///g" | sed -e "s/\/\.\.\.//g")
 
@@ -40,14 +40,14 @@ start-registrar: ## Start the Registrar
 start-health: ## Start the Health Check
 	./scripts/services/start-health.sh
 
-start-redis: ## Start the Redis
-	./scripts/services/start-redis.sh
+start-taskdispatcher: ## Start the Task Dispatcher
+	./scripts/services/start-taskdispatcher.sh
+
+start-taskmonitor: ## Start the Task Monitor
+	./scripts/services/start-taskmonitor.sh
 
 start-time-scheduler: ## Start the Time Scheduler
 	./scripts/services/start-time-scheduler.sh
-
-start-event-schedulers: ## Start the Event Schedulers
-	./scripts/services/start-event-schedulers.sh
 
 start-condition-scheduler: ## Start the Condition Scheduler
 	./scripts/services/start-condition-scheduler.sh
@@ -55,12 +55,49 @@ start-condition-scheduler: ## Start the Condition Scheduler
 start-keeper: ## Start the Keeper
 	./scripts/services/start-keeper.sh
 
+start-imua-keeper: ## Start the Imua Keeper
+	./scripts/services/start-imua-keeper.sh
+
+############################# TESTING #############################
+----------------------------TESTING----------------------------: ## 
+
+test: ## Run all tests
+	go test -v ./...
+
+test-short: ## Run tests in short mode
+	go test -v -short ./...
+
+test-race: ## Run tests with race detection
+	go test -v -race ./...
+
+test-coverage: ## Run tests with coverage
+	echo "Use the cmd: ./scripts/tests/coverage.sh <FOLDER_PATH>"
+	echo "Example: make test-coverage ./internal/keeper/..."
+	echo "Note: If no folder path is provided, it will run all tests"
+
+test-unit: ## Run unit tests only
+	go test -v -short ./internal/... ./pkg/...
+
+test-integration: ## Run integration tests only
+	go test -v -run Integration ./...
+
+test-api: ## Run API tests only
+	go test -v ./internal/*/api/...
+
+test-database: ## Run database tests only
+	go test -v ./internal/*/repository/... ./pkg/database/...
+
+benchmark: ## Run benchmarks
+	go test -v -bench=. -benchmem ./pkg/...
+
 ############################ GITHUB ACTIONS ####################################
 -------------------------GITHUB-ACTIONS-------------------------: ## 
 
 install-tools: ## Install the tools for GitHub Actions
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
-	go install github.com/psampaz/go-mod-outdated@latest
+	go install github.com/golang/mock/mockgen@latest
+	go install github.com/axw/gocov/gocov@latest
+	go install github.com/matm/gocov-html/cmd/gocov-html@latest
+# curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
 
 format-go: ## Format the Go code (active)
 	@which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
@@ -78,8 +115,14 @@ build-go: ## Build the Go code (active)
 ############################ BUILD AND PUSH DOCKER IMAGES ####################################
 ----------------------------DOCKERS----------------------------: ## 
 
-docker-build: ## Build the Docker image
-	./scripts/docker/build.sh
+docker-build: ## Build the Docker image (usage: make docker-build SERVICE=<service> VERSION=<version>)
+	@if [ -z "$(SERVICE)" ] || [ -z "$(VERSION)" ]; then \
+		echo "Error: SERVICE and VERSION are required"; \
+		echo "Usage: make docker-build SERVICE=<service> VERSION=<version>"; \
+		echo "Example: make docker-build SERVICE=all VERSION=0.0.7"; \
+		exit 1; \
+	fi
+	./scripts/docker/build.sh -n $(SERVICE) -v $(VERSION)
 
 docker-push: ## Push the Docker image
 	./scripts/docker/publish.sh

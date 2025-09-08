@@ -10,6 +10,8 @@ import (
 )
 
 func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
+	traceID := c.GetString("trace_id")
+	h.logger.Infof("[IncrementKeeperTaskCount][trace_id: %s] Incrementing task count for keeper with ID: %s", traceID, c.Param("id"))
 	keeperID := c.Param("id")
 	h.logger.Infof("[IncrementKeeperTaskCount] Incrementing task count for keeper with ID: %s", keeperID)
 
@@ -37,6 +39,8 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 }
 
 func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
+	traceID := c.GetString("trace_id")
+	h.logger.Infof("[AddTaskFeeToKeeperPoints][trace_id: %s] Adding task fee to keeper with ID: %s", traceID, c.Param("id"))
 	keeperID := c.Param("id")
 	keeperIDInt, err := strconv.ParseInt(keeperID, 10, 64)
 	if err != nil {
@@ -92,6 +96,9 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 }
 
 func (h *Handler) UpdateKeeperChatID(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[UpdateKeeperChatID] trace_id=%s - Updating keeper chat ID", traceID)
+
 	var requestData types.UpdateKeeperChatIDRequest
 	if err := c.ShouldBindJSON(&requestData); err != nil {
 		h.logger.Errorf("[UpdateKeeperChatID] Error decoding request body: %v", err)

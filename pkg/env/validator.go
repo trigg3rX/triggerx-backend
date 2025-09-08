@@ -3,7 +3,7 @@ package env
 import (
 	"regexp"
 	"strings"
-	
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )

@@ -5,16 +5,16 @@ import (
 	"sync"
 	"time"
 
-	schedulerTypes "github.com/trigg3rX/triggerx-backend/internal/schedulers/event/scheduler/types"
+	"github.com/shirou/gopsutil/v3/cpu"
 )
 
-type HealthChecker interface {
-	HealthCheck() error
-}
+const (
+	// DuplicateEventWindow is the window to prevent duplicate event processing
+	// This matches the value in scheduler/worker package to avoid circular import
+	DuplicateEventWindow = 30 * time.Second
+)
 
 var (
-	dbChecker HealthChecker
-
 	// Internal tracking variables for performance calculations
 	conditionStatsLock       sync.RWMutex
 	conditionCheckTimes      []float64
@@ -41,11 +41,6 @@ func init() {
 	lastConfigUpdate = time.Now()
 }
 
-// SetHealthChecker sets the health checker for database status monitoring
-func SetHealthChecker(checker HealthChecker) {
-	dbChecker = checker
-}
-
 // Collects system resource metrics
 func collectSystemMetrics() {
 	var memStats runtime.MemStats
@@ -55,7 +50,13 @@ func collectSystemMetrics() {
 	MemoryUsageBytes.Set(float64(memStats.Alloc))
 
 	// Update CPU usage (using system memory as a proxy)
-	CPUUsagePercent.Set(float64(memStats.Sys))
+	cpuPercent, err := cpu.Percent(0, false)
+	if err == nil && len(cpuPercent) > 0 {
+		CPUUsagePercent.Set(cpuPercent[0])
+	} else {
+		// Fallback to 0.0 if CPU monitoring fails
+		CPUUsagePercent.Set(0.0)
+	}
 
 	// Update active goroutines count
 	GoroutinesActive.Set(float64(runtime.NumGoroutine()))
@@ -133,17 +134,6 @@ func collectWorkerMetrics() {
 	}
 }
 
-// Collects database health metrics
-func collectDatabaseMetrics() {
-	if dbChecker != nil {
-		err := dbChecker.HealthCheck()
-		if err != nil {
-			// Database is unhealthy
-			TrackDBConnectionError()
-		}
-	}
-}
-
 // Resets metrics that should be reset daily
 func resetDailyMetrics() {
 	conditionStatsLock.Lock()
@@ -169,8 +159,8 @@ func resetDailyMetrics() {
 
 // Helper functions to get configuration values
 func getDuplicateConditionWindowSeconds() float64 {
-	// Use the constant from scheduler types instead of hardcoded value
-	return schedulerTypes.DuplicateEventWindow.Seconds()
+	// Use the local constant to avoid circular import
+	return DuplicateEventWindow.Seconds()
 }
 
 // HTTP and API tracking functions
@@ -410,4 +400,112 @@ func GetSchedulerHealthStatus() map[string]interface{} {
 		"max_evaluation_time":     maxEvalDuration,
 		"conditions_last_minute":  len(conditionsLastMinute),
 	}
+}
+
+var (
+	// Internal tracking variables for performance calculations
+	eventStatsLock       sync.RWMutex
+	eventProcessingTimes []float64
+	eventsLastMinute     map[string]int64 // chain_id -> count
+	totalEvents          int64
+	successfulEvents     int64
+)
+
+func init() {
+	eventsLastMinute = make(map[string]int64)
+	workerStartTimes = make(map[string]time.Time)
+	workerMemoryUsage = make(map[string]int64)
+	lastMinuteReset = time.Now()
+	lastConfigUpdate = time.Now()
+}
+
+// Blockchain and RPC tracking functions
+
+// TrackChainConnection tracks blockchain connection attempts
+func TrackChainConnection(chainID, status string) {
+	ChainConnectionsTotal.WithLabelValues(chainID, status).Inc()
+}
+
+// TrackRPCRequest tracks RPC requests to blockchain nodes
+func TrackRPCRequest(chainID, method, status string) {
+	RPCRequestsTotal.WithLabelValues(chainID, method, status).Inc()
+}
+
+// TrackConnectionFailure tracks blockchain connection failures
+func TrackConnectionFailure(chainID string) {
+	ConnectionFailuresTotal.WithLabelValues(chainID).Inc()
+}
+
+// TrackWorkerError tracks worker errors
+func TrackWorkerError(jobID, errorType string) {
+	WorkerErrorsTotal.WithLabelValues(jobID, errorType).Inc()
+}
+
+// Event tracking functions
+
+// TrackEvent tracks when an event is detected
+func TrackEvent(chainID string, processingTime time.Duration) {
+	eventStatsLock.Lock()
+	defer eventStatsLock.Unlock()
+
+	// Update events per minute counter
+	eventsLastMinute[chainID]++
+	totalEvents++
+
+	// Track processing time (keep last 1000 entries to avoid memory growth)
+	eventProcessingTimes = append(eventProcessingTimes, processingTime.Seconds())
+	if len(eventProcessingTimes) > 1000 {
+		eventProcessingTimes = eventProcessingTimes[1:]
+	}
+}
+
+// TrackEventSuccess tracks successful event processing
+func TrackEventSuccess(chainID string) {
+	eventStatsLock.Lock()
+	defer eventStatsLock.Unlock()
+	successfulEvents++
+}
+
+// Stats and utility functions
+
+// GetEventStats returns current event statistics
+func GetEventStats() (total, successful int64, avgProcessingTime float64) {
+	eventStatsLock.RLock()
+	defer eventStatsLock.RUnlock()
+
+	total = totalEvents
+	successful = successfulEvents
+
+	if len(eventProcessingTimes) > 0 {
+		var sum float64
+		for _, duration := range eventProcessingTimes {
+			sum += duration
+		}
+		avgProcessingTime = sum / float64(len(eventProcessingTimes))
+	}
+
+	return
+}
+
+// TrackEventWithDuration tracks event processing with comprehensive metrics
+func TrackEventWithDuration(chainID string, duration time.Duration, success bool) {
+	// Track the basic event
+	TrackEvent(chainID, duration)
+
+	// Track success/failure
+	if success {
+		TrackEventSuccess(chainID)
+	}
+
+	// Update average processing time immediately for real-time accuracy
+	eventStatsLock.RLock()
+	if len(eventProcessingTimes) > 0 {
+		var sum float64
+		for _, processingTime := range eventProcessingTimes {
+			sum += processingTime
+		}
+		avgTime := sum / float64(len(eventProcessingTimes))
+		AverageEventProcessingTimeSeconds.Set(avgTime)
+	}
+	eventStatsLock.RUnlock()
 }

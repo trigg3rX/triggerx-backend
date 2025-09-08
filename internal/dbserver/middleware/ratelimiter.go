@@ -169,3 +169,29 @@ func (rl *RateLimiter) GetRateLimitStatus(ctx context.Context, apiKey *types.Api
 		Reset:     currentTimestamp + int64(ttl.Seconds()),
 	}, nil
 }
+
+// CheckRateLimitForKey checks rate limit for a given API key without using gin.Context
+func (rl *RateLimiter) CheckRateLimitForKey(apiKey *types.ApiKey) error {
+	key := fmt.Sprintf("rate_limit:%s", apiKey.Key)
+	window := 60 // 1 minute window
+	limit := apiKey.RateLimit
+
+	ctx := context.Background()
+	result, err := rl.redis.EvalScript(ctx, rateLimitScript, []string{key}, []interface{}{limit, window})
+	if err != nil {
+		rl.logger.Errorf("Failed to evaluate rate limit script: %v", err)
+		return err
+	}
+
+	values, ok := result.([]interface{})
+	if !ok || len(values) != 3 {
+		rl.logger.Error("Invalid response from rate limit script")
+		return fmt.Errorf("invalid response from rate limit script")
+	}
+
+	current := values[0].(int64)
+	if current > int64(limit) {
+		return fmt.Errorf("rate limit exceeded")
+	}
+	return nil
+}

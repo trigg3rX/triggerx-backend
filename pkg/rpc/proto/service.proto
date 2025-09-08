@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package rpc;
+
+option go_package = "github.com/trigg3rX/triggerx-backend/pkg/rpc/proto";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// ServiceInfo represents information about an RPC service
+message ServiceInfo {
+  string name = 1;
+  string version = 2;
+  string address = 3;
+  int32 port = 4;
+  map<string, string> metadata = 5;
+  google.protobuf.Timestamp last_seen = 6;
+  HealthStatus health = 7;
+}
+
+// HealthStatus represents the health status of a service
+message HealthStatus {
+  string status = 1; // "healthy", "unhealthy", "degraded"
+  string message = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  map<string, string> details = 4;
+}
+
+// RPCMethod represents an RPC method definition
+message RPCMethod {
+  string name = 1;
+  string description = 2;
+  string request_type = 3;
+  string response_type = 4;
+  int64 timeout_nanos = 5;
+}
+
+// RPCRequest represents a generic RPC request
+message RPCRequest {
+  string method = 1;
+  google.protobuf.Any payload = 2;
+  map<string, string> metadata = 3;
+}
+
+// RPCResponse represents a generic RPC response
+message RPCResponse {
+  google.protobuf.Any result = 1;
+  string error = 2;
+  map<string, string> metadata = 3;
+}
+
+// HealthCheckRequest represents a health check request
+message HealthCheckRequest {
+  string service = 1;
+}
+
+// HealthCheckResponse represents a health check response
+message HealthCheckResponse {
+  HealthStatus status = 1;
+}
+
+// GetMethodsResponse returns available RPC methods
+message GetMethodsResponse {
+  repeated RPCMethod methods = 1;
+}
+
+// GenericService provides a generic RPC interface
+service GenericService {
+  // Call handles generic RPC calls
+  rpc Call(RPCRequest) returns (RPCResponse);
+  
+  // HealthCheck performs a health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  
+  // GetMethods returns available methods
+  rpc GetMethods(google.protobuf.Empty) returns (GetMethodsResponse);
+}

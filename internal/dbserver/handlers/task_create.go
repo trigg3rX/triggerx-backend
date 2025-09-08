@@ -9,6 +9,8 @@ import (
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[CreateTaskData] trace_id=%s - Creating task", traceID)
 	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
 		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
@@ -27,6 +29,18 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create task",
 			"code":  "TASK_CREATION_ERROR",
+		})
+		return
+	}
+
+	trackDBOp = metrics.TrackDBOperation("update", "add_task_id")
+	err = h.taskRepository.AddTaskIDToJob(taskData.JobID, taskID)
+	trackDBOp(err)
+	if err != nil {
+		h.logger.Errorf("[CreateTaskData] Error adding task ID to job: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to add task ID to job",
+			"code":  "TASK_ID_ADDITION_ERROR",
 		})
 		return
 	}

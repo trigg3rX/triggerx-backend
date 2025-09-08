@@ -1,5 +1,5 @@
 # Use golang:1.24.2-alpine as the base image
-FROM golang:1.24.2-alpine AS builder
+FROM golang:1.24.6-alpine AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -24,23 +24,46 @@ ARG SERVICE
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/${DOCKER_NAME} ./cmd/${SERVICE}
 
 # Use a minimal alpine image for the final stage
-FROM golang:1.24.2-alpine
+FROM golang:1.24.6-alpine
 
 # Install ca-certificates
 RUN apk --no-cache add ca-certificates
 
-# Set working directory
-WORKDIR /root/
+# Create a non-root user with specific UID/GID for log file permissions
+# Use GID 1000 as default, but this will be overridden at runtime if needed
+RUN addgroup -g 1000 appgroup && \
+    adduser -D -u 1000 -G appgroup appuser
 
-# Create a placeholder env file
-RUN touch .env
+# Create necessary directories for the application
+RUN mkdir -p /home/appuser/data/cache && \
+    mkdir -p /home/appuser/data/logs && \
+    mkdir -p /home/appuser/data/logs/dbserver && \
+    mkdir -p /home/appuser/data/logs/schedulers-time && \
+    mkdir -p /home/appuser/data/logs/schedulers-condition && \
+    mkdir -p /home/appuser/data/logs/health && \
+    mkdir -p /home/appuser/data/logs/registrar && \
+    mkdir -p /home/appuser/data/logs/taskmanager
+
+# Set working directory
+WORKDIR /home/appuser/
 
 # Copy the built binary
 ARG DOCKER_NAME
 COPY --from=builder /app/${DOCKER_NAME} .
 
-COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /root/start.sh
-RUN chmod +x /root/start.sh
+# Copy the config files
+RUN mkdir -p /home/appuser/config/
+COPY ./config/ /home/appuser/config/
+RUN chown -R appuser:appgroup /home/appuser/config/
+
+COPY ./scripts/docker/services/start-${DOCKER_NAME}-binary.sh /home/appuser/start.sh
+
+# Make sure the script is executable by everyone and set proper ownership
+RUN chmod 755 /home/appuser/start.sh && \
+    chown -R appuser:appgroup /home/appuser/
+
+# Switch to non-root user
+USER appuser
 
 # Default command: run the binary
 CMD ["sh", "./start.sh"]

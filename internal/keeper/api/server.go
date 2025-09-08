@@ -31,12 +31,12 @@ type Config struct {
 // Dependencies holds the server dependencies
 type Dependencies struct {
 	Logger    logging.Logger
-	Executor  execution.TaskExecutor
-	Validator validation.TaskValidator
+	Executor  *execution.TaskExecutor
+	Validator *validation.TaskValidator
 }
 
 // NewServer creates a new API server
-func NewServer(cfg Config, deps Dependencies) *Server {
+func NewServer(cfg Config, deps *Dependencies) *Server {
 	if cfg.ReadTimeout == 0 {
 		cfg.ReadTimeout = 30 * time.Second
 	}
@@ -99,7 +99,7 @@ func (s *Server) setupMiddleware() {
 }
 
 // setupRoutes sets up the routes for the server
-func (s *Server) setupRoutes(deps Dependencies) {
+func (s *Server) setupRoutes(deps *Dependencies) {
 	// Create handlers
 	taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
 	metricsHandler := handlers.NewMetricsHandler(deps.Logger)

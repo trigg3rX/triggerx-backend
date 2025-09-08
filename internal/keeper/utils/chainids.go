@@ -7,25 +7,25 @@ import (
 
 func GetChainRpcUrl(chainID string) string {
 	switch chainID {
+	// Testnets
 	case "11155111":
 		return fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "11155420":
 		return fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	case "84532":
 		return fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
-	default:
-		return ""
-	}
-}
+	case "421614":
+		return fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 
-func GetProxyHubAddress(chainID string) string {
-	switch chainID {
-	// case "11155111":
-	// 	return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
-	case "11155420":
-		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
-	case "84532":
-		return "0x68605feB94a8FeBe5e1fBEF0A9D3fE6e80cEC126"
+	// Mainnets
+	case "1":
+		return fmt.Sprintf("https://eth-mainnet.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "10":
+		return fmt.Sprintf("https://opt-mainnet.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "8453":
+		return fmt.Sprintf("https://base-mainnet.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
+	case "42161":
+		return fmt.Sprintf("https://arb-mainnet.g.alchemy.com/v2/%s", config.GetAlchemyAPIKey())
 	default:
 		return ""
 	}

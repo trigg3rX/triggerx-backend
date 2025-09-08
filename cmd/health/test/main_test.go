@@ -13,7 +13,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"github.com/trigg3rX/triggerx-backend/pkg/mocks"
 )
 
 func TestMain(t *testing.T) {
@@ -48,9 +47,6 @@ func TestMain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to initialize logger: %v", err)
 		}
-
-		// Initialize test dependencies
-		mocks.InitializeTestDependencies(logger)
 
 		// Initialize state manager for tests
 		_ = keeper.InitializeStateManager(logger)
@@ -97,9 +93,6 @@ func TestMain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to initialize logger: %v", err)
 		}
-
-		// Initialize test dependencies
-		mocks.InitializeTestDependencies(logger)
 
 		// Initialize state manager for tests
 		_ = keeper.InitializeStateManager(logger)

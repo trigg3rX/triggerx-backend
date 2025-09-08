@@ -120,6 +120,7 @@ func (sm *StateManager) GetDetailedKeeperInfo() []types.KeeperInfo {
 			PeerID:           state.PeerID,
 			LastCheckedIn:    state.LastCheckedIn,
 			IsActive:         state.IsActive,
+			IsImua:           state.IsImua,
 		}
 		keeperInfoList = append(keeperInfoList, info)
 	}

@@ -1,75 +1,158 @@
-# TODO List for the Keeper Backend Production Scaling
+# TODO List
 
-## Redis Service
+## Current State Analysis
 
-* Question to PS: If streams are handling all the caching with Upstash / local redis, then why was `internal/cache` package created? How is it used?
+The codebase has tight coupling between services with direct instantiation of external dependencies. Key issues identified:
 
-* [x] `NewRedisClient`: Create a new redis client, uses Upstash if available, otherwise uses local redis, panics if both are not available.
-* [x] `JobStream`: 2 kinds of streams, running and completed. TTL of 120 hrs. COntains JobID, TaskDefinitionID, TaskIDs.
-* [x] `TaskStream`: 5 kinds of streams with 1 minute TTL for each task:
-  * [x] Ready: Queue of tasks that are ready to be executed, i.e., to be sent to performer. There will be not tasks here until the network is busy will no performers available.
-  * [x] Processing: Tasks sent to performer. Waiting for Performer ack.
-  * [x] Retry: Tasks that failed to be executed. 3 retries.
-  * [ ] Failed: Tasks that failed to be executed 3 times.
-    * TODO: What can we do here?
-  * [x] Completed: Tasks that were successfully executed.
-* [ ] `PerformerLocks`: Health service `/operators` endpoint would have the current active performers. Implement round robin for them. Lock the performer when sending tasks to them. Release them if sending tasks fails or if the task is completed ack is received.
-  * We need to keep the next performer ready as soon as the current performer is locked.
-  * **TODO**:
-    * ~~Round robin logic~~ (skip for now, we have fixed performers)
-    * ~~Fetch the list of performers from health service~~ (skip for now, we have fixed performers)
-    * `AcquirePerformerLock` and `ReleasePerformerLock`: Defined, but we need to call them when we send tasks to performers from `redis` package.
+**Hard-coded Dependencies:**
+- Database connections are directly instantiated in service constructors
+- Redis clients created without interface abstraction
+- Ethereum clients and blockchain connections hard-coded
+- IPFS clients are directly instantiated
+- Docker manager is tightly coupled to handlers
 
-### API Server
+**Singleton Patterns:**
+- Database managers using the singleton pattern (health service)
+- State managers with global instances
+- No dependency injection for external services
 
-I was thinking of implementing the routes in an API server, which shall be accessed by Othentic Attester node, to get the updates regarding task execution requests and validation requests. It can be used to get the status of the tasks, and to get the results of the tasks, along with keeper's status: busy or idle.
+**Missing Interfaces:**
+- Database operations not abstracted
+- Blockchain client operations are not interface-based
+- Notification services (Telegram, Email) are directly coupled
+- Repository patterns are inconsistent across services
 
-* [ ] `/p2p/meassage`: receives the execution data
-* [ ] `/task/validate`: receives the validation data
+## Refactoring Strategy
 
-**TODO:** Basic handlers deifned, need to add the data parsing logic, along with the logic to update the redis streams.
+### 1. Database Layer Abstraction
 
-## Schedulers
+**Create Database Interface:**
+```go
+type DatabaseInterface interface {
+    // Connection management
+    Connect(ctx context.Context) error
+    Close() error
+    IsConnected() bool
+    
+    // Session management
+    Session() SessionInterface
+    
+    // Health checks
+    Ping(ctx context.Context) error
+}
 
-### Time based Tasks
+type SessionInterface interface {
+    Query(stmt string, values ...interface{}) QueryInterface
+    Batch() BatchInterface
+    Close() error
+}
 
-No workers, only one scheduler, which polls every 30 seconds and sends the tasks to the performer with `next_execution_timestamp`. Peroformer will wait till `next_execution_timestamp - time_drift` to execute the task. The time drift will be 0 initially, and will be adjusted as we get the results in testing.
+type QueryInterface interface {
+    Scan(dest ...interface{}) error
+    Exec() error
+    Iter() IterInterface
+}
+```
 
-* [x] `pollAndScheduleJobs`: It polls every 30 seconds for jobs with `next_execution_timestamp` < 40 seconds. that 10 second is a security margin.
-* [x] `processBatch`: The jobs are processed in batches of 15. This is to ensure resource usage is not too high, and can be changed as per benchmarking. Only next 30 seconds of jobs are processed. In case the next poll fails, we use the 10 secs oj jobs for processing, will retrying to poll again. (Current assumption is 1 task per 2 sec, so 15 tasks per 30 seconds and hence the batch size is 15)
-* [x] `executeJob`: update redis service regarding these tasks are to be executed for these jobs. Update the JobStream and TaskStream accordingly. Also, get performerLock for this batch of jobs.
-* [x] `performJobExecution`: Send the list of tasks to the performer. It will be busy for next 30 seconds, executing the tasks at exact time possible. Handle the nonce and gas fees for this.
-* [ ] `check.go`: Will receive the list of tasks from redis that were successfully executed from api server endpoints. Update the JobStream and TaskStream accordingly.
-  * **TODO**: It is a blank file.
+### 2. External Service Interfaces
 
-### Event and Condition based Tasks
+**Blockchain Client Interface:**
+```go
+type BlockchainClientInterface interface {
+    // Chain operations
+    GetBlockNumber(ctx context.Context) (uint64, error)
+    GetChainID(ctx context.Context) (*big.Int, error)
+    
+    // Contract operations
+    CallContract(ctx context.Context, call ethereum.CallMsg) ([]byte, error)
+    SendTransaction(ctx context.Context, tx *types.Transaction) error
+    
+    // Event subscription
+    SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error)
+}
+```
 
-Pool of workers, each monitoring the "condition". When it happens, it notifies the redis to get the keeper, and execute the task.
+**Redis Client Interface (Already exists, extend):**
+```go
+type RedisClientInterface interface {
+    // Add missing methods for complete coverage
+    SetWithExpiration(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+    GetWithDefault(ctx context.Context, key string, defaultValue interface{}) (interface{}, error)
+    DeletePattern(ctx context.Context, pattern string) error
+    Exists(ctx context.Context, keys ...string) (int64, error)
+}
+```
 
-* [x] `api/server.go`: API server with `/jobs/schedule` and `/jobs/delete` endpoints. DB server calls these endpoints to schedule and delete jobs as it gets the requests from frontend / sdk.
-* [x] worker = go routine. It will be monitoring the condition. When it happens, it will fetch keeper from redis, lock it and execute the task.
-* [ ] `check.go`: Will receive the list of tasks from redis that were successfully executed from api server endpoints. Update the JobStream and TaskStream accordingly.
-  * **TODO**: It is a blank file.
+**Notification Service Interface:**
+```go
+// pkg/notifications/interface.go
+type NotificationServiceInterface interface {
+    SendEmail(to, subject, body string) error
+    SendTelegramMessage(chatID string, message string) error
+    SendSlackMessage(channel, message string) error
+}
+```
 
-### Task Execution
+### 3. Repository Pattern Standardisation
 
-* [x] `checkIfPerformer`: Check is the performer is self. If not, it will not perform the task.
-  * [x] `executeTask`:
-    * [x] `validateSchedulerSignature`: Validate the scheduler signature.
-    * [x] `validateTrigger`: Validate the trigger.
-    * [x] `takeActionWithStaticArgs`: Take action with static arguments.
-    * [x] `takeActionWithDynamicArgs`: Take action with dynamic arguments.
-  * [x] `generateProof`: TLS certificate proof generation.
-  * [x] `signIPFSData`: Sign the ipfs data using Consensus private key.
-  * [x] `uploadToIPFS`: Upload the data + proof to IPFS.
+**Create Base Repository Interface:**
+```go
+// pkg/repository/interface.go
+type RepositoryInterface[T any] interface {
+    Create(ctx context.Context, entity T) error
+    GetByID(ctx context.Context, id string) (T, error)
+    Update(ctx context.Context, entity T) error
+    Delete(ctx context.Context, id string) error
+    List(ctx context.Context, filter Filter) ([]T, error)
+}
 
-### Task Validation
+type Filter interface {
+    ToQuery() (string, []interface{})
+}
+```
 
-* [x] `validateTask`: Validate the task.
-  * [x] `validateSchedulerSignature`: Validate the scheduler signature.
-  * [x] `validateTrigger`: Validate the trigger.
-  * [x] `validateAction`: Validate the action.
-  * [x] `validateProof`: Validate the proof.
-  * [x] `validateSignature`: Validate the performer signature.
+**Standardise All Repositories:**
+- EventJobRepository
+- ConditionJobRepository  
+- TimeJobRepository
+- TaskRepository
+- UserRepository
+- KeeperRepository
+- ApiKeysRepository
 
-More details in [Keeper](keeper.md).
+### 4. Mock Implementations
+
+Mock External Services:
+
+- MockDatabase
+- MockBlockchainClient
+- MockRedisClient  
+- MockNotificationService
+- MockDockerManager
+- MockIPFSClient
+
+## 1. Internal Services
+
+Switch to GRPC from API interactions between internal services.
+
+- [ ] Start the trace ID at DB Server - Schedulers interaction
+- [ ] Carry trace ID across all services, add trace ID to DB
+- [ ] Include Keepers in the trace ID loop, with error update back to backend
+  - [ ] Health check-in can be expanded to cover this base, or create a new interface to another service
+
+## 2. Keepers
+
+- [ ] Use of seccomp profiles in container executions - restricts misuse of keepers
+  - [ ] Can we pass secrets for API keys from the user in a secure method?
+- [ ] Switch to keystore file reading for wallet keys
+- [ ] CLI: add methods to cover all operations, update the install script
+
+## 3. Users (Developer) UX
+
+- [ ] Add script language, IPFS doesn't store the extension if the name is not added upon upload
+- [ ] Simple dynamic price fetch via API / oracle should be migrated from user defined script to our provided options
+
+## 4. Developer UX
+
+- [ ] Logger: Add function signatures and trace IDs in log structure. Add logger.Info() and logger.Infow()
+- [ ] Persistent storage: Migrate all data saving to `~/.triggerx/` folder - logs, cache, peerstore

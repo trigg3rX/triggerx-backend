@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 // KeeperHealthCheckIn represents the health check-in data from a keeper
 type KeeperHealthCheckIn struct {
@@ -11,6 +14,7 @@ type KeeperHealthCheckIn struct {
 	Timestamp        time.Time `json:"timestamp" validate:"required"`
 	Signature        string    `json:"signature" validate:"required"`
 	PeerID           string    `json:"peer_id" validate:"required"`
+	IsImua           bool      `json:"is_imua" validate:"required"`
 }
 
 // KeeperHealthCheckInResponse represents the response from the health check-in endpoint
@@ -34,7 +38,7 @@ type PerformerActionData struct {
 	BlockWrite    uint64  `json:"block_write"`
 	BandwidthRate float64 `json:"bandwidth_rate"`
 
-	TotalFee           float64   `json:"total_fee"`
+	TotalFee           *big.Int  `json:"total_fee"`
 	StaticComplexity   float64   `json:"static_complexity"`
 	DynamicComplexity  float64   `json:"dynamic_complexity"`
 	ComplexityIndex    float64   `json:"complexity_index"`

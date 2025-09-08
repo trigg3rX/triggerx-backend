@@ -3,27 +3,18 @@ package validation
 import (
 	"fmt"
 
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
+func (v *TaskValidator) ValidateManagerSignature(task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
 	logger := v.logger.With("traceID", traceID)
 
-	// check if the scheduler signature is valid
-	if task.SchedulerSignature == nil {
-		logger.Error("Scheduler signature data is missing")
-		return false, fmt.Errorf("scheduler signature data is missing")
-	}
-
-	if task.SchedulerSignature.SchedulerSignature == "" {
-		logger.Error("Scheduler signature is empty")
-		return false, fmt.Errorf("scheduler signature is empty")
-	}
-
-	if task.SchedulerSignature.SchedulerSigningAddress == "" {
-		logger.Error("Scheduler signing address is empty")
-		return false, fmt.Errorf("scheduler signing address is empty")
+	// check if the manager signature is valid
+	if task.ManagerSignature == "" {
+		logger.Error("Manager signature data is missing")
+		return false, fmt.Errorf("manager signature data is missing")
 	}
 
 	// Create a copy of the task data without the signature for verification
@@ -32,30 +23,26 @@ func (v *TaskValidator) ValidateSchedulerSignature(task *types.SendTaskDataToKee
 		PerformerData: task.PerformerData,
 		TargetData:    task.TargetData,
 		TriggerData:   task.TriggerData,
-		SchedulerSignature: &types.SchedulerSignatureData{
-			TaskID:                  task.SchedulerSignature.TaskID,
-			SchedulerSigningAddress: task.SchedulerSignature.SchedulerSigningAddress,
-			// Note: SchedulerSignature field is intentionally left empty for verification
-		},
+		SchedulerID:   task.SchedulerID,
 	}
 
 	// Convert the task data to JSON message format (same as signing process)
 	isValid, err := cryptography.VerifySignatureFromJSON(
 		taskDataForVerification,
-		task.SchedulerSignature.SchedulerSignature,
-		task.SchedulerSignature.SchedulerSigningAddress,
+		task.ManagerSignature,
+		config.GetManagerSigningAddress(),
 	)
 	if err != nil {
-		logger.Error("Failed to verify scheduler signature", "error", err)
-		return false, fmt.Errorf("failed to verify scheduler signature: %w", err)
+		logger.Error("Failed to verify manager signature", "error", err)
+		return false, fmt.Errorf("failed to verify manager signature: %w", err)
 	}
 
 	if !isValid {
-		logger.Error("Scheduler signature verification failed")
-		return false, fmt.Errorf("scheduler signature verification failed")
+		logger.Error("Manager signature verification failed")
+		return false, fmt.Errorf("manager signature verification failed")
 	}
 
-	logger.Info("Scheduler signature verification successful")
+	logger.Info("Manager signature verification successful")
 	return true, nil
 }
 
@@ -89,7 +76,7 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		ActionData: ipfsData.ActionData,
 		ProofData:  ipfsData.ProofData,
 		PerformerSignature: &types.PerformerSignatureData{
-			TaskID:                  ipfsData.TaskData.TaskID,
+			TaskID:                  ipfsData.PerformerSignature.TaskID,
 			PerformerSigningAddress: ipfsData.PerformerSignature.PerformerSigningAddress,
 			// Note: PerformerSignature field is intentionally left empty for verification
 		},

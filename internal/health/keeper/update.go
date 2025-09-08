@@ -38,6 +38,7 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealth
 	existingState.PeerID = keeperHealth.PeerID
 	existingState.LastCheckedIn = now
 	existingState.IsActive = true
+	existingState.IsImua = keeperHealth.IsImua
 
 	// Update database
 	if err := sm.retryWithBackoff(func() error {
@@ -49,6 +50,7 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealth
 	sm.logger.Info("Updated keeper health status",
 		"keeper", address,
 		"version", keeperHealth.Version,
+		"is_imua", keeperHealth.IsImua,
 	)
 	return nil
 }

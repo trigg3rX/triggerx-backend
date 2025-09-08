@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
+	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -37,42 +36,22 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	logger.Info("Starting Time-based Scheduler with Redis integration...")
+
 	// Initialize database client
-	dbClient, err := client.NewDBServerClient(logger, config.GetDBServerURL())
+	dbClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerURL())
 	if err != nil {
 		logger.Fatal("Failed to initialize database client", "error", err)
 	}
-	defer dbClient.Close()
+	logger.Info("Database client initialized successfully")
 
-	// Initialize aggregator client
-	aggClientCfg := aggregator.AggregatorClientConfig{
-		AggregatorRPCUrl: config.GetAggregatorRPCUrl(),
-		SenderPrivateKey: config.GetSchedulerSigningKey(),
-		SenderAddress:    config.GetSchedulerSigningAddress(),
-		RetryAttempts:    3,
-		RetryDelay:       2 * time.Second,
-		RequestTimeout:   10 * time.Second,
-	}
-	aggClient, err := aggregator.NewAggregatorClient(logger, aggClientCfg)
-	if err != nil {
-		logger.Fatal("Failed to initialize aggregator client", "error", err)
-	}
-
-	// Perform initial health check
-	logger.Info("Performing initial health check...")
-	if err := dbClient.HealthCheck(); err != nil {
-		logger.Warn("Database server health check failed", "error", err)
-		logger.Info("Continuing startup - will retry connections during operation")
-	} else {
-		logger.Info("Database server health check passed")
-	}
-
-	// Initialize time-based scheduler
+	// Initialize time-based scheduler with Redis integration via HTTP API
 	managerID := fmt.Sprintf("time-scheduler-%d", time.Now().Unix())
-	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, dbClient, aggClient)
+	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, dbClient)
 	if err != nil {
 		logger.Fatal("Failed to initialize time-based scheduler", "error", err)
 	}
+	logger.Info("Time-based scheduler initialized successfully")
 
 	// Setup HTTP server with scheduler integration
 	srv := api.NewServer(api.Config{
@@ -87,13 +66,13 @@ func main() {
 
 	// Start scheduler in background
 	go func() {
-		logger.Info("Starting time-based scheduler worker management...")
+		logger.Info("Starting time-based task polling and Redis submission...")
 		timeScheduler.Start(ctx)
 	}()
 
 	// Start HTTP server
 	go func() {
-		logger.Info("Starting HTTP server for job scheduling API...", "port", config.GetSchedulerRPCPort())
+		logger.Info("Starting HTTP server for scheduler management API...", "port", config.GetSchedulerRPCPort())
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
 			logger.Error("HTTP server error", "error", err)
 		}
@@ -106,9 +85,11 @@ func main() {
 		"poll_interval":         config.GetPollingInterval(),
 		"look_ahead":            config.GetPollingLookAhead(),
 		"batch_size":            config.GetTaskBatchSize(),
-		"performer_lock_ttl":    config.GetPerformerLockTTL(),
 		"task_cache_ttl":        config.GetTaskCacheTTL(),
 		"duplicate_task_window": config.GetDuplicateTaskWindow(),
+		"redis_integration":     "enabled",
+		"orchestration_mode":    "redis_streams",
+		"performer_assignment":  "automatic_via_redis",
 	}
 
 	logger.Info("Time-based scheduler service ready", "status", serviceStatus)
@@ -119,10 +100,10 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(cancel, srv, timeScheduler, logger)
+	performGracefulShutdown(cancel, srv, timeScheduler, dbClient, logger)
 }
 
-func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, logger logging.Logger) {
+func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, dbClient *dbserver.DBServerClient, logger logging.Logger) {
 	shutdownStart := time.Now()
 	logger.Info("Initiating graceful shutdown...")
 
@@ -136,6 +117,9 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeSch
 	// Stop scheduler gracefully
 	timeScheduler.Stop()
 
+	// Close database client
+	dbClient.Close()
+
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {
 		logger.Error("Server forced to shutdown", "error", err)
@@ -143,6 +127,8 @@ func performGracefulShutdown(cancel context.CancelFunc, srv *api.Server, timeSch
 
 	shutdownDuration := time.Since(shutdownStart)
 
-	logger.Info("Time-based scheduler shutdown complete", "duration", shutdownDuration)
+	logger.Info("Time-based scheduler shutdown complete",
+		"duration", shutdownDuration,
+		"redis_integration", "disconnected")
 	os.Exit(0)
 }

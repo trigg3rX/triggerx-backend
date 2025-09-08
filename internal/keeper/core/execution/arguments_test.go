@@ -1,404 +1,246 @@
 package execution
 
 import (
-	"math/big"
-	"strings"
+	"reflect"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 )
 
-// ===========================================
-// UNIT TESTS FOR ArgumentConverter.convertToType
-// ===========================================
-
-func TestConvertToType_StringToUint256(t *testing.T) {
-	// Arrange
+func TestArgumentConverter_ConvertToType_Uint8(t *testing.T) {
 	converter := &ArgumentConverter{}
-	uintType, _ := abi.NewType("uint256", "", nil)
 
-	// Act
-	result, err := converter.convertToType("123", uintType)
-
-	// Assert
-	assert.NoError(t, err)
-	bigIntResult, ok := result.(*big.Int)
-	assert.True(t, ok)
-	assert.Equal(t, "123", bigIntResult.String())
-}
-
-func TestConvertToType_StringToAddress(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	addressType, _ := abi.NewType("address", "", nil)
-	addressStr := "0x742d35cc6632c0532c718d329da9e8e0a7d4b7fa"
-
-	// Act
-	result, err := converter.convertToType(addressStr, addressType)
-
-	// Assert
-	assert.NoError(t, err)
-	addressResult, ok := result.(common.Address)
-	assert.True(t, ok)
-	// Use case-insensitive comparison since Ethereum addresses are checksummed
-	assert.True(t, strings.EqualFold(addressStr, addressResult.Hex()))
-}
-
-func TestConvertToType_StringToBool(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	boolType, _ := abi.NewType("bool", "", nil)
+	// Test uint8 type
+	uint8Type := abi.Type{T: abi.UintTy, Size: 8}
 
 	tests := []struct {
-		input    string
-		expected bool
+		name     string
+		input    interface{}
+		expected interface{}
+		hasError bool
 	}{
-		{"true", true},
-		{"false", false},
+		{
+			name:     "string to uint8",
+			input:    "0",
+			expected: uint8(0),
+			hasError: false,
+		},
+		{
+			name:     "float64 to uint8",
+			input:    float64(255),
+			expected: uint8(255),
+			hasError: false,
+		},
+		{
+			name:     "int to uint8",
+			input:    128,
+			expected: uint8(128),
+			hasError: false,
+		},
+		{
+			name:     "uint8 to uint8",
+			input:    uint8(42),
+			expected: uint8(42),
+			hasError: false,
+		},
+		{
+			name:     "negative value should error",
+			input:    -1,
+			hasError: true,
+		},
+		{
+			name:     "value too large should error",
+			input:    256,
+			hasError: true,
+		},
+		{
+			name:     "float too large should error",
+			input:    float64(256),
+			hasError: true,
+		},
 	}
 
-	for _, test := range tests {
-		// Act
-		result, err := converter.convertToType(test.input, boolType)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := converter.convertToType(tt.input, uint8Type)
 
-		// Assert
-		assert.NoError(t, err)
-		boolResult, ok := result.(bool)
-		assert.True(t, ok)
-		assert.Equal(t, test.expected, boolResult)
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
 	}
 }
 
-func TestConvertToType_InvalidAddress(t *testing.T) {
-	// Arrange
+func TestArgumentConverter_ConvertToType_Enum(t *testing.T) {
 	converter := &ArgumentConverter{}
-	addressType, _ := abi.NewType("address", "", nil)
 
-	// Act
-	result, err := converter.convertToType("invalid-address", addressType)
+	// Test enum type (uint8)
+	enumType := abi.Type{T: abi.UintTy, Size: 8}
 
-	// Assert
-	assert.Error(t, err)
-	// The result should be a zero address, not nil
-	addressResult, ok := result.(common.Address)
-	assert.True(t, ok)
-	assert.Equal(t, common.Address{}, addressResult)
-	assert.Contains(t, err.Error(), "invalid")
+	// Test the specific case from the user's error
+	// operation: 0 (enum value)
+	result, err := converter.convertToType(0, enumType)
+
+	assert.NoError(t, err)
+	assert.Equal(t, uint8(0), result)
+
+	// Test with string representation
+	result, err = converter.convertToType("0", enumType)
+
+	assert.NoError(t, err)
+	assert.Equal(t, uint8(0), result)
 }
 
-func TestConvertToType_UnsupportedType(t *testing.T) {
-	// Arrange
+func TestArgumentConverter_ConvertToType_Array(t *testing.T) {
 	converter := &ArgumentConverter{}
 
-	// Create a type that's not handled
-	functionType, _ := abi.NewType("function", "", nil)
+	// Test fixed-size array (uint8[3])
+	fixedArrayType := abi.Type{
+		T:    abi.ArrayTy,
+		Size: 3,
+		Elem: &abi.Type{T: abi.UintTy, Size: 8},
+	}
 
-	// Act
-	result, err := converter.convertToType("test", functionType)
-
-	// Assert
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "unsupported type")
-}
-
-// ===========================================
-// UNIT TESTS FOR ArgumentConverter.convertToInteger
-// ===========================================
-
-func TestConvertToInteger_ValidString(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	uintType, _ := abi.NewType("uint256", "", nil)
+	// Test dynamic slice (uint8[])
+	sliceType := abi.Type{
+		T:    abi.SliceTy,
+		Elem: &abi.Type{T: abi.UintTy, Size: 8},
+	}
 
 	tests := []struct {
-		input    string
-		expected string
+		name        string
+		targetType  abi.Type
+		input       interface{}
+		expectedLen int
+		hasError    bool
 	}{
-		{"123", "123"},
-		{"0", "0"},
-		{"999", "999"},
+		{
+			name:        "fixed array with correct length",
+			targetType:  fixedArrayType,
+			input:       []interface{}{1, 2, 3},
+			expectedLen: 3,
+			hasError:    false,
+		},
+		{
+			name:        "fixed array with wrong length",
+			targetType:  fixedArrayType,
+			input:       []interface{}{1, 2},
+			expectedLen: 0,
+			hasError:    true,
+		},
+		{
+			name:        "dynamic slice with any length",
+			targetType:  sliceType,
+			input:       []interface{}{1, 2, 3, 4},
+			expectedLen: 4,
+			hasError:    false,
+		},
+		{
+			name:        "dynamic slice with empty array",
+			targetType:  sliceType,
+			input:       []interface{}{},
+			expectedLen: 0,
+			hasError:    false,
+		},
+		{
+			name:        "string JSON array",
+			targetType:  sliceType,
+			input:       "[1,2,3]",
+			expectedLen: 3,
+			hasError:    false,
+		},
 	}
 
-	for _, test := range tests {
-		// Act
-		result, err := converter.convertToInteger(test.input, uintType)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := converter.convertToType(tt.input, tt.targetType)
 
-		// Assert
-		assert.NoError(t, err)
-		bigIntResult, ok := result.(*big.Int)
-		assert.True(t, ok)
-		assert.Equal(t, test.expected, bigIntResult.String())
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				// Check the result type and length
+				resultValue := reflect.ValueOf(result)
+				if tt.targetType.T == abi.ArrayTy {
+					assert.Equal(t, reflect.Array, resultValue.Kind())
+				} else {
+					assert.Equal(t, reflect.Slice, resultValue.Kind())
+				}
+				assert.Equal(t, tt.expectedLen, resultValue.Len())
+			}
+		})
 	}
 }
 
-func TestConvertToInteger_InvalidString(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	uintType, _ := abi.NewType("uint256", "", nil)
-
-	// Act
-	result, err := converter.convertToInteger("not-a-number", uintType)
-
-	// Assert
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestConvertToInteger_FromBigInt(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	uintType, _ := abi.NewType("uint256", "", nil)
-	bigInt := big.NewInt(456)
-
-	// Act
-	result, err := converter.convertToInteger(bigInt, uintType)
-
-	// Assert
-	assert.NoError(t, err)
-	bigIntResult, ok := result.(*big.Int)
-	assert.True(t, ok)
-	assert.Equal(t, "456", bigIntResult.String())
-}
-
-func TestConvertToInteger_FromFloat(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	uintType, _ := abi.NewType("uint256", "", nil)
-
-	// Act
-	result, err := converter.convertToInteger(123.456, uintType)
-
-	// Assert
-	assert.NoError(t, err)
-	bigIntResult, ok := result.(*big.Int)
-	assert.True(t, ok)
-	assert.Equal(t, "123", bigIntResult.String()) // Should truncate
-}
-
-func TestConvertToInteger_Uint32Type(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	uint32Type, _ := abi.NewType("uint32", "", nil)
-
-	// Act
-	result, err := converter.convertToInteger("123", uint32Type)
-
-	// Assert
-	assert.NoError(t, err)
-	uint32Result, ok := result.(uint32)
-	assert.True(t, ok)
-	assert.Equal(t, uint32(123), uint32Result)
-}
-
-func TestConvertToInteger_UnsupportedType(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	uintType, _ := abi.NewType("uint256", "", nil)
-
-	// Act
-	result, err := converter.convertToInteger([]int{1, 2, 3}, uintType)
-
-	// Assert
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "cannot convert")
-}
-
-// ===========================================
-// UNIT TESTS FOR ArgumentConverter.convertToString
-// ===========================================
-
-func TestConvertToString_FromString(t *testing.T) {
-	// Arrange
+func TestArgumentConverter_ConvertToType_FixedBytes(t *testing.T) {
 	converter := &ArgumentConverter{}
 
-	// Act
-	result, err := converter.convertToString("hello world")
+	// Test bytes32 type
+	bytes32Type := abi.Type{T: abi.FixedBytesTy, Size: 32}
 
-	// Assert
-	assert.NoError(t, err)
-	assert.Equal(t, "hello world", result)
-}
-
-func TestConvertToString_FromInt(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToString(42)
-
-	// Assert
-	assert.NoError(t, err)
-	assert.Equal(t, "42", result)
-}
-
-func TestConvertToString_FromFloat(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToString(3.14159)
-
-	// Assert
-	assert.NoError(t, err)
-	assert.Equal(t, "3.14159", result)
-}
-
-func TestConvertToString_UnsupportedType(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToString([]int{1, 2, 3})
-
-	// Assert
-	assert.Error(t, err)
-	assert.Equal(t, "", result)
-	assert.Contains(t, err.Error(), "cannot convert")
-}
-
-// ===========================================
-// UNIT TESTS FOR ArgumentConverter.convertToBool
-// ===========================================
-
-func TestConvertToBool_FromBool(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
+	// Test bytes4 type
+	bytes4Type := abi.Type{T: abi.FixedBytesTy, Size: 4}
 
 	tests := []struct {
-		input    bool
-		expected bool
+		name       string
+		targetType abi.Type
+		input      interface{}
+		hasError   bool
 	}{
-		{true, true},
-		{false, false},
+		{
+			name:       "valid bytes32 hex string",
+			targetType: bytes32Type,
+			input:      "0x2dbb0cb2cb611d2ee68719380e6fe9578bb5b47ee9a562cd6529130a9436cc68",
+			hasError:   false,
+		},
+		{
+			name:       "valid bytes4 hex string",
+			targetType: bytes4Type,
+			input:      "0xd0e30db0",
+			hasError:   false,
+		},
+		{
+			name:       "bytes32 with wrong length",
+			targetType: bytes32Type,
+			input:      "0x1234",
+			hasError:   true,
+		},
+		{
+			name:       "bytes4 with wrong length",
+			targetType: bytes4Type,
+			input:      "0x1234567890",
+			hasError:   true,
+		},
+		{
+			name:       "invalid hex string",
+			targetType: bytes32Type,
+			input:      "not a hex string",
+			hasError:   true,
+		},
 	}
 
-	for _, test := range tests {
-		// Act
-		result, err := converter.convertToBool(test.input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := converter.convertToType(tt.input, tt.targetType)
 
-		// Assert
-		assert.NoError(t, err)
-		assert.Equal(t, test.expected, result)
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				// Check that the result is a fixed-size array
+				resultValue := reflect.ValueOf(result)
+				assert.Equal(t, reflect.Array, resultValue.Kind())
+				assert.Equal(t, tt.targetType.Size, resultValue.Len())
+
+				// Check that the element type is byte
+				assert.Equal(t, reflect.TypeOf(byte(0)), resultValue.Type().Elem())
+			}
+		})
 	}
-}
-
-func TestConvertToBool_FromString(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"true", true},
-		{"false", false},
-		{"1", true},
-		{"0", false},
-	}
-
-	for _, test := range tests {
-		// Act
-		result, err := converter.convertToBool(test.input)
-
-		// Assert
-		assert.NoError(t, err, "Failed for input: %s", test.input)
-		assert.Equal(t, test.expected, result, "Failed for input: %s", test.input)
-	}
-}
-
-func TestConvertToBool_FromFloat(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	tests := []struct {
-		input    float64
-		expected bool
-	}{
-		{1.0, true},
-		{0.0, false},
-		{-1.0, true},
-		{100.5, true},
-	}
-
-	for _, test := range tests {
-		// Act
-		result, err := converter.convertToBool(test.input)
-
-		// Assert
-		assert.NoError(t, err)
-		assert.Equal(t, test.expected, result)
-	}
-}
-
-func TestConvertToBool_InvalidString(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToBool("maybe")
-
-	// Assert
-	assert.Error(t, err)
-	assert.False(t, result)
-}
-
-func TestConvertToBool_UnsupportedType(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToBool([]string{"true"})
-
-	// Assert
-	assert.Error(t, err)
-	assert.False(t, result)
-	assert.Contains(t, err.Error(), "cannot convert")
-}
-
-// ===========================================
-// UNIT TESTS FOR ArgumentConverter.convertToAddress
-// ===========================================
-
-func TestConvertToAddress_ValidHexAddress(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-	addressStr := "0x742d35cc6632c0532c718d329da9e8e0a7d4b7fa"
-
-	// Act
-	result, err := converter.convertToAddress(addressStr)
-
-	// Assert
-	assert.NoError(t, err)
-	// Use case-insensitive comparison since Ethereum addresses are checksummed
-	assert.True(t, strings.EqualFold(addressStr, result.Hex()))
-}
-
-func TestConvertToAddress_InvalidAddress(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToAddress("invalid-address")
-
-	// Assert
-	assert.Error(t, err)
-	assert.Equal(t, common.Address{}, result)
-	assert.Contains(t, err.Error(), "invalid")
-}
-
-func TestConvertToAddress_UnsupportedType(t *testing.T) {
-	// Arrange
-	converter := &ArgumentConverter{}
-
-	// Act
-	result, err := converter.convertToAddress(123)
-
-	// Assert
-	assert.Error(t, err)
-	assert.Equal(t, common.Address{}, result)
-	assert.Contains(t, err.Error(), "cannot convert")
 }

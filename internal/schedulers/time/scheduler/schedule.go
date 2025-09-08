@@ -2,39 +2,18 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Start begins the scheduler's main polling and execution loop
-func (s *TimeBasedScheduler) Start(ctx context.Context) {
-	s.logger.Info("Starting time-based scheduler", "scheduler_signing_address", s.schedulerSigningAddress)
-
-	ticker := time.NewTicker(s.pollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Info("Scheduler context cancelled, stopping")
-			return
-		case <-s.ctx.Done():
-			s.logger.Info("Scheduler stopped")
-			return
-		case <-ticker.C:
-			s.pollAndScheduleTasks()
-		}
-	}
-}
-
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleTasks() {
-	tasks, err := s.dbClient.GetTimeBasedJobs()
+	tasks, err := s.dbClient.GetTimeBasedTasks(context.Background())
 	if err != nil {
 		s.logger.Errorf("Failed to fetch time-based tasks: %v", err)
 		metrics.TrackDBConnectionError()
@@ -42,7 +21,6 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 	}
 
 	if len(tasks) == 0 {
-		s.logger.Debug("No tasks found for execution")
 		return
 	}
 
@@ -50,162 +28,199 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 	metrics.TasksScheduled.Set(float64(len(tasks)))
 	metrics.TaskBatchSize.Set(float64(s.taskBatchSize))
 
-	for i := 0; i < len(tasks); i += s.taskBatchSize {
-		end := i + s.taskBatchSize
-		if end > len(tasks) {
-			end = len(tasks)
-		}
+	// Separate tasks based on is_imua flag
+	var imuaTasks []types.ScheduleTimeTaskData
+	var nonImuaTasks []types.ScheduleTimeTaskData
 
-		batch := tasks[i:end]
-		s.processBatch(batch)
-	}
-}
-
-// processBatch processes a batch of jobs
-func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	for _, task := range tasks {
-		// Add job to execution queue
-		select {
-		case s.taskQueue <- &task:
-			s.executeJob(&task)
-			s.logger.Debugf("Queued task %d for execution", task.TaskID)
-		default:
-			s.logger.Warnf("Task queue is full, skipping task %d", task.TaskID)
+		if task.IsImua {
+			imuaTasks = append(imuaTasks, task)
+		} else {
+			nonImuaTasks = append(nonImuaTasks, task)
+		}
+	}
+
+	// Process non-imua tasks in batches
+	if len(nonImuaTasks) > 0 {
+		s.logger.Infof("Processing %d non-imua tasks in batches", len(nonImuaTasks))
+		for i := 0; i < len(nonImuaTasks); i += s.taskBatchSize {
+			end := i + s.taskBatchSize
+			if end > len(nonImuaTasks) {
+				end = len(nonImuaTasks)
+			}
+
+			batch := nonImuaTasks[i:end]
+			s.processBatch(batch)
+		}
+	}
+
+	// Process imua tasks in separate batches
+	if len(imuaTasks) > 0 {
+		s.logger.Infof("Processing %d imua tasks in separate batches", len(imuaTasks))
+		for i := 0; i < len(imuaTasks); i += s.taskBatchSize {
+			end := i + s.taskBatchSize
+			if end > len(imuaTasks) {
+				end = len(imuaTasks)
+			}
+
+			batch := imuaTasks[i:end]
+			s.processBatch(batch)
 		}
 	}
 }
 
-// executeJob executes a single job and updates its next execution time
-func (s *TimeBasedScheduler) executeJob(task *types.ScheduleTimeTaskData) {
+// processBatch processes a batch of tasks by submitting to task dispatcher
+func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
+	s.logger.Infof("Processing batch of %d time-based tasks", len(tasks))
+
+	var targetDataList []types.TaskTargetData
+	var triggerDataList []types.TaskTriggerData
+	var validTaskIDs []int64
+
+	for _, task := range tasks {
+		// Check if ExpirationTime of the job has passed or not
+		if task.ExpirationTime.Before(time.Now()) {
+			s.logger.Infof("Task ID %d has expired, skipping execution", task.TaskID)
+			metrics.TrackTaskExpired()
+			continue
+		}
+
+		// Track task by schedule type
+		metrics.TrackTaskByScheduleType(task.ScheduleType)
+
+		// Generate the task data to send to the performer
+		targetData := types.TaskTargetData{
+			JobID:                     task.TaskTargetData.JobID,
+			TaskID:                    task.TaskID,
+			TaskDefinitionID:          task.TaskDefinitionID,
+			TargetChainID:             task.TaskTargetData.TargetChainID,
+			TargetContractAddress:     task.TaskTargetData.TargetContractAddress,
+			TargetFunction:            task.TaskTargetData.TargetFunction,
+			ABI:                       task.TaskTargetData.ABI,
+			ArgType:                   task.TaskTargetData.ArgType,
+			Arguments:                 task.TaskTargetData.Arguments,
+			DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
+			IsImua:                    task.IsImua,
+		}
+		triggerData := types.TaskTriggerData{
+			TaskID:                  task.TaskID,
+			TaskDefinitionID:        task.TaskDefinitionID,
+			ExpirationTime:          task.ExpirationTime,
+			CurrentTriggerTimestamp: task.LastExecutedAt,
+			NextTriggerTimestamp:    task.NextExecutionTimestamp,
+			TimeScheduleType:        task.ScheduleType,
+			TimeCronExpression:      task.CronExpression,
+			TimeSpecificSchedule:    task.SpecificSchedule,
+			TimeInterval:            task.TimeInterval,
+		}
+
+		targetDataList = append(targetDataList, targetData)
+		triggerDataList = append(triggerDataList, triggerData)
+		validTaskIDs = append(validTaskIDs, task.TaskID)
+	}
+
+	// If no valid tasks, return early
+	if len(validTaskIDs) == 0 {
+		s.logger.Debug("No valid tasks in batch after filtering expired tasks")
+		return
+	}
+
+	// Create the batch task data
+	sendTaskData := types.SendTaskDataToKeeper{
+		TaskID:           validTaskIDs,
+		TargetData:       targetDataList,
+		TriggerData:      triggerDataList,
+		SchedulerID:      s.schedulerID,
+		ManagerSignature: "",
+	}
+
+	// Create request for task dispatcher
+	request := types.SchedulerTaskRequest{
+		SendTaskDataToKeeper: sendTaskData,
+		Source:               "time_scheduler",
+	}
+
+	// Convert validTaskIDs ([]int64) to []string for joining
+	taskIDStrs := make([]string, len(validTaskIDs))
+	for i, id := range validTaskIDs {
+		taskIDStrs[i] = fmt.Sprintf("%d", id)
+	}
+	taskIDs := strings.Join(taskIDStrs, ", ")
+
+	// Submit batch to task dispatcher
+	success := s.submitBatchToTaskDispatcher(request, taskIDs, len(validTaskIDs))
+
+	if success {
+		s.logger.Infof("Batch processing completed successfully: %d tasks submitted", len(validTaskIDs))
+		metrics.TrackTaskCompletion(true, time.Since(time.Now()))
+		metrics.TrackTaskBroadcast("task_dispatcher_submitted")
+	} else {
+		s.logger.Errorf("Batch processing failed: %d tasks", len(validTaskIDs))
+		metrics.TrackTaskBroadcast("failed")
+	}
+}
+
+// submitBatchToTaskDispatcher submits the batch task data to Task Dispatcher via RPC
+func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
 	startTime := time.Now()
 
-	s.logger.Infof("Executing time-based task %d (type: %s) for job %d", task.TaskID, task.ScheduleType, task.TaskTargetData.JobID)
-
-	// Check if ExpirationTime of the job has passed or not
-	if task.ExpirationTime.Before(time.Now()) {
-		s.logger.Infof("Job for this task ID %d has expired, skipping execution", task.TaskID)
-		metrics.TrackTaskExpired()
-		return
+	// Create retry configuration for task dispatcher calls
+	retryConfig := &retry.RetryConfig{
+		MaxRetries:      3,
+		InitialDelay:    1 * time.Second,
+		MaxDelay:        10 * time.Second,
+		BackoffFactor:   2.0,
+		JitterFactor:    0.2,
+		LogRetryAttempt: true,
+		ShouldRetry: func(err error, attempt int) bool {
+			// Retry on network errors, timeouts, and temporary failures
+			// Don't retry on permanent errors like invalid requests
+			return err != nil && !strings.Contains(err.Error(), "invalid") &&
+				!strings.Contains(err.Error(), "permission denied")
+		},
 	}
 
-	// Track task by schedule type
-	metrics.TrackTaskByScheduleType(task.ScheduleType)
+	// Create context with timeout for the entire retry operation
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
-	// Get the performer data
-	// TODO: Get the performer data from redis service, which gets it from online keepers list from health service, and sets the performerLock in redis
-	// For now, I fixed the performer
-	performerData := types.PerformerData{
-		KeeperID:      3,
-		KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",
-	}
+	// Define the operation to retry
+	operation := func() (bool, error) {
+		// Create context with timeout for individual RPC call
+		rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer rpcCancel()
 
-	// Generate the task data to send to the performer
-	targetData := types.TaskTargetData{
-		TaskID:                    task.TaskID,
-		TaskDefinitionID:          task.TaskDefinitionID,
-		TargetChainID:             task.TaskTargetData.TargetChainID,
-		TargetContractAddress:     task.TaskTargetData.TargetContractAddress,
-		TargetFunction:            task.TaskTargetData.TargetFunction,
-		ABI:                       task.TaskTargetData.ABI,
-		ArgType:                   task.TaskTargetData.ArgType,
-		Arguments:                 task.TaskTargetData.Arguments,
-		DynamicArgumentsScriptUrl: task.TaskTargetData.DynamicArgumentsScriptUrl,
-	}
-	triggerData := types.TaskTriggerData{
-		TaskID:                  task.TaskID,
-		TaskDefinitionID:        task.TaskDefinitionID,
-		ExpirationTime:          task.ExpirationTime,
-		CurrentTriggerTimestamp: time.Now(),
-		NextTriggerTimestamp:    task.NextExecutionTimestamp,
-		TimeScheduleType:        task.ScheduleType,
-		TimeCronExpression:      task.CronExpression,
-		TimeSpecificSchedule:    task.SpecificSchedule,
-		TimeInterval:            task.TimeInterval,
-	}
-	schedulerSignatureData := types.SchedulerSignatureData{
-		TaskID:                  task.TaskID,
-		SchedulerSigningAddress: s.schedulerSigningAddress,
-	}
-	sendTaskData := types.SendTaskDataToKeeper{
-		TaskID:             task.TaskID,
-		PerformerData:      performerData,
-		TargetData:         []types.TaskTargetData{targetData},
-		TriggerData:        []types.TaskTriggerData{triggerData},
-		SchedulerSignature: &schedulerSignatureData,
+		// Make RPC call to task dispatcher
+		var response types.TaskManagerAPIResponse
+		err := s.taskDispatcherClient.Call(rpcCtx, "submit-task", &request, &response)
+		if err != nil {
+			return false, fmt.Errorf("RPC call failed: %w", err)
+		}
+
+		if !response.Success {
+			return false, fmt.Errorf("task dispatcher processing failed: %s - %s", response.Message, response.Error)
+		}
+
+		return true, nil
 	}
 
-	// Sign the task data
-	signature, err := cryptography.SignJSONMessage(sendTaskData, config.GetSchedulerSigningKey())
+	// Execute with retry logic
+	success, err := retry.Retry(ctx, operation, retryConfig, s.logger)
 	if err != nil {
-		s.logger.Errorf("Failed to sign task data: %v", err)
-		return
-	}
-	sendTaskData.SchedulerSignature.SchedulerSignature = signature
-
-	jsonData, err := json.Marshal(sendTaskData)
-	if err != nil {
-		s.logger.Errorf("Failed to marshal task data: %v", err)
-		return
-	}
-	dataBytes := []byte(jsonData)
-
-	broadcastDataForPerformer := types.BroadcastDataForPerformer{
-		TaskID:           task.TaskID,
-		TaskDefinitionID: task.TaskDefinitionID,
-		PerformerAddress: performerData.KeeperAddress,
-		Data:             dataBytes,
-	}
-
-	// Execute the actual job
-	executionSuccess := s.performJobExecution(broadcastDataForPerformer)
-
-	// Track task completion with timing and success status
-	executionDuration := time.Since(startTime)
-	metrics.TrackTaskCompletion(executionSuccess, executionDuration)
-
-	if executionSuccess {
-		s.logger.Infof("Executed task ID %d for job %d in %v", task.TaskID, task.TaskTargetData.JobID, executionDuration)
-	} else {
-		s.logger.Errorf("Failed to execute task %d for job %d after %v", task.TaskID, task.TaskTargetData.JobID, executionDuration)
-	}
-}
-
-// performJobExecution handles the actual job execution logic
-func (s *TimeBasedScheduler) performJobExecution(broadcastDataForPerformer types.BroadcastDataForPerformer) bool {
-	success, err := s.aggClient.SendTaskToPerformer(s.ctx, &broadcastDataForPerformer)
-
-	if err != nil {
-		s.logger.Errorf("Failed to send task to performer: %v", err)
-		metrics.TrackTaskBroadcast("failed")
+		duration := time.Since(startTime)
+		s.logger.Error("Failed to submit batch to task dispatcher after retries",
+			"task_ids", taskIDs,
+			"task_count", taskCount,
+			"error", err,
+			"duration", duration)
 		return false
 	}
 
-	metrics.TrackTaskBroadcast("success")
-	return success
-}
-
-// Stop gracefully stops the scheduler
-func (s *TimeBasedScheduler) Stop() {
-	startTime := time.Now()
-	s.logger.Info("Stopping time-based scheduler")
-
-	// Capture statistics before shutdown
-	activeTasksCount := len(s.activeTasks)
-	queueLength := len(s.taskQueue)
-
-	s.cancel()
-
-	// Close job queue
-	close(s.taskQueue)
-
 	duration := time.Since(startTime)
+	s.logger.Info("Successfully submitted batch to task dispatcher",
+		"task_ids", taskIDs,
+		"task_count", taskCount,
+		"duration", duration)
 
-	s.logger.Info("Time-based scheduler stopped",
-		"duration", duration,
-		"active_tasks_stopped", activeTasksCount,
-		"queue_length", queueLength,
-		"performer_lock_ttl", s.performerLockTTL,
-		"task_cache_ttl", s.taskCacheTTL,
-		"duplicate_task_window", s.duplicateTaskWindow,
-	)
+	return success
 }

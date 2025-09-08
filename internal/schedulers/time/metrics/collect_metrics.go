@@ -4,19 +4,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 )
-
-type HealthChecker interface {
-	HealthCheck() error
-}
-
-var dbChecker HealthChecker
-
-// SetHealthChecker sets the health checker for database status monitoring
-func SetHealthChecker(checker HealthChecker) {
-	dbChecker = checker
-}
 
 // Collects system resource metrics
 func collectSystemMetrics() {
@@ -27,7 +17,13 @@ func collectSystemMetrics() {
 	MemoryUsageBytes.Set(float64(memStats.Alloc))
 
 	// Update CPU usage (using system memory as a proxy)
-	CPUUsagePercent.Set(float64(memStats.Sys))
+	cpuPercent, err := cpu.Percent(0, false)
+	if err == nil && len(cpuPercent) > 0 {
+		CPUUsagePercent.Set(cpuPercent[0])
+	} else {
+		// Fallback to 0.0 if CPU monitoring fails
+		CPUUsagePercent.Set(0.0)
+	}
 
 	// Update active goroutines count
 	GoroutinesActive.Set(float64(runtime.NumGoroutine()))
@@ -43,17 +39,6 @@ func collectConfigurationMetrics() {
 
 	// Set duplicate task window from configuration
 	DuplicateTaskWindowSeconds.Set(getDuplicateTaskWindowSeconds())
-
-	// Check database health and update APIServerStatus
-	if dbChecker != nil {
-		if err := dbChecker.HealthCheck(); err != nil {
-			APIServerStatus.Set(0) // Database unhealthy
-		} else {
-			APIServerStatus.Set(1) // Database healthy
-		}
-	} else {
-		APIServerStatus.Set(0) // No health checker configured
-	}
 }
 
 // Collects performance-related metrics

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Mock time.Now() for testing
@@ -33,16 +34,16 @@ func TestGetTimeBasedJobs(t *testing.T) {
 		setupMocks    func()
 		expectedCode  int
 		expectedError string
-		expectedJobs  []types.TimeJobData
+		expectedJobs  []commonTypes.TimeJobData
 	}{
 		{
 			name:         "Success - Get Time Based Jobs",
 			pollInterval: "60",
 			setupMocks: func() {
 				nextExecutionTime := mockTime.Add(60 * time.Second)
-				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]types.TimeJobData{
+				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]commonTypes.TimeJobData{
 					{
-						JobID:          1,
+						JobID:          commonTypes.NewBigInt(big.NewInt(1)),
 						ExpirationTime: mockTime.Add(60 * time.Second),
 						// Recurring:                 true,
 						TimeInterval:              60,
@@ -61,7 +62,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 						IsActive:                  true,
 					},
 					{
-						JobID:          2,
+						JobID:          commonTypes.NewBigInt(big.NewInt(2)),
 						ExpirationTime: mockTime.Add(60 * time.Second),
 						// Recurring:                 false,
 						TimeInterval:              120,
@@ -82,9 +83,9 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				}, nil)
 			},
 			expectedCode: http.StatusOK,
-			expectedJobs: []types.TimeJobData{
+			expectedJobs: []commonTypes.TimeJobData{
 				{
-					JobID:          1,
+					JobID:          commonTypes.NewBigInt(big.NewInt(1)),
 					ExpirationTime: mockTime.Add(60 * time.Second),
 					// Recurring:                 true,
 					TimeInterval:              60,
@@ -103,7 +104,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 					IsActive:                  true,
 				},
 				{
-					JobID:          2,
+					JobID:          commonTypes.NewBigInt(big.NewInt(2)),
 					ExpirationTime: mockTime.Add(60 * time.Second),
 					// Recurring:                 false,
 					TimeInterval:              120,
@@ -135,7 +136,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 			pollInterval: "60",
 			setupMocks: func() {
 				nextExecutionTime := mockTime.Add(60 * time.Second)
-				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]types.TimeJobData{}, assert.AnError)
+				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]commonTypes.TimeJobData{}, assert.AnError)
 			},
 			expectedCode:  http.StatusInternalServerError,
 			expectedError: assert.AnError.Error(),
@@ -145,10 +146,10 @@ func TestGetTimeBasedJobs(t *testing.T) {
 			pollInterval: "60",
 			setupMocks: func() {
 				nextExecutionTime := mockTime.Add(60 * time.Second)
-				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]types.TimeJobData{}, nil)
+				mockTimeJobRepo.On("GetTimeJobsByNextExecutionTimestamp", nextExecutionTime).Return([]commonTypes.TimeJobData{}, nil)
 			},
 			expectedCode: http.StatusOK,
-			expectedJobs: []types.TimeJobData{},
+			expectedJobs: []commonTypes.TimeJobData{},
 		},
 	}
 
@@ -182,7 +183,7 @@ func TestGetTimeBasedJobs(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Contains(t, response["error"], tt.expectedError)
 			} else {
-				var response []types.TimeJobData
+				var response []commonTypes.TimeJobData
 				err := json.Unmarshal(w.Body.Bytes(), &response)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedJobs, response)

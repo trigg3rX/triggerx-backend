@@ -1,0 +1,117 @@
+// init_condition.go
+package worker
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+)
+
+// ConditionWorker represents an individual worker monitoring a specific condition
+type ConditionWorker struct {
+	ConditionWorkerData *types.ConditionWorkerData
+	Logger              logging.Logger
+	HttpClient          *httppkg.HTTPClient
+	Ctx                 context.Context
+	Cancel              context.CancelFunc
+	IsActive            bool
+	Mutex               sync.RWMutex
+	LastValue           float64
+	LastCheckTimestamp  time.Time
+	ConditionMet        int64 // Count of consecutive condition met checks
+	TriggerCallback     WorkerTriggerCallback
+	CleanupCallback     WorkerCleanupCallback
+}
+
+// Start begins the condition worker's monitoring loop
+func (w *ConditionWorker) Start() {
+	startTime := time.Now()
+
+	w.Mutex.Lock()
+	w.IsActive = true
+	w.Mutex.Unlock()
+
+	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+
+	w.Logger.Info("Starting condition worker",
+		"job_id", w.ConditionWorkerData.JobID,
+		"condition_type", w.ConditionWorkerData.ConditionType,
+		"value_source", w.ConditionWorkerData.ValueSourceUrl,
+		"selected_key_route", w.ConditionWorkerData.SelectedKeyRoute,
+		"upper_limit", w.ConditionWorkerData.UpperLimit,
+		"lower_limit", w.ConditionWorkerData.LowerLimit,
+		"expiration_time", w.ConditionWorkerData.ExpirationTime,
+	)
+
+	ticker := time.NewTicker(ConditionPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.Ctx.Done():
+			stopTime := time.Now()
+			duration := stopTime.Sub(startTime)
+
+			w.Logger.Info("Condition worker stopped",
+				"job_id", w.ConditionWorkerData.JobID,
+				"runtime", duration,
+				"last_value", w.LastValue,
+				"condition_met_count", w.ConditionMet,
+			)
+			metrics.JobsCompleted.WithLabelValues("success").Inc()
+			return
+		case <-ticker.C:
+			if time.Now().After(w.ConditionWorkerData.ExpirationTime) {
+				w.Logger.Info("Job has expired, stopping worker",
+					"job_id", w.ConditionWorkerData.JobID,
+					"expiration_time", w.ConditionWorkerData.ExpirationTime,
+				)
+				go w.Stop()
+				return
+			}
+
+			if err := w.checkCondition(); err != nil {
+				w.Logger.Error("Error checking condition",
+					"job_id", w.ConditionWorkerData.JobID,
+					"error", err)
+				metrics.JobsCompleted.WithLabelValues("failed").Inc()
+			}
+		}
+	}
+}
+
+// Stop gracefully stops the condition worker
+func (w *ConditionWorker) Stop() {
+	w.Mutex.Lock()
+	defer w.Mutex.Unlock()
+
+	if w.IsActive {
+		w.Cancel()
+		w.IsActive = false
+
+		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+
+		if w.CleanupCallback != nil {
+			if err := w.CleanupCallback(w.ConditionWorkerData.JobID.ToBigInt()); err != nil {
+				w.Logger.Error("Failed to clean up job data",
+					"job_id", w.ConditionWorkerData.JobID,
+					"error", err)
+			}
+		}
+
+		w.Logger.Info("Condition worker stopped", "job_id", w.ConditionWorkerData.JobID)
+	}
+}
+
+// IsRunning returns whether the worker is currently running
+func (w *ConditionWorker) IsRunning() bool {
+	w.Mutex.RLock()
+	defer w.Mutex.RUnlock()
+	return w.IsActive
+}
