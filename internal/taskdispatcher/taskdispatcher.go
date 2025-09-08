@@ -134,6 +134,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 			CreatedAt:            time.Now(),
 			RetryCount:           0,
 			SendTaskDataToKeeper: req.SendTaskDataToKeeper,
+			IsMainnet:            isMainnet,
 		}
 
 		// Add task to batch processor for improved performance

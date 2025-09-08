@@ -429,12 +429,9 @@ func (ep *executionPipeline) calculateCost(duration time.Duration, complexity fl
 	// uses separate static and dynamic complexity values
 	x := (complexity * feesConfig.StaticComplexityFactor) + feesConfig.TransactionCost
 
-	// Calculate TG (execution time in seconds)
-	tg := duration.Seconds()
-
-	// Calculate fee = [(0.1% of x) + x] * TG
+	// Calculate fee = [(0.1% of x) + x] TG
 	// 0.1% = 0.001
-	feeInTG := (0.001*x + x) * tg
+	feeInTG := (0.001*x + x) // TG
 
 	// Convert TG to Ether using price per TG
 	feeInEther := feeInTG * feesConfig.PricePerTG
