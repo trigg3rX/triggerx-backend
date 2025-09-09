@@ -23,6 +23,8 @@ type Client struct {
 	logger   logging.Logger
 	ctx      context.Context
 	cancel   context.CancelFunc
+	// OnClose is called once when the client disconnects (read loop exits)
+	OnClose func()
 }
 
 // NewClient creates a new WebSocket client
@@ -84,6 +86,9 @@ func (c *Client) ReadPump() {
 		c.Hub.unregister <- c
 		if err := c.Conn.Close(); err != nil {
 			c.logger.Warnf("Error closing WebSocket for client %s: %v", c.ID, err)
+		}
+		if c.OnClose != nil {
+			c.OnClose()
 		}
 	}()
 

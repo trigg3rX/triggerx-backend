@@ -257,6 +257,10 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 	client := NewClient(clientID, conn, wcm.hub, wcm.logger)
 	client.UserID = userID
 	client.APIKey = apiKey
+	// Ensure per-IP connection is released on client disconnect
+	client.OnClose = func() {
+		wcm.rateLimit.ReleaseConnection(clientIP)
+	}
 
 	// Register client with hub
 	wcm.hub.register <- client
