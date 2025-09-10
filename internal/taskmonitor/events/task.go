@@ -58,6 +58,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 			taskData.ExecutionTimestamp = ipfsData.ActionData.ExecutionTimestamp
 			taskData.TaskOpxCost = taskOpxCostFloat
 			taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
+			taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
 
 			// h.logger.Infof("Task data: %+v", taskData)
 
@@ -249,7 +250,7 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 			attestersIds = append(attestersIds, id.Int64())
 		}
 	// case nil:
-		// h.logger.Debug("attestersIds is nil")
+	// h.logger.Debug("attestersIds is nil")
 	default:
 		// h.logger.Warn("attestersIds has unexpected type", "type", fmt.Sprintf("%T", v), "value", v)
 
