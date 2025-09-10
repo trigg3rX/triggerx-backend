@@ -21,6 +21,12 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	}
 	attesterIds := data.AttesterIds
 
+	// Convert []interface{} to []string for Cassandra
+	convertedArgsStrings := make([]string, len(data.ConvertedArguments))
+	for i, arg := range data.ConvertedArguments {
+		convertedArgsStrings[i] = fmt.Sprintf("%v", arg)
+	}
+
 	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
@@ -31,6 +37,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 		data.ExecutionTimestamp,
 		data.TaskOpxCost,
 		data.ProofOfTask,
+		convertedArgsStrings,
 		data.TaskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", data.TaskID, err)
 		return err

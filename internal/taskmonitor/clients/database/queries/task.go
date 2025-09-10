@@ -51,7 +51,8 @@ const (
 			execution_tx_hash = ?,
 			execution_timestamp = ?,
 			task_opx_cost = ?,
-			proof_of_task = ?
+			proof_of_task = ?,
+			converted_arguments = ?
 		WHERE task_id = ?`
 	UpdateTaskFailed = `
 		UPDATE triggerx.task_data 
