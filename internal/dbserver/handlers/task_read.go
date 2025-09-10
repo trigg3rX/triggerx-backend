@@ -98,6 +98,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 			TaskAttesterIDs:    task.TaskAttesterIDs,
 			IsAccepted:         task.IsAccepted,
 			TaskStatus:         task.TaskStatus,
+			ConvertedArguments:  task.ConvertedArguments ,
 		}
 	}
 	//find the created_chain id for the job using jobIDBig from database

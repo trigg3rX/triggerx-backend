@@ -74,6 +74,7 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 			IsAccepted:         task.IsAccepted,
 			TxURL:              task.TxURL,
 			TaskStatus:         task.TaskStatus,
+			ConvertedArguments:  task.ConvertedArguments ,
 		}
 	}
 

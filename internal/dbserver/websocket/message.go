@@ -80,6 +80,7 @@ type JobTaskSnapshotData struct {
 	TaskStatus         string    `json:"task_status"`
 	IsAccepted         bool      `json:"is_accepted"`
 	TxURL              string    `json:"tx_url"`
+	ConvertedArguments []string  `json:"converted_arguments"`
 }
 
 // NewMessage creates a new WebSocket message
