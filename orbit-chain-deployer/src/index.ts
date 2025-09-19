@@ -1,23 +1,27 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-
-// Load environment variables
-dotenv.config();
+import { config, isDevelopment } from './utils/config';
+import logger from './utils/logger';
+import routes from './routes';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-  }
+  const requestId = req.headers['x-request-id'] as string || 'unknown';
+  
+  logger.http(`${req.method} ${req.path}`, {
+    requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip || req.connection.remoteAddress
+  });
+  
   next();
 });
 
@@ -26,6 +30,7 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Orbit Chain Deployer service is running',
     version: '1.0.0',
+    environment: config.nodeEnv,
     endpoints: {
       health: '/health',
       deployChain: '/deploy-chain',
@@ -34,63 +39,60 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
-});
-
-// Deploy Chain endpoint - called by Go backend to deploy a new Orbit chain
-app.post('/deploy-chain', (req, res) => {
-  console.log('Deploy Chain request received:', req.body);
-  
-  // TODO: Implement actual orbit chain deployment logic
-  // For now, return success response as placeholder
-  
-  const response = {
-    success: true,
-    deployment_id: req.body.deployment_id || 'placeholder-deployment-id',
-    status: 'pending',
-    message: 'Chain deployment initiated (placeholder)',
-    chain_address: '0x0000000000000000000000000000000000000000' // Placeholder address
-  };
-  
-  console.log('Deploy Chain response:', response);
-  res.status(200).json(response);
-});
-
-// Deploy Contracts endpoint - called by Go backend to deploy TriggerX contracts
-app.post('/deploy-contracts', (req, res) => {
-  console.log('Deploy Contracts request received:', req.body);
-  
-  // TODO: Implement actual contract deployment logic
-  // For now, return success response as placeholder
-  
-  const response = {
-    success: true,
-    deployment_id: req.body.deployment_id || 'placeholder-deployment-id',
-    status: 'completed',
-    message: 'Contracts deployment completed (placeholder)'
-  };
-  
-  console.log('Deploy Contracts response:', response);
-  res.status(200).json(response);
-});
+// Mount all routes
+app.use('/', routes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error occurred:', err);
+  logger.error('Unhandled error occurred', {
+    error: err.message,
+    path: req.path,
+    method: req.method
+  });
+  
   res.status(500).json({
     success: false,
     message: 'Internal server error',
-    error: err.message
+    error: isDevelopment ? err.message : 'Something went wrong'
   });
 });
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    path: req.originalUrl
+  });
+});
+
+// Graceful shutdown handling
+const gracefulShutdown = (signal: string) => {
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`Orbit Chain Deployer service running on port ${PORT}`);
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
+  logger.info('Orbit Chain Deployer service started', {
+    port: PORT,
+    environment: config.nodeEnv
+  });
+});
+
+// Handle server errors
+server.on('error', (error: any) => {
+  logger.error('Server error occurred', {
+    error: error.message,
+    code: error.code
+  });
+  
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`Port ${PORT} is already in use`);
+    process.exit(1);
+  }
 });
