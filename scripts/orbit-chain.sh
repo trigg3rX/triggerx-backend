@@ -32,7 +32,8 @@ case $ENDPOINT_TYPE in
     # Generate chain name
     adj=$(shuf -n 1 scripts/adjectives.txt 2>/dev/null || echo "Amazing")
     noun=$(shuf -n 1 scripts/nouns.txt 2>/dev/null || echo "Chain")
-    CHAIN_NAME="$adj $noun"
+    nanosec=$(date +%N)
+    CHAIN_NAME="$adj $noun $nanosec"
     
     # Default addresses - change these as needed
     USER_ADDRESS="0x7Db951c0E6D8906687B459427eA3F3F2b456473B"

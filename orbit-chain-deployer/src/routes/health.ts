@@ -9,9 +9,9 @@ const router = Router();
 router.get('/health', async (req: Request, res: Response) => {
   try {
     // Check service connectivity (simplified)
-    const databaseStatus = config.dbServerUrl ? 'connected' : 'disconnected';
+    const goBackendStatus = config.goBackendUrl ? 'connected' : 'disconnected';
     const arbitrumStatus = config.arbitrumRpcUrl ? 'connected' : 'disconnected';
-    const overallStatus = (databaseStatus === 'connected' && arbitrumStatus === 'connected') ? 'healthy' : 'unhealthy';
+    const overallStatus = (goBackendStatus === 'connected' && arbitrumStatus === 'connected') ? 'healthy' : 'unhealthy';
     
     const response: HealthCheckResponse = {
       status: overallStatus,
@@ -19,9 +19,9 @@ router.get('/health', async (req: Request, res: Response) => {
       version: '1.0.0',
       environment: config.nodeEnv,
       services: {
-        database: {
-          status: databaseStatus,
-          url: config.dbServerUrl ? '***configured***' : undefined
+        goBackend: {
+          status: goBackendStatus,
+          url: config.goBackendUrl ? '***configured***' : undefined
         },
         arbitrum: {
           status: arbitrumStatus,
@@ -30,7 +30,6 @@ router.get('/health', async (req: Request, res: Response) => {
       },
       configuration: {
         port: config.port,
-        log_level: config.logLevel,
         deployment_timeout: config.deploymentTimeout,
         max_retries: config.maxRetries
       },

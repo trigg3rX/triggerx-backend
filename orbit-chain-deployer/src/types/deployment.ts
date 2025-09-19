@@ -3,6 +3,9 @@ export enum DeploymentStatus {
   PENDING = 'pending',
   DEPLOYING_ORBIT = 'deploying_orbit',
   ORBIT_DEPLOYED = 'orbit_deployed',
+  GENERATING_NODE_CONFIG = 'generating_node_config',
+  STARTING_NODE = 'starting_node',
+  NODE_READY = 'node_ready',
   DEPLOYING_CONTRACTS = 'deploying_contracts',
   CONFIGURING_CONTRACTS = 'configuring_contracts',
   COMPLETED = 'completed',
@@ -85,8 +88,8 @@ export interface DeployChainRequest {
   chain_name: string;
   chain_id: number;
   owner_address: string;
-  batch_poster: string;
-  validator: string;
+  batch_poster?: string;
+  validator?: string;
   user_address: string;
   
   // ERC20 Token Details (if custom gas token)
@@ -149,7 +152,7 @@ export interface HealthCheckResponse {
   version: string;
   environment: string;
   services: {
-    database: {
+    goBackend: {
       status: 'connected' | 'disconnected';
       url?: string;
     };
@@ -160,7 +163,6 @@ export interface HealthCheckResponse {
   };
   configuration: {
     port: number;
-    log_level: string;
     deployment_timeout: number;
     max_retries: number;
   };
