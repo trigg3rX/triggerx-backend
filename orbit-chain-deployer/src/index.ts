@@ -67,10 +67,29 @@ app.use((req, res) => {
 });
 
 // Graceful shutdown handling
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = async (signal: string) => {
   logger.info(`Received ${signal}, shutting down gracefully`);
   
-  process.exit(0);
+  // Clean up any running Orbit nodes
+  // try {
+    // const { OrbitService } = await import('./services');
+    // Note: This would need to be implemented if we want to track running services
+    // logger.info('Cleaning up running services...');
+  // } catch (error) {
+    // logger.warn('Error during service cleanup', { error });
+  // }
+  
+  // Close server gracefully
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
+  
+  // Force exit after 10 seconds
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
 };
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

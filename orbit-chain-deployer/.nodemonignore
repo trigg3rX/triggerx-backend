@@ -1,0 +1,10 @@
+node_modules/
+dist/
+logs/
+node-configs/
+*.log
+*.json
+.env
+.git/
+yarn.lock
+package-lock.json

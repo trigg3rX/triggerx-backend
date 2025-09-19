@@ -1,0 +1,25 @@
+{
+  "watch": [
+    "src/**/*"
+  ],
+  "ignore": [
+    "node_modules/**/*",
+    "dist/**/*",
+    "logs/**/*",
+    "node-configs/**/*",
+    "*.log",
+    "*.json",
+    ".env",
+    ".git/**/*",
+    "yarn.lock",
+    "package-lock.json"
+  ],
+  "ext": "ts,js,json",
+  "exec": "ts-node src/index.ts",
+  "delay": "1000",
+  "verbose": true,
+  "restartable": "rs",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}
