@@ -336,6 +336,10 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
 	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
 
+	api.POST("/orbit-chains/deploy", handler.CreateOrbitChain)
+	api.GET("/orbit-chains/user/:user_address", handler.GetOrbitChainsByUserAddress)
+	api.GET("/orbit-chains/dashboard", handler.GetAllOrbitChains)
+
 }
 
 func (s *Server) Start(port string) error {
