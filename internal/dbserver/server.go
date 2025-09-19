@@ -348,6 +348,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 
 	// Chain deployment routes
 	api.POST("/orbit-chain/deploy", s.validator.GinMiddleware(), s.chainDeploymentHandler.DeployChain)
+	api.PUT("/orbit-chain/update-status", s.validator.GinMiddleware(), s.chainDeploymentHandler.UpdateChainDeploymentStatus)
 	api.GET("/orbit-chain/user/:user_address", s.chainDeploymentHandler.GetUserChains)
 	api.GET("/orbit-chain/:chain_id/status", s.chainDeploymentHandler.GetChainDeploymentStatus)
 	api.GET("/orbit-chain/dashboard", s.chainDeploymentHandler.GetAllChains)

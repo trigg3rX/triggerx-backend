@@ -13,9 +13,9 @@ type CreateOrbitChainRequest struct {
 type DeployChainRequest struct {
 	ChainID      int64  `json:"chain_id" binding:"required"`
 	ChainName    string `json:"chain_name" binding:"required"`
-	OwnerAddress string `json:"owner_address" binding:"required"`
-	BatchPoster  string `json:"batch_poster" binding:"required"`
-	Validator    string `json:"validator" binding:"required"`
+	OwnerAddress string `json:"owner_address"`
+	BatchPoster  string `json:"batch_poster"`
+	Validator    string `json:"validator"`
 	UserAddress  string `json:"user_address" binding:"required"`
 
 	// ERC20 Token Details (if custom gas token)

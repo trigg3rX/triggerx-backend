@@ -58,7 +58,7 @@ func (h *ChainDeploymentHandler) DeployChain(c *gin.Context) {
 	}
 
 	// Validate required fields
-	if req.ChainName == "" || req.ChainID == 0 || req.OwnerAddress == "" || req.BatchPoster == "" || req.Validator == "" || req.UserAddress == "" {
+	if req.ChainName == "" || req.ChainID == 0 || req.UserAddress == "" {
 		h.logger.Errorf("[%s] Missing required fields in deployment request", traceID)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required fields"})
 		return
@@ -115,7 +115,7 @@ func (h *ChainDeploymentHandler) deployChainAsync(chainID int64, req *types.Depl
 		"deployment_id":                  fmt.Sprintf("%d", chainID),
 		"chain_name":                     req.ChainName,
 		"chain_id":                       req.ChainID,
-		"owner":                          req.OwnerAddress,
+		"owner_address":                  req.UserAddress,
 		"batch_poster":                   req.BatchPoster,
 		"validator":                      req.Validator,
 		"user_address":                   req.UserAddress,
@@ -169,6 +169,20 @@ func (h *ChainDeploymentHandler) deployChainAsync(chainID int64, req *types.Depl
 	contractResp, err := h.callOrbitService("/deploy-contracts", map[string]interface{}{
 		"deployment_id": fmt.Sprintf("%d", chainID),
 		"chain_address": chainAddress,
+		"contracts": []map[string]interface{}{
+			{
+				"name":     "JobRegistry",
+				"bytecode": "0x", // Placeholder - actual bytecode loaded from contract artifacts
+			},
+			{
+				"name":     "TriggerGasRegistry",
+				"bytecode": "0x", // Placeholder - actual bytecode loaded from contract artifacts
+			},
+			{
+				"name":     "TaskExecutionSpoke",
+				"bytecode": "0x", // Placeholder - actual bytecode loaded from contract artifacts
+			},
+		},
 	}, traceID)
 
 	if err != nil {
@@ -357,6 +371,58 @@ func (h *ChainDeploymentHandler) GetAllChains(c *gin.Context) {
 
 	h.logger.Infof("[%s] Retrieved %d total chains", traceID, len(chainStatuses))
 	c.JSON(http.StatusOK, gin.H{"chains": chainStatuses})
+}
+
+// UpdateChainDeploymentStatus updates the deployment status of a chain
+func (h *ChainDeploymentHandler) UpdateChainDeploymentStatus(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[%s] Updating chain deployment status", traceID)
+
+	var req struct {
+		DeploymentID      string `json:"deployment_id" binding:"required"`
+		Status            string `json:"status" binding:"required"`
+		OrbitChainAddress string `json:"orbit_chain_address,omitempty"`
+		ErrorMessage      string `json:"error_message,omitempty"`
+		DeploymentLogs    string `json:"deployment_logs,omitempty"`
+		Contracts         []struct {
+			Name    string `json:"name"`
+			Address string `json:"address"`
+		} `json:"contracts,omitempty"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("[%s] Failed to bind JSON: %v", traceID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format", "details": err.Error()})
+		return
+	}
+
+	// Parse deployment ID to chain ID
+	chainID, err := strconv.ParseInt(req.DeploymentID, 10, 64)
+	if err != nil {
+		h.logger.Errorf("[%s] Invalid deployment ID format: %v", traceID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deployment ID format"})
+		return
+	}
+
+	h.logger.Infof("[%s] Updating status for chain ID %d to %s", traceID, chainID, req.Status)
+
+	// Update the chain status in the database
+	trackDBOp := metrics.TrackDBOperation("update", "orbit_chain_data")
+	if err := h.repository.UpdateOrbitChainStatus(chainID, req.Status, req.OrbitChainAddress); err != nil {
+		trackDBOp(err)
+		h.logger.Errorf("[%s] Failed to update chain status: %v", traceID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update chain status"})
+		return
+	}
+	trackDBOp(nil)
+
+	h.logger.Infof("[%s] Chain deployment status updated successfully", traceID)
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"message":  "Chain deployment status updated successfully",
+		"chain_id": chainID,
+		"status":   req.Status,
+	})
 }
 
 // getTraceID extracts trace ID from gin context
