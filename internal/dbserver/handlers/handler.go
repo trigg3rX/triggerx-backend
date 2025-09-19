@@ -10,8 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	"net/http"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
 type NotificationConfig struct {

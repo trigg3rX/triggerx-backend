@@ -1,15 +1,17 @@
--- ... existing code ...
--- Create Orbit_Chain_data table
-CREATE TABLE IF NOT EXISTS orbit_chain_data (
-    chain_id bigint,
-    chain_name text,
-    rpc_url text,
-    user_address text,
-    deployment_status text,
-    orbit_chain_address text,
-    PRIMARY KEY (chain_id)
-);
--- ... existing code ...a;
+-- Create keyspace
+CREATE KEYSPACE IF NOT EXISTS triggerx
+WITH replication = {
+    'class': 'SimpleStrategy',
+    'replication_factor': 1
+};
+
+-- Switch to keyspace
+USE triggerx;
+
+-- Drop existing tables
+DROP TABLE IF EXISTS user_data;
+DROP TABLE IF EXISTS job_data;
+DROP TABLE IF EXISTS time_job_data;
 DROP TABLE IF EXISTS event_job_data;
 DROP TABLE IF EXISTS condition_job_data;
 DROP TABLE IF EXISTS task_data;
@@ -210,6 +212,8 @@ CREATE TABLE IF NOT EXISTS orbit_chain_data (
     user_address text,
     deployment_status text,
     orbit_chain_address text,
+    created_at timestamp,
+    updated_at timestamp,
     PRIMARY KEY (chain_id)
 );
 

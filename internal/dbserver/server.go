@@ -109,6 +109,9 @@ type Server struct {
 	// WebSocket components
 	hub                 *websocket.Hub
 	wsConnectionManager *websocket.WebSocketConnectionManager
+
+	// Chain deployment handler
+	chainDeploymentHandler *handlers.ChainDeploymentHandler
 }
 
 func NewServer(db *database.Connection, logger logging.Logger) *Server {
@@ -252,6 +255,13 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	go s.jobStatusChecker.StartStatusCheckLoop()
 	logger.Info("Job status checker started successfully")
 
+	// Initialize orbit chain repository
+	orbitChainRepo := repository.NewOrbitChainRepository(db)
+
+	// Initialize chain deployment handler
+	s.chainDeploymentHandler = handlers.NewChainDeploymentHandler(config.GetOrbitServiceURL(), logger, orbitChainRepo)
+	logger.Info("Chain deployment handler initialized successfully")
+
 	return s
 }
 
@@ -336,9 +346,11 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
 	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
 
-	api.POST("/orbit-chains/deploy", handler.CreateOrbitChain)
-	api.GET("/orbit-chains/user/:user_address", handler.GetOrbitChainsByUserAddress)
-	api.GET("/orbit-chains/dashboard", handler.GetAllOrbitChains)
+	// Chain deployment routes
+	api.POST("/orbit-chain/deploy", s.validator.GinMiddleware(), s.chainDeploymentHandler.DeployChain)
+	api.GET("/orbit-chain/user/:user_address", s.chainDeploymentHandler.GetUserChains)
+	api.GET("/orbit-chain/:chain_id/status", s.chainDeploymentHandler.GetChainDeploymentStatus)
+	api.GET("/orbit-chain/dashboard", s.chainDeploymentHandler.GetAllChains)
 
 }
 
