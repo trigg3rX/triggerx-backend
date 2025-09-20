@@ -28,6 +28,8 @@ type EventWorkerData struct {
 	TriggerChainID         string    `json:"trigger_chain_id"`
 	TriggerContractAddress string    `json:"trigger_contract_address"`
 	TriggerEvent           string    `json:"trigger_event"`
+	EventFilterParaName    string    `json:"event_filter_para_name"`
+	EventFilterValue       string    `json:"event_filter_value"`
 }
 type ConditionWorkerData struct {
 	JobID            *BigInt  `json:"job_id"`

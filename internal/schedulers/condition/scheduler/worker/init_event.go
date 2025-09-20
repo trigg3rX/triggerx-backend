@@ -55,6 +55,9 @@ func (w *EventWorker) Start() {
 		"event", w.EventWorkerData.TriggerEvent,
 		"current_block", currentBlock,
 		"expiration_time", w.EventWorkerData.ExpirationTime,
+		"filter_enabled", w.EventWorkerData.EventFilterParaName != "" && w.EventWorkerData.EventFilterValue != "",
+		"filter_param", w.EventWorkerData.EventFilterParaName,
+		"filter_value", w.EventWorkerData.EventFilterValue,
 	)
 
 	contractAddr := common.HexToAddress(w.EventWorkerData.TriggerContractAddress)

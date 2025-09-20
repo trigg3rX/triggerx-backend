@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS condition_job_data;
 DROP TABLE IF EXISTS task_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS apikeys;
+DROP TABLE IF EXISTS orbit_chain_data;
 
 -- Create User_data table (without counters)
 CREATE TABLE IF NOT EXISTS user_data (
@@ -92,6 +93,8 @@ CREATE TABLE IF NOT EXISTS event_job_data (
     trigger_chain_id text,
     trigger_contract_address text,
     trigger_event text,
+    event_filter_para_name text,
+    event_filter_value text,
     target_chain_id text,
     target_contract_address text,
     target_function text,
@@ -201,6 +204,19 @@ CREATE TABLE IF NOT EXISTS apikeys (
     last_used timestamp,
     created_at timestamp,
     PRIMARY KEY (key)
+);
+
+-- Create Orbit_Chain_data table
+CREATE TABLE IF NOT EXISTS orbit_chain_data (
+    chain_id bigint,
+    chain_name text,
+    rpc_url text,
+    user_address text,
+    deployment_status text,
+    orbit_chain_address text,
+    created_at timestamp,
+    updated_at timestamp,
+    PRIMARY KEY (chain_id)
 );
 
 -- Drop existing indexes if they exist
