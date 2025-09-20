@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { HealthCheckResponse } from '../types/deployment';
 import { config } from '../utils/config';
+import { DockerUtils } from '../utils/dockerUtils';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -8,10 +9,16 @@ const router = Router();
 // Health check endpoint
 router.get('/health', async (req: Request, res: Response) => {
   try {
-    // Check service connectivity (simplified)
+    // Check service connectivity
     const goBackendStatus = config.goBackendUrl ? 'connected' : 'disconnected';
     const arbitrumStatus = config.arbitrumRpcUrl ? 'connected' : 'disconnected';
-    const overallStatus = (goBackendStatus === 'connected' && arbitrumStatus === 'connected') ? 'healthy' : 'unhealthy';
+    
+    // Check Docker availability
+    const isDockerAvailable = await DockerUtils.isDockerAvailable();
+    const dockerVersion = isDockerAvailable ? await DockerUtils.getDockerVersion() : undefined;
+    const dockerStatus = isDockerAvailable ? 'available' : 'unavailable';
+    
+    const overallStatus = (goBackendStatus === 'connected' && arbitrumStatus === 'connected' && dockerStatus === 'available') ? 'healthy' : 'unhealthy';
     
     const response: HealthCheckResponse = {
       status: overallStatus,
@@ -26,6 +33,10 @@ router.get('/health', async (req: Request, res: Response) => {
         arbitrum: {
           status: arbitrumStatus,
           rpc_url: config.arbitrumRpcUrl ? '***configured***' : undefined
+        },
+        docker: {
+          status: dockerStatus,
+          version: dockerVersion || undefined
         }
       },
       configuration: {
@@ -35,7 +46,8 @@ router.get('/health', async (req: Request, res: Response) => {
       },
       uptime: Math.floor(process.uptime()),
       memory_usage: process.memoryUsage(),
-      node_version: process.version
+      node_version: process.version,
+      running_nodes: 0 // TODO: Get actual count from NodeManagementService
     };
     
     const statusCode = overallStatus === 'healthy' ? 200 : 503;

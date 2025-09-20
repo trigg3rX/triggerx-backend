@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, http, type Address } from 'viem';
+import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import axios from 'axios';
 import logger from '../utils/logger';

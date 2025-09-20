@@ -106,6 +106,7 @@ export interface DeployChainRequest {
 export interface DeployContractsRequest {
   deployment_id: string;
   chain_address: string;
+  rpc_url?: string; // RPC URL of the Orbit chain node
   contracts: {
     name: string;
     bytecode: string;
@@ -145,6 +146,74 @@ export interface ChainDeploymentStatus {
   error_message?: string;
 }
 
+// Node process information for real deployment
+export interface NodeProcess {
+  id: string;
+  chainName: string;
+  configPath: string;
+  rpcUrl: string;
+  explorerUrl: string;
+  pid: number;
+  startTime: Date;
+  containerName?: string;
+  dataDir?: string;
+  logsDir?: string;
+  process?: any; // For binary-based deployment
+}
+
+// Node management configuration
+export interface NodeManagementConfig {
+  deployerPrivateKey: string;
+  batchPosterPrivateKey: string;
+  validatorPrivateKey: string;
+  parentChainRpcUrl: string;
+  parentChainBeaconRpcUrl?: string;
+  nodeConfigDir: string;
+  defaultRpcPort: number;
+  defaultExplorerPort: number;
+  dockerImage?: string;
+  containerPrefix?: string;
+  nitroBinaryPath?: string;
+  memoryLimit?: string;
+  cpuLimit?: string;
+  startupTimeout?: number;
+  healthCheckInterval?: number;
+}
+
+// Node startup result
+export interface NodeStartupResult {
+  success: boolean;
+  nodeConfigPath?: string;
+  rpcUrl?: string;
+  explorerUrl?: string;
+  containerName?: string;
+  pid?: number;
+  error?: string;
+}
+
+// Node status information
+export interface NodeStatus {
+  isRunning: boolean;
+  rpcUrl?: string;
+  explorerUrl?: string;
+  blockNumber?: number;
+  chainId?: number;
+  containerName?: string;
+  pid?: number;
+  uptime?: number;
+  error?: string;
+}
+
+// Docker container information
+export interface DockerContainerInfo {
+  name: string;
+  id: string;
+  status: string;
+  ports: string[];
+  created: string;
+  image: string;
+}
+
 // Health check response
 export interface HealthCheckResponse {
   status: 'healthy' | 'unhealthy';
@@ -160,6 +229,10 @@ export interface HealthCheckResponse {
       status: 'connected' | 'disconnected';
       rpc_url?: string;
     };
+    docker: {
+      status: 'available' | 'unavailable';
+      version?: string;
+    };
   };
   configuration: {
     port: number;
@@ -169,5 +242,6 @@ export interface HealthCheckResponse {
   uptime: number;
   memory_usage: NodeJS.MemoryUsage;
   node_version: string;
+  running_nodes: number;
   error?: string;
 }

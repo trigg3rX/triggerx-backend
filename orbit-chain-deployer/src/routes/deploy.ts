@@ -16,14 +16,21 @@ const router = Router();
 const orbitService = new OrbitService({
   parentChainRpc: config.arbitrumRpcUrl || 'https://sepolia-rollup.arbitrum.io/rpc',
   parentChainId: parseInt(process.env.PARENT_CHAIN_ID || '421614'),
-  deployerPrivateKey: config.deployerPrivateKey || '',
-  batchPosterPrivateKey: process.env.BATCH_POSTER_PRIVATE_KEY || config.deployerPrivateKey || '',
-  validatorPrivateKey: process.env.VALIDATOR_PRIVATE_KEY || config.deployerPrivateKey || '',
+  deployerPrivateKey: config.deployerPrivateKey,
+  batchPosterPrivateKey: config.batchPosterPrivateKey,
+  validatorPrivateKey: config.validatorPrivateKey,
   parentChainBeaconRpcUrl: process.env.ETHEREUM_BEACON_RPC_URL,
-  nodeConfigDir: process.env.NODE_CONFIG_DIR || './node-configs',
-  defaultRpcPort: parseInt(process.env.DEFAULT_RPC_PORT || '8449'),
-  defaultExplorerPort: parseInt(process.env.DEFAULT_EXPLORER_PORT || '8448'),
-  contractArtifactsBaseUrl: process.env.CONTRACT_ARTIFACTS_BASE_URL
+  nodeConfigDir: config.node.nodeConfigDir,
+  defaultRpcPort: config.node.defaultRpcPort,
+  defaultExplorerPort: config.node.defaultExplorerPort,
+  contractArtifactsBaseUrl: process.env.CONTRACT_ARTIFACTS_BASE_URL,
+  dockerImage: config.node.dockerImage,
+  containerPrefix: config.node.containerPrefix,
+  nitroBinaryPath: config.node.nitroBinaryPath,
+  memoryLimit: config.node.memoryLimit,
+  cpuLimit: config.node.cpuLimit,
+  startupTimeout: config.node.startupTimeout,
+  healthCheckInterval: config.node.healthCheckInterval
 });
 
 const contractsService = new ContractsService({

@@ -4,7 +4,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrumSepolia } from 'viem/chains';
 import logger from '../utils/logger';
 import { DeployChainRequest, DeploymentStatus, ChainDeploymentResponse, DeployContractsRequest } from '../types/deployment';
-import NodeManagementService, { NodeManagementConfig, NodeConfig, NodeStartupResult } from './nodeService';
+import NodeManagementService from './nodeService';
+import { NodeManagementConfig } from '../types/deployment';
 import ContractsService, { ContractDeploymentConfig } from './contractsService';
 
 export interface OrbitDeploymentConfig {
@@ -18,6 +19,13 @@ export interface OrbitDeploymentConfig {
   defaultRpcPort: number;
   defaultExplorerPort: number;
   contractArtifactsBaseUrl?: string;
+  dockerImage?: string;
+  containerPrefix?: string;
+  nitroBinaryPath?: string;
+  memoryLimit?: string;
+  cpuLimit?: string;
+  startupTimeout?: number;
+  healthCheckInterval?: number;
 }
 
 export interface OrbitDeploymentResult {
@@ -86,15 +94,11 @@ class OrbitService {
       });
       logger.info('Deployer wallet client created successfully');
 
-      // Use deployer key for batch poster if not provided
-      const batchPosterKey = this.config.batchPosterPrivateKey && this.config.batchPosterPrivateKey.trim() !== '' 
-        ? this.config.batchPosterPrivateKey 
-        : this.config.deployerPrivateKey;
-
+      // Use separate batch poster private key
       logger.info('Creating batch poster wallet client...');
-      const batchPosterKeyFormatted = batchPosterKey.startsWith('0x') 
-        ? batchPosterKey 
-        : `0x${batchPosterKey}`;
+      const batchPosterKeyFormatted = this.config.batchPosterPrivateKey.startsWith('0x') 
+        ? this.config.batchPosterPrivateKey 
+        : `0x${this.config.batchPosterPrivateKey}`;
         
       this.batchPosterWallet = createWalletClient({
         account: privateKeyToAccount(batchPosterKeyFormatted as `0x${string}`),
@@ -103,15 +107,11 @@ class OrbitService {
       });
       logger.info('Batch poster wallet client created successfully');
 
-      // Use deployer key for validator if not provided
-      const validatorKey = this.config.validatorPrivateKey && this.config.validatorPrivateKey.trim() !== '' 
-        ? this.config.validatorPrivateKey 
-        : this.config.deployerPrivateKey;
-
+      // Use separate validator private key
       logger.info('Creating validator wallet client...');
-      const validatorKeyFormatted = validatorKey.startsWith('0x') 
-        ? validatorKey 
-        : `0x${validatorKey}`;
+      const validatorKeyFormatted = this.config.validatorPrivateKey.startsWith('0x') 
+        ? this.config.validatorPrivateKey 
+        : `0x${this.config.validatorPrivateKey}`;
         
       this.validatorWallet = createWalletClient({
         account: privateKeyToAccount(validatorKeyFormatted as `0x${string}`),
@@ -121,7 +121,12 @@ class OrbitService {
       logger.info('Validator wallet client created successfully');
 
       logger.info('Orbit service clients initialized successfully', {
-        usingSameKeyForAllRoles: batchPosterKey === this.config.deployerPrivateKey && validatorKey === this.config.deployerPrivateKey
+        deployerAddress: this.deployerWallet.account.address,
+        batchPosterAddress: this.batchPosterWallet.account.address,
+        validatorAddress: this.validatorWallet.account.address,
+        usingDifferentKeys: this.deployerWallet.account.address !== this.batchPosterWallet.account.address && 
+                           this.deployerWallet.account.address !== this.validatorWallet.account.address &&
+                           this.batchPosterWallet.account.address !== this.validatorWallet.account.address
       });
     } catch (error) {
       logger.error('Failed to initialize Orbit service clients', { 
@@ -147,7 +152,14 @@ class OrbitService {
         parentChainBeaconRpcUrl: this.config.parentChainBeaconRpcUrl,
         nodeConfigDir: this.config.nodeConfigDir,
         defaultRpcPort: this.config.defaultRpcPort,
-        defaultExplorerPort: this.config.defaultExplorerPort
+        defaultExplorerPort: this.config.defaultExplorerPort,
+        dockerImage: this.config.dockerImage,
+        containerPrefix: this.config.containerPrefix,
+        nitroBinaryPath: this.config.nitroBinaryPath,
+        memoryLimit: this.config.memoryLimit,
+        cpuLimit: this.config.cpuLimit,
+        startupTimeout: this.config.startupTimeout,
+        healthCheckInterval: this.config.healthCheckInterval
       };
       
       this.nodeService = new NodeManagementService(nodeConfig);
@@ -243,10 +255,30 @@ class OrbitService {
           };
         }
 
-        logger.info('Step 3 completed: Orbit node started', {
+        logger.info('Step 3 completed: Orbit node container started', {
           deploymentId: request.deployment_id,
           rpcUrl: nodeStartupResult.rpcUrl,
           explorerUrl: nodeStartupResult.explorerUrl
+        });
+
+        // Step 3.5: Wait for node to be ready before proceeding
+        logger.info('Step 3.5: Waiting for node to be ready', { deploymentId: request.deployment_id });
+        const isNodeReady = await this.nodeService.waitForNodeReady(nodeStartupResult.rpcUrl);
+        
+        if (!isNodeReady) {
+          logger.error('Step 3.5 failed: Node not ready within timeout', {
+            deploymentId: request.deployment_id,
+            rpcUrl: nodeStartupResult.rpcUrl
+          });
+          return {
+            success: false,
+            error: 'Node failed to become ready within timeout period'
+          };
+        }
+
+        logger.info('Step 3.5 completed: Node is ready and responding', {
+          deploymentId: request.deployment_id,
+          rpcUrl: nodeStartupResult.rpcUrl
         });
       } catch (error) {
         logger.error('Step 2 or 3 failed: Node configuration or startup failed', {
@@ -261,12 +293,16 @@ class OrbitService {
 
       // Step 4: Deploy TriggerX contracts (if contracts service is available)
       let contractsResult: any[] = [];
-      if (this.contractsService) {
-        logger.info('Step 4: Deploying TriggerX contracts', { deploymentId: request.deployment_id });
+      if (this.contractsService && nodeStartupResult.rpcUrl) {
+        logger.info('Step 4: Deploying TriggerX contracts', { 
+          deploymentId: request.deployment_id,
+          rpcUrl: nodeStartupResult.rpcUrl 
+        });
         
         const contractsRequest: DeployContractsRequest = {
           deployment_id: request.deployment_id,
           chain_address: orbitDeploymentResult.chainAddress!,
+          rpc_url: nodeStartupResult.rpcUrl, // Use the node's RPC URL
           contracts: [
             { name: 'JobRegistry', bytecode: '' },
             { name: 'TriggerGasRegistry', bytecode: '' },
@@ -280,17 +316,23 @@ class OrbitService {
           contractsResult = contractDeploymentResult.contracts;
           logger.info('Step 4 completed: TriggerX contracts deployed', {
             deploymentId: request.deployment_id,
-            contractsDeployed: contractsResult.length
+            contractsDeployed: contractsResult.length,
+            rpcUrl: nodeStartupResult.rpcUrl
           });
         } else {
           logger.warn('Step 4 failed: Contract deployment failed', {
             deploymentId: request.deployment_id,
-            error: contractDeploymentResult.error
+            error: contractDeploymentResult.error,
+            rpcUrl: nodeStartupResult.rpcUrl
           });
           // Don't fail the entire deployment if contracts fail
         }
       } else {
-        logger.info('Step 4 skipped: No contracts service configured', { deploymentId: request.deployment_id });
+        logger.info('Step 4 skipped: Contracts service not available or node RPC URL not ready', { 
+          deploymentId: request.deployment_id,
+          hasContractsService: !!this.contractsService,
+          hasRpcUrl: !!nodeStartupResult.rpcUrl
+        });
       }
 
       logger.info('Complete Orbit chain deployment finished successfully', {

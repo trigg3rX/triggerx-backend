@@ -14,12 +14,49 @@ export interface Config {
   goBackendApiKey: string;
   
   // Arbitrum configuration
-  arbitrumRpcUrl?: string;
-  deployerPrivateKey?: string;
+  arbitrumRpcUrl: string;
+  deployerPrivateKey: string;
+  batchPosterPrivateKey: string;
+  validatorPrivateKey: string;
+  parentChainBeaconRpcUrl?: string;
   
   // Deployment configuration
   deploymentTimeout: number;
   maxRetries: number;
+  
+  // Node management configuration
+  node: NodeConfig;
+}
+
+// Interface for node configuration
+export interface NodeConfig {
+  // Docker configuration
+  dockerImage: string;
+  containerPrefix: string;
+  
+  // Binary configuration (fallback)
+  nitroBinaryPath: string;
+  
+  // Resource limits
+  memoryLimit: string;
+  cpuLimit: string;
+  
+  // Port configuration
+  rpcPortRange: {
+    start: number;
+    end: number;
+  };
+  
+  // Directory configuration
+  nodeConfigDir: string;
+  
+  // Health check configuration
+  healthCheckInterval: number;
+  startupTimeout: number;
+  
+  // Default ports
+  defaultRpcPort: number;
+  defaultExplorerPort: number;
 }
 
 // Interface for contract configuration
@@ -40,6 +77,27 @@ const validateConfig = (): void => {
   if (!process.env.DEPLOYER_PRIVATE_KEY) {
     throw new Error('Missing required environment variable: DEPLOYER_PRIVATE_KEY');
   }
+  if (!process.env.BATCH_POSTER_PRIVATE_KEY) {
+    throw new Error('Missing required environment variable: BATCH_POSTER_PRIVATE_KEY');
+  }
+  if (!process.env.VALIDATOR_PRIVATE_KEY) {
+    throw new Error('Missing required environment variable: VALIDATOR_PRIVATE_KEY');
+  }
+  
+  // Ensure all three private keys are different
+  const deployerKey = process.env.DEPLOYER_PRIVATE_KEY!;
+  const batchPosterKey = process.env.BATCH_POSTER_PRIVATE_KEY!;
+  const validatorKey = process.env.VALIDATOR_PRIVATE_KEY!;
+  
+  if (deployerKey === batchPosterKey) {
+    throw new Error('DEPLOYER_PRIVATE_KEY and BATCH_POSTER_PRIVATE_KEY must be different');
+  }
+  if (deployerKey === validatorKey) {
+    throw new Error('DEPLOYER_PRIVATE_KEY and VALIDATOR_PRIVATE_KEY must be different');
+  }
+  if (batchPosterKey === validatorKey) {
+    throw new Error('BATCH_POSTER_PRIVATE_KEY and VALIDATOR_PRIVATE_KEY must be different');
+  }
 };
 
 // Create configuration object
@@ -58,10 +116,44 @@ const createConfig = (): Config => {
     // Arbitrum configuration
     arbitrumRpcUrl: process.env.ARBITRUM_RPC_URL!,
     deployerPrivateKey: process.env.DEPLOYER_PRIVATE_KEY!,
+    batchPosterPrivateKey: process.env.BATCH_POSTER_PRIVATE_KEY!,
+    validatorPrivateKey: process.env.VALIDATOR_PRIVATE_KEY!,
+    parentChainBeaconRpcUrl: process.env.ETHEREUM_BEACON_RPC_URL,
     
     // Deployment configuration
     deploymentTimeout: parseInt(process.env.DEPLOYMENT_TIMEOUT || '300000', 10), // 5 minutes default
     maxRetries: parseInt(process.env.MAX_RETRIES || '3', 10),
+    
+    // Node management configuration
+    node: {
+      // Docker configuration
+      dockerImage: process.env.NITRO_DOCKER_IMAGE || 'arbitrum/nitro:v3.6.0-fc07dd2',
+      containerPrefix: process.env.NODE_CONTAINER_PREFIX || 'orbit-node-',
+      
+      // Binary configuration (fallback)
+      nitroBinaryPath: process.env.NITRO_BINARY_PATH || '/usr/local/bin/nitro',
+      
+      // Resource limits
+      memoryLimit: process.env.NODE_MEMORY_LIMIT || '2g',
+      cpuLimit: process.env.NODE_CPU_LIMIT || '1',
+      
+      // Port configuration
+      rpcPortRange: {
+        start: parseInt(process.env.RPC_PORT_START || '8449', 10),
+        end: parseInt(process.env.RPC_PORT_END || '8549', 10)
+      },
+      
+      // Directory configuration
+      nodeConfigDir: process.env.NODE_CONFIG_DIR || './node-configs',
+      
+      // Health check configuration
+      healthCheckInterval: parseInt(process.env.HEALTH_CHECK_INTERVAL || '30000', 10),
+      startupTimeout: parseInt(process.env.NODE_STARTUP_TIMEOUT || '1080000', 10), // avg 15 minutes
+      
+      // Default ports
+      defaultRpcPort: parseInt(process.env.DEFAULT_RPC_PORT || '8449', 10),
+      defaultExplorerPort: parseInt(process.env.DEFAULT_EXPLORER_PORT || '8448', 10)
+    }
   };
 };
 
