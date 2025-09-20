@@ -1,5 +1,5 @@
 // Bridge Service for transferring funds from parent chain to Orbit chain
-import { createPublicClient, createWalletClient, http, type Address, type Chain, defineChain } from 'viem';
+import { createPublicClient, createWalletClient, http, type Address, type Chain, defineChain, encodeFunctionData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrumSepolia } from 'viem/chains';
 import logger from '../utils/logger';
@@ -119,12 +119,12 @@ class BridgeService {
   }
 
   /**
-   * Fund deployer wallet using a simple ETH transfer via retryable ticket
-   * This is a simplified approach that should work more reliably
+   * Fund deployer wallet using ETH deposit via Inbox.depositEth
+   * This follows the official Arbitrum documentation for ETH deposits
    */
   async fundDeployerDirectly(amount: string = this.config.bridgeAmount || "0.02", rollupAddress?: Address): Promise<BridgeResult> {
     try {
-      logger.info('Funding deployer wallet via simple retryable ticket', { amount, rollupAddress });
+      logger.info('Funding deployer wallet via Inbox.depositEth', { amount, rollupAddress });
 
       if (!this.orbitChainPublicClient) {
         throw new Error('Orbit chain client not initialized. Call setupOrbitChainClient first.');
@@ -137,19 +137,113 @@ class BridgeService {
       const inboxAddress = await this.getInboxAddress(rollupAddress);
       
       if (!inboxAddress) {
-        throw new Error('Could not determine inbox address for retryable ticket');
+        logger.warn('Could not determine inbox address for ETH deposit, skipping bridge funding', { rollupAddress });
+        return {
+          success: false,
+          error: 'Could not determine inbox address for ETH deposit. Orbit chain may not be ready for bridging yet.'
+        };
+      }
+
+      logger.info('Using inbox address for ETH deposit', { inboxAddress });
+
+      // Use the official Inbox.depositEth method as per Arbitrum docs
+      const depositEthABI = [
+        {
+          name: 'depositEth',
+          type: 'function',
+          stateMutability: 'payable',
+          inputs: [
+            { name: 'destAddr', type: 'address' }
+          ],
+          outputs: [{ name: 'ticketId', type: 'uint256' }]
+        }
+      ];
+
+      // Encode the depositEth function call
+      const data = encodeFunctionData({
+        abi: depositEthABI,
+        functionName: 'depositEth',
+        args: [this.deployerWallet.account.address] // destAddr
+      });
+
+      const depositTx = {
+        to: inboxAddress,
+        value: amountWei, // Only send the ETH amount, no additional fees needed for depositEth
+        data: data
+      };
+
+      logger.info('Sending ETH deposit transaction', {
+        to: this.deployerWallet.account.address,
+        value: amountWei.toString(),
+        inboxAddress: inboxAddress
+      });
+
+      // Send the transaction
+      const txHash = await this.deployerWallet.sendTransaction(depositTx);
+      const txReceipt = await this.parentChainPublicClient.waitForTransactionReceipt({ hash: txHash });
+
+      logger.info('ETH deposit transaction confirmed', {
+        transactionHash: txHash,
+        amount: amount,
+        gasUsed: txReceipt.gasUsed?.toString()
+      });
+
+      // Wait for the deposit to be processed on the Orbit chain
+      logger.info('Waiting for ETH deposit to arrive on Orbit chain');
+      await this.waitForDepositExecution(txReceipt);
+
+      return {
+        success: true,
+        transactionHash: txHash
+      };
+
+    } catch (error) {
+      logger.error('ETH deposit failed', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'ETH deposit failed'
+      };
+    }
+  }
+
+  /**
+   * Alternative method: Fund deployer wallet using retryable tickets
+   * This provides more flexibility than depositEth but is more complex
+   */
+  async fundDeployerViaRetryableTicket(amount: string = this.config.bridgeAmount || "0.02", rollupAddress?: Address): Promise<BridgeResult> {
+    try {
+      logger.info('Funding deployer wallet via retryable ticket', { amount, rollupAddress });
+
+      if (!this.orbitChainPublicClient) {
+        throw new Error('Orbit chain client not initialized. Call setupOrbitChainClient first.');
+      }
+
+      // Convert amount to wei
+      const amountWei = BigInt(parseFloat(amount) * 1e18);
+
+      // Get the inbox address
+      const inboxAddress = await this.getInboxAddress(rollupAddress);
+      
+      if (!inboxAddress) {
+        logger.warn('Could not determine inbox address for retryable ticket, skipping bridge funding', { rollupAddress });
+        return {
+          success: false,
+          error: 'Could not determine inbox address for retryable ticket. Orbit chain may not be ready for bridging yet.'
+        };
       }
 
       logger.info('Using inbox address for retryable ticket', { inboxAddress });
 
-      // Create a simple retryable ticket that just transfers ETH
-      // We'll use a minimal approach with lower gas costs
-      const maxSubmissionCost = BigInt("500000000000000"); // 0.0005 ETH
-      const gasLimit = BigInt("100000"); // 100k gas
-      const maxFeePerGas = BigInt("1000000000"); // 1 gwei
+      // Estimate gas parameters dynamically
+      const maxSubmissionCost = await this.estimateMaxSubmissionCost();
+      const gasLimit = BigInt("200000"); // 200k gas
+      const maxFeePerGas = await this.estimateMaxFeePerGas();
 
-      // Encode the function call data manually
-      const abi = [
+      // Create retryable ticket ABI
+      const retryableTicketABI = [
         {
           name: 'createRetryableTicket',
           type: 'function',
@@ -168,10 +262,9 @@ class BridgeService {
         }
       ];
 
-      // Use encodeFunctionData to create the transaction data
-      const { encodeFunctionData } = await import('viem');
+      // Encode the retryable ticket function call
       const data = encodeFunctionData({
-        abi,
+        abi: retryableTicketABI,
         functionName: 'createRetryableTicket',
         args: [
           this.deployerWallet.account.address, // to
@@ -187,7 +280,7 @@ class BridgeService {
 
       const retryableTx = {
         to: inboxAddress,
-        value: amountWei + maxSubmissionCost,
+        value: amountWei + maxSubmissionCost, // ETH amount + submission cost
         data: data
       };
 
@@ -196,7 +289,9 @@ class BridgeService {
         value: amountWei.toString(),
         maxSubmissionCost: maxSubmissionCost.toString(),
         gasLimit: gasLimit.toString(),
-        maxFeePerGas: maxFeePerGas.toString()
+        maxFeePerGas: maxFeePerGas.toString(),
+        totalValue: (amountWei + maxSubmissionCost).toString(),
+        inboxAddress: inboxAddress
       });
 
       // Send the transaction
@@ -210,7 +305,7 @@ class BridgeService {
       });
 
       // Wait for the retryable ticket to be executed on the Orbit chain
-      logger.info('Waiting for funds to arrive on Orbit chain');
+      logger.info('Waiting for retryable ticket to be executed on Orbit chain');
       await this.waitForRetryableExecution(txReceipt);
 
       return {
@@ -219,15 +314,46 @@ class BridgeService {
       };
 
     } catch (error) {
-      logger.error('Direct funding failed', { 
+      logger.error('Retryable ticket funding failed', { 
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Direct funding failed'
+        error: error instanceof Error ? error.message : 'Retryable ticket funding failed'
       };
     }
+  }
+
+  /**
+   * Wait for ETH deposit execution on Orbit chain
+   */
+  private async waitForDepositExecution(txReceipt: any, timeoutMs: number = 300000): Promise<void> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        // Check if the deposit has been processed
+        logger.info('Checking ETH deposit execution status');
+        
+        // For ETH deposits, we can check the balance on the Orbit chain
+        const balance = await this.orbitChainPublicClient.getBalance({
+          address: this.deployerWallet.account.address
+        });
+        
+        if (balance > 0n) {
+          logger.info('ETH deposit execution completed', { balance: balance.toString() });
+          return;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+      } catch (error) {
+        logger.warn('Error checking deposit status', { error });
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+      }
+    }
+    
+    throw new Error('ETH deposit execution timeout');
   }
 
   /**
@@ -259,10 +385,70 @@ class BridgeService {
   }
 
   /**
+   * Estimate max submission cost for retryable tickets
+   */
+  private async estimateMaxSubmissionCost(): Promise<bigint> {
+    try {
+      // Get current gas price
+      const gasPrice = await this.parentChainPublicClient.getGasPrice();
+      
+      // Estimate submission cost (typically 0.001 ETH or gas price * 100k)
+      const estimatedCost = gasPrice * BigInt(100000);
+      
+      // Ensure minimum cost
+      const minCost = BigInt("1000000000000000"); // 0.001 ETH
+      
+      return estimatedCost > minCost ? estimatedCost : minCost;
+    } catch (error) {
+      logger.warn('Failed to estimate max submission cost, using default', { error });
+      return BigInt("1000000000000000"); // 0.001 ETH default
+    }
+  }
+
+  /**
+   * Estimate max fee per gas for retryable tickets
+   */
+  private async estimateMaxFeePerGas(): Promise<bigint> {
+    try {
+      // Get current gas price
+      const gasPrice = await this.parentChainPublicClient.getGasPrice();
+      
+      // Add 20% buffer
+      return gasPrice * BigInt(120) / BigInt(100);
+    } catch (error) {
+      logger.warn('Failed to estimate max fee per gas, using default', { error });
+      return BigInt("2000000000"); // 2 gwei default
+    }
+  }
+
+  /**
    * Get deployer wallet address
    */
   getDeployerAddress(): Address {
     return this.deployerWallet.account.address;
+  }
+
+  /**
+   * Get the recommended bridging method based on use case
+   * Based on Arbitrum documentation recommendations
+   */
+  getRecommendedBridgingMethod(): 'depositEth' | 'retryableTicket' {
+    // For simple ETH transfers to fund a wallet, depositEth is recommended
+    // For more complex operations or when you need fallback functions, use retryable tickets
+    return 'depositEth';
+  }
+
+  /**
+   * Main bridging method that uses the recommended approach
+   */
+  async bridgeETH(amount: string = this.config.bridgeAmount || "0.02", rollupAddress?: Address): Promise<BridgeResult> {
+    const method = this.getRecommendedBridgingMethod();
+    
+    if (method === 'depositEth') {
+      return this.fundDeployerDirectly(amount, rollupAddress);
+    } else {
+      return this.fundDeployerViaRetryableTicket(amount, rollupAddress);
+    }
   }
 
   /**
@@ -272,35 +458,37 @@ class BridgeService {
     try {
       if (rollupAddress) {
         // Try to get inbox address from the rollup contract
-        const inboxAddress = await this.parentChainPublicClient.readContract({
-          address: rollupAddress,
-          abi: [
-            {
-              name: 'inbox',
-              type: 'function',
-              stateMutability: 'view',
-              inputs: [],
-              outputs: [{ name: '', type: 'address' }]
-            }
-          ],
-          functionName: 'inbox'
-        });
-        
-        if (inboxAddress && inboxAddress !== '0x0000000000000000000000000000000000000000') {
-          logger.info('Retrieved inbox address from rollup contract', { inboxAddress });
-          return inboxAddress as Address;
+        try {
+          const inboxAddress = await this.parentChainPublicClient.readContract({
+            address: rollupAddress,
+            abi: [
+              {
+                name: 'inbox',
+                type: 'function',
+                stateMutability: 'view',
+                inputs: [],
+                outputs: [{ name: '', type: 'address' }]
+              }
+            ],
+            functionName: 'inbox'
+          });
+          
+          if (inboxAddress && inboxAddress !== '0x0000000000000000000000000000000000000000') {
+            logger.info('Retrieved inbox address from rollup contract', { inboxAddress });
+            return inboxAddress as Address;
+          }
+        } catch (error) {
+          logger.warn('Failed to read inbox address from rollup contract', { error });
         }
       }
       
-      // Fallback to known inbox addresses
-      const knownInboxAddresses = {
-        421614: '0x0000000000000000000000000000000000000064', // Arbitrum Sepolia inbox
-        42161: '0x0000000000000000000000000000000000000064',  // Arbitrum One inbox
-      };
-      
-      const fallbackAddress = knownInboxAddresses[this.config.parentChainId as keyof typeof knownInboxAddresses] as Address;
-      logger.info('Using fallback inbox address', { fallbackAddress });
-      return fallbackAddress || null;
+      // For Orbit chains, we need to use the rollup's specific inbox
+      // If we can't get it from the rollup contract, we should not proceed
+      logger.error('Cannot determine inbox address for Orbit chain', { 
+        rollupAddress,
+        parentChainId: this.config.parentChainId 
+      });
+      return null;
     } catch (error) {
       logger.error('Failed to get inbox address', { error });
       return null;

@@ -185,9 +185,9 @@ class OrbitService {
         parentChainId: this.config.parentChainId,
         deployerPrivateKey: this.config.deployerPrivateKey,
         bridgeAmount: "0.02", // Bridge 0.02 ETH by default
-        maxSubmissionCost: "1000000000000000", // 0.001 ETH
-        maxGas: "1000000", // 1M gas
-        gasPriceBid: "1000000000" // 1 gwei
+        maxSubmissionCost: "1000000000000000", // 0.001 ETH (for retryable tickets)
+        maxGas: "200000", // 200k gas (for retryable tickets)
+        gasPriceBid: "2000000000" // 2 gwei (for retryable tickets)
       };
       
       this.bridgeService = new BridgeService(bridgeConfig);
@@ -296,50 +296,14 @@ class OrbitService {
           rpcUrl: nodeStartupResult.rpcUrl
         });
 
-        // Step 3.6: Fund deployer wallet directly using retryable tickets
-        if (this.bridgeService && nodeStartupResult.rpcUrl) {
-          logger.info('Step 3.6: Funding deployer wallet directly via retryable tickets', { 
-            deploymentId: request.deployment_id,
-            rpcUrl: nodeStartupResult.rpcUrl 
-          });
-          
-          try {
-            // Setup Orbit chain client for bridge service
-            await this.bridgeService.setupOrbitChainClient(request.chain_id, nodeStartupResult.rpcUrl);
-            
-            // Fund deployer wallet directly using retryable tickets
-            const fundingResult = await this.bridgeService.fundDeployerDirectly(
-              "0.02", // Use 0.02 ETH as per your configuration
-              orbitDeploymentResult.chainAddress! as `0x${string}`
-            );
-            
-            if (!fundingResult.success) {
-              logger.warn('Step 3.6 failed: Direct funding failed', {
-                deploymentId: request.deployment_id,
-                error: fundingResult.error
-              });
-              // Don't fail the entire deployment if funding fails
-            } else {
-              logger.info('Step 3.6 completed: Deployer wallet funded via retryable ticket', {
-                deploymentId: request.deployment_id,
-                fundingTxHash: fundingResult.transactionHash,
-                deployerAddress: this.bridgeService.getDeployerAddress()
-              });
-            }
-          } catch (error) {
-            logger.warn('Step 3.6 failed: Direct funding failed', {
-              deploymentId: request.deployment_id,
-              error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            // Don't fail the entire deployment if funding fails
-          }
-        } else {
-          logger.info('Step 3.6 skipped: Bridge service not available or node RPC URL not ready', { 
-            deploymentId: request.deployment_id,
-            hasBridgeService: !!this.bridgeService,
-            hasRpcUrl: !!nodeStartupResult.rpcUrl
-          });
-        }
+        // Step 3.6: Skip bridge funding during initial deployment
+        // Bridge funding should be done manually after the Orbit chain is fully deployed and ready
+        logger.info('Step 3.6 skipped: Bridge funding should be done manually after Orbit chain is ready', { 
+          deploymentId: request.deployment_id,
+          chainAddress: orbitDeploymentResult.chainAddress,
+          rpcUrl: nodeStartupResult.rpcUrl,
+          note: 'Use the bridge service manually to fund the deployer wallet on the Orbit chain'
+        });
       } catch (error) {
         logger.error('Step 2 or 3 failed: Node configuration or startup failed', {
           deploymentId: request.deployment_id,
@@ -351,50 +315,14 @@ class OrbitService {
         };
       }
 
-      // Step 4: Deploy TriggerX contracts (if contracts service is available)
-      let contractsResult: any[] = [];
-      if (this.contractsService && nodeStartupResult.rpcUrl) {
-        logger.info('Step 4: Deploying TriggerX contracts', { 
-          deploymentId: request.deployment_id,
-          rpcUrl: nodeStartupResult.rpcUrl 
-        });
-        
-        const contractsRequest: DeployContractsRequest = {
-          deployment_id: request.deployment_id,
-          chain_address: orbitDeploymentResult.chainAddress!,
-          chain_id: request.chain_id, // Pass the actual chain ID from the deployment request
-          rpc_url: nodeStartupResult.rpcUrl, // Use the node's RPC URL
-          contracts: [
-            { name: 'JobRegistry', constructor_args: [] },
-            { name: 'TriggerGasRegistry', constructor_args: [] },
-            { name: 'TaskExecutionSpoke', constructor_args: [] }
-          ]
-        };
-        
-        const contractDeploymentResult = await this.contractsService.deployContracts(contractsRequest);
-        
-        if (contractDeploymentResult.success && contractDeploymentResult.contracts) {
-          contractsResult = contractDeploymentResult.contracts;
-          logger.info('Step 4 completed: TriggerX contracts deployed', {
-            deploymentId: request.deployment_id,
-            contractsDeployed: contractsResult.length,
-            rpcUrl: nodeStartupResult.rpcUrl
-          });
-        } else {
-          logger.warn('Step 4 failed: Contract deployment failed', {
-            deploymentId: request.deployment_id,
-            error: contractDeploymentResult.error,
-            rpcUrl: nodeStartupResult.rpcUrl
-          });
-          // Don't fail the entire deployment if contracts fail
-        }
-      } else {
-        logger.info('Step 4 skipped: Contracts service not available or node RPC URL not ready', { 
-          deploymentId: request.deployment_id,
-          hasContractsService: !!this.contractsService,
-          hasRpcUrl: !!nodeStartupResult.rpcUrl
-        });
-      }
+      // Step 4: Skip contract deployment during initial deployment
+      // Contract deployment should be done separately after funding the deployer wallet
+      logger.info('Step 4 skipped: Contract deployment should be done separately after funding deployer wallet', { 
+        deploymentId: request.deployment_id,
+        chainAddress: orbitDeploymentResult.chainAddress,
+        rpcUrl: nodeStartupResult.rpcUrl,
+        note: 'Use the contracts service manually to deploy contracts after funding the deployer wallet'
+      });
 
       logger.info('Complete Orbit chain deployment finished successfully', {
         deploymentId: request.deployment_id,
@@ -756,6 +684,78 @@ class OrbitService {
    */
   getRunningNodes(): Array<{ chainName: string; rpcUrl: string; explorerUrl: string }> {
     return this.nodeService.getRunningNodes();
+  }
+
+  /**
+   * Get bridge service status and configuration
+   */
+  getBridgeServiceStatus(): {
+    isAvailable: boolean;
+    deployerAddress?: string;
+    recommendedMethod?: string;
+    config?: any;
+  } {
+    if (!this.bridgeService) {
+      return { isAvailable: false };
+    }
+
+    return {
+      isAvailable: true,
+      deployerAddress: this.bridgeService.getDeployerAddress(),
+      recommendedMethod: this.bridgeService.getRecommendedBridgingMethod(),
+      config: {
+        parentChainRpc: this.config.parentChainRpc,
+        parentChainId: this.config.parentChainId,
+        bridgeAmount: "0.02"
+      }
+    };
+  }
+
+  /**
+   * Manually fund deployer wallet (useful for troubleshooting)
+   */
+  async fundDeployerWallet(
+    amount: string = "0.02", 
+    chainAddress?: string,
+    method?: 'depositEth' | 'retryableTicket'
+  ): Promise<{
+    success: boolean;
+    transactionHash?: string;
+    error?: string;
+    method?: string;
+  }> {
+    if (!this.bridgeService) {
+      return {
+        success: false,
+        error: 'Bridge service not available'
+      };
+    }
+
+    try {
+      let result;
+      
+      if (method === 'retryableTicket') {
+        result = await this.bridgeService.fundDeployerViaRetryableTicket(amount, chainAddress as `0x${string}`);
+      } else if (method === 'depositEth') {
+        result = await this.bridgeService.fundDeployerDirectly(amount, chainAddress as `0x${string}`);
+      } else {
+        // Use recommended method
+        result = await this.bridgeService.bridgeETH(amount, chainAddress as `0x${string}`);
+      }
+
+      return {
+        success: result.success,
+        transactionHash: result.transactionHash,
+        error: result.error,
+        method: method || this.bridgeService.getRecommendedBridgingMethod()
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        method: method || this.bridgeService.getRecommendedBridgingMethod()
+      };
+    }
   }
 }
 
