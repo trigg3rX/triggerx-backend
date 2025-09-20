@@ -186,6 +186,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				TriggerChainID:            tempJobs[i].TriggerChainID,
 				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
 				TriggerEvent:              tempJobs[i].TriggerEvent,
+				EventFilterParaName:       tempJobs[i].EventFilterParaName,
+				EventFilterValue:          tempJobs[i].EventFilterValue,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
 				TargetFunction:            tempJobs[i].TargetFunction,
@@ -223,9 +225,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				TriggerChainID:         tempJobs[i].TriggerChainID,
 				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
 				TriggerEvent:           tempJobs[i].TriggerEvent,
+				EventFilterParaName:    tempJobs[i].EventFilterParaName,
+				EventFilterValue:       tempJobs[i].EventFilterValue,
 			}
-			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
-				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
+			filterEnabled := eventJobData.EventFilterParaName != "" && eventJobData.EventFilterValue != ""
+			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s (filter_enabled=%t)",
+				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress, filterEnabled)
 
 		case 5, 6:
 			// Condition-based job

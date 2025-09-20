@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS event_job_data (
     trigger_chain_id text,
     trigger_contract_address text,
     trigger_event text,
+    event_filter_para_name text,
+    event_filter_value text,
     target_chain_id text,
     target_contract_address text,
     target_function text,
