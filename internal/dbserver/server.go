@@ -289,7 +289,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 
 	// Apply validation middleware to routes that need it
 	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
-	protected.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
 	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
