@@ -1,16 +1,27 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import axios from 'axios';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import logger from '../utils/logger';
-import { config } from '../utils/config';
+import { config, contractConfig } from '../utils/config';
 import { DeployContractsRequest, DeploymentStatus, ContractInfo } from '../types/deployment';
+
+const execAsync = promisify(exec);
 
 export interface ContractDeploymentConfig {
   deployerPrivateKey: string;
-  contractArtifactsBaseUrl: string;
-  jobRegistryAddress: string;
-  gasRegistryAddress: string;
-  taskExecutionSpokeAddress: string;
+  contractArtifactsBaseUrl?: string;
+  jobRegistryAddress?: string;
+  gasRegistryAddress?: string;
+  taskExecutionSpokeAddress?: string;
+}
+
+export interface TriggerXContract {
+  name: string;
+  address: string;
+  abi: any[];
+  bytecode?: string;
+  deploymentTxHash?: string;
 }
 
 export interface ContractDeploymentResult {
@@ -20,33 +31,22 @@ export interface ContractDeploymentResult {
   error?: string;
 }
 
-export interface TriggerXContract {
-  name: string;
-  abi: any[];
-  bytecode: string;
-  constructorArgs?: any[];
-}
-
 class ContractsService {
-  private config: ContractDeploymentConfig;
   private publicClient: any;
   private deployerWallet: any;
-  private contracts: Map<string, TriggerXContract> = new Map();
+  private currentChainRpcUrl: string = '';
+  private config: ContractDeploymentConfig;
 
   constructor(config: ContractDeploymentConfig) {
     this.config = config;
     this.initializeClients();
-    // Load contract artifacts asynchronously (don't await to avoid blocking constructor)
-    this.loadContractArtifacts().catch(error => {
-      logger.error('Failed to load contract artifacts in constructor', { error });
-    });
   }
 
   private initializeClients() {
     try {
       logger.info('Starting Contracts service client initialization');
       
-      // Validate and format private key
+      // Validate and format private key from config
       if (!this.config.deployerPrivateKey || this.config.deployerPrivateKey.trim() === '') {
         throw new Error('Deployer private key is required');
       }
@@ -76,80 +76,6 @@ class ContractsService {
     }
   }
 
-  /**
-   * Load contract artifacts from GitHub URLs
-   */
-  private async loadContractArtifacts() {
-    try {
-      const baseUrl = this.config.contractArtifactsBaseUrl;
-      
-      // Check if base URL exists
-      if (!baseUrl || baseUrl.trim() === '') {
-        logger.warn('No contract artifacts base URL provided, skipping contract artifact loading');
-        return;
-      }
-
-      logger.info('Loading contract artifacts from GitHub URLs', { baseUrl });
-      
-      // Define contract artifacts to load
-      const contractsToLoad = [
-        {
-          name: 'JobRegistry',
-          abiUrl: `${baseUrl}/JobRegistry.arbitrum.abi.json`,
-          bytecodeUrl: `${baseUrl}/JobRegistry.arbitrum.bin`
-        },
-        {
-          name: 'TriggerGasRegistry',
-          abiUrl: `${baseUrl}/TriggerGasRegistry.arbitrum.abi.json`,
-          bytecodeUrl: `${baseUrl}/TriggerGasRegistry.arbitrum.bin`
-        },
-        {
-          name: 'TaskExecutionSpoke',
-          abiUrl: `${baseUrl}/TaskExecutionSpoke.arbitrum.abi.json`,
-          bytecodeUrl: `${baseUrl}/TaskExecutionSpoke.arbitrum.bin`
-        }
-      ];
-
-      // Load each contract artifact
-      for (const contract of contractsToLoad) {
-        try {
-          logger.info(`Loading ${contract.name} contract artifacts...`);
-          
-          // Fetch ABI
-          const abiResponse = await axios.get(contract.abiUrl, { timeout: 10000 });
-          const abi = abiResponse.data;
-          
-          // Fetch bytecode
-          const bytecodeResponse = await axios.get(contract.bytecodeUrl, { timeout: 10000 });
-          const bytecode = '0x' + bytecodeResponse.data;
-
-          this.contracts.set(contract.name, {
-            name: contract.name,
-            abi: abi,
-            bytecode: bytecode
-          });
-          
-          logger.info(`${contract.name} contract artifact loaded successfully`);
-        } catch (error) {
-          logger.warn(`Failed to load ${contract.name} contract artifact`, { 
-            error: error instanceof Error ? error.message : 'Unknown error',
-            abiUrl: contract.abiUrl,
-            bytecodeUrl: contract.bytecodeUrl
-          });
-        }
-      }
-
-      logger.info('Contract artifacts loading completed', {
-        contracts: Array.from(this.contracts.keys()),
-        totalLoaded: this.contracts.size
-      });
-
-    } catch (error) {
-      logger.error('Failed to load contract artifacts', { error });
-      // Don't throw error, just log it - the service can still work without artifacts
-      logger.warn('ContractsService will work without contract artifacts (deployment will use placeholders)');
-    }
-  }
 
   /**
    * Deploy TriggerX contracts to a deployed Orbit chain
@@ -172,10 +98,10 @@ class ContractsService {
       }
 
       // Set up client for the target chain
-      await this.setupChainClient(request.chain_address);
+      await this.setupChainClient(request.chain_address, request.rpc_url);
 
-      // Deploy contracts in sequence
-      const deploymentResult = await this.executeContractDeployments(request);
+      // Deploy contracts using forge scripts
+      const deploymentResult = await this.executeForgeDeployments(request);
 
       if (deploymentResult.success) {
         logger.info('TriggerX contracts deployment completed successfully', {
@@ -226,12 +152,10 @@ class ContractsService {
         return { valid: false, error: 'Contract name is required' };
       }
 
-      if (!this.contracts.has(contract.name)) {
-        return { valid: false, error: `Unknown contract: ${contract.name}` };
-      }
-
-      if (!contract.bytecode || contract.bytecode.trim().length === 0) {
-        return { valid: false, error: `Bytecode is required for contract: ${contract.name}` };
+      // Check if it's a supported contract type
+      const supportedContracts = ['JobRegistry', 'TriggerGasRegistry', 'TaskExecutionSpoke'];
+      if (!supportedContracts.includes(contract.name)) {
+        return { valid: false, error: `Unsupported contract: ${contract.name}. Supported: ${supportedContracts.join(', ')}` };
       }
     }
 
@@ -241,77 +165,50 @@ class ContractsService {
   /**
    * Set up client for the target chain
    */
-  private async setupChainClient(chainAddress: string) {
+  private async setupChainClient(chainAddress: string, rpcUrl?: string) {
     try {
-      // Check if this is a placeholder address (all zeros)
-      const isPlaceholderAddress = chainAddress === '0x' + '0'.repeat(40);
-      
-      if (isPlaceholderAddress) {
-        logger.info('Detected placeholder chain address, using parent chain RPC for simulation', { chainAddress });
-        
-        // For placeholder addresses, use the parent chain RPC for simulation
-        const parentChainRpc = process.env.ARBITRUM_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc';
-        
-        logger.info('Creating public client for simulation', { rpcUrl: parentChainRpc });
-        
-        // Create public client for the parent chain (for simulation)
-        this.publicClient = createPublicClient({
-          transport: http(parentChainRpc)
-        });
-
-        logger.info('Creating wallet client for simulation', { 
-          hasPrivateKey: !!this.config.deployerPrivateKey,
-          privateKeyLength: this.config.deployerPrivateKey?.length || 0
-        });
-
-        // Validate private key before using it
-        if (!this.config.deployerPrivateKey || this.config.deployerPrivateKey.trim() === '') {
-          throw new Error('Deployer private key is required but not provided');
-        }
-
-        // Format private key if needed
-        const formattedPrivateKey = this.config.deployerPrivateKey.startsWith('0x') 
-          ? this.config.deployerPrivateKey 
-          : `0x${this.config.deployerPrivateKey}`;
-
-        logger.info('Creating wallet client with formatted private key', { 
-          privateKeyPrefix: formattedPrivateKey.substring(0, 6) + '...',
-          privateKeyLength: formattedPrivateKey.length
-        });
-
-        // Update wallet client transport
-        this.deployerWallet = createWalletClient({
-          account: privateKeyToAccount(formattedPrivateKey as `0x${string}`),
-          transport: http(parentChainRpc)
-        });
-
-        logger.info('Chain client setup completed (simulation mode)', { chainAddress, rpcUrl: parentChainRpc });
+      // Use provided RPC URL if available, otherwise fall back to constructed URL
+      if (rpcUrl) {
+        this.currentChainRpcUrl = rpcUrl;
+        logger.info('Using provided RPC URL for chain client', { chainAddress, rpcUrl: this.currentChainRpcUrl });
       } else {
-        // TODO: Get actual RPC URL for the deployed chain
-        // For real deployments, construct the actual RPC URL
-        const chainRpcUrl = `https://orbit-chain-${chainAddress.slice(2, 10)}.arbitrum.io/rpc`;
-
-        // Create public client for the target chain
-        this.publicClient = createPublicClient({
-          transport: http(chainRpcUrl)
-        });
-
-        // Update wallet client transport with properly formatted private key
-        const deployerKey = this.config.deployerPrivateKey.startsWith('0x') 
-          ? this.config.deployerPrivateKey 
-          : `0x${this.config.deployerPrivateKey}`;
+        // Check if this is a placeholder address (all zeros)
+        const isPlaceholderAddress = chainAddress === '0x' + '0'.repeat(40);
+        
+        if (isPlaceholderAddress) {
+          logger.info('Detected placeholder chain address, using parent chain RPC', { chainAddress });
           
-        this.deployerWallet = createWalletClient({
-          account: privateKeyToAccount(deployerKey as `0x${string}`),
-          transport: http(chainRpcUrl)
-        });
-
-        logger.info('Chain client setup completed', { chainAddress, chainRpcUrl });
+          // For placeholder addresses, use the parent chain RPC
+          this.currentChainRpcUrl = process.env.ARBITRUM_RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc';
+        } else {
+          // For real deployments, construct the actual RPC URL
+          this.currentChainRpcUrl = `https://orbit-chain-${chainAddress.slice(2, 10)}.arbitrum.io/rpc`;
+        }
+        
+        logger.info('Using constructed RPC URL for chain client', { chainAddress, rpcUrl: this.currentChainRpcUrl });
       }
+
+      // Create public client for the target chain
+      this.publicClient = createPublicClient({
+        transport: http(this.currentChainRpcUrl)
+      });
+
+      // Update wallet client transport with properly formatted private key
+      const deployerKey = this.config.deployerPrivateKey.startsWith('0x') 
+        ? this.config.deployerPrivateKey 
+        : `0x${this.config.deployerPrivateKey}`;
+        
+      this.deployerWallet = createWalletClient({
+        account: privateKeyToAccount(deployerKey as `0x${string}`),
+        transport: http(this.currentChainRpcUrl)
+      });
+
+      logger.info('Chain client setup completed', { chainAddress, rpcUrl: this.currentChainRpcUrl });
 
     } catch (error) {
       logger.error('Failed to setup chain client', { 
         chainAddress, 
+        rpcUrl: this.currentChainRpcUrl,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
         errorType: typeof error,
@@ -322,44 +219,81 @@ class ContractsService {
   }
 
   /**
-   * Execute contract deployments in sequence
+   * Execute forge script deployments in sequence
    */
-  private async executeContractDeployments(request: DeployContractsRequest): Promise<ContractDeploymentResult> {
+  private async executeForgeDeployments(request: DeployContractsRequest): Promise<ContractDeploymentResult> {
     try {
       const deployedContracts: ContractInfo[] = [];
       const deploymentTxHashes: string[] = [];
 
-      // Deploy contracts in the specified order
-      for (const contractRequest of request.contracts) {
-        logger.info(`Deploying contract: ${contractRequest.name}`);
+      // Get deterministic salts for consistent addresses across all chains
+      const salts = this.getDeploymentSalts();
 
-        const contractArtifact = this.contracts.get(contractRequest.name);
-        if (!contractArtifact) {
-          throw new Error(`Contract artifact not found: ${contractRequest.name}`);
+      // Deploy JobRegistry first
+      logger.info('Deploying JobRegistry contract');
+      const jobRegistryResult = await this.executeForgeScript(
+        'script/deploy/1_deployJobRegistry.s.sol:DeployJobRegistry',
+        {
+          ...this.getForgeEnvironment(),
+          JR_SALT: salts.jobRegistrySalt,
+          JR_IMPL_SALT: salts.jobRegistryImplSalt
         }
+      );
 
-        // Deploy the contract
-        const deploymentResult = await this.deploySingleContract(
-          contractRequest.name,
-          contractArtifact,
-          contractRequest.constructor_args || []
-        );
-
-        if (!deploymentResult.success) {
-          return {
-            success: false,
-            error: `Failed to deploy ${contractRequest.name}: ${deploymentResult.error}`
-          };
-        }
-
-        deployedContracts.push(deploymentResult.contract!);
-        deploymentTxHashes.push(deploymentResult.deploymentTxHash!);
-
-        logger.info(`Contract deployed successfully: ${contractRequest.name}`, {
-          address: deploymentResult.contract!.address,
-          txHash: deploymentResult.deploymentTxHash
-        });
+      if (!jobRegistryResult.success) {
+        return {
+          success: false,
+          error: `Failed to deploy JobRegistry: ${jobRegistryResult.error}`
+        };
       }
+
+      deployedContracts.push(jobRegistryResult.contract!);
+      deploymentTxHashes.push(jobRegistryResult.deploymentTxHash!);
+
+      // Deploy TriggerGasRegistry
+      logger.info('Deploying TriggerGasRegistry contract');
+      const gasRegistryResult = await this.executeForgeScript(
+        'script/deploy/2_deployTriggerGasRegistry.s.sol:DeployTriggerGasRegistry',
+        {
+          ...this.getForgeEnvironment(),
+          GAS_REGISTRY_SALT: salts.gasRegistrySalt,
+          GAS_REGISTRY_IMPL_SALT: salts.gasRegistryImplSalt,
+          JOB_REGISTRY_ADDRESS: jobRegistryResult.contract!.address
+        }
+      );
+
+      if (!gasRegistryResult.success) {
+        return {
+          success: false,
+          error: `Failed to deploy TriggerGasRegistry: ${gasRegistryResult.error}`
+        };
+      }
+
+      deployedContracts.push(gasRegistryResult.contract!);
+      deploymentTxHashes.push(gasRegistryResult.deploymentTxHash!);
+
+      // Deploy TaskExecutionSpoke
+      logger.info('Deploying TaskExecutionSpoke contract');
+      const spokeResult = await this.executeForgeScript(
+        'script/deploy/4_deployTaskExecutionSpoke.s.sol:DeployTaskExecutionSpoke',
+        {
+          ...this.getForgeEnvironment(),
+          TASK_EXECUTION_SALT: salts.taskExecutionSalt,
+          TASK_EXECUTION_IMPL_SALT: salts.taskExecutionImplSalt,
+          JOB_REGISTRY_ADDRESS: jobRegistryResult.contract!.address,
+          GAS_REGISTRY_ADDRESS: gasRegistryResult.contract!.address
+        }
+      );
+
+      if (!spokeResult.success) {
+        return {
+          success: false,
+          error: `Failed to deploy TaskExecutionSpoke: ${spokeResult.error}`
+        };
+      }
+
+      deployedContracts.push(spokeResult.contract!);
+      deploymentTxHashes.push(spokeResult.deploymentTxHash!);
 
       // Configure contract relationships after all deployments
       await this.configureContractRelationships(deployedContracts);
@@ -371,52 +305,78 @@ class ContractsService {
       };
 
     } catch (error) {
-      logger.error('Contract deployment execution failed', { error });
+      logger.error('Forge deployment execution failed', { error });
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Deployment execution failed'
+        error: error instanceof Error ? error.message : 'Forge deployment execution failed'
       };
     }
   }
 
   /**
-   * Deploy a single contract
+   * Execute a forge script and parse the results
    */
-  private async deploySingleContract(
-    contractName: string,
-    contractArtifact: TriggerXContract,
-    constructorArgs: any[]
+  private async executeForgeScript(
+    scriptPath: string,
+    env: Record<string, string>
   ): Promise<{ success: boolean; contract?: ContractInfo; deploymentTxHash?: string; error?: string }> {
     try {
-      logger.info(`Deploying ${contractName} with constructor args:`, constructorArgs);
-
-      // TODO: Implement actual contract deployment using viem
-      // This is a placeholder implementation
+      const command = `forge script ${scriptPath} --broadcast --rpc-url ${this.currentChainRpcUrl} --skip-simulation --non-interactive --chain-id 421614`;
       
-      // Simulate deployment process
-      await this.simulateContractDeployment(contractName);
+      logger.info(`Executing forge script: ${scriptPath}`, {
+        command,
+        rpcUrl: this.currentChainRpcUrl
+      });
 
-      // Return mock deployment result
-      const contractAddress = '0x' + '0'.repeat(40); // Placeholder address
-      const deploymentTxHash = '0x' + '0'.repeat(64); // Placeholder tx hash
+      const { stdout, stderr } = await execAsync(command, {
+        env: { ...process.env, ...env },
+        cwd: './triggerx-contracts/contracts',
+        timeout: config.deploymentTimeout // Use config timeout
+      });
+
+      if (stderr && !stderr.includes('WARNING')) {
+        logger.error('Forge script execution failed', { stderr });
+        return {
+          success: false,
+          error: `Forge script execution failed: ${stderr}`
+        };
+      }
+
+      // Parse the output to extract contract addresses and transaction hashes
+      const addresses = this.parseForgeOutput(stdout);
+      const contractName = this.extractContractName(scriptPath);
+
+      if (!addresses.proxy || !addresses.txHash) {
+        logger.error('Failed to parse forge output', { stdout });
+        return {
+          success: false,
+          error: 'Failed to parse contract addresses from forge output'
+        };
+      }
+
+      logger.info(`Forge script completed successfully: ${contractName}`, {
+        proxy: addresses.proxy,
+        implementation: addresses.implementation,
+        txHash: addresses.txHash
+      });
 
       return {
         success: true,
         contract: {
           name: contractName,
-          address: contractAddress,
-          abi: contractArtifact.abi,
-          bytecode: contractArtifact.bytecode,
-          deploymentTxHash
+          address: addresses.proxy,
+          abi: [], // Will be loaded from artifacts if needed
+          bytecode: '0x', // Will be loaded from artifacts if needed
+          deploymentTxHash: addresses.txHash
         },
-        deploymentTxHash
+        deploymentTxHash: addresses.txHash
       };
 
     } catch (error) {
-      logger.error(`Failed to deploy contract: ${contractName}`, { error });
+      logger.error(`Failed to execute forge script: ${scriptPath}`, { error });
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Contract deployment failed'
+        error: error instanceof Error ? error.message : 'Forge script execution failed'
       };
     }
   }
@@ -437,12 +397,9 @@ class ContractsService {
         throw new Error('Required contracts not found for configuration');
       }
 
-      // TODO: Implement actual contract configuration
+      // TODO: Implement actual contract configuration using forge scripts
       // This would involve calling setter functions on the contracts to establish relationships
       
-      // Simulate configuration process
-      await this.simulateContractConfiguration();
-
       logger.info('Contract relationships configured successfully');
 
     } catch (error) {
@@ -452,52 +409,95 @@ class ContractsService {
   }
 
   /**
-   * Simulate contract deployment process for testing
-   * TODO: Replace with actual contract deployment
+   * Get deterministic salts for contract deployments
+   * These salts are FIXED and should be the same across ALL chains
+   * This ensures the same contract addresses on every chain deployment
    */
-  private async simulateContractDeployment(contractName: string): Promise<void> {
-    logger.info(`Simulating ${contractName} deployment...`);
-    
-    // Simulate deployment steps
-    const steps = [
-      'Validating contract bytecode',
-      'Estimating gas costs',
-      'Deploying contract',
-      'Waiting for confirmation',
-      'Verifying deployment'
-    ];
-
-    for (const step of steps) {
-      logger.info(`${contractName} deployment step: ${step}`);
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-
-    logger.info(`${contractName} deployment simulation completed`);
+  private getDeploymentSalts(): {
+    jobRegistrySalt: string;
+    jobRegistryImplSalt: string;
+    gasRegistrySalt: string;
+    gasRegistryImplSalt: string;
+    taskExecutionSalt: string;
+    taskExecutionImplSalt: string;
+  } {
+    return {
+      jobRegistrySalt: contractConfig.fixed.jobRegistrySalt || 'TriggerX_JobRegistry_v1',
+      jobRegistryImplSalt: contractConfig.fixed.jobRegistryImplSalt || 'TriggerX_JobRegistry_Impl_v1',
+      gasRegistrySalt: contractConfig.fixed.gasRegistrySalt || 'TriggerX_GasRegistry_v1',
+      gasRegistryImplSalt: contractConfig.fixed.gasRegistryImplSalt || 'TriggerX_GasRegistry_Impl_v1',
+      taskExecutionSalt: contractConfig.fixed.taskExecutionSalt || 'TriggerX_TaskExecution_v1',
+      taskExecutionImplSalt: contractConfig.fixed.taskExecutionImplSalt || 'TriggerX_TaskExecution_Impl_v1'
+    };
   }
 
   /**
-   * Simulate contract configuration process for testing
-   * TODO: Replace with actual contract configuration
+   * Get environment variables for forge script execution
    */
-  private async simulateContractConfiguration(): Promise<void> {
-    logger.info('Simulating contract configuration...');
-    
-    // Simulate configuration steps
-    const steps = [
-      'Setting up JobRegistry permissions',
-      'Configuring TriggerGasRegistry relationships',
-      'Initializing TaskExecutionSpoke connections',
-      'Verifying contract relationships'
-    ];
+  private getForgeEnvironment(): Record<string, string> {
+    // Ensure private key has 0x prefix for Forge compatibility
+    const privateKey = config.deployerPrivateKey.startsWith('0x') 
+      ? config.deployerPrivateKey 
+      : `0x${config.deployerPrivateKey}`;
 
-    for (const step of steps) {
-      logger.info(`Configuration step: ${step}`);
-      // Simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 300));
+    const env: Record<string, string> = {
+      PRIVATE_KEY: privateKey,
+      RPC_URL: this.currentChainRpcUrl,
+      // Use contractConfig for environment variables
+      LZ_ENDPOINT: contractConfig.fixed.lzEndpoint || '',
+      LZ_EID_BASE: contractConfig.fixed.lzEIDBase.toString(),
+      TG_PER_ETH: contractConfig.fixed.tgPerEth.toString(),
+      BASE_RPC: contractConfig.fixed.baseRPC || ''
+    };
+
+    // Add Etherscan API key if available
+    if (config.etherscanApiKey) {
+      env.ETHERSCAN_API_KEY = config.etherscanApiKey;
     }
 
-    logger.info('Contract configuration simulation completed');
+    return env;
+  }
+
+  /**
+   * Parse forge script output to extract contract addresses and transaction hashes
+   */
+  private parseForgeOutput(output: string): {
+    proxy?: string;
+    implementation?: string;
+    txHash?: string;
+  } {
+    const result: { proxy?: string; implementation?: string; txHash?: string } = {};
+
+    // Look for proxy address in deployment summary
+    const proxyMatch = output.match(/Proxy:\s*(0x[a-fA-F0-9]{40})/);
+    if (proxyMatch) {
+      result.proxy = proxyMatch[1];
+    }
+
+    // Look for implementation address in deployment summary
+    const implMatch = output.match(/Implementation:\s*(0x[a-fA-F0-9]{40})/);
+    if (implMatch) {
+      result.implementation = implMatch[1];
+    }
+
+    // Look for transaction hash in broadcast logs
+    const txMatch = output.match(/Transaction hash:\s*(0x[a-fA-F0-9]{64})/);
+    if (txMatch) {
+      result.txHash = txMatch[1];
+    }
+
+    return result;
+  }
+
+  /**
+   * Extract contract name from script path
+   */
+  private extractContractName(scriptPath: string): string {
+    const match = scriptPath.match(/\/([^\/]+)\.s\.sol/);
+    if (match) {
+      return match[1].replace('deploy', '').replace(/([A-Z])/g, ' $1').trim();
+    }
+    return 'Unknown';
   }
 
   /**
@@ -545,14 +545,7 @@ class ContractsService {
    * Get available contracts
    */
   getAvailableContracts(): string[] {
-    return Array.from(this.contracts.keys());
-  }
-
-  /**
-   * Get contract artifact by name
-   */
-  getContractArtifact(contractName: string): TriggerXContract | undefined {
-    return this.contracts.get(contractName);
+    return ['JobRegistry', 'TriggerGasRegistry', 'TaskExecutionSpoke'];
   }
 }
 

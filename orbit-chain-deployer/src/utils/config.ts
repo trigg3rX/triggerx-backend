@@ -20,6 +20,9 @@ export interface Config {
   validatorPrivateKey: string;
   parentChainBeaconRpcUrl?: string;
   
+  // Etherscan configuration
+  etherscanApiKey?: string;
+  
   // Deployment configuration
   deploymentTimeout: number;
   maxRetries: number;
@@ -61,9 +64,26 @@ export interface NodeConfig {
 
 // Interface for contract configuration
 export interface ContractConfig {
+  // Contract addresses (populated after deployment)
   taskExecutionAddress: string;
   gasRegistryAddress: string;
   jobRegistryAddress: string;
+  attesttationCenterAddress: string;
+  
+  // Fixed configuration for forge scripts
+  fixed: {
+    baseRPC: string;
+    lzEndpoint: string;
+    lzEIDBase: number;
+    tgPerEth: number;
+    // Salt configuration for deterministic deployments
+    jobRegistrySalt: string;
+    jobRegistryImplSalt: string;
+    gasRegistrySalt: string;
+    gasRegistryImplSalt: string;
+    taskExecutionSalt: string;
+    taskExecutionImplSalt: string;
+  };
 }
 
 // Validate required environment variables
@@ -120,6 +140,9 @@ const createConfig = (): Config => {
     validatorPrivateKey: process.env.VALIDATOR_PRIVATE_KEY!,
     parentChainBeaconRpcUrl: process.env.ETHEREUM_BEACON_RPC_URL,
     
+    // Etherscan configuration
+    etherscanApiKey: process.env.ETHERSCAN_API_KEY,
+    
     // Deployment configuration
     deploymentTimeout: parseInt(process.env.DEPLOYMENT_TIMEOUT || '300000', 10), // 5 minutes default
     maxRetries: parseInt(process.env.MAX_RETRIES || '3', 10),
@@ -148,7 +171,7 @@ const createConfig = (): Config => {
       
       // Health check configuration
       healthCheckInterval: parseInt(process.env.HEALTH_CHECK_INTERVAL || '30000', 10),
-      startupTimeout: parseInt(process.env.NODE_STARTUP_TIMEOUT || '1080000', 10), // avg 15 minutes
+      startupTimeout: parseInt(process.env.NODE_STARTUP_TIMEOUT || '1800000', 10), // avg is 15 minutes
       
       // Default ports
       defaultRpcPort: parseInt(process.env.DEFAULT_RPC_PORT || '8449', 10),
@@ -159,9 +182,28 @@ const createConfig = (): Config => {
 
 const createContractConfig = (): ContractConfig => {
   return {
+    // Contract addresses (populated after deployment)
     taskExecutionAddress: process.env.TASK_EXECUTION_ADDRESS || '',
     gasRegistryAddress: process.env.GAS_REGISTRY_ADDRESS || '',
     jobRegistryAddress: process.env.JOB_REGISTRY_ADDRESS || '',
+    attesttationCenterAddress: process.env.ATTESTTATION_CENTER_ADDRESS || '',
+    
+    // Fixed configuration for forge scripts
+    fixed: {
+      // LayerZero configuration
+      baseRPC: process.env.BASE_RPC || '',
+      lzEndpoint: process.env.LZ_ENDPOINT || '',
+      lzEIDBase: parseInt(process.env.LZ_EID_BASE || '0', 10),
+      tgPerEth: parseInt(process.env.TG_PER_ETH || '0', 10),
+      
+      // Salt configuration for deterministic deployments
+      jobRegistrySalt: process.env.JOB_REGISTRY_SALT || '',
+      jobRegistryImplSalt: process.env.JOB_REGISTRY_IMPL_SALT || '',
+      gasRegistrySalt: process.env.GAS_REGISTRY_SALT || '',
+      gasRegistryImplSalt: process.env.GAS_REGISTRY_IMPL_SALT || '',
+      taskExecutionSalt: process.env.TASK_EXECUTION_SALT || '',
+      taskExecutionImplSalt: process.env.TASK_EXECUTION_IMPL_SALT || ''
+    }
   };
 };
 

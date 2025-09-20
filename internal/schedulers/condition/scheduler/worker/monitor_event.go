@@ -200,11 +200,12 @@ func (w *EventWorker) matchesEventFilter(log types.Log) bool {
 	// Check if the filter value is a hex address
 	if common.IsHexAddress(filterValue) {
 		filterAddr := common.HexToAddress(filterValue)
+		filterAddrHash := common.BytesToHash(filterAddr.Bytes())
 		for i, topic := range log.Topics {
 			if i == 0 {
 				continue
 			}
-			if topic == filterAddr.Hash() {
+			if topic == filterAddrHash {
 				w.Logger.Debug("Event filter matched address in topic",
 					"job_id", w.EventWorkerData.JobID,
 					"topic_index", i,

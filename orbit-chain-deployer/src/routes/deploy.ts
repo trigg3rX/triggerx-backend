@@ -34,11 +34,8 @@ const orbitService = new OrbitService({
 });
 
 const contractsService = new ContractsService({
-  deployerPrivateKey: config.deployerPrivateKey || '',
-  contractArtifactsBaseUrl: process.env.CONTRACT_ARTIFACTS_BASE_URL || '',
-  jobRegistryAddress: process.env.JOB_REGISTRY_ADDRESS || '',
-  gasRegistryAddress: process.env.GAS_REGISTRY_ADDRESS || '',
-  taskExecutionSpokeAddress: process.env.TASK_EXECUTION_SPOKE_ADDRESS || ''
+  deployerPrivateKey: config.deployerPrivateKey,
+  contractArtifactsBaseUrl: process.env.CONTRACT_ARTIFACTS_BASE_URL
 });
 
 const statusService = new StatusService({
