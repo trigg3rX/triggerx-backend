@@ -1,3 +1,22 @@
+/**
+ * Deployment Routes
+ * 
+ * This module handles deployment requests for Orbit chains and TriggerX contracts.
+ * 
+ * Contract Deployment:
+ * - Uses bytecode and ABI loaded from triggerx-contracts submodule artifacts
+ * - Supports JobRegistry, TriggerGasRegistry, and TaskExecutionSpoke contracts
+ * - Automatically loads artifacts on service initialization
+ * - Validates contract names against available artifacts
+ * 
+ * Available endpoints:
+ * - POST /deploy-chain: Deploy a new Orbit chain
+ * - POST /deploy-contracts: Deploy TriggerX contracts to an Orbit chain
+ * - GET /deployment-status/:deploymentId: Get deployment status
+ * - GET /deployment-stats: Get deployment statistics
+ * - GET /contract-artifacts: Get information about loaded contract artifacts
+ */
+
 import { Router, Request, Response } from 'express';
 import {
   DeployChainRequest,
@@ -158,7 +177,21 @@ router.post('/deploy-chain', async (req: Request, res: Response) => {
   }
 });
 
-// Deploy Contracts endpoint - called by Go backend to deploy TriggerX contracts
+/**
+ * Deploy Contracts endpoint - called by Go backend to deploy TriggerX contracts
+ * 
+ * Example request body:
+ * {
+ *   "deployment_id": "deployment-123",
+ *   "chain_address": "0x1234567890123456789012345678901234567890",
+ *   "rpc_url": "https://orbit-chain-12345678.arbitrum.io/rpc", // optional
+ *   "contracts": [
+ *     { "name": "JobRegistry", "constructor_args": [] },
+ *     { "name": "TriggerGasRegistry", "constructor_args": [owner, operator, tgPerEth] },
+ *     { "name": "TaskExecutionSpoke", "constructor_args": [] }
+ *   ]
+ * }
+ */
 router.post('/deploy-contracts', async (req: Request, res: Response) => {
   const { v4: uuidv4 } = await import('uuid');
   const requestId = uuidv4();
@@ -182,6 +215,31 @@ router.post('/deploy-contracts', async (req: Request, res: Response) => {
         message: `Missing required fields: ${missing.join(', ')}`
       });
     }
+
+    // Validate contract names
+    const availableContracts = contractsService.getAvailableContracts();
+    const invalidContracts = deployRequest.contracts.filter(contract => 
+      !availableContracts.includes(contract.name)
+    );
+    
+    if (invalidContracts.length > 0) {
+      return res.status(400).json({
+        success: false,
+        deployment_id: deployRequest.deployment_id,
+        status: DeploymentStatus.FAILED,
+        message: `Invalid contract names: ${invalidContracts.map(c => c.name).join(', ')}. Available: ${availableContracts.join(', ')}`
+      });
+    }
+
+    // Check if artifacts are loaded
+    if (!contractsService.hasArtifactsLoaded()) {
+      return res.status(500).json({
+        success: false,
+        deployment_id: deployRequest.deployment_id,
+        status: DeploymentStatus.FAILED,
+        message: 'Contract artifacts not loaded. Please check the triggerx-contracts submodule.'
+      });
+    }
     
     // Update status to deploying contracts
     await statusService.updateDeploymentStatus(
@@ -190,12 +248,23 @@ router.post('/deploy-contracts', async (req: Request, res: Response) => {
       { deploymentLogs: 'Starting TriggerX contracts deployment' }
     );
 
+    // Log contract deployment details
+    logger.info('Contract deployment details', {
+      deploymentId: deployRequest.deployment_id,
+      chainAddress: deployRequest.chain_address,
+      contractsToDeploy: deployRequest.contracts.map(c => ({
+        name: c.name,
+        hasConstructorArgs: !!c.constructor_args?.length
+      })),
+      rpcUrl: deployRequest.rpc_url || 'auto-detected'
+    });
+
     // Update local progress
     statusService.updateDeploymentProgress(deployRequest.deployment_id, {
       status: DeploymentStatus.DEPLOYING_CONTRACTS,
       progress: 60,
       currentStep: 'Deploying TriggerX contracts',
-      log: 'Starting contracts deployment'
+      log: `Starting deployment of ${deployRequest.contracts.length} contracts: ${deployRequest.contracts.map(c => c.name).join(', ')}`
     });
 
     // Deploy the contracts
@@ -355,6 +424,51 @@ router.get('/deployment-stats', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get deployment statistics',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    return;
+  }
+});
+
+// Get contract artifacts information endpoint
+router.get('/contract-artifacts', async (req: Request, res: Response) => {
+  const { v4: uuidv4 } = await import('uuid');
+  const requestId = uuidv4();
+  
+  try {
+    logger.info('Contract artifacts information request received', { requestId });
+    
+    const artifactsLoaded = contractsService.hasArtifactsLoaded();
+    const availableContracts = contractsService.getAvailableContracts();
+    const loadedArtifacts = contractsService.getLoadedArtifacts();
+    
+    // Create a summary of loaded artifacts (without exposing full ABI/bytecode)
+    const artifactSummary = Array.from(loadedArtifacts.entries()).map(([name, artifact]) => ({
+      name,
+      abiLength: artifact.abi.length,
+      hasBytecode: !!artifact.bytecode,
+      hasDeployedBytecode: !!artifact.deployedBytecode,
+      bytecodeLength: artifact.bytecode?.length || 0
+    }));
+    
+    res.status(200).json({
+      success: true,
+      artifactsLoaded,
+      availableContracts,
+      loadedArtifacts: artifactSummary,
+      timestamp: new Date().toISOString()
+    });
+    return;
+    
+  } catch (error) {
+    logger.error('Failed to get contract artifacts information', { 
+      requestId, 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get contract artifacts information',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
     return;

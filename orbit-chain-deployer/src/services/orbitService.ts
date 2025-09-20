@@ -7,6 +7,7 @@ import { DeployChainRequest, DeploymentStatus, ChainDeploymentResponse, DeployCo
 import NodeManagementService from './nodeService';
 import { NodeManagementConfig } from '../types/deployment';
 import ContractsService, { ContractDeploymentConfig } from './contractsService';
+import BridgeService, { BridgeServiceConfig } from './bridgeService';
 
 export interface OrbitDeploymentConfig {
   parentChainRpc: string;
@@ -48,6 +49,7 @@ class OrbitService {
   private validatorWallet: any;
   private nodeService!: NodeManagementService;
   private contractsService?: ContractsService;
+  private bridgeService?: BridgeService;
 
   constructor(config: OrbitDeploymentConfig) {
     this.config = config;
@@ -176,6 +178,19 @@ class OrbitService {
         
         this.contractsService = new ContractsService(contractConfig);
       }
+
+      // Initialize BridgeService for funding the deployer wallet
+      const bridgeConfig: BridgeServiceConfig = {
+        parentChainRpc: this.config.parentChainRpc,
+        parentChainId: this.config.parentChainId,
+        deployerPrivateKey: this.config.deployerPrivateKey,
+        bridgeAmount: "0.02", // Bridge 0.02 ETH by default
+        maxSubmissionCost: "1000000000000000", // 0.001 ETH
+        maxGas: "1000000", // 1M gas
+        gasPriceBid: "1000000000" // 1 gwei
+      };
+      
+      this.bridgeService = new BridgeService(bridgeConfig);
       
       logger.info('Orbit service dependencies initialized successfully');
     } catch (error) {
@@ -280,6 +295,51 @@ class OrbitService {
           deploymentId: request.deployment_id,
           rpcUrl: nodeStartupResult.rpcUrl
         });
+
+        // Step 3.6: Fund deployer wallet directly using retryable tickets
+        if (this.bridgeService && nodeStartupResult.rpcUrl) {
+          logger.info('Step 3.6: Funding deployer wallet directly via retryable tickets', { 
+            deploymentId: request.deployment_id,
+            rpcUrl: nodeStartupResult.rpcUrl 
+          });
+          
+          try {
+            // Setup Orbit chain client for bridge service
+            await this.bridgeService.setupOrbitChainClient(request.chain_id, nodeStartupResult.rpcUrl);
+            
+            // Fund deployer wallet directly using retryable tickets
+            const fundingResult = await this.bridgeService.fundDeployerDirectly(
+              "0.02", // Use 0.02 ETH as per your configuration
+              orbitDeploymentResult.chainAddress! as `0x${string}`
+            );
+            
+            if (!fundingResult.success) {
+              logger.warn('Step 3.6 failed: Direct funding failed', {
+                deploymentId: request.deployment_id,
+                error: fundingResult.error
+              });
+              // Don't fail the entire deployment if funding fails
+            } else {
+              logger.info('Step 3.6 completed: Deployer wallet funded via retryable ticket', {
+                deploymentId: request.deployment_id,
+                fundingTxHash: fundingResult.transactionHash,
+                deployerAddress: this.bridgeService.getDeployerAddress()
+              });
+            }
+          } catch (error) {
+            logger.warn('Step 3.6 failed: Direct funding failed', {
+              deploymentId: request.deployment_id,
+              error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            // Don't fail the entire deployment if funding fails
+          }
+        } else {
+          logger.info('Step 3.6 skipped: Bridge service not available or node RPC URL not ready', { 
+            deploymentId: request.deployment_id,
+            hasBridgeService: !!this.bridgeService,
+            hasRpcUrl: !!nodeStartupResult.rpcUrl
+          });
+        }
       } catch (error) {
         logger.error('Step 2 or 3 failed: Node configuration or startup failed', {
           deploymentId: request.deployment_id,
@@ -302,11 +362,12 @@ class OrbitService {
         const contractsRequest: DeployContractsRequest = {
           deployment_id: request.deployment_id,
           chain_address: orbitDeploymentResult.chainAddress!,
+          chain_id: request.chain_id, // Pass the actual chain ID from the deployment request
           rpc_url: nodeStartupResult.rpcUrl, // Use the node's RPC URL
           contracts: [
-            { name: 'JobRegistry', bytecode: '' },
-            { name: 'TriggerGasRegistry', bytecode: '' },
-            { name: 'TaskExecutionSpoke', bytecode: '' }
+            { name: 'JobRegistry', constructor_args: [] },
+            { name: 'TriggerGasRegistry', constructor_args: [] },
+            { name: 'TaskExecutionSpoke', constructor_args: [] }
           ]
         };
         
@@ -339,8 +400,8 @@ class OrbitService {
         deploymentId: request.deployment_id,
         chainName: request.chain_name,
         chainAddress: orbitDeploymentResult.chainAddress,
-        rpcUrl: nodeStartupResult.rpcUrl,
-        contractsDeployed: contractsResult.length
+        rpcUrl: nodeStartupResult.rpcUrl
+        // contractsDeployed: contractsResult.length
       });
 
       return {
@@ -350,8 +411,8 @@ class OrbitService {
         confirmationTxHash: orbitDeploymentResult.confirmationTxHash,
         rpcUrl: nodeStartupResult.rpcUrl,
         explorerUrl: nodeStartupResult.explorerUrl,
-        nodeConfigPath: nodeStartupResult.nodeConfigPath,
-        contracts: contractsResult
+        nodeConfigPath: nodeStartupResult.nodeConfigPath
+        // contracts: contractsResult
       };
 
     } catch (error) {

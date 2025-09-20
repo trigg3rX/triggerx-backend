@@ -106,10 +106,10 @@ export interface DeployChainRequest {
 export interface DeployContractsRequest {
   deployment_id: string;
   chain_address: string;
+  chain_id?: number; // Chain ID of the deployed Orbit chain
   rpc_url?: string; // RPC URL of the Orbit chain node
   contracts: {
     name: string;
-    bytecode: string;
     constructor_args?: any[];
   }[];
 }
