@@ -203,8 +203,4 @@ else
         -t triggerx-${DOCKER_NAME}:${VERSION} .
 fi
 
-if [[ "$SERVICE" == "all" ]]; then
-    echo "All services built successfully with version ${VERSION}"
-else
-    echo "Successfully built: triggerx-${SERVICE}:${VERSION}"
-fi
+echo "Successfully built: ${VERSION}"

@@ -7,7 +7,7 @@ fi
 
 # Ensure mounted directories exist and have proper permissions
 mkdir -p data/cache
-mkdir -p data/logs
+mkdir -p data/logs/keeper
 mkdir -p data/peerstore
 
 # Set up signal handlers
