@@ -91,13 +91,15 @@ func (r *conditionJobRepository) GetActiveConditionJobs() ([]commonTypes.Conditi
 	var conditionJobs []commonTypes.ConditionJobData
 	iter := r.db.Session().Query(queries.GetActiveConditionJobsQuery).Iter()
 	var conditionJob commonTypes.ConditionJobData
+	var jobIDBigInt *big.Int
 	for iter.Scan(
-		&conditionJob.JobID, &conditionJob.ExpirationTime, &conditionJob.Recurring,
+		&jobIDBigInt, &conditionJob.ExpirationTime, &conditionJob.Recurring,
 		&conditionJob.ConditionType, &conditionJob.UpperLimit, &conditionJob.LowerLimit,
 		&conditionJob.ValueSourceType, &conditionJob.ValueSourceUrl, &conditionJob.TargetChainID,
 		&conditionJob.TargetContractAddress, &conditionJob.TargetFunction, &conditionJob.ABI,
 		&conditionJob.ArgType, &conditionJob.Arguments, &conditionJob.DynamicArgumentsScriptUrl,
 		&conditionJob.IsCompleted, &conditionJob.IsActive, &conditionJob.SelectedKeyRoute) {
+		conditionJob.JobID = commonTypes.NewBigInt(jobIDBigInt)
 		conditionJobs = append(conditionJobs, conditionJob)
 	}
 	if err := iter.Close(); err != nil {

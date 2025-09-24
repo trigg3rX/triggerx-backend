@@ -87,13 +87,15 @@ func (r *eventJobRepository) GetActiveEventJobs() ([]commonTypes.EventJobData, e
 	var eventJobs []commonTypes.EventJobData
 	iter := r.db.Session().Query(queries.GetActiveEventJobsQuery).Iter()
 	var eventJob commonTypes.EventJobData
+	var jobIDBigInt *big.Int
 	for iter.Scan(
-		&eventJob.JobID, &eventJob.ExpirationTime, &eventJob.Recurring,
+		&jobIDBigInt, &eventJob.ExpirationTime, &eventJob.Recurring,
 		&eventJob.TriggerChainID, &eventJob.TriggerContractAddress, &eventJob.TriggerEvent,
 		&eventJob.EventFilterParaName, &eventJob.EventFilterValue,
 		&eventJob.TargetChainID, &eventJob.TargetContractAddress, &eventJob.TargetFunction,
 		&eventJob.ABI, &eventJob.ArgType, &eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl,
 		&eventJob.IsCompleted, &eventJob.IsActive) {
+		eventJob.JobID = commonTypes.NewBigInt(jobIDBigInt)
 		eventJobs = append(eventJobs, eventJob)
 	}
 	if err := iter.Close(); err != nil {
