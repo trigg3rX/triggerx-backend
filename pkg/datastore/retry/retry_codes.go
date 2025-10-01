@@ -1,4 +1,4 @@
-package database
+package retry
 
 import (
 	"errors"
