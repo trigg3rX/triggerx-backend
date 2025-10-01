@@ -123,11 +123,7 @@ func (r *userRepository) GetUserDataByAddress(address string) (int64, types.User
 	if err != nil {
 		return -1, types.UserData{}, err
 	}
-	// Convert jobIDs from []*big.Int to []*BigInt
-	userData.JobIDs = make([]*big.Int, len(jobIDs))
-	for i, jobID := range jobIDs {
-		userData.JobIDs[i] = jobID
-	}
+	userData.JobIDs = jobIDs
 	return userID, userData, nil
 }
 
