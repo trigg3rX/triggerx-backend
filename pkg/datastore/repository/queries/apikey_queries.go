@@ -3,7 +3,8 @@ package queries
 // Create Queries
 const (
 	CreateApiKeyQuery = `
-			INSERT INTO triggerx.apikeys (key, owner, is_active, rate_limit, last_used, created_at)
+			INSERT INTO triggerx.apikeys (
+			key, owner, is_active, rate_limit, last_used, created_at)
 			VALUES (?, ?, ?, ?, ?, ?)`
 )
 
@@ -23,10 +24,6 @@ const (
 			UPDATE triggerx.apikeys 
 			SET last_used = ?, success_count = ?, failed_count = ? 
 			WHERE key = ?`
-
-	// Delete Queries
-	DeleteApiKeyQuery = `
-	DELETE FROM triggerx.apikeys WHERE key = ?`
 )
 
 // Read Queries
@@ -39,12 +36,12 @@ const (
 	GetApiKeyDataByApiKeyQuery = `
 			SELECT key, owner, is_active, rate_limit, success_count, failed_count, last_used, created_at 
 			FROM triggerx.apikeys 
-			WHERE key = ? ALLOW FILTERING`
+			WHERE key = ?`
 
 	GetApiKeyCallCountQuery = `
 			SELECT success_count, failed_count 
 			FROM triggerx.apikeys 
-			WHERE key = ? ALLOW FILTERING`
+			WHERE key = ?`
 
 	GetApiKeyByOwnerQuery = `
 			SELECT key
@@ -54,5 +51,5 @@ const (
 	GetApiOwnerByApiKeyQuery = `
 			SELECT owner
 			FROM triggerx.apikeys 
-			WHERE key = ? ALLOW FILTERING`
+			WHERE key = ?`
 )

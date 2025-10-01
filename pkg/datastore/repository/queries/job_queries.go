@@ -2,14 +2,13 @@ package queries
 
 // Create Queries
 const (
-	GetMaxJobIDQuery = `SELECT MAX(job_id) FROM triggerx.job_data`
-
 	CreateJobDataQuery = `
 			INSERT INTO triggerx.job_data (
-				job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
-				custom, time_frame, recurring, status, job_cost_prediction,
-				created_at, updated_at, timezone, is_imua, created_chain_id
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+				job_id, job_title, task_definition_id, created_chain_id, 
+				user_id, link_job_id, chain_status, time_frame, is_imua,
+				job_type, time_frame, recurring, status, job_cost_prediction,
+				created_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	// 15 values to be inserted, so 15 ?s
 )
 

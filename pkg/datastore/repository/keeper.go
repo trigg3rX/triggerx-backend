@@ -4,20 +4,17 @@ import (
 	"fmt"
 	"sort"
 
-	// "time"
-
 	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/connection"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/repository/queries"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type KeeperRepository interface {
 	CheckKeeperExists(address string) (int64, error)
 	CreateKeeper(keeperData types.CreateKeeperData) (int64, error)
 	GetKeeperAsPerformer() ([]types.GetPerformerData, error)
-	GetKeeperDataByID(id int64) (commonTypes.KeeperData, error)
+	GetKeeperDataByID(id int64) (types.KeeperData, error)
 	IncrementKeeperTaskCount(id int64) (int64, error)
 	GetKeeperTaskCount(id int64) (int64, error)
 	UpdateKeeperPoints(id int64, taskFee float64) (float64, error)
@@ -27,23 +24,34 @@ type KeeperRepository interface {
 	GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntry, error)
 	GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error)
 	GetKeeperLeaderboardByIdentifierInDB(address string, name string) (types.KeeperLeaderboardEntry, error)
-	CheckKeeperExistsByAddress(address string) (int64, error)
 	CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error)
 }
 
 type keeperRepository struct {
-	db *database.Connection
+	db connection.ConnectionManager
 }
 
-func NewKeeperRepository(db *database.Connection) KeeperRepository {
+func NewKeeperRepository(db connection.ConnectionManager) KeeperRepository {
 	return &keeperRepository{
 		db: db,
 	}
 }
 
+func (r *keeperRepository) CheckKeeperExists(address string) (int64, error) {
+	var id int64
+	err := r.db.GetSession().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
+	if err == gocql.ErrNotFound {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func (r *keeperRepository) CreateKeeper(keeperData types.CreateKeeperData) (int64, error) {
 	var maxKeeperID int64
-	err := r.db.Session().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
+	err := r.db.GetSession().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
 	if err == gocql.ErrNotFound {
 		// If no keeper exists yet, start with ID 1
 		maxKeeperID = 0
@@ -51,7 +59,7 @@ func (r *keeperRepository) CreateKeeper(keeperData types.CreateKeeperData) (int6
 		return -1, fmt.Errorf("error getting max keeper ID: %v", err)
 	}
 
-	err = r.db.Session().Query(queries.CreateNewKeeperQuery, maxKeeperID+1, keeperData.KeeperName, keeperData.KeeperAddress, 1.0, 0.0, true, keeperData.EmailID).Exec()
+	err = r.db.GetSession().Query(queries.CreateNewKeeperQuery, maxKeeperID+1, keeperData.KeeperName, keeperData.KeeperAddress, 1.0, 0.0, true, keeperData.EmailID).Exec()
 	if err != nil {
 		return -1, err
 	}
@@ -60,7 +68,7 @@ func (r *keeperRepository) CreateKeeper(keeperData types.CreateKeeperData) (int6
 }
 
 func (r *keeperRepository) GetKeeperAsPerformer() ([]types.GetPerformerData, error) {
-	iter := r.db.Session().Query(queries.GetKeeperAsPerformersQuery).Iter()
+	iter := r.db.GetSession().Query(queries.GetKeeperAsPerformersQuery).Iter()
 
 	var performers []types.GetPerformerData
 	var performer types.GetPerformerData
@@ -76,9 +84,9 @@ func (r *keeperRepository) GetKeeperAsPerformer() ([]types.GetPerformerData, err
 	return performers, nil
 }
 
-func (r *keeperRepository) GetKeeperDataByID(id int64) (commonTypes.KeeperData, error) {
-	var keeperData commonTypes.KeeperData
-	err := r.db.Session().Query(queries.GetKeeperDataByIDQuery, id).Scan(
+func (r *keeperRepository) GetKeeperDataByID(id int64) (types.KeeperData, error) {
+	var keeperData types.KeeperData
+	err := r.db.GetSession().Query(queries.GetKeeperDataByIDQuery, id).Scan(
 		&keeperData.KeeperID,
 		&keeperData.KeeperName,
 		&keeperData.KeeperAddress,
@@ -89,7 +97,7 @@ func (r *keeperRepository) GetKeeperDataByID(id int64) (commonTypes.KeeperData, 
 		&keeperData.RewardsBooster,
 		&keeperData.VotingPower,
 		&keeperData.KeeperPoints,
-		&keeperData.ConnectionAddress,
+		&keeperData.OperatorID,
 		&keeperData.PeerID,
 		&keeperData.Whitelisted,
 		&keeperData.Registered,
@@ -104,14 +112,14 @@ func (r *keeperRepository) GetKeeperDataByID(id int64) (commonTypes.KeeperData, 
 		&keeperData.Uptime,
 	)
 	if err != nil {
-		return commonTypes.KeeperData{}, err
+		return types.KeeperData{}, err
 	}
 	return keeperData, nil
 }
 
-func (r *keeperRepository) CheckKeeperExists(address string) (int64, error) {
+func (r *keeperRepository) CheckKeeperExistsByAddress(address string) (int64, error) {
 	var id int64
-	err := r.db.Session().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
+	err := r.db.GetSession().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
 	if err == gocql.ErrNotFound {
 		return -1, nil
 	}
@@ -123,12 +131,12 @@ func (r *keeperRepository) CheckKeeperExists(address string) (int64, error) {
 
 func (r *keeperRepository) UpdateKeeperChatID(address string, chatID int64) error {
 	var id int64
-	err := r.db.Session().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
+	err := r.db.GetSession().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
 	if err != nil {
 		return err
 	}
 
-	err = r.db.Session().Query(queries.UpdateKeeperChatIDQuery, id, chatID).Exec()
+	err = r.db.GetSession().Query(queries.UpdateKeeperChatIDQuery, id, chatID).Exec()
 	if err != nil {
 		return err
 	}
@@ -138,14 +146,14 @@ func (r *keeperRepository) UpdateKeeperChatID(address string, chatID int64) erro
 
 func (r *keeperRepository) IncrementKeeperTaskCount(id int64) (int64, error) {
 	var currentCount int64
-	err := r.db.Session().Query(queries.GetKeeperTaskCountByIDQuery, id).Scan(&currentCount)
+	err := r.db.GetSession().Query(queries.GetKeeperTaskCountByIDQuery, id).Scan(&currentCount)
 	if err != nil {
 		return 0, err
 	}
 
 	newCount := currentCount + 1
 
-	err = r.db.Session().Query(queries.UpdateKeeperTaskCountQuery, newCount, id).Exec()
+	err = r.db.GetSession().Query(queries.UpdateKeeperTaskCountQuery, newCount, id).Exec()
 	if err != nil {
 		return 0, err
 	}
@@ -155,7 +163,7 @@ func (r *keeperRepository) IncrementKeeperTaskCount(id int64) (int64, error) {
 
 func (r *keeperRepository) GetKeeperTaskCount(id int64) (int64, error) {
 	var taskCount int64
-	err := r.db.Session().Query(queries.GetKeeperTaskCountByIDQuery, id).Scan(&taskCount)
+	err := r.db.GetSession().Query(queries.GetKeeperTaskCountByIDQuery, id).Scan(&taskCount)
 	if err != nil {
 		return 0, err
 	}
@@ -164,7 +172,7 @@ func (r *keeperRepository) GetKeeperTaskCount(id int64) (int64, error) {
 
 func (r *keeperRepository) GetKeeperPointsByIDInDB(id int64) (float64, error) {
 	var points float64
-	err := r.db.Session().Query(queries.GetKeeperPointsByIDQuery, id).Scan(&points)
+	err := r.db.GetSession().Query(queries.GetKeeperPointsByIDQuery, id).Scan(&points)
 	if err != nil {
 		return 0, err
 	}
@@ -173,7 +181,7 @@ func (r *keeperRepository) GetKeeperPointsByIDInDB(id int64) (float64, error) {
 
 func (r *keeperRepository) UpdateKeeperPoints(id int64, taskFee float64) (float64, error) {
 	var existingPoints float64
-	err := r.db.Session().Query(queries.GetKeeperPointsByIDQuery, id).Scan(&existingPoints)
+	err := r.db.GetSession().Query(queries.GetKeeperPointsByIDQuery, id).Scan(&existingPoints)
 	if err == gocql.ErrNotFound {
 		existingPoints = 0
 	}
@@ -183,7 +191,7 @@ func (r *keeperRepository) UpdateKeeperPoints(id int64, taskFee float64) (float6
 
 	newPoints := existingPoints + taskFee
 
-	err = r.db.Session().Query(queries.UpdateKeeperPointsQuery, newPoints, id).Exec()
+	err = r.db.GetSession().Query(queries.UpdateKeeperPointsQuery, newPoints, id).Exec()
 	if err != nil {
 		return 0, err
 	}
@@ -192,7 +200,7 @@ func (r *keeperRepository) UpdateKeeperPoints(id int64, taskFee float64) (float6
 
 func (r *keeperRepository) GetKeeperCommunicationInfo(id int64) (types.KeeperCommunicationInfo, error) {
 	var keeperCommunicationInfo types.KeeperCommunicationInfo
-	err := r.db.Session().Query(queries.GetKeeperCommunicationInfoQuery, id).Scan(&keeperCommunicationInfo.ChatID, &keeperCommunicationInfo.KeeperName, &keeperCommunicationInfo.EmailID)
+	err := r.db.GetSession().Query(queries.GetKeeperCommunicationInfoQuery, id).Scan(&keeperCommunicationInfo.ChatID, &keeperCommunicationInfo.KeeperName, &keeperCommunicationInfo.EmailID)
 	if err != nil {
 		return types.KeeperCommunicationInfo{}, err
 	}
@@ -200,7 +208,7 @@ func (r *keeperRepository) GetKeeperCommunicationInfo(id int64) (types.KeeperCom
 }
 
 func (r *keeperRepository) GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntry, error) {
-	iter := r.db.Session().Query(queries.GetKeeperLeaderboardQuery).Iter()
+	iter := r.db.GetSession().Query(queries.GetKeeperLeaderboardQuery).Iter()
 
 	var keeperLeaderboard []types.KeeperLeaderboardEntry
 	var keeperEntry types.KeeperLeaderboardEntry
@@ -243,7 +251,7 @@ func (r *keeperRepository) GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntr
 }
 
 func (r *keeperRepository) GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error) {
-	iter := r.db.Session().Query(queries.GetKeeperLeaderboardByOnImuaQuery, onImua).Iter()
+	iter := r.db.GetSession().Query(queries.GetKeeperLeaderboardByOnImuaQuery, onImua).Iter()
 
 	var keeperLeaderboard []types.KeeperLeaderboardEntry
 	var keeperEntry types.KeeperLeaderboardEntry
@@ -298,24 +306,12 @@ func (r *keeperRepository) GetKeeperLeaderboardByIdentifierInDB(address string, 
 		args = append(args, name)
 	}
 
-	err := r.db.Session().Query(query, args...).Scan(&keeperEntry.KeeperID, &keeperEntry.KeeperAddress, &keeperEntry.KeeperName, &keeperEntry.NoExecutedTasks, &keeperEntry.NoAttestedTasks, &keeperEntry.KeeperPoints)
+	err := r.db.GetSession().Query(query, args...).Scan(&keeperEntry.KeeperID, &keeperEntry.KeeperAddress, &keeperEntry.KeeperName, &keeperEntry.NoExecutedTasks, &keeperEntry.NoAttestedTasks, &keeperEntry.KeeperPoints)
 	if err != nil {
 		return types.KeeperLeaderboardEntry{}, err
 	}
 
 	return keeperEntry, nil
-}
-
-func (r *keeperRepository) CheckKeeperExistsByAddress(address string) (int64, error) {
-	var id int64
-	err := r.db.Session().Query(queries.GetKeeperIDByAddressQuery, address).Scan(&id)
-	if err == gocql.ErrNotFound {
-		return 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
 }
 
 func (r *keeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error) {
@@ -324,7 +320,7 @@ func (r *keeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.G
 		return 0, err
 	}
 	if existingKeeperID != 0 {
-		err = r.db.Session().Query(
+		err = r.db.GetSession().Query(
 			queries.UpdateKeeperFromGoogleFormQuery,
 			keeperData.KeeperName,
 			keeperData.KeeperAddress,
@@ -339,14 +335,14 @@ func (r *keeperRepository) CreateOrUpdateKeeperFromGoogleForm(keeperData types.G
 		return existingKeeperID, nil
 	}
 	var maxKeeperID int64
-	err = r.db.Session().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
+	err = r.db.GetSession().Query(queries.GetMaxKeeperIDQuery).Scan(&maxKeeperID)
 	if err == gocql.ErrNotFound {
 		maxKeeperID = 0
 	} else if err != nil {
 		return 0, err
 	}
 	currentKeeperID := maxKeeperID + 1
-	err = r.db.Session().Query(
+	err = r.db.GetSession().Query(
 		queries.CreateNewKeeperFromGoogleFormQuery,
 		currentKeeperID,
 		keeperData.KeeperName,

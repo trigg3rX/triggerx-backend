@@ -7,7 +7,7 @@ const (
 	// Schedulers will Create Task Data in DB before Passing the task to the Performer
 	CreateTaskDataQuery = `
         INSERT INTO triggerx.task_data (
-            task_id, job_id, task_definition_id, created_at, is_imua, task_status
+            task_id, job_id, task_definition_id, task_opx_predicted_cost, created_at, is_imua, task_status
         ) VALUES (?, ?, ?, ?, ?, 'processing')`
 )
 
@@ -46,6 +46,11 @@ const (
 
 // Read Task Queries
 const (
+	GetTaskPredictedCostFromJobIDQuery = `
+		SELECT job_predicted_cost
+		FROM triggerx.job_data
+		WHERE job_id = ?`
+
 	GetTaskDataByIDQuery = `
         SELECT task_id, task_number, job_id, task_definition_id, created_at,
                task_opx_cost, execution_timestamp, execution_tx_hash, task_performer_id, 

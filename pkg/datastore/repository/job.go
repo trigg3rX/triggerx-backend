@@ -5,54 +5,48 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/connection"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/repository/queries"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type JobRepository interface {
-	CreateNewJob(job *commonTypes.JobData) (*big.Int, error)
+	CreateNewJob(job *types.JobData) (*big.Int, error)
 	UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error
 	UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
 	UpdateJobStatus(jobID *big.Int, status string) error
-	GetJobByID(jobID *big.Int) (*commonTypes.JobData, error)
+	GetJobByID(jobID *big.Int) (*types.JobData, error)
 	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
 	GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error)
-	GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error)
+	GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]types.JobData, error)
 }
 
 type jobRepository struct {
-	db *database.Connection
+	db connection.ConnectionManager
 }
 
 // NewJobRepository creates a new job repository instance
-func NewJobRepository(db *database.Connection) JobRepository {
+func NewJobRepository(db connection.ConnectionManager) JobRepository {
 	return &jobRepository{
 		db: db,
 	}
 }
 
-func (r *jobRepository) CreateNewJob(job *commonTypes.JobData) (*big.Int, error) {
-	// var lastJobID int64
-	// err := r.db.Session().Query(queries.GetMaxJobIDQuery).Scan(&lastJobID)
-	// if err == gocql.ErrNotFound {
-	// 	return -1, nil
-	// }
-
-	err := r.db.Session().Query(queries.CreateJobDataQuery,
-		job.JobID.ToBigInt(), job.JobTitle, job.TaskDefinitionID, job.UserID, job.LinkJobID.ToBigInt(), job.ChainStatus,
-		job.Custom, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), time.Now(), job.Timezone, job.IsImua, job.CreatedChainID).Exec()
+func (r *jobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
+	err := r.db.GetSession().Query(queries.CreateJobDataQuery,
+		job.JobID, job.JobTitle, job.TaskDefinitionID, job.CreatedChainID, 
+		job.UserID, job.LinkJobID, job.ChainStatus, job.TimeFrame, job.IsImua,
+		job.JobType, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now()).Exec()
 
 	if err != nil {
 		return nil, err
 	}
 
-	return job.JobID.Int, nil
+	return job.JobID, nil
 }
 
 func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error {
-	err := r.db.Session().Query(queries.UpdateJobDataFromUserQuery,
+	err := r.db.GetSession().Query(queries.UpdateJobDataFromUserQuery,
 		job.JobTitle, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now(), jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job from user")
@@ -62,13 +56,13 @@ func (r *jobRepository) UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJ
 
 func (r *jobRepository) UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error {
 	var existingTaskIDs []int64
-	err := r.db.Session().Query(queries.GetTaskIDsByJobIDQuery, jobID).Scan(&existingTaskIDs)
+	err := r.db.GetSession().Query(queries.GetTaskIDsByJobIDQuery, jobID).Scan(&existingTaskIDs)
 	if err != nil {
 		return errors.New("failed to get task ids by job id")
 	}
 
 	existingTaskIDs = append(existingTaskIDs, taskID)
-	err = r.db.Session().Query(queries.UpdateJobDataLastExecutedAtQuery,
+	err = r.db.GetSession().Query(queries.UpdateJobDataLastExecutedAtQuery,
 		existingTaskIDs, jobCostActual, lastExecutedAt).Exec()
 	if err != nil {
 		return errors.New("failed to update job last executed at")
@@ -77,7 +71,7 @@ func (r *jobRepository) UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jo
 }
 
 func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
-	err := r.db.Session().Query(queries.UpdateJobDataStatusQuery,
+	err := r.db.GetSession().Query(queries.UpdateJobDataStatusQuery,
 		status, time.Now(), jobID).Exec()
 	if err != nil {
 		return errors.New("failed to update job status")
@@ -85,12 +79,12 @@ func (r *jobRepository) UpdateJobStatus(jobID *big.Int, status string) error {
 	return nil
 }
 
-func (r *jobRepository) GetJobByID(jobID *big.Int) (*commonTypes.JobData, error) {
-	var jobData commonTypes.JobData
+func (r *jobRepository) GetJobByID(jobID *big.Int) (*types.JobData, error) {
+	var jobData types.JobData
 	var jobIDBigInt, linkJobIDBigInt *big.Int
-	err := r.db.Session().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
+	err := r.db.GetSession().Query(queries.GetJobDataByJobIDQuery, jobID).Scan(
 		&jobIDBigInt, &jobData.JobTitle, &jobData.TaskDefinitionID, &jobData.UserID,
-		&linkJobIDBigInt, &jobData.ChainStatus, &jobData.Custom, &jobData.TimeFrame,
+		&linkJobIDBigInt, &jobData.ChainStatus, &jobData.TimeFrame,
 		&jobData.Recurring, &jobData.Status, &jobData.JobCostPrediction, &jobData.JobCostActual,
 		&jobData.TaskIDs, &jobData.CreatedAt, &jobData.UpdatedAt, &jobData.LastExecutedAt,
 		&jobData.Timezone, &jobData.IsImua, &jobData.CreatedChainID)
@@ -98,14 +92,14 @@ func (r *jobRepository) GetJobByID(jobID *big.Int) (*commonTypes.JobData, error)
 	if err != nil {
 		return nil, err
 	}
-	jobData.JobID = commonTypes.NewBigInt(jobIDBigInt)
-	jobData.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
+	jobData.JobID = jobIDBigInt
+	jobData.LinkJobID = linkJobIDBigInt
 	return &jobData, nil
 }
 
 func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) {
 	var taskDefinitionID int
-	err := r.db.Session().Query(queries.GetTaskDefinitionIDByJobIDQuery, jobID).Scan(&taskDefinitionID)
+	err := r.db.GetSession().Query(queries.GetTaskDefinitionIDByJobIDQuery, jobID).Scan(&taskDefinitionID)
 	if err != nil {
 		return 0, errors.New("failed to get task definition id by job id")
 	}
@@ -113,7 +107,7 @@ func (r *jobRepository) GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error) 
 }
 
 func (r *jobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error) {
-	session := r.db.Session()
+	session := r.db.GetSession()
 	iter := session.Query(queries.GetTaskFeesByJobIDQuery, jobID).Iter()
 
 	var results []types.TaskFeeResponse
@@ -131,28 +125,28 @@ func (r *jobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeRespo
 	return results, nil
 }
 
-func (r *jobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error) {
-	session := r.db.Session()
+func (r *jobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]types.JobData, error) {
+	session := r.db.GetSession()
 	iter := session.Query(queries.GetJobsByUserIDAndChainIDQuery, userID, createdChainID).Iter()
 
-	var jobs []commonTypes.JobData
+	var jobs []types.JobData
 	for {
 		var (
 			jobIDBigInt     *big.Int
 			linkJobIDBigInt *big.Int
-			job             commonTypes.JobData
+			job             types.JobData
 		)
 		if !iter.Scan(
 			&jobIDBigInt, &job.JobTitle, &job.TaskDefinitionID, &job.UserID,
-			&linkJobIDBigInt, &job.ChainStatus, &job.Custom, &job.TimeFrame,
+			&linkJobIDBigInt, &job.ChainStatus, &job.TimeFrame,
 			&job.Recurring, &job.Status, &job.JobCostPrediction, &job.JobCostActual,
 			&job.TaskIDs, &job.CreatedAt, &job.UpdatedAt, &job.LastExecutedAt,
 			&job.Timezone, &job.IsImua, &job.CreatedChainID,
 		) {
 			break
 		}
-		job.JobID = commonTypes.NewBigInt(jobIDBigInt)
-		job.LinkJobID = commonTypes.NewBigInt(linkJobIDBigInt)
+		job.JobID = jobIDBigInt
+		job.LinkJobID = linkJobIDBigInt
 		jobs = append(jobs, job)
 	}
 
