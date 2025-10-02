@@ -2,8 +2,8 @@ package repository
 
 import (
 	"errors"
-	"math/big"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
@@ -11,21 +11,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore/repository/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
-
-type TaskRepository interface {
-	GetMaxTaskID() (int64, error)
-	CreateTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error)
-	AddTaskPerformerID(taskID int64, performerID int64) error
-	UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error
-	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
-	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
-	GetTaskDataByID(taskID int64) (types.TaskData, error)
-	GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobID, error)
-	AddTaskIDToJob(jobID *big.Int, taskID int64) error
-	UpdateTaskFee(taskID int64, fee float64) error
-	GetTaskFee(taskID int64) (float64, error)
-	GetCreatedChainIDByJobID(jobID *big.Int) (string, error)
-}
 
 type taskRepository struct {
 	db        connection.ConnectionManager
@@ -165,10 +150,10 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int6
 
 	// Emit WebSocket event for task status change
 	// if r.publisher != nil {
-		// jobID := r.getJobIDFromTaskID(taskID)
-		// userID := r.getUserIDFromJobID(jobID)
+	// jobID := r.getJobIDFromTaskID(taskID)
+	// userID := r.getUserIDFromJobID(jobID)
 
-		// r.publisher.PublishTaskStatusChanged(taskID, jobID.String(), statusChanged, userID, &taskNumber, &txHash)
+	// r.publisher.PublishTaskStatusChanged(taskID, jobID.String(), statusChanged, userID, &taskNumber, &txHash)
 	// }
 
 	return nil
@@ -178,10 +163,10 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (types.TaskData, error) {
 	var task types.TaskData
 	var jobIDBigInt *big.Int
 	err := r.db.GetSession().Query(queries.GetTaskDataByIDQuery, taskID).Scan(
-		&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, 
-		&task.CreatedAt, &task.TaskOpXPredictedCost, &task.TaskOpXActualCost, 
-		&task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, 
-		&task.ProofOfTask, &task.TaskAttesterIDs, &task.SubmissionTxHash, 
+		&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID,
+		&task.CreatedAt, &task.TaskOpXPredictedCost, &task.TaskOpXActualCost,
+		&task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID,
+		&task.ProofOfTask, &task.TaskAttesterIDs, &task.SubmissionTxHash,
 		&task.IsAccepted, &task.IsImua)
 	if err != nil {
 		return types.TaskData{}, errors.New("error getting task data by ID")

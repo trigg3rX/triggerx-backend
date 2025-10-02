@@ -10,17 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type JobRepository interface {
-	CreateNewJob(job *types.JobData) (*big.Int, error)
-	UpdateJobFromUserInDB(jobID *big.Int, job *types.UpdateJobDataFromUserRequest) error
-	UpdateJobLastExecutedAt(jobID *big.Int, taskID int64, jobCostActual float64, lastExecutedAt time.Time) error
-	UpdateJobStatus(jobID *big.Int, status string) error
-	GetJobByID(jobID *big.Int) (*types.JobData, error)
-	GetTaskDefinitionIDByJobID(jobID *big.Int) (int, error)
-	GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeResponse, error)
-	GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]types.JobData, error)
-}
-
 type jobRepository struct {
 	db connection.ConnectionManager
 }
@@ -34,7 +23,7 @@ func NewJobRepository(db connection.ConnectionManager) JobRepository {
 
 func (r *jobRepository) CreateNewJob(job *types.JobData) (*big.Int, error) {
 	err := r.db.GetSession().Query(queries.CreateJobDataQuery,
-		job.JobID, job.JobTitle, job.TaskDefinitionID, job.CreatedChainID, 
+		job.JobID, job.JobTitle, job.TaskDefinitionID, job.CreatedChainID,
 		job.UserID, job.LinkJobID, job.ChainStatus, job.TimeFrame, job.IsImua,
 		job.JobType, job.TimeFrame, job.Recurring, job.Status, job.JobCostPrediction, time.Now()).Exec()
 

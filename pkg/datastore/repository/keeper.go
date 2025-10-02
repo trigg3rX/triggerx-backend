@@ -10,23 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type KeeperRepository interface {
-	CheckKeeperExists(address string) (int64, error)
-	CreateKeeper(keeperData types.CreateKeeperData) (int64, error)
-	GetKeeperAsPerformer() ([]types.GetPerformerData, error)
-	GetKeeperDataByID(id int64) (types.KeeperData, error)
-	IncrementKeeperTaskCount(id int64) (int64, error)
-	GetKeeperTaskCount(id int64) (int64, error)
-	UpdateKeeperPoints(id int64, taskFee float64) (float64, error)
-	UpdateKeeperChatID(address string, chatID int64) error
-	GetKeeperPointsByIDInDB(id int64) (float64, error)
-	GetKeeperCommunicationInfo(id int64) (types.KeeperCommunicationInfo, error)
-	GetKeeperLeaderboard() ([]types.KeeperLeaderboardEntry, error)
-	GetKeeperLeaderboardByOnImua(onImua bool) ([]types.KeeperLeaderboardEntry, error)
-	GetKeeperLeaderboardByIdentifierInDB(address string, name string) (types.KeeperLeaderboardEntry, error)
-	CreateOrUpdateKeeperFromGoogleForm(keeperData types.GoogleFormCreateKeeperData) (int64, error)
-}
-
 type keeperRepository struct {
 	db connection.ConnectionManager
 }

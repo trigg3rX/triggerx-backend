@@ -10,14 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type EventJobRepository interface {
-	CreateEventJob(eventJob *types.EventJobData) error
-	GetEventJobByJobID(jobID *big.Int) (types.EventJobData, error)
-	CompleteEventJob(jobID *big.Int) error
-	UpdateEventJobStatus(jobID *big.Int, isActive bool) error
-	GetActiveEventJobs() ([]types.EventJobData, error)
-}
-
 type eventJobRepository struct {
 	db connection.ConnectionManager
 }

@@ -10,14 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type ConditionJobRepository interface {
-	CreateConditionJob(conditionJob *types.ConditionJobData) error
-	GetConditionJobByJobID(jobID *big.Int) (types.ConditionJobData, error)
-	CompleteConditionJob(jobID *big.Int) error
-	UpdateConditionJobStatus(jobID *big.Int, isActive bool) error
-	GetActiveConditionJobs() ([]types.ConditionJobData, error)
-}
-
 type conditionJobRepository struct {
 	db connection.ConnectionManager
 }

@@ -10,18 +10,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type ApiKeysRepository interface {
-	CreateApiKey(apiKey *types.ApiKeyData) error
-	GetApiKeyDataByOwner(owner string) ([]*types.ApiKeyData, error)
-	GetApiKeyDataByKey(key string) (*types.ApiKeyData, error)
-	GetApiKeyCounters(key string) (*types.ApiKeyCounters, error)
-	GetApiKeyByOwner(owner string) (key string, err error)
-	GetApiOwnerByApiKey(key string) (owner string, err error)
-	UpdateApiKey(apiKey *types.UpdateApiKeyRequest) error
-	UpdateApiKeyStatus(apiKey *types.UpdateApiKeyStatusRequest) error
-	UpdateApiKeyLastUsed(key string, isSuccess bool) error
-}
-
 type apiKeysRepository struct {
 	db connection.ConnectionManager
 }

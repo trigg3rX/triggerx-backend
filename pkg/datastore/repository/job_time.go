@@ -12,17 +12,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type TimeJobRepository interface {
-	CreateTimeJob(timeJob *types.TimeJobData) error
-	GetTimeJobByJobID(jobID *big.Int) (types.TimeJobData, error)
-	CompleteTimeJob(jobID *big.Int) error
-	UpdateTimeJobStatus(jobID *big.Int, isActive bool) error
-	GetTimeJobsByNextExecutionTimestamp(lookAheadTime time.Time) ([]types.ScheduleTimeTaskData, error)
-	UpdateTimeJobNextExecutionTimestamp(jobID *big.Int, nextExecutionTimestamp time.Time) error
-	UpdateTimeJobInterval(jobID *big.Int, timeInterval int64) error
-	GetActiveTimeJobs() ([]types.TimeJobData, error)
-}
-
 type timeJobRepository struct {
 	db connection.ConnectionManager
 }

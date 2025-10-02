@@ -12,21 +12,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type UserRepository interface {
-	CheckUserExists(address string) (int64, error)
-	CreateNewUser(user *types.CreateUserDataRequest) (types.CreateUserDataRequest, error)
-	UpdateUserBalance(user *types.UpdateUserBalanceRequest) error
-	UpdateUserJobIDs(userID int64, jobIDs []*big.Int) error
-	UpdateUserTasksAndPoints(userID int64, tasksCompleted int64, userPoints float64) error
-	GetUserDataByAddress(address string) (int64, types.UserData, error)
-	GetUserPointsByID(id int64) (float64, error)
-	GetUserPointsByAddress(address string) (float64, error)
-	GetUserJobIDsByAddress(address string) (int64, []*big.Int, error)
-	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
-	GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error)
-	UpdateUserEmail(address string, email string) error
-}
-
 type userRepository struct {
 	db connection.ConnectionManager
 }
