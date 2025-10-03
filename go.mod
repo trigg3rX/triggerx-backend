@@ -198,6 +198,8 @@ require (
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/scylladb/go-reflectx v1.0.1 // indirect
+	github.com/scylladb/gocqlx/v2 v2.8.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
