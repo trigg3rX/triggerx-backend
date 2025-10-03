@@ -4,13 +4,13 @@ import (
 	"sync"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // StateManager manages the state of all keepers
 type StateManager struct {
-	keepers     map[string]*types.KeeperInfo
+	keepers     map[string]*types.HealthKeeperInfo
 	mu          sync.RWMutex
 	logger      logging.Logger
 	initialized bool
@@ -29,7 +29,7 @@ func InitializeStateManager(logger logging.Logger) *StateManager {
 		stateLogger := logger.With("component", "state_manager")
 
 		stateManager = &StateManager{
-			keepers:     make(map[string]*types.KeeperInfo),
+			keepers:     make(map[string]*types.HealthKeeperInfo),
 			logger:      stateLogger,
 			initialized: true,
 			db:          client.GetInstance(),
@@ -104,14 +104,14 @@ func (sm *StateManager) GetKeeperCount() (total int, active int) {
 }
 
 // GetDetailedKeeperInfo returns detailed information about all keepers
-func (sm *StateManager) GetDetailedKeeperInfo() []types.KeeperInfo {
+func (sm *StateManager) GetDetailedKeeperInfo() []types.HealthKeeperInfo {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	var keeperInfoList []types.KeeperInfo
+	var keeperInfoList []types.HealthKeeperInfo
 
 	for address, state := range sm.keepers {
-		info := types.KeeperInfo{
+		info := types.HealthKeeperInfo{
 			KeeperName:       state.KeeperName,
 			KeeperAddress:    address,
 			ConsensusAddress: state.ConsensusAddress,

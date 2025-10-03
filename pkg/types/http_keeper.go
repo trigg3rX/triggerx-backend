@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 type CreateKeeperData struct {
 	KeeperName    string `json:"keeper_name"`
 	KeeperAddress string `json:"keeper_address"`
@@ -41,4 +43,18 @@ type KeeperLeaderboardEntry struct {
 type GetPerformerData struct {
 	KeeperID      int64  `json:"keeper_id"`
 	KeeperAddress string `json:"keeper_address"`
+}
+
+
+// HealthKeeperInfo represents the public information about a keeper in the health service
+type HealthKeeperInfo struct {
+	KeeperName       string    `json:"keeper_name"`
+	KeeperAddress    string    `json:"keeper_address"`
+	ConsensusAddress string    `json:"consensus_address"`
+	OperatorID       string    `json:"operator_id"`
+	Version          string    `json:"version"`
+	PeerID           string    `json:"peer_id"`
+	IsActive         bool      `json:"is_active"`
+	LastCheckedIn    time.Time `json:"last_checked_in"`
+	IsImua           bool      `json:"is_imua"`
 }

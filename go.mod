@@ -22,6 +22,7 @@ require (
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/imua-xyz/imua-avs-sdk v0.0.1
@@ -31,6 +32,7 @@ require (
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prysmaticlabs/prysm/v5 v5.2.0
 	github.com/redis/go-redis/v9 v9.11.0
+	github.com/scylladb/gocqlx/v2 v2.8.0
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/stretchr/testify v1.10.0
 	github.com/trigg3rX/imua-contracts/bindings v0.0.0-20250724143839-635671af334f
@@ -199,7 +201,6 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/scylladb/go-reflectx v1.0.1 // indirect
-	github.com/scylladb/gocqlx/v2 v2.8.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect

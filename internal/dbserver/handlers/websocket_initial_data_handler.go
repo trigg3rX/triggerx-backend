@@ -5,22 +5,23 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // InitialDataHandler handles fetching initial data for WebSocket subscriptions
 type InitialDataHandler struct {
-	taskRepository repository.TaskRepository
+	taskRepo       interfaces.GenericRepository[types.TaskDataEntity]
 	logger         logging.Logger
 }
 
 // NewInitialDataHandler creates a new initial data handler
-func NewInitialDataHandler(taskRepository repository.TaskRepository, logger logging.Logger) *InitialDataHandler {
+func NewInitialDataHandler(taskRepository interfaces.GenericRepository[types.TaskDataEntity], logger logging.Logger) *InitialDataHandler {
 	return &InitialDataHandler{
-		taskRepository: taskRepository,
-		logger:         logger,
+		taskRepo: taskRepository,
+		logger:   logger,
 	}
 }
 
@@ -54,7 +55,7 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 	h.logger.Infof("Fetching initial tasks for job ID: %s", jobIDStr)
 
 	// Fetch all tasks for this job
-	tasks, err := h.taskRepository.GetTasksByJobID(jobID)
+	tasks, err := h.taskRepo.GetTasksByJobID(jobID)
 	if err != nil {
 		h.logger.Errorf("Error fetching tasks for job %s: %v", jobIDStr, err)
 		return err
@@ -79,7 +80,7 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 
 	//find the created_chain id for the job using jobIDBig from database
 	var createdChainID string
-	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobID)
+	createdChainID, err = h.taskRepo.GetCreatedChainIDByJobID(jobID)
 	if err != nil {
 		h.logger.Errorf("Error retrieving created_chain_id for jobID %s: %v", jobID.String(), err)
 		return err

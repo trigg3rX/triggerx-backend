@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // LoadVerifiedKeepers loads only verified keepers from the database
@@ -22,11 +21,11 @@ func (sm *StateManager) LoadVerifiedKeepers() error {
 	defer sm.mu.Unlock()
 
 	// Clear existing state
-	sm.keepers = make(map[string]*types.KeeperInfo)
+	sm.keepers = make(map[string]*types.HealthKeeperInfo)
 
 	// Load each keeper's state (initially marked as inactive)
 	for _, keeper := range keepers {
-		state := &types.KeeperInfo{
+		state := &types.HealthKeeperInfo{
 			KeeperName:       keeper.KeeperName,
 			KeeperAddress:    keeper.KeeperAddress,
 			ConsensusAddress: keeper.ConsensusAddress,
@@ -56,7 +55,7 @@ func (sm *StateManager) DumpState() error {
 	for address, state := range sm.keepers {
 		if state.IsActive {
 			// Create a minimal health check-in with just the address
-			health := commonTypes.KeeperHealthCheckIn{
+			health := types.KeeperHealthCheckIn{
 				KeeperAddress: address,
 			}
 

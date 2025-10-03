@@ -1,14 +1,14 @@
 package handlers
 
 import (
-	"math/big"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {

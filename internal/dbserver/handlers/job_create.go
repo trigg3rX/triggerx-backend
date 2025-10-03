@@ -9,9 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {

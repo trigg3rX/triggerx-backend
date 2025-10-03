@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 const (
@@ -18,7 +18,7 @@ var (
 )
 
 // UpdateKeeperHealth updates the health status of a keeper
-func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn) error {
+func (sm *StateManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckIn) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -55,7 +55,7 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealth
 	return nil
 }
 
-func (sm *StateManager) updateKeeperStatusInDatabase(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
+func (sm *StateManager) updateKeeperStatusInDatabase(keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
 	if err := sm.db.UpdateKeeperHealth(keeperHealth, isActive); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}

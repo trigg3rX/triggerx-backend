@@ -149,7 +149,10 @@ func (m *scyllaConnectionManager) reconnect() {
 		cfg = retry.DefaultRetryConfig()
 	}
 
-	retry.RetryFunc(context.Background(), operation, cfg, m.logger)
+	err := retry.RetryFunc(context.Background(), operation, cfg, m.logger)
+	if err != nil {
+		m.logger.Errorf("Failed to reconnect to the database: %v", err)
+	}
 }
 
 // SetSession sets the session for the connection (for testing).

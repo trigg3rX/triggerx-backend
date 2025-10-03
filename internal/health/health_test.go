@@ -16,67 +16,16 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // StateManagerInterface defines the interface for StateManager
 type StateManagerInterface interface {
-	UpdateKeeperHealth(health commonTypes.KeeperHealthCheckIn) error
+	UpdateKeeperHealth(health types.KeeperHealthCheckIn) error
 	GetKeeperCount() (int, int)
 	GetAllActiveKeepers() []string
-	GetDetailedKeeperInfo() []types.KeeperInfo
-}
-
-// MockLogger is a mock implementation of logging.Logger
-type MockLogger struct {
-	mock.Mock
-}
-
-func (m *MockLogger) Debug(msg string, keysAndValues ...interface{}) {
-	m.Called(msg, keysAndValues)
-}
-
-func (m *MockLogger) Debugf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Info(msg string, keysAndValues ...interface{}) {
-	m.Called(msg, keysAndValues)
-}
-
-func (m *MockLogger) Infof(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Warn(msg string, keysAndValues ...interface{}) {
-	m.Called(msg, keysAndValues)
-}
-
-func (m *MockLogger) Warnf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Error(msg string, keysAndValues ...interface{}) {
-	m.Called(msg, keysAndValues)
-}
-
-func (m *MockLogger) Errorf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) Fatal(msg string, keysAndValues ...interface{}) {
-	m.Called(msg, keysAndValues)
-}
-
-func (m *MockLogger) Fatalf(format string, args ...interface{}) {
-	m.Called(format, args)
-}
-
-func (m *MockLogger) With(keysAndValues ...interface{}) logging.Logger {
-	args := m.Called(keysAndValues)
-	return args.Get(0).(logging.Logger)
+	GetDetailedKeeperInfo() []types.HealthKeeperInfo
 }
 
 // MockStateManager is a mock implementation of StateManagerInterface
@@ -84,7 +33,7 @@ type MockStateManager struct {
 	mock.Mock
 }
 
-func (m *MockStateManager) UpdateKeeperHealth(health commonTypes.KeeperHealthCheckIn) error {
+func (m *MockStateManager) UpdateKeeperHealth(health types.KeeperHealthCheckIn) error {
 	args := m.Called(health)
 	return args.Error(0)
 }
@@ -99,9 +48,9 @@ func (m *MockStateManager) GetAllActiveKeepers() []string {
 	return args.Get(0).([]string)
 }
 
-func (m *MockStateManager) GetDetailedKeeperInfo() []types.KeeperInfo {
+func (m *MockStateManager) GetDetailedKeeperInfo() []types.HealthKeeperInfo {
 	args := m.Called()
-	return args.Get(0).([]types.KeeperInfo)
+	return args.Get(0).([]types.HealthKeeperInfo)
 }
 
 // TestHandler is a test-specific version of Handler that uses our mock
@@ -130,7 +79,7 @@ func mockVerifySignature(message string, signatureHex string, expectedAddress st
 }
 
 func (h *TestHandler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth commonTypes.KeeperHealthCheckIn
+	var keeperHealth types.KeeperHealthCheckIn
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
 		h.logger.Error("Failed to parse keeper health check-in request",
 			"error", err,
@@ -244,11 +193,11 @@ func (h *TestHandler) GetDetailedKeeperStatus(c *gin.Context) {
 	})
 }
 
-func setupTestRouter() (*gin.Engine, *MockLogger, *MockStateManager) {
+func setupTestRouter() (*gin.Engine, *logging.MockLogger, *MockStateManager) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	mockLogger := new(MockLogger)
+	mockLogger := new(logging.MockLogger)
 	mockStateManager := new(MockStateManager)
 
 	// Create a test handler with the mock implementations
@@ -290,15 +239,15 @@ func TestHandleCheckInEvent(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		keeperHealth   commonTypes.KeeperHealthCheckIn
+		keeperHealth   types.KeeperHealthCheckIn
 		expectedStatus int
-		mockSetup      func(*MockLogger, *MockStateManager)
+		mockSetup      func(*logging.MockLogger, *MockStateManager)
 		verifyResult   bool
 		verifyError    error
 	}{
 		{
 			name: "Valid keeper check-in",
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress:   "0x123",
 				Version:         "0.1.2",
 				Signature:       "0x456",
@@ -306,7 +255,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 				PeerID:          "test-peer",
 			},
 			expectedStatus: http.StatusOK,
-			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
+			mockSetup: func(logger *logging.MockLogger, stateManager *MockStateManager) {
 				logger.On("Debug", mock.Anything, mock.Anything).Return()
 				logger.On("Info", mock.Anything, mock.Anything).Return()
 				stateManager.On("UpdateKeeperHealth", mock.Anything).Return(nil)
@@ -316,35 +265,35 @@ func TestHandleCheckInEvent(t *testing.T) {
 		},
 		{
 			name: "Obsolete version",
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "0.0.7",
 				PeerID:        "test-peer",
 			},
 			expectedStatus: http.StatusPreconditionFailed,
-			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
+			mockSetup: func(logger *logging.MockLogger, stateManager *MockStateManager) {
 				logger.On("Debug", mock.Anything, mock.Anything).Return()
 				logger.On("Warn", mock.Anything, mock.Anything).Return()
 			},
 		},
 		{
 			name: "Older version",
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "0.1.1",
 				PeerID:        "test-peer",
 			},
 			expectedStatus: http.StatusOK,
-			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
+			mockSetup: func(logger *logging.MockLogger, stateManager *MockStateManager) {
 				logger.On("Debug", mock.Anything, mock.Anything).Return()
 				logger.On("Warn", mock.Anything, mock.Anything).Return()
 			},
 		},
 		{
 			name:           "Invalid JSON",
-			keeperHealth:   commonTypes.KeeperHealthCheckIn{},
+			keeperHealth:   types.KeeperHealthCheckIn{},
 			expectedStatus: http.StatusPreconditionFailed,
-			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
+			mockSetup: func(logger *logging.MockLogger, stateManager *MockStateManager) {
 				logger.On("Debug", mock.Anything, mock.Anything).Return()
 				logger.On("Warn", mock.Anything, mock.Anything).Return()
 				logger.On("Error", mock.Anything, mock.Anything).Return()
@@ -352,7 +301,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 		},
 		{
 			name: "Invalid signature",
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress:   "0x123",
 				Version:         "0.1.2",
 				Signature:       "invalid",
@@ -360,7 +309,7 @@ func TestHandleCheckInEvent(t *testing.T) {
 				PeerID:          "test-peer",
 			},
 			expectedStatus: http.StatusPreconditionFailed,
-			mockSetup: func(logger *MockLogger, stateManager *MockStateManager) {
+			mockSetup: func(logger *logging.MockLogger, stateManager *MockStateManager) {
 				logger.On("Debug", mock.Anything, mock.Anything).Return()
 				logger.On("Error", mock.Anything, mock.Anything).Return()
 			},
@@ -417,7 +366,7 @@ func TestGetDetailedKeeperStatus(t *testing.T) {
 	router, _, mockStateManager := setupTestRouter()
 
 	mockStateManager.On("GetKeeperCount").Return(10, 5)
-	mockStateManager.On("GetDetailedKeeperInfo").Return([]types.KeeperInfo{
+	mockStateManager.On("GetDetailedKeeperInfo").Return([]types.HealthKeeperInfo{
 		{
 			KeeperAddress: "0x1",
 			IsActive:      true,
@@ -482,7 +431,7 @@ func TestVerifySignature(t *testing.T) {
 }
 
 func TestLoggerMiddleware(t *testing.T) {
-	mockLogger := new(MockLogger)
+	mockLogger := new(logging.MockLogger)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 	mockLogger.On("With", mock.Anything).Return(mockLogger)
 

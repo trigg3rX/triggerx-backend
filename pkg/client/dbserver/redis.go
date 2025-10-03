@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (c *DBServerClient) UpdateTaskExecutionData(ctx context.Context, taskExecutionData types.UpdateTaskExecutionDataRequest) (bool, error) {

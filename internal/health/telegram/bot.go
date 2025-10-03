@@ -1,31 +1,31 @@
 package telegram
 
 import (
-	"strconv"
+	"context"
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type Bot struct {
-	api    *tgbotapi.BotAPI
-	logger logging.Logger
-	db     *database.Connection
+	api        *tgbotapi.BotAPI
+	logger     logging.Logger
+	keeperRepo interfaces.GenericRepository[types.KeeperDataEntity]
 }
 
-func NewBot(token string, logger logging.Logger, db *database.Connection) (*Bot, error) {
+func NewBot(token string, logger logging.Logger, keeperRepo interfaces.GenericRepository[types.KeeperDataEntity]) (*Bot, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Bot{
-		api:    bot,
-		logger: logger,
-		db:     db,
+		api:        bot,
+		logger:     logger,
+		keeperRepo: keeperRepo,
 	}, nil
 }
 
@@ -88,24 +88,23 @@ func (b *Bot) Start() {
 func (b *Bot) updateKeeperChatID(keeperAddress string, chatID int64) error {
 	b.logger.Infof("[UpdateKeeperChatID] Finding keeper ID for keeper: %s", keeperAddress)
 
-	var keeperID string
-	if err := b.db.Session().Query(`
-		SELECT keeper_id FROM triggerx.keeper_data 
-		WHERE keeper_address = ? ALLOW FILTERING`, keeperAddress).Consistency(gocql.One).Scan(&keeperID); err != nil {
+	ctx := context.Background()
+	keeper, err := b.keeperRepo.GetByNonID(ctx, "keeper_address", keeperAddress)
+	if err != nil {
 		b.logger.Errorf("[UpdateKeeperChatID] Error finding keeper ID for keeper %s: %v", keeperAddress, err)
 		return err
 	}
 
-	b.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %s", keeperID)
+	if keeper == nil {
+		b.logger.Errorf("[UpdateKeeperChatID] Keeper not found: %s", keeperAddress)
+		return err
+	}
 
-	chatIDStr := strconv.FormatInt(chatID, 10)
+	b.logger.Infof("[UpdateKeeperChatID] Updating chat ID for keeper ID: %d", keeper.KeeperID)
 
-	if err := b.db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET chat_id = ? 
-		WHERE keeper_id = ?`,
-		chatIDStr, keeperID).Exec(); err != nil {
-		b.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper ID %s: %v", keeperID, err)
+	keeper.ChatID = chatID
+	if err := b.keeperRepo.Update(ctx, keeper); err != nil {
+		b.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper ID %d: %v", keeper.KeeperID, err)
 		return err
 	}
 

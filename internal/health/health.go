@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
 	// "strconv"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Handler encapsulates the dependencies for health handlers
@@ -91,8 +92,8 @@ func (h *Handler) handleRoot(c *gin.Context) {
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth commonTypes.KeeperHealthCheckIn
-	var response commonTypes.KeeperHealthCheckInResponse
+	var keeperHealth types.KeeperHealthCheckIn
+	var response types.KeeperHealthCheckInResponse
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
 		h.logger.Error("Failed to parse keeper health check-in request",
 			"error", err,
@@ -301,7 +302,7 @@ func (h *Handler) GetActivePerformers(c *gin.Context) {
 	// }
 
 	// Temporary fix for taskmanager
-	fallbackPerformers := []commonTypes.PerformerData{
+	fallbackPerformers := []types.PerformerData{
 		{
 			OperatorID:    4,
 			KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",

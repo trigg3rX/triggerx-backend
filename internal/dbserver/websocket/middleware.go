@@ -102,7 +102,7 @@ func (wam *WebSocketAuthMiddleware) AuthenticateWebSocket(c *gin.Context) (strin
 }
 
 // extractUserIDFromApiKey extracts user ID from API key data
-func (wam *WebSocketAuthMiddleware) extractUserIDFromApiKey(apiKey *types.ApiKey) string {
+func (wam *WebSocketAuthMiddleware) extractUserIDFromApiKey(apiKey *types.ApiKeyDataEntity) string {
 	// The API key owner field contains the user information
 	// This could be a user ID, email, or other identifier
 	// For now, we'll use the owner field directly
@@ -143,7 +143,7 @@ func NewWebSocketRateLimiter(rateLimiter *middleware.RateLimiter, maxConns int, 
 }
 
 // CheckRateLimit checks if the client has exceeded rate limits
-func (wrl *WebSocketRateLimiter) CheckRateLimit(clientIP string, apiKey *types.ApiKey) bool {
+func (wrl *WebSocketRateLimiter) CheckRateLimit(clientIP string, apiKey *types.ApiKeyDataEntity) bool {
 	// Check connection limit per IP (simple in-memory tracking)
 	if wrl.connections[clientIP] >= wrl.maxConns {
 		wrl.logger.Warnf("Connection limit exceeded for IP: %s", clientIP)

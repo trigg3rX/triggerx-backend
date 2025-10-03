@@ -16,7 +16,8 @@ import (
 	dbserver "github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/infrastructure/connection"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
@@ -45,7 +46,7 @@ func main() {
 		"host", config.GetDatabaseHostAddress(),
 	)
 
-	dbConfig := &database.Config{
+	dbConfig := &connection.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:    "triggerx",
 		Consistency: gocql.Quorum,
@@ -55,16 +56,11 @@ func main() {
 		RetryConfig: retry.DefaultRetryConfig(),
 	}
 
-	conn, err := database.NewConnection(dbConfig, logger)
-	if err != nil || conn == nil {
+	datastore, err := datastore.NewService(dbConfig, logger)
+	if err != nil || datastore == nil {
 		logger.Fatalf("Failed to initialize main database connection: %v", err)
 	}
-	defer conn.Close()
-
-	mainSession := conn.Session()
-	if mainSession == nil {
-		logger.Fatalf("Database session cannot be nil")
-	}
+	defer datastore.Close()
 
 	var wg sync.WaitGroup
 	serverErrors := make(chan error, 1)
@@ -82,7 +78,7 @@ func main() {
 		}
 	}
 
-	dbServer := dbserver.NewServer(conn, logger)
+	dbServer := dbserver.NewServer(datastore, logger)
 
 	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerExecutor)
 

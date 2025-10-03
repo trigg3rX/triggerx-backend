@@ -13,7 +13,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/infrastructure/connection"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
@@ -60,7 +61,7 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 	client.SetMonitoringHooks(monitoringHooks)
 
 	// Initialize database client
-	dbCfg := &dbClient.Config{
+	dbCfg := &connection.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:    "triggerx",
 		Consistency: gocql.Quorum,
@@ -69,14 +70,18 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		ConnectWait: 5 * time.Second,
 		RetryConfig: retry.DefaultRetryConfig(),
 	}
-	dbConn, err := dbClient.NewConnection(dbCfg, logger)
+	datastore, err := datastore.NewService(dbCfg, logger)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to initialize database client: %w", err)
+		return nil, fmt.Errorf("failed to initialize datastore: %w", err)
 	}
+	taskRepo := datastore.Task()
+	keeperRepo := datastore.Keeper()
+	userRepo := datastore.User()
+	jobRepo := datastore.Job()
 
 	// Initialize database client
-	databaseClient := database.NewDatabaseClient(logger, dbConn)
+	databaseClient := database.NewDatabaseClient(logger, taskRepo, keeperRepo, userRepo, jobRepo)
 
 	// Initialize IPFS client
 	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())

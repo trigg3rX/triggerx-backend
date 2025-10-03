@@ -1,13 +1,13 @@
 package test
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/infrastructure/connection"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -75,31 +75,21 @@ func TestMain(t *testing.T) {
 			return
 		}
 
-		dbConfig := database.NewConfig(host, port)
+		dbConfig := connection.NewConfig(host, port)
 		dbConfig = dbConfig.WithKeyspace("triggerx")
 
-		conn, err := database.NewConnection(dbConfig, logger)
+		datastore, err := datastore.NewService(dbConfig, logger)
 		if err != nil {
 			t.Logf("Database connection error: %v", err)
 			t.Skip("Skipping database connection test due to connection error")
 			return
 		}
-		assert.NotNil(t, conn, "Database connection should not be nil")
+		assert.NotNil(t, datastore, "Database connection should not be nil")
 		logger.Info("Database connection successful")
 
-		// Test database operations
-		session := conn.Session()
-		assert.NotNil(t, session, "Database session should not be nil")
-
-		// Test keyspace creation
-		err = session.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}", dbConfig.Keyspace)).Exec()
-		if err != nil {
-			t.Logf("Keyspace creation error: %v", err)
-		}
-
 		// Close connection
-		if conn != nil {
-			conn.Close()
+		if datastore != nil {
+			datastore.Close()
 		}
 	})
 }

@@ -18,7 +18,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/infrastructure/connection"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -49,7 +50,7 @@ func main() {
 	ready := make(chan struct{})
 
 	// Initialize database connection
-	dbConfig := &database.Config{
+	dbConfig := &connection.Config{
 		Hosts:        []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:     "triggerx",
 		Consistency:  gocql.Quorum,
@@ -58,19 +59,22 @@ func main() {
 		ConnectWait:  time.Second * 10,
 		ProtoVersion: 4,
 	}
-	dbConn, err := database.NewConnection(dbConfig, logger)
+	dbConn, err := datastore.NewService(dbConfig, logger)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize database connection: %v", err))
 	}
 
+	// Create keeper repository
+	keeperRepo := dbConn.Keeper()
+
 	// Initialize Telegram bot
-	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, dbConn)
+	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, keeperRepo)
 	if err != nil {
 		logger.Errorf("Failed to initialize Telegram bot: %v", err)
 	}
 
 	// Initialize database manager
-	client.InitDatabaseManager(logger, dbConn, telegramBot)
+	client.InitDatabaseManager(logger, keeperRepo, telegramBot)
 	logger.Info("Database manager initialized")
 
 	// Initialize state manager

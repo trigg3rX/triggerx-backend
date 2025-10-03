@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (c *DBServerClient) CreateTask(ctx context.Context, createTaskData types.CreateTaskDataRequest) (int64, error) {

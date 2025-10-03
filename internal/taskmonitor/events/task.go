@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ProcessTaskEvent processes task-related events

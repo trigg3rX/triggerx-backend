@@ -3,7 +3,7 @@ package keeper
 import (
 	"time"
 
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 const (
@@ -38,7 +38,7 @@ func (sm *StateManager) checkInactiveKeepers() {
 	sm.mu.Unlock()
 
 	for _, address := range inactiveKeepers {
-		keeperHealth := commonTypes.KeeperHealthCheckIn{
+		keeperHealth := types.KeeperHealthCheckIn{
 			KeeperAddress: address,
 		}
 

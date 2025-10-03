@@ -1,18 +1,20 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"strings"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database/queries"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database
 func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData) error {
 	// dm.logger.Infof("Updating task %d with task number %d and acceptance status %t", data.TaskID, data.TaskNumber, data.IsAccepted)
+
+	ctx := context.Background()
 
 	performerId, err := dm.GetKeeperIds([]string{data.PerformerAddress})
 	if err != nil {
@@ -21,17 +23,31 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	}
 	attesterIds := data.AttesterIds
 
-	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
-		data.TaskNumber,
-		data.IsAccepted,
-		data.TaskSubmissionTxHash,
-		performerId[0],
-		attesterIds,
-		data.ExecutionTxHash,
-		data.ExecutionTimestamp,
-		data.TaskOpxCost,
-		data.ProofOfTask,
-		data.TaskID).Exec(); err != nil {
+	// Get the task entity
+	task, err := dm.taskRepo.GetByID(ctx, data.TaskID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get task %d: %v", data.TaskID, err)
+		return err
+	}
+
+	if task == nil {
+		dm.logger.Errorf("Task %d not found", data.TaskID)
+		return fmt.Errorf("task %d not found", data.TaskID)
+	}
+
+	// Update task fields
+	task.TaskNumber = data.TaskNumber
+	task.IsAccepted = data.IsAccepted
+	task.IsSuccessful = true
+	task.SubmissionTxHash = data.TaskSubmissionTxHash
+	task.TaskPerformerID = performerId[0]
+	task.TaskAttesterIDs = attesterIds
+	task.ExecutionTxHash = data.ExecutionTxHash
+	task.ExecutionTimestamp = data.ExecutionTimestamp
+	task.TaskOpxActualCost = *big.NewInt(int64(data.TaskOpxCost))
+	task.ProofOfTask = data.ProofOfTask
+
+	if err := dm.taskRepo.Update(ctx, task); err != nil {
 		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", data.TaskID, err)
 		return err
 	}
@@ -41,7 +57,24 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 }
 
 func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
-	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
+	ctx := context.Background()
+
+	// Get the task entity
+	task, err := dm.taskRepo.GetByID(ctx, taskID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get task %d: %v", taskID, err)
+		return err
+	}
+
+	if task == nil {
+		dm.logger.Errorf("Task %d not found", taskID)
+		return fmt.Errorf("task %d not found", taskID)
+	}
+
+	// Update task fields
+	task.IsSuccessful = false
+
+	if err := dm.taskRepo.Update(ctx, task); err != nil {
 		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
 		return err
 	}
@@ -51,29 +84,22 @@ func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
 func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmissionData) error {
-	var jobID *big.Int
-	var userID int64
-	var userTasks int64
-	var taskPredictedOpxCost float64
-
-	var keeperId int64
-	var keeperPoints float64
-	var rewardsBooster float64
-	var noAttestedTasks int64
-	var noExecutedTasks int64
+	ctx := context.Background()
 
 	// Get task cost and job ID
-	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, data.TaskID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
+	task, err := dm.taskRepo.GetByID(ctx, data.TaskID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get task %d: %v", data.TaskID, err)
+		return err
+	}
 
-	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
-		dm.logger.Errorf("Failed to get task fee and job ID for task ID %d: no results found", data.TaskID)
+	if task == nil {
+		dm.logger.Errorf("Task %d not found", data.TaskID)
 		return fmt.Errorf("task not found for task ID %d", data.TaskID)
 	}
+
+	_ = task.TaskOpxPredictedCost // taskPredictedOpxCost - for future use
+	jobID := task.JobID
 
 	// dm.logger.Debugf("Details: taskID: %d, taskPredictedOpxCost: %f, taskOpxCost: %f, jobID: %d", data.TaskID, taskPredictedOpxCost, data.TaskOpxCost, jobID)
 
@@ -82,26 +108,28 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	// Update the Attester Points
 	for _, operator_id := range data.AttesterIds {
-		// Use RetryableIter since the query needs parameters
-		iter := dm.db.NewQuery(queries.GetAttesterPointsAndNoOfTasks, operator_id).Iter()
-		defer func() {
-			if cerr := iter.Close(); cerr != nil {
-				dm.logger.Errorf("Error closing iterator: %v", cerr)
-			}
-		}()
+		// Get keeper by operator_id
+		keeper, err := dm.keeperRepo.GetByNonID(ctx, "operator_id", operator_id)
+		if err != nil {
+			dm.logger.Errorf("Failed to get keeper for operator_id %d: %v", operator_id, err)
+			return err
+		}
 
-		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
-			dm.logger.Error(fmt.Sprintf("Failed to get keeper points for operator_id %d: no results found", operator_id))
+		if keeper == nil {
+			dm.logger.Errorf("Keeper not found for operator_id %d", operator_id)
 			return fmt.Errorf("keeper not found for operator_id %d", operator_id)
 		}
-		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
-		noAttestedTasks = noAttestedTasks + 1
 
-		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeperPoints, rewardsBooster, noAttestedTasks)
+		// Update keeper points and attested tasks
+		rewardsBoosterFloat, _ := keeper.RewardsBooster.Float64()
+		pointsToAdd := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost))
+		keeper.KeeperPoints.Add(&keeper.KeeperPoints, pointsToAdd)
+		keeper.NoAttestedTasks = keeper.NoAttestedTasks + 1
 
-		if err := dm.db.NewQuery(queries.UpdateAttesterPointsAndNoOfTasks,
-			keeperPoints, noAttestedTasks, keeperId).Exec(); err != nil {
-			dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
+		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeper.KeeperPoints, keeper.RewardsBooster, keeper.NoAttestedTasks)
+
+		if err := dm.keeperRepo.Update(ctx, keeper); err != nil {
+			dm.logger.Errorf("Failed to update keeper points: %v", err)
 			return err
 		}
 	}
@@ -112,83 +140,76 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		dm.logger.Errorf("Failed to get performer ID: %v", err)
 		return err
 	}
-	// Use RetryableIter since the query needs parameters
-	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId[0]).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
 
-	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
-		dm.logger.Error(fmt.Sprintf("Failed to get keeper points for performer_id %d: no results found", performerId[0]))
+	// Get performer keeper
+	performerKeeper, err := dm.keeperRepo.GetByID(ctx, performerId[0])
+	if err != nil {
+		dm.logger.Errorf("Failed to get performer keeper %d: %v", performerId[0], err)
+		return err
+	}
+
+	if performerKeeper == nil {
+		dm.logger.Errorf("Performer keeper %d not found", performerId[0])
 		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
 	}
-	if data.IsAccepted {
-		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
-	} else {
-		keeperPoints = keeperPoints - float64(rewardsBooster)*data.TaskOpxCost*0.1
-	}
-	noExecutedTasks = noExecutedTasks + 1
 
-	if err := dm.db.NewQuery(queries.UpdatePerformerPointsAndNoOfTasks,
-		keeperPoints, noExecutedTasks, performerId[0]).Exec(); err != nil {
-		dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
+	rewardsBoosterFloat, _ := performerKeeper.RewardsBooster.Float64()
+	if data.IsAccepted {
+		pointsToAdd := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost))
+		performerKeeper.KeeperPoints.Add(&performerKeeper.KeeperPoints, pointsToAdd)
+	} else {
+		pointsToSubtract := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost * 0.1))
+		performerKeeper.KeeperPoints.Sub(&performerKeeper.KeeperPoints, pointsToSubtract)
+	}
+	performerKeeper.NoExecutedTasks = performerKeeper.NoExecutedTasks + 1
+
+	if err := dm.keeperRepo.Update(ctx, performerKeeper); err != nil {
+		dm.logger.Errorf("Failed to update keeper points: %v", err)
 		return err
 	}
 
 	// Update the User Points
-	iter = dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
-
-	if !iter.Scan(&userID) {
-		dm.logger.Errorf("Failed to get user ID for job ID %d: no results found", jobID)
-		return fmt.Errorf("user not found for job ID %d", jobID)
+	// Get job to find user_id
+	job, err := dm.jobRepo.GetByID(ctx, jobID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get job %d: %v", jobID, err)
+		return err
 	}
 
-	var userPoints float64
-	iter = dm.db.NewQuery(queries.GetUserPoints, userID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
+	if job == nil {
+		dm.logger.Errorf("Job %d not found", jobID)
+		return fmt.Errorf("user not found for job ID %v", jobID)
+	}
 
-	if !iter.Scan(&userPoints, &userTasks) {
-		dm.logger.Errorf("Failed to get user points for user ID %d: no results found", userID)
+	userID := job.UserID
+
+	// Get user
+	user, err := dm.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get user %d: %v", userID, err)
+		return err
+	}
+
+	if user == nil {
+		dm.logger.Errorf("User %d not found", userID)
 		return fmt.Errorf("user not found for user ID %d", userID)
 	}
 
-	userTasks = userTasks + 1
-	userPoints = userPoints + data.TaskOpxCost
-	lastUpdatedAt := time.Now().UTC()
+	user.TotalTasks = user.TotalTasks + 1
+	pointsToAdd := big.NewInt(int64(data.TaskOpxCost))
+	user.OpxConsumed.Add(&user.OpxConsumed, pointsToAdd)
+	user.LastUpdatedAt = time.Now().UTC()
 
-	if err := dm.db.NewQuery(queries.UpdateUserPoints,
-		userPoints, userTasks, lastUpdatedAt, userID).Exec(); err != nil {
+	if err := dm.userRepo.Update(ctx, user); err != nil {
 		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
 		return err
 	}
 
-	var jobCostActual float64
-	iter = dm.db.NewQuery(queries.GetJobCostActual, jobID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
+	// Update job cost actual (we already have the job entity from above)
+	costToAdd := big.NewInt(int64(data.TaskOpxCost))
+	job.JobCostActual.Add(&job.JobCostActual, costToAdd)
 
-	if !iter.Scan(&jobCostActual) {
-		dm.logger.Errorf("Failed to get job cost actual for job ID %d: no results found", jobID)
-		return fmt.Errorf("job not found for job ID %d", jobID)
-	}
-
-	jobCostActual = jobCostActual + data.TaskOpxCost
-
-	if err := dm.db.NewQuery(queries.UpdateJobCostActual, jobCostActual, jobID).Exec(); err != nil {
+	if err := dm.jobRepo.Update(ctx, job); err != nil {
 		dm.logger.Errorf("Failed to update job cost actual for job ID %d: %v", jobID, err)
 		return err
 	}
@@ -199,26 +220,26 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 // GetKeeperIds gets keeper IDs from keeper addresses
 func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error) {
+	ctx := context.Background()
 	var keeperIds []int64
+
 	for _, keeperAddress := range keeperAddresses {
-		var keeperID int64
 		keeperAddress = strings.ToLower(keeperAddress)
 
-		// Use RetryableIter since the query needs parameters
-		iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, keeperAddress).Iter()
-		defer func() {
-			if cerr := iter.Close(); cerr != nil {
-				dm.logger.Errorf("Error closing iterator: %v", cerr)
-			}
-		}()
+		// Get keeper by address using repository
+		keeper, err := dm.keeperRepo.GetByNonID(ctx, "keeper_address", keeperAddress)
+		if err != nil {
+			dm.logger.Errorf("Failed to get keeper for address %s: %v", keeperAddress, err)
+			return nil, err
+		}
 
-		if iter.Scan(&keeperID) {
-			dm.logger.Infof("Keeper ID for address %s: %d", keeperAddress, keeperID)
-			keeperIds = append(keeperIds, keeperID)
-		} else {
-			dm.logger.Errorf("Failed to get keeper ID for address %s: no results found", keeperAddress)
+		if keeper == nil {
+			dm.logger.Errorf("Keeper not found for address %s", keeperAddress)
 			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
 		}
+
+		dm.logger.Infof("Keeper ID for address %s: %d", keeperAddress, keeper.KeeperID)
+		keeperIds = append(keeperIds, keeper.KeeperID)
 	}
 	return keeperIds, nil
 }

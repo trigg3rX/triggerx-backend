@@ -2,11 +2,9 @@ package client
 
 import (
 	"bytes"
-	// "encoding/json"
+	"context"
 	"errors"
 	"fmt"
-
-	// "net/http"
 	"strings"
 	"time"
 
@@ -14,28 +12,27 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // DatabaseManager handles database operations
 type DatabaseManager struct {
 	logger      logging.Logger
-	db          *database.Connection
 	telegramBot *telegram.Bot
+	keeperRepo  interfaces.GenericRepository[types.KeeperDataEntity]
 }
 
 var instance *DatabaseManager
 
 // InitDatabaseManager initializes the database manager with a logger
-func InitDatabaseManager(logger logging.Logger, connection *database.Connection, telegramBot *telegram.Bot) {
+func InitDatabaseManager(logger logging.Logger, keeperRepo interfaces.GenericRepository[types.KeeperDataEntity], telegramBot *telegram.Bot) {
 	if logger == nil {
 		panic("logger cannot be nil")
 	}
-	if connection == nil {
-		panic("database connection cannot be nil")
+	if keeperRepo == nil {
+		panic("keeper repository cannot be nil")
 	}
 	if telegramBot == nil {
 		logger.Warn("Telegram bot is nil, notifications will not be sent")
@@ -46,8 +43,8 @@ func InitDatabaseManager(logger logging.Logger, connection *database.Connection,
 
 	instance = &DatabaseManager{
 		logger:      dbLogger,
-		db:          connection,
 		telegramBot: telegramBot,
+		keeperRepo:  keeperRepo,
 	}
 }
 
@@ -60,7 +57,7 @@ func GetInstance() *DatabaseManager {
 }
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)
-func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
+func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
 	dm.logger.Debug("Updating keeper status in database",
 		"keeper", keeperHealth.KeeperAddress,
 		"active", isActive,
@@ -76,26 +73,27 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 		keeperHealth.KeeperAddress = "0x" + keeperHealth.KeeperAddress
 	}
 
-	var keeperID int64
-	var prevOnline bool
-	var prevLastCheckedIn time.Time
-	var prevUptime int64
+	ctx := context.Background()
 
-	// Fetch previous online status, last_checked_in, and uptime
-	if err := dm.db.Session().Query(`
-		SELECT keeper_id, online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime); err != nil {
-		dm.logger.Error("Failed to retrieve keeper_id and previous status",
+	// Fetch keeper using repository
+	keeper, err := dm.keeperRepo.GetByNonID(ctx, "keeper_address", keeperHealth.KeeperAddress)
+	if err != nil {
+		dm.logger.Error("Failed to retrieve keeper",
 			"keeper", keeperHealth.KeeperAddress,
 			"error", err,
 		)
 		return err
 	}
 
-	if keeperID == 0 {
+	if keeper == nil {
 		dm.logger.Errorf("[KeeperHealthCheckIn] No keeper found with address: %s", keeperHealth.KeeperAddress)
 		return errors.New("keeper not found")
 	}
+
+	keeperID := keeper.KeeperID
+	prevOnline := keeper.Online
+	prevLastCheckedIn := keeper.LastCheckedIn
+	prevUptime := keeper.Uptime
 
 	if keeperHealth.PeerID == "" {
 		keeperHealth.PeerID = "no-peer-id"
@@ -111,14 +109,10 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 		if uptimeToAdd < 0 {
 			uptimeToAdd = 0 // avoid negative values
 		}
-		newUptime := prevUptime + uptimeToAdd
+		keeper.Uptime = prevUptime + uptimeToAdd
 
-		// Update uptime field
-		if err := dm.db.Session().Query(`
-			UPDATE triggerx.keeper_data 
-			SET uptime = ?
-			WHERE keeper_id = ?`,
-			newUptime, keeperID).Exec(); err != nil {
+		// Update uptime field using repository
+		if err := dm.keeperRepo.Update(ctx, keeper); err != nil {
 			dm.logger.Error("Failed to update keeper uptime",
 				"error", err,
 				"keeper_id", keeperID,
@@ -131,11 +125,8 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 
 	if !isActive {
 		// If not active, just set online = false
-		if err := dm.db.Session().Query(`
-			UPDATE triggerx.keeper_data 
-			SET online = ?
-			WHERE keeper_id = ?`,
-			false, keeperID).Exec(); err != nil {
+		keeper.Online = false
+		if err := dm.keeperRepo.Update(ctx, keeper); err != nil {
 			dm.logger.Error("Failed to update keeper inactive status",
 				"error", err,
 				"keeper_id", keeperID,
@@ -147,11 +138,13 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 	}
 
 	// If active, update all fields including last_checked_in
-	if err := dm.db.Session().Query(`
-		UPDATE triggerx.keeper_data 
-		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
-		WHERE keeper_id = ?`,
-		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec(); err != nil {
+	keeper.ConsensusAddress = keeperHealth.ConsensusAddress
+	keeper.Online = true
+	keeper.PeerID = keeperHealth.PeerID
+	keeper.Version = keeperHealth.Version
+	keeper.LastCheckedIn = keeperHealth.Timestamp
+
+	if err := dm.keeperRepo.Update(ctx, keeper); err != nil {
 		dm.logger.Error("Failed to update keeper status",
 			"error", err,
 			"keeper_id", keeperID,
@@ -177,11 +170,8 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 		"keeper_id", keeperID,
 	)
 
-	var online bool
-	err := dm.db.Session().Query(`
-		SELECT online FROM triggerx.keeper_data WHERE keeper_id = ?`,
-		keeperID).Scan(&online)
-
+	ctx := context.Background()
+	keeper, err := dm.keeperRepo.GetByID(ctx, keeperID)
 	if err != nil {
 		dm.logger.Error("Failed to check keeper online status",
 			"error", err,
@@ -190,22 +180,19 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 		return
 	}
 
-	if !online {
-		var chatID int64
-		var keeperName, emailID string
-		err := dm.db.Session().Query(`
-			SELECT chat_id, keeper_name, email_id 
-			FROM triggerx.keeper_data 
-			WHERE keeper_id = ?`,
-			keeperID).Scan(&chatID, &keeperName, &emailID)
+	if keeper == nil {
+		dm.logger.Error("Keeper not found",
+			"keeper_id", keeperID,
+		)
+		return
+	}
 
-		if err != nil {
-			dm.logger.Error("Failed to fetch keeper communication info",
-				"error", err,
-				"keeper_id", keeperID,
-			)
-			return
-		}
+	online := keeper.Online
+
+	if !online {
+		chatID := keeper.ChatID
+		keeperName := keeper.KeeperName
+		emailID := keeper.EmailID
 
 		if chatID != 0 {
 			telegramMsg := fmt.Sprintf("Keeper %s is down for more than 10 minutes. Please check and start it.", keeperName)
@@ -298,34 +285,30 @@ func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error
 }
 
 // GetVerifiedKeepers retrieves only verified keepers from the database
-func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
-	var keepers []types.KeeperInfo
+func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.HealthKeeperInfo, error) {
+	ctx := context.Background()
 
-	iter := dm.db.Session().Query(`
-		SELECT keeper_name, keeper_address, consensus_address, operator_id, version, peer_id, last_checked_in, on_imua
-		FROM triggerx.keeper_data 
-		WHERE registered = true AND whitelisted = true 
-		ALLOW FILTERING`).Iter()
-
-	var keeperName, keeperAddress, consensusAddress, operatorID, version, peerID string
-	var lastCheckedIn time.Time
-	var isImua bool
-
-	for iter.Scan(&keeperName, &keeperAddress, &consensusAddress, &operatorID, &version, &peerID, &lastCheckedIn, &isImua) {
-		keepers = append(keepers, types.KeeperInfo{
-			KeeperName:       keeperName,
-			KeeperAddress:    keeperAddress,
-			ConsensusAddress: consensusAddress,
-			OperatorID:       operatorID,
-			Version:          version,
-			PeerID:           peerID,
-			LastCheckedIn:    lastCheckedIn,
-			IsImua:           isImua,
-		})
+	// Get all keepers and filter for verified ones
+	allKeepers, err := dm.keeperRepo.GetByFields(ctx, map[string]interface{}{
+		"registered":  true,
+		"whitelisted": true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verified keepers: %w", err)
 	}
 
-	if err := iter.Close(); err != nil {
-		return nil, fmt.Errorf("error closing iterator: %w", err)
+	var keepers []types.HealthKeeperInfo
+	for _, keeper := range allKeepers {
+		keepers = append(keepers, types.HealthKeeperInfo{
+			KeeperName:       keeper.KeeperName,
+			KeeperAddress:    keeper.KeeperAddress,
+			ConsensusAddress: keeper.ConsensusAddress,
+			OperatorID:       fmt.Sprintf("%d", keeper.OperatorID),
+			Version:          keeper.Version,
+			PeerID:           keeper.PeerID,
+			LastCheckedIn:    keeper.LastCheckedIn,
+			IsImua:           keeper.OnImua,
+		})
 	}
 
 	dm.logger.Debug("Retrieved verified keepers from database",

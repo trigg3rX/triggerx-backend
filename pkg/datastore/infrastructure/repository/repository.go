@@ -115,7 +115,12 @@ func (r *genericRepository[T]) List(ctx context.Context) ([]*T, error) {
 func (r *genericRepository[T]) ExecuteQuery(ctx context.Context, query string, values ...interface{}) ([]*T, error) {
 	// For custom queries, we'll use the raw gocql session for maximum flexibility
 	iter := r.db.GetSession().Query(query, values...).WithContext(ctx).Iter()
-	defer iter.Close()
+	defer func() {
+		err := iter.Close()
+		if err != nil {
+			r.logger.Errorf("Failed to close iterator: %v", err)
+		}
+	}()
 
 	var results []*T
 	var result T

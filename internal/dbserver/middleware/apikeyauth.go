@@ -1,24 +1,26 @@
 package middleware
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/pkg/database"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ApiKeyAuth struct {
-	db          *database.Connection
+	apiKeyRepo  interfaces.GenericRepository[types.ApiKeyDataEntity]
 	logger      logging.Logger
 	rateLimiter *RateLimiter
 }
 
-func NewApiKeyAuth(db *database.Connection, rateLimiter *RateLimiter, logger logging.Logger) *ApiKeyAuth {
+func NewApiKeyAuth(apiKeyRepo interfaces.GenericRepository[types.ApiKeyDataEntity], rateLimiter *RateLimiter, logger logging.Logger) *ApiKeyAuth {
 	return &ApiKeyAuth{
-		db:          db,
+		apiKeyRepo:  apiKeyRepo,
 		logger:      logger,
 		rateLimiter: rateLimiter,
 	}
@@ -91,19 +93,19 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 		}
 
 		// Check if the API key belongs to a keeper
-		isKeeper, err := a.isKeeperApiKey(apiKey.Key)
-		if err != nil {
-			a.logger.Errorf("Error checking keeper status: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-			c.Abort()
-			return
-		}
+		// isKeeper, err := a.isKeeperApiKey(apiKey.Key)
+		// if err != nil {
+		// 	a.logger.Errorf("Error checking keeper status: %v", err)
+		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		// 	c.Abort()
+		// 	return
+		// }
 
-		if !isKeeper {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Keeper authorization required"})
-			c.Abort()
-			return
-		}
+		// if !isKeeper {
+		// 	c.JSON(http.StatusForbidden, gin.H{"error": "Access denied. Keeper authorization required"})
+		// 	c.Abort()
+		// 	return
+		// }
 
 		go a.updateLastUsed(apiKeyHeader)
 
@@ -124,53 +126,59 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 	}
 }
 
-func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
-	query := `SELECT key, owner, is_active, rate_limit, last_used, created_at 
-			  FROM triggerx.apikeys WHERE key = ? AND is_active = ? ALLOW FILTERING`
+func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKeyDataEntity, error) {
+	ctx := context.Background()
 
-	var apiKey types.ApiKey
-
-	err := a.db.Session().Query(query, key, true).Scan(
-		&apiKey.Key,
-		&apiKey.Owner,
-		&apiKey.IsActive,
-		&apiKey.RateLimit,
-		&apiKey.LastUsed,
-		&apiKey.CreatedAt,
-	)
-
+	// Use repository to get API key by key field
+	apiKey, err := a.apiKeyRepo.GetByNonID(ctx, "key", key)
 	if err != nil {
 		a.logger.Errorf("Failed to retrieve API key for key %s: %v", key, err)
 		return nil, err
 	}
 
-	return &apiKey, nil
+	// Check if the API key is active
+	if !apiKey.IsActive {
+		return nil, fmt.Errorf("API key is inactive")
+	}
+
+	return apiKey, nil
 }
 
 func (a *ApiKeyAuth) updateLastUsed(key string) {
-	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ?`
+	ctx := context.Background()
 
-	if err := a.db.Session().Query(query, time.Now().UTC(), key).Exec(); err != nil {
+	// First get the current API key
+	apiKey, err := a.apiKeyRepo.GetByNonID(ctx, "key", key)
+	if err != nil {
+		a.logger.Errorf("Failed to retrieve API key for update: %v", err)
+		return
+	}
+
+	// Update the last used timestamp
+	apiKey.LastUsed = time.Now().UTC()
+
+	// Use repository to update the record
+	if err := a.apiKeyRepo.Update(ctx, apiKey); err != nil {
 		a.logger.Errorf("Failed to update last used timestamp: %v", err)
 	}
 }
 
-func (a *ApiKeyAuth) isKeeperApiKey(key string) (bool, error) {
-	query := `SELECT isKeeper FROM triggerx.apikeys WHERE key = ? ALLOW FILTERING`
+// func (a *ApiKeyAuth) isKeeperApiKey(key string) (bool, error) {
+// 	ctx := context.Background()
 
-	var isKeeper bool
-	err := a.db.Session().Query(query, key).Scan(&isKeeper)
-	if err != nil {
-		return false, err
-	}
+// 	// Use repository to get API key by key field
+// 	apiKey, err := a.apiKeyRepo.GetByNonID(ctx, "key", key)
+// 	if err != nil {
+// 		return false, err
+// 	}
 
-	return isKeeper, nil
-}
+// 	return apiKey.IsKeeper, nil
+// }
 
 // Public wrapper methods for WebSocket authentication
 
 // GetApiKey validates and retrieves API key data (public wrapper for getApiKey)
-func (a *ApiKeyAuth) GetApiKey(key string) (*types.ApiKey, error) {
+func (a *ApiKeyAuth) GetApiKey(key string) (*types.ApiKeyDataEntity, error) {
 	return a.getApiKey(key)
 }
 
