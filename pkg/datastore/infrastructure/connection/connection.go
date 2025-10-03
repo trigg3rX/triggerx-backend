@@ -6,16 +6,19 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/scylladb/gocqlx/v2"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 // scyllaConnectionManager holds the database session and configuration.
 type scyllaConnectionManager struct {
-	session Sessioner
-	config  *Config
-	logger  logging.Logger
-	mu      sync.RWMutex
+	session       interfaces.Sessioner
+	gocqlxSession interfaces.GocqlxSessioner
+	config        *Config
+	logger        logging.Logger
+	mu            sync.RWMutex
 }
 
 var (
@@ -25,7 +28,7 @@ var (
 
 // NewConnection creates a new ScyllaDB connection.
 // It uses a singleton pattern to ensure only one connection is created.
-func NewConnection(config *Config, logger logging.Logger) (ConnectionManager, error) {
+func NewConnection(config *Config, logger logging.Logger) (interfaces.Connection, error) {
 	var err error
 	once.Do(func() {
 		cluster := gocql.NewCluster(config.Hosts...)
@@ -45,10 +48,14 @@ func NewConnection(config *Config, logger logging.Logger) (ConnectionManager, er
 			return
 		}
 
+		// Create gocqlx session wrapper
+		gocqlxSession := &gocqlxSessionWrapper{session: session}
+
 		instance = &scyllaConnectionManager{
-			session: session,
-			config:  config,
-			logger:  logger,
+			session:       session,
+			gocqlxSession: gocqlxSession,
+			config:        config,
+			logger:        logger,
 		}
 
 		// Start a background goroutine for health checks and reconnection
@@ -62,10 +69,17 @@ func NewConnection(config *Config, logger logging.Logger) (ConnectionManager, er
 }
 
 // GetSession returns the underlying gocql session.
-func (m *scyllaConnectionManager) GetSession() Sessioner {
+func (m *scyllaConnectionManager) GetSession() interfaces.Sessioner {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.session
+}
+
+// GetGocqlxSession returns the gocqlx session wrapper.
+func (m *scyllaConnectionManager) GetGocqlxSession() interfaces.GocqlxSessioner {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.gocqlxSession
 }
 
 // Close closes the database connection.
@@ -120,6 +134,8 @@ func (m *scyllaConnectionManager) reconnect() {
 				m.session.Close() // Close the old, dead session
 			}
 			m.session = newSession
+			// Update gocqlx session wrapper
+			m.gocqlxSession = &gocqlxSessionWrapper{session: newSession}
 			m.logger.Infof("Successfully reconnected to the database.")
 		}
 		return err
@@ -137,7 +153,7 @@ func (m *scyllaConnectionManager) reconnect() {
 }
 
 // SetSession sets the session for the connection (for testing).
-func (m *scyllaConnectionManager) SetSession(session Sessioner) {
+func (m *scyllaConnectionManager) SetSession(session interfaces.Sessioner) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.session = session
@@ -155,4 +171,57 @@ func (m *scyllaConnectionManager) SetLogger(logger logging.Logger) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.logger = logger
+}
+
+// gocqlxSessionWrapper wraps a gocql session to implement the GocqlxSessioner interface
+type gocqlxSessionWrapper struct {
+	session *gocql.Session
+}
+
+// Query creates a new gocqlx query
+func (w *gocqlxSessionWrapper) Query(stmt string, names []string) interfaces.GocqlxQueryer {
+	// Use the deprecated but still functional gocqlx.Query for now
+	// This is the correct way to create a gocqlx query from a gocql session
+	query := gocqlx.Query(w.session.Query(stmt), names)
+	return &gocqlxQueryWrapper{query: query}
+}
+
+// Close closes the underlying session
+func (w *gocqlxSessionWrapper) Close() {
+	w.session.Close()
+}
+
+// gocqlxQueryWrapper wraps a *gocqlx.Queryx to implement the GocqlxQueryer interface
+type gocqlxQueryWrapper struct {
+	query *gocqlx.Queryx
+}
+
+// WithContext implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) WithContext(ctx context.Context) interfaces.GocqlxQueryer {
+	return &gocqlxQueryWrapper{query: w.query.WithContext(ctx)}
+}
+
+// BindStruct implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) BindStruct(data interface{}) interfaces.GocqlxQueryer {
+	return &gocqlxQueryWrapper{query: w.query.BindStruct(data)}
+}
+
+// ExecRelease implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) ExecRelease() error {
+	return w.query.ExecRelease()
+}
+
+// GetRelease implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) GetRelease(dest interface{}) error {
+	return w.query.GetRelease(dest)
+}
+
+// Select implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) Select(dest interface{}) error {
+	return w.query.Select(dest)
+}
+
+// SelectRelease implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) SelectRelease(dest interface{}) error {
+	return w.query.SelectRelease(dest)
 }
