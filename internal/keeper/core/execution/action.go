@@ -19,7 +19,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client, taskID string) (types.PerformerActionData, error) {
 	if targetData.TargetContractAddress == "" {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
@@ -135,6 +135,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		executionInput,
 		chainID,
 		privateKey,
+		taskID,
 	)
 	if err != nil {
 		return types.PerformerActionData{}, err

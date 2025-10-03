@@ -32,6 +32,10 @@ type NonceManager struct {
 	pendingTxs map[uint64]*PendingTransaction
 	txMutex    sync.RWMutex
 
+	// Nonce reservation system
+	reservedNonces map[uint64]*ReservedNonce
+	reserveMutex   sync.RWMutex
+
 	// Retry configurations for different operations
 	rpcRetryConfig     *retry.RetryConfig
 	submitRetryConfig  *retry.RetryConfig
@@ -51,14 +55,22 @@ type PendingTransaction struct {
 	PrivateKey   *ecdsa.PrivateKey
 }
 
+type ReservedNonce struct {
+	Nonce      uint64
+	ReservedAt time.Time
+	TaskID     string // For debugging/tracking purposes
+	Status     string // "reserved", "committed", "released"
+}
+
 // NewNonceManager creates a new nonce manager with optimized retry settings
 func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceManager {
-	return &NonceManager{
-		client:       client,
-		address:      common.HexToAddress(config.GetKeeperAddress()),
-		logger:       logger,
-		syncInterval: 10 * time.Second, // More frequent sync for L2 chains
-		pendingTxs:   make(map[uint64]*PendingTransaction),
+	nm := &NonceManager{
+		client:         client,
+		address:        common.HexToAddress(config.GetKeeperAddress()),
+		logger:         logger,
+		syncInterval:   10 * time.Second, // More frequent sync for L2 chains
+		pendingTxs:     make(map[uint64]*PendingTransaction),
+		reservedNonces: make(map[uint64]*ReservedNonce),
 
 		// Aggressive retry configs optimized for L2 chains (1-2 sec block time)
 		rpcRetryConfig: &retry.RetryConfig{
@@ -91,6 +103,21 @@ func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceMana
 			ShouldRetry:     shouldRetryConfirmationError,
 		},
 	}
+
+	// Start cleanup goroutine for expired reservations
+	go nm.startCleanupRoutine()
+
+	return nm
+}
+
+// startCleanupRoutine runs a background goroutine to clean up expired reservations
+func (nm *NonceManager) startCleanupRoutine() {
+	ticker := time.NewTicker(30 * time.Second) // Clean up every 30 seconds
+	defer ticker.Stop()
+
+	for range ticker.C {
+		nm.CleanupExpiredReservations(5 * time.Minute) // Clean up reservations older than 5 minutes
+	}
 }
 
 // Initialize sets up the initial nonce
@@ -101,8 +128,9 @@ func (nm *NonceManager) Initialize(ctx context.Context) error {
 	return nm.syncWithBlockchain(ctx)
 }
 
-// GetNextNonce returns the next available nonce atomically
-func (nm *NonceManager) GetNextNonce(ctx context.Context) (uint64, error) {
+// ReserveNonce reserves a nonce for a task without incrementing the counter
+// Returns the reserved nonce and a reservation ID for tracking
+func (nm *NonceManager) ReserveNonce(ctx context.Context, taskID string) (uint64, error) {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
@@ -113,11 +141,117 @@ func (nm *NonceManager) GetNextNonce(ctx context.Context) (uint64, error) {
 		}
 	}
 
+	// Find the next available nonce
 	nonce := nm.currentNonce
-	nm.currentNonce++
+	for {
+		// Check if this nonce is already reserved
+		nm.reserveMutex.RLock()
+		_, isReserved := nm.reservedNonces[nonce]
+		nm.reserveMutex.RUnlock()
 
-	nm.logger.Debugf("Allocated nonce: %d", nonce)
+		if !isReserved {
+			break
+		}
+		nonce++
+	}
+
+	// Reserve the nonce
+	nm.reserveMutex.Lock()
+	nm.reservedNonces[nonce] = &ReservedNonce{
+		Nonce:      nonce,
+		ReservedAt: time.Now(),
+		TaskID:     taskID,
+		Status:     "reserved",
+	}
+	nm.reserveMutex.Unlock()
+
+	nm.logger.Debugf("Reserved nonce: %d for task: %s", nonce, taskID)
 	return nonce, nil
+}
+
+// CommitNonce commits a reserved nonce, making it unavailable for future reservations
+// This should be called when the transaction is successfully submitted
+func (nm *NonceManager) CommitNonce(nonce uint64, taskID string) error {
+	nm.reserveMutex.Lock()
+	defer nm.reserveMutex.Unlock()
+
+	reservation, exists := nm.reservedNonces[nonce]
+	if !exists {
+		return fmt.Errorf("nonce %d is not reserved", nonce)
+	}
+
+	if reservation.Status != "reserved" {
+		return fmt.Errorf("nonce %d is not in reserved status (current: %s)", nonce, reservation.Status)
+	}
+
+	if reservation.TaskID != taskID {
+		nm.logger.Warnf("Task ID mismatch for nonce %d: expected %s, got %s", nonce, reservation.TaskID, taskID)
+	}
+
+	// Update the reservation status
+	reservation.Status = "committed"
+
+	// Update current nonce to be at least this nonce + 1
+	nm.mu.Lock()
+	if nonce >= nm.currentNonce {
+		nm.currentNonce = nonce + 1
+	}
+	nm.mu.Unlock()
+
+	nm.logger.Debugf("Committed nonce: %d for task: %s", nonce, taskID)
+	return nil
+}
+
+// ReleaseNonce releases a reserved nonce back to the pool
+// This should be called when a task fails before transaction submission
+func (nm *NonceManager) ReleaseNonce(nonce uint64, taskID string) error {
+	nm.reserveMutex.Lock()
+	defer nm.reserveMutex.Unlock()
+
+	reservation, exists := nm.reservedNonces[nonce]
+	if !exists {
+		nm.logger.Warnf("Attempted to release unreserved nonce: %d for task: %s", nonce, taskID)
+		return nil // Not an error, just log and continue
+	}
+
+	if reservation.Status != "reserved" {
+		nm.logger.Warnf("Attempted to release non-reserved nonce %d (status: %s) for task: %s", nonce, reservation.Status, taskID)
+		return nil // Not an error, just log and continue
+	}
+
+	// Remove the reservation
+	delete(nm.reservedNonces, nonce)
+
+	nm.logger.Debugf("Released nonce: %d for task: %s", nonce, taskID)
+	return nil
+}
+
+// CleanupExpiredReservations removes reservations that are older than the specified duration
+// This helps prevent nonce leaks from crashed processes
+func (nm *NonceManager) CleanupExpiredReservations(maxAge time.Duration) {
+	nm.reserveMutex.Lock()
+	defer nm.reserveMutex.Unlock()
+
+	now := time.Now()
+	for nonce, reservation := range nm.reservedNonces {
+		if reservation.Status == "reserved" && now.Sub(reservation.ReservedAt) > maxAge {
+			nm.logger.Warnf("Cleaning up expired nonce reservation: %d for task: %s (age: %v)",
+				nonce, reservation.TaskID, now.Sub(reservation.ReservedAt))
+			delete(nm.reservedNonces, nonce)
+		}
+	}
+}
+
+// GetReservationStatus returns the status of a reserved nonce
+func (nm *NonceManager) GetReservationStatus(nonce uint64) (string, bool) {
+	nm.reserveMutex.RLock()
+	defer nm.reserveMutex.RUnlock()
+
+	reservation, exists := nm.reservedNonces[nonce]
+	if !exists {
+		return "", false
+	}
+	return reservation.Status, true
 }
 
 // syncWithBlockchain updates the current nonce from the blockchain
@@ -142,6 +276,7 @@ func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
 }
 
 // SubmitTransaction submits a transaction with intelligent retry logic
+// The nonce should be reserved using ReserveNonce before calling this method
 func (nm *NonceManager) SubmitTransaction(
 	ctx context.Context,
 	nonce uint64,
@@ -149,6 +284,7 @@ func (nm *NonceManager) SubmitTransaction(
 	data []byte,
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
+	taskID string,
 ) (*types.Receipt, string, error) {
 
 	// Check if we should replace an existing transaction
@@ -158,7 +294,7 @@ func (nm *NonceManager) SubmitTransaction(
 
 		// If existing tx is older than 30 seconds, replace it
 		if time.Since(existingTx.CreatedAt) > 30*time.Second {
-			return nm.replaceTransaction(ctx, existingTx, data, to, chainID, privateKey)
+			return nm.replaceTransaction(ctx, existingTx, data, to, chainID, privateKey, taskID)
 		}
 
 		// Otherwise, wait for the existing transaction
@@ -167,7 +303,7 @@ func (nm *NonceManager) SubmitTransaction(
 	nm.txMutex.RUnlock()
 
 	// Submit new transaction
-	return nm.submitNewTransaction(ctx, nonce, to, data, chainID, privateKey)
+	return nm.submitNewTransaction(ctx, nonce, to, data, chainID, privateKey, taskID)
 }
 
 // submitNewTransaction submits a new transaction with EIP-1559 support
@@ -178,6 +314,7 @@ func (nm *NonceManager) submitNewTransaction(
 	data []byte,
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
+	taskID string,
 ) (*types.Receipt, string, error) {
 
 	// Get current gas price
@@ -200,7 +337,7 @@ func (nm *NonceManager) submitNewTransaction(
 	// Track the transaction
 	nm.trackTransaction(nonce, signedTx.Hash().Hex(), data, to, chainID, privateKey, gasPrice)
 
-	return nm.submitWithRetry(ctx, signedTx, nonce, privateKey)
+	return nm.submitWithRetry(ctx, signedTx, nonce, privateKey, taskID)
 }
 
 // replaceTransaction replaces a stuck transaction with higher fees
@@ -211,6 +348,7 @@ func (nm *NonceManager) replaceTransaction(
 	to common.Address,
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
+	taskID string,
 ) (*types.Receipt, string, error) {
 
 	nm.logger.Infof("Replacing stuck transaction with nonce %d", existingTx.Nonce)
@@ -235,7 +373,7 @@ func (nm *NonceManager) replaceTransaction(
 	// Update tracking
 	nm.updateTransactionStatus(existingTx.Nonce, signedTx.Hash().Hex(), gasPrice)
 
-	return nm.submitWithRetry(ctx, signedTx, existingTx.Nonce, privateKey)
+	return nm.submitWithRetry(ctx, signedTx, existingTx.Nonce, privateKey, taskID)
 }
 
 // waitForExistingTransaction waits for an existing transaction to be confirmed
@@ -253,7 +391,7 @@ func (nm *NonceManager) waitForExistingTransaction(ctx context.Context, existing
 }
 
 // submitWithRetry handles the actual submission with intelligent retry logic
-func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Transaction, nonce uint64, privateKey *ecdsa.PrivateKey) (*types.Receipt, string, error) {
+func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Transaction, nonce uint64, privateKey *ecdsa.PrivateKey, taskID string) (*types.Receipt, string, error) {
 	// First, submit the transaction with retry logic
 	submitOperation := func() (string, error) {
 		err := nm.client.SendTransaction(ctx, signedTx)
@@ -311,10 +449,15 @@ func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Tra
 		nm.updateTransactionStatus(nonce, signedReplacementTx.Hash().Hex(), signedReplacementTx.GasPrice())
 
 		// Recursively try with the replacement transaction (but limit depth)
-		return nm.submitWithRetry(ctx, signedReplacementTx, nonce, privateKey)
+		return nm.submitWithRetry(ctx, signedReplacementTx, nonce, privateKey, taskID)
 	}
 
-	// Success!
+	// Success! Commit the nonce
+	if err := nm.CommitNonce(nonce, taskID); err != nil {
+		nm.logger.Errorf("Failed to commit nonce %d for task %s: %v", nonce, taskID, err)
+		// Don't fail the transaction for this, but log the error
+	}
+
 	nm.markTransactionConfirmed(nonce, txHash)
 	nm.logger.Infof("Transaction confirmed: %s", txHash)
 	return receipt, txHash, nil

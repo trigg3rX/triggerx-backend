@@ -104,10 +104,11 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				return
 			}
 
-			// Get next nonce atomically
-			nonce, err := nonceManager.GetNextNonce(context.Background())
+			// Reserve nonce for this task
+			taskIDStr := fmt.Sprintf("%d", task.TaskID[idx])
+			nonce, err := nonceManager.ReserveNonce(context.Background(), taskIDStr)
 			if err != nil {
-				e.logger.Error("Failed to get nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				e.logger.Error("Failed to reserve nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				resultCh <- struct {
 					success bool
 					err     error
@@ -115,11 +116,26 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				return
 			}
 
+			// Ensure nonce is released if task fails
+			defer func() {
+				if r := recover(); r != nil {
+					// Task panicked, release the nonce
+					if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+						e.logger.Errorf("Failed to release nonce %d after panic: %v", nonce, releaseErr)
+					}
+					panic(r) // Re-panic to maintain original behavior
+				}
+			}()
+
 			// create a client for validating event based and performing action
 			rpcURL := utils.GetChainRpcUrl(task.TargetData[idx].TargetChainID)
 			client, err := ethclient.Dial(rpcURL)
 			if err != nil {
 				e.logger.Error("Failed to connect to chain", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Release the nonce since we failed to connect
+				if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+					e.logger.Errorf("Failed to release nonce %d after connection failure: %v", nonce, releaseErr)
+				}
 				resultCh <- struct {
 					success bool
 					err     error
@@ -131,9 +147,13 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 			// execute the action with the allocated nonce
 			var actionData types.PerformerActionData
-			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client)
+			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client, taskIDStr)
 			if err != nil {
 				e.logger.Error("Failed to execute action", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Release the nonce since action execution failed
+				if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+					e.logger.Errorf("Failed to release nonce %d after action failure: %v", nonce, releaseErr)
+				}
 				resultCh <- struct {
 					success bool
 					err     error
@@ -185,6 +205,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			performerSignature, err := cryptography.SignJSONMessage(ipfsDataForSigning, config.GetPrivateKeyConsensus())
 			if err != nil {
 				e.logger.Error("Failed to sign the ipfs data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Release the nonce since signing failed
+				if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+					e.logger.Errorf("Failed to release nonce %d after signing failure: %v", nonce, releaseErr)
+				}
 				resultCh <- struct {
 					success bool
 					err     error
@@ -201,6 +225,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			filename := fmt.Sprintf("proof_of_task_%d_%s.json", task.TaskID, time.Now().Format("20060102150405"))
 			ipfsDataBytes, err := json.Marshal(ipfsData)
 			if err != nil {
+				// Release the nonce since marshaling failed
+				if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+					e.logger.Errorf("Failed to release nonce %d after marshaling failure: %v", nonce, releaseErr)
+				}
 				resultCh <- struct {
 					success bool
 					err     error
@@ -210,6 +238,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			cid, err := e.validator.IpfsClient.Upload(ctx, filename, ipfsDataBytes)
 			if err != nil {
 				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Release the nonce since IPFS upload failed
+				if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+					e.logger.Errorf("Failed to release nonce %d after IPFS upload failure: %v", nonce, releaseErr)
+				}
 				resultCh <- struct {
 					success bool
 					err     error
@@ -228,6 +260,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)
 			if !success {
 				e.logger.Error("Failed to send task result to aggregator", "task_id", task.TaskID, "error", err, "trace_id", traceID)
+				// Release the nonce since aggregator communication failed
+				if releaseErr := nonceManager.ReleaseNonce(nonce, taskIDStr); releaseErr != nil {
+					e.logger.Errorf("Failed to release nonce %d after aggregator failure: %v", nonce, releaseErr)
+				}
 				resultCh <- struct {
 					success bool
 					err     error
