@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_address text,
     email_id text,
     job_ids set<varint>,
-    tg_consumed varint,
+    opx_consumed varint,
     total_jobs bigint,
     total_tasks bigint,
     created_at timestamp,

@@ -181,22 +181,22 @@ type ConditionJobDataAPI struct {
 }
 
 type JobResponse struct {
-	JobData          JobData           `json:"job_data"`
-	TimeJobData      *TimeJobData      `json:"time_job_data,omitempty"`
-	EventJobData     *EventJobData     `json:"event_job_data,omitempty"`
-	ConditionJobData *ConditionJobData `json:"condition_job_data,omitempty"`
+	JobData          JobDataAPI           `json:"job_data"`
+	TimeJobData      *TimeJobDataAPI      `json:"time_job_data,omitempty"`
+	EventJobData     *EventJobDataAPI     `json:"event_job_data,omitempty"`
+	ConditionJobData *ConditionJobDataAPI `json:"condition_job_data,omitempty"`
 }
 
 type JobResponseAPI struct {
-	JobData          JobDataAPI        `json:"job_data"`
-	TimeJobData      *TimeJobData      `json:"time_job_data,omitempty"`
-	EventJobData     *EventJobData     `json:"event_job_data,omitempty"`
-	ConditionJobData *ConditionJobData `json:"condition_job_data,omitempty"`
+	JobData          JobDataAPI           `json:"job_data"`
+	TimeJobData      *TimeJobDataAPI      `json:"time_job_data,omitempty"`
+	EventJobData     *EventJobDataAPI     `json:"event_job_data,omitempty"`
+	ConditionJobData *ConditionJobDataAPI `json:"condition_job_data,omitempty"`
 }
 
 func ConvertJobResponseToAPI(j JobResponse) JobResponseAPI {
-	costPrediction, _ := new(big.Float).SetInt(&j.JobData.JobCostPrediction).Float64()
-	costActual, _ := new(big.Float).SetInt(&j.JobData.JobCostActual).Float64()
+	costPrediction := j.JobData.JobCostPrediction
+	costActual := j.JobData.JobCostActual
 
 	return JobResponseAPI{
 		JobData: JobDataAPI{
