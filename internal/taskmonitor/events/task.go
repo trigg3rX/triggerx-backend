@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 )
@@ -83,6 +84,32 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 			if err := h.db.UpdateKeeperPointsInDatabase(*taskData); err != nil {
 				h.logger.Errorf("Failed to update keeper points in database: %v", err)
 				return
+			}
+
+			// Notify user about task completion/rejection
+			if h.notifier != nil {
+				// Fetch user email by task id -> job id mapping
+				email, err := h.db.GetUserEmailByTaskID(taskData.TaskID)
+				if err != nil {
+					h.logger.Warnf("Could not fetch user email for task %d: %v", taskData.TaskID, err)
+				} else if email != "" {
+					payload := notify.TaskStatusPayload{
+						TaskID:          taskData.TaskID,
+						JobID:           0,
+						Status:          "completed",
+						IsAccepted:      taskData.IsAccepted,
+						SubmissionTx:    taskData.TaskSubmissionTxHash,
+						ExecutionTxHash: taskData.ExecutionTxHash,
+						ProofOfTask:     taskData.ProofOfTask,
+						OccurredAt:      time.Now(),
+					}
+					if !taskData.IsAccepted {
+						payload.Status = "failed"
+					}
+					if err := h.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+						h.logger.Warnf("Failed to notify user %s for task %d: %v", email, taskData.TaskID, err)
+					}
+				}
 			}
 		default:
 			return

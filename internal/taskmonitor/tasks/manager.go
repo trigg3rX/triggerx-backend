@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
@@ -17,6 +18,7 @@ import (
 type TaskStreamManager struct {
 	redisClient    redisClient.RedisClientInterface
 	dbClient       *database.DatabaseClient
+	notifier       notify.Notifier
 	logger         logging.Logger
 	consumerGroups map[string]bool
 	mu             sync.RWMutex
@@ -29,6 +31,7 @@ func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient
 	tsm := &TaskStreamManager{
 		redisClient:    redisClient,
 		dbClient:       dbClient,
+		notifier:       notify.NewCompositeNotifier(logger, notify.NewWebhookNotifier(logger), notify.NewSMTPNotifier(logger)),
 		logger:         logger,
 		consumerGroups: make(map[string]bool),
 		startTime:      time.Now(),
