@@ -21,6 +21,8 @@ type GenericRepository[T any] interface {
 	Count(ctx context.Context) (int64, error)
 	Exists(ctx context.Context, id interface{}) (bool, error)
 	ExistsByField(ctx context.Context, field string, value interface{}) (bool, error)
+	GetTableName() string
+	GetPrimaryKey() string
 	Close()
 }
 

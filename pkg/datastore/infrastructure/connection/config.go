@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -75,4 +76,62 @@ func (c *Config) WithRetryConfig(retryConfig *retry.RetryConfig) *Config {
 func (c *Config) WithHealthCheckInterval(interval time.Duration) *Config {
 	c.HealthCheckInterval = interval
 	return c
+}
+
+// Validate validates the configuration and returns an error if invalid
+func (c *Config) Validate() error {
+	if len(c.Hosts) == 0 {
+		return fmt.Errorf("at least one host must be specified")
+	}
+
+	if c.Keyspace == "" {
+		return fmt.Errorf("keyspace cannot be empty")
+	}
+
+	if c.Timeout <= 0 {
+		return fmt.Errorf("timeout must be positive, got: %v", c.Timeout)
+	}
+
+	if c.ConnectWait <= 0 {
+		return fmt.Errorf("connect wait must be positive, got: %v", c.ConnectWait)
+	}
+
+	if c.Retries < 0 {
+		return fmt.Errorf("retries cannot be negative, got: %d", c.Retries)
+	}
+
+	if c.ProtoVersion < 1 || c.ProtoVersion > 4 {
+		return fmt.Errorf("protocol version must be between 1 and 4, got: %d", c.ProtoVersion)
+	}
+
+	if c.MaxPreparedStmts < 0 {
+		return fmt.Errorf("max prepared statements cannot be negative, got: %d", c.MaxPreparedStmts)
+	}
+
+	if c.HealthCheckInterval < 0 {
+		return fmt.Errorf("health check interval cannot be negative, got: %v", c.HealthCheckInterval)
+	}
+
+	return nil
+}
+
+// Clone creates a deep copy of the configuration
+func (c *Config) Clone() *Config {
+	hosts := make([]string, len(c.Hosts))
+	copy(hosts, c.Hosts)
+
+	return &Config{
+		Hosts:               hosts,
+		Keyspace:            c.Keyspace,
+		Timeout:             c.Timeout,
+		Retries:             c.Retries,
+		ConnectWait:         c.ConnectWait,
+		Consistency:         c.Consistency,
+		HealthCheckInterval: c.HealthCheckInterval,
+		ProtoVersion:        c.ProtoVersion,
+		SocketKeepalive:     c.SocketKeepalive,
+		MaxPreparedStmts:    c.MaxPreparedStmts,
+		DefaultIdempotence:  c.DefaultIdempotence,
+		RetryConfig:         c.RetryConfig,
+	}
 }

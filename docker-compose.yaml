@@ -9,6 +9,19 @@ services:
     logging:
       driver: "json-file"
 
+  # scylla-test:
+  #   image: scylladb/scylla
+  #   container_name: triggerx-scylla-test
+  #   ports:
+  #     - "9043:9042"
+  #   environment:
+  #     - SCYLLA_CLUSTER_NAME=test-cluster
+  #     - SCYLLA_DC=test-dc
+  #   volumes:
+  #     - scylla_test_data:/var/lib/scylla
+  #   logging:
+  #     driver: "json-file"
+
   # redis:
   #   image: "redis:7-alpine"
   #   container_name: triggerx-redis
@@ -16,4 +29,5 @@ services:
   #     - "6379:6379"
 
 volumes:
-  scylla_data: 
+  scylla_data:
+  scylla_test_data: 

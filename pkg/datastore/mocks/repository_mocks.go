@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -43,8 +44,8 @@ func (m *MockGenericRepository[T]) GetByNonID(ctx context.Context, field string,
 }
 
 // List mocks the List method
-func (m *MockGenericRepository[T]) List(ctx context.Context, limit int, offset int) ([]*T, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockGenericRepository[T]) List(ctx context.Context) ([]*T, error) {
+	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -113,55 +114,67 @@ func (m *MockGenericRepository[T]) Close() {
 	m.Called()
 }
 
+// GetTableName mocks the GetTableName method
+func (m *MockGenericRepository[T]) GetTableName() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+// GetPrimaryKey mocks the GetPrimaryKey method
+func (m *MockGenericRepository[T]) GetPrimaryKey() string {
+	args := m.Called()
+	return args.String(0)
+}
+
 // MockRepositoryFactory is a mock implementation of RepositoryFactory interface
 type MockRepositoryFactory struct {
 	mock.Mock
 }
 
 // CreateUserRepository mocks the CreateUserRepository method
-func (m *MockRepositoryFactory) CreateUserRepository() *MockGenericRepository[types.UserDataEntity] {
+func (m *MockRepositoryFactory) CreateUserRepository() interfaces.GenericRepository[types.UserDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.UserDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.UserDataEntity])
 }
 
 // CreateJobRepository mocks the CreateJobRepository method
-func (m *MockRepositoryFactory) CreateJobRepository() *MockGenericRepository[types.JobDataEntity] {
+func (m *MockRepositoryFactory) CreateJobRepository() interfaces.GenericRepository[types.JobDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.JobDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.JobDataEntity])
 }
 
 // CreateTimeJobRepository mocks the CreateTimeJobRepository method
-func (m *MockRepositoryFactory) CreateTimeJobRepository() *MockGenericRepository[types.TimeJobDataEntity] {
+func (m *MockRepositoryFactory) CreateTimeJobRepository() interfaces.GenericRepository[types.TimeJobDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.TimeJobDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.TimeJobDataEntity])
 }
 
 // CreateEventJobRepository mocks the CreateEventJobRepository method
-func (m *MockRepositoryFactory) CreateEventJobRepository() *MockGenericRepository[types.EventJobDataEntity] {
+func (m *MockRepositoryFactory) CreateEventJobRepository() interfaces.GenericRepository[types.EventJobDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.EventJobDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.EventJobDataEntity])
 }
 
 // CreateConditionJobRepository mocks the CreateConditionJobRepository method
-func (m *MockRepositoryFactory) CreateConditionJobRepository() *MockGenericRepository[types.ConditionJobDataEntity] {
+func (m *MockRepositoryFactory) CreateConditionJobRepository() interfaces.GenericRepository[types.ConditionJobDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.ConditionJobDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.ConditionJobDataEntity])
 }
 
 // CreateTaskRepository mocks the CreateTaskRepository method
-func (m *MockRepositoryFactory) CreateTaskRepository() *MockGenericRepository[types.TaskDataEntity] {
+func (m *MockRepositoryFactory) CreateTaskRepository() interfaces.GenericRepository[types.TaskDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.TaskDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.TaskDataEntity])
 }
 
 // CreateKeeperRepository mocks the CreateKeeperRepository method
-func (m *MockRepositoryFactory) CreateKeeperRepository() *MockGenericRepository[types.KeeperDataEntity] {
+func (m *MockRepositoryFactory) CreateKeeperRepository() interfaces.GenericRepository[types.KeeperDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.KeeperDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.KeeperDataEntity])
 }
 
 // CreateApiKeyRepository mocks the CreateApiKeyRepository method
-func (m *MockRepositoryFactory) CreateApiKeyRepository() *MockGenericRepository[types.ApiKeyDataEntity] {
+func (m *MockRepositoryFactory) CreateApiKeyRepository() interfaces.GenericRepository[types.ApiKeyDataEntity] {
 	args := m.Called()
-	return args.Get(0).(*MockGenericRepository[types.ApiKeyDataEntity])
+	return args.Get(0).(interfaces.GenericRepository[types.ApiKeyDataEntity])
 }
