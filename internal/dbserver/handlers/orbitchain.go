@@ -132,7 +132,9 @@ func (h *ChainDeploymentHandler) deployChainAsync(chainID int64, req *types.Depl
 	if err != nil {
 		h.logger.Errorf("[%s] Orbit service call failed: %v", traceID, err)
 		trackDBOp = metrics.TrackDBOperation("update", "orbit_chain_data")
-		h.repository.UpdateOrbitChainStatus(chainID, "failed", "")
+		if updateErr := h.repository.UpdateOrbitChainStatus(chainID, "failed", ""); updateErr != nil {
+			h.logger.Errorf("[%s] Failed to update status to failed: %v", traceID, updateErr)
+		}
 		trackDBOp(nil)
 		return
 	}
@@ -141,7 +143,9 @@ func (h *ChainDeploymentHandler) deployChainAsync(chainID int64, req *types.Depl
 	if !orbitResp["success"].(bool) {
 		h.logger.Errorf("[%s] Orbit deployment failed: %v", traceID, orbitResp["message"])
 		trackDBOp = metrics.TrackDBOperation("update", "orbit_chain_data")
-		h.repository.UpdateOrbitChainStatus(chainID, "failed", "")
+		if updateErr := h.repository.UpdateOrbitChainStatus(chainID, "failed", ""); updateErr != nil {
+			h.logger.Errorf("[%s] Failed to update status to failed: %v", traceID, updateErr)
+		}
 		trackDBOp(nil)
 		return
 	}
@@ -188,7 +192,9 @@ func (h *ChainDeploymentHandler) deployChainAsync(chainID int64, req *types.Depl
 	if err != nil {
 		h.logger.Errorf("[%s] Contract deployment failed: %v", traceID, err)
 		trackDBOp = metrics.TrackDBOperation("update", "orbit_chain_data")
-		h.repository.UpdateOrbitChainStatus(chainID, "failed", chainAddress)
+		if updateErr := h.repository.UpdateOrbitChainStatus(chainID, "failed", chainAddress); updateErr != nil {
+			h.logger.Errorf("[%s] Failed to update status to failed: %v", traceID, updateErr)
+		}
 		trackDBOp(nil)
 		return
 	}
@@ -197,7 +203,9 @@ func (h *ChainDeploymentHandler) deployChainAsync(chainID int64, req *types.Depl
 	if !contractResp["success"].(bool) {
 		h.logger.Errorf("[%s] Contract deployment failed: %v", traceID, contractResp["message"])
 		trackDBOp = metrics.TrackDBOperation("update", "orbit_chain_data")
-		h.repository.UpdateOrbitChainStatus(chainID, "failed", chainAddress)
+		if updateErr := h.repository.UpdateOrbitChainStatus(chainID, "failed", chainAddress); updateErr != nil {
+			h.logger.Errorf("[%s] Failed to update status to failed: %v", traceID, updateErr)
+		}
 		trackDBOp(nil)
 		return
 	}
@@ -236,7 +244,11 @@ func (h *ChainDeploymentHandler) callOrbitService(endpoint string, payload map[s
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			h.logger.Errorf("Failed to close response body: %v", closeErr)
+		}
+	}()
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

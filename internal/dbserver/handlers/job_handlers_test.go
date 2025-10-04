@@ -40,29 +40,6 @@ func (f *fakeJobRepo) GetJobsByUserIDAndChainID(userID int64, createdChainID str
 	return nil, nil
 }
 
-type fakeUserRepo struct {
-	userID int64
-	jobIDs []*big.Int
-	err    error
-
-	userLeaderboard    []typesUserEntry
-	userLeaderboardErr error
-}
-
-// Minimal interfaces for methods referenced in handlers
-func (f *fakeUserRepo) GetUserJobIDsByAddress(addr string) (int64, []*big.Int, error) {
-	return f.userID, f.jobIDs, f.err
-}
-func (f *fakeUserRepo) GetUserLeaderboard() ([]typesUserEntry, error) {
-	return f.userLeaderboard, f.userLeaderboardErr
-}
-func (f *fakeUserRepo) GetUserLeaderboardByAddress(addr string) (typesUserEntry, error) {
-	if len(f.userLeaderboard) > 0 {
-		return f.userLeaderboard[0], nil
-	}
-	return typesUserEntry{}, errors.New("not found")
-}
-
 type fakeApiKeysRepo struct {
 	owner string
 	err   error
@@ -89,9 +66,6 @@ func (f *fakeApiKeysRepo) UpdateApiKeyStatus(req *dbtypes.UpdateApiKeyStatusRequ
 }
 func (f *fakeApiKeysRepo) UpdateApiKeyLastUsed(key string, isSuccess bool) error { return nil }
 func (f *fakeApiKeysRepo) DeleteApiKey(key string) error                         { return nil }
-
-// Structs mirroring leaderboard entries used by handlers
-type typesUserEntry = dbtypes.UserLeaderboardEntry
 
 func TestGetJobDataByJobID_ValidationAndRepoError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -226,4 +200,3 @@ func TestGetJobsByApiKey_HeaderAndOwner(t *testing.T) {
 		}
 	}
 }
-

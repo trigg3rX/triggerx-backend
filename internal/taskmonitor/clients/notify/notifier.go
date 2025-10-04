@@ -75,7 +75,11 @@ func (n *WebhookNotifier) NotifyTaskStatus(ctx context.Context, email string, pa
 		n.logger.Errorf("Webhook request failed: %v", err)
 		return fmt.Errorf("webhook request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			n.logger.Errorf("Failed to close response body: %v", closeErr)
+		}
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		n.logger.Errorf("Webhook returned non-2xx status: %d", resp.StatusCode)
 		return fmt.Errorf("webhook returned non-2xx status: %d", resp.StatusCode)
@@ -118,9 +122,9 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 
 	// Build message
 	msg := bytes.NewBuffer(nil)
-	msg.WriteString(fmt.Sprintf("From: %s\r\n", from))
-	msg.WriteString(fmt.Sprintf("To: %s\r\n", email))
-	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	fmt.Fprintf(msg, "From: %s\r\n", from)
+	fmt.Fprintf(msg, "To: %s\r\n", email)
+	fmt.Fprintf(msg, "Subject: %s\r\n", subject)
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
 	msg.WriteString(body)
@@ -139,7 +143,11 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		if err != nil {
 			return fmt.Errorf("smtp new client failed: %w", err)
 		}
-		defer c.Quit()
+		defer func() {
+			if quitErr := c.Quit(); quitErr != nil {
+				n.logger.Errorf("Failed to quit SMTP client: %v", quitErr)
+			}
+		}()
 
 		if ok, _ := c.Extension("STARTTLS"); ok {
 			tlsConfig := &tls.Config{ServerName: host}
@@ -179,12 +187,20 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		if err != nil {
 			return fmt.Errorf("smtps dial failed: %w", err)
 		}
-		defer conn.Close()
+		defer func() {
+			if closeErr := conn.Close(); closeErr != nil {
+				n.logger.Errorf("Failed to close connection: %v", closeErr)
+			}
+		}()
 		c, err := smtp.NewClient(conn, host)
 		if err != nil {
 			return fmt.Errorf("smtps new client failed: %w", err)
 		}
-		defer c.Quit()
+		defer func() {
+			if quitErr := c.Quit(); quitErr != nil {
+				n.logger.Errorf("Failed to quit SMTP client: %v", quitErr)
+			}
+		}()
 
 		if user != "" && pass != "" {
 			if err := c.Auth(smtp.PlainAuth("", user, pass, host)); err != nil {
