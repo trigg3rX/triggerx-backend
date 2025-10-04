@@ -4,6 +4,7 @@ RUN npm install -g npm@10.5.0
 
 WORKDIR /app
 
-RUN npm i -g @othentic/othentic-cli@1.15.0
+RUN npm i -g @othentic/othentic-cli
+RUN npm i -g @libp2p/autonat
 
 ENTRYPOINT [ "othentic-cli" ]

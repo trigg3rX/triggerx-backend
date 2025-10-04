@@ -4,6 +4,7 @@ x-othentic-cli: &othentic-cli
   build:
     context: .
     dockerfile: ./Dockerfile
+    no_cache: true
 
 services:
   aggregator:
@@ -14,22 +15,27 @@ services:
     command: [
       "node",
       "aggregator",
+      "--l1-chain", "sepolia",
+      "--l2-chain", "base-sepolia",
       "--json-rpc",
-      "--json-rpc.port", "${AGGREGATOR_RPC_PORT}",
+      "--json-rpc.port", "9001",
       "--json-rpc.custom-message-enabled",
-      "--p2p.port", "${AGGREGATOR_P2P_PORT}",
-      "--p2p.datadir", "/peerstore/aggregator",
-      "--p2p.discovery-interval", "${AGGREGATOR_P2P_DISCOVERY_INTERVAL}",
-      "--internal-tasks",
+      "--p2p.port", "9876",
+      "--p2p.datadir", "/data/peerstore",
+      "--p2p.discovery-interval", "10000",
+      # "--p2p.public-ip", "${PUBLIC_IP_ADDRESS}",
       "--metrics",
+      "--metrics.port", "9021",
+      "--internal-tasks",
       "--delay", "10000",
       "--aggregator.simulate-transactions", "true",
-      "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
-      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
+      "--keystore", "/data/keystore/aggregator.json",
+      "--keystore-password", "${AGGREGATOR_KEYSTORE_PASSWORD}"
     ]
     environment:
-      - PRIVATE_KEY=${AGGREGATOR_OPERATOR_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${AGGREGATOR_OPERATOR_ADDRESS}
+      - BLS_PRIVATE_KEY=${AGGREGATOR_BLS_PRIVATE_KEY}
+      - LOG_DIR=${LOG_DIR}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
       - INTERNAL_TASKS=${INTERNAL_TASKS}
@@ -37,68 +43,109 @@ services:
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
       - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
       - OTHENTIC_BOOTSTRAP_SEED=${OTHENTIC_BOOTSTRAP_SEED}
-      - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
-      - LOG_DIR=${LOG_DIR_AGGREGATOR}
-      - AGGREGATOR_RPC_PORT=${AGGREGATOR_RPC_PORT}
-      - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
-      - AGGREGATOR_P2P_DISCOVERY_INTERVAL=${AGGREGATOR_P2P_DISCOVERY_INTERVAL}
-      - AGGREGATOR_METRICS_PORT=${AGGREGATOR_METRICS_PORT}
+      - PUBLIC_IP_ADDRESS=${PUBLIC_IP_ADDRESS}
     volumes:
-      - ./data/peerstore/aggregator:/peeerstore/aggregator
-      - ./data/logs/aggregator:/data/logs/aggregator
+      - ../data/peerstore/aggregator:/data/peerstore
+      - ../data/logs/aggregator:/data/logs
+      - ../.keystore/aggregator.json:/data/keystore/aggregator.json
     ports:
-      - "${AGGREGATOR_P2P_PORT}:${AGGREGATOR_P2P_PORT}"
-      - "${AGGREGATOR_RPC_PORT}:${AGGREGATOR_RPC_PORT}"
+      - "9876:9876"
+      - "9001:9001"
     networks:
       p2p:
         ipv4_address: 172.28.0.69
 
-  nexus:
-    container_name: nexus
-    <<: *othentic-cli
-    env_file:
-      - .env
-    command: [
-      "node",
-      "attester",
-      "/ip4/172.28.0.69/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}",
-      "--avs-webapi", "http://host.docker.internal",
-      "--avs-webapi-port", "${NEXUS_RPC_PORT}",
-      "--l1-chain", "holesky",
-      "--l2-chain", "base-sepolia",
-      "--json-rpc.custom-message-enabled",
-      "--p2p.port", "${NEXUS_P2P_PORT}",
-      "--p2p.discovery-interval", "60000",
-      "--metrics",
-      "--metrics.port", "${NEXUS_METRICS_PORT}",
-      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${NEXUS_P2P_PORT}/p2p/${PEER_ID}"
-    ]
-    environment:
-      - PRIVATE_KEY=${NEXUS_PRIVATE_KEY}
-      - OPERATOR_ADDRESS=${NEXUS_OPERATOR_ADDRESS}
-      - L1_RPC=${L1_RPC}
-      - L2_RPC=${L2_RPC}
-      - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
-      - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
-      - LOG_DIR=${LOG_DIR_NEXUS}
-      - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
-      - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
-      - PEER_ID=${PEER_ID}
-      - NEXUS_P2P_PORT=${NEXUS_P2P_PORT}
-      - NEXUS_RPC_PORT=${NEXUS_RPC_PORT}
-      - NEXUS_METRICS_PORT=${NEXUS_METRICS_PORT}
-    volumes:
-      - ./data/logs/nexus:/data/logs/nexus
-    ports:
-      - "${NEXUS_P2P_PORT}:${NEXUS_P2P_PORT}"
-    networks:
-      p2p:
-        ipv4_address: 172.28.0.70
-    depends_on:
-      aggregator:
-        condition: service_started
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+  # performer:
+  #   container_name: performer
+  #   <<: *othentic-cli
+  #   env_file:
+  #     - .env
+  #   command: [
+  #     "node",
+  #     "attester",
+  #     "/ip4/172.28.0.69/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
+  #     "--avs-webapi", "http://host.docker.internal",
+  #     "--avs-webapi-port", "9008",
+  #     "--l1-chain", "sepolia",
+  #     "--l2-chain", "base-sepolia",
+  #     "--json-rpc.custom-message-enabled",
+  #     "--p2p.port", "9875",
+  #     "--p2p.datadir", "/data/peerstore",
+  #     "--p2p.discovery-interval", "60000",
+  #     # "--p2p.public-ip", "${PUBLIC_IP_ADDRESS}",
+  #     "--metrics",
+  #     "--metrics.port", "9028"
+  #   ]
+  #   environment:
+  #     - PRIVATE_KEY=${PERFORMER_PRIVATE_KEY}
+  #     - OPERATOR_ADDRESS=${PERFORMER_OPERATOR_ADDRESS}
+  #     - LOG_DIR=${LOG_DIR}
+  #     - L1_RPC=${L1_RPC}
+  #     - L2_RPC=${L2_RPC}
+  #     - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
+  #     - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
+  #     - PUBLIC_IP_ADDRESS=${PUBLIC_IP_ADDRESS}
+  #   volumes:
+  #     - ../data/peerstore/performer:/data/peerstore
+  #     - ../data/logs/performer:/data/logs
+  #   ports:
+  #     - "9875:9875"
+  #     # - "9008:9008"
+  #   networks:
+  #     p2p:
+  #       ipv4_address: 172.28.0.70
+  #   # depends_on:
+  #   #   aggregator:
+  #   #     condition: service_started
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+
+  # attester:
+  #   container_name: attester
+  #   <<: *othentic-cli
+  #   env_file:
+  #     - .env
+  #   command: [
+  #     "node",
+  #     "attester",
+  #     "/ip4/172.28.0.69/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
+  #     "/ip4/172.28.0.70/tcp/9875/p2p/${PERFORMER_OPERATOR_PEER_ID}",
+  #     "--avs-webapi", "http://host.docker.internal",
+  #     "--avs-webapi-port", "9009",
+  #     "--l1-chain", "sepolia",
+  #     "--l2-chain", "base-sepolia",
+  #     "--json-rpc.custom-message-enabled",
+  #     "--p2p.port", "9874",
+  #     "--p2p.datadir", "/data/peerstore",
+  #     "--p2p.discovery-interval", "60000",
+  #     # "--p2p.public-ip", "${PUBLIC_IP_ADDRESS}",
+  #     "--metrics",
+  #     "--metrics.port", "9029"
+  #   ]
+  #   environment:
+  #     - PRIVATE_KEY=${ATTESTER_PRIVATE_KEY}
+  #     - OPERATOR_ADDRESS=${ATTESTER_OPERATOR_ADDRESS}
+  #     - LOG_DIR=${LOG_DIR}
+  #     - L1_RPC=${L1_RPC}
+  #     - L2_RPC=${L2_RPC}
+  #     - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
+  #     - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
+  #     - PUBLIC_IP_ADDRESS=${PUBLIC_IP_ADDRESS}
+  #     - PERFORMER_OPERATOR_PEER_ID=${PERFORMER_OPERATOR_PEER_ID}
+  #   volumes:
+  #     - ../data/peerstore/attester:/data/peerstore
+  #     - ../data/logs/attester:/data/logs
+  #   ports:
+  #     - "9874:9874"
+  #     # - "9009:9009"
+  #   networks:
+  #     p2p:
+  #       ipv4_address: 172.28.0.71
+  #   depends_on:
+  #     performer:
+  #       condition: service_started
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
 
 networks:
   p2p:
