@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/internal/health/mocks"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -75,7 +75,7 @@ func TestGetStateManager(t *testing.T) {
 		mockDB := &mocks.MockDatabaseManager{}
 		
 		sm := &StateManager{
-			keepers:     make(map[string]*types.KeeperInfo),
+			keepers:     make(map[string]*types.HealthKeeperInfo),
 			logger:      logger,
 			initialized: true,
 			db:          interfaces.DatabaseManagerInterface(mockDB),
@@ -92,13 +92,13 @@ func TestGetStateManager(t *testing.T) {
 func TestIsKeeperActive(t *testing.T) {
 	tests := []struct {
 		name           string
-		initialKeepers map[string]*types.KeeperInfo
+		initialKeepers map[string]*types.HealthKeeperInfo
 		keeperAddress  string
 		expectedResult bool
 	}{
 		{
 			name: "should return true for active keeper",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -109,7 +109,7 @@ func TestIsKeeperActive(t *testing.T) {
 		},
 		{
 			name: "should return false for inactive keeper",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      false,
@@ -120,7 +120,7 @@ func TestIsKeeperActive(t *testing.T) {
 		},
 		{
 			name:           "should return false for non-existent keeper",
-			initialKeepers: map[string]*types.KeeperInfo{},
+			initialKeepers: map[string]*types.HealthKeeperInfo{},
 			keeperAddress:  "0x123",
 			expectedResult: false,
 		},
@@ -150,13 +150,13 @@ func TestIsKeeperActive(t *testing.T) {
 func TestGetAllActiveKeepers(t *testing.T) {
 	tests := []struct {
 		name             string
-		initialKeepers   map[string]*types.KeeperInfo
+		initialKeepers   map[string]*types.HealthKeeperInfo
 		expectedActiveCount int
 		expectedAddresses []string
 	}{
 		{
 			name: "should return all active keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -175,7 +175,7 @@ func TestGetAllActiveKeepers(t *testing.T) {
 		},
 		{
 			name: "should return empty slice when no active keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      false,
@@ -190,7 +190,7 @@ func TestGetAllActiveKeepers(t *testing.T) {
 		},
 		{
 			name:                "should return empty slice when no keepers",
-			initialKeepers:      map[string]*types.KeeperInfo{},
+			initialKeepers:      map[string]*types.HealthKeeperInfo{},
 			expectedActiveCount: 0,
 			expectedAddresses:   []string{},
 		},
@@ -225,13 +225,13 @@ func TestGetAllActiveKeepers(t *testing.T) {
 func TestGetKeeperCount(t *testing.T) {
 	tests := []struct {
 		name           string
-		initialKeepers map[string]*types.KeeperInfo
+		initialKeepers map[string]*types.HealthKeeperInfo
 		expectedTotal  int
 		expectedActive int
 	}{
 		{
 			name: "should count total and active keepers correctly",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -254,7 +254,7 @@ func TestGetKeeperCount(t *testing.T) {
 		},
 		{
 			name: "should handle all active keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -269,7 +269,7 @@ func TestGetKeeperCount(t *testing.T) {
 		},
 		{
 			name: "should handle all inactive keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      false,
@@ -284,7 +284,7 @@ func TestGetKeeperCount(t *testing.T) {
 		},
 		{
 			name:           "should handle empty keeper map",
-			initialKeepers: map[string]*types.KeeperInfo{},
+			initialKeepers: map[string]*types.HealthKeeperInfo{},
 			expectedTotal:  0,
 			expectedActive: 0,
 		},
@@ -317,12 +317,12 @@ func TestGetDetailedKeeperInfo(t *testing.T) {
 	
 	tests := []struct {
 		name           string
-		initialKeepers map[string]*types.KeeperInfo
+		initialKeepers map[string]*types.HealthKeeperInfo
 		expectedCount  int
 	}{
 		{
 			name: "should return detailed info for all keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperName:       "keeper1",
 					KeeperAddress:    "0x123",
@@ -350,7 +350,7 @@ func TestGetDetailedKeeperInfo(t *testing.T) {
 		},
 		{
 			name:           "should return empty slice for no keepers",
-			initialKeepers: map[string]*types.KeeperInfo{},
+			initialKeepers: map[string]*types.HealthKeeperInfo{},
 			expectedCount:  0,
 		},
 	}
@@ -398,7 +398,7 @@ func TestStateManager_ConcurrentAccess(t *testing.T) {
 	mockDB := &mocks.MockDatabaseManager{}
 	
 	sm := &StateManager{
-		keepers: map[string]*types.KeeperInfo{
+		keepers: map[string]*types.HealthKeeperInfo{
 			"0x123": {
 				KeeperAddress: "0x123",
 				IsActive:      true,
@@ -475,7 +475,7 @@ func TestStateManager_EdgeCases(t *testing.T) {
 		mockDB := &mocks.MockDatabaseManager{}
 		
 		sm := &StateManager{
-			keepers: map[string]*types.KeeperInfo{
+			keepers: map[string]*types.HealthKeeperInfo{
 				"0x123": nil, // This shouldn't happen in practice but test robustness
 			},
 			logger: logger,
@@ -498,7 +498,7 @@ func TestStateManager_EdgeCases(t *testing.T) {
 		mockDB := &mocks.MockDatabaseManager{}
 		
 		sm := &StateManager{
-			keepers: map[string]*types.KeeperInfo{
+			keepers: map[string]*types.HealthKeeperInfo{
 				"": {
 					KeeperAddress: "",
 					IsActive:      true,

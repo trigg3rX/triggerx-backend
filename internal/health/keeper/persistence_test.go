@@ -9,9 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/internal/health/mocks"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func TestLoadVerifiedKeepers(t *testing.T) {
@@ -24,7 +23,7 @@ func TestLoadVerifiedKeepers(t *testing.T) {
 		{
 			name: "should load verified keepers successfully",
 			setupMocks: func(mockDB *mocks.MockDatabaseManager) {
-				keepers := []types.KeeperInfo{
+				keepers := []types.HealthKeeperInfo{
 					{
 						KeeperName:       "keeper1",
 						KeeperAddress:    "0x123",
@@ -62,7 +61,7 @@ func TestLoadVerifiedKeepers(t *testing.T) {
 		{
 			name: "should handle empty keeper list",
 			setupMocks: func(mockDB *mocks.MockDatabaseManager) {
-				mockDB.On("GetVerifiedKeepers").Return([]types.KeeperInfo{}, nil)
+				mockDB.On("GetVerifiedKeepers").Return([]types.HealthKeeperInfo{}, nil)
 			},
 			expectedError: "",
 			expectedCount: 0,
@@ -77,7 +76,7 @@ func TestLoadVerifiedKeepers(t *testing.T) {
 			tt.setupMocks(mockDB)
 
 			sm := &StateManager{
-				keepers: make(map[string]*types.KeeperInfo),
+				keepers: make(map[string]*types.HealthKeeperInfo),
 				logger:  logger,
 				db:      interfaces.DatabaseManagerInterface(mockDB),
 			}
@@ -108,14 +107,14 @@ func TestLoadVerifiedKeepers(t *testing.T) {
 func TestDumpState(t *testing.T) {
 	tests := []struct {
 		name             string
-		initialKeepers   map[string]*types.KeeperInfo
-		setupMocks       func(*mocks.MockDatabaseManager, map[string]*types.KeeperInfo)
+		initialKeepers   map[string]*types.HealthKeeperInfo
+		setupMocks       func(*mocks.MockDatabaseManager, map[string]*types.HealthKeeperInfo)
 		expectedError    string
 		expectedLogCalls int
 	}{
 		{
 			name: "should dump active keepers successfully",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperName:       "keeper1",
 					KeeperAddress:    "0x123",
@@ -131,9 +130,9 @@ func TestDumpState(t *testing.T) {
 					LastCheckedIn:    time.Now(),
 				},
 			},
-			setupMocks: func(mockDB *mocks.MockDatabaseManager, keepers map[string]*types.KeeperInfo) {
+			setupMocks: func(mockDB *mocks.MockDatabaseManager, keepers map[string]*types.HealthKeeperInfo) {
 				// Only expect call for active keeper
-				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 					return health.KeeperAddress == "0x123"
 				}), false).Return(nil)
 			},
@@ -141,7 +140,7 @@ func TestDumpState(t *testing.T) {
 		},
 		{
 			name: "should handle database update error",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperName:       "keeper1",
 					KeeperAddress:    "0x123",
@@ -150,15 +149,15 @@ func TestDumpState(t *testing.T) {
 					LastCheckedIn:    time.Now(),
 				},
 			},
-			setupMocks: func(mockDB *mocks.MockDatabaseManager, keepers map[string]*types.KeeperInfo) {
+			setupMocks: func(mockDB *mocks.MockDatabaseManager, keepers map[string]*types.HealthKeeperInfo) {
 				mockDB.On("UpdateKeeperHealth", mock.Anything, false).Return(errors.New("database error"))
 			},
 			expectedError: "",
 		},
 		{
 			name:           "should handle empty keeper map",
-			initialKeepers: map[string]*types.KeeperInfo{},
-			setupMocks: func(mockDB *mocks.MockDatabaseManager, keepers map[string]*types.KeeperInfo) {
+			initialKeepers: map[string]*types.HealthKeeperInfo{},
+			setupMocks: func(mockDB *mocks.MockDatabaseManager, keepers map[string]*types.HealthKeeperInfo) {
 				// No database calls expected for empty map
 			},
 			expectedError: "",
@@ -283,7 +282,7 @@ func TestLoadVerifiedKeepers_Integration(t *testing.T) {
 	logger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 
-	testKeepers := []types.KeeperInfo{
+	testKeepers := []types.HealthKeeperInfo{
 		{
 			KeeperName:       "test-keeper-1",
 			KeeperAddress:    "0x1234567890abcdef",
@@ -309,7 +308,7 @@ func TestLoadVerifiedKeepers_Integration(t *testing.T) {
 	mockDB.On("GetVerifiedKeepers").Return(testKeepers, nil)
 
 	sm := &StateManager{
-		keepers: make(map[string]*types.KeeperInfo),
+		keepers: make(map[string]*types.HealthKeeperInfo),
 		logger:  logger,
 		db:      interfaces.DatabaseManagerInterface(mockDB),
 	}
@@ -355,7 +354,7 @@ func TestDumpState_Integration(t *testing.T) {
 	mockDB := &mocks.MockDatabaseManager{}
 
 	// Setup initial state with mixed active/inactive keepers
-	initialKeepers := map[string]*types.KeeperInfo{
+	initialKeepers := map[string]*types.HealthKeeperInfo{
 		"0x123": {
 			KeeperName:       "active-keeper-1",
 			KeeperAddress:    "0x123",
@@ -380,11 +379,11 @@ func TestDumpState_Integration(t *testing.T) {
 	}
 
 	// Expect database calls only for active keepers
-	mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+	mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 		return health.KeeperAddress == "0x123"
 	}), false).Return(nil)
 
-	mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+	mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 		return health.KeeperAddress == "0x789"
 	}), false).Return(nil)
 

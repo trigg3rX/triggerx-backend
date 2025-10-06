@@ -9,9 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/internal/health/mocks"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func TestUpdateKeeperHealth(t *testing.T) {
@@ -19,15 +18,15 @@ func TestUpdateKeeperHealth(t *testing.T) {
 	
 	tests := []struct {
 		name           string
-		initialKeepers map[string]*types.KeeperInfo
-		keeperHealth   commonTypes.KeeperHealthCheckIn
+		initialKeepers map[string]*types.HealthKeeperInfo
+		keeperHealth   types.KeeperHealthCheckIn
 		setupMocks     func(*mocks.MockDatabaseManager)
 		expectedError  string
-		verifyResult   func(*testing.T, *StateManager, commonTypes.KeeperHealthCheckIn)
+		verifyResult   func(*testing.T, *StateManager, types.KeeperHealthCheckIn)
 	}{
 		{
 			name: "should update existing verified keeper successfully",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperName:       "test-keeper",
 					KeeperAddress:    "0x123",
@@ -40,7 +39,7 @@ func TestUpdateKeeperHealth(t *testing.T) {
 					IsImua:           false,
 				},
 			},
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress:    "0x123",
 				ConsensusAddress: "0x789",
 				Version:          "1.1.0",
@@ -52,7 +51,7 @@ func TestUpdateKeeperHealth(t *testing.T) {
 				mockDB.On("UpdateKeeperHealth", mock.Anything, true).Return(nil)
 			},
 			expectedError: "",
-			verifyResult: func(t *testing.T, sm *StateManager, health commonTypes.KeeperHealthCheckIn) {
+			verifyResult: func(t *testing.T, sm *StateManager, health types.KeeperHealthCheckIn) {
 				keeper := sm.keepers[health.KeeperAddress]
 				assert.NotNil(t, keeper)
 				assert.Equal(t, health.Version, keeper.Version)
@@ -64,8 +63,8 @@ func TestUpdateKeeperHealth(t *testing.T) {
 		},
 		{
 			name:           "should return error for unverified keeper",
-			initialKeepers: map[string]*types.KeeperInfo{},
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			initialKeepers: map[string]*types.HealthKeeperInfo{},
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress:    "0x123",
 				ConsensusAddress: "0x456",
 				Version:          "1.0.0",
@@ -76,7 +75,7 @@ func TestUpdateKeeperHealth(t *testing.T) {
 				// No database calls expected for unverified keeper
 			},
 			expectedError: "keeper not verified",
-			verifyResult: func(t *testing.T, sm *StateManager, health commonTypes.KeeperHealthCheckIn) {
+			verifyResult: func(t *testing.T, sm *StateManager, health types.KeeperHealthCheckIn) {
 				// Keeper should not exist in the map
 				_, exists := sm.keepers[health.KeeperAddress]
 				assert.False(t, exists)
@@ -84,14 +83,14 @@ func TestUpdateKeeperHealth(t *testing.T) {
 		},
 		{
 			name: "should handle database update failure with retries",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      false,
 					LastCheckedIn: now.Add(-1 * time.Hour),
 				},
 			},
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "1.0.0",
 				PeerID:        "peer123",
@@ -101,7 +100,7 @@ func TestUpdateKeeperHealth(t *testing.T) {
 				mockDB.On("UpdateKeeperHealth", mock.Anything, true).Return(errors.New("database error"))
 			},
 			expectedError: "failed to update keeper status in database",
-			verifyResult: func(t *testing.T, sm *StateManager, health commonTypes.KeeperHealthCheckIn) {
+			verifyResult: func(t *testing.T, sm *StateManager, health types.KeeperHealthCheckIn) {
 				// State should still be updated locally even if database fails
 				keeper := sm.keepers[health.KeeperAddress]
 				assert.NotNil(t, keeper)
@@ -112,14 +111,14 @@ func TestUpdateKeeperHealth(t *testing.T) {
 		},
 		{
 			name: "should update keeper with empty peer ID",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      false,
 					LastCheckedIn: now.Add(-1 * time.Hour),
 				},
 			},
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "1.0.0",
 				PeerID:        "", // Empty peer ID
@@ -129,7 +128,7 @@ func TestUpdateKeeperHealth(t *testing.T) {
 				mockDB.On("UpdateKeeperHealth", mock.Anything, true).Return(nil)
 			},
 			expectedError: "",
-			verifyResult: func(t *testing.T, sm *StateManager, health commonTypes.KeeperHealthCheckIn) {
+			verifyResult: func(t *testing.T, sm *StateManager, health types.KeeperHealthCheckIn) {
 				keeper := sm.keepers[health.KeeperAddress]
 				assert.NotNil(t, keeper)
 				assert.Equal(t, "", keeper.PeerID) // Should preserve empty peer ID
@@ -176,14 +175,14 @@ func TestUpdateKeeperHealth(t *testing.T) {
 func TestUpdateKeeperStatusInDatabase(t *testing.T) {
 	tests := []struct {
 		name          string
-		keeperHealth  commonTypes.KeeperHealthCheckIn
+		keeperHealth  types.KeeperHealthCheckIn
 		isActive      bool
 		setupMocks    func(*mocks.MockDatabaseManager)
 		expectedError string
 	}{
 		{
 			name: "should update database successfully",
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress:    "0x123",
 				ConsensusAddress: "0x456",
 				Version:          "1.0.0",
@@ -198,7 +197,7 @@ func TestUpdateKeeperStatusInDatabase(t *testing.T) {
 		},
 		{
 			name: "should handle database error",
-			keeperHealth: commonTypes.KeeperHealthCheckIn{
+			keeperHealth: types.KeeperHealthCheckIn{
 				KeeperAddress: "0x123",
 				Version:       "1.0.0",
 				Timestamp:     time.Now(),
@@ -256,7 +255,7 @@ func TestUpdateKeeperHealth_ConcurrentAccess(t *testing.T) {
 	logger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 
-	initialKeepers := map[string]*types.KeeperInfo{
+	initialKeepers := map[string]*types.HealthKeeperInfo{
 		"0x123": {
 			KeeperAddress: "0x123",
 			IsActive:      false,
@@ -282,7 +281,7 @@ func TestUpdateKeeperHealth_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
 			for j := 0; j < numUpdates; j++ {
-				health := commonTypes.KeeperHealthCheckIn{
+				health := types.KeeperHealthCheckIn{
 					KeeperAddress:    "0x123",
 					ConsensusAddress: "0x456",
 					Version:          "1.0.0",
@@ -326,7 +325,7 @@ func TestUpdateKeeperHealth_EdgeCases(t *testing.T) {
 	t.Run("should handle keeper with all fields", func(t *testing.T) {
 		now := time.Now().UTC()
 		
-		initialKeepers := map[string]*types.KeeperInfo{
+		initialKeepers := map[string]*types.HealthKeeperInfo{
 			"0x123": {
 				KeeperName:       "test-keeper",
 				KeeperAddress:    "0x123",
@@ -348,7 +347,7 @@ func TestUpdateKeeperHealth_EdgeCases(t *testing.T) {
 			db:      interfaces.DatabaseManagerInterface(mockDB),
 		}
 
-		health := commonTypes.KeeperHealthCheckIn{
+		health := types.KeeperHealthCheckIn{
 			KeeperAddress:    "0x123",
 			ConsensusPubKey:  "pubkey123",
 			ConsensusAddress: "0x789",
@@ -379,7 +378,7 @@ func TestUpdateKeeperHealth_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("should handle zero timestamp", func(t *testing.T) {
-		initialKeepers := map[string]*types.KeeperInfo{
+		initialKeepers := map[string]*types.HealthKeeperInfo{
 			"0x123": {
 				KeeperAddress: "0x123",
 				IsActive:      false,
@@ -394,7 +393,7 @@ func TestUpdateKeeperHealth_EdgeCases(t *testing.T) {
 			db:      interfaces.DatabaseManagerInterface(mockDB),
 		}
 
-		health := commonTypes.KeeperHealthCheckIn{
+		health := types.KeeperHealthCheckIn{
 			KeeperAddress: "0x123",
 			Version:       "1.0.0",
 			Timestamp:     time.Time{}, // Zero timestamp
@@ -416,7 +415,7 @@ func TestUpdateKeeperHealth_DatabaseRetry(t *testing.T) {
 	logger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 
-	initialKeepers := map[string]*types.KeeperInfo{
+	initialKeepers := map[string]*types.HealthKeeperInfo{
 		"0x123": {
 			KeeperAddress: "0x123",
 			IsActive:      false,
@@ -433,7 +432,7 @@ func TestUpdateKeeperHealth_DatabaseRetry(t *testing.T) {
 		db:      interfaces.DatabaseManagerInterface(mockDB),
 	}
 
-	health := commonTypes.KeeperHealthCheckIn{
+	health := types.KeeperHealthCheckIn{
 		KeeperAddress: "0x123",
 		Version:       "1.0.0",
 		Timestamp:     time.Now(),

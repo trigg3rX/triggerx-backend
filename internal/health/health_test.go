@@ -432,8 +432,7 @@ func TestVerifySignature(t *testing.T) {
 
 func TestLoggerMiddleware(t *testing.T) {
 	mockLogger := new(logging.MockLogger)
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("With", mock.Anything).Return(mockLogger)
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

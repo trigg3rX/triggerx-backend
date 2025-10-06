@@ -4,8 +4,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // MockDatabaseManager is a mock implementation of DatabaseManager
@@ -14,25 +13,25 @@ type MockDatabaseManager struct {
 }
 
 // UpdateKeeperHealth mocks the UpdateKeeperHealth method
-func (m *MockDatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
+func (m *MockDatabaseManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
 	args := m.Called(keeperHealth, isActive)
 	return args.Error(0)
 }
 
 // GetVerifiedKeepers mocks the GetVerifiedKeepers method
-func (m *MockDatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
+func (m *MockDatabaseManager) GetVerifiedKeepers() ([]types.HealthKeeperInfo, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]types.KeeperInfo), args.Error(1)
+	return args.Get(0).([]types.HealthKeeperInfo), args.Error(1)
 }
 
 // Simplified test helpers for creating test data
-func CreateTestKeepers(count int) []types.KeeperInfo {
-	keepers := make([]types.KeeperInfo, count)
+func CreateTestKeepers(count int) []types.HealthKeeperInfo {
+	keepers := make([]types.HealthKeeperInfo, count)
 	for i := 0; i < count; i++ {
-		keepers[i] = types.KeeperInfo{
+		keepers[i] = types.HealthKeeperInfo{
 			KeeperName:       "test-keeper-" + string(rune(i)),
 			KeeperAddress:    "0x" + string(rune(65+i)) + "23",
 			ConsensusAddress: "0x" + string(rune(65+i)) + "45",

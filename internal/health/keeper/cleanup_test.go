@@ -9,9 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/internal/health/mocks"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func TestCheckInactiveKeepers(t *testing.T) {
@@ -19,14 +18,14 @@ func TestCheckInactiveKeepers(t *testing.T) {
 	
 	tests := []struct {
 		name             string
-		initialKeepers   map[string]*types.KeeperInfo
+		initialKeepers   map[string]*types.HealthKeeperInfo
 		setupMocks       func(*mocks.MockDatabaseManager)
 		expectedInactive []string
 		expectedDBCalls  int
 	}{
 		{
 			name: "should mark recently inactive keepers as inactive",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -39,7 +38,7 @@ func TestCheckInactiveKeepers(t *testing.T) {
 				},
 			},
 			setupMocks: func(mockDB *mocks.MockDatabaseManager) {
-				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 					return health.KeeperAddress == "0x123"
 				}), false).Return(nil)
 			},
@@ -48,7 +47,7 @@ func TestCheckInactiveKeepers(t *testing.T) {
 		},
 		{
 			name: "should not affect already inactive keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      false,
@@ -63,7 +62,7 @@ func TestCheckInactiveKeepers(t *testing.T) {
 		},
 		{
 			name: "should not affect keepers within threshold",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -83,7 +82,7 @@ func TestCheckInactiveKeepers(t *testing.T) {
 		},
 		{
 			name: "should handle multiple inactive keepers",
-			initialKeepers: map[string]*types.KeeperInfo{
+			initialKeepers: map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -101,13 +100,13 @@ func TestCheckInactiveKeepers(t *testing.T) {
 				},
 			},
 			setupMocks: func(mockDB *mocks.MockDatabaseManager) {
-				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 					return health.KeeperAddress == "0x123"
 				}), false).Return(nil)
-				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 					return health.KeeperAddress == "0x456"
 				}), false).Return(nil)
-				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health commonTypes.KeeperHealthCheckIn) bool {
+				mockDB.On("UpdateKeeperHealth", mock.MatchedBy(func(health types.KeeperHealthCheckIn) bool {
 					return health.KeeperAddress == "0x789"
 				}), false).Return(nil)
 			},
@@ -116,7 +115,7 @@ func TestCheckInactiveKeepers(t *testing.T) {
 		},
 		{
 			name:           "should handle empty keeper map",
-			initialKeepers: map[string]*types.KeeperInfo{},
+			initialKeepers: map[string]*types.HealthKeeperInfo{},
 			setupMocks: func(mockDB *mocks.MockDatabaseManager) {
 				// No database calls expected
 			},
@@ -183,7 +182,7 @@ func TestCheckInactiveKeepers_DatabaseError(t *testing.T) {
 	logger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 
-	initialKeepers := map[string]*types.KeeperInfo{
+	initialKeepers := map[string]*types.HealthKeeperInfo{
 		"0x123": {
 			KeeperAddress: "0x123",
 			IsActive:      true,
@@ -219,7 +218,7 @@ func TestStartCleanupRoutine_Integration(t *testing.T) {
 	mockDB := &mocks.MockDatabaseManager{}
 
 	now := time.Now().UTC()
-	initialKeepers := map[string]*types.KeeperInfo{
+	initialKeepers := map[string]*types.HealthKeeperInfo{
 		"0x123": {
 			KeeperAddress: "0x123",
 			IsActive:      true,
@@ -316,7 +315,7 @@ func TestInactivityThreshold_BoundaryConditions(t *testing.T) {
 			logger := logging.NewNoOpLogger()
 			mockDB := &mocks.MockDatabaseManager{}
 
-			initialKeepers := map[string]*types.KeeperInfo{
+			initialKeepers := map[string]*types.HealthKeeperInfo{
 				"0x123": {
 					KeeperAddress: "0x123",
 					IsActive:      true,
@@ -352,7 +351,7 @@ func TestInactivityThreshold_BoundaryConditions(t *testing.T) {
 
 			// Call database updates for inactive keepers
 			for _, address := range inactiveKeepers {
-				keeperHealth := commonTypes.KeeperHealthCheckIn{
+				keeperHealth := types.KeeperHealthCheckIn{
 					KeeperAddress: address,
 				}
 				sm.updateKeeperStatusInDatabase(keeperHealth, false)
@@ -378,7 +377,7 @@ func TestCleanupRoutine_Concurrency(t *testing.T) {
 	mockDB := &mocks.MockDatabaseManager{}
 
 	now := time.Now().UTC()
-	initialKeepers := map[string]*types.KeeperInfo{
+	initialKeepers := map[string]*types.HealthKeeperInfo{
 		"0x123": {
 			KeeperAddress: "0x123",
 			IsActive:      true,
