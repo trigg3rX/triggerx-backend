@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
+	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
@@ -14,7 +15,7 @@ type StateManager struct {
 	mu          sync.RWMutex
 	logger      logging.Logger
 	initialized bool
-	db          *client.DatabaseManager
+	db          interfaces.DatabaseManagerInterface
 }
 
 var (
@@ -53,7 +54,7 @@ func (sm *StateManager) IsKeeperActive(keeperAddress string) bool {
 	defer sm.mu.RUnlock()
 
 	state, exists := sm.keepers[keeperAddress]
-	isActive := exists && state.IsActive
+	isActive := exists && state != nil && state.IsActive
 
 	sm.logger.Debug("Checked keeper active status",
 		"keeper", keeperAddress,
@@ -71,7 +72,7 @@ func (sm *StateManager) GetAllActiveKeepers() []string {
 
 	var activeKeepers []string
 	for address, state := range sm.keepers {
-		if state.IsActive {
+		if state != nil && state.IsActive {
 			activeKeepers = append(activeKeepers, address)
 		}
 	}
@@ -90,7 +91,7 @@ func (sm *StateManager) GetKeeperCount() (total int, active int) {
 
 	total = len(sm.keepers)
 	for _, state := range sm.keepers {
-		if state.IsActive {
+		if state != nil && state.IsActive {
 			active++
 		}
 	}
@@ -111,18 +112,20 @@ func (sm *StateManager) GetDetailedKeeperInfo() []types.HealthKeeperInfo {
 	var keeperInfoList []types.HealthKeeperInfo
 
 	for address, state := range sm.keepers {
-		info := types.HealthKeeperInfo{
-			KeeperName:       state.KeeperName,
-			KeeperAddress:    address,
-			ConsensusAddress: state.ConsensusAddress,
-			OperatorID:       state.OperatorID,
-			Version:          state.Version,
-			PeerID:           state.PeerID,
-			LastCheckedIn:    state.LastCheckedIn,
-			IsActive:         state.IsActive,
-			IsImua:           state.IsImua,
+		if state != nil {
+			info := types.HealthKeeperInfo{
+				KeeperName:       state.KeeperName,
+				KeeperAddress:    address,
+				ConsensusAddress: state.ConsensusAddress,
+				OperatorID:       state.OperatorID,
+				Version:          state.Version,
+				PeerID:           state.PeerID,
+				LastCheckedIn:    state.LastCheckedIn,
+				IsActive:         state.IsActive,
+				IsImua:           state.IsImua,
+			}
+			keeperInfoList = append(keeperInfoList, info)
 		}
-		keeperInfoList = append(keeperInfoList, info)
 	}
 
 	sm.logger.Debug("Retrieved detailed keeper information",

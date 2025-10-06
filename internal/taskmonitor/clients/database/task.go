@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
