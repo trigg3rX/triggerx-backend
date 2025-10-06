@@ -39,7 +39,7 @@ func NewJobStatusChecker(
 
 // StartStatusCheckLoop begins the periodic job status check
 func (c *JobStatusChecker) StartStatusCheckLoop() {
-	ticker := time.NewTicker(15 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {

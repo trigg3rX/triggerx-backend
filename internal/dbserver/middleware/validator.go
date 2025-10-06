@@ -57,7 +57,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		}
 
 		// Log the raw request body
-		v.logger.Infof("Raw request body: %s", string(body))
+		// v.logger.Infof("Raw request body: %s", string(body))
 
 		// Create a new reader with the body and restore it
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))

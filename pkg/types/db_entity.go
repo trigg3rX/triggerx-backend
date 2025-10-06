@@ -120,6 +120,7 @@ type TaskDataEntity struct {
 	ExecutionTxHash      string    `cql:"execution_tx_hash"`
 	TaskPerformerID      int64     `cql:"task_performer_id"`
 	TaskAttesterIDs      []int64   `cql:"task_attester_ids"`
+	ConvertedArguments   string    `cql:"converted_arguments"`
 	ProofOfTask          string    `cql:"proof_of_task"`
 	SubmissionTxHash     string    `cql:"submission_tx_hash"`
 	IsSuccessful         bool      `cql:"is_successful"`

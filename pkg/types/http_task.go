@@ -41,6 +41,7 @@ type TasksByJobIDResponse struct {
 	TaskStatus         string    `json:"task_status"`
 	IsAccepted         bool      `json:"is_accepted"`
 	TxURL              string    `json:"tx_url"`
+	ConvertedArguments []string  `json:"converted_arguments"`
 }
 
 type GetTasksByJobID struct {
@@ -54,4 +55,5 @@ type GetTasksByJobID struct {
 	IsAccepted         bool      `json:"is_accepted"`
 	TxURL              string    `json:"tx_url"`
 	TaskStatus         string    `json:"task_status"`
+	ConvertedArguments []string  `json:"converted_arguments"`
 }

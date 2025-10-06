@@ -120,6 +120,7 @@ type TaskDataDTO struct {
 	ExecutionTxHash      string    `json:"execution_tx_hash"`
 	TaskPerformerID      int64     `json:"task_performer_id"`
 	TaskAttesterIDs      []int64   `json:"task_attester_ids"`
+	ConvertedArguments   []interface{} `json:"converted_arguments"`
 	ProofOfTask          string    `json:"proof_of_task"`
 	SubmissionTxHash     string    `json:"submission_tx_hash"`
 	IsSuccessful         bool      `json:"is_successful"`

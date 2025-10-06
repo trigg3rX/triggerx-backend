@@ -69,7 +69,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		PerformerAddress: performerAddress,
 		Signature:        serializedSignature,
 		SignatureType:    "ecdsa",
-		TargetChainID:    84532,
+		TargetChainID:    8453,
 	}
 
 	var response interface{}

@@ -1,0 +1,3 @@
+[submodule "orbit-chain-deployer/triggerx-contracts"]
+	path = orbit-chain-deployer/triggerx-contracts
+	url = https://github.com/trigg3rX/triggerx-contracts.git

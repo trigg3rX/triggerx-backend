@@ -31,6 +31,8 @@ type CreateJobData struct {
 	TriggerChainID         string `json:"trigger_chain_id,omitempty" validate:"omitempty,chain_id"`
 	TriggerContractAddress string `json:"trigger_contract_address,omitempty" validate:"omitempty,ethereum_address"`
 	TriggerEvent           string `json:"trigger_event,omitempty" validate:"omitempty"`
+	EventFilterParaName    string `json:"event_filter_para_name,omitempty" validate:"omitempty"`
+	EventFilterValue       string `json:"event_filter_value,omitempty" validate:"omitempty"`
 
 	// Condition job specific fields
 	ConditionType    string  `json:"condition_type,omitempty" validate:"omitempty"`
@@ -140,6 +142,8 @@ type EventJobDataAPI struct {
 	TriggerChainID            string    `json:"trigger_chain_id"`
 	TriggerContractAddress    string    `json:"trigger_contract_address"`
 	TriggerEvent              string    `json:"trigger_event"`
+	EventFilterParaName    string `json:"event_filter_para_name"`
+	EventFilterValue       string `json:"event_filter_value"`
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
 	TargetFunction            string    `json:"target_function"`

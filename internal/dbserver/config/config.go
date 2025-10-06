@@ -42,6 +42,9 @@ type Config struct {
 
 	// Polling Look Ahead
 	timeSchedulerPollingLookAhead int
+
+	// Orbit Service URL
+	orbitServiceURL string
 }
 
 var cfg Config
@@ -67,6 +70,7 @@ func Init() error {
 		otTempoEndpoint:               env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 		devMode:                       env.GetEnvBool("DEV_MODE", false),
 		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
+		orbitServiceURL:               env.GetEnvString("ORBIT_SERVICE_URL", "http://localhost:3001"),
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -184,4 +188,8 @@ func IsDevMode() bool {
 
 func GetPollingLookAhead() int {
 	return cfg.timeSchedulerPollingLookAhead
+}
+
+func GetOrbitServiceURL() string {
+	return cfg.orbitServiceURL
 }

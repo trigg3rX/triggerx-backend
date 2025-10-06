@@ -157,6 +157,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		StaticComplexity:   result.Stats.StaticComplexity,
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
+		ConvertedArguments: convertedArgs,
 	}
 	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
 	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))

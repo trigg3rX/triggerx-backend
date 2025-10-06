@@ -23,6 +23,12 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	}
 	attesterIds := data.AttesterIds
 
+	// Convert []interface{} to []string for Cassandra
+	convertedArgsStrings := make([]string, len(data.ConvertedArguments))
+	for i, arg := range data.ConvertedArguments {
+		convertedArgsStrings[i] = fmt.Sprintf("%v", arg)
+	}
+
 	// Get the task entity
 	task, err := dm.taskRepo.GetByID(ctx, data.TaskID)
 	if err != nil {
@@ -80,6 +86,51 @@ func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
 	}
 	dm.logger.Infof("Successfully updated task %d as failed", taskID)
 	return nil
+}
+
+// GetUserEmailByJobID returns the user's email_id for a given job_id
+func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
+	var userID int64
+	iter := dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&userID) {
+		return "", fmt.Errorf("user not found for job ID %d", jobID)
+	}
+
+	var email string
+	iter = dm.db.NewQuery(queries.GetUserEmailByUserID, userID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&email) {
+		return "", fmt.Errorf("email not found for user ID %d", userID)
+	}
+
+	return email, nil
+}
+
+// GetUserEmailByTaskID returns the user's email_id for a given task_id
+func (dm *DatabaseClient) GetUserEmailByTaskID(taskID int64) (string, error) {
+	var predicted float64
+	var jobID *big.Int
+	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if !iter.Scan(&predicted, &jobID) {
+		return "", fmt.Errorf("job not found for task ID %d", taskID)
+	}
+	return dm.GetUserEmailByJobID(jobID)
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
