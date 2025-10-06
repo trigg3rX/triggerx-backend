@@ -31,7 +31,6 @@ type Handler struct {
 	userRepository         repository.UserRepository
 	keeperRepository       repository.KeeperRepository
 	apiKeysRepository      repository.ApiKeysRepository
-	orbitChainRepository   repository.OrbitChainRepository
 
 	// WebSocket components
 	hub       *websocket.Hub
@@ -54,7 +53,6 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		userRepository:         repository.NewUserRepository(db),
 		keeperRepository:       repository.NewKeeperRepository(db),
 		apiKeysRepository:      repository.NewApiKeysRepository(db),
-		orbitChainRepository:   repository.NewOrbitChainRepository(db),
 		hub:                    hub,
 		publisher:              publisher,
 	}
