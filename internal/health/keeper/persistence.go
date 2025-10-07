@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,11 +9,11 @@ import (
 )
 
 // LoadVerifiedKeepers loads only verified keepers from the database
-func (sm *StateManager) LoadVerifiedKeepers() error {
+func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 	sm.logger.Info("Loading verified keepers from database...")
 
 	// Get only verified keepers from database
-	keepers, err := sm.db.GetVerifiedKeepers()
+	keepers, err := sm.db.GetVerifiedKeepers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load verified keepers from database: %w", err)
 	}
@@ -31,8 +32,8 @@ func (sm *StateManager) LoadVerifiedKeepers() error {
 			ConsensusAddress: keeper.ConsensusAddress,
 			OperatorID:       keeper.OperatorID,
 			Version:          keeper.Version,
-			PeerID:           keeper.PeerID,
 			IsActive:         false,
+			Uptime:           keeper.Uptime,
 			LastCheckedIn:    keeper.LastCheckedIn,
 			IsImua:           keeper.IsImua,
 		}
@@ -46,7 +47,7 @@ func (sm *StateManager) LoadVerifiedKeepers() error {
 }
 
 // DumpState updates all keepers to inactive in the database
-func (sm *StateManager) DumpState() error {
+func (sm *StateManager) DumpState(ctx context.Context) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -55,12 +56,12 @@ func (sm *StateManager) DumpState() error {
 	for address, state := range sm.keepers {
 		if state.IsActive {
 			// Create a minimal health check-in with just the address
-			health := types.KeeperHealthCheckIn{
+			health := types.HealthKeeperInfo{
 				KeeperAddress: address,
 			}
 
-			if err := sm.retryWithBackoff(func() error {
-				return sm.updateKeeperStatusInDatabase(health, false)
+			if err := sm.retryWithBackoff(ctx, func() error {
+				return sm.updateKeeperStatusInDatabase(ctx, health, false)
 			}, maxRetries); err != nil {
 				sm.logger.Error("Failed to update keeper status during state dump",
 					"error", err,
@@ -76,9 +77,15 @@ func (sm *StateManager) DumpState() error {
 }
 
 // RetryWithBackoff retries a database operation with exponential backoff
-func (sm *StateManager) retryWithBackoff(operation func() error, maxRetries int) error {
+func (sm *StateManager) retryWithBackoff(ctx context.Context, operation func() error, maxRetries int) error {
 	var err error
 	for i := 0; i < maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		err = operation()
 		if err == nil {
 			return nil

@@ -105,7 +105,7 @@ func InitWithEnvFile(configPath string, envFilePath string) error {
 	}
 
 	// Load secrets from environment variables
-	config.Secrets = loadSecretsFromEnv()
+	config.Secrets, config.DevMode = loadSecretsFromEnv()
 
 	// Validate the complete configuration
 	if err := validateConfig(config); err != nil {
@@ -123,7 +123,7 @@ func InitWithEnvFile(configPath string, envFilePath string) error {
 }
 
 // loadSecretsFromEnv loads sensitive configuration from environment variables
-func loadSecretsFromEnv() SecretsConfig {
+func loadSecretsFromEnv() (SecretsConfig, bool) {
 	return SecretsConfig{
 		// External API keys
 		BotToken:        env.GetEnvString("BOT_TOKEN", ""),
@@ -142,13 +142,13 @@ func loadSecretsFromEnv() SecretsConfig {
 
 		// JWT signing key
 		JWTPrivateKey: env.GetEnvString("JWT_PRIVATE_KEY", ""),
-	}
+	}, env.GetEnvBool("DEV_MODE", false)
 }
 
 // validateConfig validates the complete configuration
 func validateConfig(config *Config) error {
 	// Validate YAML configuration using the validator
-	if err := yaml.ValidateHealthConfig(config); err != nil {
+	if err := yaml.ValidateConfig(config); err != nil {
 		return fmt.Errorf("yaml validation failed: %w", err)
 	}
 

@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"context"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -38,11 +39,11 @@ func (sm *StateManager) checkInactiveKeepers() {
 	sm.mu.Unlock()
 
 	for _, address := range inactiveKeepers {
-		keeperHealth := types.KeeperHealthCheckIn{
+		keeperHealth := types.HealthKeeperInfo{
 			KeeperAddress: address,
 		}
 
-		if err := sm.updateKeeperStatusInDatabase(keeperHealth, false); err != nil {
+		if err := sm.updateKeeperStatusInDatabase(context.Background(), keeperHealth, false); err != nil {
 			sm.logger.Error("Failed to update inactive status",
 				"error", err,
 				"keeper", address,

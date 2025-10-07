@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -18,7 +19,7 @@ var (
 )
 
 // UpdateKeeperHealth updates the health status of a keeper
-func (sm *StateManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckIn) error {
+func (sm *StateManager) UpdateKeeperStatus(ctx context.Context, keeperHealth types.HealthKeeperInfo) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -35,14 +36,13 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckI
 
 	// Update the state with new health check-in data
 	existingState.Version = keeperHealth.Version
-	existingState.PeerID = keeperHealth.PeerID
 	existingState.LastCheckedIn = now
 	existingState.IsActive = true
 	existingState.IsImua = keeperHealth.IsImua
 
 	// Update database
-	if err := sm.retryWithBackoff(func() error {
-		return sm.updateKeeperStatusInDatabase(keeperHealth, true)
+	if err := sm.retryWithBackoff(ctx, func() error {
+		return sm.updateKeeperStatusInDatabase(ctx, keeperHealth, true)
 	}, maxRetries); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
@@ -55,8 +55,8 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth types.KeeperHealthCheckI
 	return nil
 }
 
-func (sm *StateManager) updateKeeperStatusInDatabase(keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
-	if err := sm.db.UpdateKeeperHealth(keeperHealth, isActive); err != nil {
+func (sm *StateManager) updateKeeperStatusInDatabase(ctx context.Context, keeperHealth types.HealthKeeperInfo, isActive bool) error {
+	if err := sm.db.UpdateAllKeepersStatus(ctx, []types.HealthKeeperInfo{keeperHealth}); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
 

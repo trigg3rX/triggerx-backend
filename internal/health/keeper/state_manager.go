@@ -3,7 +3,6 @@ package keeper
 import (
 	"sync"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/client"
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -14,7 +13,6 @@ type StateManager struct {
 	keepers     map[string]*types.HealthKeeperInfo
 	mu          sync.RWMutex
 	logger      logging.Logger
-	initialized bool
 	db          interfaces.DatabaseManagerInterface
 }
 
@@ -24,7 +22,10 @@ var (
 )
 
 // InitializeStateManager creates and initializes the state manager
-func InitializeStateManager(logger logging.Logger) *StateManager {
+func InitializeStateManager(
+	logger logging.Logger,
+	db interfaces.DatabaseManagerInterface,
+) *StateManager {
 	stateManagerOnce.Do(func() {
 		// Create a new logger with component field and proper level
 		stateLogger := logger.With("component", "state_manager")
@@ -32,8 +33,7 @@ func InitializeStateManager(logger logging.Logger) *StateManager {
 		stateManager = &StateManager{
 			keepers:     make(map[string]*types.HealthKeeperInfo),
 			logger:      stateLogger,
-			initialized: true,
-			db:          client.GetInstance(),
+			db:          db,
 		}
 		go stateManager.startCleanupRoutine()
 	})
@@ -119,7 +119,6 @@ func (sm *StateManager) GetDetailedKeeperInfo() []types.HealthKeeperInfo {
 				ConsensusAddress: state.ConsensusAddress,
 				OperatorID:       state.OperatorID,
 				Version:          state.Version,
-				PeerID:           state.PeerID,
 				LastCheckedIn:    state.LastCheckedIn,
 				IsActive:         state.IsActive,
 				IsImua:           state.IsImua,

@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,28 +14,30 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Handler encapsulates the dependencies for health handlers
 type Handler struct {
-	logger       logging.Logger
-	stateManager *keeper.StateManager
+	logger        logging.Logger
+	stateManager  *keeper.StateManager
+	healthMetrics *HealthMetrics
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handler {
+func NewHandler(logger logging.Logger, stateManager *keeper.StateManager, healthMetrics *HealthMetrics) *Handler {
 	return &Handler{
-		logger:       logger,
-		stateManager: stateManager,
+		logger:        logger,
+		stateManager:  stateManager,
+		healthMetrics: healthMetrics,
 	}
 }
 
 // LoggerMiddleware creates a gin middleware for logging
-func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
+func LoggerMiddleware(logger logging.Logger, healthMetrics *HealthMetrics) gin.HandlerFunc {
 	middlewareLogger := logger
 	return func(c *gin.Context) {
 		// Skip logging for metrics endpoint
@@ -54,8 +57,8 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 
 		// Record HTTP metrics
 		statusCode := fmt.Sprintf("%d", status)
-		metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
-		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
+		healthMetrics.HTTPRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
+		healthMetrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
 
 		middlewareLogger.Debug("HTTP Request",
 			"method", method,
@@ -69,11 +72,18 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 
 // RegisterRoutes registers all HTTP routes for the health service
 func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
-	handler := NewHandler(logger, keeper.GetStateManager())
-
 	// Initialize metrics collector
-	metricsCollector := metrics.NewCollector()
+	metricsCollector := metrics.NewCollector("health")
 	metricsCollector.Start()
+
+	// Initialize health-specific metrics
+	healthMetrics := NewHealthMetrics(metricsCollector)
+
+	// Apply logger middleware with metrics
+	router.Use(LoggerMiddleware(logger, healthMetrics))
+
+	// Create handler with metrics
+	handler := NewHandler(logger, keeper.GetStateManager(), healthMetrics)
 
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
@@ -92,8 +102,8 @@ func (h *Handler) handleRoot(c *gin.Context) {
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth types.KeeperHealthCheckIn
-	var response types.KeeperHealthCheckInResponse
+	var keeperHealth types.HealthKeeperCheckInRequest
+	var response types.HealthKeeperCheckInResponse
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
 		h.logger.Error("Failed to parse keeper health check-in request",
 			"error", err,
@@ -105,9 +115,6 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	}
 
 	// Handle missing fields with defaults
-	if keeperHealth.PeerID == "" {
-		keeperHealth.PeerID = "no-peer-id"
-	}
 	if keeperHealth.Version == "" {
 		keeperHealth.Version = "0.1.0"
 	}
@@ -119,7 +126,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// )
 
 	// Record check-in by version metric
-	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
+	h.healthMetrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
 
 	// Verify signature for all versions
 	ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
@@ -143,8 +150,16 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
 
+	// Convert request to HealthKeeperInfo for state manager
+	keeperInfo := types.HealthKeeperInfo{
+		KeeperAddress:    keeperHealth.KeeperAddress,
+		ConsensusAddress: keeperHealth.ConsensusAddress,
+		Version:          keeperHealth.Version,
+		IsImua:           keeperHealth.IsImua,
+	}
+
 	// Update keeper state for all versions
-	if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
+	if err := h.stateManager.UpdateKeeperStatus(context.Background(), keeperInfo); err != nil {
 		if errors.Is(err, keeper.ErrKeeperNotVerified) {
 			h.logger.Warn("Unverified keeper attempted health check-in",
 				"keeper", keeperHealth.KeeperAddress,
@@ -248,9 +263,9 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 	activeKeepers := h.stateManager.GetAllActiveKeepers()
 
 	// Update keeper metrics
-	metrics.KeepersTotal.Set(float64(total))
-	metrics.KeepersActiveTotal.Set(float64(active))
-	metrics.KeepersInactiveTotal.Set(float64(total - active))
+	h.healthMetrics.KeepersTotal.Set(float64(total))
+	h.healthMetrics.KeepersActiveTotal.Set(float64(active))
+	h.healthMetrics.KeepersInactiveTotal.Set(float64(total - active))
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":      total,
@@ -264,9 +279,9 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	detailedInfo := h.stateManager.GetDetailedKeeperInfo()
 
 	// Update keeper metrics
-	metrics.KeepersTotal.Set(float64(total))
-	metrics.KeepersActiveTotal.Set(float64(active))
-	metrics.KeepersInactiveTotal.Set(float64(total - active))
+	h.healthMetrics.KeepersTotal.Set(float64(total))
+	h.healthMetrics.KeepersActiveTotal.Set(float64(active))
+	h.healthMetrics.KeepersInactiveTotal.Set(float64(total - active))
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":  total,
