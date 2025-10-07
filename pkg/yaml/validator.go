@@ -308,8 +308,8 @@ func parseFloat(value string) (float64, error) {
 	return strconv.ParseFloat(value, 64)
 }
 
-// ValidateHealthConfig validates the health service configuration
-func ValidateHealthConfig(config interface{}) error {
+// ValidateConfig validates the configuration
+func ValidateConfig(config interface{}) error {
 	validator := NewValidator()
 	return validator.ValidateConfig(config)
 }

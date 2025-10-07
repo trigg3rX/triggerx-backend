@@ -66,7 +66,14 @@ func IsValidURL(url string) bool {
 		return false
 	}
 	urlWithoutProtocol := strings.TrimPrefix(strings.TrimPrefix(url, "http://"), "https://")
-	parts := strings.Split(urlWithoutProtocol, ":")
+
+	// Extract just the host part (before any path, query, or fragment)
+	hostPart := urlWithoutProtocol
+	if idx := strings.IndexAny(hostPart, "/?#"); idx != -1 {
+		hostPart = hostPart[:idx]
+	}
+
+	parts := strings.Split(hostPart, ":")
 
 	if len(parts) == 1 {
 		if IsValidIPAddress(parts[0]) {

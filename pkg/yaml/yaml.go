@@ -1,6 +1,7 @@
 package yaml
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,8 +21,11 @@ func LoadYAML(path string, target interface{}) error {
 	}
 
 	// Check if file exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fmt.Errorf("yaml file does not exist: %s", path)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("yaml file does not exist: %s: %w", path, err)
+		}
+		return fmt.Errorf("failed to stat yaml file %s: %w", path, err)
 	}
 
 	// Read file content
@@ -48,7 +52,7 @@ func LoadEnvironmentSpecificYAML(basePath string, target interface{}, environmen
 	baseFile := basePath + ".yaml"
 	if err := LoadYAML(baseFile, target); err != nil {
 		// Base file is optional, continue if it doesn't exist
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("failed to load base config: %w", err)
 		}
 	}
@@ -58,7 +62,7 @@ func LoadEnvironmentSpecificYAML(basePath string, target interface{}, environmen
 		envFile := fmt.Sprintf("%s.%s.yaml", basePath, environment)
 		if err := LoadYAML(envFile, target); err != nil {
 			// Environment file is optional, continue if it doesn't exist
-			if !os.IsNotExist(err) {
+			if !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("failed to load environment config: %w", err)
 			}
 		}
