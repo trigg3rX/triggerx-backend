@@ -31,10 +31,11 @@ func NewGenericRepository[T any](
 	// Use gocqlx session for better performance and features
 	gocqlxSession := db.GetGocqlxSession()
 
-	queryBuilder := query_builder.NewGocqlxQueryBuilder[T](
+	queryBuilder := query_builder.NewGocqlxQueryBuilderWithPrimaryKey[T](
 		gocqlxSession,
 		logger,
 		tableName,
+		primaryKey,
 	)
 
 	return &genericRepository[T]{
