@@ -180,14 +180,25 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 				config.GetImuaTaskExecutionAddress(),
 			)
 		} else {
-			message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
-				config.GetEtherscanAPIKey(),
-				config.GetAlchemyAPIKey(),
-				config.GetPinataHost(),
-				config.GetPinataJWT(),
-				config.GetManagerSigningAddress(),
-				config.GetTaskExecutionAddress(),
-			)
+			if (keeperHealth.Version == "1.0.0" || keeperHealth.Version == "1.0.1") {
+				message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+					config.GetEtherscanAPIKey(),
+					config.GetAlchemyAPIKey(),
+					config.GetPinataHost(),
+					config.GetPinataJWT(),
+					config.GetManagerSigningAddress(),
+					config.GetTaskExecutionAddress(),
+				)
+			} else {
+				message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+					config.GetEtherscanAPIKey(),
+					config.GetAlchemyAPIKey(),
+					config.GetPinataHost(),
+					config.GetPinataJWT(),
+					config.GetManagerSigningAddress(),
+					config.GetTestTaskExecutionAddress(),
+				)
+			}
 		}
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
