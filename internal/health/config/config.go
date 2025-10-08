@@ -74,9 +74,6 @@ type SecretsConfig struct {
 	TaskExecutionAddress     string
 	TestTaskExecutionAddress string
 	ImuaTaskExecutionAddress string
-
-	// JWT signing key
-	JWTPrivateKey string
 }
 
 var cfg *Config
@@ -139,9 +136,6 @@ func loadSecretsFromEnv() (SecretsConfig, bool) {
 		TaskExecutionAddress:     env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
 		TestTaskExecutionAddress: env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
 		ImuaTaskExecutionAddress: env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
-
-		// JWT signing key
-		JWTPrivateKey: env.GetEnvString("JWT_PRIVATE_KEY", ""),
 	}, env.GetEnvBool("DEV_MODE", false)
 }
 
@@ -197,9 +191,6 @@ func validateSecrets(secrets SecretsConfig) error {
 	}
 	if env.IsEmpty(secrets.BotToken) {
 		return fmt.Errorf("bot token is required")
-	}
-	if env.IsEmpty(secrets.JWTPrivateKey) {
-		return fmt.Errorf("JWT private key is required")
 	}
 
 	return nil
@@ -339,8 +330,4 @@ func GetTestTaskExecutionAddress() string {
 
 func GetImuaTaskExecutionAddress() string {
 	return cfg.Secrets.ImuaTaskExecutionAddress
-}
-
-func GetJWTPrivateKey() string {
-	return cfg.Secrets.JWTPrivateKey
 }

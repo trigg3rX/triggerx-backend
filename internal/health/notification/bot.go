@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"sync"
 
 	"github.com/go-gomail/gomail"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -12,9 +11,9 @@ import (
 )
 
 type NotificationBot struct {
-	tgBotAPI   *tgbotapi.BotAPI
-	dbManager  interfaces.DatabaseManagerInterface
-	logger     logging.Logger
+	tgBotAPI  *tgbotapi.BotAPI
+	dbManager interfaces.DatabaseManagerInterface
+	logger    logging.Logger
 }
 
 func NewBot(
@@ -28,9 +27,9 @@ func NewBot(
 	}
 
 	return &NotificationBot{
-		tgBotAPI:        bot,
-		dbManager:  dbManager,
-		logger:     logger,
+		tgBotAPI:  bot,
+		dbManager: dbManager,
+		logger:    logger,
 	}, nil
 }
 
@@ -40,11 +39,7 @@ func (b *NotificationBot) Start() {
 
 	updates := b.tgBotAPI.GetUpdatesChan(u)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	go func() {
-		defer wg.Done()
 		for update := range updates {
 			if update.Message == nil {
 				continue
@@ -79,8 +74,6 @@ func (b *NotificationBot) Start() {
 			}
 		}
 	}()
-
-	wg.Wait()
 }
 
 func (b *NotificationBot) SendTGMessage(chatID int64, message string) error {

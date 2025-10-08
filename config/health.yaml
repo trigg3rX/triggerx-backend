@@ -1,0 +1,29 @@
+# Health Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+server:
+  http_port: "9004"                    # HTTP API server port
+  grpc_port: "9014"                    # gRPC server port  
+
+health_check:
+  keeper_timeout: "70s"                # Timeout for inactive keepers
+  check_interval: "30s"                # Interval for health check routine
+  sync_interval: "5m"                  # Database sync interval
+  max_retries: 3                       # Maximum retry attempts
+  retry_backoff: "1s"                  # Backoff duration between retries
+
+database:
+  host: "localhost"                    # Database host address
+  port: "9042"                         # Database port
+  keyspace: "triggerx_health"          # ScyllaDB keyspace
+  replication_factor: 3                # Replication factor for keyspace
+  consistency_level: "quorum"          # Consistency level for operations
+  connection_timeout: "10s"            # Connection timeout
+  query_timeout: "30s"                 # Query timeout
+
+notification:
+  smtp_host: "smtp.gmail.com"          # SMTP server host
+  smtp_port: "587"                     # SMTP server port
+  timeout: "30s"                       # Email sending timeout
+  retry_attempts: 3                    # Number of retry attempts

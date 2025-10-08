@@ -14,10 +14,10 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health"
-	"github.com/trigg3rX/triggerx-backend/internal/health/client"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend/internal/health/database"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
-	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
+	"github.com/trigg3rX/triggerx-backend/internal/health/notification"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore/infrastructure/connection"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -27,7 +27,7 @@ const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
-	if err := config.Init(); err != nil {
+	if err := config.Init("config/health.yaml"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -51,7 +51,7 @@ func main() {
 
 	// Initialize database connection
 	dbConfig := &connection.Config{
-		Hosts:        []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Hosts:        []string{config.GetDatabaseHost() + ":" + config.GetDatabasePort()},
 		Keyspace:     "triggerx",
 		Consistency:  gocql.Quorum,
 		Timeout:      time.Second * 30,
@@ -67,22 +67,23 @@ func main() {
 	// Create keeper repository
 	keeperRepo := dbConn.Keeper()
 
-	// Initialize Telegram bot
-	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, keeperRepo)
-	if err != nil {
-		logger.Errorf("Failed to initialize Telegram bot: %v", err)
-	}
-
-	// Initialize database manager
-	client.InitDatabaseManager(logger, keeperRepo, telegramBot)
+	dbManager := database.InitDatabaseManager(logger, keeperRepo)
 	logger.Info("Database manager initialized")
 
+	// Initialize notification bot
+	notificationBot, err := notification.NewBot(config.GetBotToken(), logger, dbManager)
+	if err != nil {
+		logger.Errorf("Failed to initialize notification bot: %v", err)
+	}
+	notificationBot.Start()
+	logger.Info("Notification bot initialized")
+
 	// Initialize state manager
-	stateManager := keeper.InitializeStateManager(logger)
+	stateManager := keeper.InitializeStateManager(logger, dbManager)
 	logger.Info("Keeper state manager initialized")
 
 	// Load verified keepers from database
-	if err := stateManager.LoadVerifiedKeepers(); err != nil {
+	if err := stateManager.LoadVerifiedKeepers(context.Background()); err != nil {
 		logger.Debug("Failed to load verified keepers from database", "error", err)
 		// Continue anyway, as we can still operate with an empty state
 	}
@@ -101,7 +102,7 @@ func main() {
 	}()
 
 	close(ready)
-	logger.Infof("Health service is ready on port %s", config.GetHealthRPCPort())
+	logger.Infof("Health service is ready on port %s", config.GetHTTPPort())
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -124,13 +125,12 @@ func setupHTTPServer(logger logging.Logger) *http.Server {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(health.LoggerMiddleware(logger))
 
-	// Register routes
+	// Register routes (middleware with metrics is applied inside RegisterRoutes)
 	health.RegisterRoutes(router, logger)
 
 	return &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),
+		Addr:    fmt.Sprintf(":%s", config.GetHTTPPort()),
 		Handler: router,
 	}
 }
@@ -143,7 +143,7 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 
 	// Update all keepers to inactive in database
 	stateManager := keeper.GetStateManager()
-	if err := stateManager.DumpState(); err != nil {
+	if err := stateManager.DumpState(ctx); err != nil {
 		logger.Error("Failed to dump keeper state", "error", err)
 	}
 
