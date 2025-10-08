@@ -45,6 +45,7 @@ type GocqlxSessioner interface {
 type GocqlxQueryer interface {
 	WithContext(ctx context.Context) GocqlxQueryer
 	BindStruct(data interface{}) GocqlxQueryer
+	BindMap(data map[string]interface{}) GocqlxQueryer
 	ExecRelease() error
 	GetRelease(dest interface{}) error
 	Select(dest interface{}) error

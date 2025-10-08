@@ -358,8 +358,8 @@ func TestGenericRepository_GetByNonID(t *testing.T) {
 		}
 
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Test Name").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name LIMIT 1 ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Test Name"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().GetRelease(gomock.Any()).DoAndReturn(func(dest interface{}) error {
 			*dest.(*TestEntity) = testEntity
@@ -376,8 +376,8 @@ func TestGenericRepository_GetByNonID(t *testing.T) {
 
 	t.Run("record not found", func(t *testing.T) {
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Non-existent").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name LIMIT 1 ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Non-existent"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().GetRelease(gomock.Any()).Return(errors.New("not found"))
 
@@ -390,8 +390,8 @@ func TestGenericRepository_GetByNonID(t *testing.T) {
 	t.Run("database error", func(t *testing.T) {
 		expectedError := errors.New("database connection failed")
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Test Name").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name LIMIT 1 ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Test Name"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().GetRelease(gomock.Any()).Return(expectedError)
 
@@ -573,8 +573,8 @@ func TestGenericRepository_GetByField(t *testing.T) {
 		}
 
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Entity 1").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Entity 1"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().SelectRelease(gomock.Any()).DoAndReturn(func(dest interface{}) error {
 			*dest.(*[]TestEntity) = testEntities
@@ -590,8 +590,8 @@ func TestGenericRepository_GetByField(t *testing.T) {
 
 	t.Run("empty results", func(t *testing.T) {
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Non-existent").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Non-existent"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().SelectRelease(gomock.Any()).DoAndReturn(func(dest interface{}) error {
 			*dest.(*[]TestEntity) = []TestEntity{}
@@ -607,8 +607,8 @@ func TestGenericRepository_GetByField(t *testing.T) {
 		expectedError := errors.New("select failed")
 
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Test Name").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Test Name"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().SelectRelease(gomock.Any()).Return(expectedError)
 
@@ -654,9 +654,10 @@ func TestGenericRepository_GetByFields(t *testing.T) {
 		mockGocqlxSession.EXPECT().Query(gomock.Any(), gomock.Any()).DoAndReturn(func(query string, names []string) interface{} {
 			// Verify the query contains the expected elements
 			assert.Contains(t, query, "SELECT * FROM test_table WHERE")
-			assert.Contains(t, query, "name = ?")
-			assert.Contains(t, query, "age = ?")
+			assert.Contains(t, query, "name = :name")
+			assert.Contains(t, query, "age = :age")
 			assert.Contains(t, query, "AND")
+			assert.Contains(t, query, "ALLOW FILTERING")
 			// Verify the names slice contains both fields
 			assert.Len(t, names, 2)
 			assert.Contains(t, names, "name")
@@ -664,12 +665,12 @@ func TestGenericRepository_GetByFields(t *testing.T) {
 			return mockQuery
 		})
 
-		// Use gomock.Any() for BindStruct since the order depends on map iteration
-		mockQuery.EXPECT().BindStruct(gomock.Any()).DoAndReturn(func(values []interface{}) interface{} {
-			// Verify the values slice contains the expected values
+		// Use gomock.Any() for BindMap since the order depends on map iteration
+		mockQuery.EXPECT().BindMap(gomock.Any()).DoAndReturn(func(values map[string]interface{}) interface{} {
+			// Verify the map contains the expected values
 			assert.Len(t, values, 2)
-			assert.Contains(t, values, "Test Name")
-			assert.Contains(t, values, 25)
+			assert.Equal(t, "Test Name", values["name"])
+			assert.Equal(t, 25, values["age"])
 			return mockQuery
 		})
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
@@ -706,8 +707,8 @@ func TestGenericRepository_GetByFields(t *testing.T) {
 		expectedError := errors.New("select failed")
 
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct([]interface{}{"Test Name"}).Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Test Name"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().SelectRelease(gomock.Any()).Return(expectedError)
 
@@ -861,8 +862,8 @@ func TestGenericRepository_ExistsByField(t *testing.T) {
 		testEntity := TestEntity{ID: "test-id", Name: "Test Name", Age: 25}
 
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Test Name").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name LIMIT 1 ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Test Name"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().GetRelease(gomock.Any()).DoAndReturn(func(dest interface{}) error {
 			*dest.(*TestEntity) = testEntity
@@ -876,8 +877,8 @@ func TestGenericRepository_ExistsByField(t *testing.T) {
 
 	t.Run("not exists - false", func(t *testing.T) {
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Non-existent").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name LIMIT 1 ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Non-existent"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().GetRelease(gomock.Any()).Return(errors.New("not found"))
 
@@ -890,8 +891,8 @@ func TestGenericRepository_ExistsByField(t *testing.T) {
 		expectedError := errors.New("database error")
 
 		mockConnection.EXPECT().GetGocqlxSession().Return(mockGocqlxSession)
-		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = ?", []string{"name"}).Return(mockQuery)
-		mockQuery.EXPECT().BindStruct("Test Name").Return(mockQuery)
+		mockGocqlxSession.EXPECT().Query("SELECT * FROM test_table WHERE name = :name LIMIT 1 ALLOW FILTERING", []string{"name"}).Return(mockQuery)
+		mockQuery.EXPECT().BindMap(map[string]interface{}{"name": "Test Name"}).Return(mockQuery)
 		mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
 		mockQuery.EXPECT().GetRelease(gomock.Any()).Return(expectedError)
 

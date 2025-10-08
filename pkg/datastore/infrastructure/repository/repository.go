@@ -77,16 +77,17 @@ func (r *genericRepository[T]) GetByID(ctx context.Context, id interface{}) (*T,
 
 // GetByNonID retrieves a record by a non-primary key field
 func (r *genericRepository[T]) GetByNonID(ctx context.Context, field string, value interface{}) (*T, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", r.tableName, field)
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = :%s LIMIT 1 ALLOW FILTERING", r.tableName, field, field)
 	names := []string{field}
 
-	// Use gocqlx for better performance
+	// Use gocqlx with named parameters
 	gocqlxSession := r.db.GetGocqlxSession()
 	stmt := gocqlxSession.Query(query, names)
 
 	var result T
-	if err := stmt.BindStruct(value).WithContext(ctx).GetRelease(&result); err != nil {
-		if err.Error() == "not found" {
+	params := map[string]interface{}{field: value}
+	if err := stmt.BindMap(params).WithContext(ctx).GetRelease(&result); err != nil {
+		if strings.Contains(err.Error(), "not found") {
 			return nil, errors.New("record not found")
 		}
 		return nil, err
@@ -192,22 +193,24 @@ func (r *genericRepository[T]) BatchCreate(ctx context.Context, data []*T) error
 
 // GetByField retrieves records by any field
 func (r *genericRepository[T]) GetByField(ctx context.Context, field string, value interface{}) ([]*T, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", r.tableName, field)
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = :%s ALLOW FILTERING", r.tableName, field, field)
 	names := []string{field}
 
-	// Use gocqlx for better performance
+	// Use gocqlx with named parameters
 	gocqlxSession := r.db.GetGocqlxSession()
 	stmt := gocqlxSession.Query(query, names)
 
 	var results []T
-	if err := stmt.BindStruct(value).WithContext(ctx).SelectRelease(&results); err != nil {
+	params := map[string]interface{}{field: value}
+	if err := stmt.BindMap(params).WithContext(ctx).SelectRelease(&results); err != nil {
 		return nil, err
 	}
 
 	// Convert []T to []*T
 	result := make([]*T, len(results))
 	for i, record := range results {
-		result[i] = &record
+		recordCopy := record
+		result[i] = &recordCopy
 	}
 
 	return result, nil
@@ -220,30 +223,32 @@ func (r *genericRepository[T]) GetByFields(ctx context.Context, conditions map[s
 	}
 
 	var whereClauses []string
-	var values []interface{}
 	var names []string
+	conditionsStruct := make(map[string]interface{})
 
 	for field, value := range conditions {
-		whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", field))
-		values = append(values, value)
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = :%s", field, field))
 		names = append(names, field)
+		conditionsStruct[field] = value
 	}
 
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s", r.tableName, strings.Join(whereClauses, " AND "))
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s ALLOW FILTERING", r.tableName, strings.Join(whereClauses, " AND "))
 
-	// Use gocqlx for better performance
+	// Use gocqlx with named parameters
 	gocqlxSession := r.db.GetGocqlxSession()
 	stmt := gocqlxSession.Query(query, names)
 
 	var results []T
-	if err := stmt.BindStruct(values).WithContext(ctx).SelectRelease(&results); err != nil {
+	// Use BindMap for named parameters with map
+	if err := stmt.BindMap(conditionsStruct).WithContext(ctx).SelectRelease(&results); err != nil {
 		return nil, err
 	}
 
 	// Convert []T to []*T
 	result := make([]*T, len(results))
 	for i, record := range results {
-		result[i] = &record
+		recordCopy := record
+		result[i] = &recordCopy
 	}
 
 	return result, nil

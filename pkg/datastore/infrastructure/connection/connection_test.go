@@ -277,6 +277,11 @@ func TestGocqlxQueryWrapper(t *testing.T) {
 	result = wrapper.BindStruct(struct{}{})
 	assert.NotNil(t, result)
 
+	// Test BindMap
+	mockQuery.EXPECT().BindMap(gomock.Any()).Return(mockQuery)
+	result = wrapper.BindMap(map[string]interface{}{"key": "value"})
+	assert.NotNil(t, result)
+
 	// Test ExecRelease
 	expectedError := fmt.Errorf("exec error")
 	mockQuery.EXPECT().ExecRelease().Return(expectedError)
@@ -485,9 +490,9 @@ func TestGocqlxQueryWrapper_MethodChaining(t *testing.T) {
 
 	// Test method chaining
 	mockQuery.EXPECT().WithContext(gomock.Any()).Return(mockQuery)
-	mockQuery.EXPECT().BindStruct(gomock.Any()).Return(mockQuery)
+	mockQuery.EXPECT().BindMap(gomock.Any()).Return(mockQuery)
 
-	result := wrapper.WithContext(context.Background()).BindStruct(struct{}{})
+	result := wrapper.WithContext(context.Background()).BindMap(map[string]interface{}{"key": "value"})
 	assert.NotNil(t, result)
 }
 

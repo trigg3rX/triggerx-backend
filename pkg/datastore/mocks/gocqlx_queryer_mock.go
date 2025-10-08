@@ -49,6 +49,20 @@ func (mr *MockGocqlxQueryerMockRecorder) BindStruct(data interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindStruct", reflect.TypeOf((*MockGocqlxQueryer)(nil).BindStruct), data)
 }
 
+// BindMap mocks base method.
+func (m *MockGocqlxQueryer) BindMap(data map[string]interface{}) interfaces.GocqlxQueryer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BindMap", data)
+	ret0, _ := ret[0].(interfaces.GocqlxQueryer)
+	return ret0
+}
+
+// BindMap indicates an expected call of BindMap.
+func (mr *MockGocqlxQueryerMockRecorder) BindMap(data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BindMap", reflect.TypeOf((*MockGocqlxQueryer)(nil).BindMap), data)
+}
+
 // ExecRelease mocks base method.
 func (m *MockGocqlxQueryer) ExecRelease() error {
 	m.ctrl.T.Helper()

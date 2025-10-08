@@ -361,6 +361,11 @@ func (w *gocqlxQueryWrapper) BindStruct(data interface{}) interfaces.GocqlxQuery
 	return &gocqlxQueryWrapper{query: w.query.BindStruct(data)}
 }
 
+// BindMap implements interfaces.GocqlxQueryer
+func (w *gocqlxQueryWrapper) BindMap(data map[string]interface{}) interfaces.GocqlxQueryer {
+	return &gocqlxQueryWrapper{query: w.query.BindMap(data)}
+}
+
 // ExecRelease implements interfaces.GocqlxQueryer
 func (w *gocqlxQueryWrapper) ExecRelease() error {
 	return w.query.ExecRelease()
@@ -394,6 +399,11 @@ func (r *realGocqlxQuery) WithContext(ctx context.Context) interfaces.GocqlxQuer
 // BindStruct implements interfaces.GocqlxQueryer
 func (r *realGocqlxQuery) BindStruct(data interface{}) interfaces.GocqlxQueryer {
 	return &realGocqlxQuery{query: r.query.BindStruct(data)}
+}
+
+// BindMap implements interfaces.GocqlxQueryer
+func (r *realGocqlxQuery) BindMap(data map[string]interface{}) interfaces.GocqlxQueryer {
+	return &realGocqlxQuery{query: r.query.BindMap(data)}
 }
 
 // ExecRelease implements interfaces.GocqlxQueryer
