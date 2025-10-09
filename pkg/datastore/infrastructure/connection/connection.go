@@ -76,7 +76,10 @@ func NewConnection(config *Config, logger logging.Logger) (interfaces.Connection
 		}
 
 		// Create gocqlx session wrapper
-		gocqlxSession := &gocqlxSessionWrapper{session: session}
+		gocqlxSession := &gocqlxSessionWrapper{
+			session:       session,
+			gocqlxSession: &gocqlx.Session{Session: session},
+		}
 
 		instance = &scyllaConnectionManager{
 			session:       session,
@@ -206,7 +209,10 @@ func (m *scyllaConnectionManager) reconnect() {
 			}
 			m.session = newSession
 			// Update gocqlx session wrapper
-			m.gocqlxSession = &gocqlxSessionWrapper{session: newSession}
+			m.gocqlxSession = &gocqlxSessionWrapper{
+				session:       newSession,
+				gocqlxSession: &gocqlx.Session{Session: newSession},
+			}
 			m.healthStatus = true // Reset health status on successful reconnect
 			m.mu.Unlock()
 			m.logger.Infof("Successfully reconnected to the database after %d attempts", attempts)
@@ -330,14 +336,20 @@ func (m *scyllaConnectionManager) recordCircuitBreakerFailure() {
 
 // gocqlxSessionWrapper wraps a gocql session to implement the GocqlxSessioner interface
 type gocqlxSessionWrapper struct {
-	session interfaces.Sessioner
+	session       interfaces.Sessioner
+	gocqlxSession *gocqlx.Session
 }
 
 // Query creates a new gocqlx query
 func (w *gocqlxSessionWrapper) Query(stmt string, names []string) interfaces.GocqlxQueryer {
-	// Use the deprecated but still functional gocqlx.Query for now
-	// This is the correct way to create a gocqlx query from a gocql session
-	query := gocqlx.Query(w.session.Query(stmt), names)
+	// First ensure we have a gocqlx session wrapper
+	if w.gocqlxSession == nil {
+		// Wrap the gocql session if not already wrapped
+		// Note: gocqlx.Session internally wraps gocql.Session
+		w.gocqlxSession = &gocqlx.Session{Session: w.session.(*gocql.Session)}
+	}
+
+	query := w.gocqlxSession.Query(stmt, names)
 	return &gocqlxQueryWrapper{query: &realGocqlxQuery{query: query}}
 }
 

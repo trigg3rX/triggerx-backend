@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -23,15 +22,13 @@ type HealthClient struct {
 
 // NewHealthClient creates a new health service gRPC client
 func NewHealthClient(target string, logger logging.Logger) (*HealthClient, error) {
-	// Create gRPC connection with appropriate options
-	conn, err := grpc.Dial(
+	// Create gRPC connection with appropriate options (using new API)
+	conn, err := grpc.NewClient(
 		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-		grpc.WithTimeout(10*time.Second),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to health service: %w", err)
+		return nil, fmt.Errorf("failed to create health service client: %w", err)
 	}
 
 	client := pb.NewHealthServiceClient(conn)

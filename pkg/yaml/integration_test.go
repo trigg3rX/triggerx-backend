@@ -76,7 +76,12 @@ notification:
 `
 
 	tempFile := createTempYAML(t, yamlContent)
-	defer os.Remove(tempFile)
+	defer func() {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 	
 
 	// Load configuration
@@ -263,7 +268,12 @@ database:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempFile := createTempYAMLIntegration(t, tt.yamlContent)
-			defer os.Remove(tempFile)
+			defer func() {
+				err := os.Remove(tempFile)
+				if err != nil {
+					t.Errorf("Failed to remove temp file: %v", err)
+				}
+			}()
 
 			// Load configuration
 			var config IntegrationTestStruct
@@ -320,7 +330,12 @@ database:
 
 	// Create temporary files
 	baseFile := createTempYAMLIntegration(t, baseContent)
-	defer os.Remove(baseFile)
+	defer func() {
+		err := os.Remove(baseFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Create environment file in same directory
 	baseDir := filepath.Dir(baseFile)
@@ -332,7 +347,12 @@ database:
 	if err != nil {
 		t.Fatalf("Failed to create environment file: %v", err)
 	}
-	defer os.Remove(envFile)
+	defer func() {
+		err := os.Remove(envFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Load with environment-specific overrides
 	var config IntegrationTestStruct

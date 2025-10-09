@@ -35,7 +35,12 @@ url: "https://example.com"
 strategy: "round_robin"
 optional: "test"
 `)
-	defer os.Remove(tempFile)
+	defer func() {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	var config TestYAMLStruct
 	err := LoadYAML(tempFile, &config)
@@ -76,7 +81,12 @@ func TestLoadYAML_InvalidYAML(t *testing.T) {
 invalid: yaml: content
   - this is broken
 `)
-	defer os.Remove(tempFile)
+	defer func() {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	var config TestYAMLStruct
 	err := LoadYAML(tempFile, &config)
@@ -94,7 +104,12 @@ email: base@example.com
 port: "8080"
 strategy: "round_robin"
 `)
-	defer os.Remove(baseFile)
+	defer func() {
+		err := os.Remove(baseFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Extract base name without extension
 	baseName := filepath.Base(baseFile)
@@ -111,7 +126,12 @@ strategy: "weighted"
 	if err != nil {
 		t.Fatalf("Failed to create env file: %v", err)
 	}
-	defer os.Remove(envFile)
+	defer func() {
+		err := os.Remove(envFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Remove extension from base path
 	basePath := filepath.Join(filepath.Dir(baseFile), baseName)
@@ -154,7 +174,12 @@ func TestLoadEnvironmentSpecificYAML_NoEnvFile(t *testing.T) {
 name: Base Config
 age: 25
 `)
-	defer os.Remove(baseFile)
+	defer func() {
+		err := os.Remove(baseFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Extract base name without extension
 	baseName := filepath.Base(baseFile)
@@ -218,7 +243,12 @@ func TestValidateYAMLStructure(t *testing.T) {
 name: Valid Config
 age: 30
 `)
-	defer os.Remove(validFile)
+	defer func() {
+		err := os.Remove(validFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Test with valid validator
 	err := ValidateYAMLStructure(validFile, func(data interface{}) error {
@@ -255,7 +285,12 @@ database:
   port: "5432"
 `
 	tempFile := createTempYAML(t, yamlContent)
-	defer os.Remove(tempFile)
+	defer func() {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Test getting nested field
 	value, err := GetYAMLField(tempFile, "server.http.port")
@@ -287,7 +322,12 @@ func TestGetYAMLField_InvalidPath(t *testing.T) {
 server:
   port: "8080"
 `)
-	defer os.Remove(tempFile)
+	defer func() {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Test accessing non-map value as map
 	_, err := GetYAMLField(tempFile, "server.port.subfield")
@@ -344,7 +384,12 @@ func TestSaveYAML_CreateDirectory(t *testing.T) {
 
 func TestLoadYAML_NilTarget(t *testing.T) {
 	tempFile := createTempYAML(t, `name: test`)
-	defer os.Remove(tempFile)
+	defer func() {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	err := LoadYAML(tempFile, nil)
 	if err == nil {
