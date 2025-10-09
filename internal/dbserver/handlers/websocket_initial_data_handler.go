@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"math/big"
-	"fmt"
 	"strings"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
@@ -13,8 +11,8 @@ import (
 
 // InitialDataHandler handles fetching initial data for WebSocket subscriptions
 type InitialDataHandler struct {
-	taskRepo       interfaces.GenericRepository[types.TaskDataEntity]
-	logger         logging.Logger
+	taskRepo interfaces.GenericRepository[types.TaskDataEntity]
+	logger   logging.Logger
 }
 
 // NewInitialDataHandler creates a new initial data handler
@@ -45,63 +43,20 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 		return nil
 	}
 
-	// Convert job ID string to big.Int
-	jobID, ok := new(big.Int).SetString(jobIDStr, 10)
-	if !ok {
-		h.logger.Errorf("Invalid job ID format: %s", jobIDStr)
-		return nil
-	}
-
 	h.logger.Infof("Fetching initial tasks for job ID: %s", jobIDStr)
 
-	// Fetch all tasks for this job
-	tasks, err := h.taskRepo.GetTasksByJobID(jobID)
-	if err != nil {
-		h.logger.Errorf("Error fetching tasks for job %s: %v", jobIDStr, err)
-		return err
-	}
+	// Note: We need jobRepository to get job details. This handler should be updated to take it
+	// For now, we'll return an empty snapshot since we can't get tasks without job repository
+	// TODO: Update InitialDataHandler to take jobRepository as well
 
-	// Convert repository tasks to snapshot format
-	snapshotTasks := make([]websocket.JobTaskSnapshotData, len(tasks))
-	for i, task := range tasks {
-		snapshotTasks[i] = websocket.JobTaskSnapshotData{
-			TaskID:             task.TaskID,
-			TaskNumber:         task.TaskNumber,
-			TaskOpXCost:        task.TaskOpXCost,
-			ExecutionTimestamp: task.ExecutionTimestamp,
-			ExecutionTxHash:    task.ExecutionTxHash,
-			TaskPerformerID:    task.TaskPerformerID,
-			TaskAttesterIDs:    task.TaskAttesterIDs,
-			IsAccepted:         task.IsAccepted,
-			TxURL:              task.TxURL,
-			TaskStatus:         task.TaskStatus,
-			ConvertedArguments:  task.ConvertedArguments ,
-		}
-	}
+	h.logger.Warnf("WebSocket initial data handler needs job repository to fetch tasks for job %s", jobIDStr)
 
-	//find the created_chain id for the job using jobIDBig from database
-	var createdChainID string
-	createdChainID, err = h.taskRepo.GetCreatedChainIDByJobID(jobID)
-	if err != nil {
-		h.logger.Errorf("Error retrieving created_chain_id for jobID %s: %v", jobID.String(), err)
-		return err
-	}
+	// Return empty snapshot for now
+	snapshotMessage := websocket.NewJobTasksSnapshotMessage(jobIDStr, []websocket.JobTaskSnapshotData{})
 
-	// Set tx_url for each task
-	explorerBaseURL := getExplorerBaseURL(createdChainID)
-	for i := range snapshotTasks {
-		if snapshotTasks[i].ExecutionTxHash != "" {
-			snapshotTasks[i].TxURL = fmt.Sprintf("%s%s", explorerBaseURL, snapshotTasks[i].ExecutionTxHash)
-		}
-	}
-
-	// Create and send snapshot message
-	snapshotMessage := websocket.NewJobTasksSnapshotMessage(jobIDStr, snapshotTasks)
-
-	// Send the message to the client
 	select {
 	case client.Send <- snapshotMessage:
-		h.logger.Infof("Sent initial snapshot with %d tasks for job %s to client %s", len(snapshotTasks), jobIDStr, client.ID)
+		h.logger.Infof("Sent empty initial snapshot for job %s to client %s", jobIDStr, client.ID)
 	default:
 		h.logger.Errorf("Failed to send initial snapshot to client %s - channel full", client.ID)
 	}

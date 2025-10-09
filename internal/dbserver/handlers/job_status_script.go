@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
+
 	// "math/big"
 	"sync"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 const (
@@ -16,17 +19,17 @@ const (
 
 // JobStatusChecker handles periodic checking of job statuses
 type JobStatusChecker struct {
-	eventJobRepo     repository.EventJobRepository
-	conditionJobRepo repository.ConditionJobRepository
-	timeJobRepo      repository.TimeJobRepository
+	eventJobRepo     interfaces.GenericRepository[types.EventJobDataEntity]
+	conditionJobRepo interfaces.GenericRepository[types.ConditionJobDataEntity]
+	timeJobRepo      interfaces.GenericRepository[types.TimeJobDataEntity]
 	logger           logging.Logger
 }
 
 // NewJobStatusChecker creates a new JobStatusChecker instance
 func NewJobStatusChecker(
-	eventJobRepo repository.EventJobRepository,
-	conditionJobRepo repository.ConditionJobRepository,
-	timeJobRepo repository.TimeJobRepository,
+	eventJobRepo interfaces.GenericRepository[types.EventJobDataEntity],
+	conditionJobRepo interfaces.GenericRepository[types.ConditionJobDataEntity],
+	timeJobRepo interfaces.GenericRepository[types.TimeJobDataEntity],
 	logger logging.Logger,
 ) *JobStatusChecker {
 	return &JobStatusChecker{
@@ -83,57 +86,66 @@ func (c *JobStatusChecker) checkJobStatuses() {
 
 // checkEventJobs checks all active event jobs for expiration
 func (c *JobStatusChecker) checkEventJobs(currentTime time.Time) {
-	eventJobs, err := c.eventJobRepo.GetActiveEventJobs()
+	ctx := context.Background()
+
+	eventJobs, err := c.eventJobRepo.List(ctx)
 	if err != nil {
 		c.logger.Error("Failed to fetch active event jobs", err)
 		return
 	}
 
 	for _, job := range eventJobs {
-		if job.ExpirationTime.Before(currentTime) {
-			if err := c.eventJobRepo.UpdateEventJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to update event job status for job ID %s", job.JobID.String()), err)
+		if !job.IsCompleted && job.ExpirationTime.Before(currentTime) {
+			job.IsCompleted = true
+			if err := c.eventJobRepo.Update(ctx, job); err != nil {
+				c.logger.Error(fmt.Sprintf("Failed to update event job status for job ID %v", &job.JobID), err)
 				continue
 			}
-			c.logger.Info(fmt.Sprintf("Event job %s marked as inactive due to expiration", job.JobID.String()))
+			c.logger.Info(fmt.Sprintf("Event job %v marked as inactive due to expiration", &job.JobID))
 		}
 	}
 }
 
 // checkConditionJobs checks all active condition jobs for expiration
 func (c *JobStatusChecker) checkConditionJobs(currentTime time.Time) {
-	conditionJobs, err := c.conditionJobRepo.GetActiveConditionJobs()
+	ctx := context.Background()
+
+	conditionJobs, err := c.conditionJobRepo.List(ctx)
 	if err != nil {
 		c.logger.Error("Failed to fetch active condition jobs", err)
 		return
 	}
 
 	for _, job := range conditionJobs {
-		if job.ExpirationTime.Before(currentTime) {
-			if err := c.conditionJobRepo.UpdateConditionJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to update condition job status for job ID %s", job.JobID.String()), err)
+		if !job.IsCompleted && job.ExpirationTime.Before(currentTime) {
+			job.IsCompleted = true
+			if err := c.conditionJobRepo.Update(ctx, job); err != nil {
+				c.logger.Error(fmt.Sprintf("Failed to update condition job status for job ID %v", &job.JobID), err)
 				continue
 			}
-			c.logger.Info(fmt.Sprintf("Condition job %s marked as inactive due to expiration", job.JobID.String()))
+			c.logger.Info(fmt.Sprintf("Condition job %v marked as inactive due to expiration", &job.JobID))
 		}
 	}
 }
 
 // checkTimeJobs checks all active time jobs for expiration
 func (c *JobStatusChecker) checkTimeJobs(currentTime time.Time) {
-	timeJobs, err := c.timeJobRepo.GetActiveTimeJobs()
+	ctx := context.Background()
+
+	timeJobs, err := c.timeJobRepo.List(ctx)
 	if err != nil {
 		c.logger.Error("Failed to fetch active time jobs", err)
 		return
 	}
 
 	for _, job := range timeJobs {
-		if job.ExpirationTime.Before(currentTime) {
-			if err := c.timeJobRepo.UpdateTimeJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to update time job status for job ID %s", job.JobID.String()), err)
+		if !job.IsCompleted && job.ExpirationTime.Before(currentTime) {
+			job.IsCompleted = true
+			if err := c.timeJobRepo.Update(ctx, job); err != nil {
+				c.logger.Error(fmt.Sprintf("Failed to update time job status for job ID %v", &job.JobID), err)
 				continue
 			}
-			c.logger.Info(fmt.Sprintf("Time job %s marked as inactive due to expiration", job.JobID.String()))
+			c.logger.Info(fmt.Sprintf("Time job %v marked as inactive due to expiration", &job.JobID))
 		}
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database/queries"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -91,47 +90,51 @@ func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
 
 // GetUserEmailByJobID returns the user's email_id for a given job_id
 func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
-	var userID int64
-	iter := dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
+	ctx := context.Background()
 
-	if !iter.Scan(&userID) {
-		return "", fmt.Errorf("user not found for job ID %d", jobID)
+	// Get job to find user_id
+	job, err := dm.jobRepo.GetByID(ctx, jobID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get job %v: %v", jobID, err)
+		return "", err
 	}
 
-	var email string
-	iter = dm.db.NewQuery(queries.GetUserEmailByUserID, userID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
+	if job == nil {
+		return "", fmt.Errorf("user not found for job ID %v", jobID)
+	}
 
-	if !iter.Scan(&email) {
+	userID := job.UserID
+
+	// Get user to find email
+	user, err := dm.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get user %d: %v", userID, err)
+		return "", err
+	}
+
+	if user == nil {
 		return "", fmt.Errorf("email not found for user ID %d", userID)
 	}
 
-	return email, nil
+	return user.EmailID, nil
 }
 
 // GetUserEmailByTaskID returns the user's email_id for a given task_id
 func (dm *DatabaseClient) GetUserEmailByTaskID(taskID int64) (string, error) {
-	var predicted float64
-	var jobID *big.Int
-	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, taskID).Iter()
-	defer func() {
-		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
-		}
-	}()
-	if !iter.Scan(&predicted, &jobID) {
+	ctx := context.Background()
+
+	// Get task to find job_id
+	task, err := dm.taskRepo.GetByID(ctx, taskID)
+	if err != nil {
+		dm.logger.Errorf("Failed to get task %d: %v", taskID, err)
+		return "", err
+	}
+
+	if task == nil {
 		return "", fmt.Errorf("job not found for task ID %d", taskID)
 	}
-	return dm.GetUserEmailByJobID(jobID)
+
+	return dm.GetUserEmailByJobID(&task.JobID)
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
@@ -176,7 +179,14 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		rewardsBoosterFloat, _ := keeper.RewardsBooster.Float64()
 		pointsToAdd := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost))
 		keeper.KeeperPoints.Add(&keeper.KeeperPoints, pointsToAdd)
-		keeper.NoAttestedTasks = keeper.NoAttestedTasks + 1
+
+		// Update attested tasks count (handle nil pointer)
+		if keeper.NoAttestedTasks == nil {
+			noAttestedTasks := int64(1)
+			keeper.NoAttestedTasks = &noAttestedTasks
+		} else {
+			*keeper.NoAttestedTasks = *keeper.NoAttestedTasks + 1
+		}
 
 		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeper.KeeperPoints, keeper.RewardsBooster, keeper.NoAttestedTasks)
 
@@ -213,7 +223,14 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		pointsToSubtract := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost * 0.1))
 		performerKeeper.KeeperPoints.Sub(&performerKeeper.KeeperPoints, pointsToSubtract)
 	}
-	performerKeeper.NoExecutedTasks = performerKeeper.NoExecutedTasks + 1
+
+	// Update executed tasks count (handle nil pointer)
+	if performerKeeper.NoExecutedTasks == nil {
+		noExecutedTasks := int64(1)
+		performerKeeper.NoExecutedTasks = &noExecutedTasks
+	} else {
+		*performerKeeper.NoExecutedTasks = *performerKeeper.NoExecutedTasks + 1
+	}
 
 	if err := dm.keeperRepo.Update(ctx, performerKeeper); err != nil {
 		dm.logger.Errorf("Failed to update keeper points: %v", err)
@@ -270,7 +287,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	return nil
 }
 
-// GetKeeperIds gets keeper IDs from keeper addresses
+// GetKeeperIds gets keeper operator IDs from keeper addresses
 func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error) {
 	ctx := context.Background()
 	var keeperIds []int64
@@ -290,8 +307,13 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
 		}
 
-		dm.logger.Infof("Keeper ID for address %s: %d", keeperAddress, keeper.KeeperID)
-		keeperIds = append(keeperIds, keeper.KeeperID)
+		if keeper.OperatorID == nil {
+			dm.logger.Errorf("Keeper operator ID is nil for address %s", keeperAddress)
+			return nil, fmt.Errorf("keeper operator ID is nil for address %s", keeperAddress)
+		}
+
+		dm.logger.Infof("Keeper operator ID for address %s: %d", keeperAddress, *keeper.OperatorID)
+		keeperIds = append(keeperIds, *keeper.OperatorID)
 	}
 	return keeperIds, nil
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"math/big"
 	"net/http"
 	"time"
@@ -35,11 +36,13 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	// Track database operation
 	trackDBOp := metrics.TrackDBOperation("read", "job_data")
-	taskDefinitionID, err := h.jobRepository.GetTaskDefinitionIDByJobID(jobIDBig)
+	job, err := h.jobRepository.GetByID(ctx, jobIDBig)
 	trackDBOp(err)
-	if err != nil {
+	if err != nil || job == nil {
 		h.logger.Errorf("[DeleteJobData] Error getting job data for jobID %s: %v", jobID, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found",
@@ -48,9 +51,14 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		return
 	}
 
+	taskDefinitionID := job.TaskDefinitionID
+
 	// Track job status update
+	job.Status = "deleted"
+	job.UpdatedAt = time.Now().UTC()
+
 	trackDBOp = metrics.TrackDBOperation("update", "job_data")
-	err = h.jobRepository.UpdateJobStatus(jobIDBig, "deleted")
+	err = h.jobRepository.Update(ctx, job)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[DeleteJobData] Error updating job status for jobID %s: %v", jobID, err)
@@ -61,7 +69,11 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	switch taskDefinitionID {
 	case 1, 2:
 		trackDBOp = metrics.TrackDBOperation("update", "time_job")
-		err = h.timeJobRepository.UpdateTimeJobStatus(jobIDBig, false)
+		timeJob, err := h.timeJobRepository.GetByNonID(ctx, "job_id", jobIDBig)
+		if err == nil && timeJob != nil {
+			timeJob.IsCompleted = true
+			err = h.timeJobRepository.Update(ctx, timeJob)
+		}
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[DeleteJobData] Error updating time job status for jobID %s: %v", jobID, err)
@@ -70,7 +82,11 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		}
 	case 3, 4:
 		trackDBOp = metrics.TrackDBOperation("update", "event_job")
-		err = h.eventJobRepository.UpdateEventJobStatus(jobIDBig, false)
+		eventJob, err := h.eventJobRepository.GetByNonID(ctx, "job_id", jobIDBig)
+		if err == nil && eventJob != nil {
+			eventJob.IsCompleted = true
+			err = h.eventJobRepository.Update(ctx, eventJob)
+		}
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[DeleteJobData] Error updating event job status for jobID %s: %v", jobID, err)
@@ -86,7 +102,11 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		}
 	case 5, 6:
 		trackDBOp = metrics.TrackDBOperation("update", "condition_job")
-		err = h.conditionJobRepository.UpdateConditionJobStatus(jobIDBig, false)
+		conditionJob, err := h.conditionJobRepository.GetByNonID(ctx, "job_id", jobIDBig)
+		if err == nil && conditionJob != nil {
+			conditionJob.IsCompleted = true
+			err = h.conditionJobRepository.Update(ctx, conditionJob)
+		}
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[DeleteJobData] Error updating condition job status for jobID %s: %v", jobID, err)
@@ -125,32 +145,50 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		return
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "job_data")
-	err := h.jobRepository.UpdateJobFromUserInDB(jobID, &updateData)
+	ctx := context.Background()
+
+	// Get the job first
+	trackDBOp := metrics.TrackDBOperation("read", "job_data")
+	job, err := h.jobRepository.GetByID(ctx, jobID)
+	trackDBOp(err)
+	if err != nil || job == nil {
+		h.logger.Errorf("[UpdateJobData] Error getting job data for jobID %s: %v", updateData.JobID, err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Job not found",
+			"code":  "JOB_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update job fields from request
+	job.JobTitle = updateData.JobTitle
+	job.UpdatedAt = time.Now().UTC()
+
+	trackDBOp = metrics.TrackDBOperation("update", "job_data")
+	err = h.jobRepository.Update(ctx, job)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[UpdateJobData] Error updating job data for jobID %d: %v", updateData.JobID, err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Job not found or update failed",
+		h.logger.Errorf("[UpdateJobData] Error updating job data for jobID %s: %v", updateData.JobID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Job update failed",
 			"code":  "JOB_UPDATE_ERROR",
 		})
 		return
 	}
 
-	// Fetch the job to get its task_definition_id
-	job, err := h.jobRepository.GetJobByID(jobID)
-	if err == nil && (job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2) {
-		// For time-based jobs, update time_interval and next_execution_timestamp
-		err = h.timeJobRepository.UpdateTimeJobInterval(jobID, updateData.TimeInterval)
-		if err != nil {
-			h.logger.Errorf("[UpdateJobData] Error updating time_interval for jobID %d: %v", updateData.JobID, err)
-		}
-		updatedAt := job.UpdatedAt
-		nextExecution := updatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
-		err = h.timeJobRepository.UpdateTimeJobNextExecutionTimestamp(jobID, nextExecution)
-		if err != nil {
-			h.logger.Errorf("[UpdateJobData] Error updating next_execution_timestamp for jobID %d: %v", updateData.JobID, err)
-			// Not returning error to client, just logging
+	// For time-based jobs, update time_interval and next_execution_timestamp
+	if job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2 {
+		timeJob, err := h.timeJobRepository.GetByNonID(ctx, "job_id", jobID)
+		if err == nil && timeJob != nil {
+			timeJob.TimeInterval = updateData.TimeInterval
+			nextExecution := job.UpdatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
+			timeJob.NextExecutionTimestamp = nextExecution
+
+			err = h.timeJobRepository.Update(ctx, timeJob)
+			if err != nil {
+				h.logger.Errorf("[UpdateJobData] Error updating time job for jobID %s: %v", updateData.JobID, err)
+				// Not returning error to client, just logging
+			}
 		}
 	}
 
@@ -195,9 +233,27 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
+	// Get the job first
+	trackDBOp := metrics.TrackDBOperation("read", "job_data")
+	job, err := h.jobRepository.GetByID(ctx, jobIDBig)
+	trackDBOp(err)
+	if err != nil || job == nil {
+		h.logger.Errorf("[UpdateJobStatus] Error getting job: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Job not found",
+			"code":  "JOB_NOT_FOUND",
+		})
+		return
+	}
+
 	// Update the job status
-	trackDBOp := metrics.TrackDBOperation("update", "job_data")
-	if err := h.jobRepository.UpdateJobStatus(jobIDBig, status); err != nil {
+	job.Status = status
+	job.UpdatedAt = time.Now().UTC()
+
+	trackDBOp = metrics.TrackDBOperation("update", "job_data")
+	if err := h.jobRepository.Update(ctx, job); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateJobStatus] Error updating job status: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -224,11 +280,35 @@ func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
+	// Get the job first
+	trackDBOp := metrics.TrackDBOperation("read", "job_data")
+	job, err := h.jobRepository.GetByID(ctx, updateData.JobID)
+	trackDBOp(err)
+	if err != nil || job == nil {
+		h.logger.Errorf("[UpdateJobLastExecutedAt] Error getting job for jobID %v: %v", updateData.JobID, err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Job not found",
+			"code":  "JOB_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update job fields
+	job.LastExecutedAt = updateData.LastExecutedAt
+	job.TaskIDs = append(job.TaskIDs, updateData.TaskIDs)
+
+	// Update job cost actual
+	jobCostActualBigInt := big.NewInt(int64(updateData.JobCostActual))
+	job.JobCostActual.Add(&job.JobCostActual, jobCostActualBigInt)
+	job.UpdatedAt = time.Now().UTC()
+
 	// Update main job_data table
-	trackDBOp := metrics.TrackDBOperation("update", "job_data")
-	if err := h.jobRepository.UpdateJobLastExecutedAt(updateData.JobID, updateData.TaskIDs, updateData.JobCostActual, updateData.LastExecutedAt); err != nil {
+	trackDBOp = metrics.TrackDBOperation("update", "job_data")
+	if err := h.jobRepository.Update(ctx, job); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating job data for jobID %d: %v", updateData.JobID, err)
+		h.logger.Errorf("[UpdateJobLastExecutedAt] Error updating job data for jobID %v: %v", updateData.JobID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
 		return
 	}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -23,11 +24,13 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 
 	h.logger.Infof("[GetUserDataByAddress] Retrieving user with address: %s", userAddress)
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userID, userData, err := h.userRepository.GetUserDataByAddress(userAddress)
+	userData, err := h.userRepository.GetByNonID(ctx, "user_address", userAddress)
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[GetUserData] Error retrieving user with ID %d: %v", userID, err)
+	if err != nil || userData == nil {
+		h.logger.Errorf("[GetUserData] Error retrieving user with address %s: %v", userAddress, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "User not found",
 			"code":  "USER_NOT_FOUND",
@@ -35,7 +38,7 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetUserData] Successfully retrieved user with ID: %d", userID)
+	h.logger.Infof("[GetUserData] Successfully retrieved user with ID: %d", userData.UserID)
 	c.JSON(http.StatusOK, userData)
 }
 
@@ -45,20 +48,18 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	walletAddress := strings.ToLower(c.Param("address"))
 	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
-	var userPoints float64
-	var keeperPoints float64
+	ctx := context.Background()
+	var keeperPoints float64 = 0
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userPoints, err := h.userRepository.GetUserPointsByAddress(walletAddress)
+	user, err := h.userRepository.GetByNonID(ctx, "user_address", walletAddress)
 	trackDBOp(err)
-	if err != nil {
-		userPoints = 0
-	}
 
-	// keeperPoints, err := h.userRepository.GetKeeperPointsByAddress(walletAddress)
-	// if err != nil {
-	// 	keeperPoints = 0
-	// }
+	userPoints := float64(0)
+	if err == nil && user != nil {
+		// Convert big.Int OpxConsumed to float64 for points
+		userPoints, _ = user.OpxConsumed.Float64()
+	}
 
 	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %.2f + %.2f", walletAddress, userPoints, keeperPoints)
 
@@ -90,7 +91,20 @@ func (h *Handler) StoreUserEmail(c *gin.Context) {
 
 	req.UserAddress = strings.ToLower(req.UserAddress)
 
-	err := h.userRepository.UpdateUserEmail(req.UserAddress, req.Email)
+	ctx := context.Background()
+
+	// Get user
+	user, err := h.userRepository.GetByNonID(ctx, "user_address", req.UserAddress)
+	if err != nil || user == nil {
+		h.logger.Errorf("[StoreUserEmail] User not found for address %s: %v", req.UserAddress, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found", "code": "USER_NOT_FOUND"})
+		return
+	}
+
+	// Update email
+	user.EmailID = req.Email
+
+	err = h.userRepository.Update(ctx, user)
 	if err != nil {
 		h.logger.Errorf("[StoreUserEmail] Failed to update email %s for address %s: %v", req.Email, req.UserAddress, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update email", "code": "UPDATE_FAILED"})

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -14,51 +16,94 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	pollLookAhead := config.GetPollingLookAhead()
 	lookAheadTime := time.Now().Add(time.Duration(pollLookAhead) * time.Second)
 
-	var tasks []commonTypes.ScheduleTimeTaskData
-	var err error
+	ctx := context.Background()
 
+	// Get all time jobs
 	trackDBOp := metrics.TrackDBOperation("read", "time_jobs")
-	tasks, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(lookAheadTime)
+	allTimeJobs, err := h.timeJobRepository.List(ctx)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time based tasks: %v", err)
+		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time jobs: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve time based tasks",
 			"code":  "TIME_TASKS_FETCH_ERROR",
-			"tasks": tasks,
 		})
 		return
 	}
 
-	for i := range tasks {
+	// Filter jobs by next execution timestamp
+	var filteredJobs []*types.TimeJobDataEntity
+	for _, job := range allTimeJobs {
+		if !job.IsCompleted && job.NextExecutionTimestamp.Before(lookAheadTime) {
+			filteredJobs = append(filteredJobs, job)
+		}
+	}
+
+	// Convert to ScheduleTimeTaskData format
+	var tasks []types.ScheduleTimeTaskData
+	for _, timeJob := range filteredJobs {
+		// Create task for this job
+		newTask := &types.TaskDataEntity{
+			TaskID:               0, // Will be auto-generated
+			TaskNumber:           0,
+			JobID:                timeJob.JobID,
+			TaskDefinitionID:     timeJob.TaskDefinitionID,
+			CreatedAt:            time.Now().UTC(),
+			TaskOpxPredictedCost: *big.NewInt(0),
+			TaskOpxActualCost:    *big.NewInt(0),
+			IsSuccessful:         false,
+			IsAccepted:           false,
+		}
+
 		trackDBOp = metrics.TrackDBOperation("create", "task_data")
-		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
-			JobID:            tasks[i].TaskTargetData.JobID.Int,
-			TaskDefinitionID: tasks[i].TaskDefinitionID,
-		})
+		err := h.taskRepository.Create(ctx, newTask)
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to create task data",
-				"code":  "TASK_CREATION_ERROR",
-			})
 			continue
 		}
 
-		trackDBOp = metrics.TrackDBOperation("update", "add_task_id")
-		err = h.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID.Int, taskID)
-		trackDBOp(err)
-		if err != nil {
-			h.logger.Errorf("[GetTimeBasedJobs] Error adding task ID: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to add task ID",
-				"code":  "TASK_ID_ADDITION_ERROR",
-			})
+		// Get created task to get ID
+		task, err := h.taskRepository.GetByID(ctx, newTask.TaskID)
+		if err != nil || task == nil {
 			continue
 		}
 
-		tasks[i].TaskID = taskID
+		// Update job with new task ID
+		job, err := h.jobRepository.GetByID(ctx, &timeJob.JobID)
+		if err == nil && job != nil {
+			job.TaskIDs = append(job.TaskIDs, task.TaskID)
+			err = h.jobRepository.Update(ctx, job)
+			if err != nil {
+				h.logger.Errorf("[GetTimeBasedJobs] Error updating job with new task ID: %v", err)
+				continue
+			}
+		}
+
+		// Build response
+		scheduleData := types.ScheduleTimeTaskData{
+			TaskID:                 task.TaskID,
+			TaskDefinitionID:       timeJob.TaskDefinitionID,
+			LastExecutedAt:         timeJob.LastExecutedAt,
+			ExpirationTime:         timeJob.ExpirationTime,
+			NextExecutionTimestamp: timeJob.NextExecutionTimestamp,
+			ScheduleType:           timeJob.ScheduleType,
+			TimeInterval:           timeJob.TimeInterval,
+			CronExpression:         timeJob.CronExpression,
+			SpecificSchedule:       timeJob.SpecificSchedule,
+			TaskTargetData: types.TaskTargetData{
+				JobID:                     types.NewBigInt(&timeJob.JobID),
+				TaskDefinitionID:          timeJob.TaskDefinitionID,
+				TargetChainID:             timeJob.TargetChainID,
+				TargetContractAddress:     timeJob.TargetContractAddress,
+				TargetFunction:            timeJob.TargetFunction,
+				ABI:                       timeJob.ABI,
+				ArgType:                   timeJob.ArgType,
+				Arguments:                 timeJob.Arguments,
+				DynamicArgumentsScriptUrl: timeJob.DynamicArgumentsScriptURL,
+			},
+		}
+		tasks = append(tasks, scheduleData)
 	}
 
 	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))

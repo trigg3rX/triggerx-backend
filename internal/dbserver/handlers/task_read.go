@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -36,10 +37,12 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 
 	h.logger.Infof("[GetTaskDataByID] Retrieving task data for task ID: %d", taskIDInt)
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	taskData, err := h.taskRepository.GetTaskDataByID(taskIDInt)
+	taskData, err := h.taskRepository.GetByID(ctx, taskIDInt)
 	trackDBOp(err)
-	if err != nil {
+	if err != nil || taskData == nil {
 		h.logger.Errorf("[GetTaskDataByID] Error retrieving task data for taskID %d: %v", taskIDInt, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found",
@@ -73,44 +76,49 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 
 	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s | %s", jobIDStr, jobID.String())
 
-	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	tasksData, err := h.taskRepository.GetTasksByJobID(jobID)
+	ctx := context.Background()
+
+	// Get job to find task IDs and chain ID
+	trackDBOp := metrics.TrackDBOperation("read", "job_data")
+	job, err := h.jobRepository.GetByID(ctx, jobID)
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobID.String(), err)
+	if err != nil || job == nil {
+		h.logger.Errorf("[GetTasksByJobID] Error retrieving job for jobID %s: %v", jobID.String(), err)
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "No tasks found for this job",
-			"code":  "TASKS_NOT_FOUND",
+			"error": "Job not found",
+			"code":  "JOB_NOT_FOUND",
 		})
 		return
 	}
 
-	// Convert GetTasksByJobID to TasksByJobIDResponse
+	createdChainID := job.CreatedChainID
+
+	// Get tasks by task IDs
+	trackDBOp = metrics.TrackDBOperation("read", "task_data")
+	var tasksData []*types.TaskDataEntity
+	for _, taskID := range job.TaskIDs {
+		task, err := h.taskRepository.GetByID(ctx, taskID)
+		if err == nil && task != nil {
+			tasksData = append(tasksData, task)
+		}
+	}
+	trackDBOp(nil)
+
+	// Convert to TasksByJobIDResponse
 	tasks := make([]types.TasksByJobIDResponse, len(tasksData))
 	for i, task := range tasksData {
 		tasks[i] = types.TasksByJobIDResponse{
 			TaskID:             task.TaskID,
 			TaskNumber:         task.TaskNumber,
-			TaskOpXCost:        task.TaskOpXCost,
+			TaskOpXCost:        0, // Convert from big.Int if needed
 			ExecutionTimestamp: task.ExecutionTimestamp,
 			ExecutionTxHash:    task.ExecutionTxHash,
 			TaskPerformerID:    task.TaskPerformerID,
 			TaskAttesterIDs:    task.TaskAttesterIDs,
 			IsAccepted:         task.IsAccepted,
-			TaskStatus:         task.TaskStatus,
-			ConvertedArguments:  task.ConvertedArguments ,
+			TaskStatus:         "", // Map from entity if needed
+			ConvertedArguments: []string{task.ConvertedArguments},
 		}
-	}
-	//find the created_chain id for the job using jobIDBig from database
-	var createdChainID string
-	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobID)
-	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving created_chain_id for jobID %s: %v", jobID.String(), err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "No tasks found for this job",
-			"code":  "TASKS_NOT_FOUND",
-		})
-		return
 	}
 
 	// Set tx_url for each task

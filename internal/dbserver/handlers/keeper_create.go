@@ -1,13 +1,25 @@
 package handlers
 
 import (
+	"context"
+	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
+
+// Helper functions for pointer types
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func int64Ptr(i int64) *int64 {
+	return &i
+}
 
 func (h *Handler) CreateKeeperData(c *gin.Context) {
 	traceID := h.getTraceID(c)
@@ -22,8 +34,10 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
-	existingKeeperID, err := h.keeperRepository.CheckKeeperExists(keeperData.KeeperAddress)
+	existingKeeper, err := h.keeperRepository.GetByNonID(ctx, "keeper_address", strings.ToLower(keeperData.KeeperAddress))
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateKeeperData] Database error while checking keeper existence: %v", err)
@@ -34,18 +48,35 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 		return
 	}
 
-	if existingKeeperID != -1 {
-		h.logger.Infof("[CreateKeeperData] Keeper already exists with ID: %d", existingKeeperID)
+	if existingKeeper != nil && existingKeeper.OperatorID != nil {
+		h.logger.Infof("[CreateKeeperData] Keeper already exists with operator ID: %d", *existingKeeper.OperatorID)
 		c.JSON(http.StatusOK, gin.H{
-			"message":   "Keeper already exists",
-			"keeper_id": existingKeeperID,
-			"status":    "existing",
+			"message":     "Keeper already exists",
+			"operator_id": *existingKeeper.OperatorID,
+			"status":      "existing",
 		})
 		return
 	}
 
+	// Create new keeper entity
+	newKeeper := &types.KeeperDataEntity{
+		KeeperName:      keeperData.KeeperName,
+		KeeperAddress:   strings.ToLower(keeperData.KeeperAddress),
+		Whitelisted:     boolPtr(true),
+		Registered:      boolPtr(true),
+		Online:          boolPtr(false),
+		OnImua:          boolPtr(false),
+		EmailID:         keeperData.EmailID,
+		RewardsBooster:  *big.NewInt(1),
+		NoExecutedTasks: int64Ptr(0),
+		NoAttestedTasks: int64Ptr(0),
+		Uptime:          int64Ptr(0),
+		KeeperPoints:    *big.NewInt(0),
+		LastCheckedIn:   time.Now().UTC(),
+	}
+
 	trackDBOp = metrics.TrackDBOperation("create", "keeper_data")
-	currentKeeperID, err := h.keeperRepository.CreateKeeper(keeperData)
+	err = h.keeperRepository.Create(ctx, newKeeper)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateKeeperData] Error creating keeper data: %v", err)
@@ -81,8 +112,8 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	// 	h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
 	// }
 
-	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
-	c.JSON(http.StatusCreated, gin.H{"keeper_id": currentKeeperID})
+	h.logger.Infof("[CreateKeeperData] Successfully created keeper with operator ID: %d", newKeeper.OperatorID)
+	c.JSON(http.StatusCreated, gin.H{"operator_id": newKeeper.OperatorID})
 }
 
 func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
@@ -95,10 +126,11 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
 	keeperData.KeeperAddress = strings.ToLower(keeperData.KeeperAddress)
 
 	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
-	existingKeeperID, err := h.keeperRepository.CheckKeeperExistsByAddress(keeperData.KeeperAddress)
+	existingKeeper, err := h.keeperRepository.GetByNonID(ctx, "keeper_address", keeperData.KeeperAddress)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[CreateKeeperDataGoogleForm] Database error while checking keeper existence: %v", err)
@@ -107,21 +139,64 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 	}
 
 	var status string
-	if existingKeeperID != 0 {
+	var operatorID int64
+
+	if existingKeeper != nil {
+		// Update existing keeper
 		status = "existing"
+		existingKeeper.KeeperName = keeperData.KeeperName
+		existingKeeper.EmailID = keeperData.EmailID
+		existingKeeper.LastCheckedIn = time.Now().UTC()
+
+		trackDBOp = metrics.TrackDBOperation("update", "keeper_data")
+		err = h.keeperRepository.Update(ctx, existingKeeper)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[CreateKeeperDataGoogleForm] Error updating keeper data: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper", "code": "KEEPER_UPDATE_ERROR"})
+			return
+		}
+
+		if existingKeeper.OperatorID != nil {
+			operatorID = *existingKeeper.OperatorID
+		}
 	} else {
+		// Create new keeper
 		status = "created"
+		newKeeper := &types.KeeperDataEntity{
+			KeeperName:       keeperData.KeeperName,
+			KeeperAddress:    keeperData.KeeperAddress,
+			RewardsAddress:   keeperData.KeeperAddress, // Use keeper address as default
+			ConsensusAddress: "",
+			RegisteredTx:     "",
+			OperatorID:       nil, // Will be assigned later
+			VotingPower:      *big.NewInt(0),
+			Whitelisted:      boolPtr(false),
+			Registered:       boolPtr(false),
+			Online:           boolPtr(false),
+			Version:          "",
+			OnImua:           boolPtr(false),
+			ChatID:           nil,
+			EmailID:          keeperData.EmailID,
+			RewardsBooster:   *big.NewInt(1),
+			NoExecutedTasks:  int64Ptr(0),
+			NoAttestedTasks:  int64Ptr(0),
+			Uptime:           int64Ptr(0),
+			KeeperPoints:     *big.NewInt(0),
+			LastCheckedIn:    time.Now().UTC(),
+		}
+
+		trackDBOp = metrics.TrackDBOperation("create", "keeper_data")
+		err = h.keeperRepository.Create(ctx, newKeeper)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[CreateKeeperDataGoogleForm] Error creating keeper data: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create keeper", "code": "KEEPER_CREATION_ERROR"})
+			return
+		}
+		operatorID = 0 // New keeper doesn't have operator ID yet
 	}
 
-	trackDBOp = metrics.TrackDBOperation("create", "keeper_data")
-	keeperID, err := h.keeperRepository.CreateOrUpdateKeeperFromGoogleForm(keeperData)
-	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error creating/updating keeper data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create/update keeper", "code": "KEEPER_CREATION_ERROR"})
-		return
-	}
-
-	h.logger.Infof("[CreateKeeperDataGoogleForm] Successfully processed keeper with ID: %d", keeperID)
-	c.JSON(http.StatusCreated, gin.H{"keeper_id": keeperID, "status": status})
+	h.logger.Infof("[CreateKeeperDataGoogleForm] Successfully processed keeper with address: %s", keeperData.KeeperAddress)
+	c.JSON(http.StatusCreated, gin.H{"keeper_address": keeperData.KeeperAddress, "operator_id": operatorID, "status": status})
 }

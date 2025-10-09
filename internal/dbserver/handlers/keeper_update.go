@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
@@ -25,15 +27,37 @@ func (h *Handler) IncrementKeeperTaskCount(c *gin.Context) {
 		return
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "keeper_data")
-	newCount, err := h.keeperRepository.IncrementKeeperTaskCount(keeperIDInt)
+	ctx := context.Background()
+
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
+	keeper, err := h.keeperRepository.GetByNonID(ctx, "operator_id", keeperIDInt)
+	trackDBOp(err)
+	if err != nil || keeper == nil {
+		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving keeper: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
+		return
+	}
+
+	// Increment task count
+	if keeper.NoExecutedTasks == nil {
+		keeper.NoExecutedTasks = int64Ptr(1)
+	} else {
+		*keeper.NoExecutedTasks = *keeper.NoExecutedTasks + 1
+	}
+
+	trackDBOp = metrics.TrackDBOperation("update", "keeper_data")
+	err = h.keeperRepository.Update(ctx, keeper)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[IncrementKeeperTaskCount] Error retrieving current task count: %v", err)
+		h.logger.Errorf("[IncrementKeeperTaskCount] Error updating keeper: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	newCount := *keeper.NoExecutedTasks
 	h.logger.Infof("[IncrementKeeperTaskCount] Successfully incremented task count to %d for keeper ID: %s", newCount, keeperID)
 	c.JSON(http.StatusOK, gin.H{"no_executed_tasks": newCount})
 }
@@ -65,11 +89,14 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 	taskID := requestBody.TaskID
 	h.logger.Infof("[AddTaskFeeToKeeperPoints] Processing task fee for task ID %d to keeper with ID: %s", taskID, keeperID)
 
+	ctx := context.Background()
+
+	// Get task to extract fee
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	taskFee, err := h.taskRepository.GetTaskFee(taskID)
+	task, err := h.taskRepository.GetByID(ctx, taskID)
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving task fee for task ID %d: %v", taskID, err)
+	if err != nil || task == nil {
+		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving task for task ID %d: %v", taskID, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found",
 			"code":  "TASK_NOT_FOUND",
@@ -77,21 +104,39 @@ func (h *Handler) AddTaskFeeToKeeperPoints(c *gin.Context) {
 		return
 	}
 
+	taskFee := &task.TaskOpxActualCost
+
+	// Get keeper
+	trackDBOp = metrics.TrackDBOperation("read", "keeper_data")
+	keeper, err := h.keeperRepository.GetByNonID(ctx, "operator_id", keeperIDInt)
+	trackDBOp(err)
+	if err != nil || keeper == nil {
+		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving keeper: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update keeper points
+	keeper.KeeperPoints.Add(&keeper.KeeperPoints, taskFee)
+
 	trackDBOp = metrics.TrackDBOperation("update", "keeper_data")
-	newPoints, err := h.keeperRepository.UpdateKeeperPoints(keeperIDInt, taskFee)
+	err = h.keeperRepository.Update(ctx, keeper)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error retrieving current points: %v", err)
+		h.logger.Errorf("[AddTaskFeeToKeeperPoints] Error updating keeper points: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.logger.Infof("[AddTaskFeeToKeeperPoints] Successfully added task fee %f from task ID %d to keeper ID: %s, new points: %f",
-		taskFee, taskID, keeperID, newPoints)
+	h.logger.Infof("[AddTaskFeeToKeeperPoints] Successfully added task fee from task ID %d to keeper ID: %s",
+		taskID, keeperID)
 	c.JSON(http.StatusOK, gin.H{
 		"task_id":       taskID,
 		"task_fee":      taskFee,
-		"keeper_points": newPoints,
+		"keeper_points": keeper.KeeperPoints,
 	})
 }
 
@@ -109,14 +154,31 @@ func (h *Handler) UpdateKeeperChatID(c *gin.Context) {
 		return
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "keeper_data")
-	err := h.keeperRepository.UpdateKeeperChatID(requestData.KeeperAddress, requestData.ChatID)
+	ctx := context.Background()
+
+	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
+	keeper, err := h.keeperRepository.GetByNonID(ctx, "keeper_address", strings.ToLower(requestData.KeeperAddress))
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper: %s", requestData.KeeperAddress)
+	if err != nil || keeper == nil {
+		h.logger.Errorf("[UpdateKeeperChatID] Keeper not found for address: %s, error: %v", requestData.KeeperAddress, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Keeper not found",
 			"code":  "KEEPER_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update chat ID
+	keeper.ChatID = &requestData.ChatID
+
+	trackDBOp = metrics.TrackDBOperation("update", "keeper_data")
+	err = h.keeperRepository.Update(ctx, keeper)
+	trackDBOp(err)
+	if err != nil {
+		h.logger.Errorf("[UpdateKeeperChatID] Error updating chat ID for keeper: %s, error: %v", requestData.KeeperAddress, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update chat ID",
+			"code":  "UPDATE_ERROR",
 		})
 		return
 	}

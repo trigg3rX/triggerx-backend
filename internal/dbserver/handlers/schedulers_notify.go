@@ -11,11 +11,11 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // notifyConditionScheduler sends a notification to the condition scheduler
-func (h *Handler) notifyConditionScheduler(jobID *big.Int, scheduleConditionJobData commonTypes.ScheduleConditionJobData) (bool, error) {
+func (h *Handler) notifyConditionScheduler(jobID *big.Int, scheduleConditionJobData types.ScheduleConditionJobData) (bool, error) {
 	success, err := h.sendDataToScheduler("/api/v1/job/schedule", scheduleConditionJobData)
 	if err != nil {
 		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", jobID, err)
@@ -30,7 +30,7 @@ func (h *Handler) notifyConditionScheduler(jobID *big.Int, scheduleConditionJobD
 
 // SendPauseToEventScheduler sends a DELETE request to the event scheduler
 func (h *Handler) notifyPauseToConditionScheduler(jobID *big.Int) (bool, error) {
-	success, err := h.sendDataToScheduler("/api/v1/job/pause", commonTypes.ScheduleConditionJobData{JobID: commonTypes.NewBigInt(jobID)})
+	success, err := h.sendDataToScheduler("/api/v1/job/pause", types.ScheduleConditionJobData{JobID: types.NewBigInt(jobID)})
 	if err != nil {
 		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", jobID, err)
 		return false, err
@@ -44,7 +44,7 @@ func (h *Handler) notifyPauseToConditionScheduler(jobID *big.Int) (bool, error) 
 }
 
 // sendDataToScheduler is a generic function to send data to any scheduler
-func (h *Handler) sendDataToScheduler(route string, data commonTypes.ScheduleConditionJobData) (bool, error) {
+func (h *Handler) sendDataToScheduler(route string, data types.ScheduleConditionJobData) (bool, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return false, fmt.Errorf("error marshaling data: %v", err)

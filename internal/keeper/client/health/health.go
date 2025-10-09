@@ -74,11 +74,11 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 }
 
 // CheckIn performs a health check-in with the health service
-func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse, error) {
+func (c *Client) CheckIn(ctx context.Context) (types.HealthKeeperCheckInResponse, error) {
 	// Get consensus address from private key
 	privateKey, err := ethcrypto.HexToECDSA(c.config.PrivateKey)
 	if err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("invalid private key: %w", err)
@@ -91,21 +91,20 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 	msg := []byte(c.config.KeeperAddress)
 	signature, err := cryptography.SignMessage(string(msg), c.config.PrivateKey)
 	if err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("failed to sign check-in message: %w", err)
 	}
 
 	// Prepare health check payload
-	payload := types.KeeperHealthCheckIn{
+	payload := types.HealthKeeperCheckInRequest{
 		KeeperAddress:    c.config.KeeperAddress,
 		ConsensusPubKey:  consensusPubKey,
 		ConsensusAddress: consensusAddress,
 		Version:          c.config.Version,
 		Timestamp:        time.Now().UTC(),
 		Signature:        signature,
-		PeerID:           c.config.PeerID,
 		IsImua:           config.IsImua(),
 	}
 
@@ -114,7 +113,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 	// Send health check request
 	response, err := c.sendHealthCheck(ctx, payload)
 	if err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("health check failed: %w", err)
@@ -131,10 +130,10 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 }
 
 // sendHealthCheck sends the health check request to the health service
-func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealthCheckIn) (types.KeeperHealthCheckInResponse, error) {
+func (c *Client) sendHealthCheck(ctx context.Context, payload types.HealthKeeperCheckInRequest) (types.HealthKeeperCheckInResponse, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("failed to marshal health check payload: %w", err)
@@ -144,7 +143,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		fmt.Sprintf("%s/health", c.config.HealthServiceURL),
 		bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("failed to create health check request: %w", err)
@@ -154,7 +153,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 
 	resp, err := c.httpClient.DoWithRetry(context.Background(), req)
 	if err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("failed to send health check request: %w", err)
@@ -170,22 +169,22 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		var errResp ErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil {
 			if errResp.Code == "KEEPER_NOT_VERIFIED" {
-				return types.KeeperHealthCheckInResponse{
+				return types.HealthKeeperCheckInResponse{
 					Status: false,
 					Data:   errResp.Error,
 				}, ErrKeeperNotVerified
 			}
 		}
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   errResp.Error,
 		}, fmt.Errorf("health service returned non-OK status: %d", resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	var response types.KeeperHealthCheckInResponse
+	var response types.HealthKeeperCheckInResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: false,
 			Data:   err.Error(),
 		}, fmt.Errorf("failed to unmarshal health check response: %w", err)
@@ -195,7 +194,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	if response.Status {
 		decryptedString, err := cryptography.DecryptMessage(c.config.PrivateKey, response.Data)
 		if err != nil {
-			return types.KeeperHealthCheckInResponse{
+			return types.HealthKeeperCheckInResponse{
 				Status: false,
 				Data:   err.Error(),
 			}, fmt.Errorf("failed to decrypt health check response: %w", err)
@@ -203,7 +202,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 
 		parts := strings.Split(decryptedString, ":")
 		if len(parts) != 6 {
-			return types.KeeperHealthCheckInResponse{
+			return types.HealthKeeperCheckInResponse{
 				Status: false,
 				Data:   "invalid response format",
 			}, fmt.Errorf("invalid response format: expected host:token")
@@ -217,7 +216,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 		config.SetTaskExecutionAddress(parts[5])
 		// config.SetTaskExecutionAddress("0x3509F38e10eB3cDcE7695743cB7e81446F4d8A33")
 
-		return types.KeeperHealthCheckInResponse{
+		return types.HealthKeeperCheckInResponse{
 			Status: true,
 			Data:   "Health check-in successful",
 		}, nil

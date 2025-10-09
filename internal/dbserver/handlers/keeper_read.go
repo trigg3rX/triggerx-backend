@@ -1,19 +1,23 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
-	"sort"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) GetPerformers(c *gin.Context) {
 	traceID := h.getTraceID(c)
 	h.logger.Infof("[GetPerformers] trace_id=%s - Retrieving performers", traceID)
+
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "keepers")
-	performers, err := h.keeperRepository.GetKeeperAsPerformer()
+	performers, err := h.keeperRepository.List(ctx)
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetPerformers] Error retrieving performers: %v", err)
@@ -21,12 +25,16 @@ func (h *Handler) GetPerformers(c *gin.Context) {
 		return
 	}
 
-	sort.Slice(performers, func(i, j int) bool {
-		return performers[i].KeeperID < performers[j].KeeperID
-	})
+	// Filter for registered and whitelisted keepers
+	var activePerformers []*types.KeeperDataEntity
+	for _, keeper := range performers {
+		if keeper.Registered != nil && *keeper.Registered && keeper.Whitelisted != nil && *keeper.Whitelisted {
+			activePerformers = append(activePerformers, keeper)
+		}
+	}
 
-	h.logger.Infof("[GetPerformers] Successfully retrieved %d performers", len(performers))
-	c.JSON(http.StatusOK, performers)
+	h.logger.Infof("[GetPerformers] Successfully retrieved %d performers", len(activePerformers))
+	c.JSON(http.StatusOK, activePerformers)
 }
 
 func (h *Handler) GetKeeperData(c *gin.Context) {
@@ -45,10 +53,12 @@ func (h *Handler) GetKeeperData(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "keeper_data")
-	keeperData, err := h.keeperRepository.GetKeeperDataByID(keeperIDInt)
+	keeperData, err := h.keeperRepository.GetByNonID(ctx, "operator_id", keeperIDInt)
 	trackDBOp(err)
-	if err != nil {
+	if err != nil || keeperData == nil {
 		h.logger.Errorf("[GetKeeperData] Error retrieving keeper data: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Keeper not found",
@@ -77,13 +87,23 @@ func (h *Handler) GetKeeperTaskCount(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "keeper_tasks")
-	taskCount, err := h.keeperRepository.GetKeeperTaskCount(keeperIDInt)
+	keeper, err := h.keeperRepository.GetByNonID(ctx, "operator_id", keeperIDInt)
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[GetKeeperTaskCount] Error retrieving task count: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err != nil || keeper == nil {
+		h.logger.Errorf("[GetKeeperTaskCount] Error retrieving keeper: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
 		return
+	}
+
+	taskCount := int64(0)
+	if keeper.NoExecutedTasks != nil {
+		taskCount = *keeper.NoExecutedTasks
 	}
 
 	h.logger.Infof("[GetKeeperTaskCount] Successfully retrieved task count %d for keeper ID: %s", taskCount, keeperID)
@@ -103,17 +123,22 @@ func (h *Handler) GetKeeperPoints(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "keeper_points")
-	points, err := h.keeperRepository.GetKeeperPointsByIDInDB(keeperIDInt)
+	keeper, err := h.keeperRepository.GetByNonID(ctx, "operator_id", keeperIDInt)
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[GetKeeperPoints] Error retrieving keeper points: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err != nil || keeper == nil {
+		h.logger.Errorf("[GetKeeperPoints] Error retrieving keeper: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
 		return
 	}
 
-	h.logger.Infof("[GetKeeperPoints] Successfully retrieved points %f for keeper ID: %s", points, keeperID)
-	c.JSON(http.StatusOK, gin.H{"keeper_points": points})
+	h.logger.Infof("[GetKeeperPoints] Successfully retrieved points for keeper ID: %s", keeperID)
+	c.JSON(http.StatusOK, gin.H{"keeper_points": keeper.KeeperPoints})
 }
 
 func (h *Handler) GetKeeperCommunicationInfo(c *gin.Context) {
@@ -129,13 +154,30 @@ func (h *Handler) GetKeeperCommunicationInfo(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "keeper_communication")
-	keeperData, err := h.keeperRepository.GetKeeperCommunicationInfo(keeperIDInt)
+	keeper, err := h.keeperRepository.GetByNonID(ctx, "operator_id", keeperIDInt)
 	trackDBOp(err)
-	if err != nil {
-		h.logger.Errorf("[GetKeeperChatInfo] Error retrieving chat ID, keeper name, and email for ID %s: %v", keeperID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err != nil || keeper == nil {
+		h.logger.Errorf("[GetKeeperChatInfo] Error retrieving keeper for ID %s: %v", keeperID, err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Keeper not found",
+			"code":  "KEEPER_NOT_FOUND",
+		})
 		return
+	}
+
+	// Return communication info
+	chatID := int64(0)
+	if keeper.ChatID != nil {
+		chatID = *keeper.ChatID
+	}
+
+	keeperData := map[string]interface{}{
+		"chat_id":     chatID,
+		"keeper_name": keeper.KeeperName,
+		"email_id":    keeper.EmailID,
 	}
 
 	h.logger.Infof("[GetKeeperChatInfo] Successfully retrieved chat ID, keeper name, and email for ID: %s", keeperID)

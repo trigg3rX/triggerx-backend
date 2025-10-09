@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -36,12 +38,32 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 		return
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "task_data")
-	if err := h.taskRepository.UpdateTaskExecutionDataInDB(&taskData); err != nil {
+	ctx := context.Background()
+
+	// Get task
+	trackDBOp := metrics.TrackDBOperation("read", "task_data")
+	task, err := h.taskRepository.GetByID(ctx, taskData.TaskID)
+	trackDBOp(err)
+	if err != nil || task == nil {
+		h.logger.Errorf("[UpdateTaskExecutionData] Task not found for ID %d: %v", taskData.TaskID, err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found",
+			"code":  "TASK_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update task fields
+	task.ExecutionTimestamp = taskData.ExecutionTimestamp
+	task.ExecutionTxHash = taskData.ExecutionTxHash
+	task.TaskPerformerID = taskData.TaskPerformerID
+
+	trackDBOp = metrics.TrackDBOperation("update", "task_data")
+	if err := h.taskRepository.Update(ctx, task); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskExecutionData] Error updating task execution data: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Task not found or update failed",
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Task update failed",
 			"code":  "TASK_UPDATE_ERROR",
 		})
 		return
@@ -78,12 +100,32 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 		return
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "task_data")
-	if err := h.taskRepository.UpdateTaskAttestationDataInDB(&taskData); err != nil {
+	ctx := context.Background()
+
+	// Get task
+	trackDBOp := metrics.TrackDBOperation("read", "task_data")
+	task, err := h.taskRepository.GetByID(ctx, taskData.TaskID)
+	trackDBOp(err)
+	if err != nil || task == nil {
+		h.logger.Errorf("[UpdateTaskAttestationData] Task not found for ID %d: %v", taskData.TaskID, err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found",
+			"code":  "TASK_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update task fields
+	task.TaskNumber = taskData.TaskNumber
+	task.TaskAttesterIDs = taskData.TaskAttesterIDs
+	task.SubmissionTxHash = taskData.TaskSubmissionTxHash
+
+	trackDBOp = metrics.TrackDBOperation("update", "task_data")
+	if err := h.taskRepository.Update(ctx, task); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskAttestationData] Error updating task attestation data: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Task not found or update failed",
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Task update failed",
 			"code":  "TASK_UPDATE_ERROR",
 		})
 		return
@@ -122,12 +164,31 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 		return
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "task_data")
-	if err := h.taskRepository.UpdateTaskFee(taskIDInt, taskFee.Fee); err != nil {
+	ctx := context.Background()
+
+	// Get task
+	trackDBOp := metrics.TrackDBOperation("read", "task_data")
+	task, err := h.taskRepository.GetByID(ctx, taskIDInt)
+	trackDBOp(err)
+	if err != nil || task == nil {
+		h.logger.Errorf("[UpdateTaskFee] Task not found for ID %d: %v", taskIDInt, err)
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Task not found",
+			"code":  "TASK_NOT_FOUND",
+		})
+		return
+	}
+
+	// Update task fee
+	feeBigInt := big.NewInt(int64(taskFee.Fee))
+	task.TaskOpxActualCost = *feeBigInt
+
+	trackDBOp = metrics.TrackDBOperation("update", "task_data")
+	if err := h.taskRepository.Update(ctx, task); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Task not found or update failed",
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Task update failed",
 			"code":  "TASK_UPDATE_ERROR",
 		})
 		return

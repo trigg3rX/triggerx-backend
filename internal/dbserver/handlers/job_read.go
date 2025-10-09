@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	// "fmt"
+	"context"
 	"math/big"
 	"net/http"
 	"strings"
@@ -10,6 +10,106 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
+
+// Helper functions to convert Entity types to API types
+func convertJobDataEntityToAPI(entity *types.JobDataEntity) types.JobDataAPI {
+	return types.JobDataAPI{
+		JobID:             &entity.JobID,
+		JobTitle:          entity.JobTitle,
+		TaskDefinitionID:  entity.TaskDefinitionID,
+		UserID:            entity.UserID,
+		CreatedChainID:    entity.CreatedChainID,
+		LinkJobID:         &entity.LinkJobID,
+		ChainStatus:       entity.ChainStatus,
+		TimeFrame:         entity.TimeFrame,
+		Recurring:         entity.Recurring,
+		Status:            entity.Status,
+		JobCostPrediction: 0, // Convert from big.Int if needed
+		JobCostActual:     0, // Convert from big.Int if needed
+		TaskIDs:           entity.TaskIDs,
+		CreatedAt:         entity.CreatedAt,
+		UpdatedAt:         entity.UpdatedAt,
+		LastExecutedAt:    entity.LastExecutedAt,
+	}
+}
+
+func convertTimeJobDataEntityToAPI(entity *types.TimeJobDataEntity) *types.TimeJobDataAPI {
+	if entity == nil {
+		return nil
+	}
+	return &types.TimeJobDataAPI{
+		JobID:                     &entity.JobID,
+		TaskDefinitionID:          entity.TaskDefinitionID,
+		ScheduleType:              entity.ScheduleType,
+		TimeInterval:              entity.TimeInterval,
+		CronExpression:            entity.CronExpression,
+		SpecificSchedule:          entity.SpecificSchedule,
+		NextExecutionTimestamp:    entity.NextExecutionTimestamp,
+		TargetChainID:             entity.TargetChainID,
+		TargetContractAddress:     entity.TargetContractAddress,
+		TargetFunction:            entity.TargetFunction,
+		ABI:                       entity.ABI,
+		ArgType:                   entity.ArgType,
+		Arguments:                 entity.Arguments,
+		DynamicArgumentsScriptUrl: entity.DynamicArgumentsScriptURL,
+		IsCompleted:               entity.IsCompleted,
+		LastExecutedAt:            entity.LastExecutedAt,
+		ExpirationTime:            entity.ExpirationTime,
+	}
+}
+
+func convertEventJobDataEntityToAPI(entity *types.EventJobDataEntity) *types.EventJobDataAPI {
+	if entity == nil {
+		return nil
+	}
+	return &types.EventJobDataAPI{
+		JobID:                     &entity.JobID,
+		TaskDefinitionID:          entity.TaskDefinitionID,
+		Recurring:                 entity.Recurring,
+		TriggerChainID:            entity.TriggerChainID,
+		TriggerContractAddress:    entity.TriggerContractAddress,
+		TriggerEvent:              entity.TriggerEvent,
+		EventFilterParaName:       entity.TriggerEventFilterParaName,
+		EventFilterValue:          entity.TriggerEventFilterValue,
+		TargetChainID:             entity.TargetChainID,
+		TargetContractAddress:     entity.TargetContractAddress,
+		TargetFunction:            entity.TargetFunction,
+		ABI:                       entity.ABI,
+		ArgType:                   entity.ArgType,
+		Arguments:                 entity.Arguments,
+		DynamicArgumentsScriptUrl: entity.DynamicArgumentsScriptURL,
+		IsCompleted:               entity.IsCompleted,
+		LastExecutedAt:            entity.LastExecutedAt,
+		ExpirationTime:            entity.ExpirationTime,
+	}
+}
+
+func convertConditionJobDataEntityToAPI(entity *types.ConditionJobDataEntity) *types.ConditionJobDataAPI {
+	if entity == nil {
+		return nil
+	}
+	return &types.ConditionJobDataAPI{
+		JobID:                     &entity.JobID,
+		TaskDefinitionID:          entity.TaskDefinitionID,
+		Recurring:                 entity.Recurring,
+		ConditionType:             entity.ConditionType,
+		UpperLimit:                entity.UpperLimit,
+		LowerLimit:                entity.LowerLimit,
+		ValueSourceType:           entity.ValueSourceType,
+		ValueSourceUrl:            entity.ValueSourceURL,
+		SelectedKeyRoute:          entity.SelectedKeyRoute,
+		TargetChainID:             entity.TargetChainID,
+		TargetContractAddress:     entity.TargetContractAddress,
+		TargetFunction:            entity.TargetFunction,
+		ABI:                       entity.ABI,
+		ArgType:                   entity.ArgType,
+		Arguments:                 entity.Arguments,
+		DynamicArgumentsScriptUrl: entity.DynamicArgumentsScriptURL,
+		IsCompleted:               entity.IsCompleted,
+		LastExecutedAt:            entity.LastExecutedAt,
+		ExpirationTime:            entity.ExpirationTime,
+	}
+}
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	traceID := h.getTraceID(c)
@@ -26,16 +126,14 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 
 	h.logger.Infof("[GetJobsByUserAddress] Retrieving jobs for user address: %s", userAddress)
 
+	ctx := context.Background()
+
 	// First get user ID and job IDs
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userID, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
+	user, err := h.userRepository.GetByNonID(ctx, "user_address", userAddress)
 	trackDBOp(err)
 	if err != nil {
-		if err.Error() == "user address not found" {
-			h.logger.Infof("[GetJobsByUserAddress] No user found for address %s", userAddress)
-		} else {
-			h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
-		}
+		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this user",
 			"jobs":    []types.JobResponse{},
@@ -43,13 +141,16 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		return
 	}
 
-	if len(jobIDs) == 0 {
+	if user == nil || len(user.JobIDs) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this user",
 			"jobs":    []types.JobResponse{},
 		})
 		return
 	}
+
+	userID := user.UserID
+	jobIDs := user.JobIDs
 
 	var jobs []types.JobResponse
 	var hasErrors bool
@@ -57,56 +158,62 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	for _, jobID := range jobIDs {
 		// Get basic job data
 		trackDBOp = metrics.TrackDBOperation("read", "job_data")
-		jobData, err := h.jobRepository.GetJobByID(jobID)
+		jobData, err := h.jobRepository.GetByID(ctx, &jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %d: %v", jobID, err)
+			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %v: %v", &jobID, err)
 			hasErrors = true
 			continue
 		}
 
-		jobResponse := types.JobResponse{JobData: *jobData}
+		if jobData == nil {
+			h.logger.Errorf("[GetJobsByUserAddress] Job data not found for jobID %v", &jobID)
+			hasErrors = true
+			continue
+		}
+
+		jobResponse := types.JobResponse{JobData: convertJobDataEntityToAPI(jobData)}
 
 		// Check task_definition_id to determine job type
 		switch jobData.TaskDefinitionID {
 		case 1, 2:
 			// Time-based job
 			trackDBOp = metrics.TrackDBOperation("read", "time_job")
-			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
+			timeJobData, err := h.timeJobRepository.GetByNonID(ctx, "job_id", &jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %d: %v", jobID, err)
+				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %v: %v", &jobID, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.TimeJobData = &timeJobData
+			jobResponse.TimeJobData = convertTimeJobDataEntityToAPI(timeJobData)
 
 		case 3, 4:
 			// Event-based job
 			trackDBOp = metrics.TrackDBOperation("read", "event_job")
-			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
+			eventJobData, err := h.eventJobRepository.GetByNonID(ctx, "job_id", &jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %d: %v", jobID, err)
+				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %v: %v", &jobID, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.EventJobData = &eventJobData
+			jobResponse.EventJobData = convertEventJobDataEntityToAPI(eventJobData)
 
 		case 5, 6:
 			// Condition-based job
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
-			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
+			conditionJobData, err := h.conditionJobRepository.GetByNonID(ctx, "job_id", &jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %d: %v", jobID, err)
+				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %v: %v", &jobID, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.ConditionJobData = &conditionJobData
+			jobResponse.ConditionJobData = convertConditionJobDataEntityToAPI(conditionJobData)
 
 		default:
-			h.logger.Errorf("[GetJobsByUserAddress] Unknown task definition ID %d for jobID %d", jobData.TaskDefinitionID, jobID)
+			h.logger.Errorf("[GetJobsByUserAddress] Unknown task definition ID %d for jobID %v", jobData.TaskDefinitionID, &jobID)
 			hasErrors = true
 			continue
 		}
@@ -165,11 +272,28 @@ func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
 		return
 	}
 
-	taskFees, err := h.jobRepository.GetTaskFeesByJobID(jobID)
-	if err != nil {
-		h.logger.Errorf("[GetTaskFeesByJobID] failed to get task fees: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get task fees"})
+	ctx := context.Background()
+
+	// Get job data
+	job, err := h.jobRepository.GetByID(ctx, jobID)
+	if err != nil || job == nil {
+		h.logger.Errorf("[GetTaskFeesByJobID] failed to get job: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
 		return
+	}
+
+	// Get task fees from task_ids
+	var taskFees []map[string]interface{}
+	for _, taskID := range job.TaskIDs {
+		task, err := h.taskRepository.GetByID(ctx, taskID)
+		if err != nil || task == nil {
+			continue
+		}
+		taskFees = append(taskFees, map[string]interface{}{
+			"task_id":                 task.TaskID,
+			"task_opx_predicted_cost": task.TaskOpxPredictedCost,
+			"task_opx_actual_cost":    task.TaskOpxActualCost,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"task_fees": taskFees})
@@ -186,8 +310,10 @@ func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 		return
 	}
 
-	apiKeyData, err := h.apiKeysRepository.GetApiKeyDataByKey(apiKey)
-	if err != nil {
+	ctx := context.Background()
+
+	apiKeyData, err := h.apiKeysRepository.GetByNonID(ctx, "key", apiKey)
+	if err != nil || apiKeyData == nil {
 		h.logger.Errorf("[GetJobsByApiKey] Invalid API key: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
 		return
@@ -225,10 +351,11 @@ func (h *Handler) GetJobDataByJobID(c *gin.Context) {
 		return
 	}
 
-	jobData, err := h.jobRepository.GetJobByID(jobID)
-	if err != nil {
+	ctx := context.Background()
+	jobData, err := h.jobRepository.GetByID(ctx, jobID)
+	if err != nil || jobData == nil {
 		h.logger.Errorf("[GetJobDataByJobID] failed to get job data: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get job data"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
 		return
 	}
 
@@ -261,16 +388,14 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 
 	h.logger.Infof("[GetJobsByUserAddressAndChainID] Retrieving jobs for user address: %s and created_chain_id: %s", userAddress, createdChainIDParam)
 
+	ctx := context.Background()
+
 	// First get user ID and job IDs
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	_, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
+	user, err := h.userRepository.GetByNonID(ctx, "user_address", userAddress)
 	trackDBOp(err)
 	if err != nil {
-		if err.Error() == "user address not found" {
-			h.logger.Infof("[GetJobsByUserAddressAndChainID] No user found for address %s", userAddress)
-		} else {
-			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting user data for address %s: %v", userAddress, err)
-		}
+		h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting user data for address %s: %v", userAddress, err)
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this user",
 			"jobs":    []types.JobResponse{},
@@ -278,13 +403,15 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 		return
 	}
 
-	if len(jobIDs) == 0 {
+	if user == nil || len(user.JobIDs) == 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this user",
 			"jobs":    []types.JobResponse{},
 		})
 		return
 	}
+
+	jobIDs := user.JobIDs
 
 	var jobs []types.JobResponse
 	var hasErrors bool
@@ -292,10 +419,16 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 	for _, jobID := range jobIDs {
 		// Get basic job data
 		trackDBOp = metrics.TrackDBOperation("read", "job_data")
-		jobData, err := h.jobRepository.GetJobByID(jobID)
+		jobData, err := h.jobRepository.GetByID(ctx, &jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting job data for jobID %d: %v", jobID, err)
+			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting job data for jobID %v: %v", &jobID, err)
+			hasErrors = true
+			continue
+		}
+
+		if jobData == nil {
+			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Job data not found for jobID %v", &jobID)
 			hasErrors = true
 			continue
 		}
@@ -305,48 +438,48 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 			continue
 		}
 
-		jobResponse := types.JobResponse{JobData: *jobData}
+		jobResponse := types.JobResponse{JobData: convertJobDataEntityToAPI(jobData)}
 
 		// Check task_definition_id to determine job type
 		switch jobData.TaskDefinitionID {
 		case 1, 2:
 			// Time-based job
 			trackDBOp = metrics.TrackDBOperation("read", "time_job")
-			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
+			timeJobData, err := h.timeJobRepository.GetByNonID(ctx, "job_id", &jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting time job data for jobID %d: %v", jobID, err)
+				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting time job data for jobID %v: %v", &jobID, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.TimeJobData = &timeJobData
+			jobResponse.TimeJobData = convertTimeJobDataEntityToAPI(timeJobData)
 
 		case 3, 4:
 			// Event-based job
 			trackDBOp = metrics.TrackDBOperation("read", "event_job")
-			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
+			eventJobData, err := h.eventJobRepository.GetByNonID(ctx, "job_id", &jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting event job data for jobID %d: %v", jobID, err)
+				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting event job data for jobID %v: %v", &jobID, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.EventJobData = &eventJobData
+			jobResponse.EventJobData = convertEventJobDataEntityToAPI(eventJobData)
 
 		case 5, 6:
 			// Condition-based job
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
-			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
+			conditionJobData, err := h.conditionJobRepository.GetByNonID(ctx, "job_id", &jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting condition job data for jobID %d: %v", jobID, err)
+				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting condition job data for jobID %v: %v", &jobID, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.ConditionJobData = &conditionJobData
+			jobResponse.ConditionJobData = convertConditionJobDataEntityToAPI(conditionJobData)
 
 		default:
-			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Unknown task definition ID %d for jobID %d", jobData.TaskDefinitionID, jobID)
+			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Unknown task definition ID %d for jobID %v", jobData.TaskDefinitionID, &jobID)
 			hasErrors = true
 			continue
 		}

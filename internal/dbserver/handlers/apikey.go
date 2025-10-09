@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -40,19 +41,23 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		req.RateLimit = 60
 	}
 
+	ctx := context.Background()
+
 	// No longer check for existing API key for this owner; allow multiple API keys per owner
 
-	apiKey := commonTypes.ApiKey{
-		Key:       "TGRX-" + uuid.New().String(),
-		Owner:     req.Owner,
-		IsActive:  true,
-		RateLimit: req.RateLimit,
-		LastUsed:  time.Now().UTC(),
-		CreatedAt: time.Now().UTC(),
+	apiKey := &types.ApiKeyDataEntity{
+		Key:          "TGRX-" + uuid.New().String(),
+		Owner:        req.Owner,
+		IsActive:     true,
+		RateLimit:    req.RateLimit,
+		SuccessCount: 0,
+		FailedCount:  0,
+		LastUsed:     time.Now().UTC(),
+		CreatedAt:    time.Now().UTC(),
 	}
 
 	trackDBOp := metrics.TrackDBOperation("create", "apikey_data")
-	if err := h.apiKeysRepository.CreateApiKey(&apiKey); err != nil {
+	if err := h.apiKeysRepository.Create(ctx, apiKey); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("[CreateApiKey] Failed to insert API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create API key"})
@@ -76,10 +81,12 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
-	apiKey, err := h.apiKeysRepository.GetApiKeyDataByKey(keyID)
+	apiKey, err := h.apiKeysRepository.GetByNonID(ctx, "key", keyID)
 	trackDBOp(err)
-	if err != nil {
+	if err != nil || apiKey == nil {
 		h.logger.Errorf("API key not found: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "API key not found"})
 		return
@@ -94,7 +101,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 	}
 
 	trackDBOp = metrics.TrackDBOperation("update", "apikey_data")
-	if err := h.apiKeysRepository.UpdateApiKey(&req); err != nil {
+	if err := h.apiKeysRepository.Update(ctx, apiKey); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("Failed to update API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update API key"})
@@ -110,6 +117,8 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 	h.logger.Infof("[DeleteApiKey] trace_id=%s - Deleting API key", traceID)
 	keyID := c.Param("key")
 
+	ctx := context.Background()
+
 	// If the keyID is masked, resolve the real key
 	if strings.Contains(keyID, "*") {
 		owner := c.Query("owner") // require owner as query param for disambiguation
@@ -117,8 +126,8 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Owner is required when deleting by masked key"})
 			return
 		}
-		apiKeys, err := h.apiKeysRepository.GetApiKeyDataByOwner(owner)
-		if err != nil {
+		apiKeys, err := h.apiKeysRepository.GetByField(ctx, "owner", owner)
+		if err != nil || len(apiKeys) == 0 {
 			c.JSON(http.StatusNotFound, gin.H{"error": "No API keys found for this owner"})
 			return
 		}
@@ -136,8 +145,21 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 		}
 	}
 
-	trackDBOp := metrics.TrackDBOperation("update", "apikey_data")
-	if err := h.apiKeysRepository.DeleteApiKey(keyID); err != nil {
+	// Get the API key to mark as inactive
+	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
+	apiKey, err := h.apiKeysRepository.GetByNonID(ctx, "key", keyID)
+	trackDBOp(err)
+	if err != nil || apiKey == nil {
+		h.logger.Errorf("Failed to find API key: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "API key not found"})
+		return
+	}
+
+	// Mark as inactive instead of deleting
+	apiKey.IsActive = false
+
+	trackDBOp = metrics.TrackDBOperation("update", "apikey_data")
+	if err := h.apiKeysRepository.Update(ctx, apiKey); err != nil {
 		trackDBOp(err)
 		h.logger.Errorf("Failed to delete API key: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
@@ -160,9 +182,14 @@ func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
 		return
 	}
 
+	ctx := context.Background()
+
 	h.logger.Infof("[GetApiKeysByOwner] Fetching API keys for owner: %s", owner)
-	apiKeys, err := h.apiKeysRepository.GetApiKeyDataByOwner(owner)
-	if err != nil {
+
+	trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
+	apiKeys, err := h.apiKeysRepository.GetByField(ctx, "owner", owner)
+	trackDBOp(err)
+	if err != nil || len(apiKeys) == 0 {
 		h.logger.Warnf("[GetApiKeysByOwner] No API keys found for owner %s: %v", owner, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "No API keys found for this owner"})
 		return
