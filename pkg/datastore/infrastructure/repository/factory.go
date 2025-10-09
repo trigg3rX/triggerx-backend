@@ -113,7 +113,7 @@ func (rf *repositoryFactory) CreateKeeperRepository() interfaces.GenericReposito
 		rf.connection,
 		rf.logger,
 		"keeper_data",
-		"keeper_id",
+		"keeper_address",
 	)
 }
 

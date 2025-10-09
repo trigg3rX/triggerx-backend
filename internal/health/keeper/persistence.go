@@ -32,7 +32,7 @@ func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 			ConsensusAddress: keeper.ConsensusAddress,
 			OperatorID:       keeper.OperatorID,
 			Version:          keeper.Version,
-			IsActive:         false,
+			IsActive:         keeper.IsActive,
 			Uptime:           keeper.Uptime,
 			LastCheckedIn:    keeper.LastCheckedIn,
 			IsImua:           keeper.IsImua,
@@ -46,33 +46,78 @@ func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 	return nil
 }
 
-// DumpState updates all keepers to inactive in the database
+// DumpState persists all keeper states to database preserving their actual status
 func (sm *StateManager) DumpState(ctx context.Context) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	sm.logger.Info("Dumping keeper state to database...")
 
-	for address, state := range sm.keepers {
-		if state.IsActive {
-			// Create a minimal health check-in with just the address
-			health := types.HealthKeeperInfo{
-				KeeperAddress: address,
-			}
+	// Collect all keepers (both active and inactive) to update while holding lock
+	sm.mu.Lock()
+	var keepersToUpdate []*types.HealthKeeperInfo
+	for _, state := range sm.keepers {
+		// Create a copy to avoid holding reference to map value
+		stateCopy := *state
+		keepersToUpdate = append(keepersToUpdate, &stateCopy)
+	}
+	sm.mu.Unlock()
 
-			if err := sm.retryWithBackoff(ctx, func() error {
-				return sm.updateKeeperStatusInDatabase(ctx, health, false)
-			}, maxRetries); err != nil {
-				sm.logger.Error("Failed to update keeper status during state dump",
-					"error", err,
-					"keeper", address,
-				)
-				continue
-			}
+	// Update database without holding lock, preserving actual isActive state
+	for _, state := range keepersToUpdate {
+		if err := sm.retryWithBackoff(ctx, func() error {
+			// Preserve the actual isActive state instead of forcing to false
+			return sm.updateKeeperStatusInDatabase(ctx, state, state.IsActive)
+		}, maxRetries); err != nil {
+			sm.logger.Error("Failed to update keeper status during state dump",
+				"error", err,
+				"keeper", state.KeeperAddress,
+			)
+			continue
 		}
 	}
 
-	sm.logger.Info("Successfully dumped keeper state")
+	sm.logger.Info("Successfully dumped keeper state",
+		"total_keepers", len(keepersToUpdate),
+	)
+	return nil
+}
+
+// PeriodicDump periodically persists uptime for active keepers to database
+// This ensures uptime data is not lost if service crashes between check-ins
+func (sm *StateManager) PeriodicDump(ctx context.Context) error {
+	sm.logger.Debug("Starting periodic keeper state dump...")
+
+	// Collect only active keepers while holding lock
+	sm.mu.RLock()
+	var activeKeepers []*types.HealthKeeperInfo
+	for _, state := range sm.keepers {
+		if state.IsActive {
+			stateCopy := *state
+			activeKeepers = append(activeKeepers, &stateCopy)
+		}
+	}
+	sm.mu.RUnlock()
+
+	if len(activeKeepers) == 0 {
+		sm.logger.Debug("No active keepers to dump")
+		return nil
+	}
+
+	// Update database for all active keepers without holding lock
+	successCount := 0
+	for _, state := range activeKeepers {
+		if err := sm.updateKeeperStatusInDatabase(ctx, state, true); err != nil {
+			sm.logger.Warn("Failed to update keeper in periodic dump",
+				"error", err,
+				"keeper", state.KeeperAddress,
+			)
+			continue
+		}
+		successCount++
+	}
+
+	sm.logger.Info("Completed periodic keeper state dump",
+		"active_keepers", len(activeKeepers),
+		"successful_updates", successCount,
+	)
 	return nil
 }
 

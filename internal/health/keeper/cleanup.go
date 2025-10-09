@@ -10,6 +10,7 @@ import (
 const (
 	inactivityThreshold  = 70 * time.Second
 	stateCleanupInterval = 5 * time.Second
+	periodicDumpInterval = 5 * time.Minute // Persist uptime every 5 minutes
 )
 
 func (sm *StateManager) startCleanupRoutine() {
@@ -23,7 +24,7 @@ func (sm *StateManager) startCleanupRoutine() {
 
 func (sm *StateManager) checkInactiveKeepers() {
 	now := time.Now().UTC()
-	var inactiveKeepers []string
+	var inactiveKeepers []*types.HealthKeeperInfo
 
 	sm.mu.Lock()
 	for address, state := range sm.keepers {
@@ -33,21 +34,32 @@ func (sm *StateManager) checkInactiveKeepers() {
 				"lastSeen", state.LastCheckedIn.Format(time.RFC3339),
 			)
 			state.IsActive = false
-			inactiveKeepers = append(inactiveKeepers, address)
+			// Store a copy of the complete state
+			stateCopy := *state
+			inactiveKeepers = append(inactiveKeepers, &stateCopy)
 		}
 	}
 	sm.mu.Unlock()
 
-	for _, address := range inactiveKeepers {
-		keeperHealth := types.HealthKeeperInfo{
-			KeeperAddress: address,
-		}
-
-		if err := sm.updateKeeperStatusInDatabase(context.Background(), keeperHealth, false); err != nil {
+	// Update database for all inactive keepers
+	for _, keeperState := range inactiveKeepers {
+		if err := sm.updateKeeperStatusInDatabase(context.Background(), keeperState, false); err != nil {
 			sm.logger.Error("Failed to update inactive status",
 				"error", err,
-				"keeper", address,
+				"keeper", keeperState.KeeperAddress,
 			)
+		}
+	}
+}
+
+// startPeriodicDumpRoutine periodically persists keeper state to database
+func (sm *StateManager) startPeriodicDumpRoutine() {
+	ticker := time.NewTicker(periodicDumpInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := sm.PeriodicDump(context.Background()); err != nil {
+			sm.logger.Error("Periodic dump failed", "error", err)
 		}
 	}
 }

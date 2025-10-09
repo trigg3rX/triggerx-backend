@@ -83,17 +83,11 @@ func (gqb *GocqlxQueryBuilder[T]) Update(ctx context.Context, data *T) error {
 		strings.Join(setClauses, ", "),
 		whereClause)
 
-	// Convert values map to ordered array matching fieldNames
-	values := make([]interface{}, len(fieldNames))
-	for i, name := range fieldNames {
-		values[i] = valuesMap[name]
-	}
-
 	// Use gocqlx query with named binding
 	stmt := gqb.session.Query(query, fieldNames)
 
-	// Bind the values as a slice
-	if err := stmt.BindStruct(values).WithContext(ctx).ExecRelease(); err != nil {
+	// Bind the values using named binding map
+	if err := stmt.BindMap(valuesMap).WithContext(ctx).ExecRelease(); err != nil {
 		gqb.logger.Errorf("gocqlx partial update failed: %v", err)
 		return fmt.Errorf("gocqlx partial update failed: %w", err)
 	}

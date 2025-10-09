@@ -33,11 +33,14 @@ func (dm *DatabaseManager) UpdateKeeperStatus(
 	publicIP string,
 	isActive bool,
 ) error {
+	// Use pointers for optional fields to avoid updating unset fields
+	online := isActive
+	uptimePtr := uptime
 
 	keeperData := &types.KeeperDataEntity{
 		KeeperAddress:    strings.ToLower(keeperAddress),
-		Online:           isActive,
-		Uptime:           uptime,
+		Online:           &online,
+		Uptime:           &uptimePtr,
 		LastCheckedIn:    timestamp,
 		ConsensusAddress: strings.ToLower(consensusAddress),
 		Version:          version,
@@ -59,6 +62,7 @@ func (dm *DatabaseManager) UpdateKeeperStatus(
 // GetVerifiedKeepers retrieves only verified keepers from the database
 func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.HealthKeeperInfo, error) {
 	// Get all keepers and filter for verified ones
+	// Pass boolean values directly for query filtering (not pointers)
 	allKeepers, err := dm.keeperRepo.GetByFields(ctx, map[string]interface{}{
 		"registered":  true,
 		"whitelisted": true,
@@ -69,16 +73,37 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Heal
 
 	var keepers []types.HealthKeeperInfo
 	for _, keeper := range allKeepers {
+		// Helper functions to safely dereference pointers
+		online := false
+		if keeper.Online != nil {
+			online = *keeper.Online
+		}
+
+		uptime := int64(0)
+		if keeper.Uptime != nil {
+			uptime = *keeper.Uptime
+		}
+
+		operatorID := int64(0)
+		if keeper.OperatorID != nil {
+			operatorID = *keeper.OperatorID
+		}
+
+		onImua := false
+		if keeper.OnImua != nil {
+			onImua = *keeper.OnImua
+		}
+
 		keepers = append(keepers, types.HealthKeeperInfo{
 			KeeperName:       keeper.KeeperName,
 			KeeperAddress:    keeper.KeeperAddress,
 			ConsensusAddress: keeper.ConsensusAddress,
-			OperatorID:       fmt.Sprintf("%d", keeper.OperatorID),
+			OperatorID:       fmt.Sprintf("%d", operatorID),
 			Version:          keeper.Version,
-			IsActive:         false,
-			Uptime:           keeper.Uptime,
+			IsActive:         online,
+			Uptime:           uptime,
 			LastCheckedIn:    keeper.LastCheckedIn,
-			IsImua:           keeper.OnImua,
+			IsImua:           onImua,
 		})
 	}
 
@@ -96,10 +121,11 @@ func (dm *DatabaseManager) UpdateAllKeepersStatus(ctx context.Context, onlineKee
 
 	// Update each online keeper's status
 	for _, keeper := range onlineKeepers {
+		uptime := keeper.Uptime
 		// Prepare partial update with only the fields we want to modify
 		update := &types.KeeperDataEntity{
 			KeeperAddress: keeper.KeeperAddress,
-			Uptime:        keeper.Uptime,
+			Uptime:        &uptime,
 			LastCheckedIn: now,
 		}
 
@@ -123,7 +149,7 @@ func (dm *DatabaseManager) UpdateKeeperChatID(ctx context.Context, keeperAddress
 	if err != nil {
 		return err
 	}
-	keeper.ChatID = chatID
+	keeper.ChatID = &chatID
 	if err := dm.keeperRepo.Update(ctx, keeper); err != nil {
 		return err
 	}
@@ -136,5 +162,11 @@ func (dm *DatabaseManager) GetKeeperChatInfo(ctx context.Context, keeperAddress 
 	if err != nil {
 		return 0, "", err
 	}
-	return keeper.ChatID, keeper.EmailID, nil
+
+	chatID := int64(0)
+	if keeper.ChatID != nil {
+		chatID = *keeper.ChatID
+	}
+
+	return chatID, keeper.EmailID, nil
 }

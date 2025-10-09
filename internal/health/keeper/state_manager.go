@@ -4,16 +4,16 @@ import (
 	"sync"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // StateManager manages the state of all keepers
 type StateManager struct {
-	keepers     map[string]*types.HealthKeeperInfo
-	mu          sync.RWMutex
-	logger      logging.Logger
-	db          interfaces.DatabaseManagerInterface
+	keepers map[string]*types.HealthKeeperInfo
+	mu      sync.RWMutex
+	logger  logging.Logger
+	db      interfaces.DatabaseManagerInterface
 }
 
 var (
@@ -31,11 +31,12 @@ func InitializeStateManager(
 		stateLogger := logger.With("component", "state_manager")
 
 		stateManager = &StateManager{
-			keepers:     make(map[string]*types.HealthKeeperInfo),
-			logger:      stateLogger,
-			db:          db,
+			keepers: make(map[string]*types.HealthKeeperInfo),
+			logger:  stateLogger,
+			db:      db,
 		}
 		go stateManager.startCleanupRoutine()
+		go stateManager.startPeriodicDumpRoutine()
 	})
 	return stateManager
 }
@@ -122,6 +123,7 @@ func (sm *StateManager) GetDetailedKeeperInfo() []types.HealthKeeperInfo {
 				LastCheckedIn:    state.LastCheckedIn,
 				IsActive:         state.IsActive,
 				IsImua:           state.IsImua,
+				Uptime:           state.Uptime,
 			}
 			keeperInfoList = append(keeperInfoList, info)
 		}
