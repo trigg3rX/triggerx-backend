@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package rpc;
+
+option go_package = "github.com/trigg3rX/triggerx-backend/pkg/rpc/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// HealthService provides RPC methods for internal services
+service HealthService {
+  // GetActivePerformers returns active keepers for task assignment
+  rpc GetActivePerformers(GetActivePerformersRequest) returns (GetActivePerformersResponse);
+  
+  // GetNextPerformer returns the next keeper using load balancing
+  rpc GetNextPerformer(GetNextPerformerRequest) returns (GetNextPerformerResponse);
+  
+  // GetKeeperStatus returns the status of all keepers
+  rpc GetKeeperStatus(GetKeeperStatusRequest) returns (GetKeeperStatusResponse);
+}
+
+// GetActivePerformersRequest requests active performers
+message GetActivePerformersRequest {
+  bool include_imua = 1;  // Filter for IMUA keepers
+  int32 limit = 2;        // Limit number of performers returned (0 = no limit)
+}
+
+// GetActivePerformersResponse returns active performers
+message GetActivePerformersResponse {
+  repeated Performer performers = 1;
+  int32 count = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// GetNextPerformerRequest requests the next performer (load balanced)
+message GetNextPerformerRequest {
+  bool is_imua_task = 1;  // Whether the task requires IMUA keeper
+  string task_type = 2;    // Optional: type of task for filtering
+}
+
+// GetNextPerformerResponse returns the selected performer
+message GetNextPerformerResponse {
+  Performer performer = 1;
+  string strategy = 2;  // Load balancing strategy used
+}
+
+// GetKeeperStatusRequest requests keeper status information
+message GetKeeperStatusRequest {
+  repeated string keeper_addresses = 1;  // Empty = all keepers
+}
+
+// GetKeeperStatusResponse returns keeper status
+message GetKeeperStatusResponse {
+  repeated KeeperInfo keepers = 1;
+  int32 total_keepers = 2;
+  int32 active_keepers = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+// Performer represents a keeper available for task execution
+message Performer {
+  int64 operator_id = 1;
+  string keeper_address = 2;
+  bool is_imua = 3;
+  string version = 4;
+  int64 uptime_seconds = 5;
+  google.protobuf.Timestamp last_seen = 6;
+}
+
+// KeeperInfo represents detailed keeper information
+message KeeperInfo {
+  string keeper_name = 1;
+  string keeper_address = 2;
+  string consensus_address = 3;
+  string operator_id = 4;
+  string version = 5;
+  bool is_active = 6;
+  bool is_imua = 7;
+  int64 uptime_seconds = 8;
+  google.protobuf.Timestamp last_checked_in = 9;
+}
+

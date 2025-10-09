@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health"
@@ -82,27 +80,34 @@ func main() {
 	stateManager := keeper.InitializeStateManager(logger, dbManager)
 	logger.Info("Keeper state manager initialized")
 
+	// Set global state manager for orchestrator access
+	health.SetStateManager(stateManager)
+
 	// Load verified keepers from database
 	if err := stateManager.LoadVerifiedKeepers(context.Background()); err != nil {
 		logger.Debug("Failed to load verified keepers from database", "error", err)
 		// Continue anyway, as we can still operate with an empty state
 	}
 
-	// Setup HTTP server
-	srv := setupHTTPServer(logger)
+	// Create and start health service orchestrator (HTTP + gRPC)
+	healthService := health.NewService(logger, &health.Config{
+		HTTPPort: config.GetHTTPPort(),
+		GRPCPort: config.GetGRPCPort(),
+		GRPCHost: "0.0.0.0",
+	})
 
-	// Start server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Info("Starting HTTP server...")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
+		if err := healthService.Start(context.Background()); err != nil {
+			serverErrors <- fmt.Errorf("health service error: %v", err)
 		}
 	}()
 
 	close(ready)
-	logger.Infof("Health service is ready on port %s", config.GetHTTPPort())
+	logger.Infof("Health service is ready - HTTP: %s, gRPC: %s",
+		config.GetHTTPPort(),
+		config.GetGRPCPort())
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -115,27 +120,10 @@ func main() {
 		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(srv, &wg, logger)
+	performGracefulShutdown(healthService, &wg, logger)
 }
 
-func setupHTTPServer(logger logging.Logger) *http.Server {
-	if !config.IsDevMode() {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	router := gin.New()
-	router.Use(gin.Recovery())
-
-	// Register routes (middleware with metrics is applied inside RegisterRoutes)
-	health.RegisterRoutes(router, logger)
-
-	return &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetHTTPPort()),
-		Handler: router,
-	}
-}
-
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(healthService *health.Service, wg *sync.WaitGroup, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -147,11 +135,9 @@ func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger loggin
 		logger.Error("Failed to dump keeper state", "error", err)
 	}
 
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", "error", err)
-		if err := srv.Close(); err != nil {
-			logger.Error("Forced HTTP server close error", "error", err)
-		}
+	// Stop health service (HTTP + gRPC servers)
+	if err := healthService.Stop(ctx); err != nil {
+		logger.Error("Health service shutdown error", "error", err)
 	}
 
 	wg.Wait()
