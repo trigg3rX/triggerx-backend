@@ -82,8 +82,12 @@ func main() {
 	}
 	logger.Info("[3/5] Test Aggregator client Initialised")
 
-	healthClient := taskdispatcher.NewHealthClient(logger, config.GetHealthRPCUrl())
-	logger.Info("[4/5] Health client Initialised")
+	// Initialize gRPC client for health service
+	healthClient, err := rpc.NewHealthClient(config.GetHealthRPCUrl(), logger)
+	if err != nil {
+		logger.Fatal("Failed to create health gRPC client", "error", err)
+	}
+	logger.Info("[4/5] Health gRPC client Initialised")
 
 	// Initialize task stream manager for orchestration
 	taskStreamMgr, err := tasks.NewTaskStreamManager(redisClient, aggClient, testAggClient, logger)

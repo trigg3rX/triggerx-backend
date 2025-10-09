@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -16,7 +17,7 @@ import (
 type TaskDispatcher struct {
 	logger            logging.Logger
 	taskStreamManager *tasks.TaskStreamManager
-	healthClient      *HealthClient
+	healthClient      *rpc.HealthClient
 	signingKey        string
 	signingAddress    string
 }
@@ -25,7 +26,7 @@ type TaskDispatcher struct {
 func NewTaskDispatcher(
 	logger logging.Logger,
 	taskStreamManager *tasks.TaskStreamManager,
-	healthClient *HealthClient,
+	healthClient *rpc.HealthClient,
 	signingKey string,
 	signingAddress string) (*TaskDispatcher, error) {
 
@@ -61,11 +62,11 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		"task_count", taskCount,
 		"scheduler_id", req.SendTaskDataToKeeper.SchedulerID,
 		"source", req.Source)
-	
+
 	isMainnet := req.SendTaskDataToKeeper.TargetData[0].TargetChainID == "42161"
 
-	// Use dynamic performer selection instead of hardcoded selection
-	performer, err := d.healthClient.GetPerformerData(req.SendTaskDataToKeeper.TargetData[0].IsImua, isMainnet)
+	// Use dynamic performer selection via gRPC instead of hardcoded selection
+	performer, err := d.healthClient.GetPerformerData(ctx, req.SendTaskDataToKeeper.TargetData[0].IsImua, isMainnet)
 	if err != nil {
 		d.logger.Error("Failed to get performer data dynamically",
 			"task_id", req.SendTaskDataToKeeper.TaskID[0],
