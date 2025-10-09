@@ -149,7 +149,6 @@ CREATE TABLE IF NOT EXISTS task_data (
 
 -- Create Keeper_data table
 CREATE TABLE IF NOT EXISTS keeper_data (
-    keeper_id bigint,
     keeper_name text,
     keeper_address text,
     rewards_address text,
@@ -163,7 +162,6 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     version text,
     on_imua boolean,
     public_ip text,
-    peer_id text,
     chat_id bigint,
     email_id text,
     rewards_booster varint,
@@ -172,7 +170,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     uptime bigint,
     keeper_points varint,
     last_checked_in timestamp,
-    PRIMARY KEY (keeper_id)
+    PRIMARY KEY (keeper_address)
 );
 
 -- Create ApiKey table
@@ -232,21 +230,11 @@ CREATE INDEX IF NOT EXISTS job_data_last_executed_at_idx ON triggerx.job_data (l
 CREATE INDEX IF NOT EXISTS job_data_timezone_idx ON triggerx.job_data (timezone);
 
 -- Create indexes for time_job_data table
-CREATE INDEX IF NOT EXISTS time_job_data_created_at_idx ON triggerx.time_job_data (created_at);
-CREATE INDEX IF NOT EXISTS time_job_data_updated_at_idx ON triggerx.time_job_data (updated_at);
 CREATE INDEX IF NOT EXISTS time_job_data_last_executed_at_idx ON triggerx.time_job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS time_job_data_timezone_idx ON triggerx.time_job_data (timezone);
 CREATE INDEX IF NOT EXISTS time_job_data_next_execution_timestamp_idx ON triggerx.time_job_data (next_execution_timestamp);
 
 -- Create indexes for event_job_data table
-CREATE INDEX IF NOT EXISTS event_job_data_created_at_idx ON triggerx.event_job_data (created_at);
-CREATE INDEX IF NOT EXISTS event_job_data_updated_at_idx ON triggerx.event_job_data (updated_at);
 CREATE INDEX IF NOT EXISTS event_job_data_last_executed_at_idx ON triggerx.event_job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS event_job_data_timezone_idx ON triggerx.event_job_data (timezone);
 
 -- Create indexes for condition_job_data table
-CREATE INDEX IF NOT EXISTS condition_job_data_created_at_idx ON triggerx.condition_job_data (created_at);
-CREATE INDEX IF NOT EXISTS condition_job_data_updated_at_idx ON triggerx.condition_job_data (updated_at);
 CREATE INDEX IF NOT EXISTS condition_job_data_last_executed_at_idx ON triggerx.condition_job_data (last_executed_at);
-CREATE INDEX IF NOT EXISTS condition_job_data_timezone_idx ON triggerx.condition_job_data (timezone);
-

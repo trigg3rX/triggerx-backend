@@ -130,7 +130,6 @@ type TaskDataDTO struct {
 
 // KeeperDataDTO represents the keeper data transfer object
 type KeeperDataDTO struct {
-	KeeperID         int64     `json:"keeper_id"`
 	KeeperName       string    `json:"keeper_name"`
 	KeeperAddress    string    `json:"keeper_address"`
 	RewardsAddress   string    `json:"rewards_address"`
@@ -144,7 +143,6 @@ type KeeperDataDTO struct {
 	Version          string    `json:"version"`
 	OnImua           bool      `json:"on_imua"`
 	PublicIP         string    `json:"public_ip"`
-	PeerID           string    `json:"peer_id"`
 	ChatID           int64     `json:"chat_id"`
 	EmailID          string    `json:"email_id"`
 	RewardsBooster   big.Int   `json:"rewards_booster"`

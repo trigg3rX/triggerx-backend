@@ -129,28 +129,28 @@ type TaskDataEntity struct {
 }
 
 // KeeperDataEntity represents the keeper_data table structure
+// Pointer types (*bool, *int64) are used for optional fields to distinguish between
+// "not set" (nil) and "set to zero/false" for partial updates
 type KeeperDataEntity struct {
-	KeeperID         int64     `cql:"keeper_id"`
 	KeeperName       string    `cql:"keeper_name"`
 	KeeperAddress    string    `cql:"keeper_address"`
 	RewardsAddress   string    `cql:"rewards_address"`
 	ConsensusAddress string    `cql:"consensus_address"`
 	RegisteredTx     string    `cql:"registered_tx"`
-	OperatorID       int64     `cql:"operator_id"`
+	OperatorID       *int64    `cql:"operator_id"`
 	VotingPower      big.Int   `cql:"voting_power"`
-	Whitelisted      bool      `cql:"whitelisted"`
-	Registered       bool      `cql:"registered"`
-	Online           bool      `cql:"online"`
+	Whitelisted      *bool     `cql:"whitelisted"`
+	Registered       *bool     `cql:"registered"`
+	Online           *bool     `cql:"online"`
 	Version          string    `cql:"version"`
-	OnImua           bool      `cql:"on_imua"`
+	OnImua           *bool     `cql:"on_imua"`
 	PublicIP         string    `cql:"public_ip"`
-	PeerID           string    `cql:"peer_id"`
-	ChatID           int64     `cql:"chat_id"`
+	ChatID           *int64    `cql:"chat_id"`
 	EmailID          string    `cql:"email_id"`
 	RewardsBooster   big.Int   `cql:"rewards_booster"`
-	NoExecutedTasks  int64     `cql:"no_executed_tasks"`
-	NoAttestedTasks  int64     `cql:"no_attested_tasks"`
-	Uptime           int64     `cql:"uptime"`
+	NoExecutedTasks  *int64    `cql:"no_executed_tasks"`
+	NoAttestedTasks  *int64    `cql:"no_attested_tasks"`
+	Uptime           *int64    `cql:"uptime"`
 	KeeperPoints     big.Int   `cql:"keeper_points"`
 	LastCheckedIn    time.Time `cql:"last_checked_in"`
 }
