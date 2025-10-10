@@ -1,17 +1,13 @@
 package types
 
-import (
-	"math/big"
-	"time"
-)
+import "time"
 
 // UserDataDTO represents the user data transfer object
 type UserDataDTO struct {
-	UserID        int64     `json:"user_id"`
 	UserAddress   string    `json:"user_address"`
 	EmailID       string    `json:"email_id"`
-	JobIDs        []big.Int `json:"job_ids"`
-	OpxConsumed   big.Int   `json:"opx_consumed"`
+	JobIDs        []string  `json:"job_ids"`
+	OpxConsumed   string    `json:"opx_consumed"`
 	TotalJobs     int64     `json:"total_jobs"`
 	TotalTasks    int64     `json:"total_tasks"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -20,12 +16,12 @@ type UserDataDTO struct {
 
 // JobDataDTO represents the job data transfer object
 type JobDataDTO struct {
-	JobID             big.Int   `json:"job_id"`
+	JobID             string    `json:"job_id"`
 	JobTitle          string    `json:"job_title"`
 	TaskDefinitionID  int       `json:"task_definition_id"`
 	CreatedChainID    string    `json:"created_chain_id"`
-	UserID            int64     `json:"user_id"`
-	LinkJobID         big.Int   `json:"link_job_id"`
+	UserAddress       string    `json:"user_address"`
+	LinkJobID         string    `json:"link_job_id"`
 	ChainStatus       int       `json:"chain_status"`
 	Timezone          string    `json:"timezone"`
 	IsImua            bool      `json:"is_imua"`
@@ -33,8 +29,8 @@ type JobDataDTO struct {
 	TimeFrame         int64     `json:"time_frame"`
 	Recurring         bool      `json:"recurring"`
 	Status            string    `json:"status"`
-	JobCostPrediction big.Int   `json:"job_cost_prediction"`
-	JobCostActual     big.Int   `json:"job_cost_actual"`
+	JobCostPrediction string    `json:"job_cost_prediction"`
+	JobCostActual     string    `json:"job_cost_actual"`
 	TaskIDs           []int64   `json:"task_ids"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
@@ -43,7 +39,7 @@ type JobDataDTO struct {
 
 // TimeJobDataDTO represents the time job data transfer object
 type TimeJobDataDTO struct {
-	JobID                     big.Int   `json:"job_id"`
+	JobID                     string    `json:"job_id"`
 	TaskDefinitionID          int       `json:"task_definition_id"`
 	ScheduleType              string    `json:"schedule_type"`
 	TimeInterval              int64     `json:"time_interval"`
@@ -64,7 +60,7 @@ type TimeJobDataDTO struct {
 
 // EventJobDataDTO represents the event job data transfer object
 type EventJobDataDTO struct {
-	JobID                      big.Int   `json:"job_id"`
+	JobID                      string    `json:"job_id"`
 	TaskDefinitionID           int       `json:"task_definition_id"`
 	Recurring                  bool      `json:"recurring"`
 	TriggerChainID             string    `json:"trigger_chain_id"`
@@ -86,7 +82,7 @@ type EventJobDataDTO struct {
 
 // ConditionJobDataDTO represents the condition job data transfer object
 type ConditionJobDataDTO struct {
-	JobID                     big.Int   `json:"job_id"`
+	JobID                     string    `json:"job_id"`
 	TaskDefinitionID          int       `json:"task_definition_id"`
 	Recurring                 bool      `json:"recurring"`
 	ConditionType             string    `json:"condition_type"`
@@ -111,11 +107,11 @@ type ConditionJobDataDTO struct {
 type TaskDataDTO struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
-	JobID                big.Int   `json:"job_id"`
+	JobID                string    `json:"job_id"`
 	TaskDefinitionID     int       `json:"task_definition_id"`
 	CreatedAt            time.Time `json:"created_at"`
-	TaskOpxPredictedCost big.Int   `json:"task_opx_predicted_cost"`
-	TaskOpxActualCost    big.Int   `json:"task_opx_actual_cost"`
+	TaskOpxPredictedCost string    `json:"task_opx_predicted_cost"`
+	TaskOpxActualCost    string    `json:"task_opx_actual_cost"`
 	ExecutionTimestamp   time.Time `json:"execution_timestamp"`
 	ExecutionTxHash      string    `json:"execution_tx_hash"`
 	TaskPerformerID      int64     `json:"task_performer_id"`
@@ -136,7 +132,7 @@ type KeeperDataDTO struct {
 	ConsensusAddress string    `json:"consensus_address"`
 	RegisteredTx     string    `json:"registered_tx"`
 	OperatorID       int64     `json:"operator_id"`
-	VotingPower      big.Int   `json:"voting_power"`
+	VotingPower      string    `json:"voting_power"`
 	Whitelisted      bool      `json:"whitelisted"`
 	Registered       bool      `json:"registered"`
 	Online           bool      `json:"online"`
@@ -145,11 +141,11 @@ type KeeperDataDTO struct {
 	PublicIP         string    `json:"public_ip"`
 	ChatID           int64     `json:"chat_id"`
 	EmailID          string    `json:"email_id"`
-	RewardsBooster   big.Int   `json:"rewards_booster"`
+	RewardsBooster   string    `json:"rewards_booster"`
 	NoExecutedTasks  int64     `json:"no_executed_tasks"`
 	NoAttestedTasks  int64     `json:"no_attested_tasks"`
 	Uptime           int64     `json:"uptime"`
-	KeeperPoints     big.Int   `json:"keeper_points"`
+	KeeperPoints     string    `json:"keeper_points"`
 	LastCheckedIn    time.Time `json:"last_checked_in"`
 }
 
@@ -163,4 +159,12 @@ type ApiKeyDataDTO struct {
 	FailedCount  int64     `json:"failed_count"`
 	LastUsed     time.Time `json:"last_used"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// CompleteJobDataDTO represents the complete job data transfer object
+type CompleteJobDataDTO struct {
+	JobDataDTO           JobDataDTO          `json:"job_data"`
+	TimeJobDataDTO       TimeJobDataDTO      `json:"time_job_data"`
+	EventJobDataDTO      EventJobDataDTO     `json:"event_job_data"`
+	ConditionJobDataDTO  ConditionJobDataDTO `json:"condition_job_data"`
 }

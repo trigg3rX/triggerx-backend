@@ -49,13 +49,17 @@ func main() {
 
 	// Initialize database connection
 	dbConfig := &connection.Config{
-		Hosts:        []string{config.GetDatabaseHost() + ":" + config.GetDatabasePort()},
-		Keyspace:     "triggerx",
-		Consistency:  gocql.Quorum,
-		Timeout:      time.Second * 30,
-		Retries:      5,
-		ConnectWait:  time.Second * 10,
-		ProtoVersion: 4,
+		Hosts:               []string{config.GetDatabaseHost() + ":" + config.GetDatabasePort()},
+		Keyspace:            "triggerx",
+		Consistency:         gocql.Quorum,
+		Timeout:             time.Second * 30,
+		Retries:             5,
+		ConnectWait:         time.Second * 10,
+		ProtoVersion:        4,
+		HealthCheckInterval: 15 * time.Second,
+		SocketKeepalive:     15 * time.Second,
+		MaxPreparedStmts:    1000,
+		DefaultIdempotence:  true,
 	}
 	dbConn, err := datastore.NewService(dbConfig, logger)
 	if err != nil {
@@ -76,9 +80,9 @@ func main() {
 	notificationBot.Start()
 	logger.Info("Notification bot initialized")
 
-	// Initialize state manager
-	stateManager := keeper.InitializeStateManager(logger, dbManager)
-	logger.Info("Keeper state manager initialized")
+	// Initialize state manager with notification bot for inactivity alerts
+	stateManager := keeper.InitializeStateManager(logger, dbManager, notificationBot)
+	logger.Info("Keeper state manager initialized with notification support")
 
 	// Set global state manager for orchestrator access
 	health.SetStateManager(stateManager)

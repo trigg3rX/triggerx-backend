@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"math/big"
 	"net/http"
 	"time"
 
@@ -12,11 +10,11 @@ import (
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[CreateTaskData] trace_id=%s - Creating task", traceID)
+	logger := h.getLogger(c)
+	logger.Debugf("POST [CreateTaskData] Creating task")
 	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
-		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
+		logger.Errorf("Error decoding request body: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -24,17 +22,16 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 		return
 	}
 
-	ctx := context.Background()
 
 	// Create new task entity
 	newTask := &types.TaskDataEntity{
 		TaskID:               0, // Will be auto-generated
 		TaskNumber:           0,
-		JobID:                *taskData.JobID,
+		JobID:                taskData.JobID,
 		TaskDefinitionID:     taskData.TaskDefinitionID,
 		CreatedAt:            time.Now().UTC(),
-		TaskOpxPredictedCost: *big.NewInt(0),
-		TaskOpxActualCost:    *big.NewInt(0),
+		TaskOpxPredictedCost: "0",
+		TaskOpxActualCost:    "0",
 		ExecutionTimestamp:   time.Time{},
 		ExecutionTxHash:      "",
 		TaskPerformerID:      0,
@@ -48,10 +45,10 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("create", "task_data")
-	err := h.taskRepository.Create(ctx, newTask)
+	err := h.taskRepository.Create(c.Request.Context(), newTask)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateTaskData] Error creating task: %v", err)
+		logger.Errorf("Error creating task: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create task",
 			"code":  "TASK_CREATION_ERROR",
@@ -60,9 +57,9 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	}
 
 	// Get the created task to retrieve the generated ID
-	task, err := h.taskRepository.GetByID(ctx, newTask.TaskID)
+	task, err := h.taskRepository.GetByID(c.Request.Context(), newTask.TaskID)
 	if err != nil || task == nil {
-		h.logger.Errorf("[CreateTaskData] Error fetching created task: %v", err)
+		logger.Errorf("Error fetching created task: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to fetch created task",
 			"code":  "TASK_FETCH_ERROR",
@@ -74,9 +71,9 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 
 	// Add task ID to job's task_ids list
 	trackDBOp = metrics.TrackDBOperation("update", "add_task_id")
-	job, err := h.jobRepository.GetByID(ctx, taskData.JobID)
+	job, err := h.jobRepository.GetByID(c.Request.Context(), taskData.JobID)
 	if err != nil || job == nil {
-		h.logger.Errorf("[CreateTaskData] Error getting job: %v", err)
+		logger.Errorf("Error getting job: %v", err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found",
 			"code":  "JOB_NOT_FOUND",
@@ -85,10 +82,10 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	}
 
 	job.TaskIDs = append(job.TaskIDs, taskID)
-	err = h.jobRepository.Update(ctx, job)
+	err = h.jobRepository.Update(c.Request.Context(), job)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateTaskData] Error adding task ID to job: %v", err)
+		logger.Errorf("Error adding task ID to job: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to add task ID to job",
 			"code":  "TASK_ID_ADDITION_ERROR",
@@ -96,6 +93,6 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskID)
+	logger.Debugf("Successfully created task with ID: %d", taskID)
 	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
 }

@@ -26,15 +26,6 @@ type KeeperCommunicationInfo struct {
 	EmailID    string `json:"email_id"`
 }
 
-type KeeperLeaderboardEntry struct {
-	KeeperID        int64   `json:"keeper_id"`
-	KeeperAddress   string  `json:"keeper_address"`
-	KeeperName      string  `json:"keeper_name"`
-	NoExecutedTasks int64   `json:"no_executed_tasks"`
-	NoAttestedTasks int64   `json:"no_attested_tasks"`
-	KeeperPoints    float64 `json:"keeper_points"`
-	OnImua          bool    `json:"on_imua"`
-}
 
 ///////////////////////////////////////////////////
 

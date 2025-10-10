@@ -95,16 +95,16 @@ func (wam *WebSocketAuthMiddleware) AuthenticateWebSocket(c *gin.Context) (strin
 	// Update last used timestamp asynchronously
 	go wam.apiKeyAuth.UpdateLastUsed(apiKey)
 
-	// Extract user ID from the API key owner
-	userID := wam.extractUserIDFromApiKey(apiKeyData)
+	// Extract user address from the API key owner
+	userAddress := wam.extractUserAddressFromApiKey(apiKeyData)
 
-	return apiKey, userID, nil
+	return apiKey, userAddress, nil
 }
 
-// extractUserIDFromApiKey extracts user ID from API key data
-func (wam *WebSocketAuthMiddleware) extractUserIDFromApiKey(apiKey *types.ApiKeyDataEntity) string {
+// extractUserAddressFromApiKey extracts user address from API key data
+func (wam *WebSocketAuthMiddleware) extractUserAddressFromApiKey(apiKey *types.ApiKeyDataEntity) string {
 	// The API key owner field contains the user information
-	// This could be a user ID, email, or other identifier
+	// This could be a user address, email, or other identifier
 	// For now, we'll use the owner field directly
 	if apiKey.Owner != "" {
 		return apiKey.Owner
@@ -204,7 +204,7 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 	clientIP := c.ClientIP()
 
 	// Authenticate the connection first to get API key data
-	apiKey, userID, err := wcm.auth.AuthenticateWebSocket(c)
+	apiKey, userAddress, err := wcm.auth.AuthenticateWebSocket(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": err.Error(),
@@ -255,7 +255,7 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 	// Create client
 	clientID := generateClientID()
 	client := NewClient(clientID, conn, wcm.hub, wcm.logger)
-	client.UserID = userID
+	client.UserAddress = userAddress
 	client.APIKey = apiKey
 	// Ensure per-IP connection is released on client disconnect
 	client.OnClose = func() {

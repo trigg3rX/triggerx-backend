@@ -4,22 +4,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-type NotificationConfig struct {
-	EmailFrom     string
-	EmailPassword string
-	BotToken      string
-}
-
 type Handler struct {
 	logger                 logging.Logger
-	config                 NotificationConfig
 	dockerExecutor         dockerexecutor.DockerExecutorAPI
+	datastore              datastore.DatastoreService
 	jobRepository          interfaces.GenericRepository[types.JobDataEntity]
 	timeJobRepository      interfaces.GenericRepository[types.TimeJobDataEntity]
 	eventJobRepository     interfaces.GenericRepository[types.EventJobDataEntity]
@@ -36,10 +31,10 @@ type Handler struct {
 
 func NewHandler(
 	logger logging.Logger,
-	config NotificationConfig,
 	dockerExecutor dockerexecutor.DockerExecutorAPI,
 	hub *websocket.Hub,
 	publisher *events.Publisher,
+	datastore datastore.DatastoreService,
 	jobRepository interfaces.GenericRepository[types.JobDataEntity],
 	timeJobRepository interfaces.GenericRepository[types.TimeJobDataEntity],
 	eventJobRepository interfaces.GenericRepository[types.EventJobDataEntity],
@@ -51,8 +46,8 @@ func NewHandler(
 ) *Handler {
 	h := &Handler{
 		logger:                 logger,
-		config:                 config,
 		dockerExecutor:         dockerExecutor,
+		datastore:              datastore,
 		jobRepository:          jobRepository,
 		timeJobRepository:      timeJobRepository,
 		eventJobRepository:     eventJobRepository,
@@ -68,10 +63,13 @@ func NewHandler(
 	return h
 }
 
-func (h *Handler) getTraceID(c *gin.Context) string {
-	traceID, exists := c.Get("trace_id")
+// getLogger retrieves the traced logger from context
+// This logger already has the traceID attached
+func (h *Handler) getLogger(c *gin.Context) logging.Logger {
+	logger, exists := c.Get("logger")
 	if !exists {
-		return ""
+		// Fallback to base logger if context logger not found
+		return h.logger
 	}
-	return traceID.(string)
+	return logger.(logging.Logger)
 }

@@ -6,25 +6,24 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/errors"
 )
 
 // HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[HealthCheck] trace_id=%s - Health check requested", traceID)
+	logger := h.getLogger(c)
+	logger.Debugf("GET [HealthCheck] Health check requested")
 	startTime := time.Now()
 
-	// Check database connection by trying to list repositories
-	// Note: This is a simple check. For full health check, the server should expose datastore.HealthCheck()
-	dbStatus := "healthy"
-	dbError := ""
-
-	// Track database health check operation
+	// Check database connection
 	trackDBOp := metrics.TrackDBOperation("read", "system_health")
-
-	// Basic health check - assume healthy if handler exists
-	// The datastore layer should have its own health check endpoint
-	trackDBOp(nil)
+	err := h.datastore.HealthCheck(c.Request.Context())
+	trackDBOp(err)
+	if err != nil {
+		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": errors.ErrDBOperationFailed})
+		return
+	}
 	metrics.HealthChecksTotal.WithLabelValues("healthy").Inc()
 
 	// Prepare response
@@ -35,25 +34,14 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 		"version":   "1.0.0",
 		"uptime":    time.Since(startTime).String(),
 		"database": gin.H{
-			"status": dbStatus,
-			"error":  dbError,
+			"status": "healthy",
+			"error":  "",
 		},
 		"checks": gin.H{
-			"database_connection": dbStatus == "healthy",
+			"database_connection": err == nil,
 		},
 	}
 
-	// Set appropriate HTTP status
-	httpStatus := http.StatusOK
-	if dbStatus != "healthy" {
-		httpStatus = http.StatusServiceUnavailable
-		response["status"] = "degraded"
-	}
-
-	// Log health check
-	duration := time.Since(startTime)
-	h.logger.Debugf("Health check completed: status=%s, db_status=%s, duration=%v",
-		response["status"], dbStatus, duration)
-
-	c.JSON(httpStatus, response)
+	logger.Debugf("Health check completed")
+	c.JSON(http.StatusOK, response)
 }

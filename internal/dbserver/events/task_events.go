@@ -19,7 +19,7 @@ type TaskEvent struct {
 	Type      TaskEventType `json:"type"`
 	TaskID    int64         `json:"task_id"`
 	JobID     string        `json:"job_id"`
-	UserID    string        `json:"user_id,omitempty"`
+	UserAddress string      `json:"user_address,omitempty"`
 	Changes   interface{}   `json:"changes,omitempty"`
 	Timestamp time.Time     `json:"timestamp"`
 }
@@ -31,7 +31,7 @@ type TaskCreatedEvent struct {
 	TaskDefinitionID int64     `json:"task_definition_id"`
 	IsImua           bool      `json:"is_imua"`
 	CreatedAt        time.Time `json:"created_at"`
-	UserID           string    `json:"user_id,omitempty"`
+	UserAddress      string    `json:"user_address,omitempty"`
 }
 
 // TaskUpdatedEvent represents a task updated event
@@ -50,7 +50,7 @@ type TaskUpdatedEvent struct {
 	TaskSubmissionTxHash *string    `json:"task_submission_tx_hash,omitempty"`
 	IsSuccessful         *bool      `json:"is_successful,omitempty"`
 	TaskStatus           *string    `json:"task_status,omitempty"`
-	UserID               string     `json:"user_id,omitempty"`
+	UserAddress               string     `json:"user_address,omitempty"`
 }
 
 // TaskStatusChangedEvent represents a task status changed event
@@ -61,7 +61,7 @@ type TaskStatusChangedEvent struct {
 	NewStatus            string  `json:"new_status"`
 	TaskNumber           *int64  `json:"task_number,omitempty"`
 	TaskSubmissionTxHash *string `json:"task_submission_tx_hash,omitempty"`
-	UserID               string  `json:"user_id,omitempty"`
+	UserAddress               string  `json:"user_address,omitempty"`
 }
 
 // TaskFeeUpdatedEvent represents a task fee updated event
@@ -70,46 +70,46 @@ type TaskFeeUpdatedEvent struct {
 	JobID  string  `json:"job_id"`
 	OldFee float64 `json:"old_fee"`
 	NewFee float64 `json:"new_fee"`
-	UserID string  `json:"user_id,omitempty"`
+	UserAddress string  `json:"user_address,omitempty"`
 }
 
 // NewTaskEvent creates a new task event
-func NewTaskEvent(eventType TaskEventType, taskID int64, jobID string, userID string, changes interface{}) *TaskEvent {
+func NewTaskEvent(eventType TaskEventType, taskID int64, jobID string, userAddress string, changes interface{}) *TaskEvent {
 	return &TaskEvent{
 		Type:      eventType,
 		TaskID:    taskID,
 		JobID:     jobID,
-		UserID:    userID,
+		UserAddress: userAddress,
 		Changes:   changes,
 		Timestamp: time.Now(),
 	}
 }
 
 // NewTaskCreatedEvent creates a new task created event
-func NewTaskCreatedEvent(taskID int64, jobID string, taskDefinitionID int64, isImua bool, userID string) *TaskEvent {
+func NewTaskCreatedEvent(taskID int64, jobID string, taskDefinitionID int64, isImua bool, userAddress string) *TaskEvent {
 	changes := &TaskCreatedEvent{
 		TaskID:           taskID,
 		JobID:            jobID,
 		TaskDefinitionID: taskDefinitionID,
 		IsImua:           isImua,
 		CreatedAt:        time.Now(),
-		UserID:           userID,
+		UserAddress:      userAddress,
 	}
 
-	return NewTaskEvent(TaskEventTypeCreated, taskID, jobID, userID, changes)
+	return NewTaskEvent(TaskEventTypeCreated, taskID, jobID, userAddress, changes)
 }
 
 // NewTaskUpdatedEvent creates a new task updated event
-func NewTaskUpdatedEvent(taskID int64, jobID string, userID string, changes *TaskUpdatedEvent) *TaskEvent {
+func NewTaskUpdatedEvent(taskID int64, jobID string, userAddress string, changes *TaskUpdatedEvent) *TaskEvent {
 	changes.TaskID = taskID
 	changes.JobID = jobID
-	changes.UserID = userID
+	changes.UserAddress = userAddress
 
-	return NewTaskEvent(TaskEventTypeUpdated, taskID, jobID, userID, changes)
+	return NewTaskEvent(TaskEventTypeUpdated, taskID, jobID, userAddress, changes)
 }
 
 // NewTaskStatusChangedEvent creates a new task status changed event
-func NewTaskStatusChangedEvent(taskID int64, jobID string, oldStatus, newStatus string, userID string, taskNumber *int64, txHash *string) *TaskEvent {
+func NewTaskStatusChangedEvent(taskID int64, jobID string, oldStatus, newStatus string, userAddress string, taskNumber *int64, txHash *string) *TaskEvent {
 	changes := &TaskStatusChangedEvent{
 		TaskID:               taskID,
 		JobID:                jobID,
@@ -117,21 +117,21 @@ func NewTaskStatusChangedEvent(taskID int64, jobID string, oldStatus, newStatus 
 		NewStatus:            newStatus,
 		TaskNumber:           taskNumber,
 		TaskSubmissionTxHash: txHash,
-		UserID:               userID,
+		UserAddress:          userAddress,
 	}
 
-	return NewTaskEvent(TaskEventTypeStatusChanged, taskID, jobID, userID, changes)
+	return NewTaskEvent(TaskEventTypeStatusChanged, taskID, jobID, userAddress, changes)
 }
 
 // NewTaskFeeUpdatedEvent creates a new task fee updated event
-func NewTaskFeeUpdatedEvent(taskID int64, jobID string, oldFee, newFee float64, userID string) *TaskEvent {
+func NewTaskFeeUpdatedEvent(taskID int64, jobID string, oldFee, newFee float64, userAddress string) *TaskEvent {
 	changes := &TaskFeeUpdatedEvent{
 		TaskID: taskID,
 		JobID:  jobID,
 		OldFee: oldFee,
 		NewFee: newFee,
-		UserID: userID,
+		UserAddress: userAddress,
 	}
 
-	return NewTaskEvent(TaskEventTypeFeeUpdated, taskID, jobID, userID, changes)
+	return NewTaskEvent(TaskEventTypeFeeUpdated, taskID, jobID, userAddress, changes)
 }

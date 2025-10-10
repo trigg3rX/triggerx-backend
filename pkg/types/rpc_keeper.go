@@ -1,7 +1,6 @@
 package types
 
 import (
-	"math/big"
 	"time"
 )
 
@@ -20,7 +19,7 @@ type PerformerActionData struct {
 	BlockWrite    uint64  `json:"block_write"`
 	BandwidthRate float64 `json:"bandwidth_rate"`
 
-	TotalFee           *big.Int      `json:"total_fee"`
+	TotalFee           string       `json:"total_fee"`
 	StaticComplexity   float64       `json:"static_complexity"`
 	DynamicComplexity  float64       `json:"dynamic_complexity"`
 	ComplexityIndex    float64       `json:"complexity_index"`

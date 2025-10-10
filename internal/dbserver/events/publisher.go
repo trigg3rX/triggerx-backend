@@ -28,13 +28,13 @@ func NewPublisher(hub *websocket.Hub, logger logging.Logger) *Publisher {
 }
 
 // PublishTaskCreated publishes a task created event
-func (p *Publisher) PublishTaskCreated(taskID int64, jobID string, taskDefinitionID int64, isImua bool, userID string) {
-	event := NewTaskCreatedEvent(taskID, jobID, taskDefinitionID, isImua, userID)
+func (p *Publisher) PublishTaskCreated(taskID int64, jobID string, taskDefinitionID int64, isImua bool, userAddress string) {
+	event := NewTaskCreatedEvent(taskID, jobID, taskDefinitionID, isImua, userAddress)
 
 	taskEventData := &websocket.TaskEventData{
 		TaskID:    taskID,
 		JobID:     jobID,
-		UserID:    userID,
+		UserAddress:    userAddress,
 		Changes:   event.Changes,
 		Timestamp: event.Timestamp,
 	}
@@ -44,13 +44,13 @@ func (p *Publisher) PublishTaskCreated(taskID int64, jobID string, taskDefinitio
 }
 
 // PublishTaskUpdated publishes a task updated event
-func (p *Publisher) PublishTaskUpdated(taskID int64, jobID string, userID string, changes *TaskUpdatedEvent) {
-	event := NewTaskUpdatedEvent(taskID, jobID, userID, changes)
+func (p *Publisher) PublishTaskUpdated(taskID int64, jobID string, userAddress string, changes *TaskUpdatedEvent) {
+	event := NewTaskUpdatedEvent(taskID, jobID, userAddress, changes)
 
 	taskEventData := &websocket.TaskEventData{
 		TaskID:    taskID,
 		JobID:     jobID,
-		UserID:    userID,
+		UserAddress:    userAddress,
 		Changes:   event.Changes,
 		Timestamp: event.Timestamp,
 	}
@@ -60,13 +60,13 @@ func (p *Publisher) PublishTaskUpdated(taskID int64, jobID string, userID string
 }
 
 // PublishTaskStatusChanged publishes a task status changed event
-func (p *Publisher) PublishTaskStatusChanged(taskID int64, jobID string, oldStatus, newStatus string, userID string, taskNumber *int64, txHash *string) {
-	event := NewTaskStatusChangedEvent(taskID, jobID, oldStatus, newStatus, userID, taskNumber, txHash)
+func (p *Publisher) PublishTaskStatusChanged(taskID int64, jobID string, oldStatus, newStatus string, userAddress string, taskNumber *int64, txHash *string) {
+	event := NewTaskStatusChangedEvent(taskID, jobID, oldStatus, newStatus, userAddress, taskNumber, txHash)
 
 	taskEventData := &websocket.TaskEventData{
 		TaskID:    taskID,
 		JobID:     jobID,
-		UserID:    userID,
+		UserAddress:    userAddress,
 		Changes:   event.Changes,
 		Timestamp: event.Timestamp,
 	}
@@ -76,13 +76,13 @@ func (p *Publisher) PublishTaskStatusChanged(taskID int64, jobID string, oldStat
 }
 
 // PublishTaskFeeUpdated publishes a task fee updated event
-func (p *Publisher) PublishTaskFeeUpdated(taskID int64, jobID string, oldFee, newFee float64, userID string) {
-	event := NewTaskFeeUpdatedEvent(taskID, jobID, oldFee, newFee, userID)
+func (p *Publisher) PublishTaskFeeUpdated(taskID int64, jobID string, oldFee, newFee float64, userAddress string) {
+	event := NewTaskFeeUpdatedEvent(taskID, jobID, oldFee, newFee, userAddress)
 
 	taskEventData := &websocket.TaskEventData{
 		TaskID:    taskID,
 		JobID:     jobID,
-		UserID:    userID,
+		UserAddress:    userAddress,
 		Changes:   event.Changes,
 		Timestamp: event.Timestamp,
 	}

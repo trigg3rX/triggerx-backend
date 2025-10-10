@@ -14,11 +14,12 @@ const (
 type JobStatus string
 
 const (
-	JobStatusCreated JobStatus = "created"
-	JobStatusRunning JobStatus = "running"
-	JobStatusCompleted JobStatus = "completed"
-	JobStatusFailed JobStatus = "failed"
-	JobStatusExpired JobStatus = "expired"
+	JobStatusCreated JobStatus = "created"      // Created but not yet scheduled
+	JobStatusRunning JobStatus = "running"      // Scheduled and running
+	JobStatusCompleted JobStatus = "completed"  // Ran with atleast one task completed
+	JobStatusFailed JobStatus = "failed"        // Ran with no successful task execution
+	JobStatusExpired JobStatus = "expired"      // Ran with no triggers in time frame
+	JobStatusDeleted JobStatus = "deleted"      // Deleted by user (was active when deleted)
 )
 
 type JobChainStatus int
@@ -74,6 +75,7 @@ const (
 	ConditionJobValueSourceTypeStatic ConditionJobValueSourceType = "static"
 )
 
+// Ethereum, Base, Arbitrum, Optimism are supported testnet for Jobs
 type SupportedTestnetChainID string
 
 const (
@@ -83,11 +85,17 @@ const (
 	SupportedTestnetChainIDOptimismSepolia SupportedTestnetChainID = "11155420"
 )
 
+// Ethereum and Base have the architecture deployed and Arbitrum is supported mainnet for Jobs
 type SupportedMainnetChainID string
 
 const (
 	SupportedMainnetChainIDEthereum SupportedMainnetChainID = "1"
 	SupportedMainnetChainIDBase SupportedMainnetChainID = "8453"
 	SupportedMainnetChainIDArbitrum SupportedMainnetChainID = "42161"
-	SupportedMainnetChainIDOptimism SupportedMainnetChainID = "10"
+	// SupportedMainnetChainIDOptimism SupportedMainnetChainID = "10"
 )
+
+// Store the values as strings as the caluculations are done in Wei
+const TG_PER_ETH = "1000"
+const WEI_PER_ETH = "1000000000000000000" // 1e18
+const WEI_PER_TG = "1000000000000000" // 1e15

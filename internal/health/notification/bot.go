@@ -39,6 +39,7 @@ func (b *NotificationBot) Start() {
 
 	updates := b.tgBotAPI.GetUpdatesChan(u)
 
+
 	go func() {
 		for update := range updates {
 			if update.Message == nil {
@@ -46,6 +47,7 @@ func (b *NotificationBot) Start() {
 			}
 
 			if update.Message.IsCommand() && update.Message.Command() == "start" {
+				b.logger.Infof("Received start command from chat ID: %d", update.Message.Chat.ID)
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Enter Your Operator address (Keeper address)")
 				_, err := b.tgBotAPI.Send(msg)
 				if err != nil {
@@ -68,6 +70,7 @@ func (b *NotificationBot) Start() {
 				b.logger.Errorf("Failed to send message: %v", err)
 			}
 
+			b.logger.Infof("Sending test message to chat ID: %d", chatID)
 			err = b.SendTGMessage(chatID, "This is a test message to confirm your chat ID works!")
 			if err != nil {
 				b.logger.Errorf("Failed to send message: %v", err)

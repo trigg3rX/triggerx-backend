@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -19,94 +18,20 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	gootel "go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-const TraceIDHeader = "X-Trace-ID"
-const TraceIDKey = "trace_id"
-
-// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
-func InitTracer() (func(context.Context) error, error) {
-	exporter, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpoint(config.GetOTTempoEndpoint()),
-		otlptracehttp.WithInsecure(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	tp := trace.NewTracerProvider(
-		trace.WithBatcher(exporter),
-		trace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("triggerx-backend"),
-		)),
-	)
-	gootel.SetTracerProvider(tp)
-	return tp.Shutdown, nil
-}
-
-// TraceMiddleware injects a trace ID into the Gin context and response headers
-func TraceMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Get the global tracer
-		tracer := gootel.Tracer("triggerx-backend")
-
-		// Start a new span for this request
-		ctx, span := tracer.Start(c.Request.Context(), c.Request.URL.Path)
-		defer span.End()
-
-		// Set span attributes
-		span.SetAttributes(
-			semconv.HTTPMethodKey.String(c.Request.Method),
-			semconv.HTTPURLKey.String(c.Request.URL.String()),
-			semconv.HTTPUserAgentKey.String(c.Request.UserAgent()),
-		)
-
-		// Get or generate trace ID
-		traceID := c.GetHeader(TraceIDHeader)
-		if traceID == "" {
-			// Extract trace ID from span context
-			spanContext := span.SpanContext()
-			if spanContext.HasTraceID() {
-				traceID = spanContext.TraceID().String()
-			} else {
-				traceID = uuid.New().String()
-			}
-		}
-
-		// Store in context
-		c.Set(TraceIDKey, traceID)
-		c.Header(TraceIDHeader, traceID)
-
-		// Update request context with span context
-		c.Request = c.Request.WithContext(ctx)
-
-		// Process request
-		c.Next()
-
-		// Set response status on span
-		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(c.Writer.Status()))
-	}
-}
-
 type Server struct {
-	router             *gin.Engine
-	datastore          datastore.DatastoreService
-	logger             logging.Logger
-	rateLimiter        *middleware.RateLimiter
-	apiKeyAuth         *middleware.ApiKeyAuth
-	validator          *middleware.Validator
-	redisClient        *redis.Client
-	notificationConfig handlers.NotificationConfig
+	router      *gin.Engine
+	datastore   datastore.DatastoreService
+	logger      logging.Logger
+	rateLimiter *middleware.RateLimiter
+	apiKeyAuth  *middleware.ApiKeyAuth
+	validator   *middleware.Validator
+	redisClient *redis.Client
 
 	// WebSocket components
 	hub                 *websocket.Hub
-	// wsConnectionManager *websocket.WebSocketConnectionManager
+	wsConnectionManager *websocket.WebSocketConnectionManager
 }
 
 func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Server {
@@ -115,7 +40,7 @@ func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Ser
 	}
 
 	// Initialize OpenTelemetry tracer
-	_, err := InitTracer()
+	_, err := middleware.InitTracer()
 	if err != nil {
 		logger.Errorf("Failed to initialize OpenTelemetry tracer: %v", err)
 	}
@@ -123,8 +48,8 @@ func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Ser
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	// Add tracing middleware before all others
-	router.Use(TraceMiddleware())
+	// Add tracing middleware before all others - creates traced logger for each request
+	router.Use(middleware.TraceMiddleware(logger))
 
 	// Start metrics collection
 	metrics.StartMetricsCollection()
@@ -206,11 +131,6 @@ func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Ser
 		rateLimiter: rateLimiter,
 		redisClient: redisClient,
 		validator:   middleware.NewValidator(logger),
-		notificationConfig: handlers.NotificationConfig{
-			EmailFrom:     config.GetEmailUser(),
-			EmailPassword: config.GetEmailPassword(),
-			BotToken:      config.GetBotToken(),
-		},
 	}
 
 	apiKeyRepo := datastore.ApiKey()
@@ -221,18 +141,18 @@ func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Ser
 	s.hub = websocket.NewHub(logger)
 
 	// Create the task repository with publisher for WebSocket events
-	// taskRepo := datastore.Task()
+	taskRepo := datastore.Task()
 
 	// Create and set the initial data handler for the hub
-	// initialDataHandler := handlers.NewInitialDataHandler(taskRepo, logger)
-	// s.hub.SetInitialDataCallback(initialDataHandler.HandleInitialData)
-	// s.wsConnectionManager = websocket.NewWebSocketConnectionManager(
-	// 	websocket.NewWebSocketUpgrader(logger),
-	// 	websocket.NewWebSocketAuthMiddleware(s.apiKeyAuth, logger),
-	// 	websocket.NewWebSocketRateLimiter(s.rateLimiter, 100, logger), // Max 100 connections per IP
-	// 	s.hub,
-	// 	logger,
-	// )
+	initialDataHandler := handlers.NewInitialDataHandler(taskRepo, logger)
+	s.hub.SetInitialDataCallback(initialDataHandler.HandleInitialData)
+	s.wsConnectionManager = websocket.NewWebSocketConnectionManager(
+		websocket.NewWebSocketUpgrader(logger),
+		websocket.NewWebSocketAuthMiddleware(s.apiKeyAuth, logger),
+		websocket.NewWebSocketRateLimiter(s.rateLimiter, 100, logger), // Max 100 connections per IP
+		s.hub,
+		logger,
+	)
 
 	// Start WebSocket hub
 	go s.hub.Run()
@@ -259,7 +179,12 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	apiKeyRepo := s.datastore.ApiKey()
 
 	// Create handler with WebSocket-enabled repository
-	handler := handlers.NewHandler(s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher,
+	handler := handlers.NewHandler(
+		s.logger,
+		dockerExecutor,
+		s.hub,
+		publisher,
+		s.datastore,
 		jobRepo,
 		timeJobRepo,
 		eventJobRepo,
@@ -272,66 +197,62 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	router.GET("/status", handler.HealthCheck)
 
 	api := router.Group("/api")
-
-	// Health check route - no authentication required
-	// api.GET("/health", handler.HealthCheck)
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
 	// Public routes
-	// protected.GET("/users/:address", handler.GetUserDataByAddress)
-	// protected.POST("/users/email", handler.StoreUserEmail)
+	protected.GET("/users/:address", handler.GetUserDataByAddress)
+	protected.POST("/users/email", handler.StoreUserEmail)
 
 	// Apply validation middleware to routes that need it
-	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
-	// protected.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
-	// protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
-	// api.GET("/jobs/time", handler.GetTimeBasedTasks)
-	// api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
+	protected.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
+	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
+	api.GET("/jobs/time", handler.GetTimeBasedTasks)
+	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	// api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
-	// api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
-	// protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
-	// protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
-	// protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
-	// protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
-	// api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
+	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
+	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
+	protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
+	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
+	protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
+	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
-	// api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
-	// api.GET("/tasks/:id", handler.GetTaskDataByID)
+	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
+	api.GET("/tasks/:id", handler.GetTaskDataByID)
 	// api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
-	// api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
-	// api.PUT("/tasks/execution/:id", handler.UpdateTaskExecutionData)
-	// api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
+	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
+	api.PUT("/tasks/execution/:id", handler.UpdateTaskExecutionData)
+	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
-	// api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
-	// api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
+	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
+	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
 	// api.GET("/keepers/performers", handler.GetPerformers)
-	// api.GET("/keepers/:id", handler.GetKeeperData)
-	// api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
-	// api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
-	// api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
-	// api.GET("/keepers/:id/points", handler.GetKeeperPoints)
+	api.GET("/keepers/:id", handler.GetKeeperData)
+	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
+	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
+	api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
+	api.GET("/keepers/:id/points", handler.GetKeeperPoints)
 
-	// protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
-	// protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
-	// protected.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
-	// api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
+	protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
+	protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
+	protected.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
+	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
 	api.GET("/fees", handler.GetTaskFees)
 
-	// api.POST("/keepers/update-chat-id", handler.UpdateKeeperChatID)
-	// api.GET("/keepers/com-info/:id", handler.GetKeeperCommunicationInfo)
+	api.POST("/keepers/update-chat-id", handler.UpdateKeeperChatID)
+	api.GET("/keepers/com-info/:id", handler.GetKeeperCommunicationInfo)
 	api.POST("/claim-fund", handler.ClaimFund)
 
 	// Admin routes
-	// admin := protected.Group("/admin")
-	// admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
-	// admin.PUT("/api-keys/:key", handler.UpdateApiKey)
-	// admin.DELETE("/api-keys/:key", handler.DeleteApiKey)
-	// admin.GET("/api-keys/:owner", handler.GetApiKeysByOwner)
+	admin := protected.Group("/admin")
+	admin.POST("/api-keys", s.validator.GinMiddleware(), handler.CreateApiKey)
+	admin.PUT("/api-keys/:key", handler.DeleteApiKey)
+	admin.GET("/api-keys/:owner", handler.GetApiKeysByOwner)
 
 	// Keeper routes
 	keeper := protected.Group("/keeper")
@@ -339,10 +260,10 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	// Keeper-specific routes will be added here later
 
 	// WebSocket routes
-	// wsHandler := handlers.NewWebSocketHandler(s.wsConnectionManager, s.logger)
-	// api.GET("/ws/tasks", wsHandler.HandleWebSocketConnection)
-	// api.GET("/ws/stats", wsHandler.GetWebSocketStats)
-	// api.GET("/ws/health", wsHandler.GetWebSocketHealth)
+	wsHandler := handlers.NewWebSocketHandler(s.wsConnectionManager, s.logger)
+	api.GET("/ws/tasks", wsHandler.HandleWebSocketConnection)
+	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
+	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
 
 }
 

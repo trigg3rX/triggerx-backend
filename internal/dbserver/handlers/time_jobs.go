@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"math/big"
 	"net/http"
 	"time"
 
@@ -16,11 +14,9 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	pollLookAhead := config.GetPollingLookAhead()
 	lookAheadTime := time.Now().Add(time.Duration(pollLookAhead) * time.Second)
 
-	ctx := context.Background()
-
 	// Get all time jobs
 	trackDBOp := metrics.TrackDBOperation("read", "time_jobs")
-	allTimeJobs, err := h.timeJobRepository.List(ctx)
+	allTimeJobs, err := h.timeJobRepository.List(c.Request.Context())
 	trackDBOp(err)
 	if err != nil {
 		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time jobs: %v", err)
@@ -49,14 +45,14 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 			JobID:                timeJob.JobID,
 			TaskDefinitionID:     timeJob.TaskDefinitionID,
 			CreatedAt:            time.Now().UTC(),
-			TaskOpxPredictedCost: *big.NewInt(0),
-			TaskOpxActualCost:    *big.NewInt(0),
+			TaskOpxPredictedCost: "0",
+			TaskOpxActualCost:    "0",
 			IsSuccessful:         false,
 			IsAccepted:           false,
 		}
 
 		trackDBOp = metrics.TrackDBOperation("create", "task_data")
-		err := h.taskRepository.Create(ctx, newTask)
+		err := h.taskRepository.Create(c.Request.Context(), newTask)
 		trackDBOp(err)
 		if err != nil {
 			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
@@ -64,16 +60,16 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		}
 
 		// Get created task to get ID
-		task, err := h.taskRepository.GetByID(ctx, newTask.TaskID)
+		task, err := h.taskRepository.GetByID(c.Request.Context(), newTask.TaskID)
 		if err != nil || task == nil {
 			continue
 		}
 
 		// Update job with new task ID
-		job, err := h.jobRepository.GetByID(ctx, &timeJob.JobID)
+		job, err := h.jobRepository.GetByID(c.Request.Context(), timeJob.JobID)
 		if err == nil && job != nil {
 			job.TaskIDs = append(job.TaskIDs, task.TaskID)
-			err = h.jobRepository.Update(ctx, job)
+			err = h.jobRepository.Update(c.Request.Context(), job)
 			if err != nil {
 				h.logger.Errorf("[GetTimeBasedJobs] Error updating job with new task ID: %v", err)
 				continue
@@ -92,7 +88,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 			CronExpression:         timeJob.CronExpression,
 			SpecificSchedule:       timeJob.SpecificSchedule,
 			TaskTargetData: types.TaskTargetData{
-				JobID:                     types.NewBigInt(&timeJob.JobID),
+				JobID:                     timeJob.JobID,
 				TaskDefinitionID:          timeJob.TaskDefinitionID,
 				TargetChainID:             timeJob.TargetChainID,
 				TargetContractAddress:     timeJob.TargetContractAddress,
@@ -106,6 +102,6 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		tasks = append(tasks, scheduleData)
 	}
 
-	h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
+	// h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
 	c.JSON(http.StatusOK, tasks)
 }

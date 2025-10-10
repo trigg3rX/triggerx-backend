@@ -47,13 +47,18 @@ func main() {
 	)
 
 	dbConfig := &connection.Config{
-		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
-		Keyspace:    "triggerx",
-		Consistency: gocql.Quorum,
-		Timeout:     10 * time.Second,
-		Retries:     3,
-		ConnectWait: 5 * time.Second,
-		RetryConfig: retry.DefaultRetryConfig(),
+		Hosts:               []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
+		Keyspace:            "triggerx",
+		Consistency:         gocql.Quorum,
+		Timeout:             10 * time.Second,
+		Retries:             3,
+		ConnectWait:         5 * time.Second,
+		RetryConfig:         retry.DefaultRetryConfig(),
+		ProtoVersion:        4,
+		HealthCheckInterval: 15 * time.Second,
+		SocketKeepalive:     15 * time.Second,
+		MaxPreparedStmts:    1000,
+		DefaultIdempotence:  true,
 	}
 
 	datastore, err := datastore.NewService(dbConfig, logger)

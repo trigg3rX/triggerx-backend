@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -30,16 +29,16 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 
 	// Get the job data from storage
 	s.workersMutex.RLock()
-	jobData, exists := s.jobDataStore[notification.JobID.String()]
+	jobData, exists := s.jobDataStore[notification.JobID]
 	s.workersMutex.RUnlock()
 
 	if !exists || jobData == nil {
 		s.logger.Error("Job data not found", "job_id", notification.JobID)
-		return fmt.Errorf("job data not found for job %d", notification.JobID)
+		return fmt.Errorf("job data not found for job %s", notification.JobID)
 	}
 
 	createTaskRequest := types.CreateTaskDataRequest{
-		JobID:            jobData.JobID.ToBigInt(),
+		JobID:            jobData.JobID,
 		TaskDefinitionID: jobData.TaskDefinitionID,
 	}
 
@@ -68,7 +67,7 @@ func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker
 			"job_id", notification.JobID,
 			"duration", duration,
 		)
-		metrics.TrackActionExecution(fmt.Sprintf("%d", notification.JobID), duration)
+		metrics.TrackActionExecution(notification.JobID, duration)
 	} else {
 		s.logger.Error("Failed to submit triggered task to task dispatcher",
 			"job_id", notification.JobID,
@@ -156,7 +155,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 }
 
 // submitTaskToTaskManager submits the task to Task Dispatcher via RPC
-func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID *big.Int) (bool, error) {
+func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.SchedulerTaskRequest, taskID string) (bool, error) {
 	startTime := time.Now()
 
 	// Create retry configuration for task dispatcher calls

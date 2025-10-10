@@ -69,6 +69,11 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		Retries:     3,
 		ConnectWait: 5 * time.Second,
 		RetryConfig: retry.DefaultRetryConfig(),
+		ProtoVersion: 4,
+		SocketKeepalive: 10 * time.Second,
+		MaxPreparedStmts: 10000,
+		DefaultIdempotence: true,
+		HealthCheckInterval: 10 * time.Second,
 	}
 	datastore, err := datastore.NewService(dbCfg, logger)
 	if err != nil {

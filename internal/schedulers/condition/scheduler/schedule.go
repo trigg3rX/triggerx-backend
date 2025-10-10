@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -40,7 +39,7 @@ func (s *ConditionBasedScheduler) ScheduleJob(jobData *types.ScheduleConditionJo
 	// Update metrics
 	metrics.TrackJobScheduled()
 	metrics.UpdateActiveWorkers(len(s.eventWorkers) + len(s.conditionWorkers))
-	metrics.TrackWorkerStart(fmt.Sprintf("%d", jobData.JobID))
+	metrics.TrackWorkerStart(jobData.JobID)
 
 	return nil
 }
@@ -50,7 +49,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(jobData *types.ScheduleCo
 	// Check if job is already scheduled
 	if _, exists := s.conditionWorkers[jobData.JobID]; exists {
 		metrics.TrackCriticalError("duplicate_job_schedule")
-		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
+		return fmt.Errorf("job %s is already scheduled", jobData.JobID)
 	}
 
 	// Validate condition type
@@ -74,7 +73,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(jobData *types.ScheduleCo
 
 	// Store worker and job data separately for Redis integration
 	s.conditionWorkers[jobData.JobID] = conditionWorker
-	s.jobDataStore[jobData.JobID.String()] = jobData
+	s.jobDataStore[jobData.JobID] = jobData
 
 	// Start worker
 	go conditionWorker.Start()
@@ -104,7 +103,7 @@ func (s *ConditionBasedScheduler) scheduleEventJob(jobData *types.ScheduleCondit
 	// Check if job is already scheduled
 	if _, exists := s.eventWorkers[jobData.JobID]; exists {
 		metrics.TrackCriticalError("duplicate_job_schedule")
-		return fmt.Errorf("job %d is already scheduled", jobData.JobID)
+		return fmt.Errorf("job %s is already scheduled", jobData.JobID)
 	}
 
 	// Check if chain client is available
@@ -128,7 +127,7 @@ func (s *ConditionBasedScheduler) scheduleEventJob(jobData *types.ScheduleCondit
 
 	// Store worker and job data separately for Redis integration
 	s.eventWorkers[jobData.JobID] = eventWorker
-	s.jobDataStore[jobData.JobID.String()] = jobData
+	s.jobDataStore[jobData.JobID] = jobData
 
 	// Start worker
 	go eventWorker.Start()
@@ -197,7 +196,7 @@ func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.Event
 }
 
 // cleanupJobData removes job data from the scheduler's store when a worker stops
-func (s *ConditionBasedScheduler) cleanupJobData(jobID *big.Int) error {
+func (s *ConditionBasedScheduler) cleanupJobData(jobID string) error {
 	s.notificationMutex.Lock()
 	defer s.notificationMutex.Unlock()
 
@@ -205,14 +204,14 @@ func (s *ConditionBasedScheduler) cleanupJobData(jobID *big.Int) error {
 	defer s.workersMutex.Unlock()
 
 	// Remove job data from store
-	delete(s.jobDataStore, jobID.String())
+	delete(s.jobDataStore, jobID)
 
 	s.logger.Debug("Cleaned up job data from store", "job_id", jobID)
 	return nil
 }
 
 // UnscheduleJob stops and removes a condition worker
-func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
+func (s *ConditionBasedScheduler) UnscheduleJob(jobID string) error {
 	s.notificationMutex.Lock()
 	defer s.notificationMutex.Unlock()
 
@@ -220,17 +219,17 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 	defer s.workersMutex.Unlock()
 
 	// Try condition workers first
-	if conditionWorker, exists := s.conditionWorkers[types.NewBigInt(jobID)]; exists {
+	if conditionWorker, exists := s.conditionWorkers[jobID]; exists {
 		conditionWorker.Stop()
-		delete(s.conditionWorkers, types.NewBigInt(jobID))
-		delete(s.jobDataStore, jobID.String()) // Clean up job data
-	} else if eventWorker, exists := s.eventWorkers[types.NewBigInt(jobID)]; exists {
+		delete(s.conditionWorkers, jobID)
+		delete(s.jobDataStore, jobID) // Clean up job data
+	} else if eventWorker, exists := s.eventWorkers[jobID]; exists {
 		eventWorker.Stop()
-		delete(s.eventWorkers, types.NewBigInt(jobID))
-		delete(s.jobDataStore, jobID.String()) // Clean up job data
+		delete(s.eventWorkers, jobID)
+		delete(s.jobDataStore, jobID) // Clean up job data
 	} else {
 		metrics.TrackCriticalError("job_not_found")
-		return fmt.Errorf("job %d is not scheduled", jobID)
+		return fmt.Errorf("job %s is not scheduled", jobID)
 	}
 
 	// Update active workers count

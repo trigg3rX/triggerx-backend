@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
-	"math/big"
+
 	"strings"
 	"time"
 
@@ -50,7 +50,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	task.TaskAttesterIDs = attesterIds
 	task.ExecutionTxHash = data.ExecutionTxHash
 	task.ExecutionTimestamp = data.ExecutionTimestamp
-	task.TaskOpxActualCost = *big.NewInt(int64(data.TaskOpxCost))
+	task.TaskOpxActualCost = data.TaskOpxCost
 	task.ProofOfTask = data.ProofOfTask
 
 	if err := dm.taskRepo.Update(ctx, task); err != nil {
@@ -89,10 +89,10 @@ func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
 }
 
 // GetUserEmailByJobID returns the user's email_id for a given job_id
-func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
+func (dm *DatabaseClient) GetUserEmailByJobID(jobID string) (string, error) {
 	ctx := context.Background()
 
-	// Get job to find user_id
+	// Get job to find user_address
 	job, err := dm.jobRepo.GetByID(ctx, jobID)
 	if err != nil {
 		dm.logger.Errorf("Failed to get job %v: %v", jobID, err)
@@ -103,23 +103,21 @@ func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
 		return "", fmt.Errorf("user not found for job ID %v", jobID)
 	}
 
-	userID := job.UserID
-
 	// Get user to find email
-	user, err := dm.userRepo.GetByID(ctx, userID)
+	user, err := dm.userRepo.GetByID(ctx, job.UserAddress)
 	if err != nil {
-		dm.logger.Errorf("Failed to get user %d: %v", userID, err)
+		dm.logger.Errorf("Failed to get user %s: %v", job.UserAddress, err)
 		return "", err
 	}
 
 	if user == nil {
-		return "", fmt.Errorf("email not found for user ID %d", userID)
+		return "", fmt.Errorf("email not found for user address %s", job.UserAddress)
 	}
 
 	return user.EmailID, nil
 }
 
-// GetUserEmailByTaskID returns the user's email_id for a given task_id
+// GetUserEmailByTaskID returns the user's email for a given task_id
 func (dm *DatabaseClient) GetUserEmailByTaskID(taskID int64) (string, error) {
 	ctx := context.Background()
 
@@ -134,7 +132,7 @@ func (dm *DatabaseClient) GetUserEmailByTaskID(taskID int64) (string, error) {
 		return "", fmt.Errorf("job not found for task ID %d", taskID)
 	}
 
-	return dm.GetUserEmailByJobID(&task.JobID)
+	return dm.GetUserEmailByJobID(task.JobID)
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
@@ -176,16 +174,16 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		}
 
 		// Update keeper points and attested tasks
-		rewardsBoosterFloat, _ := keeper.RewardsBooster.Float64()
-		pointsToAdd := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost))
-		keeper.KeeperPoints.Add(&keeper.KeeperPoints, pointsToAdd)
+		rewardsBoosterFloat := keeper.RewardsBooster
+		pointsToAdd := types.Add(keeper.KeeperPoints, types.Mul(rewardsBoosterFloat, data.TaskOpxCost))
+		keeper.KeeperPoints = pointsToAdd
 
 		// Update attested tasks count (handle nil pointer)
-		if keeper.NoAttestedTasks == nil {
+		if keeper.NoAttestedTasks == 0 {
 			noAttestedTasks := int64(1)
-			keeper.NoAttestedTasks = &noAttestedTasks
+			keeper.NoAttestedTasks = noAttestedTasks
 		} else {
-			*keeper.NoAttestedTasks = *keeper.NoAttestedTasks + 1
+			keeper.NoAttestedTasks = keeper.NoAttestedTasks + 1
 		}
 
 		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeper.KeeperPoints, keeper.RewardsBooster, keeper.NoAttestedTasks)
@@ -215,21 +213,21 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
 	}
 
-	rewardsBoosterFloat, _ := performerKeeper.RewardsBooster.Float64()
+	rewardsBoosterFloat := performerKeeper.RewardsBooster
 	if data.IsAccepted {
-		pointsToAdd := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost))
-		performerKeeper.KeeperPoints.Add(&performerKeeper.KeeperPoints, pointsToAdd)
+		pointsToAdd := types.Add(performerKeeper.KeeperPoints, types.Mul(rewardsBoosterFloat, data.TaskOpxCost))
+		performerKeeper.KeeperPoints = pointsToAdd
 	} else {
-		pointsToSubtract := big.NewInt(int64(rewardsBoosterFloat * data.TaskOpxCost * 0.1))
-		performerKeeper.KeeperPoints.Sub(&performerKeeper.KeeperPoints, pointsToSubtract)
+		pointsToSubtract := types.Add(performerKeeper.KeeperPoints, types.Mul(rewardsBoosterFloat, data.TaskOpxCost))
+		performerKeeper.KeeperPoints = pointsToSubtract
 	}
 
 	// Update executed tasks count (handle nil pointer)
-	if performerKeeper.NoExecutedTasks == nil {
+	if performerKeeper.NoExecutedTasks == 0 {
 		noExecutedTasks := int64(1)
-		performerKeeper.NoExecutedTasks = &noExecutedTasks
+		performerKeeper.NoExecutedTasks = noExecutedTasks
 	} else {
-		*performerKeeper.NoExecutedTasks = *performerKeeper.NoExecutedTasks + 1
+		performerKeeper.NoExecutedTasks = performerKeeper.NoExecutedTasks + 1
 	}
 
 	if err := dm.keeperRepo.Update(ctx, performerKeeper); err != nil {
@@ -238,7 +236,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 
 	// Update the User Points
-	// Get job to find user_id
+	// Get job to find user_address
 	job, err := dm.jobRepo.GetByID(ctx, jobID)
 	if err != nil {
 		dm.logger.Errorf("Failed to get job %d: %v", jobID, err)
@@ -250,40 +248,38 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		return fmt.Errorf("user not found for job ID %v", jobID)
 	}
 
-	userID := job.UserID
-
 	// Get user
-	user, err := dm.userRepo.GetByID(ctx, userID)
+	user, err := dm.userRepo.GetByID(ctx, job.UserAddress)
 	if err != nil {
-		dm.logger.Errorf("Failed to get user %d: %v", userID, err)
+		dm.logger.Errorf("Failed to get user %s: %v", job.UserAddress, err)
 		return err
 	}
 
 	if user == nil {
-		dm.logger.Errorf("User %d not found", userID)
-		return fmt.Errorf("user not found for user ID %d", userID)
+		dm.logger.Errorf("User %s not found", job.UserAddress)
+		return fmt.Errorf("user not found for user address %s", job.UserAddress)
 	}
 
 	user.TotalTasks = user.TotalTasks + 1
-	pointsToAdd := big.NewInt(int64(data.TaskOpxCost))
-	user.OpxConsumed.Add(&user.OpxConsumed, pointsToAdd)
+	pointsToAdd := types.Add(user.OpxConsumed, data.TaskOpxCost)
+	user.OpxConsumed = pointsToAdd
 	user.LastUpdatedAt = time.Now().UTC()
 
 	if err := dm.userRepo.Update(ctx, user); err != nil {
-		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
+		dm.logger.Errorf("Failed to update user points for user address %s: %v", job.UserAddress, err)
 		return err
 	}
 
 	// Update job cost actual (we already have the job entity from above)
-	costToAdd := big.NewInt(int64(data.TaskOpxCost))
-	job.JobCostActual.Add(&job.JobCostActual, costToAdd)
+	costToAdd := types.Add(job.JobCostActual, data.TaskOpxCost)
+	job.JobCostActual = costToAdd
 
 	if err := dm.jobRepo.Update(ctx, job); err != nil {
 		dm.logger.Errorf("Failed to update job cost actual for job ID %d: %v", jobID, err)
 		return err
 	}
 
-	dm.logger.Infof("Successfully updated points for user ID %d: added %.2f points", userID, data.TaskOpxCost)
+	dm.logger.Infof("Successfully updated points for user address %s: added %.2f points", job.UserAddress, data.TaskOpxCost)
 	return nil
 }
 
@@ -307,13 +303,13 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
 		}
 
-		if keeper.OperatorID == nil {
+		if keeper.OperatorID == 0 {
 			dm.logger.Errorf("Keeper operator ID is nil for address %s", keeperAddress)
 			return nil, fmt.Errorf("keeper operator ID is nil for address %s", keeperAddress)
 		}
 
-		dm.logger.Infof("Keeper operator ID for address %s: %d", keeperAddress, *keeper.OperatorID)
-		keeperIds = append(keeperIds, *keeper.OperatorID)
+		dm.logger.Infof("Keeper operator ID for address %s: %d", keeperAddress, keeper.OperatorID)
+		keeperIds = append(keeperIds, keeper.OperatorID)
 	}
 	return keeperIds, nil
 }

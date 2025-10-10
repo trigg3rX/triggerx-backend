@@ -57,7 +57,7 @@ func (w *ConditionWorker) checkCondition() error {
 	metrics.TrackConditionEvaluation(evaluationDuration)
 
 	// Track condition check with success status
-	chainID := fmt.Sprintf("%d", w.ConditionWorkerData.JobID) // Using job_id as chain identifier for consistency
+	chainID := w.ConditionWorkerData.JobID // Using job_id as chain identifier for consistency
 	metrics.TrackConditionCheck(chainID, evaluationDuration, satisfied)
 
 	if satisfied {
@@ -79,7 +79,7 @@ func (w *ConditionWorker) checkCondition() error {
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
 			notification := &TriggerNotification{
-				JobID:        w.ConditionWorkerData.JobID.ToBigInt(),
+				JobID:        w.ConditionWorkerData.JobID,
 				TriggerValue: currentValue,
 				TriggeredAt:  time.Now(),
 			}

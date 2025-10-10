@@ -34,9 +34,8 @@ func (rf *repositoryFactory) CreateUserRepository() interfaces.GenericRepository
 		rf.connection,
 		rf.logger,
 		"user_data",
-		"user_id",
+		"user_address",
 	)
-	
 }
 
 // CreateJobRepository returns the job data repository

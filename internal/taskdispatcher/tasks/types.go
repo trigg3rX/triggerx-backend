@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"math/big"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -26,7 +25,7 @@ const (
 
 // TaskStreamData represents task information for Redis-managed task streams
 type TaskStreamData struct {
-	JobID            *big.Int  `json:"job_id"`
+	JobID            string    `json:"job_id"`
 	TaskDefinitionID int       `json:"task_definition_id"`
 	CreatedAt        time.Time `json:"created_at"`
 	IsMainnet        bool      `json:"is_mainnet"`

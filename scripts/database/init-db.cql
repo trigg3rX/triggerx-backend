@@ -17,30 +17,28 @@ DROP TABLE IF EXISTS condition_job_data;
 DROP TABLE IF EXISTS task_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS apikeys;
-DROP TABLE IF EXISTS orbit_chain_data;
 
 -- Create User_data table (without counters)
 CREATE TABLE IF NOT EXISTS user_data (
-    user_id bigint,
     user_address text,
     email_id text,
-    job_ids set<varint>,
-    opx_consumed varint,
+    job_ids set<text>,
+    opx_consumed text,
     total_jobs bigint,
     total_tasks bigint,
     created_at timestamp,
     last_updated_at timestamp,
-    PRIMARY KEY (user_id)
+    PRIMARY KEY (user_address)
 );
 
 -- Create Job_data table    
 CREATE TABLE IF NOT EXISTS job_data (
-    job_id varint,
+    job_id text,
     job_title text,
     task_definition_id int,
     created_chain_id text,
-    user_id bigint,
-    link_job_id varint,
+    user_address text,
+    link_job_id text,
     chain_status int,
     timezone text,
     is_imua boolean,
@@ -48,8 +46,8 @@ CREATE TABLE IF NOT EXISTS job_data (
     time_frame bigint,
     recurring boolean,
     status text,
-    job_cost_prediction varint,
-    job_cost_actual varint,
+    job_cost_prediction text,
+    job_cost_actual text,
     task_ids set<bigint>,
     created_at timestamp,
     updated_at timestamp,
@@ -59,7 +57,7 @@ CREATE TABLE IF NOT EXISTS job_data (
 
 -- Create Time_Job_data table
 CREATE TABLE IF NOT EXISTS time_job_data (
-    job_id varint,
+    job_id text,
     task_definition_id int,
     schedule_type text,
     time_interval bigint,
@@ -81,7 +79,7 @@ CREATE TABLE IF NOT EXISTS time_job_data (
 
 -- Create Event_Job_data table
 CREATE TABLE IF NOT EXISTS event_job_data (
-    job_id varint,
+    job_id text,
     task_definition_id int,
     recurring boolean,
     trigger_chain_id text,
@@ -104,7 +102,7 @@ CREATE TABLE IF NOT EXISTS event_job_data (
 
 -- Create Condition_Job_data table
 CREATE TABLE IF NOT EXISTS condition_job_data (
-    job_id varint,
+    job_id text,
     task_definition_id int,
     recurring boolean,
     condition_type text,
@@ -130,11 +128,11 @@ CREATE TABLE IF NOT EXISTS condition_job_data (
 CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
     task_number bigint,
-    job_id varint,
+    job_id text,
     task_definition_id int,
     created_at timestamp,
-    task_opx_predicted_cost varint,
-    task_opx_actual_cost varint,
+    task_opx_predicted_cost text,
+    task_opx_actual_cost text,
     execution_timestamp timestamp,
     execution_tx_hash text,
     task_performer_id bigint,
@@ -155,7 +153,7 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     consensus_address text,
     registered_tx text,
     operator_id bigint,
-    voting_power varint,
+    voting_power text,
     whitelisted boolean,
     registered boolean,
     online boolean,
@@ -164,11 +162,11 @@ CREATE TABLE IF NOT EXISTS keeper_data (
     public_ip text,
     chat_id bigint,
     email_id text,
-    rewards_booster varint,
+    rewards_booster text,
     no_executed_tasks bigint,
     no_attested_tasks bigint,
     uptime bigint,
-    keeper_points varint,
+    keeper_points text,
     last_checked_in timestamp,
     PRIMARY KEY (keeper_address)
 );
@@ -186,19 +184,6 @@ CREATE TABLE IF NOT EXISTS apikeys (
     PRIMARY KEY (key)
 );
 
--- Create Orbit_Chain_data table
-CREATE TABLE IF NOT EXISTS orbit_chain_data (
-    chain_id bigint,
-    chain_name text,
-    rpc_url text,
-    user_address text,
-    deployment_status text,
-    orbit_chain_address text,
-    created_at timestamp,
-    updated_at timestamp,
-    PRIMARY KEY (chain_id)
-);
-
 -- Drop existing indexes if they exist
 DROP INDEX IF EXISTS triggerx.job_data_status_idx;
 DROP INDEX IF EXISTS triggerx.job_data_created_at_idx;
@@ -206,19 +191,13 @@ DROP INDEX IF EXISTS triggerx.job_data_updated_at_idx;
 DROP INDEX IF EXISTS triggerx.job_data_last_executed_at_idx;
 DROP INDEX IF EXISTS triggerx.job_data_timezone_idx;
 
-DROP INDEX IF EXISTS triggerx.time_job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.time_job_data_updated_at_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_last_executed_at_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_next_execution_timestamp_idx;
 DROP INDEX IF EXISTS triggerx.time_job_data_timezone_idx;
 
-DROP INDEX IF EXISTS triggerx.event_job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.event_job_data_updated_at_idx;
 DROP INDEX IF EXISTS triggerx.event_job_data_last_executed_at_idx;
 DROP INDEX IF EXISTS triggerx.event_job_data_timezone_idx;
 
-DROP INDEX IF EXISTS triggerx.condition_job_data_created_at_idx;
-DROP INDEX IF EXISTS triggerx.condition_job_data_updated_at_idx;
 DROP INDEX IF EXISTS triggerx.condition_job_data_last_executed_at_idx;
 DROP INDEX IF EXISTS triggerx.condition_job_data_timezone_idx;
 

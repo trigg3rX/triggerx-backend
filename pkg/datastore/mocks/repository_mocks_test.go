@@ -3,7 +3,6 @@ package mocks
 import (
 	"context"
 	"errors"
-	"math/big"
 	"testing"
 	"time"
 
@@ -675,11 +674,10 @@ func TestMockGenericRepositoryWithRealTypes(t *testing.T) {
 		mockRepo := &MockGenericRepository[types.UserDataEntity]{}
 		ctx := context.Background()
 		user := &types.UserDataEntity{
-			UserID:        123,
 			UserAddress:   "0x123456789",
 			EmailID:       "test@example.com",
-			JobIDs:        []big.Int{},
-			OpxConsumed:   *big.NewInt(0),
+			JobIDs:        []string{},
+			OpxConsumed:   "0",
 			TotalJobs:     0,
 			TotalTasks:    0,
 			CreatedAt:     time.Now(),
@@ -702,12 +700,12 @@ func TestMockGenericRepositoryWithRealTypes(t *testing.T) {
 		mockRepo := &MockGenericRepository[types.JobDataEntity]{}
 		ctx := context.Background()
 		job := &types.JobDataEntity{
-			JobID:             *big.NewInt(123),
+			JobID:             "123",
 			JobTitle:          "test job",
 			TaskDefinitionID:  1,
 			CreatedChainID:    "chain1",
-			UserID:            123,
-			LinkJobID:         *big.NewInt(0),
+			UserAddress:       "0x123456789",
+			LinkJobID:         "0",
 			ChainStatus:       1,
 			Timezone:          "UTC",
 			IsImua:            false,
@@ -715,8 +713,8 @@ func TestMockGenericRepositoryWithRealTypes(t *testing.T) {
 			TimeFrame:         3600,
 			Recurring:         false,
 			Status:            "active",
-			JobCostPrediction: *big.NewInt(100),
-			JobCostActual:     *big.NewInt(0),
+			JobCostPrediction: "100",
+			JobCostActual:     "10",
 			TaskIDs:           []int64{},
 			CreatedAt:         time.Now(),
 			UpdatedAt:         time.Now(),

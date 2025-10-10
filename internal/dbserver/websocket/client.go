@@ -16,7 +16,7 @@ type Client struct {
 	Hub      *Hub
 	Send     chan *Message
 	Rooms    map[string]bool // Track which rooms this client is subscribed to
-	UserID   string          // Associated user ID for authentication
+	UserAddress   string          // Associated user address for authentication
 	APIKey   string          // API key for authentication
 	LastPing time.Time
 	mu       sync.RWMutex
@@ -267,12 +267,12 @@ func (c *Client) validateRoomAccess(room string, data map[string]interface{}) bo
 
 	// Check if it's a user-specific room
 	if room[:5] == "user:" {
-		userID, ok := data["user_id"].(string)
-		if !ok || userID == "" {
+		userAddress, ok := data["user_address"].(string)
+		if !ok || userAddress == "" {
 			return false
 		}
-		// For now, allow access if user_id matches (in production, validate against API key)
-		return c.UserID == userID
+		// For now, allow access if user_address matches (in production, validate against API key)
+		return c.UserAddress == userAddress
 	}
 
 	// For job and task rooms, allow access (in production, validate against API key permissions)

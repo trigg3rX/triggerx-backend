@@ -5,9 +5,8 @@ import (
 )
 
 // Target Data for all task types
-// DEVNOTE: I separated this from all schedule data types to accomodate multiple target calls on same trigger in future
 type TaskTargetData struct {
-	JobID                     *BigInt `json:"job_id"`
+	JobID                     string `json:"job_id"`
 	TaskID                    int64    `json:"task_id"`
 	TaskDefinitionID          int      `json:"task_definition_id"`
 	TargetChainID             string   `json:"target_chain_id"`
@@ -22,17 +21,17 @@ type TaskTargetData struct {
 
 // Monitoring Data for even and condition workers
 type EventWorkerData struct {
-	JobID                  *BigInt  `json:"job_id"`
+	JobID                  string  `json:"job_id"`
 	ExpirationTime         time.Time `json:"expiration_time"`
 	Recurring              bool      `json:"recurring"`
 	TriggerChainID         string    `json:"trigger_chain_id"`
 	TriggerContractAddress string    `json:"trigger_contract_address"`
 	TriggerEvent           string    `json:"trigger_event"`
-	EventFilterParaName    string    `json:"event_filter_para_name"`
-	EventFilterValue       string    `json:"event_filter_value"`
+	TriggerEventFilterParaName    string    `json:"trigger_event_filter_para_name"`
+	TriggerEventFilterValue       string    `json:"trigger_event_filter_value"`
 }
 type ConditionWorkerData struct {
-	JobID            *BigInt  `json:"job_id"`
+	JobID            string  `json:"job_id"`
 	ExpirationTime   time.Time `json:"expiration_time"`
 	Recurring        bool      `json:"recurring"`
 	ConditionType    string    `json:"condition_type"`
@@ -60,7 +59,7 @@ type ScheduleTimeTaskData struct {
 
 // Data to pass to condition scheduler
 type ScheduleConditionJobData struct {
-	JobID               *BigInt            `json:"job_id"`
+	JobID               string            `json:"job_id"`
 	TaskDefinitionID    int                 `json:"task_definition_id"`
 	LastExecutedAt      time.Time           `json:"last_executed_at"`
 	TaskTargetData      TaskTargetData      `json:"task_target_data"`
@@ -145,7 +144,7 @@ type TaskSubmissionData struct {
 	AttesterIds          []int64
 	ExecutionTxHash      string
 	ExecutionTimestamp   time.Time
-	TaskOpxCost          float64
+	TaskOpxCost          string
 	ProofOfTask          string
 	Data                 string
 	ConvertedArguments   []interface{}

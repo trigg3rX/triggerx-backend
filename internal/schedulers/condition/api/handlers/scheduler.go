@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"math/big"
+
 	"net/http"
 	"time"
 
@@ -79,12 +80,10 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 	traceID := getTraceID(c)
 	h.logger.Info("[UnscheduleJob] trace_id=" + traceID + " - Unscheduling job")
 
-	jobIDStr := c.Param("job_id")
-	jobID := new(big.Int)
-	_, ok := jobID.SetString(jobIDStr, 10)
-	if !ok {
-		err := fmt.Errorf("invalid job ID: %s", jobIDStr)
-		h.logger.Error("Invalid job ID", "job_id", jobIDStr, "error", err)
+	jobID := c.Param("job_id")
+	if jobID == "" {
+		err := fmt.Errorf("invalid job ID: %s", jobID)
+		h.logger.Error("Invalid job ID", "job_id", jobID, "error", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
 			"message":   "Invalid job ID",

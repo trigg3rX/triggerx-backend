@@ -3,7 +3,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -37,7 +36,7 @@ func (w *ConditionWorker) Start() {
 	w.IsActive = true
 	w.Mutex.Unlock()
 
-	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+	metrics.TrackWorkerStart(w.ConditionWorkerData.JobID)
 
 	w.Logger.Info("Starting condition worker",
 		"job_id", w.ConditionWorkerData.JobID,
@@ -95,10 +94,10 @@ func (w *ConditionWorker) Stop() {
 		w.Cancel()
 		w.IsActive = false
 
-		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.ConditionWorkerData.JobID))
+		metrics.TrackWorkerStop(w.ConditionWorkerData.JobID)
 
 		if w.CleanupCallback != nil {
-			if err := w.CleanupCallback(w.ConditionWorkerData.JobID.ToBigInt()); err != nil {
+			if err := w.CleanupCallback(w.ConditionWorkerData.JobID); err != nil {
 				w.Logger.Error("Failed to clean up job data",
 					"job_id", w.ConditionWorkerData.JobID,
 					"error", err)

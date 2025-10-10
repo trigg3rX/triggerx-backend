@@ -1,11 +1,6 @@
 package scheduler
 
-import (
-	"fmt"
-	"math/big"
-
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
-)
+import "fmt"
 
 // GetStats returns current scheduler statistics
 func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
@@ -139,13 +134,13 @@ func (s *ConditionBasedScheduler) GetStats() map[string]interface{} {
 }
 
 // GetConditionWorkerStats returns statistics for a specific condition worker
-func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID *big.Int) (map[string]interface{}, error) {
+func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID string) (map[string]interface{}, error) {
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 
-	worker, exists := s.conditionWorkers[types.NewBigInt(jobID)]
+	worker, exists := s.conditionWorkers[jobID]
 	if !exists {
-		return nil, fmt.Errorf("condition worker for job %d not found", jobID)
+		return nil, fmt.Errorf("condition worker for job %s not found", jobID)
 	}
 
 	return map[string]interface{}{
@@ -165,13 +160,13 @@ func (s *ConditionBasedScheduler) GetConditionWorkerStats(jobID *big.Int) (map[s
 }
 
 // GetEventWorkerStats returns statistics for a specific event worker
-func (s *ConditionBasedScheduler) GetEventWorkerStats(jobID *big.Int) (map[string]interface{}, error) {
+func (s *ConditionBasedScheduler) GetEventWorkerStats(jobID string) (map[string]interface{}, error) {
 	s.workersMutex.RLock()
 	defer s.workersMutex.RUnlock()
 
-	worker, exists := s.eventWorkers[types.NewBigInt(jobID)]
+	worker, exists := s.eventWorkers[jobID]
 	if !exists {
-		return nil, fmt.Errorf("event worker for job %d not found", jobID)
+		return nil, fmt.Errorf("event worker for job %s not found", jobID)
 	}
 
 	return map[string]interface{}{
@@ -196,7 +191,7 @@ func (s *ConditionBasedScheduler) GetAllWorkerStats() map[string]interface{} {
 
 	// Get condition worker stats
 	for jobID, worker := range s.conditionWorkers {
-		conditionStats[fmt.Sprintf("job_%d", jobID)] = map[string]interface{}{
+		conditionStats[fmt.Sprintf("job_%s", jobID)] = map[string]interface{}{
 			"job_id":              worker.ConditionWorkerData.JobID,
 			"is_running":          worker.IsRunning(),
 			"condition_type":      worker.ConditionWorkerData.ConditionType,
@@ -208,7 +203,7 @@ func (s *ConditionBasedScheduler) GetAllWorkerStats() map[string]interface{} {
 
 	// Get event worker stats
 	for jobID, worker := range s.eventWorkers {
-		eventStats[fmt.Sprintf("job_%d", jobID)] = map[string]interface{}{
+		eventStats[fmt.Sprintf("job_%s", jobID)] = map[string]interface{}{
 			"job_id":               worker.EventWorkerData.JobID,
 			"is_running":           worker.IsRunning(),
 			"trigger_chain_id":     worker.EventWorkerData.TriggerChainID,

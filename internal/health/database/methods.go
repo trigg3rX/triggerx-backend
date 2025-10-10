@@ -39,8 +39,8 @@ func (dm *DatabaseManager) UpdateKeeperStatus(
 
 	keeperData := &types.KeeperDataEntity{
 		KeeperAddress:    strings.ToLower(keeperAddress),
-		Online:           &online,
-		Uptime:           &uptimePtr,
+		Online:           online,
+		Uptime:           uptimePtr,
 		LastCheckedIn:    timestamp,
 		ConsensusAddress: strings.ToLower(consensusAddress),
 		Version:          version,
@@ -75,23 +75,23 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Heal
 	for _, keeper := range allKeepers {
 		// Helper functions to safely dereference pointers
 		online := false
-		if keeper.Online != nil {
-			online = *keeper.Online
+		if keeper.Online {
+			online = keeper.Online
 		}
 
 		uptime := int64(0)
-		if keeper.Uptime != nil {
-			uptime = *keeper.Uptime
+		if keeper.Uptime != 0 {
+			uptime = keeper.Uptime
 		}
 
 		operatorID := int64(0)
-		if keeper.OperatorID != nil {
-			operatorID = *keeper.OperatorID
+		if keeper.OperatorID != 0 {
+			operatorID = keeper.OperatorID
 		}
 
 		onImua := false
-		if keeper.OnImua != nil {
-			onImua = *keeper.OnImua
+		if keeper.OnImua {
+			onImua = keeper.OnImua
 		}
 
 		keepers = append(keepers, types.HealthKeeperInfo{
@@ -125,7 +125,7 @@ func (dm *DatabaseManager) UpdateAllKeepersStatus(ctx context.Context, onlineKee
 		// Prepare partial update with only the fields we want to modify
 		update := &types.KeeperDataEntity{
 			KeeperAddress: keeper.KeeperAddress,
-			Uptime:        &uptime,
+			Uptime:        uptime,
 			LastCheckedIn: now,
 		}
 
@@ -149,7 +149,7 @@ func (dm *DatabaseManager) UpdateKeeperChatID(ctx context.Context, keeperAddress
 	if err != nil {
 		return err
 	}
-	keeper.ChatID = &chatID
+	keeper.ChatID = chatID
 	if err := dm.keeperRepo.Update(ctx, keeper); err != nil {
 		return err
 	}
@@ -164,8 +164,8 @@ func (dm *DatabaseManager) GetKeeperChatInfo(ctx context.Context, keeperAddress 
 	}
 
 	chatID := int64(0)
-	if keeper.ChatID != nil {
-		chatID = *keeper.ChatID
+	if keeper.ChatID != 0 {
+		chatID = keeper.ChatID
 	}
 
 	return chatID, keeper.EmailID, nil

@@ -1,231 +1,113 @@
 package handlers
 
 import (
-	"context"
-	"math/big"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/errors"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// Helper functions to convert Entity types to API types
-func convertJobDataEntityToAPI(entity *types.JobDataEntity) types.JobDataAPI {
-	return types.JobDataAPI{
-		JobID:             &entity.JobID,
-		JobTitle:          entity.JobTitle,
-		TaskDefinitionID:  entity.TaskDefinitionID,
-		UserID:            entity.UserID,
-		CreatedChainID:    entity.CreatedChainID,
-		LinkJobID:         &entity.LinkJobID,
-		ChainStatus:       entity.ChainStatus,
-		TimeFrame:         entity.TimeFrame,
-		Recurring:         entity.Recurring,
-		Status:            entity.Status,
-		JobCostPrediction: 0, // Convert from big.Int if needed
-		JobCostActual:     0, // Convert from big.Int if needed
-		TaskIDs:           entity.TaskIDs,
-		CreatedAt:         entity.CreatedAt,
-		UpdatedAt:         entity.UpdatedAt,
-		LastExecutedAt:    entity.LastExecutedAt,
-	}
-}
-
-func convertTimeJobDataEntityToAPI(entity *types.TimeJobDataEntity) *types.TimeJobDataAPI {
-	if entity == nil {
-		return nil
-	}
-	return &types.TimeJobDataAPI{
-		JobID:                     &entity.JobID,
-		TaskDefinitionID:          entity.TaskDefinitionID,
-		ScheduleType:              entity.ScheduleType,
-		TimeInterval:              entity.TimeInterval,
-		CronExpression:            entity.CronExpression,
-		SpecificSchedule:          entity.SpecificSchedule,
-		NextExecutionTimestamp:    entity.NextExecutionTimestamp,
-		TargetChainID:             entity.TargetChainID,
-		TargetContractAddress:     entity.TargetContractAddress,
-		TargetFunction:            entity.TargetFunction,
-		ABI:                       entity.ABI,
-		ArgType:                   entity.ArgType,
-		Arguments:                 entity.Arguments,
-		DynamicArgumentsScriptUrl: entity.DynamicArgumentsScriptURL,
-		IsCompleted:               entity.IsCompleted,
-		LastExecutedAt:            entity.LastExecutedAt,
-		ExpirationTime:            entity.ExpirationTime,
-	}
-}
-
-func convertEventJobDataEntityToAPI(entity *types.EventJobDataEntity) *types.EventJobDataAPI {
-	if entity == nil {
-		return nil
-	}
-	return &types.EventJobDataAPI{
-		JobID:                     &entity.JobID,
-		TaskDefinitionID:          entity.TaskDefinitionID,
-		Recurring:                 entity.Recurring,
-		TriggerChainID:            entity.TriggerChainID,
-		TriggerContractAddress:    entity.TriggerContractAddress,
-		TriggerEvent:              entity.TriggerEvent,
-		EventFilterParaName:       entity.TriggerEventFilterParaName,
-		EventFilterValue:          entity.TriggerEventFilterValue,
-		TargetChainID:             entity.TargetChainID,
-		TargetContractAddress:     entity.TargetContractAddress,
-		TargetFunction:            entity.TargetFunction,
-		ABI:                       entity.ABI,
-		ArgType:                   entity.ArgType,
-		Arguments:                 entity.Arguments,
-		DynamicArgumentsScriptUrl: entity.DynamicArgumentsScriptURL,
-		IsCompleted:               entity.IsCompleted,
-		LastExecutedAt:            entity.LastExecutedAt,
-		ExpirationTime:            entity.ExpirationTime,
-	}
-}
-
-func convertConditionJobDataEntityToAPI(entity *types.ConditionJobDataEntity) *types.ConditionJobDataAPI {
-	if entity == nil {
-		return nil
-	}
-	return &types.ConditionJobDataAPI{
-		JobID:                     &entity.JobID,
-		TaskDefinitionID:          entity.TaskDefinitionID,
-		Recurring:                 entity.Recurring,
-		ConditionType:             entity.ConditionType,
-		UpperLimit:                entity.UpperLimit,
-		LowerLimit:                entity.LowerLimit,
-		ValueSourceType:           entity.ValueSourceType,
-		ValueSourceUrl:            entity.ValueSourceURL,
-		SelectedKeyRoute:          entity.SelectedKeyRoute,
-		TargetChainID:             entity.TargetChainID,
-		TargetContractAddress:     entity.TargetContractAddress,
-		TargetFunction:            entity.TargetFunction,
-		ABI:                       entity.ABI,
-		ArgType:                   entity.ArgType,
-		Arguments:                 entity.Arguments,
-		DynamicArgumentsScriptUrl: entity.DynamicArgumentsScriptURL,
-		IsCompleted:               entity.IsCompleted,
-		LastExecutedAt:            entity.LastExecutedAt,
-		ExpirationTime:            entity.ExpirationTime,
-	}
-}
-
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetJobsByUserAddress] trace_id=%s - Retrieving jobs by user address", traceID)
+	logger := h.getLogger(c)
 	userAddress := strings.ToLower(c.Param("user_address"))
-	if userAddress == "" {
-		h.logger.Error("[GetJobsByUserAddress] Invalid user address")
+	if types.IsValidEthAddress(userAddress) {
+		logger.Errorf("%s: %s", errors.ErrInvalidRequestBody, "Invalid user address")
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid user address",
-			"code":  "INVALID_ADDRESS",
+			"error": errors.ErrInvalidRequestBody,
 		})
 		return
 	}
+	logger.Debugf("GET [GetJobsByUserAddress] For user address: %s", userAddress)
 
-	h.logger.Infof("[GetJobsByUserAddress] Retrieving jobs for user address: %s", userAddress)
-
-	ctx := context.Background()
-
-	// First get user ID and job IDs
+	// First get user Address and job IDs
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	user, err := h.userRepository.GetByNonID(ctx, "user_address", userAddress)
+	userData, err := h.userRepository.GetByID(c.Request.Context(), userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetJobsByUserAddress] Error getting user data for address %s: %v", userAddress, err)
+		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 		c.JSON(http.StatusOK, gin.H{
-			"message": "No jobs found for this user",
-			"jobs":    []types.JobResponse{},
+			"message": errors.ErrDBOperationFailed,
 		})
 		return
 	}
 
-	if user == nil || len(user.JobIDs) == 0 {
+	if userData == nil || len(userData.JobIDs) == 0 {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "No jobs found for this user",
-			"jobs":    []types.JobResponse{},
+			"message": errors.ErrDBRecordNotFound,
+			"jobs":    []types.CompleteJobDataDTO{},
 		})
 		return
 	}
 
-	userID := user.UserID
-	jobIDs := user.JobIDs
-
-	var jobs []types.JobResponse
+	var jobs []types.CompleteJobDataDTO
 	var hasErrors bool
 
-	for _, jobID := range jobIDs {
+	for _, jobID := range userData.JobIDs {
 		// Get basic job data
 		trackDBOp = metrics.TrackDBOperation("read", "job_data")
-		jobData, err := h.jobRepository.GetByID(ctx, &jobID)
+		jobData, err := h.jobRepository.GetByID(c.Request.Context(), jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Errorf("[GetJobsByUserAddress] Error getting job data for jobID %v: %v", &jobID, err)
+			logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 			hasErrors = true
 			continue
 		}
 
 		if jobData == nil {
-			h.logger.Errorf("[GetJobsByUserAddress] Job data not found for jobID %v", &jobID)
+			logger.Errorf("%s: %v", errors.ErrDBRecordNotFound, err)
 			hasErrors = true
 			continue
 		}
-
-		jobResponse := types.JobResponse{JobData: convertJobDataEntityToAPI(jobData)}
+		jobResponse := types.CompleteJobDataDTO{JobDataDTO: *types.ConvertJobDataEntityToDTO(jobData)}
 
 		// Check task_definition_id to determine job type
 		switch jobData.TaskDefinitionID {
 		case 1, 2:
 			// Time-based job
 			trackDBOp = metrics.TrackDBOperation("read", "time_job")
-			timeJobData, err := h.timeJobRepository.GetByNonID(ctx, "job_id", &jobID)
+			timeJobData, err := h.timeJobRepository.GetByID(c.Request.Context(), jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error getting time job data for jobID %v: %v", &jobID, err)
+				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.TimeJobData = convertTimeJobDataEntityToAPI(timeJobData)
+			jobResponse.TimeJobDataDTO = *types.ConvertTimeJobDataEntityToDTO(timeJobData)
 
 		case 3, 4:
 			// Event-based job
 			trackDBOp = metrics.TrackDBOperation("read", "event_job")
-			eventJobData, err := h.eventJobRepository.GetByNonID(ctx, "job_id", &jobID)
+			eventJobData, err := h.eventJobRepository.GetByID(c.Request.Context(), jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error getting event job data for jobID %v: %v", &jobID, err)
+				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.EventJobData = convertEventJobDataEntityToAPI(eventJobData)
+			jobResponse.EventJobDataDTO = *types.ConvertEventJobDataEntityToDTO(eventJobData)
 
 		case 5, 6:
 			// Condition-based job
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
-			conditionJobData, err := h.conditionJobRepository.GetByNonID(ctx, "job_id", &jobID)
+			conditionJobData, err := h.conditionJobRepository.GetByID(c.Request.Context(), jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddress] Error getting condition job data for jobID %v: %v", &jobID, err)
+				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.ConditionJobData = convertConditionJobDataEntityToAPI(conditionJobData)
+			jobResponse.ConditionJobDataDTO = *types.ConvertConditionJobDataEntityToDTO(conditionJobData)
 
 		default:
-			h.logger.Errorf("[GetJobsByUserAddress] Unknown task definition ID %d for jobID %v", jobData.TaskDefinitionID, &jobID)
+			logger.Errorf("Unknown task definition ID %d for jobID %v", jobData.TaskDefinitionID, jobID)
 			hasErrors = true
 			continue
 		}
 
 		jobs = append(jobs, jobResponse)
-	}
-
-	h.logger.Infof("[GetJobsByUserAddress] Found %d jobs for user ID %d", len(jobs), userID)
-
-	var jobsAPI []types.JobResponseAPI
-	for _, job := range jobs {
-		jobsAPI = append(jobsAPI, types.ConvertJobResponseToAPI(job))
 	}
 
 	// If we have both jobs and errors, return a partial success response
@@ -240,59 +122,52 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	// If we have only errors and no jobs, return an error response
 	if len(jobs) == 0 && hasErrors {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve jobs",
-			"code":  "JOB_RETRIEVAL_ERROR",
+			"error": errors.ErrDBOperationFailed,
 		})
 		return
 	}
 
-	// If we have only jobs and no errors, return success
+	logger.Infof("Successfully retrieved %d jobs for user address %s", len(jobs), userAddress)
 	c.JSON(http.StatusOK, gin.H{
-		"jobs": jobsAPI,
+		"jobs": jobs,
 	})
 }
 
 // GetTaskFeesByJobID handles GET /jobs/:job_id/task-fees
 func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTaskFeesByJobID] trace_id=%s - Getting task fees by job ID", traceID)
-
-	jobIDParam := c.Param("job_id")
-	if jobIDParam == "" {
-		h.logger.Error("[GetTaskFeesByJobID] job_id param missing")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id param missing"})
+	logger := h.getLogger(c)
+	jobID := c.Param("job_id")
+	if types.IsValidJobID(jobID) {
+		logger.Errorf("%s: %s", errors.ErrInvalidRequestBody, "Invalid job ID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
-
-	jobID := new(big.Int)
-	_, ok := jobID.SetString(jobIDParam, 10)
-	if !ok {
-		h.logger.Errorf("[GetTaskFeesByJobID] invalid job_id: %v", jobIDParam)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
-		return
-	}
-
-	ctx := context.Background()
+	logger.Debugf("GET [GetTaskFeesByJobID] For job ID: %s", jobID)
 
 	// Get job data
-	job, err := h.jobRepository.GetByID(ctx, jobID)
+	trackDBOp := metrics.TrackDBOperation("read", "job_data")
+	job, err := h.jobRepository.GetByID(c.Request.Context(), jobID)
+	trackDBOp(err)
 	if err != nil || job == nil {
-		h.logger.Errorf("[GetTaskFeesByJobID] failed to get job: %v", err)
+		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
 		return
 	}
 
 	// Get task fees from task_ids
-	var taskFees []map[string]interface{}
+	var taskFees []types.GetTaskFeesByJobIDResponse
 	for _, taskID := range job.TaskIDs {
-		task, err := h.taskRepository.GetByID(ctx, taskID)
+		trackDBOp = metrics.TrackDBOperation("read", "task_data")
+		task, err := h.taskRepository.GetByID(c.Request.Context(), taskID)
+		trackDBOp(err)
 		if err != nil || task == nil {
+			trackDBOp(err)
 			continue
 		}
-		taskFees = append(taskFees, map[string]interface{}{
-			"task_id":                 task.TaskID,
-			"task_opx_predicted_cost": task.TaskOpxPredictedCost,
-			"task_opx_actual_cost":    task.TaskOpxActualCost,
+		taskFees = append(taskFees, types.GetTaskFeesByJobIDResponse{
+			TaskID:               task.TaskID,
+			TaskOpxPredictedCost: task.TaskOpxPredictedCost,
+			TaskOpxActualCost:    task.TaskOpxActualCost,
 		})
 	}
 
@@ -301,27 +176,27 @@ func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
 
 // GetJobsByApiKey handles GET /jobs/by-apikey
 func (h *Handler) GetJobsByApiKey(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetJobsByApiKey] trace_id=%s - Retrieving jobs by API key", traceID)
+	logger := h.getLogger(c)
+	logger.Debugf("GET [GetJobsByApiKey] Retrieving jobs by API key")
 	apiKey := c.GetHeader("X-Api-Key")
 	if apiKey == "" {
-		h.logger.Error("[GetJobsByApiKey] Missing X-Api-Key header")
+		logger.Errorf("Missing X-Api-Key header")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing X-Api-Key header"})
 		return
 	}
 
-	ctx := context.Background()
-
-	apiKeyData, err := h.apiKeysRepository.GetByNonID(ctx, "key", apiKey)
+	trackDBOp := metrics.TrackDBOperation("read", "api_key_data")
+	apiKeyData, err := h.apiKeysRepository.GetByID(c.Request.Context(), apiKey)
+	trackDBOp(err)
 	if err != nil || apiKeyData == nil {
-		h.logger.Errorf("[GetJobsByApiKey] Invalid API key: %v", err)
+		logger.Errorf("Invalid API key: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
 		return
 	}
 
 	userAddress := apiKeyData.Owner
 	if userAddress == "" {
-		h.logger.Error("[GetJobsByApiKey] No owner found for API key")
+		logger.Errorf("No owner found for API key")
 		c.JSON(http.StatusNotFound, gin.H{"error": "No owner found for API key"})
 		return
 	}
@@ -333,28 +208,20 @@ func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 
 // GetJobDataByJobID handles GET /jobs/:job_id
 func (h *Handler) GetJobDataByJobID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetJobDataByJobID] trace_id=%s - Retrieving job data by job ID", traceID)
-
-	jobIDParam := c.Param("job_id")
-	if jobIDParam == "" {
-		h.logger.Error("[GetJobDataByJobID] job_id param missing")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id param missing"})
+	logger := h.getLogger(c)
+	jobID := c.Param("job_id")
+	if types.IsValidJobID(jobID) {
+		logger.Errorf("%s: %s", errors.ErrInvalidRequestBody, "Invalid job ID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
+	logger.Debugf("GET [GetJobDataByJobID] For job ID: %s", c.Param("job_id"))
 
-	jobID := new(big.Int)
-	_, ok := jobID.SetString(jobIDParam, 10)
-	if !ok {
-		h.logger.Errorf("[GetJobDataByJobID] invalid job_id: %v", jobIDParam)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
-		return
-	}
-
-	ctx := context.Background()
-	jobData, err := h.jobRepository.GetByID(ctx, jobID)
+	trackDBOp := metrics.TrackDBOperation("read", "job_data")
+	jobData, err := h.jobRepository.GetByID(c.Request.Context(), jobID)
+	trackDBOp(err)
 	if err != nil || jobData == nil {
-		h.logger.Errorf("[GetJobDataByJobID] failed to get job data: %v", err)
+		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "job not found"})
 		return
 	}
@@ -363,123 +230,108 @@ func (h *Handler) GetJobDataByJobID(c *gin.Context) {
 }
 
 func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetJobsByUserAddressAndChainID] trace_id=%s - Retrieving jobs by user address and created chain id", traceID)
-
+	logger := h.getLogger(c)
 	userAddress := strings.ToLower(c.Param("user_address"))
-	createdChainIDParam := strings.ToLower(c.Param("created_chain_id"))
-
-	if userAddress == "" {
-		h.logger.Error("[GetJobsByUserAddressAndChainID] Invalid user address")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid user address",
-			"code":  "INVALID_ADDRESS",
-		})
+	createdChainID := strings.ToLower(c.Param("created_chain_id"))
+	if types.IsValidEthAddress(userAddress) {	
+		logger.Errorf("Invalid user address")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
-	if createdChainIDParam == "" {
-		h.logger.Error("[GetJobsByUserAddressAndChainID] Invalid created_chain_id")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid created_chain_id",
-			"code":  "INVALID_CREATED_CHAIN_ID",
-		})
+	if types.IsValidChainID(createdChainID) {
+		logger.Errorf("Invalid created_chain_id")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
+	logger.Debugf("GET [GetJobsByUserAddressAndChainID] For user address: %s and created chain ID: %s", userAddress, createdChainID)
 
-	h.logger.Infof("[GetJobsByUserAddressAndChainID] Retrieving jobs for user address: %s and created_chain_id: %s", userAddress, createdChainIDParam)
-
-	ctx := context.Background()
-
-	// First get user ID and job IDs
+	// First get user address and job IDs
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	user, err := h.userRepository.GetByNonID(ctx, "user_address", userAddress)
+	user, err := h.userRepository.GetByNonID(c.Request.Context(), "user_address", userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting user data for address %s: %v", userAddress, err)
+		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 		c.JSON(http.StatusOK, gin.H{
-			"message": "No jobs found for this user",
-			"jobs":    []types.JobResponse{},
+			"message": errors.ErrDBRecordNotFound,
 		})
 		return
 	}
 
 	if user == nil || len(user.JobIDs) == 0 {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "No jobs found for this user",
-			"jobs":    []types.JobResponse{},
+			"message": errors.ErrDBRecordNotFound,
+			"jobs":    []types.CompleteJobDataDTO{},
 		})
 		return
 	}
 
-	jobIDs := user.JobIDs
-
-	var jobs []types.JobResponse
+	var jobs []types.CompleteJobDataDTO
 	var hasErrors bool
 
-	for _, jobID := range jobIDs {
+	for _, jobID := range user.JobIDs {
 		// Get basic job data
 		trackDBOp = metrics.TrackDBOperation("read", "job_data")
-		jobData, err := h.jobRepository.GetByID(ctx, &jobID)
+		jobData, err := h.jobRepository.GetByID(c.Request.Context(), jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting job data for jobID %v: %v", &jobID, err)
+			logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 			hasErrors = true
 			continue
 		}
 
 		if jobData == nil {
-			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Job data not found for jobID %v", &jobID)
+			logger.Errorf("%s: %v", errors.ErrDBRecordNotFound, err)
 			hasErrors = true
 			continue
 		}
 
 		// Filter by created_chain_id
-		if strings.ToLower(jobData.CreatedChainID) != createdChainIDParam {
+		if strings.ToLower(jobData.CreatedChainID) != createdChainID {
 			continue
 		}
 
-		jobResponse := types.JobResponse{JobData: convertJobDataEntityToAPI(jobData)}
+		jobResponse := types.CompleteJobDataDTO{JobDataDTO: *types.ConvertJobDataEntityToDTO(jobData)}
 
 		// Check task_definition_id to determine job type
 		switch jobData.TaskDefinitionID {
 		case 1, 2:
 			// Time-based job
 			trackDBOp = metrics.TrackDBOperation("read", "time_job")
-			timeJobData, err := h.timeJobRepository.GetByNonID(ctx, "job_id", &jobID)
+			timeJobData, err := h.timeJobRepository.GetByNonID(c.Request.Context(), "job_id", jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting time job data for jobID %v: %v", &jobID, err)
+				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.TimeJobData = convertTimeJobDataEntityToAPI(timeJobData)
+			jobResponse.TimeJobDataDTO = *types.ConvertTimeJobDataEntityToDTO(timeJobData)
 
 		case 3, 4:
 			// Event-based job
 			trackDBOp = metrics.TrackDBOperation("read", "event_job")
-			eventJobData, err := h.eventJobRepository.GetByNonID(ctx, "job_id", &jobID)
+			eventJobData, err := h.eventJobRepository.GetByNonID(c.Request.Context(), "job_id", jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting event job data for jobID %v: %v", &jobID, err)
+				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.EventJobData = convertEventJobDataEntityToAPI(eventJobData)
+			jobResponse.EventJobDataDTO = *types.ConvertEventJobDataEntityToDTO(eventJobData)
 
 		case 5, 6:
 			// Condition-based job
 			trackDBOp = metrics.TrackDBOperation("read", "condition_job")
-			conditionJobData, err := h.conditionJobRepository.GetByNonID(ctx, "job_id", &jobID)
+			conditionJobData, err := h.conditionJobRepository.GetByNonID(c.Request.Context(), "job_id", jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Errorf("[GetJobsByUserAddressAndChainID] Error getting condition job data for jobID %v: %v", &jobID, err)
+				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
 				hasErrors = true
 				continue
 			}
-			jobResponse.ConditionJobData = convertConditionJobDataEntityToAPI(conditionJobData)
+			jobResponse.ConditionJobDataDTO = *types.ConvertConditionJobDataEntityToDTO(conditionJobData)
 
 		default:
-			h.logger.Errorf("[GetJobsByUserAddressAndChainID] Unknown task definition ID %d for jobID %v", jobData.TaskDefinitionID, &jobID)
+			logger.Errorf("Unknown task definition ID %d for jobID %v", jobData.TaskDefinitionID, jobID)
 			hasErrors = true
 			continue
 		}
@@ -487,16 +339,11 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 		jobs = append(jobs, jobResponse)
 	}
 
-	var jobsAPI []types.JobResponseAPI
-	for _, job := range jobs {
-		jobsAPI = append(jobsAPI, types.ConvertJobResponseToAPI(job))
-	}
-
 	// If we have both jobs and errors, return a partial success response
 	if len(jobs) > 0 && hasErrors {
 		c.JSON(http.StatusPartialContent, gin.H{
 			"message": "Some jobs were retrieved successfully, but there were errors with others",
-			"jobs":    jobsAPI,
+			"jobs":    jobs,
 		})
 		return
 	}
@@ -504,7 +351,7 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 	// If we have only errors and no jobs, return an error response
 	if len(jobs) == 0 && hasErrors {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve jobs",
+			"error": errors.ErrDBOperationFailed,
 			"code":  "JOB_RETRIEVAL_ERROR",
 		})
 		return
@@ -512,13 +359,6 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 
 	// If we have only jobs and no errors, return success
 	c.JSON(http.StatusOK, gin.H{
-		"jobs": jobsAPI,
+		"jobs": jobs,
 	})
 }
-
-// parseInt64 is a helper to parse int64 from string
-// func parseInt64(s string) (int64, error) {
-// 	var i int64
-// 	_, err := fmt.Sscan(s, &i)
-// 	return i, err
-// }

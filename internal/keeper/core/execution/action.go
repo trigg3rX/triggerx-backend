@@ -102,10 +102,13 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		return types.PerformerActionData{}, fmt.Errorf("failed to parse execution contract ABI: %v", err)
 	}
 
-	// Convert *BigInt to *big.Int for ABI packing
+	// Convert string to *big.Int for ABI packing
 	var jobIDBigInt *big.Int
-	if targetData.JobID != nil {
-		jobIDBigInt = targetData.JobID.ToBigInt()
+	if targetData.JobID != "" {
+		jobIDBigInt = new(big.Int)
+		if _, ok := jobIDBigInt.SetString(targetData.JobID, 10); !ok {
+			return types.PerformerActionData{}, fmt.Errorf("invalid job ID: %s", targetData.JobID)
+		}
 	} else {
 		jobIDBigInt = big.NewInt(0)
 	}
@@ -153,7 +156,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		BlockRead:          result.Stats.BlockRead,
 		BlockWrite:         result.Stats.BlockWrite,
 		BandwidthRate:      result.Stats.BandwidthRate,
-		TotalFee:           result.Stats.TotalCost,
+		TotalFee:           result.Stats.TotalCost.String(),
 		StaticComplexity:   result.Stats.StaticComplexity,
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),

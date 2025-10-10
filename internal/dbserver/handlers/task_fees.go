@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+
 	"net/http"
 	"strings"
 	"sync"
@@ -11,9 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func (h *Handler) CalculateTaskFees(ipfsURLs string) (*big.Int, error) {
+func (h *Handler) CalculateTaskFees(ipfsURLs string, logger logging.Logger) (*big.Int, error) {
 	if ipfsURLs == "" {
 		return big.NewInt(0), fmt.Errorf("missing IPFS URLs")
 	}
@@ -36,12 +38,12 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (*big.Int, error) {
 			// Use the Execute method directly which handles all the Docker-in-Docker compatibility
 			result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10)
 			if err != nil {
-				h.logger.Errorf("Error executing code: %v", err)
+				logger.Errorf("Error executing code: %v", err)
 				return
 			}
 
 			if !result.Success {
-				h.logger.Errorf("Code execution failed: %v", result.Error)
+				logger.Errorf("Code execution failed: %v", result.Error)
 				return
 			}
 
@@ -57,13 +59,13 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string) (*big.Int, error) {
 }
 
 func (h *Handler) GetTaskFees(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTaskFees] trace_id=%s - Getting task fees", traceID)
+	logger := h.getLogger(c)
+	logger.Debugf("GET [GetTaskFees] Getting task fees")
 	ipfsURLs := c.Query("ipfs_url")
 
-	totalFee, err := h.CalculateTaskFees(ipfsURLs)
+	totalFee, err := h.CalculateTaskFees(ipfsURLs, logger)
 	if err != nil {
-		h.logger.Errorf("[GetTaskFees] Error calculating fees: %v", err)
+		logger.Errorf("Error calculating fees: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

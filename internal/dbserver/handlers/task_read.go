@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"net/http"
 	"strconv"
 
@@ -13,21 +12,22 @@ import (
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTaskDataByID] trace_id=%s - Retrieving task data", traceID)
+	logger := h.getLogger(c)
 	taskID := c.Param("id")
 	if taskID == "" {
-		h.logger.Error("[GetTaskDataByID] No task ID provided")
+		logger.Debugf("No task ID provided")
+		logger.Error("No task ID provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No task ID provided",
 			"code":  "MISSING_TASK_ID",
 		})
 		return
 	}
+	logger.Debugf("GET [GetTaskDataByID] For task with ID: %s", taskID)
 
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
 	if err != nil {
-		h.logger.Errorf("[GetTaskDataByID] Invalid task ID format: %v", err)
+		logger.Errorf("Invalid task ID format: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid task ID format",
 			"code":  "INVALID_TASK_ID",
@@ -35,15 +35,13 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTaskDataByID] Retrieving task data for task ID: %d", taskIDInt)
-
 	ctx := context.Background()
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
 	taskData, err := h.taskRepository.GetByID(ctx, taskIDInt)
 	trackDBOp(err)
 	if err != nil || taskData == nil {
-		h.logger.Errorf("[GetTaskDataByID] Error retrieving task data for taskID %d: %v", taskIDInt, err)
+		logger.Errorf("Error retrieving task data for taskID %d: %v", taskIDInt, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found",
 			"code":  "TASK_NOT_FOUND",
@@ -51,16 +49,16 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTaskDataByID] Successfully retrieved task data for task ID: %d", taskIDInt)
+	logger.Debugf("Successfully retrieved task data for task ID: %d", taskIDInt)
 	c.JSON(http.StatusOK, taskData)
 }
 
 func (h *Handler) GetTasksByJobID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTasksByJobID] trace_id=%s - Retrieving tasks for job", traceID)
-	jobIDStr := c.Param("job_id")
-	if jobIDStr == "" {
-		h.logger.Error("[GetTasksByJobID] No job ID provided")
+	logger := h.getLogger(c)
+	logger.Debugf("GET [GetTasksByJobID] For job with ID: %s", c.Param("job_id"))
+	jobID := c.Param("job_id")
+	if jobID == "" {
+		logger.Error("No job ID provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No job ID provided",
 			"code":  "MISSING_JOB_ID",
@@ -68,13 +66,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	jobID := new(big.Int)
-	if _, ok := jobID.SetString(jobIDStr, 10); !ok {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
-		return
-	}
-
-	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s | %s", jobIDStr, jobID.String())
+	logger.Debugf("GET [GetTasksByJobID] Retrieving tasks for job ID: %s", jobID)
 
 	ctx := context.Background()
 
@@ -83,7 +75,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	job, err := h.jobRepository.GetByID(ctx, jobID)
 	trackDBOp(err)
 	if err != nil || job == nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving job for jobID %s: %v", jobID.String(), err)
+		logger.Errorf("Error retrieving job for jobID %s: %v", jobID, err)
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found",
 			"code":  "JOB_NOT_FOUND",
@@ -129,7 +121,7 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		}
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", len(tasks), jobID.String())
+	logger.Debugf("Successfully retrieved %d tasks for job ID: %s", len(tasks), jobID)
 	c.JSON(http.StatusOK, tasks)
 }
 

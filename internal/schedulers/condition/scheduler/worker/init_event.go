@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -38,7 +37,7 @@ func (w *EventWorker) Start() {
 	w.Mutex.Unlock()
 
 	// Track worker start
-	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.EventWorkerData.JobID))
+	metrics.TrackWorkerStart(w.EventWorkerData.JobID)
 
 	// Get current block number
 	currentBlock, err := w.ChainClient.BlockNumber(w.Ctx)
@@ -55,9 +54,9 @@ func (w *EventWorker) Start() {
 		"event", w.EventWorkerData.TriggerEvent,
 		"current_block", currentBlock,
 		"expiration_time", w.EventWorkerData.ExpirationTime,
-		"filter_enabled", w.EventWorkerData.EventFilterParaName != "" && w.EventWorkerData.EventFilterValue != "",
-		"filter_param", w.EventWorkerData.EventFilterParaName,
-		"filter_value", w.EventWorkerData.EventFilterValue,
+		"filter_enabled", w.EventWorkerData.TriggerEventFilterParaName != "" && w.EventWorkerData.TriggerEventFilterValue != "",
+		"filter_param", w.EventWorkerData.TriggerEventFilterParaName,
+		"filter_value", w.EventWorkerData.TriggerEventFilterValue,
 	)
 
 	contractAddr := common.HexToAddress(w.EventWorkerData.TriggerContractAddress)
@@ -108,11 +107,11 @@ func (w *EventWorker) Stop() {
 		w.IsActive = false
 
 		// Track worker stop
-		metrics.TrackWorkerStop(fmt.Sprintf("%d", w.EventWorkerData.JobID))
+		metrics.TrackWorkerStop(w.EventWorkerData.JobID)
 
 		// Clean up job data from scheduler store
 		if w.CleanupCallback != nil {
-			if err := w.CleanupCallback(w.EventWorkerData.JobID.ToBigInt()); err != nil {
+			if err := w.CleanupCallback(w.EventWorkerData.JobID); err != nil {
 				w.Logger.Error("Failed to clean up job data",
 					"job_id", w.EventWorkerData.JobID,
 					"error", err)

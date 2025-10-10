@@ -254,8 +254,8 @@ func (h *Hub) broadcastTaskEvent(taskEvent *TaskEventData) {
 			"job:" + taskEvent.JobID,
 		}
 
-		if taskEvent.UserID != "" {
-			rooms = append(rooms, "user:"+taskEvent.UserID)
+		if taskEvent.UserAddress != "" {
+			rooms = append(rooms, "user:"+taskEvent.UserAddress)
 		}
 	}
 

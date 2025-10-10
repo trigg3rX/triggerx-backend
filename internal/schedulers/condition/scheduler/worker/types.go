@@ -2,7 +2,6 @@
 package worker
 
 import (
-	"math/big"
 	"time"
 )
 
@@ -48,7 +47,7 @@ type ValueResponse struct {
 
 // ConditionTriggerNotification represents a notification from a worker when a condition is satisfied
 type TriggerNotification struct {
-	JobID         *big.Int  `json:"job_id"`
+	JobID         string    `json:"job_id"`
 	TriggerTxHash string    `json:"trigger_tx_hash"`
 	TriggerValue  float64   `json:"trigger_value"`
 	TriggeredAt   time.Time `json:"triggered_at"`
@@ -58,4 +57,4 @@ type TriggerNotification struct {
 type WorkerTriggerCallback func(notification *TriggerNotification) error
 
 // WorkerCleanupCallback is a callback function to clean up job data when worker stops
-type WorkerCleanupCallback func(*big.Int) error
+type WorkerCleanupCallback func(string) error

@@ -37,7 +37,7 @@ type Message struct {
 type TaskEventData struct {
 	TaskID    int64       `json:"task_id"`
 	JobID     string      `json:"job_id"`
-	UserID    string      `json:"user_id,omitempty"`
+	UserAddress    string      `json:"user_address,omitempty"`
 	Changes   interface{} `json:"changes,omitempty"`
 	Timestamp time.Time   `json:"timestamp"`
 }
@@ -47,7 +47,7 @@ type SubscriptionData struct {
 	Room   string `json:"room"`
 	JobID  string `json:"job_id,omitempty"`
 	TaskID string `json:"task_id,omitempty"`
-	UserID string `json:"user_id,omitempty"`
+	UserAddress string `json:"user_address,omitempty"`
 }
 
 // ErrorData represents error message data

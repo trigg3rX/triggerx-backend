@@ -1,12 +1,11 @@
 package types
 
 import (
-	"math/big"
 	"time"
 )
 
 type CreateTaskDataRequest struct {
-	JobID            *big.Int `json:"job_id" validate:"required"`
+	JobID            string   `json:"job_id" validate:"required"`
 	TaskDefinitionID int      `json:"task_definition_id" validate:"required"`
 	IsImua           bool     `json:"is_imua"`
 }

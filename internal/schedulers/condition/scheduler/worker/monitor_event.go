@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+
 	"strings"
 	"time"
 
@@ -51,8 +52,8 @@ func (w *EventWorker) checkForEvents(contractAddr common.Address, eventSig commo
 					"job_id", w.EventWorkerData.JobID,
 					"tx_hash", log.TxHash.Hex(),
 					"block", log.BlockNumber,
-					"filter_param", w.EventWorkerData.EventFilterParaName,
-					"filter_value", w.EventWorkerData.EventFilterValue,
+					"filter_param", w.EventWorkerData.TriggerEventFilterParaName,
+					"filter_value", w.EventWorkerData.TriggerEventFilterValue,
 				)
 				continue
 			}
@@ -96,7 +97,7 @@ func (w *EventWorker) processEvent(log types.Log) error {
 	// Notify scheduler about the event
 	if w.TriggerCallback != nil {
 		notification := &TriggerNotification{
-			JobID:         w.EventWorkerData.JobID.ToBigInt(),
+			JobID:         w.EventWorkerData.JobID,
 			TriggerTxHash: log.TxHash.Hex(),
 			TriggeredAt:   time.Now(),
 		}
@@ -132,14 +133,14 @@ func (w *EventWorker) processEvent(log types.Log) error {
 
 // shouldFilterEvent checks if event filtering is enabled
 func (w *EventWorker) shouldFilterEvent() bool {
-	return strings.TrimSpace(w.EventWorkerData.EventFilterParaName) != "" && 
-		   strings.TrimSpace(w.EventWorkerData.EventFilterValue) != ""
+	return strings.TrimSpace(w.EventWorkerData.TriggerEventFilterParaName) != "" &&
+		strings.TrimSpace(w.EventWorkerData.TriggerEventFilterValue) != ""
 }
 
 // matchesEventFilter checks if the event matches the configured filter
 func (w *EventWorker) matchesEventFilter(log types.Log) bool {
-	filterParam := strings.TrimSpace(w.EventWorkerData.EventFilterParaName)
-	filterValue := strings.TrimSpace(w.EventWorkerData.EventFilterValue)
+	filterParam := strings.TrimSpace(w.EventWorkerData.TriggerEventFilterParaName)
+	filterValue := strings.TrimSpace(w.EventWorkerData.TriggerEventFilterValue)
 
 	if filterParam == "" || filterValue == "" {
 		return true // No filtering configured
@@ -147,7 +148,7 @@ func (w *EventWorker) matchesEventFilter(log types.Log) bool {
 
 	// For basic filtering, we'll check indexed topics and data fields
 	// This is a simplified implementation that works with common event patterns
-	
+
 	// Convert filter value to compare with event data
 	filterValueLower := strings.ToLower(filterValue)
 
@@ -157,11 +158,11 @@ func (w *EventWorker) matchesEventFilter(log types.Log) bool {
 		if i == 0 {
 			continue // Skip event signature
 		}
-		
+
 		// Convert topic to string representation for comparison
 		topicStr := strings.ToLower(topic.Hex())
 		topicBigInt := topic.Big()
-		
+
 		// Check if this might be the parameter we're looking for
 		// We'll do a fuzzy match since parameter names aren't directly available in logs
 		if strings.Contains(topicStr, filterValueLower) {
@@ -173,7 +174,7 @@ func (w *EventWorker) matchesEventFilter(log types.Log) bool {
 			)
 			return true
 		}
-		
+
 		// Also check if the filter value matches the big int representation
 		if topicBigInt.String() == filterValue {
 			w.Logger.Debug("Event filter matched in topic (big int)",
@@ -222,7 +223,7 @@ func (w *EventWorker) matchesEventFilter(log types.Log) bool {
 		"filter_value", filterValue,
 		"tx_hash", log.TxHash.Hex(),
 	)
-	
+
 	return false
 }
 

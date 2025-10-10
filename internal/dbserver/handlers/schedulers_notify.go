@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
@@ -15,29 +14,29 @@ import (
 )
 
 // notifyConditionScheduler sends a notification to the condition scheduler
-func (h *Handler) notifyConditionScheduler(jobID *big.Int, scheduleConditionJobData types.ScheduleConditionJobData) (bool, error) {
+func (h *Handler) notifyConditionScheduler(jobID string, scheduleConditionJobData types.ScheduleConditionJobData) (bool, error) {
 	success, err := h.sendDataToScheduler("/api/v1/job/schedule", scheduleConditionJobData)
 	if err != nil {
-		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", jobID, err)
+		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %s: %v", jobID, err)
 		return false, err
 	}
 	if !success {
-		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d", jobID)
-		return false, fmt.Errorf("failed to notify condition scheduler for job %d", jobID)
+		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %s", jobID)
+		return false, fmt.Errorf("failed to notify condition scheduler for job %s", jobID)
 	}
 	return true, nil
 }
 
 // SendPauseToEventScheduler sends a DELETE request to the event scheduler
-func (h *Handler) notifyPauseToConditionScheduler(jobID *big.Int) (bool, error) {
-	success, err := h.sendDataToScheduler("/api/v1/job/pause", types.ScheduleConditionJobData{JobID: types.NewBigInt(jobID)})
+func (h *Handler) notifyPauseToConditionScheduler(jobID string) (bool, error) {
+	success, err := h.sendDataToScheduler("/api/v1/job/pause", types.ScheduleConditionJobData{JobID: jobID})
 	if err != nil {
-		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", jobID, err)
+		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %s: %v", jobID, err)
 		return false, err
 	}
 	if !success {
-		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d", jobID)
-		return false, fmt.Errorf("failed to notify event scheduler for job %d", jobID)
+		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %s", jobID)
+		return false, fmt.Errorf("failed to notify event scheduler for job %s", jobID)
 	}
 
 	return true, nil
