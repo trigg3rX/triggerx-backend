@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"sync"
+	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -10,10 +11,12 @@ import (
 
 // StateManager manages the state of all keepers
 type StateManager struct {
-	keepers map[string]*types.HealthKeeperInfo
-	mu      sync.RWMutex
-	logger  logging.Logger
-	db      interfaces.DatabaseManagerInterface
+	keepers           map[string]*types.HealthKeeperInfo
+	mu                sync.RWMutex
+	logger            logging.Logger
+	db                interfaces.DatabaseManagerInterface
+	notifier          interfaces.NotificationBotInterface
+	notificationsSent map[string]time.Time // Tracks when notifications were last sent
 }
 
 var (
@@ -25,15 +28,18 @@ var (
 func InitializeStateManager(
 	logger logging.Logger,
 	db interfaces.DatabaseManagerInterface,
+	notifier interfaces.NotificationBotInterface,
 ) *StateManager {
 	stateManagerOnce.Do(func() {
 		// Create a new logger with component field and proper level
 		stateLogger := logger.With("component", "state_manager")
 
 		stateManager = &StateManager{
-			keepers: make(map[string]*types.HealthKeeperInfo),
-			logger:  stateLogger,
-			db:      db,
+			keepers:           make(map[string]*types.HealthKeeperInfo),
+			logger:            stateLogger,
+			db:                db,
+			notifier:          notifier,
+			notificationsSent: make(map[string]time.Time),
 		}
 		go stateManager.startCleanupRoutine()
 		go stateManager.startPeriodicDumpRoutine()
