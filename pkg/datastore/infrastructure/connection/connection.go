@@ -75,10 +75,16 @@ func NewConnection(config *Config, logger logging.Logger) (interfaces.Connection
 			return
 		}
 
-		// Create gocqlx session wrapper
+		// Create gocqlx session wrapper using WrapSession to properly initialize the Mapper
+		wrappedSession, wrapErr := gocqlx.WrapSession(session, nil)
+		if wrapErr != nil {
+			err = wrapErr
+			return
+		}
+
 		gocqlxSession := &gocqlxSessionWrapper{
 			session:       session,
-			gocqlxSession: &gocqlx.Session{Session: session},
+			gocqlxSession: &wrappedSession,
 		}
 
 		instance = &scyllaConnectionManager{
@@ -203,6 +209,12 @@ func (m *scyllaConnectionManager) reconnect() {
 
 		newSession, err := cluster.CreateSession()
 		if err == nil {
+			// Wrap the session
+			wrappedSession, wrapErr := gocqlx.WrapSession(newSession, nil)
+			if wrapErr != nil {
+				return wrapErr
+			}
+
 			m.mu.Lock()
 			if m.session != nil {
 				m.session.Close() // Close the old, dead session
@@ -211,7 +223,7 @@ func (m *scyllaConnectionManager) reconnect() {
 			// Update gocqlx session wrapper
 			m.gocqlxSession = &gocqlxSessionWrapper{
 				session:       newSession,
-				gocqlxSession: &gocqlx.Session{Session: newSession},
+				gocqlxSession: &wrappedSession,
 			}
 			m.healthStatus = true // Reset health status on successful reconnect
 			m.mu.Unlock()
@@ -344,13 +356,23 @@ type gocqlxSessionWrapper struct {
 func (w *gocqlxSessionWrapper) Query(stmt string, names []string) interfaces.GocqlxQueryer {
 	// First ensure we have a gocqlx session wrapper
 	if w.gocqlxSession == nil {
-		// Wrap the gocql session if not already wrapped
-		// Note: gocqlx.Session internally wraps gocql.Session
-		w.gocqlxSession = &gocqlx.Session{Session: w.session.(*gocql.Session)}
+		// Wrap the gocql session using WrapSession to properly initialize the Mapper
+		wrappedSession, err := gocqlx.WrapSession(w.session.(*gocql.Session), nil)
+		if err != nil {
+			// If wrapping fails, we cannot proceed - this should be logged
+			// For now, return a query that will fail when executed
+			panic(fmt.Sprintf("failed to wrap gocql session: %v", err))
+		}
+		w.gocqlxSession = &wrappedSession
 	}
 
 	query := w.gocqlxSession.Query(stmt, names)
 	return &gocqlxQueryWrapper{query: &realGocqlxQuery{query: query}}
+}
+
+// RawSession returns the underlying gocql session for direct operations
+func (w *gocqlxSessionWrapper) RawSession() interfaces.Sessioner {
+	return w.session
 }
 
 // Close closes the underlying session

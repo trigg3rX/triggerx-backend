@@ -38,6 +38,7 @@ type Iter interface {
 // GocqlxSessioner interface for gocqlx session operations
 type GocqlxSessioner interface {
 	Query(stmt string, names []string) GocqlxQueryer
+	RawSession() Sessioner // Expose underlying session for direct gocql operations
 	Close()
 }
 

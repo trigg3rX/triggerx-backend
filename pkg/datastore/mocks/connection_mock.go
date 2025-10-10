@@ -344,3 +344,17 @@ func (mr *MockGocqlxSessionerMockRecorder) Query(stmt, names interface{}) *gomoc
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockGocqlxSessioner)(nil).Query), stmt, names)
 }
+
+// RawSession mocks base method.
+func (m *MockGocqlxSessioner) RawSession() interfaces.Sessioner {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RawSession")
+	ret0, _ := ret[0].(interfaces.Sessioner)
+	return ret0
+}
+
+// RawSession indicates an expected call of RawSession.
+func (mr *MockGocqlxSessionerMockRecorder) RawSession() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawSession", reflect.TypeOf((*MockGocqlxSessioner)(nil).RawSession))
+}

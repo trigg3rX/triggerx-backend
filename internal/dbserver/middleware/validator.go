@@ -66,7 +66,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		var validationError error
 		switch c.Request.URL.Path {
 		case "/api/jobs":
-			var jobDataArray []types.CreateJobData
+			var jobDataArray []types.CreateJobDataRequest
 			if err := c.ShouldBindJSON(&jobDataArray); err != nil {
 				validationError = err
 			} else {

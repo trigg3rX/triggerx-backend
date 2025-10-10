@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gocql/gocql"
 	"github.com/scylladb/gocqlx/v2/qb"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -51,13 +52,29 @@ func NewGocqlxQueryBuilderWithPrimaryKey[T any](session interfaces.GocqlxSession
 
 // Insert inserts a new record using gocqlx
 func (gqb *GocqlxQueryBuilder[T]) Insert(ctx context.Context, data *T) error {
-	// Build insert query using qb
-	stmt, names := qb.Insert(gqb.table).ToCql()
-	query := gqb.getPreparedStatement("insert", stmt, names)
+	// Get column names from struct to build proper INSERT query
+	columns := gqb.getStructColumns()
 
-	if err := query.BindStruct(data).WithContext(ctx).ExecRelease(); err != nil {
-		gqb.logger.Errorf("gocqlx insert failed: %v", err)
-		return fmt.Errorf("gocqlx insert failed: %w", err)
+	// WORKAROUND: gocqlx BindStruct has bugs with collections (set, list) and big.Int
+	// Use raw gocql with manual value extraction
+	values := gqb.getStructValues(data, columns)
+
+	// Build insert query - create placeholders
+	placeholders := make([]string, len(columns))
+	for i := range placeholders {
+		placeholders[i] = "?"
+	}
+
+	stmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+		gqb.table,
+		strings.Join(columns, ", "),
+		strings.Join(placeholders, ", "))
+
+	// Use raw session for insert
+	rawSession := gqb.session.RawSession()
+	if err := rawSession.Query(stmt, values...).WithContext(ctx).Exec(); err != nil {
+		gqb.logger.Errorf("gocql insert failed: %v", err)
+		return fmt.Errorf("gocql insert failed: %w", err)
 	}
 
 	return nil
@@ -83,13 +100,18 @@ func (gqb *GocqlxQueryBuilder[T]) Update(ctx context.Context, data *T) error {
 		strings.Join(setClauses, ", "),
 		whereClause)
 
-	// Use gocqlx query with named binding
-	stmt := gqb.session.Query(query, fieldNames)
+	// WORKAROUND: gocqlx BindMap has bugs with collections - use raw gocql
+	// Extract values in the order of fieldNames
+	queryValues := make([]interface{}, len(fieldNames))
+	for i, fieldName := range fieldNames {
+		queryValues[i] = valuesMap[fieldName]
+	}
 
-	// Bind the values using named binding map
-	if err := stmt.BindMap(valuesMap).WithContext(ctx).ExecRelease(); err != nil {
-		gqb.logger.Errorf("gocqlx partial update failed: %v", err)
-		return fmt.Errorf("gocqlx partial update failed: %w", err)
+	// Use raw session for update
+	rawSession := gqb.session.RawSession()
+	if err := rawSession.Query(query, queryValues...).WithContext(ctx).Exec(); err != nil {
+		gqb.logger.Errorf("gocql partial update failed: %v", err)
+		return fmt.Errorf("gocql partial update failed: %w", err)
 	}
 
 	return nil
@@ -121,7 +143,7 @@ func (gqb *GocqlxQueryBuilder[T]) buildPartialUpdateQuery(data *T) ([]string, st
 			isPrimaryKey = (cqlTag == gqb.primaryKey)
 		} else {
 			// Fallback: detect primary key by common naming patterns
-			isPrimaryKey = strings.HasSuffix(cqlTag, "_id") || cqlTag == "key"
+			isPrimaryKey = strings.HasSuffix(cqlTag, "_id") || cqlTag == "key" || strings.HasSuffix(cqlTag, "_address")
 		}
 
 		// Store primary key for WHERE clause
@@ -186,13 +208,52 @@ func (gqb *GocqlxQueryBuilder[T]) isZeroValue(v reflect.Value) bool {
 
 // Delete deletes a record using gocqlx
 func (gqb *GocqlxQueryBuilder[T]) Delete(ctx context.Context, data *T) error {
-	// Build delete query using qb - this is a simplified version
-	stmt, names := qb.Delete(gqb.table).ToCql()
-	query := gqb.getPreparedStatement("delete", stmt, names)
+	// WORKAROUND: gocqlx BindStruct has bugs - use raw gocql
+	// Build delete query - we need to find the primary key
+	v := reflect.ValueOf(data).Elem()
+	t := v.Type()
 
-	if err := query.BindStruct(data).WithContext(ctx).ExecRelease(); err != nil {
-		gqb.logger.Errorf("gocqlx delete failed: %v", err)
-		return fmt.Errorf("gocqlx delete failed: %w", err)
+	var primaryKeyField string
+	var primaryKeyValue interface{}
+
+	// Find the primary key
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldValue := v.Field(i)
+		cqlTag := field.Tag.Get("cql")
+
+		if cqlTag == "" {
+			continue
+		}
+
+		// Check if this is the configured primary key
+		isPrimaryKey := false
+		if gqb.primaryKey != "" {
+			isPrimaryKey = (cqlTag == gqb.primaryKey)
+		} else {
+			// Fallback: detect primary key by common naming patterns
+			isPrimaryKey = strings.HasSuffix(cqlTag, "_id") || cqlTag == "key" || strings.HasSuffix(cqlTag, "_address")
+		}
+
+		if isPrimaryKey && !fieldValue.IsZero() {
+			primaryKeyField = cqlTag
+			primaryKeyValue = fieldValue.Interface()
+			break
+		}
+	}
+
+	if primaryKeyField == "" {
+		return fmt.Errorf("no primary key field found for delete")
+	}
+
+	// Build delete query
+	stmt := fmt.Sprintf("DELETE FROM %s WHERE %s = ?", gqb.table, primaryKeyField)
+
+	// Use raw session for delete
+	rawSession := gqb.session.RawSession()
+	if err := rawSession.Query(stmt, primaryKeyValue).WithContext(ctx).Exec(); err != nil {
+		gqb.logger.Errorf("gocql delete failed: %v", err)
+		return fmt.Errorf("gocql delete failed: %w", err)
 	}
 
 	return nil
@@ -200,17 +261,67 @@ func (gqb *GocqlxQueryBuilder[T]) Delete(ctx context.Context, data *T) error {
 
 // Get retrieves a single record using gocqlx
 func (gqb *GocqlxQueryBuilder[T]) Get(ctx context.Context, data *T) (*T, error) {
-	// Build select query using qb - this is a simplified version
-	stmt, names := qb.Select(gqb.table).ToCql()
-	query := gqb.getPreparedStatement("get", stmt, names)
+	// Get column names from struct to avoid schema mismatch issues
+	columns := gqb.getStructColumns()
+
+	// WORKAROUND: gocqlx has bugs with reflection for set<varchar> -> []string and varint -> *big.Int
+	// Use direct gocql.Scan() instead of gocqlx's GetRelease()
+	// Build the query parameters from the data struct
+	var queryArgs []interface{}
+	var whereClauses []string
+	v := reflect.ValueOf(data).Elem()
+	t := v.Type()
+
+	// Find primary key fields and other non-zero fields to build WHERE clause
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldValue := v.Field(i)
+		cqlTag := field.Tag.Get("cql")
+
+		if cqlTag == "" {
+			continue
+		}
+
+		// Only use non-zero fields for WHERE clause
+		if !fieldValue.IsZero() {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", cqlTag))
+			queryArgs = append(queryArgs, fieldValue.Interface())
+		}
+	}
+
+	if len(whereClauses) == 0 {
+		return nil, fmt.Errorf("no query parameters provided for Get operation")
+	}
+
+	// Build select query with explicit columns and WHERE clause
+	stmt := fmt.Sprintf("SELECT %s FROM %s WHERE %s",
+		strings.Join(columns, ", "),
+		gqb.table,
+		strings.Join(whereClauses, " AND "))
+
+	// Get the underlying raw session and create a query
+	rawSession := gqb.session.RawSession()
+	rawQuery := rawSession.Query(stmt, queryArgs...)
 
 	var result T
-	if err := query.BindStruct(data).WithContext(ctx).GetRelease(&result); err != nil {
-		if err.Error() == "not found" {
-			return nil, nil
+	scanDest := gqb.getStructScanDestinations(&result, columns)
+
+	iter := rawQuery.WithContext(ctx).Iter()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			gqb.logger.Errorf("gocql close failed: %v", err)
 		}
-		gqb.logger.Errorf("gocqlx get failed: %v", err)
-		return nil, fmt.Errorf("gocqlx get failed: %w", err)
+	}()
+
+	if !iter.Scan(scanDest...) {
+		if err := iter.Close(); err != nil {
+			if err == gocql.ErrNotFound {
+				return nil, nil
+			}
+			gqb.logger.Errorf("gocql scan failed: %v", err)
+			return nil, fmt.Errorf("gocql scan failed: %w", err)
+		}
+		return nil, nil // No results found
 	}
 
 	return &result, nil
@@ -218,14 +329,66 @@ func (gqb *GocqlxQueryBuilder[T]) Get(ctx context.Context, data *T) (*T, error) 
 
 // Select retrieves multiple records using gocqlx
 func (gqb *GocqlxQueryBuilder[T]) Select(ctx context.Context, data *T) ([]T, error) {
-	// Build select query using qb
-	stmt, names := qb.Select(gqb.table).ToCql()
-	query := gqb.getPreparedStatement("select", stmt, names)
+	// Get column names from struct to avoid schema mismatch issues
+	columns := gqb.getStructColumns()
+
+	// WORKAROUND: gocqlx Select has bugs with slices and certain types
+	// Use direct gocql.Scan() instead of gocqlx's Select()
+	// Build the query parameters from the data struct
+	var queryArgs []interface{}
+	var whereClauses []string
+	v := reflect.ValueOf(data).Elem()
+	t := v.Type()
+
+	// Find non-zero fields to build WHERE clause
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldValue := v.Field(i)
+		cqlTag := field.Tag.Get("cql")
+
+		if cqlTag == "" {
+			continue
+		}
+
+		// Only use non-zero fields for WHERE clause
+		if !fieldValue.IsZero() {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", cqlTag))
+			queryArgs = append(queryArgs, fieldValue.Interface())
+		}
+	}
+
+	if len(whereClauses) == 0 {
+		return gqb.SelectAll(ctx)
+	}
+
+	// Build select query with explicit columns and WHERE clause
+	stmt := fmt.Sprintf("SELECT %s FROM %s WHERE %s ALLOW FILTERING",
+		strings.Join(columns, ", "),
+		gqb.table,
+		strings.Join(whereClauses, " AND "))
+
+	// Get the underlying raw session and create a query
+	rawSession := gqb.session.RawSession()
+	iter := rawSession.Query(stmt, queryArgs...).WithContext(ctx).Iter()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			gqb.logger.Errorf("gocql close failed: %v", err)
+		}
+	}()
 
 	var results []T
-	if err := query.BindStruct(data).WithContext(ctx).Select(&results); err != nil {
-		gqb.logger.Errorf("gocqlx select failed: %v", err)
-		return nil, fmt.Errorf("gocqlx select failed: %w", err)
+	for {
+		var result T
+		scanDest := gqb.getStructScanDestinations(&result, columns)
+		if !iter.Scan(scanDest...) {
+			break
+		}
+		results = append(results, result)
+	}
+
+	if err := iter.Close(); err != nil {
+		gqb.logger.Errorf("gocql select failed: %v", err)
+		return nil, fmt.Errorf("gocql select failed: %w", err)
 	}
 
 	return results, nil
@@ -233,14 +396,35 @@ func (gqb *GocqlxQueryBuilder[T]) Select(ctx context.Context, data *T) ([]T, err
 
 // SelectAll retrieves all records using gocqlx
 func (gqb *GocqlxQueryBuilder[T]) SelectAll(ctx context.Context) ([]T, error) {
-	// Build select all query using qb
-	stmt, names := qb.Select(gqb.table).ToCql()
-	query := gqb.getPreparedStatement("select_all", stmt, names)
+	// Get column names from struct to avoid schema mismatch issues
+	columns := gqb.getStructColumns()
+
+	// Build select query with explicit columns
+	stmt := fmt.Sprintf("SELECT %s FROM %s", strings.Join(columns, ", "), gqb.table)
+
+	// WORKAROUND: gocqlx SelectRelease has bugs with slices and certain types
+	// Use raw gocql scanning instead
+	rawSession := gqb.session.RawSession()
+	iter := rawSession.Query(stmt).WithContext(ctx).Iter()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			gqb.logger.Errorf("gocql close failed: %v", err)
+		}
+	}()
 
 	var results []T
-	if err := query.WithContext(ctx).SelectRelease(&results); err != nil {
-		gqb.logger.Errorf("gocqlx select all failed: %v", err)
-		return nil, fmt.Errorf("gocqlx select all failed: %w", err)
+	for {
+		var result T
+		scanDest := gqb.getStructScanDestinations(&result, columns)
+		if !iter.Scan(scanDest...) {
+			break
+		}
+		results = append(results, result)
+	}
+
+	if err := iter.Close(); err != nil {
+		gqb.logger.Errorf("gocql select all failed: %v", err)
+		return nil, fmt.Errorf("gocql select all failed: %w", err)
 	}
 
 	return results, nil
@@ -290,6 +474,98 @@ func (gqb *GocqlxQueryBuilder[T]) SetBatchSize(size int) {
 // SetConsistencyLevel sets the consistency level for queries
 func (gqb *GocqlxQueryBuilder[T]) SetConsistencyLevel(level string) {
 	gqb.consistencyLevel = level
+}
+
+// getStructColumns extracts column names from the struct using reflection
+func (gqb *GocqlxQueryBuilder[T]) getStructColumns() []string {
+	var entity T
+	t := reflect.TypeOf(entity)
+
+	// If it's a pointer, get the underlying type
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	var columns []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		cqlTag := field.Tag.Get("cql")
+
+		// Skip fields without cql tag
+		if cqlTag != "" {
+			columns = append(columns, cqlTag)
+		}
+	}
+
+	return columns
+}
+
+// getStructScanDestinations returns pointers to struct fields in the order of columns
+// This is used to work around gocqlx reflection bugs with set<varchar> -> []string and varint -> *big.Int
+func (gqb *GocqlxQueryBuilder[T]) getStructScanDestinations(entity *T, columns []string) []interface{} {
+	v := reflect.ValueOf(entity).Elem()
+	t := v.Type()
+
+	// Build a map of cql tag -> field index for quick lookup
+	tagToField := make(map[string]int)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		cqlTag := field.Tag.Get("cql")
+		if cqlTag != "" {
+			tagToField[cqlTag] = i
+		}
+	}
+
+	// Create scan destinations in the order of columns
+	scanDest := make([]interface{}, len(columns))
+	for i, col := range columns {
+		if fieldIdx, ok := tagToField[col]; ok {
+			fieldValue := v.Field(fieldIdx)
+			if fieldValue.CanAddr() {
+				scanDest[i] = fieldValue.Addr().Interface()
+			} else {
+				gqb.logger.Warnf("Field %s (column %s) cannot be addressed", t.Field(fieldIdx).Name, col)
+				// Create a dummy destination to avoid nil
+				var dummy interface{}
+				scanDest[i] = &dummy
+			}
+		} else {
+			gqb.logger.Warnf("Column %s not found in struct %s", col, t.Name())
+			// Create a dummy destination to avoid nil
+			var dummy interface{}
+			scanDest[i] = &dummy
+		}
+	}
+
+	return scanDest
+}
+
+// getStructValues returns field values from struct in the order of columns
+// This is used for INSERT operations to work around gocqlx BindStruct bugs
+func (gqb *GocqlxQueryBuilder[T]) getStructValues(entity *T, columns []string) []interface{} {
+	v := reflect.ValueOf(entity).Elem()
+	t := v.Type()
+
+	// Build a map of cql tag -> field index for quick lookup
+	tagToField := make(map[string]int)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		cqlTag := field.Tag.Get("cql")
+		if cqlTag != "" {
+			tagToField[cqlTag] = i
+		}
+	}
+
+	// Create values in the order of columns
+	values := make([]interface{}, len(columns))
+	for i, col := range columns {
+		if fieldIdx, ok := tagToField[col]; ok {
+			fieldValue := v.Field(fieldIdx)
+			values[i] = fieldValue.Interface()
+		}
+	}
+
+	return values
 }
 
 // Close closes the prepared statements

@@ -77,20 +77,33 @@ func (r *genericRepository[T]) GetByID(ctx context.Context, id interface{}) (*T,
 
 // GetByNonID retrieves a record by a non-primary key field
 func (r *genericRepository[T]) GetByNonID(ctx context.Context, field string, value interface{}) (*T, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = :%s LIMIT 1 ALLOW FILTERING", r.tableName, field, field)
-	names := []string{field}
+	// Get explicit column list to avoid schema mismatch
+	columns := r.getStructColumns()
+	columnList := strings.Join(columns, ", ")
 
-	// Use gocqlx with named parameters
-	gocqlxSession := r.db.GetGocqlxSession()
-	stmt := gocqlxSession.Query(query, names)
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? LIMIT 1 ALLOW FILTERING", columnList, r.tableName, field)
+
+	// WORKAROUND: gocqlx GetRelease has bugs with slices and certain types
+	// Use raw gocql scanning instead
+	rawSession := r.db.GetSession()
+	iter := rawSession.Query(query, value).WithContext(ctx).Iter()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			r.logger.Errorf("gocql close failed: %v", err)
+		}
+	}()
 
 	var result T
-	params := map[string]interface{}{field: value}
-	if err := stmt.BindMap(params).WithContext(ctx).GetRelease(&result); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			return nil, errors.New("record not found")
+	scanDest := r.getStructScanDestinations(&result, columns)
+
+	if !iter.Scan(scanDest...) {
+		if err := iter.Close(); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return nil, errors.New("record not found")
+			}
+			return nil, err
 		}
-		return nil, err
+		return nil, errors.New("record not found")
 	}
 
 	return &result, nil
@@ -193,27 +206,37 @@ func (r *genericRepository[T]) BatchCreate(ctx context.Context, data []*T) error
 
 // GetByField retrieves records by any field
 func (r *genericRepository[T]) GetByField(ctx context.Context, field string, value interface{}) ([]*T, error) {
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = :%s ALLOW FILTERING", r.tableName, field, field)
-	names := []string{field}
+	// Get explicit column list to avoid schema mismatch
+	columns := r.getStructColumns()
+	columnList := strings.Join(columns, ", ")
 
-	// Use gocqlx with named parameters
-	gocqlxSession := r.db.GetGocqlxSession()
-	stmt := gocqlxSession.Query(query, names)
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? ALLOW FILTERING", columnList, r.tableName, field)
 
-	var results []T
-	params := map[string]interface{}{field: value}
-	if err := stmt.BindMap(params).WithContext(ctx).SelectRelease(&results); err != nil {
+	// WORKAROUND: gocqlx SelectRelease has bugs with slices and certain types
+	// Use raw gocql scanning instead
+	rawSession := r.db.GetSession()
+	iter := rawSession.Query(query, value).WithContext(ctx).Iter()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			r.logger.Errorf("gocql close failed: %v", err)
+		}
+	}()
+
+	var results []*T
+	for {
+		var result T
+		scanDest := r.getStructScanDestinations(&result, columns)
+		if !iter.Scan(scanDest...) {
+			break
+		}
+		results = append(results, &result)
+	}
+
+	if err := iter.Close(); err != nil {
 		return nil, err
 	}
 
-	// Convert []T to []*T
-	result := make([]*T, len(results))
-	for i, record := range results {
-		recordCopy := record
-		result[i] = &recordCopy
-	}
-
-	return result, nil
+	return results, nil
 }
 
 // GetByFields retrieves records by multiple fields
@@ -222,36 +245,45 @@ func (r *genericRepository[T]) GetByFields(ctx context.Context, conditions map[s
 		return r.List(ctx)
 	}
 
+	// Get explicit column list to avoid schema mismatch
+	columns := r.getStructColumns()
+	columnList := strings.Join(columns, ", ")
+
 	var whereClauses []string
-	var names []string
-	conditionsStruct := make(map[string]interface{})
+	var values []interface{}
 
 	for field, value := range conditions {
-		whereClauses = append(whereClauses, fmt.Sprintf("%s = :%s", field, field))
-		names = append(names, field)
-		conditionsStruct[field] = value
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", field))
+		values = append(values, value)
 	}
 
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s ALLOW FILTERING", r.tableName, strings.Join(whereClauses, " AND "))
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s ALLOW FILTERING", columnList, r.tableName, strings.Join(whereClauses, " AND "))
 
-	// Use gocqlx with named parameters
-	gocqlxSession := r.db.GetGocqlxSession()
-	stmt := gocqlxSession.Query(query, names)
+	// WORKAROUND: gocqlx SelectRelease has bugs with slices and certain types
+	// Use raw gocql scanning instead
+	rawSession := r.db.GetSession()
+	iter := rawSession.Query(query, values...).WithContext(ctx).Iter()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			r.logger.Errorf("gocql close failed: %v", err)
+		}
+	}()
 
-	var results []T
-	// Use BindMap for named parameters with map
-	if err := stmt.BindMap(conditionsStruct).WithContext(ctx).SelectRelease(&results); err != nil {
+	var results []*T
+	for {
+		var result T
+		scanDest := r.getStructScanDestinations(&result, columns)
+		if !iter.Scan(scanDest...) {
+			break
+		}
+		results = append(results, &result)
+	}
+
+	if err := iter.Close(); err != nil {
 		return nil, err
 	}
 
-	// Convert []T to []*T
-	result := make([]*T, len(results))
-	for i, record := range results {
-		recordCopy := record
-		result[i] = &recordCopy
-	}
-
-	return result, nil
+	return results, nil
 }
 
 // Count returns the total number of records
@@ -292,4 +324,68 @@ func (r *genericRepository[T]) ExistsByField(ctx context.Context, field string, 
 		return false, err
 	}
 	return true, nil
+}
+
+// getStructColumns extracts column names from the struct using reflection
+func (r *genericRepository[T]) getStructColumns() []string {
+	var entity T
+	t := reflect.TypeOf(entity)
+
+	// If it's a pointer, get the underlying type
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	var columns []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		cqlTag := field.Tag.Get("cql")
+
+		// Skip fields without cql tag
+		if cqlTag != "" {
+			columns = append(columns, cqlTag)
+		}
+	}
+
+	return columns
+}
+
+// getStructScanDestinations returns pointers to struct fields in the order of columns
+// This is used to work around gocqlx reflection bugs with slices and certain types
+func (r *genericRepository[T]) getStructScanDestinations(entity *T, columns []string) []interface{} {
+	v := reflect.ValueOf(entity).Elem()
+	t := v.Type()
+
+	// Build a map of cql tag -> field index for quick lookup
+	tagToField := make(map[string]int)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		cqlTag := field.Tag.Get("cql")
+		if cqlTag != "" {
+			tagToField[cqlTag] = i
+		}
+	}
+
+	// Create scan destinations in the order of columns
+	scanDest := make([]interface{}, len(columns))
+	for i, col := range columns {
+		if fieldIdx, ok := tagToField[col]; ok {
+			fieldValue := v.Field(fieldIdx)
+			if fieldValue.CanAddr() {
+				scanDest[i] = fieldValue.Addr().Interface()
+			} else {
+				r.logger.Warnf("Field %s (column %s) cannot be addressed", t.Field(fieldIdx).Name, col)
+				// Create a dummy destination to avoid nil
+				var dummy interface{}
+				scanDest[i] = &dummy
+			}
+		} else {
+			r.logger.Warnf("Column %s not found in struct %s", col, t.Name())
+			// Create a dummy destination to avoid nil
+			var dummy interface{}
+			scanDest[i] = &dummy
+		}
+	}
+
+	return scanDest
 }
