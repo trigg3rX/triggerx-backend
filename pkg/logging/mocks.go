@@ -68,6 +68,15 @@ func (m *MockLogger) With(tags ...any) Logger {
 	return args.Get(0).(Logger)
 }
 
+// WithTraceID mocks the WithTraceID method
+func (m *MockLogger) WithTraceID(traceID string) Logger {
+	args := m.Called(traceID)
+	if args.Get(0) == nil {
+		return m
+	}
+	return args.Get(0).(Logger)
+}
+
 // MockLoggerFactory is a factory for creating mock loggers
 // This can be used to inject mock loggers into components under test
 type MockLoggerFactory struct {
@@ -139,6 +148,7 @@ func (n *NoOpLogger) Warnf(template string, args ...interface{})     {}
 func (n *NoOpLogger) Errorf(template string, args ...interface{})    {}
 func (n *NoOpLogger) Fatalf(template string, args ...interface{})    {}
 func (n *NoOpLogger) With(tags ...interface{}) Logger                { return n }
+func (n *NoOpLogger) WithTraceID(traceID string) Logger              { return n }
 
 // NewTestLogger creates a logger suitable for testing
 // It uses a mock rotator to avoid file system dependencies
@@ -230,6 +240,12 @@ func (b *MockLoggerBuilder) ExpectFatalf(template string, args ...interface{}) *
 // ExpectWith sets up an expectation for a With call
 func (b *MockLoggerBuilder) ExpectWith(tags ...interface{}) *MockLoggerBuilder {
 	b.logger.On("With", tags).Return(b.logger)
+	return b
+}
+
+// ExpectWithTraceID sets up an expectation for a WithTraceID call
+func (b *MockLoggerBuilder) ExpectWithTraceID(traceID string) *MockLoggerBuilder {
+	b.logger.On("WithTraceID", traceID).Return(b.logger)
 	return b
 }
 

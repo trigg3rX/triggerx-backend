@@ -179,3 +179,9 @@ func (z *zapLogger) With(tags ...any) Logger {
 		sugarLogger: z.sugarLogger.With(tags...),
 	}
 }
+
+func (z *zapLogger) WithTraceID(traceID string) Logger {
+	return &zapLogger{
+		sugarLogger: z.sugarLogger.With("traceID", traceID),
+	}
+}

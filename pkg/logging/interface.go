@@ -14,4 +14,5 @@ type Logger interface {
 	Fatalf(template string, args ...interface{})
 
 	With(tags ...any) Logger
+	WithTraceID(traceID string) Logger
 }
