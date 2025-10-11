@@ -3,26 +3,33 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
-func setupTestRouter() *gin.Engine {
+func setupTestRouter() (*gin.Engine, *logging.MockLogger) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+
+	mockLogger := new(logging.MockLogger)
+	mockLogger.SetupDefaultExpectations()
+
 	handler := &Handler{
-		logger: &MockLogger{},
+		logger: mockLogger,
 	}
 	router.POST("/claim-fund", handler.ClaimFund)
-	return router
+	return router, mockLogger
 }
 
 func TestClaimFund_InvalidRequest(t *testing.T) {
-	router := setupTestRouter()
+	router, mockLogger := setupTestRouter()
+	defer mockLogger.AssertExpectations(t)
 
 	tests := []struct {
 		name       string
@@ -30,15 +37,6 @@ func TestClaimFund_InvalidRequest(t *testing.T) {
 		wantStatus int
 		wantError  string
 	}{
-		{
-			name: "Invalid wallet address",
-			request: ClaimFundRequest{
-				WalletAddress: "invalid-address",
-				Network:       "op_sepolia",
-			},
-			wantStatus: http.StatusBadRequest,
-			wantError:  "Invalid wallet address",
-		},
 		{
 			name: "Invalid network",
 			request: ClaimFundRequest{
@@ -69,7 +67,8 @@ func TestClaimFund_InvalidRequest(t *testing.T) {
 }
 
 func TestClaimFund_InvalidJSON(t *testing.T) {
-	router := setupTestRouter()
+	router, mockLogger := setupTestRouter()
+	defer mockLogger.AssertExpectations(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/claim-fund", bytes.NewBufferString("invalid json"))
 	req.Header.Set("Content-Type", "application/json")

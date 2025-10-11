@@ -677,7 +677,7 @@ func TestMockGenericRepositoryWithRealTypes(t *testing.T) {
 			UserAddress:   "0x123456789",
 			EmailID:       "test@example.com",
 			JobIDs:        []string{},
-			OpxConsumed:   "0",
+			UserPoints:    "0",
 			TotalJobs:     0,
 			TotalTasks:    0,
 			CreatedAt:     time.Now(),

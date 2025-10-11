@@ -7,15 +7,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	ws "github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 func TestWebSocketStats(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Build a minimal real manager with a hub so types match
-	hub := ws.NewHub(&MockLogger{})
-	mgr := ws.NewWebSocketConnectionManager(nil, nil, nil, hub, &MockLogger{})
-	wsh := NewWebSocketHandler(mgr, &MockLogger{})
+	hub := ws.NewHub(&logging.MockLogger{})
+	mgr := ws.NewWebSocketConnectionManager(nil, nil, nil, hub, &logging.MockLogger{})
+	wsh := NewWebSocketHandler(mgr, &logging.MockLogger{})
 
 	r := gin.New()
 	r.GET("/ws/stats", wsh.GetWebSocketStats)
@@ -31,9 +32,9 @@ func TestWebSocketStats(t *testing.T) {
 func TestWebSocketHealth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	hub := ws.NewHub(&MockLogger{})
-	mgr := ws.NewWebSocketConnectionManager(nil, nil, nil, hub, &MockLogger{})
-	wsh := NewWebSocketHandler(mgr, &MockLogger{})
+	hub := ws.NewHub(&logging.MockLogger{})
+	mgr := ws.NewWebSocketConnectionManager(nil, nil, nil, hub, &logging.MockLogger{})
+	wsh := NewWebSocketHandler(mgr, &logging.MockLogger{})
 
 	r := gin.New()
 	r.GET("/ws/health", wsh.GetWebSocketHealth)

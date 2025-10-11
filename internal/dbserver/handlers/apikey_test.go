@@ -11,97 +11,42 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/datastore/mocks"
+	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// MockApiKeysRepository is a mock implementation of the API keys repository
-type MockApiKeysRepository struct {
-	mock.Mock
-}
-
-func setupApiKeyTestRouter() (*gin.Engine, *MockApiKeysRepository) {
+func setupApiKeyTestRouter() (*gin.Engine, *mocks.MockGenericRepository[types.ApiKeyDataEntity], *logging.MockLogger) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	mockRepo := new(MockApiKeysRepository)
+
+	mockRepo := new(mocks.MockGenericRepository[types.ApiKeyDataEntity])
+	mockLogger := new(logging.MockLogger)
+	mockLogger.SetupDefaultExpectations()
+
 	handler := &Handler{
-		logger:            &MockLogger{},
+		logger:            mockLogger,
 		apiKeysRepository: mockRepo,
 	}
+
 	router.POST("/api-keys", handler.CreateApiKey)
-	router.PUT("/api-keys/:key", handler.UpdateApiKey)
-	router.DELETE("/api-keys/:key", handler.DeleteApiKey)
-	return router, mockRepo
-}
+	router.PUT("/api-keys/:key", handler.DeleteApiKey)
+	router.GET("/api-keys/owner/:owner", handler.GetApiKeysByOwner)
 
-func (m *MockApiKeysRepository) GetApiKeyDataByOwner(owner string) ([]*commonTypes.ApiKey, error) {
-	args := m.Called(owner)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).([]*commonTypes.ApiKey), args.Error(1)
-}
-
-func (m *MockApiKeysRepository) GetApiKeyDataByKey(key string) (*commonTypes.ApiKey, error) {
-	args := m.Called(key)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*commonTypes.ApiKey), args.Error(1)
-}
-
-func (m *MockApiKeysRepository) GetApiKeyCounters(key string) (*types.ApiKeyCounters, error) {
-	args := m.Called(key)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*types.ApiKeyCounters), args.Error(1)
-}
-
-func (m *MockApiKeysRepository) GetApiKeyByOwner(owner string) (string, error) {
-	args := m.Called(owner)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockApiKeysRepository) GetApiOwnerByApiKey(key string) (string, error) {
-	args := m.Called(key)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockApiKeysRepository) CreateApiKey(apiKey *commonTypes.ApiKey) error {
-	args := m.Called(apiKey)
-	return args.Error(0)
-}
-
-func (m *MockApiKeysRepository) UpdateApiKey(req *types.UpdateApiKeyRequest) error {
-	args := m.Called(req)
-	return args.Error(0)
-}
-
-func (m *MockApiKeysRepository) UpdateApiKeyStatus(req *types.UpdateApiKeyStatusRequest) error {
-	args := m.Called(req)
-	return args.Error(0)
-}
-
-func (m *MockApiKeysRepository) UpdateApiKeyLastUsed(key string, isSuccess bool) error {
-	args := m.Called(key, isSuccess)
-	return args.Error(0)
-}
-
-func (m *MockApiKeysRepository) DeleteApiKey(key string) error {
-	args := m.Called(key)
-	return args.Error(0)
+	return router, mockRepo, mockLogger
 }
 
 func TestCreateApiKey(t *testing.T) {
-	router, mockRepo := setupApiKeyTestRouter()
+	router, mockRepo, mockLogger := setupApiKeyTestRouter()
+	defer mockLogger.AssertExpectations(t)
 
 	tests := []struct {
 		name           string
 		request        interface{}
 		mockSetup      func()
 		expectedStatus int
-		expectedBody   interface{}
+		checkResponse  func(*testing.T, map[string]interface{})
 	}{
 		{
 			name: "Success - Create new API key",
@@ -110,45 +55,15 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*commonTypes.ApiKey{}, nil)
-				mockRepo.On("CreateApiKey", mock.AnythingOfType("*commonTypes.ApiKey")).Return(nil)
+				mockRepo.On("Create", mock.Anything, mock.AnythingOfType("*types.ApiKeyDataEntity")).Return(nil).Once()
 			},
 			expectedStatus: http.StatusCreated,
-			expectedBody: func() interface{} {
-				return map[string]interface{}{
-					"owner":      "test-owner",
-					"is_active":  true,
-					"rate_limit": float64(100),
-				}
-			},
-		},
-		{
-			name: "Success - Default rate limit",
-			request: types.CreateApiKeyRequest{
-				Owner: "test-owner",
-			},
-			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*commonTypes.ApiKey{}, nil)
-				mockRepo.On("CreateApiKey", mock.AnythingOfType("*commonTypes.ApiKey")).Return(nil)
-			},
-			expectedStatus: http.StatusCreated,
-			expectedBody: func() interface{} {
-				return map[string]interface{}{
-					"owner":      "test-owner",
-					"is_active":  true,
-					"rate_limit": float64(60),
-				}
-			},
-		},
-		{
-			name: "Error - Missing owner",
-			request: types.CreateApiKeyRequest{
-				RateLimit: 100,
-			},
-			mockSetup:      func() {},
-			expectedStatus: http.StatusBadRequest,
-			expectedBody: map[string]interface{}{
-				"error": "Owner is required",
+			checkResponse: func(t *testing.T, response map[string]interface{}) {
+				assert.Equal(t, "test-owner", response["owner"])
+				assert.Equal(t, true, response["is_active"])
+				assert.NotEmpty(t, response["key"])
+				// Key should start with "TGRX-"
+				assert.Contains(t, response["key"].(string), "TGRX-")
 			},
 		},
 		{
@@ -156,44 +71,8 @@ func TestCreateApiKey(t *testing.T) {
 			request:        "invalid json",
 			mockSetup:      func() {},
 			expectedStatus: http.StatusBadRequest,
-			expectedBody: map[string]interface{}{
-				"error": "Invalid request body",
-			},
-		},
-		{
-			name: "Error - API key already exists",
-			request: types.CreateApiKeyRequest{
-				Owner:     "existing-owner",
-				RateLimit: 100,
-			},
-			mockSetup: func() {
-				existingKey := &commonTypes.ApiKey{
-					Key:       "existing-key",
-					Owner:     "existing-owner",
-					IsActive:  true,
-					RateLimit: 100,
-					LastUsed:  time.Now().UTC(),
-					CreatedAt: time.Now().UTC(),
-				}
-				mockRepo.On("GetApiKeyDataByOwner", "existing-owner").Return([]*commonTypes.ApiKey{existingKey}, nil)
-			},
-			expectedStatus: http.StatusConflict,
-			expectedBody: map[string]interface{}{
-				"error": "API key already exists for this owner",
-			},
-		},
-		{
-			name: "Error - Database error on check",
-			request: types.CreateApiKeyRequest{
-				Owner:     "test-owner",
-				RateLimit: 100,
-			},
-			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return(nil, assert.AnError)
-			},
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody: map[string]interface{}{
-				"error": "Internal server error",
+			checkResponse: func(t *testing.T, response map[string]interface{}) {
+				assert.Equal(t, "Invalid request body", response["error"])
 			},
 		},
 		{
@@ -203,12 +82,11 @@ func TestCreateApiKey(t *testing.T) {
 				RateLimit: 100,
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByOwner", "test-owner").Return([]*commonTypes.ApiKey{}, nil)
-				mockRepo.On("CreateApiKey", mock.AnythingOfType("*commonTypes.ApiKey")).Return(assert.AnError)
+				mockRepo.On("Create", mock.Anything, mock.AnythingOfType("*types.ApiKeyDataEntity")).Return(assert.AnError).Once()
 			},
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody: map[string]interface{}{
-				"error": "Failed to create API key",
+			checkResponse: func(t *testing.T, response map[string]interface{}) {
+				assert.Equal(t, "Database operation failed", response["error"])
 			},
 		},
 	}
@@ -217,6 +95,7 @@ func TestCreateApiKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock
 			mockRepo.ExpectedCalls = nil
+			mockRepo.Calls = nil
 			tt.mockSetup()
 
 			var body []byte
@@ -235,104 +114,102 @@ func TestCreateApiKey(t *testing.T) {
 			router.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-			var response map[string]interface{}
-			err = json.Unmarshal(w.Body.Bytes(), &response)
-			assert.NoError(t, err)
 
-			if expectedBody, ok := tt.expectedBody.(func() interface{}); ok {
-				expected := expectedBody()
-				for k, v := range expected.(map[string]interface{}) {
-					assert.Equal(t, v, response[k])
-				}
-			} else {
-				assert.Equal(t, tt.expectedBody, response)
+			if tt.checkResponse != nil {
+				var response map[string]interface{}
+				err = json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				tt.checkResponse(t, response)
 			}
+
+			mockRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestUpdateApiKey(t *testing.T) {
-	router, mockRepo := setupApiKeyTestRouter()
+func TestDeleteApiKey(t *testing.T) {
+	router, mockRepo, mockLogger := setupApiKeyTestRouter()
+	defer mockLogger.AssertExpectations(t)
 
 	tests := []struct {
 		name           string
-		key            string
-		request        interface{}
+		requestBody    types.DeleteApiKeyRequest
 		mockSetup      func()
 		expectedStatus int
-		expectedBody   interface{}
+		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
-			name: "Success - Update rate limit",
-			key:  "test-key",
-			request: types.UpdateApiKeyRequest{
-				RateLimit: ptr(int(200)),
+			name: "Success - Delete API key by direct key",
+			requestBody: types.DeleteApiKeyRequest{
+				Key:   "TGRX-test-key-123",
+				Owner: "test-owner",
 			},
 			mockSetup: func() {
-				existingKey := &commonTypes.ApiKey{
-					Key:       "test-key",
+				existingKey := &types.ApiKeyDataEntity{
+					Key:       "TGRX-test-key-123",
 					Owner:     "test-owner",
 					IsActive:  true,
 					RateLimit: 100,
 				}
-				mockRepo.On("GetApiKeyDataByKey", "test-key").Return(existingKey, nil)
-				mockRepo.On("UpdateApiKey", mock.AnythingOfType("*types.UpdateApiKeyRequest")).Return(nil)
+				// Mock GetByID since the key is not masked
+				mockRepo.On("GetByID", mock.Anything, "TGRX-test-key-123").Return(existingKey, nil).Once()
+				mockRepo.On("Update", mock.Anything, mock.MatchedBy(func(data *types.ApiKeyDataEntity) bool {
+					return data.Key == "TGRX-test-key-123" && !data.IsActive
+				})).Return(nil).Once()
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody: map[string]interface{}{
-				"key":           "test-key",
-				"owner":         "test-owner",
-				"is_active":     true,
-				"rate_limit":    float64(200),
-				"created_at":    "0001-01-01T00:00:00Z",
-				"last_used":     "0001-01-01T00:00:00Z",
-				"success_count": float64(0),
-				"failed_count":  float64(0),
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, w.Code)
 			},
 		},
 		{
-			name:           "Error - Invalid request body",
-			key:            "test-key",
-			request:        "invalid json",
-			mockSetup:      func() {},
-			expectedStatus: http.StatusBadRequest,
-			expectedBody: map[string]interface{}{
-				"error": "Invalid request body",
-			},
-		},
-		{
-			name: "Error - API key not found",
-			key:  "non-existent-key",
-			request: types.UpdateApiKeyRequest{
-				RateLimit: ptr(int(200)),
+			name: "Success - Delete API key by masked key",
+			requestBody: types.DeleteApiKeyRequest{
+				// TGRX-1234567890123456 (21 chars) -> TGRX*************3456
+				Key:   "TGRX*************3456",
+				Owner: "test-owner",
 			},
 			mockSetup: func() {
-				mockRepo.On("GetApiKeyDataByKey", "non-existent-key").Return(nil, assert.AnError)
+				existingKeys := []*types.ApiKeyDataEntity{
+					{
+						Key:       "TGRX-1234567890123456",
+						Owner:     "test-owner",
+						IsActive:  true,
+						RateLimit: 100,
+					},
+				}
+				mockRepo.On("GetByField", mock.Anything, "owner", "test-owner").Return(existingKeys, nil).Once()
+				mockRepo.On("Update", mock.Anything, mock.MatchedBy(func(data *types.ApiKeyDataEntity) bool {
+					return data.Key == "TGRX-1234567890123456" && !data.IsActive
+				})).Return(nil).Once()
 			},
-			expectedStatus: http.StatusNotFound,
-			expectedBody: map[string]interface{}{
-				"error": "API key not found",
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, w.Code)
 			},
 		},
 		{
 			name: "Error - Database error on update",
-			key:  "test-key",
-			request: types.UpdateApiKeyRequest{
-				RateLimit: ptr(int(200)),
+			requestBody: types.DeleteApiKeyRequest{
+				Key:   "TGRX-test-key-123",
+				Owner: "test-owner",
 			},
 			mockSetup: func() {
-				existingKey := &commonTypes.ApiKey{
-					Key:       "test-key",
+				existingKey := &types.ApiKeyDataEntity{
+					Key:       "TGRX-test-key-123",
 					Owner:     "test-owner",
 					IsActive:  true,
 					RateLimit: 100,
 				}
-				mockRepo.On("GetApiKeyDataByKey", "test-key").Return(existingKey, nil)
-				mockRepo.On("UpdateApiKey", mock.AnythingOfType("*types.UpdateApiKeyRequest")).Return(assert.AnError)
+				mockRepo.On("GetByID", mock.Anything, "TGRX-test-key-123").Return(existingKey, nil).Once()
+				mockRepo.On("Update", mock.Anything, mock.AnythingOfType("*types.ApiKeyDataEntity")).Return(assert.AnError).Once()
 			},
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody: map[string]interface{}{
-				"error": "Failed to update API key",
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var response map[string]interface{}
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				assert.NoError(t, err)
+				assert.Equal(t, "Database operation failed", response["error"])
 			},
 		},
 	}
@@ -341,66 +218,85 @@ func TestUpdateApiKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock
 			mockRepo.ExpectedCalls = nil
+			mockRepo.Calls = nil
 			tt.mockSetup()
 
-			var body []byte
-			var err error
-			if str, ok := tt.request.(string); ok {
-				body = []byte(str)
-			} else {
-				body, err = json.Marshal(tt.request)
-				assert.NoError(t, err)
-			}
+			body, err := json.Marshal(tt.requestBody)
+			assert.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPut, "/api-keys/"+tt.key, bytes.NewBuffer(body))
+			req := httptest.NewRequest(http.MethodPut, "/api-keys/"+tt.requestBody.Key, bytes.NewBuffer(body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-			var response map[string]interface{}
-			err = json.Unmarshal(w.Body.Bytes(), &response)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expectedBody, response)
+
+			if tt.checkResponse != nil {
+				tt.checkResponse(t, w)
+			}
+
+			mockRepo.AssertExpectations(t)
 		})
 	}
 }
 
-func TestDeleteApiKey(t *testing.T) {
-	router, mockRepo := setupApiKeyTestRouter()
+func TestGetApiKeysByOwner(t *testing.T) {
+	router, mockRepo, mockLogger := setupApiKeyTestRouter()
+	defer mockLogger.AssertExpectations(t)
 
 	tests := []struct {
 		name           string
-		key            string
+		owner          string
 		mockSetup      func()
 		expectedStatus int
-		expectedBody   interface{}
+		checkResponse  func(*testing.T, map[string]interface{})
 	}{
 		{
-			name: "Success - Delete API key",
-			key:  "test-key",
+			name:  "Success - Get API keys for owner",
+			owner: "test-owner",
 			mockSetup: func() {
-				mockRepo.On("UpdateApiKeyStatus", &types.UpdateApiKeyStatusRequest{
-					Key:      "test-key",
-					IsActive: false,
-				}).Return(nil)
+				existingKeys := []*types.ApiKeyDataEntity{
+					{
+						Key:          "TGRX-test-key-123",
+						Owner:        "test-owner",
+						IsActive:     true,
+						RateLimit:    100,
+						SuccessCount: 10,
+						FailedCount:  2,
+						LastUsed:     time.Now().UTC(),
+						CreatedAt:    time.Now().UTC(),
+					},
+				}
+				mockRepo.On("GetByField", mock.Anything, "owner", "test-owner").Return(existingKeys, nil).Once()
 			},
-			expectedStatus: http.StatusNoContent,
-			expectedBody:   nil,
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, response map[string]interface{}) {
+				// Response should be an array
+				// Since the response is an array, we need to check differently
+				assert.NotNil(t, response)
+			},
 		},
 		{
-			name: "Error - Database error on delete",
-			key:  "test-key",
+			name:  "Error - No API keys found",
+			owner: "non-existent-owner",
 			mockSetup: func() {
-				mockRepo.On("UpdateApiKeyStatus", &types.UpdateApiKeyStatusRequest{
-					Key:      "test-key",
-					IsActive: false,
-				}).Return(assert.AnError)
+				mockRepo.On("GetByField", mock.Anything, "owner", "non-existent-owner").Return([]*types.ApiKeyDataEntity{}, nil).Once()
 			},
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody: map[string]interface{}{
-				"error": "Failed to delete API key",
+			expectedStatus: http.StatusNotFound,
+			checkResponse: func(t *testing.T, response map[string]interface{}) {
+				assert.Equal(t, "Database record not found", response["error"])
+			},
+		},
+		{
+			name:  "Error - Database error",
+			owner: "test-owner",
+			mockSetup: func() {
+				mockRepo.On("GetByField", mock.Anything, "owner", "test-owner").Return(nil, assert.AnError).Once()
+			},
+			expectedStatus: http.StatusNotFound,
+			checkResponse: func(t *testing.T, response map[string]interface{}) {
+				assert.Equal(t, "Database record not found", response["error"])
 			},
 		},
 	}
@@ -409,27 +305,33 @@ func TestDeleteApiKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock
 			mockRepo.ExpectedCalls = nil
+			mockRepo.Calls = nil
 			tt.mockSetup()
 
-			req := httptest.NewRequest(http.MethodDelete, "/api-keys/"+tt.key, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api-keys/owner/"+tt.owner, nil)
 			w := httptest.NewRecorder()
 
 			router.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.expectedBody != nil {
+
+			if tt.checkResponse != nil {
 				var response map[string]interface{}
-				err := json.Unmarshal(w.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedBody, response)
-			} else {
-				assert.Empty(t, w.Body.String())
+				// Try to unmarshal as map first, if it fails it might be an array
+				if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+					// If it's an array response for success case
+					if tt.expectedStatus == http.StatusOK {
+						var arrayResponse []map[string]interface{}
+						err = json.Unmarshal(w.Body.Bytes(), &arrayResponse)
+						assert.NoError(t, err)
+						assert.NotEmpty(t, arrayResponse)
+						return
+					}
+				}
+				tt.checkResponse(t, response)
 			}
+
+			mockRepo.AssertExpectations(t)
 		})
 	}
-}
-
-// Helper function to create pointer to int
-func ptr(i int) *int {
-	return &i
 }

@@ -35,14 +35,29 @@ notification:
   timeout: "30s"
   retry_attempts: 3
 `)
-	defer os.Remove(tempFile)
+	defer func () {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Create test env file (contains all required env vars including DEV_MODE=true)
 	envFile := createTestEnvFile(t)
-	defer os.Remove(envFile)
+	defer func () {
+		err := os.Remove(envFile)
+		if err != nil {
+			t.Errorf("Failed to remove env file: %v", err)
+		}
+	}()
 
 	// Clear any existing env vars to ensure clean state
-	defer clearEnvVars()
+	defer func () {
+		err := clearEnvVars()
+		if err != nil {
+			t.Errorf("Failed to clear env vars: %v", err)
+		}
+	}()
 
 	// Test initialization
 	err := InitWithEnvFile(tempFile, envFile)
@@ -102,7 +117,12 @@ func TestInit_DefaultConfigPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create config directory: %v", err)
 	}
-	defer os.RemoveAll("config")
+	defer func () {
+		err := os.RemoveAll("config")
+		if err != nil {
+			t.Errorf("Failed to remove config directory: %v", err)
+		}
+	}()
 
 	// Create default config file
 	err = os.WriteFile(defaultFile, []byte(`
@@ -137,12 +157,25 @@ notification:
 	}
 
 	// Set required environment variables
-	setTestEnvVars()
-	defer clearEnvVars()
+	err = setTestEnvVars()
+	if err != nil {
+		t.Fatalf("Failed to set test env vars: %v", err)
+	}
+	defer func () {
+		err := clearEnvVars()
+		if err != nil {
+			t.Errorf("Failed to clear env vars: %v", err)
+		}
+	}()
 
 	// Create test env file
 	envFile := createTestEnvFile(t)
-	defer os.Remove(envFile)
+	defer func () {
+		err := os.Remove(envFile)
+		if err != nil {
+			t.Errorf("Failed to remove env file: %v", err)
+		}
+	}()
 
 	// Test initialization with empty config path
 	err = InitWithEnvFile("", envFile)
@@ -163,12 +196,28 @@ func TestInit_InvalidYAML(t *testing.T) {
 invalid: yaml: content
   - this is broken
 `)
-	defer os.Remove(tempFile)
+	defer func () {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
-	setTestEnvVars()
-	defer clearEnvVars()
+	err := setTestEnvVars()
+	if err != nil {
+		t.Fatalf("Failed to set test env vars: %v", err)
+	}
+	defer func () {
+		err := clearEnvVars()
+		if err != nil {
+			t.Errorf("Failed to clear env vars: %v", err)
+		}
+	}()
 
-	err := Init(tempFile)
+	err = Init(tempFile)
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
 	if err == nil {
 		t.Error("Expected error for invalid YAML")
 	}
@@ -189,12 +238,28 @@ database:
   host: "localhost"
   # Missing other required fields
 `)
-	defer os.Remove(tempFile)
+	defer func () {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
-	setTestEnvVars()
-	defer clearEnvVars()
+	err := setTestEnvVars()
+	if err != nil {
+		t.Fatalf("Failed to set test env vars: %v", err)
+	}
+	defer func () {
+		err := clearEnvVars()
+		if err != nil {
+			t.Errorf("Failed to clear env vars: %v", err)
+		}
+	}()
 
-	err := Init(tempFile)
+	err = Init(tempFile)
+	if err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
 	if err == nil {
 		t.Error("Expected error for missing required fields")
 	}
@@ -229,7 +294,12 @@ notification:
   timeout: "30s"
   retry_attempts: 3
 `)
-	defer os.Remove(tempFile)
+	defer func () {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Create env file with DEV_MODE=false and no secrets
 	envContent := `DEV_MODE=false
@@ -242,8 +312,16 @@ notification:
 	if err != nil {
 		t.Fatalf("Failed to write to temp env file: %v", err)
 	}
-	envFile.Close()
-	defer os.Remove(envFile.Name())
+	err = envFile.Close()
+	if err != nil {
+		t.Fatalf("Failed to close temp env file: %v", err)
+	}
+	defer func () {
+		err := os.Remove(envFile.Name())
+		if err != nil {
+			t.Errorf("Failed to remove env file: %v", err)
+		}
+	}()
 
 	// Don't set environment variables - should fail validation when DEV_MODE=false
 	err = InitWithEnvFile(tempFile, envFile.Name())
@@ -281,18 +359,36 @@ notification:
   timeout: "30s"
   retry_attempts: 3
 `)
-	defer os.Remove(tempFile)
+	defer func () {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Set dev mode environment variable
-	os.Setenv("DEV_MODE", "true")
-	defer os.Unsetenv("DEV_MODE")
+	err := os.Setenv("DEV_MODE", "true")
+	if err != nil {
+		t.Fatalf("Failed to set DEV_MODE: %v", err)
+	}
+	defer func () {
+		err := os.Unsetenv("DEV_MODE")
+		if err != nil {
+			t.Errorf("Failed to unset DEV_MODE: %v", err)
+		}
+	}()
 
 	// Create test env file
 	envFile := createTestEnvFile(t)
-	defer os.Remove(envFile)
+	defer func () {
+		err := os.Remove(envFile)
+		if err != nil {
+			t.Errorf("Failed to remove env file: %v", err)
+		}
+	}()
 
 	// Don't set other environment variables - should pass in dev mode
-	err := InitWithEnvFile(tempFile, envFile)
+	err = InitWithEnvFile(tempFile, envFile)
 	if err != nil {
 		t.Fatalf("Init failed in dev mode: %v", err)
 	}
@@ -559,36 +655,157 @@ DEV_MODE=true
 	return envFile.Name()
 }
 
-func setTestEnvVars() {
-	os.Setenv("BOT_TOKEN", "test_bot_token")
-	os.Setenv("EMAIL_USER", "test@example.com")
-	os.Setenv("EMAIL_PASS", "test_password")
-	os.Setenv("ETHERSCAN_API_KEY", "test_etherscan_key")
-	os.Setenv("ALCHEMY_API_KEY", "test_alchemy_key")
-	os.Setenv("PINATA_HOST", "test.pinata.cloud")
-	os.Setenv("PINATA_JWT", "test_pinata_jwt")
-	os.Setenv("MANAGER_SIGNING_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("TASK_EXECUTION_ADDRESS", "0x2345678901234567890123456789012345678901")
-	os.Setenv("TEST_TASK_EXECUTION_ADDRESS", "0x3456789012345678901234567890123456789012")
-	os.Setenv("IMUA_TASK_EXECUTION_ADDRESS", "0x4567890123456789012345678901234567890123")
-	os.Setenv("JWT_PRIVATE_KEY", "test_jwt_private_key")
-	os.Setenv("DEV_MODE", "false")
+func setTestEnvVars() error {
+	var err error
+	err = os.Setenv("BOT_TOKEN", "test_bot_token")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("EMAIL_USER", "test@example.com")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("EMAIL_PASS", "test_password")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("ETHERSCAN_API_KEY", "test_etherscan_key")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("ALCHEMY_API_KEY", "test_alchemy_key")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("PINATA_HOST", "test.pinata.cloud")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("PINATA_JWT", "test_pinata_jwt")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("MANAGER_SIGNING_ADDRESS", "0x1234567890123456789012345678901234567890")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("TASK_EXECUTION_ADDRESS", "0x2345678901234567890123456789012345678901")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("TEST_TASK_EXECUTION_ADDRESS", "0x3456789012345678901234567890123456789012")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("IMUA_TASK_EXECUTION_ADDRESS", "0x4567890123456789012345678901234567890123")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("JWT_PRIVATE_KEY", "test_jwt_private_key")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("DEV_MODE", "false")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("ALCHEMY_API_KEY", "test_alchemy_key")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("PINATA_HOST", "test.pinata.cloud")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("PINATA_JWT", "test_pinata_jwt")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("MANAGER_SIGNING_ADDRESS", "0x1234567890123456789012345678901234567890")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("TASK_EXECUTION_ADDRESS", "0x2345678901234567890123456789012345678901")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("TEST_TASK_EXECUTION_ADDRESS", "0x3456789012345678901234567890123456789012")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("IMUA_TASK_EXECUTION_ADDRESS", "0x4567890123456789012345678901234567890123")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("JWT_PRIVATE_KEY", "test_jwt_private_key")
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("DEV_MODE", "false")
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func clearEnvVars() {
-	os.Unsetenv("BOT_TOKEN")
-	os.Unsetenv("EMAIL_USER")
-	os.Unsetenv("EMAIL_PASS")
-	os.Unsetenv("ETHERSCAN_API_KEY")
-	os.Unsetenv("ALCHEMY_API_KEY")
-	os.Unsetenv("PINATA_HOST")
-	os.Unsetenv("PINATA_JWT")
-	os.Unsetenv("MANAGER_SIGNING_ADDRESS")
-	os.Unsetenv("TASK_EXECUTION_ADDRESS")
-	os.Unsetenv("TEST_TASK_EXECUTION_ADDRESS")
-	os.Unsetenv("IMUA_TASK_EXECUTION_ADDRESS")
-	os.Unsetenv("JWT_PRIVATE_KEY")
-	os.Unsetenv("DEV_MODE")
+func clearEnvVars() error {
+	var err error
+	err = os.Unsetenv("BOT_TOKEN")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("EMAIL_USER")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("EMAIL_PASS")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("ETHERSCAN_API_KEY")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("ALCHEMY_API_KEY")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("PINATA_HOST")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("PINATA_JWT")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("MANAGER_SIGNING_ADDRESS")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("TASK_EXECUTION_ADDRESS")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("TEST_TASK_EXECUTION_ADDRESS")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("IMUA_TASK_EXECUTION_ADDRESS")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("JWT_PRIVATE_KEY")
+	if err != nil {
+		return err
+	}
+	err = os.Unsetenv("DEV_MODE")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func setupTestConfig(t *testing.T) {
@@ -620,11 +837,21 @@ notification:
   timeout: "30s"
   retry_attempts: 3
 `)
-	defer os.Remove(tempFile)
+	defer func () {
+		err := os.Remove(tempFile)
+		if err != nil {
+			t.Errorf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Create test env file
 	envFile := createTestEnvFile(t)
-	defer os.Remove(envFile)
+	defer func () {
+		err := os.Remove(envFile)
+		if err != nil {
+			t.Errorf("Failed to remove env file: %v", err)
+		}
+	}()
 
 	// Initialize config
 	err := InitWithEnvFile(tempFile, envFile)

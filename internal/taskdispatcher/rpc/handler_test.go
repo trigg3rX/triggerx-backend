@@ -37,7 +37,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 			TargetData: []types.TaskTargetData{
 				{
 					TaskID: 123,
-					JobID:  nil, // Will be set by the handler
+					JobID:  "", // Will be set by the handler
 				},
 			},
 			TriggerData: []types.TaskTriggerData{

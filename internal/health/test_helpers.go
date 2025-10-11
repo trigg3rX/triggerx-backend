@@ -17,7 +17,7 @@ func CreateTestKeeperInfo(address string, overrides ...func(*types.HealthKeeperI
 		ConsensusAddress: "0x" + address + "consensus",
 		OperatorID:       "op-" + address,
 		Version:          "1.0.0",
-		PeerID:           "peer-" + address,
+		Uptime:           0,
 		IsActive:         false,
 		LastCheckedIn:    time.Now().UTC().Add(-1 * time.Hour),
 		IsImua:           false,
@@ -32,15 +32,14 @@ func CreateTestKeeperInfo(address string, overrides ...func(*types.HealthKeeperI
 }
 
 // CreateTestKeeperHealthCheckIn creates a test KeeperHealthCheckIn with default values
-func CreateTestKeeperHealthCheckIn(address string, overrides ...func(*types.KeeperHealthCheckIn)) types.KeeperHealthCheckIn {
-	health := types.KeeperHealthCheckIn{
+func CreateTestKeeperHealthCheckIn(address string, overrides ...func(*types.HealthKeeperCheckInRequest)) types.HealthKeeperCheckInRequest {
+	health := types.HealthKeeperCheckInRequest{
 		KeeperAddress:    address,
 		ConsensusPubKey:  "pubkey-" + address,
 		ConsensusAddress: "0x" + address + "consensus",
 		Version:          "1.0.0",
 		Timestamp:        time.Now().UTC(),
 		Signature:        "sig-" + address,
-		PeerID:           "peer-" + address,
 		IsImua:           false,
 	}
 
@@ -90,22 +89,22 @@ func WithImuaKeeper() func(*types.HealthKeeperInfo) {
 }
 
 // WithHealthTimestamp sets a specific timestamp for health check-in
-func WithHealthTimestamp(timestamp time.Time) func(*types.KeeperHealthCheckIn) {
-	return func(h *types.KeeperHealthCheckIn) {
+func WithHealthTimestamp(timestamp time.Time) func(*types.HealthKeeperCheckInRequest) {
+	return func(h *types.HealthKeeperCheckInRequest) {
 		h.Timestamp = timestamp
 	}
 }
 
 // WithHealthVersion sets a specific version for health check-in
-func WithHealthVersion(version string) func(*types.KeeperHealthCheckIn) {
-	return func(h *types.KeeperHealthCheckIn) {
+func WithHealthVersion(version string) func(*types.HealthKeeperCheckInRequest) {
+	return func(h *types.HealthKeeperCheckInRequest) {
 		h.Version = version
 	}
 }
 
 // WithHealthImua sets the health check-in as Imua
-func WithHealthImua() func(*types.KeeperHealthCheckIn) {
-	return func(h *types.KeeperHealthCheckIn) {
+func WithHealthImua() func(*types.HealthKeeperCheckInRequest) {
+	return func(h *types.HealthKeeperCheckInRequest) {
 		h.IsImua = true
 	}
 }

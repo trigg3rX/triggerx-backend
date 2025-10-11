@@ -37,29 +37,28 @@ func TestTimeBasedJobValidation(t *testing.T) {
 
 	// Test valid time-based job
 	validTimeJob := map[string]interface{}{
+		"job_id":                  "test-time-job-1",
 		"user_address":            "0x1234567890123456789012345678901234567890",
-		"stake_amount":            1000000000000000000,
-		"token_amount":            1000000000000000000,
+		"created_chain_id":        "1",
+		"timezone":                "UTC",
 		"task_definition_id":      1,
-		"priority":                5,
-		"security":                5,
-		"custom":                  false,
 		"job_title":               "Test Time Job",
 		"time_frame":              3600,
 		"recurring":               true,
+		"schedule_type":           "interval",
 		"time_interval":           1800,
-		"job_cost_prediction":     0.1,
+		"job_cost_prediction":     "0.1",
 		"target_chain_id":         "1",
 		"target_contract_address": "0x1234567890123456789012345678901234567890",
 		"target_function":         "execute",
 		"abi":                     "[{\"inputs\":[],\"name\":\"execute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 		"arg_type":                1,
 		"arguments":               []string{},
-		"job_type":                "time",
+		"job_type":                "sdk",
 	}
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, validTimeJob))
+	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{validTimeJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging
@@ -71,10 +70,13 @@ func TestTimeBasedJobValidation(t *testing.T) {
 	// Create a new response recorder for the next request
 	w = httptest.NewRecorder()
 
-	// Test invalid time-based job (missing required time_interval)
-	invalidTimeJob := validTimeJob
-	invalidTimeJob["time_interval"] = 0
-	req, _ = http.NewRequest("POST", "/api/jobs", createJSONBody(t, invalidTimeJob))
+	// Test invalid time-based job (invalid user address)
+	invalidTimeJob := make(map[string]interface{})
+	for k, v := range validTimeJob {
+		invalidTimeJob[k] = v
+	}
+	invalidTimeJob["user_address"] = "invalid_address" // Not a valid ethereum address
+	req, _ = http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{invalidTimeJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging
@@ -92,31 +94,29 @@ func TestEventBasedJobValidation(t *testing.T) {
 
 	// Test valid event-based job
 	validEventJob := map[string]interface{}{
+		"job_id":                   "test-event-job-1",
 		"user_address":             "0x1234567890123456789012345678901234567890",
-		"stake_amount":             1000000000000000000,
-		"token_amount":             1000000000000000000,
+		"created_chain_id":         "1",
+		"timezone":                 "UTC",
 		"task_definition_id":       3,
-		"priority":                 5,
-		"security":                 5,
-		"custom":                   false,
 		"job_title":                "Test Event Job",
 		"time_frame":               3600,
 		"recurring":                true,
 		"trigger_chain_id":         "1",
 		"trigger_contract_address": "0x1234567890123456789012345678901234567890",
 		"trigger_event":            "Transfer",
-		"job_cost_prediction":      0.1,
+		"job_cost_prediction":      "0.1",
 		"target_chain_id":          "1",
 		"target_contract_address":  "0x1234567890123456789012345678901234567890",
 		"target_function":          "execute",
 		"abi":                      "[{\"inputs\":[],\"name\":\"execute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 		"arg_type":                 1,
 		"arguments":                []string{},
-		"job_type":                 "event",
+		"job_type":                 "frontend",
 	}
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, validEventJob))
+	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{validEventJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging
@@ -128,10 +128,13 @@ func TestEventBasedJobValidation(t *testing.T) {
 	// Create a new response recorder for the next request
 	w = httptest.NewRecorder()
 
-	// Test invalid event-based job (missing trigger fields)
-	invalidEventJob := validEventJob
-	delete(invalidEventJob, "trigger_event")
-	req, _ = http.NewRequest("POST", "/api/jobs", createJSONBody(t, invalidEventJob))
+	// Test invalid event-based job (invalid target chain ID)
+	invalidEventJob := make(map[string]interface{})
+	for k, v := range validEventJob {
+		invalidEventJob[k] = v
+	}
+	invalidEventJob["target_chain_id"] = "" // Empty chain ID violates required,chain_id
+	req, _ = http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{invalidEventJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging
@@ -149,13 +152,11 @@ func TestConditionBasedJobValidation(t *testing.T) {
 
 	// Test valid condition-based job
 	validConditionJob := map[string]interface{}{
+		"job_id":                  "test-condition-job-1",
 		"user_address":            "0x1234567890123456789012345678901234567890",
-		"stake_amount":            1000000000000000000,
-		"token_amount":            1000000000000000000,
+		"created_chain_id":        "1",
+		"timezone":                "UTC",
 		"task_definition_id":      5,
-		"priority":                5,
-		"security":                5,
-		"custom":                  false,
 		"job_title":               "Test Condition Job",
 		"time_frame":              3600,
 		"recurring":               true,
@@ -164,18 +165,18 @@ func TestConditionBasedJobValidation(t *testing.T) {
 		"lower_limit":             50.0,
 		"value_source_type":       "api",
 		"value_source_url":        "https://api.example.com/price",
-		"job_cost_prediction":     0.1,
+		"job_cost_prediction":     "0.1",
 		"target_chain_id":         "1",
 		"target_contract_address": "0x1234567890123456789012345678901234567890",
 		"target_function":         "execute",
 		"abi":                     "[{\"inputs\":[],\"name\":\"execute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 		"arg_type":                1,
 		"arguments":               []string{},
-		"job_type":                "condition",
+		"job_type":                "contract",
 	}
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, validConditionJob))
+	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{validConditionJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging
@@ -187,10 +188,13 @@ func TestConditionBasedJobValidation(t *testing.T) {
 	// Create a new response recorder for the next request
 	w = httptest.NewRecorder()
 
-	// Test invalid condition-based job (missing condition fields)
-	invalidConditionJob := validConditionJob
-	delete(invalidConditionJob, "condition_type")
-	req, _ = http.NewRequest("POST", "/api/jobs", createJSONBody(t, invalidConditionJob))
+	// Test invalid condition-based job (job_title too short)
+	invalidConditionJob := make(map[string]interface{})
+	for k, v := range validConditionJob {
+		invalidConditionJob[k] = v
+	}
+	invalidConditionJob["job_title"] = "ab" // Too short (min=3)
+	req, _ = http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{invalidConditionJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging
@@ -208,28 +212,26 @@ func TestInvalidTaskDefinitionID(t *testing.T) {
 
 	// Test invalid task definition ID
 	invalidJob := map[string]interface{}{
+		"job_id":                  "test-invalid-job-1",
 		"user_address":            "0x1234567890123456789012345678901234567890",
-		"stake_amount":            1000000000000000000,
-		"token_amount":            1000000000000000000,
-		"task_definition_id":      7, // Invalid ID
-		"priority":                5,
-		"security":                5,
-		"custom":                  false,
+		"created_chain_id":        "1",
+		"timezone":                "UTC",
+		"task_definition_id":      7, // Invalid ID (max is 6)
 		"job_title":               "Test Invalid Job",
 		"time_frame":              3600,
 		"recurring":               true,
-		"job_cost_prediction":     0.1,
+		"job_cost_prediction":     "0.1",
 		"target_chain_id":         "1",
 		"target_contract_address": "0x1234567890123456789012345678901234567890",
 		"target_function":         "execute",
 		"abi":                     "[{\"inputs\":[],\"name\":\"execute\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 		"arg_type":                1,
 		"arguments":               []string{},
-		"job_type":                "time", // Even though task_definition_id is invalid, we still need a valid job_type
+		"job_type":                "template",
 	}
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, invalidJob))
+	req, _ := http.NewRequest("POST", "/api/jobs", createJSONBody(t, []interface{}{invalidJob}))
 	router.ServeHTTP(w, req)
 
 	// Print response body for debugging

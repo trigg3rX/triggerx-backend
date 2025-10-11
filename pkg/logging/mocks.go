@@ -9,6 +9,46 @@ type MockLogger struct {
 	mock.Mock
 }
 
+// SetupDefaultExpectations sets up common logger mock expectations that accept any arguments.
+// This is useful for tests where you don't care about specific logging calls.
+// It allows all logger methods to be called with any arguments without causing test failures.
+func (m *MockLogger) SetupDefaultExpectations() {
+	// Debug methods with various argument counts
+	m.On("Debug", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Debugf", mock.Anything).Maybe().Return()
+	m.On("Debugf", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Debugf", mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Debugf", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Debugf", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+
+	// Info methods with various argument counts
+	m.On("Info", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Infof", mock.Anything).Maybe().Return()
+	m.On("Infof", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Infof", mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Infof", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Infof", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+
+	// Warn methods with various argument counts
+	m.On("Warn", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Warnf", mock.Anything).Maybe().Return()
+	m.On("Warnf", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Warnf", mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+
+	// Error methods with various argument counts
+	m.On("Error", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Errorf", mock.Anything).Maybe().Return()
+	m.On("Errorf", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Errorf", mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Errorf", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+
+	// Fatal methods with various argument counts
+	m.On("Fatal", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Fatalf", mock.Anything).Maybe().Return()
+	m.On("Fatalf", mock.Anything, mock.Anything).Maybe().Return()
+	m.On("Fatalf", mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+}
+
 // Debug mocks the Debug method
 func (m *MockLogger) Debug(msg string, keysAndValues ...interface{}) {
 	m.Called(msg, keysAndValues)

@@ -203,131 +203,221 @@ func GetConfig() *Config {
 
 // Server Configuration Getters
 func GetHTTPPort() string {
+	if cfg == nil {
+		return "8080"
+	}
 	return cfg.Server.HTTPPort
 }
 
 func GetGRPCPort() string {
+	if cfg == nil {
+		return "9090"
+	}
 	return cfg.Server.GRPCPort
 }
 
 func IsDevMode() bool {
+	if cfg == nil {
+		return false
+	}
 	return cfg.DevMode
 }
 
 // Health Check Configuration Getters
 func GetKeeperTimeout() time.Duration {
+	if cfg == nil {
+		return 70 * time.Second
+	}
 	duration, _ := time.ParseDuration(cfg.HealthCheck.KeeperTimeout)
 	return duration
 }
 
 func GetCheckInterval() time.Duration {
+	if cfg == nil {
+		return 30 * time.Second
+	}
 	duration, _ := time.ParseDuration(cfg.HealthCheck.CheckInterval)
 	return duration
 }
 
 func GetSyncInterval() time.Duration {
+	if cfg == nil {
+		return 5 * time.Minute
+	}
 	duration, _ := time.ParseDuration(cfg.HealthCheck.SyncInterval)
 	return duration
 }
 
 func GetMaxRetries() int {
+	if cfg == nil {
+		return 3
+	}
 	return cfg.HealthCheck.MaxRetries
 }
 
 func GetRetryBackoff() time.Duration {
+	if cfg == nil {
+		return 1 * time.Second
+	}
 	duration, _ := time.ParseDuration(cfg.HealthCheck.RetryBackoff)
 	return duration
 }
 
 // Database Configuration Getters
 func GetDatabaseHost() string {
+	if cfg == nil {
+		return "localhost"
+	}
 	return cfg.Database.Host
 }
 
 func GetDatabasePort() string {
+	if cfg == nil {
+		return "9042"
+	}
 	return cfg.Database.Port
 }
 
 func GetDatabaseKeyspace() string {
+	if cfg == nil {
+		return "triggerx_health"
+	}
 	return cfg.Database.Keyspace
 }
 
 func GetDatabaseReplicationFactor() int {
+	if cfg == nil {
+		return 1
+	}
 	return cfg.Database.ReplicationFactor
 }
 
 func GetDatabaseConsistencyLevel() string {
+	if cfg == nil {
+		return "quorum"
+	}
 	return cfg.Database.ConsistencyLevel
 }
 
 func GetDatabaseConnectionTimeout() time.Duration {
+	if cfg == nil {
+		return 10 * time.Second
+	}
 	duration, _ := time.ParseDuration(cfg.Database.ConnectionTimeout)
 	return duration
 }
 
 func GetDatabaseQueryTimeout() time.Duration {
+	if cfg == nil {
+		return 30 * time.Second
+	}
 	duration, _ := time.ParseDuration(cfg.Database.QueryTimeout)
 	return duration
 }
 
 // Notification Configuration Getters
 func GetSMTPHost() string {
+	if cfg == nil {
+		return "smtp.gmail.com"
+	}
 	return cfg.Notification.SMTPHost
 }
 
 func GetSMTPPort() string {
+	if cfg == nil {
+		return "587"
+	}
 	return cfg.Notification.SMTPPort
 }
 func GetNotificationTimeout() time.Duration {
+	if cfg == nil {
+		return 30 * time.Second
+	}
 	duration, _ := time.ParseDuration(cfg.Notification.Timeout)
 	return duration
 }
 
 func GetNotificationRetryAttempts() int {
+	if cfg == nil {
+		return 3
+	}
 	return cfg.Notification.RetryAttempts
 }
 
 // Secrets Getters
 func GetBotToken() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.BotToken
 }
 
 func GetEmailUser() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.EmailUser
 }
 
 func GetEmailPassword() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.EmailPassword
 }
 
 func GetEtherscanAPIKey() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.EtherscanAPIKey
 }
 
 func GetAlchemyAPIKey() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.AlchemyAPIKey
 }
 
 func GetPinataHost() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.PinataHost
 }
 
 func GetPinataJWT() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.PinataJWT
 }
 
 func GetManagerSigningAddress() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.ManagerSigningAddress
 }
 
 func GetTaskExecutionAddress() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.TaskExecutionAddress
 }
 
 func GetTestTaskExecutionAddress() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.TestTaskExecutionAddress
 }
 
 func GetImuaTaskExecutionAddress() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Secrets.ImuaTaskExecutionAddress
 }
