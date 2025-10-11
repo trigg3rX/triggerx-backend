@@ -51,8 +51,28 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(jobData *types.ScheduleCo
 		metrics.TrackCriticalError("duplicate_job_schedule")
 		return fmt.Errorf("job %s is already scheduled", jobData.JobID)
 	}
-
-	// Validate condition type
+	// WebSocket jobs: check and schedule
+	if jobData.ConditionWorkerData.ValueSourceType == worker.SourceTypeWebSocket {
+		websocketWorker, err := s.createWebSocketWorker(&jobData.ConditionWorkerData)
+		if err != nil {
+			metrics.TrackCriticalError("websocket_worker_creation_failed")
+			return fmt.Errorf("failed to create websocket worker: %w", err)
+		}
+		s.conditionWorkers[jobData.JobID] = nil // Or: s.websocketWorkers[jobData.JobID] = websocketWorker (if struct field added)
+		s.jobDataStore[jobData.JobID] = jobData
+		go websocketWorker.Start()
+		duration := time.Since(startTime)
+		s.logger.Info("WebSocket job monitoring started",
+			"job_id", jobData.JobID,
+			"condition_type", jobData.ConditionWorkerData.ConditionType,
+			"value_source", jobData.ConditionWorkerData.ValueSourceUrl,
+			"active_workers", len(s.eventWorkers)+len(s.conditionWorkers),
+			"max_workers", s.maxWorkers,
+			"duration", duration,
+		)
+		return nil
+	}
+	// Normal jobs:
 	if !isValidConditionType(jobData.ConditionWorkerData.ConditionType) {
 		metrics.TrackCriticalError("invalid_condition_type")
 		return fmt.Errorf("unsupported condition type: %s", jobData.ConditionWorkerData.ConditionType)
@@ -166,6 +186,25 @@ func (s *ConditionBasedScheduler) createConditionWorker(conditionWorkerData *typ
 		CleanupCallback:     s.cleanupJobData,
 	}
 
+	return worker, nil
+}
+
+// Create a new websocket worker
+func (s *ConditionBasedScheduler) createWebSocketWorker(conditionWorkerData *types.ConditionWorkerData) (*worker.WebSocketWorker, error) {
+	ctx, cancel := context.WithCancel(s.ctx)
+	wsConfig := &worker.WebSocketConfig{
+		URL: conditionWorkerData.ValueSourceUrl,
+	}
+	worker := &worker.WebSocketWorker{
+		WebSocketConfig: wsConfig,
+		ConditionWorkerData: conditionWorkerData,
+		Logger: s.logger,
+		Ctx: ctx,
+		Cancel: cancel,
+		IsActive: false,
+		TriggerCallback: s.handleTriggerNotification,
+		CleanupCallback: s.cleanupJobData,
+	}
 	return worker, nil
 }
 

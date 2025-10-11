@@ -5,6 +5,8 @@ othentic/.env
 # release
 release/*
 
+scripts/tests/*.html
+
 # cursor
 .cursor 
 .keystore

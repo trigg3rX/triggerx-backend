@@ -31,7 +31,17 @@ const (
 	SourceTypeAPI    = "api"
 	SourceTypeOracle = "oracle"
 	SourceTypeStatic = "static"
+	SourceTypeWebSocket = "websocket" // NEW: support for websocket sources
 )
+
+// WebSocketConfig represents configuration for a WebSocket monitoring worker
+// Add/expand fields as needed by business-logic requirements.
+type WebSocketConfig struct {
+	URL         string        // The WebSocket endpoint to connect to
+	PingInterval time.Duration // Optional: interval to send ping
+	Headers     map[string]string // Optional: HTTP headers for authentication etc.
+	// TODO: Add custom match/payload/trigger logic if required
+}
 
 // ValueResponse represents a generic response structure for fetching values
 type ValueResponse struct {

@@ -29,26 +29,63 @@ func (w *EventWorker) checkForEvents(contractAddr common.Address, eventSig commo
 		return nil // No new blocks to process
 	}
 
-	// Query logs for events
-	query := ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(w.LastBlock + 1),
-		ToBlock:   new(big.Int).SetUint64(currentBlock),
-		Addresses: []common.Address{contractAddr},
-		Topics:    [][]common.Hash{{eventSig}},
+	// Query logs for events in chunks to respect API limits
+	// Alchemy free tier allows max 10 blocks per eth_getLogs request
+	const maxBlockRange = 10
+	fromBlock := w.LastBlock + 1
+	allLogs := []types.Log{}
+
+	for fromBlock <= currentBlock {
+		toBlock := fromBlock + maxBlockRange - 1
+		if toBlock > currentBlock {
+			toBlock = currentBlock
+		}
+
+		query := ethereum.FilterQuery{
+			FromBlock: new(big.Int).SetUint64(fromBlock),
+			ToBlock:   new(big.Int).SetUint64(toBlock),
+			Addresses: []common.Address{contractAddr},
+			Topics:    [][]common.Hash{{eventSig}},
+		}
+
+		w.Logger.Debug("Querying block range",
+			"job_id", w.EventWorkerData.JobID,
+			"from_block", fromBlock,
+			"to_block", toBlock,
+			"range_size", toBlock-fromBlock+1,
+		)
+
+		logs, err := w.ChainClient.FilterLogs(context.Background(), query)
+		if err != nil {
+			metrics.TrackCriticalError("rpc_filter_logs_failed")
+			return fmt.Errorf("failed to filter logs for blocks %d-%d: %w", fromBlock, toBlock, err)
+		}
+
+		allLogs = append(allLogs, logs...)
+		fromBlock = toBlock + 1
 	}
 
-	logs, err := w.ChainClient.FilterLogs(context.Background(), query)
-	if err != nil {
-		metrics.TrackCriticalError("rpc_filter_logs_failed")
-		return fmt.Errorf("failed to filter logs: %w", err)
-	}
+	logs := allLogs
 
 	// Process each event
 	for _, log := range logs {
+		w.Logger.Info("Found raw event",
+			"job_id", w.EventWorkerData.JobID,
+			"tx_hash", log.TxHash.Hex(),
+			"block", log.BlockNumber,
+			"topics", len(log.Topics),
+			"contract", log.Address.Hex(),
+		)
+		
 		// Apply event filtering if configured
 		if w.shouldFilterEvent() {
+			w.Logger.Info("Applying event filter",
+				"job_id", w.EventWorkerData.JobID,
+				"filter_param", w.EventWorkerData.TriggerEventFilterParaName,
+				"filter_value", w.EventWorkerData.TriggerEventFilterValue,
+			)
 			if !w.matchesEventFilter(log) {
-				w.Logger.Debug("Event filtered out",
+				w.Logger.Info("Event filtered out",
 					"job_id", w.EventWorkerData.JobID,
 					"tx_hash", log.TxHash.Hex(),
 					"block", log.BlockNumber,
@@ -56,6 +93,11 @@ func (w *EventWorker) checkForEvents(contractAddr common.Address, eventSig commo
 					"filter_value", w.EventWorkerData.TriggerEventFilterValue,
 				)
 				continue
+			} else {
+				w.Logger.Info("Event passed filter",
+					"job_id", w.EventWorkerData.JobID,
+					"tx_hash", log.TxHash.Hex(),
+				)
 			}
 		}
 
@@ -73,11 +115,19 @@ func (w *EventWorker) checkForEvents(contractAddr common.Address, eventSig commo
 	// Update last processed block
 	w.LastBlock = currentBlock
 
-	w.Logger.Debug("Processed blocks",
+	fromBlock = w.LastBlock + 1
+	if currentBlock <= w.LastBlock {
+		fromBlock = w.LastBlock
+	}
+	
+	w.Logger.Info("Processed blocks",
 		"job_id", w.EventWorkerData.JobID,
-		"from_block", w.LastBlock+1-uint64(len(logs)),
+		"from_block", fromBlock,
 		"to_block", currentBlock,
+		"blocks_scanned", int64(currentBlock) - int64(w.LastBlock),
 		"events_found", len(logs),
+		"contract_address", contractAddr.Hex(),
+		"event_signature", eventSig.Hex(),
 	)
 
 	return nil
@@ -201,13 +251,27 @@ func (w *EventWorker) matchesEventFilter(log types.Log) bool {
 	// Check if the filter value is a hex address
 	if common.IsHexAddress(filterValue) {
 		filterAddr := common.HexToAddress(filterValue)
-		filterAddrHash := common.BytesToHash(filterAddr.Bytes())
+		// Convert address to hash for topic comparison (addresses are left-padded to 32 bytes in topics)
+		addressHash := common.HexToHash(filterAddr.Hex())
+		w.Logger.Info("Checking address filter",
+			"job_id", w.EventWorkerData.JobID,
+			"filter_address", filterAddr.Hex(),
+			"address_hash", addressHash.Hex(),
+			"num_topics", len(log.Topics),
+		)
 		for i, topic := range log.Topics {
 			if i == 0 {
 				continue
 			}
-			if topic == filterAddrHash {
-				w.Logger.Debug("Event filter matched address in topic",
+			w.Logger.Info("Comparing topic",
+				"job_id", w.EventWorkerData.JobID,
+				"topic_index", i,
+				"topic_value", topic.Hex(),
+				"expected_hash", addressHash.Hex(),
+				"matches", topic == addressHash,
+			)
+			if topic == addressHash {
+				w.Logger.Info("Event filter matched address in topic",
 					"job_id", w.EventWorkerData.JobID,
 					"topic_index", i,
 					"address", filterAddr.Hex(),

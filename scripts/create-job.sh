@@ -38,7 +38,7 @@ case $TASK_DEFINITION_ID in
     ;;
   3)
     TASK_DEFINITION_ID=3 # Event Based, Static Args
-    TIME_FRAME=25
+    TIME_FRAME=2500
     TIME_INTERVAL=0
     ARG_TYPE=1
     DYNAMIC_ARGUMENTS_SCRIPT_URL=
@@ -46,7 +46,7 @@ case $TASK_DEFINITION_ID in
     ;;
   4)
     TASK_DEFINITION_ID=4 # Event Based, Dynamic Args
-    TIME_FRAME=25
+    TIME_FRAME=2500
     TIME_INTERVAL=0
     ARG_TYPE=2
     DYNAMIC_ARGUMENTS_SCRIPT_URL="https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la"
@@ -93,7 +93,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"user_address\": \"0x7Db951c0E6D8906687B459427eA3F3F2b456473B\",
       \"ether_balance\": 50000000000000000,
       \"token_balance\": 50000000000000000000,
-      \"created_chain_id\": \"11155420\",
+      \"created_chain_id\": \"421614\",
       \"job_id\": \"$JOB_ID\",
       \"job_title\": \"$JOB_TITLE\",
       \"task_definition_id\": $TASK_DEFINITION_ID,
@@ -106,22 +106,24 @@ curl -X POST http://localhost:9002/api/jobs \
       \"time_interval\": $TIME_INTERVAL,
       \"cron_expression\": \"0 0 * * *\",
       \"specific_schedule\": \"2025-01-01 00:00:00\",
-      \"trigger_chain_id\": \"11155420\",
-      \"trigger_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-      \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
+      \"trigger_chain_id\": \"421614\",
+      \"trigger_contract_address\": \"0x980B62Da83eFf3D4576C647993b0c1D7faf17c73\",
+      \"trigger_event\": \"Transfer(address,address,uint256)\",
+      \"event_filter_para_name\": \"to\",
+      \"event_filter_value\": \"0xC9dC9c361c248fFA0890d7E1a263247670914980\",
       \"condition_type\": \"less_than\",
       \"upper_limit\": 92,
       \"lower_limit\": 89,
       \"value_source_type\": \"api\",
       \"value_source_url\": \"http://localhost:8080/price\",
-      \"target_chain_id\": \"11155420\",
-      \"target_contract_address\": \"0x49a81A591afdDEF973e6e49aaEa7d76943ef234C\",
-      \"target_function\": \"incrementBy\",
-      \"abi\": \"[{\\\"anonymous\\\":false,\\\"inputs\\\":[{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"previousValue\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"newValue\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"incrementAmount\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"CounterIncremented\\\",\\\"type\\\":\\\"event\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"getCount\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"stateMutability\\\":\\\"view\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[],\\\"name\\\":\\\"increment\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"},{\\\"inputs\\\":[{\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"amount\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"incrementBy\\\",\\\"outputs\\\":[],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
+      \"target_chain_id\": \"421614\",
+      \"target_contract_address\": \"0x980B62Da83eFf3D4576C647993b0c1D7faf17c73\",
+      \"target_function\": \"implementation\",
+      \"abi\": \"[{\\\"inputs\\\":[],\\\"name\\\":\\\"implementation\\\",\\\"outputs\\\":[{\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"implementation_\\\",\\\"type\\\":\\\"address\\\"}],\\\"stateMutability\\\":\\\"nonpayable\\\",\\\"type\\\":\\\"function\\\"}]\",
       \"arg_type\": $ARG_TYPE,
       \"is_imua\": false,
       \"arguments\": [\"3\"],
-      \"created_chain_id\": \"11155420\",
+      \"created_chain_id\": \"421614\",
       \"dynamic_arguments_script_url\": \"$DYNAMIC_ARGUMENTS_SCRIPT_URL\"
     }
   ]"
@@ -134,10 +136,10 @@ if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
 
   cast send \
     --async \
-    --chain 11155420 \
-    --rpc-url https://opt-sepolia.g.alchemy.com/v2/PIUHuKF0BQoK9ibzzDH-B-bk0LbiYY38 \
+    --chain 421614 \
+    --rpc-url https://arb-sepolia.g.alchemy.com/v2/PIUHuKF0BQoK9ibzzDH-B-bk0LbiYY38 \
     --private-key 2212ec53a0dddee799b3342a86bb45fd1192a1981139244869102be2b3c47045 \
-    0x49a81A591afdDEF973e6e49aaEa7d76943ef234C "increment()" \
+    0x980B62Da83eFf3D4576C647993b0c1D7faf17c73 "increment()" \
     -- --broadcast
 fi
 

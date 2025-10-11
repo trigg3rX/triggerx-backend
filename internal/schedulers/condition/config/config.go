@@ -116,9 +116,10 @@ func GetSchedulerID() int {
 func GetChainRPCUrlsTest() map[string]string {
 	local := "http://127.0.0.1:8545"
 	return map[string]string{
-		"11155420": local,
-		"84532":    local,
-		"11155111": local,
+		"11155420": local, // OP Sepolia
+		"84532":    local, // Base Sepolia
+		"11155111": local, // Ethereum Sepolia
+		"421614":   local, // Arbitrum Sepolia
 	}
 }
 
@@ -132,8 +133,9 @@ func GetChainRPCUrls() map[string]string {
 		// Fallback to public endpoints if no Alchemy key
 		return map[string]string{
 			"11155420": "https://sepolia.optimism.io",
-			"84532":    "https://sepolia.base.org",
+			"84532":    "https://sepolia.base.org", 
 			"11155111": "https://ethereum-sepolia.publicnode.com",
+			"421614":   "https://sepolia-rollup.arbitrum.io/rpc",
 		}
 	}
 
@@ -141,5 +143,6 @@ func GetChainRPCUrls() map[string]string {
 		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // OP Sepolia
 		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
 		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
+		"421614":   fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Arbitrum Sepolia
 	}
 }
