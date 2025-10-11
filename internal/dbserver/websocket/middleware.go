@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/api/middleware"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )

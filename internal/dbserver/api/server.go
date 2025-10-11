@@ -1,4 +1,4 @@
-package db
+package api
 
 import (
 	"fmt"
@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/api/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/api/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/middleware"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
@@ -215,7 +215,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	// Get the estimated fees for a task in a Job
 	protected.GET("/jobs/fees", handler.CalculateFeesForJob)
 	// Claim the fund from the faucet
-	protected.POST("/claim-fund", handler.ClaimFund)	
+	protected.POST("/claim-fund", handler.ClaimFund)
 
 	// Admin routes
 	admin := protected.Group("/admin")
