@@ -1,7 +1,7 @@
 ############################# HELP MESSAGE #############################
 # Make sure the help command stays first, so that it's printed by default when `make` is called without arguments
 
-GO_LINES_IGNORED_DIRS=./othentic/... ./data/... ./docs/... ./scripts/...
+GO_LINES_IGNORED_DIRS=./othentic/... ./data/... ./docker/... ./docs/... ./scripts/...
 GO_PACKAGES=./cmd/... ./internal/... ./pkg/... ./checker/... ./cli/...
 GO_FOLDERS=$(shell echo ${GO_PACKAGES} | sed -e "s/\.\///g" | sed -e "s/\/\.\.\.//g")
 GO_LINES_IGNORED=$(shell echo ${GO_LINES_IGNORED_DIRS} | sed -e "s/\.\///g" | sed -e "s/\/\.\.\.//g")
@@ -14,8 +14,8 @@ help:
 ----------------------------DATABASE----------------------------: ## 
 
 db-setup: ## Setup ScyllaDB container
-	docker compose down
-	docker compose up -d
+	docker compose docker/docker-compose.yaml down
+	docker compose docker/docker-compose.yaml up -d
 	sleep 6
 	./scripts/database/setup-db.sh
 

@@ -130,7 +130,7 @@ if [[ "$SERVICE" == "all" ]]; then
         
         echo "[$(date '+%H:%M:%S')] Starting build for $service..."
         if docker build --no-cache \
-            -f Dockerfile.backend \
+            -f docker/Dockerfile.backend \
             --build-arg SERVICE=${service} \
             --build-arg DOCKER_NAME=${docker_name} \
             -t triggerx-${docker_name}:${version} . > "build_${docker_name}.log" 2>&1; then
@@ -181,12 +181,12 @@ if [[ "$SERVICE" == "all" ]]; then
 elif [[ "$SERVICE" == "keeper" ]]; then
     echo "Building $SERVICE..."
     docker build --no-cache \
-        -f Dockerfile.keeper \
+        -f docker/Dockerfile.keeper \
         -t triggerx-keeper:${VERSION} .
 elif [[ "$SERVICE" == "imua-keeper" ]]; then
     echo "Building $SERVICE..."
     docker build --no-cache \
-        -f Dockerfile.imua-keeper \
+        -f docker/Dockerfile.imua-keeper \
         -t triggerx-imua-keeper:${VERSION} .
 else
     echo "Building $SERVICE..."
@@ -197,7 +197,7 @@ else
     # Build a single service
     echo "Building $SERVICE..."
     docker build --no-cache \
-        -f Dockerfile.backend \
+        -f docker/Dockerfile.backend \
         --build-arg SERVICE=${SERVICE} \
         --build-arg DOCKER_NAME=${DOCKER_NAME} \
         -t triggerx-${DOCKER_NAME}:${VERSION} .

@@ -2,7 +2,7 @@
 # A modern task runner for the TriggerX backend project
 
 # Variables
-go-lines-ignored-dirs := "./othentic/... ./data/... ./docs/... ./scripts/..."
+go-lines-ignored-dirs := "./othentic/... ./data/... ./docker/... ./docs/... ./scripts/..."
 go-packages := "./cmd/... ./internal/... ./pkg/... ./checker/... ./cli/..."
 
 # Default recipe - show help
@@ -17,8 +17,8 @@ help:
 
 # Setup ScyllaDB container
 db-setup:
-    docker compose down
-    docker compose up -d
+    docker compose docker/docker-compose.yaml down
+    docker compose docker/docker-compose.yaml up -d
     sleep 6
     ./scripts/database/setup-db.sh
 
