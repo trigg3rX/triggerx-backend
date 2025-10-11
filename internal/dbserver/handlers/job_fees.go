@@ -58,7 +58,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, logger logging.Logger) (*bi
 	return totalFee, nil
 }
 
-func (h *Handler) GetTaskFees(c *gin.Context) {
+func (h *Handler) CalculateFeesForJob(c *gin.Context) {
 	logger := h.getLogger(c)
 	logger.Debugf("GET [GetTaskFees] Getting task fees")
 	ipfsURLs := c.Query("ipfs_url")

@@ -4,4 +4,5 @@ const (
 	ErrInvalidRequestBody = "Invalid request body"
 	ErrDBOperationFailed  = "Database operation failed"
 	ErrDBRecordNotFound   = "Database record not found"
+	ErrDBDuplicateRecord = "Database duplicate record"
 )

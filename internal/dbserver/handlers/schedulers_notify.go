@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
+	"time"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -39,6 +39,27 @@ func (h *Handler) notifyPauseToConditionScheduler(jobID string) (bool, error) {
 		return false, fmt.Errorf("failed to notify event scheduler for job %s", jobID)
 	}
 
+	return true, nil
+}
+
+// notifyUpdateToConditionScheduler sends a notification to the condition scheduler
+func (h *Handler) notifyUpdateToConditionScheduler(jobID string, recurring bool, expirationTime time.Time) (bool, error) {
+	success, err := h.sendDataToScheduler(
+		"/api/v1/job/update", types.ScheduleConditionJobData{
+			JobID: jobID, 
+			ConditionWorkerData: types.ConditionWorkerData{
+				Recurring: recurring,
+				ExpirationTime: expirationTime,
+			},
+		})
+	if err != nil {
+		h.logger.Errorf("[NotifyUpdateToConditionScheduler] Failed to notify condition scheduler for job %s: %v", jobID, err)
+		return false, err
+	}
+	if !success {
+		h.logger.Errorf("[NotifyUpdateToConditionScheduler] Failed to notify condition scheduler for job %s", jobID)
+		return false, fmt.Errorf("failed to notify condition scheduler for job %s", jobID)
+	}
 	return true, nil
 }
 

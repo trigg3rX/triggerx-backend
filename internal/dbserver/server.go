@@ -81,25 +81,6 @@ func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Ser
 		c.Next()
 	})
 
-	// Add retry middleware with custom configuration
-	retryConfig := &middleware.RetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    time.Second,
-		MaxDelay:        10 * time.Second,
-		BackoffFactor:   2.0,
-		JitterFactor:    0.1,
-		LogRetryAttempt: true,
-		RetryStatusCodes: []int{
-			http.StatusInternalServerError,
-			http.StatusBadGateway,
-			http.StatusServiceUnavailable,
-			http.StatusGatewayTimeout,
-			http.StatusTooManyRequests,
-			http.StatusRequestTimeout,
-			http.StatusConflict,
-		},
-	}
-
 	// Initialize Redis client with enhanced features
 	var redisClient *redis.Client
 	client, err := redis.NewClient(logger)
@@ -158,10 +139,6 @@ func NewServer(datastore datastore.DatastoreService, logger logging.Logger) *Ser
 	go s.hub.Run()
 	logger.Info("WebSocket hub started successfully")
 
-	// Apply retry middleware only to API routes
-	apiGroup := router.Group("/api")
-	apiGroup.Use(middleware.RetryMiddleware(retryConfig, logger))
-
 	return s
 }
 
@@ -198,55 +175,47 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	router.GET("/status", handler.HealthCheck)
+	router.GET("/", handler.HealthCheck)
 
 	api := router.Group("/api")
 
 	protected := api.Group("")
 	protected.Use(s.apiKeyAuth.GinMiddleware())
 
-	// Public routes
+	// Returns UserDataDTO for the given address
 	protected.GET("/users/:address", handler.GetUserDataByAddress)
-	protected.POST("/users/email", handler.StoreUserEmail)
+	// Updates the email for the given address
+	protected.PUT("/users/email", handler.UpdateUserEmail)
 
-	// Apply validation middleware to routes that need it
+	// Create the Job (frontend and sdk)
 	protected.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
-	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
-	api.GET("/jobs/time", handler.GetTimeBasedTasks)
-	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
-	// api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
-	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
+	// Returns jobs by user address, and optionally filters by chain_id if provided as a query param "?chain_id=1"
 	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
-	protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
+	// Returns a single job data by job id
+	protected.GET("/jobs/id/:job_id", handler.GetJobDataByJobID)
+	// Updates an active job status to deleted by job id
 	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
-	protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
-	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
+	// Updates a job data by job id
+	protected.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 
-	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
-	api.GET("/tasks/:id", handler.GetTaskDataByID)
-	// api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
-	api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
-	api.PUT("/tasks/execution/:id", handler.UpdateTaskExecutionData)
-	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
+	// Returns a single task data by task id
+	protected.GET("/tasks/id/:id", handler.GetTaskDataByTaskID)
+	// Returns tasks by job id
+	protected.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 
-	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
-	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
-	// api.GET("/keepers/performers", handler.GetPerformers)
-	api.GET("/keepers/:id", handler.GetKeeperData)
-	api.POST("/keepers/:id/increment-tasks", handler.IncrementKeeperTaskCount)
-	api.GET("/keepers/:id/task-count", handler.GetKeeperTaskCount)
-	api.POST("/keepers/:id/add-points", handler.AddTaskFeeToKeeperPoints)
-	api.GET("/keepers/:id/points", handler.GetKeeperPoints)
+	// Creates a new Keeper entry from Google Form
+	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataFromGoogleForm)
 
+	// Leaderboard routes
 	protected.GET("/leaderboard/keepers", handler.GetKeeperLeaderboard)
+	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 	protected.GET("/leaderboard/users", handler.GetUserLeaderboard)
 	protected.GET("/leaderboard/users/search", handler.GetUserLeaderboardByAddress)
-	api.GET("/leaderboard/keepers/search", handler.GetKeeperByIdentifier)
 
-	api.GET("/fees", handler.GetTaskFees)
-
-	api.POST("/keepers/update-chat-id", handler.UpdateKeeperChatID)
-	api.GET("/keepers/com-info/:id", handler.GetKeeperCommunicationInfo)
-	api.POST("/claim-fund", handler.ClaimFund)
+	// Get the estimated fees for a task in a Job
+	protected.GET("/jobs/fees", handler.CalculateFeesForJob)
+	// Claim the fund from the faucet
+	protected.POST("/claim-fund", handler.ClaimFund)	
 
 	// Admin routes
 	admin := protected.Group("/admin")
@@ -254,17 +223,11 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	admin.PUT("/api-keys/:key", handler.DeleteApiKey)
 	admin.GET("/api-keys/:owner", handler.GetApiKeysByOwner)
 
-	// Keeper routes
-	keeper := protected.Group("/keeper")
-	keeper.Use(s.apiKeyAuth.KeeperMiddleware())
-	// Keeper-specific routes will be added here later
-
 	// WebSocket routes
 	wsHandler := handlers.NewWebSocketHandler(s.wsConnectionManager, s.logger)
 	api.GET("/ws/tasks", wsHandler.HandleWebSocketConnection)
 	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
 	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
-
 }
 
 func (s *Server) Start(port string) error {

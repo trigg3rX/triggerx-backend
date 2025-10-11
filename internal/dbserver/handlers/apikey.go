@@ -43,14 +43,14 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 	trackDBOp(nil)
 
 	var resp = &types.CreateApiKeyResponse{
-		Key: apiKey.Key,
-		Owner: apiKey.Owner,
-		IsActive: apiKey.IsActive,
-		LastUsed: apiKey.LastUsed,
+		Key:       apiKey.Key,
+		Owner:     apiKey.Owner,
+		IsActive:  apiKey.IsActive,
+		LastUsed:  apiKey.LastUsed,
 		CreatedAt: apiKey.CreatedAt,
 	}
 
-	logger.Infof("Successfully created new API key for owner %s (Key: %s)", req.Owner, apiKey.Key)
+	logger.Infof("POST [CreateApiKey] Successful, owner: %s, key: %s", req.Owner, apiKey.Key)
 	c.JSON(http.StatusCreated, resp)
 }
 
@@ -86,6 +86,16 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "API key not found for this owner"})
 			return
 		}
+	} else {
+		// If the key is not masked, fetch it directly by key
+		trackDBOp := metrics.TrackDBOperation("read", "apikey_data")
+		existingKey, err := h.apiKeysRepository.GetByID(c.Request.Context(), req.Key)
+		trackDBOp(err)
+		if err != nil || existingKey == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "API key not found"})
+			return
+		}
+		apiKeyData = existingKey
 	}
 
 	// Mark as inactive instead of deleting
@@ -100,7 +110,7 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	logger.Infof("Successfully deleted API key: %s", req.Key)
+	logger.Infof("PUT [DeleteApiKey] Successful, key: %s", req.Key)
 	c.Status(http.StatusOK)
 }
 
@@ -138,7 +148,7 @@ func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
 		})
 	}
 
-	logger.Infof("Successfully fetched %d API keys for owner %s", len(apiKeys), owner)
+	logger.Infof("GET [GetApiKeysByOwner] Successful, owner: %s, keys: %d", owner, len(apiKeys))
 	c.JSON(http.StatusOK, resp)
 }
 

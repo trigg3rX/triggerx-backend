@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS user_data (
     user_address text,
     email_id text,
     job_ids set<text>,
-    opx_consumed text,
+    user_points text,
     total_jobs bigint,
     total_tasks bigint,
     created_at timestamp,

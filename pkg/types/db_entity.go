@@ -7,7 +7,7 @@ type UserDataEntity struct {
 	UserAddress   string    `cql:"user_address"`
 	EmailID       string    `cql:"email_id"`
 	JobIDs        []string  `cql:"job_ids"`
-	OpxConsumed   string    `cql:"opx_consumed"`
+	UserPoints    string    `cql:"user_points"`
 	TotalJobs     int64     `cql:"total_jobs"`
 	TotalTasks    int64     `cql:"total_tasks"`
 	CreatedAt     time.Time `cql:"created_at"`

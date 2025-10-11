@@ -1,127 +1,97 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/errors"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (h *Handler) GetTaskDataByID(c *gin.Context) {
+func (h *Handler) GetTaskDataByTaskID(c *gin.Context) {
 	logger := h.getLogger(c)
 	taskID := c.Param("id")
 	if taskID == "" {
-		logger.Debugf("No task ID provided")
-		logger.Error("No task ID provided")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "No task ID provided",
-			"code":  "MISSING_TASK_ID",
-		})
+		logger.Errorf("%s: %s", errors.ErrInvalidRequestBody, "No task ID provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
-	logger.Debugf("GET [GetTaskDataByID] For task with ID: %s", taskID)
+	logger.Debugf("GET [GetTaskDataByID] For task ID: %s", taskID)
 
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
 	if err != nil {
-		logger.Errorf("Invalid task ID format: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid task ID format",
-			"code":  "INVALID_TASK_ID",
-		})
+		logger.Errorf("%s: %v", errors.ErrInvalidRequestBody, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
-
-	ctx := context.Background()
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
-	taskData, err := h.taskRepository.GetByID(ctx, taskIDInt)
+	taskData, err := h.taskRepository.GetByID(c.Request.Context(), taskIDInt)
 	trackDBOp(err)
 	if err != nil || taskData == nil {
-		logger.Errorf("Error retrieving task data for taskID %d: %v", taskIDInt, err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Task not found",
-			"code":  "TASK_NOT_FOUND",
-		})
+		logger.Errorf("%s: %v", errors.ErrDBRecordNotFound, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": errors.ErrDBRecordNotFound})
 		return
 	}
 
-	logger.Debugf("Successfully retrieved task data for task ID: %d", taskIDInt)
+	logger.Infof("GET [GetTaskDataByTaskID] Successful, task ID: %d", taskIDInt)
 	c.JSON(http.StatusOK, taskData)
 }
 
 func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	logger := h.getLogger(c)
-	logger.Debugf("GET [GetTasksByJobID] For job with ID: %s", c.Param("job_id"))
 	jobID := c.Param("job_id")
 	if jobID == "" {
-		logger.Error("No job ID provided")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "No job ID provided",
-			"code":  "MISSING_JOB_ID",
-		})
+		logger.Errorf("%s: %s", errors.ErrInvalidRequestBody, "No job ID provided")
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
-
-	logger.Debugf("GET [GetTasksByJobID] Retrieving tasks for job ID: %s", jobID)
-
-	ctx := context.Background()
+	logger.Debugf("GET [GetTasksByJobID] For job ID: %s", jobID)
 
 	// Get job to find task IDs and chain ID
 	trackDBOp := metrics.TrackDBOperation("read", "job_data")
-	job, err := h.jobRepository.GetByID(ctx, jobID)
+	job, err := h.jobRepository.GetByID(c.Request.Context(), jobID)
 	trackDBOp(err)
 	if err != nil || job == nil {
-		logger.Errorf("Error retrieving job for jobID %s: %v", jobID, err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Job not found",
-			"code":  "JOB_NOT_FOUND",
-		})
+		logger.Errorf("%s: %v", errors.ErrDBRecordNotFound, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": errors.ErrDBRecordNotFound})
 		return
 	}
-
-	createdChainID := job.CreatedChainID
 
 	// Get tasks by task IDs
 	trackDBOp = metrics.TrackDBOperation("read", "task_data")
 	var tasksData []*types.TaskDataEntity
 	for _, taskID := range job.TaskIDs {
-		task, err := h.taskRepository.GetByID(ctx, taskID)
+		task, err := h.taskRepository.GetByID(c.Request.Context(), taskID)
 		if err == nil && task != nil {
 			tasksData = append(tasksData, task)
 		}
 	}
 	trackDBOp(nil)
 
-	// Convert to TasksByJobIDResponse
-	tasks := make([]types.TasksByJobIDResponse, len(tasksData))
+	// Convert to GetTasksByJobIDResponse
+	explorerBaseURL := getExplorerBaseURL(job.CreatedChainID)
+	tasks := make([]types.GetTasksByJobIDResponse, len(tasksData))
 	for i, task := range tasksData {
-		tasks[i] = types.TasksByJobIDResponse{
-			TaskID:             task.TaskID,
+		tasks[i] = types.GetTasksByJobIDResponse{
 			TaskNumber:         task.TaskNumber,
-			TaskOpXCost:        0, // Convert from big.Int if needed
+			TaskOpXPredictedCost: task.TaskOpxPredictedCost,
+			TaskOpXActualCost: task.TaskOpxActualCost,
 			ExecutionTimestamp: task.ExecutionTimestamp,
 			ExecutionTxHash:    task.ExecutionTxHash,
 			TaskPerformerID:    task.TaskPerformerID,
 			TaskAttesterIDs:    task.TaskAttesterIDs,
-			IsAccepted:         task.IsAccepted,
-			TaskStatus:         "", // Map from entity if needed
 			ConvertedArguments: []string{task.ConvertedArguments},
+			IsSuccessful:       task.IsSuccessful,
+			IsAccepted:         task.IsAccepted,
+			TxURL:              fmt.Sprintf("%s%s", explorerBaseURL, task.ExecutionTxHash),
 		}
 	}
 
-	// Set tx_url for each task
-	explorerBaseURL := getExplorerBaseURL(createdChainID)
-	for i := range tasks {
-		if tasks[i].ExecutionTxHash != "" {
-			tasks[i].TxURL = fmt.Sprintf("%s%s", explorerBaseURL, tasks[i].ExecutionTxHash)
-		}
-	}
-
-	logger.Debugf("Successfully retrieved %d tasks for job ID: %s", len(tasks), jobID)
+	logger.Infof("GET [GetTasksByJobID] Successful, job ID: %s, tasks: %d", jobID, len(tasks))
 	c.JSON(http.StatusOK, tasks)
 }
 

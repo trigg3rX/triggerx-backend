@@ -13,7 +13,7 @@ import (
 func (h *Handler) DeleteJobData(c *gin.Context) {
 	logger := h.getLogger(c)
 	jobID := c.Param("id")
-	if types.IsValidJobID(jobID) {
+	if !types.IsValidJobID(jobID) {
 		logger.Errorf("%s: %s", errors.ErrInvalidRequestBody, "Invalid job ID")
 		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
@@ -99,87 +99,19 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		}
 	}
 
+	logger.Infof("PUT [DeleteJobData] Successful, job ID: %s", jobID)
 	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})
 }
 
 func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 	logger := h.getLogger(c)
-	logger.Debugf("PUT [UpdateJobDataFromUser] Updating job data from user")
-
-	var updateData types.UpdateJobDataFromUserRequest
-	if err := c.ShouldBindJSON(&updateData); err != nil {
-		logger.Errorf("Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request format",
-			"code":  "INVALID_REQUEST",
-		})
-		return
-	}
-
-	jobID := updateData.JobID
-
-	// Get the job first
-	trackDBOp := metrics.TrackDBOperation("read", "job_data")
-	job, err := h.jobRepository.GetByID(c.Request.Context(), jobID)
-	trackDBOp(err)
-	if err != nil || job == nil {
-		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Job not found",
-			"code":  "JOB_NOT_FOUND",
-		})
-		return
-	}
-
-	// Update job fields from request
-	job.JobTitle = updateData.JobTitle
-	job.UpdatedAt = time.Now().UTC()
-
-	trackDBOp = metrics.TrackDBOperation("update", "job_data")
-	err = h.jobRepository.Update(c.Request.Context(), job)
-	trackDBOp(err)
-	if err != nil {
-		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Job update failed",
-			"code":  "JOB_UPDATE_ERROR",
-		})
-		return
-	}
-
-	// For time-based jobs, update time_interval and next_execution_timestamp
-	if job.TaskDefinitionID == 1 || job.TaskDefinitionID == 2 {
-		timeJob, err := h.timeJobRepository.GetByNonID(c.Request.Context(), "job_id", jobID)
-		if err == nil && timeJob != nil {
-			timeJob.TimeInterval = updateData.TimeInterval
-			nextExecution := job.UpdatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
-			timeJob.NextExecutionTimestamp = nextExecution
-
-			err = h.timeJobRepository.Update(c.Request.Context(), timeJob)
-			if err != nil {
-				logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
-				// Not returning error to client, just logging
-			}
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":    "Job updated successfully",
-		"job_id":     updateData.JobID,
-		"updated_at": time.Now().UTC(),
-	})
-}
-
-func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
-	logger := h.getLogger(c)
-	logger.Debugf("PUT [UpdateJobLastExecutedAt] Updating job last executed at")
-
-	var req types.UpdateJobLastExecutedAtRequest
+	var req types.UpdateJobDataFromUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Errorf("Error decoding request body: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		logger.Errorf("%s: %v", errors.ErrInvalidRequestBody, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrInvalidRequestBody})
 		return
 	}
+	logger.Debugf("PUT [UpdateJobDataFromUser] Job ID: %s", req.JobID)
 
 	// Get the job first
 	trackDBOp := metrics.TrackDBOperation("read", "job_data")
@@ -190,27 +122,105 @@ func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": errors.ErrDBRecordNotFound})
 		return
 	}
+	var notify bool
+	expirationTime := job.UpdatedAt.Add(time.Duration(req.TimeFrame) * time.Second)
+	if job.Recurring == req.Recurring {
+		// No need to notify the condition scheduler
+		notify = false
+	} else {
+		// Need to notify the condition scheduler
+		notify = true
+		job.Recurring = req.Recurring
+	}
 
-	// Update job fields
-	job.LastExecutedAt = req.LastExecutedAt
-	job.TaskIDs = append(job.TaskIDs, req.TaskIDs)
-	job.JobCostActual = types.Add(job.JobCostActual, req.JobCostActual)
+	// Update job fields from request
+	job.JobTitle = req.JobTitle
 	job.UpdatedAt = time.Now().UTC()
+	job.TimeFrame = req.TimeFrame
+	job.JobCostPrediction = req.JobCostPrediction
 
-	// Update main job_data table
 	trackDBOp = metrics.TrackDBOperation("update", "job_data")
-	if err := h.jobRepository.Update(c.Request.Context(), job); err != nil {
-		trackDBOp(err)
+	err = h.jobRepository.Update(c.Request.Context(), job)
+	trackDBOp(err)
+	if err != nil {
 		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errors.ErrDBOperationFailed})
 		return
 	}
-	trackDBOp(nil)
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":          "Last executed time updated successfully",
-		"job_id":           req.JobID,
-		"last_executed_at": req.LastExecutedAt,
-		"updated_at":       time.Now().UTC(),
-	})
+	// For time-based jobs, update time_interval and next_execution_timestamp
+	switch job.TaskDefinitionID {
+	case 1, 2:
+		trackDBOp = metrics.TrackDBOperation("update", "time_job")
+		timeJob := &types.TimeJobDataEntity{
+			JobID:                  req.JobID,
+			TimeInterval:           req.TimeInterval,
+			NextExecutionTimestamp: job.UpdatedAt.Add(time.Duration(req.TimeInterval) * time.Second),
+			ExpirationTime:         expirationTime,
+		}
+		err = h.timeJobRepository.Update(c.Request.Context(), timeJob)
+		trackDBOp(err)
+		if err != nil {
+			logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": errors.ErrDBOperationFailed})
+			return
+		}
+		logger.Infof("PUT [UpdateJobDataFromUser] Successful, job ID: %s", req.JobID)
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "Job updated successfully",
+			"job_id":     req.JobID,
+			"updated_at": time.Now().UTC(),
+		})
+	case 3, 4:
+		updateData := &types.EventJobDataEntity{
+			JobID:          req.JobID,
+			Recurring:      req.Recurring,
+			ExpirationTime: expirationTime,
+		}
+		err = h.eventJobRepository.Update(c.Request.Context(), updateData)
+		if err != nil {
+			logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
+		}
+
+		if notify {
+			success, err := h.notifyUpdateToConditionScheduler(req.JobID, req.Recurring, expirationTime)
+			if err != nil {
+				logger.Errorf("Error sending update to condition scheduler: %v", err)
+			}
+			if !success {
+				logger.Errorf("Error sending update to condition scheduler: %v", err)
+			}
+		}
+		logger.Infof("PUT [UpdateJobDataFromUser] Successful, job ID: %s", req.JobID)
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "Job updated successfully",
+			"job_id":     req.JobID,
+			"updated_at": time.Now().UTC(),
+		})
+	case 5, 6:
+		updateData := &types.ConditionJobDataEntity{
+			JobID:          req.JobID,
+			Recurring:      req.Recurring,
+			ExpirationTime: expirationTime,
+		}
+		err = h.conditionJobRepository.Update(c.Request.Context(), updateData)
+		if err != nil {
+			logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
+		}
+		if notify {
+			success, err := h.notifyUpdateToConditionScheduler(req.JobID, req.Recurring, expirationTime)
+			if err != nil {
+				logger.Errorf("Error sending update to condition scheduler: %v", err)
+			}
+			if !success {
+				logger.Errorf("Error sending update to condition scheduler: %v", err)
+			}
+		}
+		logger.Infof("PUT [UpdateJobDataFromUser] Successful, job ID: %s", req.JobID)
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "Job updated successfully",
+			"job_id":     req.JobID,
+			"updated_at": time.Now().UTC(),
+		})
+	}
 }

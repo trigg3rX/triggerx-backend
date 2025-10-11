@@ -7,7 +7,7 @@ type UserDataDTO struct {
 	UserAddress   string    `json:"user_address"`
 	EmailID       string    `json:"email_id"`
 	JobIDs        []string  `json:"job_ids"`
-	OpxConsumed   string    `json:"opx_consumed"`
+	UserPoints    string    `json:"user_points"`
 	TotalJobs     int64     `json:"total_jobs"`
 	TotalTasks    int64     `json:"total_tasks"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -161,10 +161,11 @@ type ApiKeyDataDTO struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-// CompleteJobDataDTO represents the complete job data transfer object
+// CompleteJobDataDTO represents the complete job data transfer object,
+// where only the relevant job type data is populated (others are nil).
 type CompleteJobDataDTO struct {
-	JobDataDTO           JobDataDTO          `json:"job_data"`
-	TimeJobDataDTO       TimeJobDataDTO      `json:"time_job_data"`
-	EventJobDataDTO      EventJobDataDTO     `json:"event_job_data"`
-	ConditionJobDataDTO  ConditionJobDataDTO `json:"condition_job_data"`
+	JobDataDTO           JobDataDTO           `json:"job_data"`
+	TimeJobDataDTO       *TimeJobDataDTO      `json:"time_job_data,omitempty"`
+	EventJobDataDTO      *EventJobDataDTO     `json:"event_job_data,omitempty"`
+	ConditionJobDataDTO  *ConditionJobDataDTO `json:"condition_job_data,omitempty"`
 }

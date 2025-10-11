@@ -78,22 +78,6 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 				}
 			}
 
-		case "/api/tasks":
-			var taskData types.CreateTaskDataRequest
-			if err := c.ShouldBindJSON(&taskData); err != nil {
-				validationError = err
-			} else {
-				validationError = v.validate.Struct(taskData)
-			}
-
-		case "/api/keepers":
-			var keeperData types.CreateKeeperData
-			if err := c.ShouldBindJSON(&keeperData); err != nil {
-				validationError = err
-			} else {
-				validationError = v.validate.Struct(keeperData)
-			}
-
 		case "/api/admin/api-keys":
 			var apiKeyData types.CreateApiKeyRequest
 			if err := c.ShouldBindJSON(&apiKeyData); err != nil {

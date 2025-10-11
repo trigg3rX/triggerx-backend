@@ -261,8 +261,8 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	}
 
 	user.TotalTasks = user.TotalTasks + 1
-	pointsToAdd := types.Add(user.OpxConsumed, data.TaskOpxCost)
-	user.OpxConsumed = pointsToAdd
+	pointsToAdd := types.Add(user.UserPoints, data.TaskOpxCost)
+	user.UserPoints = pointsToAdd
 	user.LastUpdatedAt = time.Now().UTC()
 
 	if err := dm.userRepo.Update(ctx, user); err != nil {

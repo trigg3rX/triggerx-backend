@@ -123,7 +123,7 @@ func ConvertUserDataEntityToDTO(entity *UserDataEntity) *UserDataDTO {
 		UserAddress:   entity.UserAddress,
 		EmailID:       entity.EmailID,
 		JobIDs:        entity.JobIDs,
-		OpxConsumed:   entity.OpxConsumed,
+		UserPoints:    entity.UserPoints,
 		TotalJobs:     entity.TotalJobs,
 		TotalTasks:    entity.TotalTasks,
 		CreatedAt:     entity.CreatedAt,

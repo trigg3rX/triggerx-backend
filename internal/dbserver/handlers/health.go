@@ -7,13 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/errors"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
 	logger := h.getLogger(c)
-	logger.Debugf("GET [HealthCheck] Health check requested")
-	startTime := time.Now()
+	logger.Debugf("GET [HealthCheck] Requested")
+	startTime := time.Now().UTC()
 
 	// Check database connection
 	trackDBOp := metrics.TrackDBOperation("read", "system_health")
@@ -21,27 +22,20 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	trackDBOp(err)
 	if err != nil {
 		logger.Errorf("%s: %v", errors.ErrDBOperationFailed, err)
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "error": errors.ErrDBOperationFailed})
+		c.JSON(http.StatusServiceUnavailable, types.HealthCheckResponse{Status: "unhealthy", Error: errors.ErrDBOperationFailed})
+		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc()
 		return
 	}
 	metrics.HealthChecksTotal.WithLabelValues("healthy").Inc()
 
 	// Prepare response
-	response := gin.H{
-		"status":    "ok",
-		"timestamp": startTime.Unix(),
-		"service":   "dbserver",
-		"version":   "1.0.0",
-		"uptime":    time.Since(startTime).String(),
-		"database": gin.H{
-			"status": "healthy",
-			"error":  "",
-		},
-		"checks": gin.H{
-			"database_connection": err == nil,
-		},
+	response := types.HealthCheckResponse{
+		Status:    "healthy",
+		Timestamp: startTime,
+		Service:   "dbserver",
+		Version:   "1.0.0",
 	}
 
-	logger.Debugf("Health check completed")
+	logger.Info("GET [HealthCheck] Completed")
 	c.JSON(http.StatusOK, response)
 }

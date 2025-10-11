@@ -44,7 +44,7 @@ func InitTracer() (func(context.Context) error, error) {
 func TraceMiddleware(baseLogger logging.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Exempt health check and metrics endpoints from trace ID requirement
-		exemptPaths := []string{"/api/health", "/metrics", "/api/ws/health", "/api/ws/stats"}
+		exemptPaths := []string{"/", "/metrics", "/status", "/api/ws/health", "/api/ws/stats"}
 		for _, path := range exemptPaths {
 			if c.Request.URL.Path == path {
 				c.Next()

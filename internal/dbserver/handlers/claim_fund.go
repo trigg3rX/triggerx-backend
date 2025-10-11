@@ -168,7 +168,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
-	logger.Infof("Fund (%s) sent successfully to %s", thresholdWei.String(), req.WalletAddress)
+	logger.Infof("POST [ClaimFund] Successful, amount: %s, wallet address: %s", thresholdWei.String(), req.WalletAddress)
 	c.JSON(http.StatusOK, ClaimFundResponse{
 		Success:         true,
 		Message:         "Funds sent successfully",
