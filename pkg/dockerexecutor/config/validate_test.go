@@ -91,7 +91,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "ValidConfig_ShouldPass",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 300,
 				MemoryLimit:    "1024m",
 				CPULimit:       1.0,
@@ -125,7 +125,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "ZeroTimeout_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 0,
 				MemoryLimit:    "1024m",
 				CPULimit:       1.0,
@@ -136,7 +136,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "NegativeTimeout_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: -1,
 				MemoryLimit:    "1024m",
 				CPULimit:       1.0,
@@ -147,7 +147,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "InvalidMemoryLimit_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 300,
 				MemoryLimit:    "invalid",
 				CPULimit:       1.0,
@@ -158,7 +158,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "ZeroCPULimit_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 300,
 				MemoryLimit:    "1024m",
 				CPULimit:       0,
@@ -169,7 +169,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "NegativeCPULimit_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 300,
 				MemoryLimit:    "1024m",
 				CPULimit:       -1.0,
@@ -180,7 +180,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "InvalidNetworkMode_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 300,
 				MemoryLimit:    "1024m",
 				CPULimit:       1.0,
@@ -192,7 +192,7 @@ func TestDockerContainerConfig_Validate(t *testing.T) {
 		{
 			name: "InvalidEnvironmentVariable_ShouldFail",
 			config: DockerContainerConfig{
-				Image:          "golang:1.21-alpine",
+				Image:          "golang:1.24-alpine",
 				TimeoutSeconds: 300,
 				MemoryLimit:    "1024m",
 				CPULimit:       1.0,
@@ -415,7 +415,7 @@ func TestLanguageConfig_Validate(t *testing.T) {
 			name: "ValidConfig_ShouldPass",
 			config: LanguageConfig{
 				Language:   types.LanguageGo,
-				ImageName:  "golang:1.21-alpine",
+				ImageName:  "golang:1.24-alpine",
 				RunCommand: "go run code.go",
 				Extensions: []string{".go"},
 			},
@@ -425,7 +425,7 @@ func TestLanguageConfig_Validate(t *testing.T) {
 			name: "InvalidLanguage_ShouldFail",
 			config: LanguageConfig{
 				Language:   "invalid",
-				ImageName:  "golang:1.21-alpine",
+				ImageName:  "golang:1.24-alpine",
 				RunCommand: "go run code.go",
 				Extensions: []string{".go"},
 			},
@@ -447,7 +447,7 @@ func TestLanguageConfig_Validate(t *testing.T) {
 			name: "EmptyRunCommand_ShouldFail",
 			config: LanguageConfig{
 				Language:   types.LanguageGo,
-				ImageName:  "golang:1.21-alpine",
+				ImageName:  "golang:1.24-alpine",
 				RunCommand: "",
 				Extensions: []string{".go"},
 			},
@@ -458,7 +458,7 @@ func TestLanguageConfig_Validate(t *testing.T) {
 			name: "EmptyExtensions_ShouldFail",
 			config: LanguageConfig{
 				Language:   types.LanguageGo,
-				ImageName:  "golang:1.21-alpine",
+				ImageName:  "golang:1.24-alpine",
 				RunCommand: "go run code.go",
 				Extensions: []string{},
 			},
@@ -499,7 +499,7 @@ func TestLanguagePoolConfig_Validate(t *testing.T) {
 					HealthCheckInterval: 30 * time.Second,
 				},
 				DockerConfig: DockerContainerConfig{
-					Image:          "golang:1.21-alpine",
+					Image:          "golang:1.24-alpine",
 					TimeoutSeconds: 300,
 					MemoryLimit:    "1024m",
 					CPULimit:       1.0,
@@ -507,7 +507,7 @@ func TestLanguagePoolConfig_Validate(t *testing.T) {
 				},
 				LanguageConfig: LanguageConfig{
 					Language:   types.LanguageGo,
-					ImageName:  "golang:1.21-alpine",
+					ImageName:  "golang:1.24-alpine",
 					RunCommand: "go run code.go",
 					Extensions: []string{".go"},
 				},
@@ -524,7 +524,7 @@ func TestLanguagePoolConfig_Validate(t *testing.T) {
 					HealthCheckInterval: 30 * time.Second,
 				},
 				DockerConfig: DockerContainerConfig{
-					Image:          "golang:1.21-alpine",
+					Image:          "golang:1.24-alpine",
 					TimeoutSeconds: 300,
 					MemoryLimit:    "1024m",
 					CPULimit:       1.0,
@@ -532,7 +532,7 @@ func TestLanguagePoolConfig_Validate(t *testing.T) {
 				},
 				LanguageConfig: LanguageConfig{
 					Language:   types.LanguageGo,
-					ImageName:  "golang:1.21-alpine",
+					ImageName:  "golang:1.24-alpine",
 					RunCommand: "go run code.go",
 					Extensions: []string{".go"},
 				},
@@ -550,7 +550,7 @@ func TestLanguagePoolConfig_Validate(t *testing.T) {
 					HealthCheckInterval: 30 * time.Second,
 				},
 				DockerConfig: DockerContainerConfig{
-					Image:          "golang:1.21-alpine",
+					Image:          "golang:1.24-alpine",
 					TimeoutSeconds: 300,
 					MemoryLimit:    "1024m",
 					CPULimit:       1.0,
@@ -766,8 +766,8 @@ func TestIsValidDockerImage(t *testing.T) {
 		image    string
 		expected bool
 	}{
-		{"ValidImage_ShouldPass", "golang:1.21-alpine", true},
-		{"ValidImageWithRegistry_ShouldPass", "dockerexecutor.io/golang:1.21-alpine", true},
+		{"ValidImage_ShouldPass", "golang:1.24-alpine", true},
+		{"ValidImageWithRegistry_ShouldPass", "dockerexecutor.io/golang:1.24-alpine", true},
 		{"ValidImageWithTag_ShouldPass", "golang:latest", true},
 		{"ValidImageWithoutTag_ShouldPass", "golang", true},
 		{"EmptyImage_ShouldFail", "", false},

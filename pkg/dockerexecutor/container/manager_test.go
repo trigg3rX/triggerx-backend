@@ -190,9 +190,9 @@ func TestManager_PullImage_ImageAlreadyExists(t *testing.T) {
 	ctx := context.Background()
 
 	// Mock existing image
-	mockDockerClient.AddMockImage("golang:1.21-alpine")
+	mockDockerClient.AddMockImage("golang:1.24-alpine")
 
-	err := manager.PullImage(ctx, "golang:1.21-alpine")
+	err := manager.PullImage(ctx, "golang:1.24-alpine")
 
 	require.NoError(t, err)
 	assert.Len(t, mockDockerClient.ImageListCalls, 1)
@@ -205,12 +205,12 @@ func TestManager_PullImage_ImageNotExists_PullSuccess(t *testing.T) {
 
 	// Don't add any mock images, so it will try to pull
 
-	err := manager.PullImage(ctx, "golang:1.21-alpine")
+	err := manager.PullImage(ctx, "golang:1.24-alpine")
 
 	require.NoError(t, err)
 	assert.Len(t, mockDockerClient.ImageListCalls, 1)
 	assert.Len(t, mockDockerClient.ImagePullCalls, 1)
-	assert.Equal(t, "golang:1.21-alpine", mockDockerClient.ImagePullCalls[0].Ref)
+	assert.Equal(t, "golang:1.24-alpine", mockDockerClient.ImagePullCalls[0].Ref)
 }
 
 func TestManager_PullImage_ImageListFailure(t *testing.T) {
@@ -220,7 +220,7 @@ func TestManager_PullImage_ImageListFailure(t *testing.T) {
 	// Mock image list failure, but pull should still work
 	mockDockerClient.ShouldFailImageList = true
 
-	err := manager.PullImage(ctx, "golang:1.21-alpine")
+	err := manager.PullImage(ctx, "golang:1.24-alpine")
 
 	require.NoError(t, err)
 	assert.Len(t, mockDockerClient.ImageListCalls, 1)
@@ -234,7 +234,7 @@ func TestManager_PullImage_PullFailure(t *testing.T) {
 	// Mock pull failure
 	mockDockerClient.ShouldFailImagePull = true
 
-	err := manager.PullImage(ctx, "golang:1.21-alpine")
+	err := manager.PullImage(ctx, "golang:1.24-alpine")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to pull image")

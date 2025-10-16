@@ -16,7 +16,7 @@ languages:
       max_wait_time: 60s
       health_check_interval: 10m
     docker_config:
-      image: "golang:1.21-alpine"
+      image: "golang:1.24-alpine"
       timeout_seconds: 300
       auto_cleanup: true
       memory_limit: "1024m"
@@ -34,7 +34,7 @@ languages:
         - "/tmp/go-cache:/tmp/go-cache"
     language_config:
       language: "go"
-      image_name: "golang:1.21-alpine"
+      image_name: "golang:1.24-alpine"
       setup_script: "apk add --no-cache git && go mod init test && go mod tidy"
       run_command: "go run code.go"
       extensions: [".go"]

@@ -71,6 +71,8 @@ func GetCleanupScript(language types.Language) string {
 const goInitializationScript = `#!/bin/sh
 
 set -e
+# Install git (required for go mod to download dependencies from GitHub)
+apk add --no-cache git
 mkdir -p /code
 cd /code
 # A minimal hello world for a valid initial state.
