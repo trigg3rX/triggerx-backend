@@ -1,0 +1,74 @@
+0000000000000000000000000000000000000000 a3181c05e34e9737bf39c1b47010c62cf57c8838 BarnBuilder412 <nipunshah1729@gmail.com> 1747821215 +0530	branch: Created from refs/remotes/origin/dev
+a3181c05e34e9737bf39c1b47010c62cf57c8838 8279fe413ca95fead2ce27de1ad387d7c25ed2cf BarnBuilder412 <nipunshah1729@gmail.com> 1747828887 +0530	pull origin dev: Fast-forward
+8279fe413ca95fead2ce27de1ad387d7c25ed2cf f71ef75ea561a794ae42a62f0267b509a7f6312f BarnBuilder412 <nipunshah1729@gmail.com> 1748842937 +0530	pull origin dev: Fast-forward
+f71ef75ea561a794ae42a62f0267b509a7f6312f c040be205604d5dfda590e26d67d826493af0dc9 BarnBuilder412 <nipunshah1729@gmail.com> 1749102360 +0530	pull: Fast-forward
+c040be205604d5dfda590e26d67d826493af0dc9 8001a945be98430054c76d95a7b148ffab752828 BarnBuilder412 <nipunshah1729@gmail.com> 1749184516 +0530	commit: fix:added test scripts for the all services' main file
+8001a945be98430054c76d95a7b148ffab752828 489e68548719757ebe1bb2d0ec8dd25070d12c11 BarnBuilder412 <nipunshah1729@gmail.com> 1749209423 +0530	commit: fix:resolved the test error of event and condition scheduler
+489e68548719757ebe1bb2d0ec8dd25070d12c11 101d10d9bd3eaa3e871eb9d08cd238aee585f020 BarnBuilder412 <nipunshah1729@gmail.com> 1749379377 +0530	pull: Fast-forward
+101d10d9bd3eaa3e871eb9d08cd238aee585f020 c83e70e0df4e390e5a61af4f35a6ad569f8d7506 BarnBuilder412 <nipunshah1729@gmail.com> 1749457929 +0530	pull origin dev: Fast-forward
+c83e70e0df4e390e5a61af4f35a6ad569f8d7506 618a3fe7655ede29bf63ca1c5d673d066d39bef9 BarnBuilder412 <nipunshah1729@gmail.com> 1749615516 +0530	pull origin dev: Fast-forward
+618a3fe7655ede29bf63ca1c5d673d066d39bef9 31e238d8b5c36f182d671e1caf01285a817aa99e BarnBuilder412 <nipunshah1729@gmail.com> 1749615587 +0530	commit: feat:route for the keeper specific APIs and added middleware for that
+31e238d8b5c36f182d671e1caf01285a817aa99e 18c1edf18368ec96dff0c284504e5087ff3b314f BarnBuilder412 <nipunshah1729@gmail.com> 1750221018 +0530	pull: Fast-forward
+18c1edf18368ec96dff0c284504e5087ff3b314f e86232b3b1fa162c1c388acf79b1af880e2e52aa BarnBuilder412 <nipunshah1729@gmail.com> 1750228527 +0530	commit: feat:health service metrics added
+e86232b3b1fa162c1c388acf79b1af880e2e52aa 14349aaf7451b661adb1ce4bce67bafe6a4f5b7e BarnBuilder412 <nipunshah1729@gmail.com> 1750313147 +0530	pull origin dev: Fast-forward
+3928c0e1bf96324ff5937d7cf9f246b9de377086 615e8262b7bd3599d7283afbc6e2250ba0b80027 BarnBuilder412 <nipunshah1729@gmail.com> 1750334095 +0530	commit: fix:event and condition jobs are succesfully send to scheduler
+615e8262b7bd3599d7283afbc6e2250ba0b80027 131c826b10c367bb14961d45781329ec47f34f19 BarnBuilder412 <nipunshah1729@gmail.com> 1750409322 +0530	pull origin dev: Fast-forward
+131c826b10c367bb14961d45781329ec47f34f19 faf2500daf0e56b9bd3093627ae75a1ce0961fb4 BarnBuilder412 <nipunshah1729@gmail.com> 1750415427 +0530	commit: add:one condition script api
+faf2500daf0e56b9bd3093627ae75a1ce0961fb4 4fe9380f6938c1c7e3eaea8f70a2d75136c2b8d8 BarnBuilder412 <nipunshah1729@gmail.com> 1750741410 +0530	commit: fix:error handling
+4fe9380f6938c1c7e3eaea8f70a2d75136c2b8d8 db4880819180805cec9d21d41e827c6ff7685d0d BarnBuilder412 <nipunshah1729@gmail.com> 1750743888 +0530	rebase (finish): refs/heads/dev onto 5e77b02c51fa0ca57b3f9d58e3927515a57bd145
+db4880819180805cec9d21d41e827c6ff7685d0d 5612a5ca2335ff539d940b0a4c9c02ce267f08f4 BarnBuilder412 <nipunshah1729@gmail.com> 1750767238 +0530	commit: fix:reducing cutoff time for deleting the data of completed tasks
+5612a5ca2335ff539d940b0a4c9c02ce267f08f4 8885e52156b0ec0518031f1c2dcb5bfb8551b6e2 BarnBuilder412 <nipunshah1729@gmail.com> 1751257339 +0530	pull origin dev: Fast-forward
+8885e52156b0ec0518031f1c2dcb5bfb8551b6e2 c704a3b4a5b13a4710cc8ee6c9623c58b0589ad0 BarnBuilder412 <nipunshah1729@gmail.com> 1751351505 +0530	pull origin dev: Fast-forward
+c704a3b4a5b13a4710cc8ee6c9623c58b0589ad0 9f406763142f09f8bc4252b4275abc44988596ac BarnBuilder412 <nipunshah1729@gmail.com> 1753089225 +0530	pull origin dev: Fast-forward
+9f406763142f09f8bc4252b4275abc44988596ac 83bffdc932d88b63552561ebeb15582283da4e31 BarnBuilder412 <nipunshah1729@gmail.com> 1753162175 +0530	pull origin dev: Fast-forward
+83bffdc932d88b63552561ebeb15582283da4e31 e92e06937e40bb2c25074126acd3ee5c827637ff BarnBuilder412 <nipunshah1729@gmail.com> 1753168074 +0530	pull origin dev: Fast-forward
+e92e06937e40bb2c25074126acd3ee5c827637ff 160d465070d79f27590253ce9cdc5b67b3b3dd4d BarnBuilder412 <nipunshah1729@gmail.com> 1753176241 +0530	pull origin dev: Fast-forward
+160d465070d79f27590253ce9cdc5b67b3b3dd4d c9178f9c8319dfbf641fe979f7d324833804c153 BarnBuilder412 <nipunshah1729@gmail.com> 1753191972 +0530	commit: fix(keeper/execution):gas fee deduction integration
+c9178f9c8319dfbf641fe979f7d324833804c153 160d465070d79f27590253ce9cdc5b67b3b3dd4d BarnBuilder412 <nipunshah1729@gmail.com> 1753192625 +0530	reset: moving to HEAD~1
+160d465070d79f27590253ce9cdc5b67b3b3dd4d 2d5b4ed8e58cf1e0908d28fbfcfd03d18f7ee543 BarnBuilder412 <nipunshah1729@gmail.com> 1753193135 +0530	commit: feat(keeper/exwcution):gas dedution integration
+2d5b4ed8e58cf1e0908d28fbfcfd03d18f7ee543 07cb1dc39bd9fb4a083609855d2936c872c9ede7 BarnBuilder412 <nipunshah1729@gmail.com> 1753193145 +0530	pull origin dev --rebase (finish): refs/heads/dev onto 26ef18593101b943f72a6a25492df8c5e2e60d47
+07cb1dc39bd9fb4a083609855d2936c872c9ede7 f4eb729c16cff6a2ab4b8c793683ac7cad0fbe6b BarnBuilder412 <nipunshah1729@gmail.com> 1753260331 +0530	commit: fix(dbserver):created chain id added in the database and in api
+f4eb729c16cff6a2ab4b8c793683ac7cad0fbe6b a5920f55ca005adc89a493ef1273036af6abe773 BarnBuilder412 <nipunshah1729@gmail.com> 1753265223 +0530	commit: fix(dbserver):update jobid from int64 to bigInt
+a5920f55ca005adc89a493ef1273036af6abe773 2e21d5d6ca58fd11a375d1e551aad22e9894bb10 BarnBuilder412 <nipunshah1729@gmail.com> 1753265267 +0530	commit: fix(internal/keeper):update jobid from int64 to bigInt
+2e21d5d6ca58fd11a375d1e551aad22e9894bb10 38bc7990691da30d8ff922a2d5ff934bb53eded4 BarnBuilder412 <nipunshah1729@gmail.com> 1753265310 +0530	commit: fix(internal/registrar):update jobid from int64 to bigInt
+38bc7990691da30d8ff922a2d5ff934bb53eded4 f768089cdd51ceb6a710d1454f31a4c20c3d6ebd BarnBuilder412 <nipunshah1729@gmail.com> 1753266832 +0530	commit: fix(pkg/types):update jobid from int64 to bigInt
+f768089cdd51ceb6a710d1454f31a4c20c3d6ebd 287d88e58d24ae4e400cea5fd745b796511e6d72 BarnBuilder412 <nipunshah1729@gmail.com> 1753266938 +0530	commit: fix:test file with int64 to bigint
+287d88e58d24ae4e400cea5fd745b796511e6d72 9cfd9c8ae824a766f81652f3066ee15a8bf9f7eb BarnBuilder412 <nipunshah1729@gmail.com> 1753274553 +0530	commit: fix(db schema):updated for bigint with varint
+9cfd9c8ae824a766f81652f3066ee15a8bf9f7eb 341bd893af4a5ccb9542722559800197aca62d83 BarnBuilder412 <nipunshah1729@gmail.com> 1753335414 +0530	pull: Fast-forward
+341bd893af4a5ccb9542722559800197aca62d83 a20344b53dea4948a1c6b15a47d6e7d4f81bb932 BarnBuilder412 <nipunshah1729@gmail.com> 1753346559 +0530	pull: Fast-forward
+a20344b53dea4948a1c6b15a47d6e7d4f81bb932 1ffce30970e955d3691d2feb0ea79bca558e991b BarnBuilder412 <nipunshah1729@gmail.com> 1753359368 +0530	pull: Fast-forward
+1ffce30970e955d3691d2feb0ea79bca558e991b b15d51067bb334dac873d46f3b3555d1b4fd2be7 BarnBuilder412 <nipunshah1729@gmail.com> 1753365333 +0530	commit: fix:job data type for read api updated
+b15d51067bb334dac873d46f3b3555d1b4fd2be7 2bad99cee1c50fbace9a18a465a8f69d5ef5198f BarnBuilder412 <nipunshah1729@gmail.com> 1753435955 +0530	pull: Fast-forward
+2bad99cee1c50fbace9a18a465a8f69d5ef5198f 2cdf03f75ecc0679ef2daca7e64439a673dc9047 BarnBuilder412 <nipunshah1729@gmail.com> 1753941509 +0530	pull origin dev: Fast-forward
+2cdf03f75ecc0679ef2daca7e64439a673dc9047 323e5bcec9df544e0cf25bea91487577804f5f9f BarnBuilder412 <nipunshah1729@gmail.com> 1753954132 +0530	commit: fix:user address converted to lowercase
+323e5bcec9df544e0cf25bea91487577804f5f9f 324110d1608d6fe0c8e17b7409e87e74b72b1e13 BarnBuilder412 <nipunshah1729@gmail.com> 1753958080 +0530	commit: feat:api added for fetching jobdata using jobid
+324110d1608d6fe0c8e17b7409e87e74b72b1e13 190cdf58e30931f19849928801ce87cad1fd18c6 BarnBuilder412 <nipunshah1729@gmail.com> 1754461878 +0530	pull origin dev --rebase: Fast-forward
+190cdf58e30931f19849928801ce87cad1fd18c6 43198d5e9c2aad870dac414106032adad2a53418 BarnBuilder412 <nipunshah1729@gmail.com> 1754475670 +0530	pull: Fast-forward
+43198d5e9c2aad870dac414106032adad2a53418 08935e53d1b5f2f87594767a916e46803eed3c99 BarnBuilder412 <nipunshah1729@gmail.com> 1754479555 +0530	pull: Fast-forward
+08935e53d1b5f2f87594767a916e46803eed3c99 744c568d7b0d9f8b4e5fd751c80b9b3c74d5beeb BarnBuilder412 <nipunshah1729@gmail.com> 1754481718 +0530	pull: Fast-forward
+744c568d7b0d9f8b4e5fd751c80b9b3c74d5beeb 845f84f7dbe527ae874e5ef2532acafba1d311ff BarnBuilder412 <nipunshah1729@gmail.com> 1754546861 +0530	pull: Fast-forward
+845f84f7dbe527ae874e5ef2532acafba1d311ff 276e1d0d78a9fccd4bb15b3b8ef0c1194969ab5a BarnBuilder412 <nipunshah1729@gmail.com> 1754562946 +0530	pull: Fast-forward
+276e1d0d78a9fccd4bb15b3b8ef0c1194969ab5a 4693c728e4e45e74ef3951128bff5d055e823f7c BarnBuilder412 <nipunshah1729@gmail.com> 1754884149 +0530	pull origin dev: Fast-forward
+4693c728e4e45e74ef3951128bff5d055e823f7c a5349ba389965ae53ff1ba3a87ccb020abf988ad BarnBuilder412 <nipunshah1729@gmail.com> 1754884575 +0530	pull origin dev: Fast-forward
+a5349ba389965ae53ff1ba3a87ccb020abf988ad d7444229b88549ca7375d304aa557fd3c3342ebe BarnBuilder412 <nipunshah1729@gmail.com> 1754895377 +0530	commit: fix:test file updated
+d7444229b88549ca7375d304aa557fd3c3342ebe 12b9728131fca039af1e4bb7af2cf8f7436cfbbf BarnBuilder412 <nipunshah1729@gmail.com> 1755064404 +0530	pull origin dev: Fast-forward
+12b9728131fca039af1e4bb7af2cf8f7436cfbbf e2c71cd43c08595ac6470b26768e5a543ee5673f BarnBuilder412 <nipunshah1729@gmail.com> 1755066355 +0530	commit: fix(dbserver/types):resolve for api call of getjob data
+e2c71cd43c08595ac6470b26768e5a543ee5673f 15c39491f0a950e608730d8a5954d97948ff7721 BarnBuilder412 <nipunshah1729@gmail.com> 1755080057 +0530	commit: feat:added one api for fetching the jobs of user for specific chain id
+15c39491f0a950e608730d8a5954d97948ff7721 ccddef038ecdbb491d13bd7bedb383d2b3fa6a80 BarnBuilder412 <nipunshah1729@gmail.com> 1756117329 +0530	pull: Fast-forward
+ccddef038ecdbb491d13bd7bedb383d2b3fa6a80 8f07af889fab961c0575aa392f6df2d00df33635 BarnBuilder412 <nipunshah1729@gmail.com> 1756123584 +0530	commit: fix:arbitrum sepolia added for claim eth
+8f07af889fab961c0575aa392f6df2d00df33635 9b2eff8a409687144bc166a15faf8bac3b0b465c BarnBuilder412 <nipunshah1729@gmail.com> 1756125670 +0530	commit: fix:update the gas fee via estimate gas instead of static
+9b2eff8a409687144bc166a15faf8bac3b0b465c d726221530b742704eb8e2292b73a4400278a8c4 BarnBuilder412 <nipunshah1729@gmail.com> 1756620082 +0530	pull origin dev: Fast-forward
+d726221530b742704eb8e2292b73a4400278a8c4 a7840ae7ce4da53c73f78335a4604915a3ad66c7 BarnBuilder412 <nipunshah1729@gmail.com> 1756889509 +0530	pull origin dev: Fast-forward
+a7840ae7ce4da53c73f78335a4604915a3ad66c7 79b368be1f5bf9c702591b92fac1c49814a0da6e BarnBuilder412 <nipunshah1729@gmail.com> 1756889618 +0530	merge websocket: Merge made by the 'ort' strategy.
+79b368be1f5bf9c702591b92fac1c49814a0da6e 9255ccf94f7d331f23600c784bfae0d42ea7ed63 BarnBuilder412 <nipunshah1729@gmail.com> 1756890831 +0530	commit: fix:logging messages for backend updated
+9255ccf94f7d331f23600c784bfae0d42ea7ed63 cb04c98e045e28e29e752bef4e5db316e50b3e14 BarnBuilder412 <nipunshah1729@gmail.com> 1757062455 +0530	pull origin dev: Fast-forward
+cb04c98e045e28e29e752bef4e5db316e50b3e14 3968bd705f252e37a7ceb3dafadbc3d8cf4102e3 BarnBuilder412 <nipunshah1729@gmail.com> 1757410302 +0530	pull origin dev: Fast-forward
+3968bd705f252e37a7ceb3dafadbc3d8cf4102e3 bf056fcbe2d5a1fef78c21235e4740077f549c74 BarnBuilder412 <nipunshah1729@gmail.com> 1757423648 +0530	commit: fix:websocket closing for all IPs
+bf056fcbe2d5a1fef78c21235e4740077f549c74 faf3d037f02cc9db8f0a97918999a298da49642d BarnBuilder412 <nipunshah1729@gmail.com> 1757499487 +0530	commit: feat:converted_arguments added in the response of task data
+faf3d037f02cc9db8f0a97918999a298da49642d c6198b5e25f64e56c826d762dd60fcc6bf25bcbf BarnBuilder412 <nipunshah1729@gmail.com> 1757499523 +0530	pull origin dev --rebase (finish): refs/heads/dev onto 733454147d9ee455e2a485a643be3905dacf1e36
+c6198b5e25f64e56c826d762dd60fcc6bf25bcbf f96991476617c04afa8610049c96654ffc95ab1d BarnBuilder412 <nipunshah1729@gmail.com> 1757502233 +0530	commit: fix:dynamic arguments added in websocket response
+f96991476617c04afa8610049c96654ffc95ab1d 9689c4204ee0382bbd90841ac872ab7b24259163 BarnBuilder412 <nipunshah1729@gmail.com> 1758696905 +0530	pull origin dev: Fast-forward
+9689c4204ee0382bbd90841ac872ab7b24259163 6381d955b3adfa64d88a97cf1925b7b95ee6e724 BarnBuilder412 <nipunshah1729@gmail.com> 1758710526 +0530	commit: fix:Status update in event and condition based jobs
+6381d955b3adfa64d88a97cf1925b7b95ee6e724 01fed32d4057509cc36471f4e8ae63e377489037 BarnBuilder412 <nipunshah1729@gmail.com> 1759569487 +0530	commit: feat:email notification on completing the task erespective of task status
+01fed32d4057509cc36471f4e8ae63e377489037 8c2c7a8d5d86d7a21a5a7f013ede3d83d420a2df BarnBuilder412 <nipunshah1729@gmail.com> 1759570627 +0530	commit: fix:linter error solved
+8c2c7a8d5d86d7a21a5a7f013ede3d83d420a2df 1e82006355c5273fa8a59f7cea67c5d83261149b BarnBuilder412 <nipunshah1729@gmail.com> 1760326631 +0530	pull origin dev: Fast-forward

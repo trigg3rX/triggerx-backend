@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -132,21 +134,106 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 	return result, nil
 }
 
-func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
-	// Stage 1: Download and Validate
-	ep.logger.Debugf("Stage 1: Downloading and validating file")
-	fileCtx, err := ep.fileManager.GetOrDownload(ctx, execCtx.FileURL, execCtx.FileLanguage)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %w", err)
+// executeSource accepts raw code and language, writes to a temp file, then runs through the same stages
+func (ep *executionPipeline) executeSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error) {
+	startTime := time.Now()
+	executionID := generateExecutionID()
+
+	ep.logger.Infof("Starting raw execution %s for language: %s", executionID, language)
+
+	select {
+	case <-ep.shutdownChan:
+		return nil, fmt.Errorf("execution pipeline is shutting down")
+	default:
 	}
 
-	// Check validation results
-	if fileCtx.Metadata["validation_errors"] != "" {
-		return &types.ExecutionResult{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Errorf("file validation failed: %s", fileCtx.Metadata["validation_errors"]),
-		}, nil
+	execCtx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc()
+
+	// Create a temporary file with appropriate extension
+	var ext string
+	switch types.Language(strings.ToLower(language)) {
+	case types.LanguageGo:
+		ext = ".go"
+	case types.LanguagePy:
+		ext = ".py"
+	case types.LanguageJS, types.LanguageNode:
+		ext = ".js"
+	case types.LanguageTS:
+		ext = ".ts"
+	default:
+		ext = ".go"
+	}
+
+	tmpFile, err := os.CreateTemp("", "tx-src-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPathNoExt := tmpFile.Name()
+	_ = tmpFile.Close()
+	tmpPath := tmpPathNoExt + ext
+	if err := os.WriteFile(tmpPath, []byte(code), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write temp source: %w", err)
+	}
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	// Build a minimal execution context compatible with executeStages
+	executionContext := &types.ExecutionContext{
+		FileURL:       "inline://source",
+		FileLanguage:  language,
+		NoOfAttesters: 1,
+		TraceID:       executionID,
+		StartedAt:     startTime,
+		Metadata: map[string]string{
+			"file_path": tmpPath,
+		},
+	}
+
+	ep.activeExecutionsWG.Add(1)
+	defer ep.activeExecutionsWG.Done()
+
+	ep.mutex.Lock()
+	ep.activeExecutions[executionID] = executionContext
+	ep.mutex.Unlock()
+	defer func() {
+		ep.mutex.Lock()
+		delete(ep.activeExecutions, executionID)
+		ep.mutex.Unlock()
+		duration := time.Since(startTime)
+		ep.updateStats(true, duration, 0.0)
+	}()
+
+	result, err := ep.executeStages(execCtx, executionContext)
+	if err != nil {
+		executionContext.CompletedAt = time.Now()
+		ep.updateStats(false, time.Since(startTime), 0.0)
+		return nil, fmt.Errorf("execution failed: %w", err)
+	}
+	executionContext.CompletedAt = time.Now()
+	return result, nil
+}
+
+func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
+	// Stage 1: Prepare file (download/validate) unless already provided (inline code)
+	var fileCtx *types.ExecutionContext
+	if existingPath := execCtx.Metadata["file_path"]; existingPath != "" {
+		ep.logger.Debugf("Stage 1: Using provided file path (inline source): %s", existingPath)
+		fileCtx = execCtx
+	} else {
+		ep.logger.Debugf("Stage 1: Downloading and validating file")
+		var err error
+		fileCtx, err = ep.fileManager.GetOrDownload(ctx, execCtx.FileURL, execCtx.FileLanguage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download file: %w", err)
+		}
+		// Check validation results
+		if fileCtx.Metadata["validation_errors"] != "" {
+			return &types.ExecutionResult{
+				Success: false,
+				Output:  "",
+				Error:   fmt.Errorf("file validation failed: %s", fileCtx.Metadata["validation_errors"]),
+			}, nil
+		}
 	}
 
 	// Stage 2: Get Container

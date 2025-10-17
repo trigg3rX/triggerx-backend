@@ -1,0 +1,7 @@
+0000000000000000000000000000000000000000 dd7b3a5fc7b449585518ac919e1958b3a69b6df4 BarnBuilder412 <nipunshah1729@gmail.com> 1749622876 +0530	branch: Created from refs/remotes/origin/143-feature-db-server-metrics-implementation
+dd7b3a5fc7b449585518ac919e1958b3a69b6df4 836f0b5983d75cd1b895cfc48790cb86ac60f919 BarnBuilder412 <nipunshah1729@gmail.com> 1749648260 +0530	commit: feat:metrics added for db-server
+836f0b5983d75cd1b895cfc48790cb86ac60f919 7d695c667b962c907d0733652a3165279e786ed0 BarnBuilder412 <nipunshah1729@gmail.com> 1749732762 +0530	commit: fix:solved errors of GET APIs after testing using postman
+7d695c667b962c907d0733652a3165279e786ed0 9889958da989fadc3a49ea7e30dfb33c9afe0d80 BarnBuilder412 <nipunshah1729@gmail.com> 1749811817 +0530	commit: chore: update dependencies
+9889958da989fadc3a49ea7e30dfb33c9afe0d80 5f847b4cd03c83c061c6c157f09cf23c1f12c56b BarnBuilder412 <nipunshah1729@gmail.com> 1749813770 +0530	commit: fix:resolved the error of POST APIs
+5f847b4cd03c83c061c6c157f09cf23c1f12c56b b61942ff19bbdc69117cfae37ad4459f1ef3d25a BarnBuilder412 <nipunshah1729@gmail.com> 1749818137 +0530	commit: fix:retry mechanism for api routes not for metrics endpoint
+b61942ff19bbdc69117cfae37ad4459f1ef3d25a 9ff213b3dddf18a1e8909196f8c3a213374b45fe BarnBuilder412 <nipunshah1729@gmail.com> 1749900200 +0530	commit: update:error handling for the apis

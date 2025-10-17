@@ -13,6 +13,7 @@ import (
 type DockerExecutorAPI interface {
 	Initialize(ctx context.Context) error
 	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetExecutionFeeConfig() config.ExecutionFeeConfig
 	GetStats() *types.PerformanceMetrics
