@@ -42,7 +42,11 @@ func (w *WebSocketWorker) Start() {
 		w.Logger.Error("Failed to dial websocket", "error", err, "url", w.WebSocketConfig.URL)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			w.Logger.Error("Failed to close websocket connection", "error", err)
+		}
+	}()
 
 	for {
 		select {

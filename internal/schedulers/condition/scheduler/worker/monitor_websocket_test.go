@@ -26,8 +26,14 @@ func TestWebSocketWorker_TriggersOnMessage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to upgrade: %v", err)
 		}
-		defer conn.Close()
-		conn.WriteMessage(websocket.TextMessage, []byte(msgToSend))
+		defer func() {
+			if err := conn.Close(); err != nil {
+				t.Logf("Failed to close websocket connection: %v", err)
+			}
+		}()
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(msgToSend)); err != nil {
+			t.Fatalf("Failed to write message: %v", err)
+		}
 		// Wait so client can read
 		time.Sleep(200 * time.Millisecond)
 	}))
@@ -78,7 +84,6 @@ func TestWebSocketWorker_ConditionCases(t *testing.T) {
 		conditionType string
 		lower         float64
 		upper         float64
-		recurring     bool
 		expectTrigger bool
 	}
 
@@ -109,8 +114,14 @@ func TestWebSocketWorker_ConditionCases(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to upgrade: %v", err)
 				}
-				defer conn.Close()
-				conn.WriteMessage(websocket.TextMessage, []byte(tc.msgToSend))
+				defer func() {
+					if err := conn.Close(); err != nil {
+						t.Logf("Failed to close websocket connection: %v", err)
+					}
+				}()
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(tc.msgToSend)); err != nil {
+					t.Fatalf("Failed to write message: %v", err)
+				}
 				time.Sleep(100 * time.Millisecond)
 			}))
 			defer ts.Close()
