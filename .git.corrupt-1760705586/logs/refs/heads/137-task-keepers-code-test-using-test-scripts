@@ -1,2 +1,0 @@
-0000000000000000000000000000000000000000 c83e70e0df4e390e5a61af4f35a6ad569f8d7506 BarnBuilder412 <nipunshah1729@gmail.com> 1749458947 +0530	branch: Created from refs/remotes/origin/137-task-keepers-code-test-using-test-scripts
-c83e70e0df4e390e5a61af4f35a6ad569f8d7506 8fd52c80bb9124a13593f87c763daa80573cb1d4 BarnBuilder412 <nipunshah1729@gmail.com> 1749487848 +0530	commit: test(keeper/api/handlers and keeper/core/validation):added test script for the keeper's handler and validation part

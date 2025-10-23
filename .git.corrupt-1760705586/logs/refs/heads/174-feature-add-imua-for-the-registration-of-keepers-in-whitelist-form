@@ -1,3 +1,0 @@
-0000000000000000000000000000000000000000 6c2ac9e719a1cbb8593347e27961d0eec752dd56 BarnBuilder412 <nipunshah1729@gmail.com> 1751521600 +0530	branch: Created from refs/remotes/origin/174-feature-add-imua-for-the-registration-of-keepers-in-whitelist-form
-6c2ac9e719a1cbb8593347e27961d0eec752dd56 de9075ebfbb7d597895be4da25a980936b0c8ca3 BarnBuilder412 <nipunshah1729@gmail.com> 1751521657 +0530	commit: feat:added on_imua field for the keepers for the imua chain
-de9075ebfbb7d597895be4da25a980936b0c8ca3 ce50953604c7293aeb124aa1a8460dda3388a64d BarnBuilder412 <nipunshah1729@gmail.com> 1751524015 +0530	commit: fix:format error
