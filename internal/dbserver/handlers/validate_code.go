@@ -13,6 +13,7 @@ type ValidateCodeRequest struct {
 	Language       string `json:"language" binding:"required"`
 	SelectedSafe   string `json:"selected_safe" binding:"required"`
 	TargetFunction string `json:"target_function" binding:"required"`
+	IsSafe         bool   `json:"is_safe"`
 }
 
 type ValidateCodeResponse struct {
@@ -33,7 +34,9 @@ func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
 	ctx := c.Request.Context()
 	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language)
 	if err != nil {
-		c.JSON(http.StatusOK, ValidateCodeResponse{Executable: false, Output: "", Error: err.Error(), SafeMatch: false})
+		// If IsSafe is false, SafeMatch is always true
+		safeMatch := !req.IsSafe
+		c.JSON(http.StatusOK, ValidateCodeResponse{Executable: false, Output: "", Error: err.Error(), SafeMatch: safeMatch})
 		return
 	}
 
@@ -67,7 +70,13 @@ func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
 	}
 
 	// Check if first field matches selected_safe
-	safeMatch := strings.EqualFold(firstField, req.SelectedSafe)
+	// If IsSafe is false, safeMatch is always true (no validation required)
+	var safeMatch bool
+	if req.IsSafe {
+		safeMatch = strings.EqualFold(firstField, req.SelectedSafe)
+	} else {
+		safeMatch = true
+	}
 
 	resp := ValidateCodeResponse{
 		Executable: result.Success,
