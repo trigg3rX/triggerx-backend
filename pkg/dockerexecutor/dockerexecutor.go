@@ -16,6 +16,7 @@ import (
 // CodeExecutor defines what the DockerManager needs from a code executor
 type CodeExecutor interface {
 	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetStats() *types.PerformanceMetrics
 	GetPoolStats() map[types.Language]*types.PoolStats
@@ -135,6 +136,29 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	}
 
 	de.logger.Infof("Execution completed successfully")
+	return result, nil
+}
+
+// ExecuteSource runs raw source code with the specified language
+func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error) {
+	de.mutex.RLock()
+	if !de.initialized {
+		de.mutex.RUnlock()
+		return nil, fmt.Errorf("docker manager not initialized")
+	}
+	if de.closed {
+		de.mutex.RUnlock()
+		return nil, fmt.Errorf("docker manager is closed")
+	}
+	de.mutex.RUnlock()
+
+	de.logger.Infof("Executing raw source for language: %s", language)
+	result, err := de.executor.ExecuteSource(ctx, code, language)
+	if err != nil {
+		de.logger.Errorf("Execution (raw) failed: %v", err)
+		return nil, fmt.Errorf("execution failed: %w", err)
+	}
+	de.logger.Infof("Execution (raw) completed successfully")
 	return result, nil
 }
 

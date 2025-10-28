@@ -266,6 +266,8 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	api := router.Group("/api")
+	// Code validation endpoint (raw source)
+	api.POST("/code/validate", handler.ValidateCodeExecutable)
 
 	// Health check route - no authentication required
 	api.GET("/health", handler.HealthCheck)

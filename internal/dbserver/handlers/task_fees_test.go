@@ -46,6 +46,15 @@ func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLa
 	}
 	return newExecResult(0, true, nil), nil
 }
+func (f *FakeDockerExecutor) ExecuteSource(ctx context.Context, code string, language string) (*dextypes.ExecutionResult, error) {
+	if err, ok := f.errors[code]; ok {
+		return nil, err
+	}
+	if res, ok := f.responses[code]; ok {
+		return res, nil
+	}
+	return newExecResult(0, true, nil), nil
+}
 func (f *FakeDockerExecutor) GetHealthStatus() *dexexec.HealthStatus { return &dexexec.HealthStatus{} }
 func (f *FakeDockerExecutor) GetExecutionFeeConfig() dexconfig.ExecutionFeeConfig {
 	return dexconfig.ExecutionFeeConfig{}

@@ -24,7 +24,7 @@ func isValidConditionType(conditionType string) bool {
 }
 
 func isValidSourceType(sourceType string) bool {
-	validTypes := []string{worker.SourceTypeAPI, worker.SourceTypeOracle, worker.SourceTypeStatic}
+	validTypes := []string{worker.SourceTypeAPI, worker.SourceTypeOracle, worker.SourceTypeStatic, worker.SourceTypeWebSocket}
 	for _, valid := range validTypes {
 		if sourceType == valid {
 			return true
