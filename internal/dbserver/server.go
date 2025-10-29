@@ -337,6 +337,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	api.GET("/ws/tasks", wsHandler.HandleWebSocketConnection)
 	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
 	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
+
+	api.GET("/users/safe-addresses/:user_address", handler.GetSafeAddressesByUser)
+	api.GET("/jobs/safe-address/:safe_address", handler.GetJobsBySafeAddress)
 }
 
 func (s *Server) Start(port string) error {

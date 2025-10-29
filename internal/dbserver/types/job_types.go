@@ -45,6 +45,9 @@ type CreateJobData struct {
 	Timezone          string  `json:"timezone" validate:"required"`
 	CreatedChainID    string  `json:"created_chain_id" validate:"required,chain_id"`
 
+	IsSafe      bool   `json:"is_safe"`
+	SafeAddress string `json:"safe_address,omitempty" validate:"omitempty,ethereum_address"`
+
 	// Time job specific fields
 	ScheduleType     string `json:"schedule_type,omitempty" validate:"omitempty,oneof=cron specific interval"`
 	TimeInterval     int64  `json:"time_interval,omitempty" validate:"omitempty,min=1"`
@@ -114,35 +117,36 @@ type TaskFeeResponse struct {
 
 type JobDataAPI struct {
 	JobID             *commonTypes.BigInt `json:"job_id"`
-	JobTitle          string             `json:"job_title"`
-	TaskDefinitionID  int                `json:"task_definition_id"`
-	UserID            int64              `json:"user_id"`
+	JobTitle          string              `json:"job_title"`
+	TaskDefinitionID  int                 `json:"task_definition_id"`
+	UserID            int64               `json:"user_id"`
 	LinkJobID         *commonTypes.BigInt `json:"link_job_id"`
-	ChainStatus       int                `json:"chain_status"`
-	Custom            bool               `json:"custom"`
-	TimeFrame         int64              `json:"time_frame"`
-	Recurring         bool               `json:"recurring"`
-	Status            string             `json:"status"`
-	JobCostPrediction float64            `json:"job_cost_prediction"`
-	JobCostActual     float64            `json:"job_cost_actual"`
-	TaskIDs           []int64            `json:"task_ids"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
-	LastExecutedAt    time.Time          `json:"last_executed_at"`
-	Timezone          string             `json:"timezone"`
-	IsImua            bool               `json:"is_imua"`
-	CreatedChainID    string             `json:"created_chain_id"`
+	ChainStatus       int                 `json:"chain_status"`
+	Custom            bool                `json:"custom"`
+	TimeFrame         int64               `json:"time_frame"`
+	Recurring         bool                `json:"recurring"`
+	Status            string              `json:"status"`
+	JobCostPrediction float64             `json:"job_cost_prediction"`
+	JobCostActual     float64             `json:"job_cost_actual"`
+	TaskIDs           []int64             `json:"task_ids"`
+	CreatedAt         time.Time           `json:"created_at"`
+	UpdatedAt         time.Time           `json:"updated_at"`
+	LastExecutedAt    time.Time           `json:"last_executed_at"`
+	Timezone          string              `json:"timezone"`
+	IsImua            bool                `json:"is_imua"`
+	CreatedChainID    string              `json:"created_chain_id"`
+	SafeAddress       string              `json:"safe_address"`
 }
 
 type TimeJobDataAPI struct {
-	JobID            *big.Int `json:"job_id"`
-	TaskDefinitionID int      `json:"task_definition_id"`
-	Timezone               string    `json:"timezone"`
-	ScheduleType           string    `json:"schedule_type"`
-	TimeInterval           int64     `json:"time_interval"`
-	CronExpression         string    `json:"cron_expression"`
-	SpecificSchedule       string    `json:"specific_schedule"`
-	NextExecutionTimestamp time.Time `json:"next_execution_timestamp"`
+	JobID                     *big.Int  `json:"job_id"`
+	TaskDefinitionID          int       `json:"task_definition_id"`
+	Timezone                  string    `json:"timezone"`
+	ScheduleType              string    `json:"schedule_type"`
+	TimeInterval              int64     `json:"time_interval"`
+	CronExpression            string    `json:"cron_expression"`
+	SpecificSchedule          string    `json:"specific_schedule"`
+	NextExecutionTimestamp    time.Time `json:"next_execution_timestamp"`
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
 	TargetFunction            string    `json:"target_function"`
@@ -155,18 +159,18 @@ type TimeJobDataAPI struct {
 	CreatedAt                 time.Time `json:"created_at"`
 	UpdatedAt                 time.Time `json:"updated_at"`
 	LastExecutedAt            time.Time `json:"last_executed_at"`
-	ExpirationTime time.Time `json:"expiration_time"`
+	ExpirationTime            time.Time `json:"expiration_time"`
 }
 
 type EventJobDataAPI struct {
-	JobID            *big.Int `json:"job_id"`
-	TaskDefinitionID int      `json:"task_definition_id"`
-	Recurring        bool     `json:"recurring"`
-	TriggerChainID         string `json:"trigger_chain_id"`
-	TriggerContractAddress string `json:"trigger_contract_address"`
-	TriggerEvent           string `json:"trigger_event"`
-	EventFilterParaName    string `json:"event_filter_para_name"`
-	EventFilterValue       string `json:"event_filter_value"`
+	JobID                     *big.Int  `json:"job_id"`
+	TaskDefinitionID          int       `json:"task_definition_id"`
+	Recurring                 bool      `json:"recurring"`
+	TriggerChainID            string    `json:"trigger_chain_id"`
+	TriggerContractAddress    string    `json:"trigger_contract_address"`
+	TriggerEvent              string    `json:"trigger_event"`
+	EventFilterParaName       string    `json:"event_filter_para_name"`
+	EventFilterValue          string    `json:"event_filter_value"`
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
 	TargetFunction            string    `json:"target_function"`
@@ -183,15 +187,15 @@ type EventJobDataAPI struct {
 }
 
 type ConditionJobDataAPI struct {
-	JobID            *big.Int `json:"job_id"`
-	TaskDefinitionID int      `json:"task_definition_id"`
-	Recurring        bool     `json:"recurring"`
-	ConditionType    string  `json:"condition_type"`
-	UpperLimit       float64 `json:"upper_limit"`
-	LowerLimit       float64 `json:"lower_limit"`
-	ValueSourceType  string  `json:"value_source_type"`
-	ValueSourceUrl   string  `json:"value_source_url"`
-	SelectedKeyRoute string  `json:"selected_key_route"`
+	JobID                     *big.Int  `json:"job_id"`
+	TaskDefinitionID          int       `json:"task_definition_id"`
+	Recurring                 bool      `json:"recurring"`
+	ConditionType             string    `json:"condition_type"`
+	UpperLimit                float64   `json:"upper_limit"`
+	LowerLimit                float64   `json:"lower_limit"`
+	ValueSourceType           string    `json:"value_source_type"`
+	ValueSourceUrl            string    `json:"value_source_url"`
+	SelectedKeyRoute          string    `json:"selected_key_route"`
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
 	TargetFunction            string    `json:"target_function"`
@@ -215,7 +219,7 @@ type JobResponse struct {
 }
 
 type JobResponseAPI struct {
-	JobData          JobDataAPI        			   `json:"job_data"`
+	JobData          JobDataAPI                    `json:"job_data"`
 	TimeJobData      *commonTypes.TimeJobData      `json:"time_job_data,omitempty"`
 	EventJobData     *commonTypes.EventJobData     `json:"event_job_data,omitempty"`
 	ConditionJobData *commonTypes.ConditionJobData `json:"condition_job_data,omitempty"`
@@ -243,6 +247,7 @@ func ConvertJobResponseToAPI(j JobResponse) JobResponseAPI {
 			Timezone:          j.JobData.Timezone,
 			IsImua:            j.JobData.IsImua,
 			CreatedChainID:    j.JobData.CreatedChainID,
+			SafeAddress:       j.JobData.SafeAddress,
 		},
 		TimeJobData:      j.TimeJobData,
 		EventJobData:     j.EventJobData,

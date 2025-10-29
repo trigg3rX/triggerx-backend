@@ -115,6 +115,35 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			Timezone:          tempJobs[i].Timezone,
 			IsImua:            tempJobs[i].IsImua,
 			CreatedChainID:    tempJobs[i].CreatedChainID,
+			SafeAddress:       "",
+		}
+
+		// Handle safe address if IsSafe is true
+		if tempJobs[i].IsSafe {
+			if tempJobs[i].SafeAddress == "" {
+				h.logger.Errorf("[CreateJobData] IsSafe is true but SafeAddress is empty for job %s", tempJobs[i].JobID)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "SafeAddress is required when IsSafe is true"})
+				return
+			}
+
+			// Lowercase the safe address for consistency
+			safeAddr := strings.ToLower(tempJobs[i].SafeAddress)
+
+			// Check if safe address already exists for this user
+			exists, err := h.safeAddressRepository.CheckSafeAddressExists(strings.ToLower(tempJobs[i].UserAddress), safeAddr)
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Error checking safe address existence: %v", err)
+			} else if !exists {
+				// Create safe address entry if it doesn't exist
+				if err := h.safeAddressRepository.CreateSafeAddress(strings.ToLower(tempJobs[i].UserAddress), safeAddr); err != nil {
+					h.logger.Errorf("[CreateJobData] Error creating safe address: %v", err)
+				} else {
+					h.logger.Infof("[CreateJobData] Created safe address %s for user %s", safeAddr, tempJobs[i].UserAddress)
+				}
+			}
+
+			// Set the safe address in job data
+			jobData.SafeAddress = safeAddr
 		}
 
 		// Track job creation

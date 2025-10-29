@@ -11,7 +11,7 @@ import (
 type ValidateCodeRequest struct {
 	Code           string `json:"code" binding:"required"`
 	Language       string `json:"language" binding:"required"`
-	SelectedSafe   string `json:"selected_safe" binding:"required"`
+	SelectedSafe   string `json:"selected_safe" binding:"required_if=IsSafe true"`
 	TargetFunction string `json:"target_function" binding:"required"`
 	IsSafe         bool   `json:"is_safe"`
 }

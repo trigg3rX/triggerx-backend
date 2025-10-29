@@ -39,6 +39,9 @@ func (f *fakeJobRepo) GetTaskFeesByJobID(jobID *big.Int) ([]dbtypes.TaskFeeRespo
 func (f *fakeJobRepo) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]pkgtypes.JobData, error) {
 	return nil, nil
 }
+func (f *fakeJobRepo) GetJobsBySafeAddress(safeAddress string) ([]pkgtypes.JobData, error) {
+	return nil, nil
+}
 
 type fakeApiKeysRepo struct {
 	owner string
