@@ -4,14 +4,14 @@ package queries
 const (
 	CreateSafeAddressQuery = `
 		INSERT INTO triggerx.safe_addresses (
-			user_address, safe_address, created_at
-		) VALUES (?, ?, ?)`
+			user_address, safe_address, safe_name, created_at
+		) VALUES (?, ?, ?, ?)`
 )
 
 // Read Queries
 const (
 	GetSafeAddressesByUserQuery = `
-		SELECT safe_address, created_at
+		SELECT safe_address, safe_name, created_at
 		FROM triggerx.safe_addresses
 		WHERE user_address = ?`
 

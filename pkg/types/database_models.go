@@ -188,5 +188,6 @@ type ApiKey struct {
 
 type SafeAddress struct {
 	SafeAddress string    `json:"safe_address"`
+	SafeName    string    `json:"safe_name"`
 	CreatedAt   time.Time `json:"created_at"`
 }

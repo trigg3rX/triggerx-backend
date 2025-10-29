@@ -47,6 +47,7 @@ type CreateJobData struct {
 
 	IsSafe      bool   `json:"is_safe"`
 	SafeAddress string `json:"safe_address,omitempty" validate:"omitempty,ethereum_address"`
+	SafeName    string `json:"safe_name,omitempty"`
 
 	// Time job specific fields
 	ScheduleType     string `json:"schedule_type,omitempty" validate:"omitempty,oneof=cron specific interval"`

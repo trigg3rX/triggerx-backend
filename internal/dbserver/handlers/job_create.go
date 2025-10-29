@@ -135,7 +135,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				h.logger.Errorf("[CreateJobData] Error checking safe address existence: %v", err)
 			} else if !exists {
 				// Create safe address entry if it doesn't exist
-				if err := h.safeAddressRepository.CreateSafeAddress(strings.ToLower(tempJobs[i].UserAddress), safeAddr); err != nil {
+				if err := h.safeAddressRepository.CreateSafeAddress(strings.ToLower(tempJobs[i].UserAddress), safeAddr, tempJobs[i].SafeName); err != nil {
 					h.logger.Errorf("[CreateJobData] Error creating safe address: %v", err)
 				} else {
 					h.logger.Infof("[CreateJobData] Created safe address %s for user %s", safeAddr, tempJobs[i].UserAddress)

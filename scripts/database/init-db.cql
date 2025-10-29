@@ -211,6 +211,7 @@ CREATE TABLE IF NOT EXISTS apikeys (
 CREATE TABLE IF NOT EXISTS safe_addresses (
     user_address text,
     safe_address text,
+    safe_name text,
     created_at timestamp,
     PRIMARY KEY (user_address, safe_address)
 );
