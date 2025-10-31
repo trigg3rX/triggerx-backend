@@ -39,6 +39,7 @@ type CreateJobData struct {
 	JobTitle          string  `json:"job_title" validate:"required,min=3,max=100"`
 	TaskDefinitionID  int     `json:"task_definition_id" validate:"required,min=1,max=6"`
 	Custom            bool    `json:"custom"`
+	Language          string  `json:"language,omitempty" validate:"omitempty,oneof=go python nodejs javascript typescript rust cpp java"`
 	TimeFrame         int64   `json:"time_frame" validate:"required,min=1"`
 	Recurring         bool    `json:"recurring"`
 	JobCostPrediction float64 `json:"job_cost_prediction" validate:"required,min=0"`

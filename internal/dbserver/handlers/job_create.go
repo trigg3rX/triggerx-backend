@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
+	"io"
+	"strconv"
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
@@ -116,6 +117,59 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			IsImua:            tempJobs[i].IsImua,
 			CreatedChainID:    tempJobs[i].CreatedChainID,
 			SafeAddress:       "",
+		}
+
+		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6 & DynamicArgumentsScriptUrl)
+		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6) && tempJobs[i].DynamicArgumentsScriptUrl != "" {
+			// Parse CID or gateway URL if needed
+			ipfsUrl := tempJobs[i].DynamicArgumentsScriptUrl
+			ctx := c.Request.Context()
+			resp, err := h.httpClient.Get(ctx, ipfsUrl)
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Failed to download file: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to download file: " + err.Error()})
+				return
+			}
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					h.logger.Errorf("[CreateJobData] Error closing response body: %v", err)
+				}
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				h.logger.Errorf("[CreateJobData] Unexpected status code: %d", resp.StatusCode)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Unexpected status code: " + strconv.Itoa(resp.StatusCode)})
+				return
+			}
+
+			content, err := io.ReadAll(resp.Body)
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Failed to read response body: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read response body: " + err.Error()})
+				return
+			}
+			ipfsCode := string(content)
+
+			valReq := ValidateCodeRequest{
+				Code:           ipfsCode,
+				Language:       tempJobs[i].Language,
+				SelectedSafe:   tempJobs[i].SafeAddress,
+				TargetFunction: tempJobs[i].TargetFunction,
+				IsSafe:         tempJobs[i].IsSafe,
+			}
+			valResp, _ := h.ValidateCodeInternal(ctx, valReq)
+			if !valResp.Executable || !valResp.SafeMatch {
+				errMsg := "Dynamic job code validation failed: "
+				if valResp.Error != "" {
+					errMsg += valResp.Error
+				} else if !valResp.SafeMatch {
+					errMsg += "SafeAddress does not match code output."
+				} else {
+					errMsg += "Code not executable."
+				}
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg, "output": valResp.Output})
+				return
+			}
 		}
 
 		// Handle safe address if IsSafe is true

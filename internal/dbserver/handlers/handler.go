@@ -9,6 +9,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
+	"github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
@@ -32,7 +33,7 @@ type Handler struct {
 	keeperRepository       repository.KeeperRepository
 	apiKeysRepository      repository.ApiKeysRepository
 	safeAddressRepository  repository.SafeAddressRepository
-
+	httpClient             http.HTTPClientInterface
 	// WebSocket components
 	hub       *websocket.Hub
 	publisher *events.Publisher
@@ -40,7 +41,7 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher, httpClient http.HTTPClientInterface) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
@@ -57,6 +58,7 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		safeAddressRepository:  repository.NewSafeAddressRepository(db),
 		hub:                    hub,
 		publisher:              publisher,
+		httpClient:             httpClient,
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
 

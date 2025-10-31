@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -23,21 +24,13 @@ type ValidateCodeResponse struct {
 	SafeMatch  bool   `json:"safe_match"`
 }
 
-// ValidateCodeExecutable validates if provided code compiles/executes successfully in a sandbox
-func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
-	var req ValidateCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx := c.Request.Context()
+// ValidateCodeInternal does the actual validation and can be used by other logic (not just HTTP handler)
+func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequest) (ValidateCodeResponse, error) {
 	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language)
 	if err != nil {
 		// If IsSafe is false, SafeMatch is always true
 		safeMatch := !req.IsSafe
-		c.JSON(http.StatusOK, ValidateCodeResponse{Executable: false, Output: "", Error: err.Error(), SafeMatch: safeMatch})
-		return
+		return ValidateCodeResponse{Executable: false, Output: "", Error: err.Error(), SafeMatch: safeMatch}, nil
 	}
 
 	// Parse the output to get the first element (address) from the printed JSON array
@@ -86,5 +79,16 @@ func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
 	if result.Error != nil {
 		resp.Error = result.Error.Error()
 	}
+	return resp, nil
+}
+
+// ValidateCodeExecutable validates if provided code compiles/executes successfully in a sandbox (HTTP handler)
+func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
+	var req ValidateCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	resp, _ := h.ValidateCodeInternal(c.Request.Context(), req)
 	c.JSON(http.StatusOK, resp)
 }
