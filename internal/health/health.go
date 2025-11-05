@@ -11,12 +11,16 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/api"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/rewards"
 	"github.com/trigg3rX/triggerx-backend/internal/health/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // stateManager is a package-level singleton for accessing the state manager
 var stateManager *keeper.StateManager
+
+// rewardsService is a package-level singleton for accessing the rewards service
+var rewardsService *rewards.Service
 
 // SetStateManager sets the global state manager instance
 func SetStateManager(sm *keeper.StateManager) {
@@ -26,6 +30,16 @@ func SetStateManager(sm *keeper.StateManager) {
 // GetStateManager returns the global state manager instance
 func GetStateManager() *keeper.StateManager {
 	return stateManager
+}
+
+// SetRewardsService sets the global rewards service instance
+func SetRewardsService(rs *rewards.Service) {
+	rewardsService = rs
+}
+
+// GetRewardsService returns the global rewards service instance
+func GetRewardsService() *rewards.Service {
+	return rewardsService
 }
 
 // Service orchestrates the HTTP API and gRPC servers for the health service
@@ -140,8 +154,8 @@ func (s *Service) startHTTPServer() error {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
-	// Register HTTP routes
-	api.RegisterRoutes(router, s.logger)
+	// Register HTTP routes with rewards service
+	api.RegisterRoutes(router, s.logger, GetRewardsService())
 
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf(":%s", s.config.HTTPPort),

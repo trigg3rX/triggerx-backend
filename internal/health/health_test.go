@@ -11,10 +11,47 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/cache"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/mocks"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
+
+// mockRewardsCache is a simple mock for testing
+type mockRewardsCache struct{}
+
+func (m *mockRewardsCache) IncrementDailyUptime(ctx context.Context, keeperAddress string, seconds int64) error {
+	return nil
+}
+func (m *mockRewardsCache) GetDailyUptime(ctx context.Context, keeperAddress string) (int64, error) {
+	return 0, nil
+}
+func (m *mockRewardsCache) GetAllDailyUptimes(ctx context.Context) (map[string]int64, error) {
+	return make(map[string]int64), nil
+}
+func (m *mockRewardsCache) ResetDailyUptime(ctx context.Context, keeperAddress string) error {
+	return nil
+}
+func (m *mockRewardsCache) ResetAllDailyUptimes(ctx context.Context) error {
+	return nil
+}
+func (m *mockRewardsCache) SetLastRewardsDistribution(ctx context.Context, timestamp time.Time) error {
+	return nil
+}
+func (m *mockRewardsCache) GetLastRewardsDistribution(ctx context.Context) (time.Time, error) {
+	return time.Time{}, nil
+}
+func (m *mockRewardsCache) SetCurrentPeriodStart(ctx context.Context, timestamp time.Time) error {
+	return nil
+}
+func (m *mockRewardsCache) GetCurrentPeriodStart(ctx context.Context) (time.Time, error) {
+	return time.Time{}, nil
+}
+func (m *mockRewardsCache) Close() error {
+	return nil
+}
+
+var _ cache.RewardsCacheInterface = (*mockRewardsCache)(nil)
 
 // TestNewService tests the creation of a new health service
 func TestNewService(t *testing.T) {
@@ -43,8 +80,9 @@ func TestSetStateManager(t *testing.T) {
 	mockLogger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 	mockNotifier := &mocks.MockNotificationBot{}
+	mockCache := &mockRewardsCache{}
 
-	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier)
+	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier, mockCache)
 	require.NotNil(t, sm)
 
 	SetStateManager(sm)
@@ -56,8 +94,9 @@ func TestGetStateManager(t *testing.T) {
 	mockLogger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 	mockNotifier := &mocks.MockNotificationBot{}
+	mockCache := &mockRewardsCache{}
 
-	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier)
+	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier, mockCache)
 	SetStateManager(sm)
 
 	retrieved := GetStateManager()
@@ -75,9 +114,10 @@ func TestService_StartStop(t *testing.T) {
 	mockLogger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 	mockNotifier := &mocks.MockNotificationBot{}
+	mockCache := &mockRewardsCache{}
 
 	// Initialize state manager
-	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier)
+	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier, mockCache)
 	SetStateManager(sm)
 
 	// Use random available ports to avoid conflicts
@@ -169,8 +209,9 @@ func TestService_ConcurrentStartStop(t *testing.T) {
 	mockLogger := logging.NewNoOpLogger()
 	mockDB := &mocks.MockDatabaseManager{}
 	mockNotifier := &mocks.MockNotificationBot{}
+	mockCache := &mockRewardsCache{}
 
-	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier)
+	sm := keeper.InitializeStateManager(mockLogger, mockDB, mockNotifier, mockCache)
 	SetStateManager(sm)
 
 	cfg := &Config{

@@ -12,10 +12,13 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health"
+	"github.com/trigg3rX/triggerx-backend/internal/health/cache"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/database"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/notification"
+	"github.com/trigg3rX/triggerx-backend/internal/health/rewards"
+	redisclient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore"
 	"github.com/trigg3rX/triggerx-backend/pkg/datastore/infrastructure/connection"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -72,6 +75,32 @@ func main() {
 	dbManager := database.InitDatabaseManager(logger, keeperRepo)
 	logger.Info("Database manager initialized")
 
+	// Initialize Redis client for rewards tracking
+	redisConfig := redisclient.RedisConfig{
+		UpstashConfig: redisclient.UpstashConfig{
+			URL:   config.GetRedisURL(),
+			Token: config.GetRedisPassword(),
+		},
+		ConnectionSettings: redisclient.ConnectionSettings{
+			PoolSize:     10,
+			MinIdleConns: 2,
+			MaxRetries:   3,
+			DialTimeout:  5 * time.Second,
+			ReadTimeout:  3 * time.Second,
+			WriteTimeout: 3 * time.Second,
+			PoolTimeout:  4 * time.Second,
+		},
+	}
+
+	redisClient, err := redisclient.NewRedisClient(logger, redisConfig)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize Redis client: %v", err))
+	}
+	logger.Info("Redis client initialized")
+
+	// Create rewards cache wrapper
+	rewardsCache := cache.NewRewardsCache(redisClient, logger)
+
 	// Initialize notification bot
 	notificationBot, err := notification.NewBot(config.GetBotToken(), logger, dbManager)
 	if err != nil {
@@ -80,9 +109,9 @@ func main() {
 	notificationBot.Start()
 	logger.Info("Notification bot initialized")
 
-	// Initialize state manager with notification bot for inactivity alerts
-	stateManager := keeper.InitializeStateManager(logger, dbManager, notificationBot)
-	logger.Info("Keeper state manager initialized with notification support")
+	// Initialize state manager with notification bot for inactivity alerts and cache for rewards
+	stateManager := keeper.InitializeStateManager(logger, dbManager, notificationBot, rewardsCache)
+	logger.Info("Keeper state manager initialized with notification support and rewards tracking")
 
 	// Set global state manager for orchestrator access
 	health.SetStateManager(stateManager)
@@ -92,6 +121,18 @@ func main() {
 		logger.Debug("Failed to load verified keepers from database", "error", err)
 		// Continue anyway, as we can still operate with an empty state
 	}
+
+	// Initialize and start rewards service
+	rewardsService := rewards.NewService(logger, rewardsCache, dbManager)
+	if err := rewardsService.Start(); err != nil {
+		logger.Error("Failed to start rewards service", "error", err)
+		// Continue anyway, rewards will be unavailable but health checks will work
+	} else {
+		logger.Info("Rewards service started successfully")
+	}
+
+	// Set global rewards service for API access
+	health.SetRewardsService(rewardsService)
 
 	// Create and start health service orchestrator (HTTP + gRPC)
 	healthService := health.NewService(logger, &health.Config{
@@ -124,14 +165,26 @@ func main() {
 		logger.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	performGracefulShutdown(healthService, &wg, logger)
+	performGracefulShutdown(healthService, rewardsService, redisClient, &wg, logger)
 }
 
-func performGracefulShutdown(healthService *health.Service, wg *sync.WaitGroup, logger logging.Logger) {
+func performGracefulShutdown(
+	healthService *health.Service,
+	rewardsService *rewards.Service,
+	redisClient redisclient.RedisClientInterface,
+	wg *sync.WaitGroup,
+	logger logging.Logger,
+) {
 	logger.Info("Initiating graceful shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+
+	// Stop rewards service
+	if rewardsService != nil {
+		rewardsService.Stop()
+		logger.Info("Rewards service stopped")
+	}
 
 	// Update all keepers to inactive in database
 	stateManager := keeper.GetStateManager()
@@ -142,6 +195,15 @@ func performGracefulShutdown(healthService *health.Service, wg *sync.WaitGroup, 
 	// Stop health service (HTTP + gRPC servers)
 	if err := healthService.Stop(ctx); err != nil {
 		logger.Error("Health service shutdown error", "error", err)
+	}
+
+	// Close Redis connection
+	if redisClient != nil {
+		if err := redisClient.Close(); err != nil {
+			logger.Error("Failed to close Redis connection", "error", err)
+		} else {
+			logger.Info("Redis connection closed")
+		}
 	}
 
 	wg.Wait()

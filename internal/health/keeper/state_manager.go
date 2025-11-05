@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/cache"
 	"github.com/trigg3rX/triggerx-backend/internal/health/interfaces"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -16,7 +17,8 @@ type StateManager struct {
 	logger            logging.Logger
 	db                interfaces.DatabaseManagerInterface
 	notifier          interfaces.NotificationBotInterface
-	notificationsSent map[string]time.Time // Tracks when notifications were last sent
+	cache             cache.RewardsCacheInterface // Redis cache for daily uptime tracking
+	notificationsSent map[string]time.Time        // Tracks when notifications were last sent
 }
 
 var (
@@ -29,6 +31,7 @@ func InitializeStateManager(
 	logger logging.Logger,
 	db interfaces.DatabaseManagerInterface,
 	notifier interfaces.NotificationBotInterface,
+	cache cache.RewardsCacheInterface,
 ) *StateManager {
 	stateManagerOnce.Do(func() {
 		// Create a new logger with component field and proper level
@@ -39,6 +42,7 @@ func InitializeStateManager(
 			logger:            stateLogger,
 			db:                db,
 			notifier:          notifier,
+			cache:             cache,
 			notificationsSent: make(map[string]time.Time),
 		}
 		go stateManager.startCleanupRoutine()

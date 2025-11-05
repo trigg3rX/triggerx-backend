@@ -69,6 +69,10 @@ type SecretsConfig struct {
 	PinataHost      string
 	PinataJWT       string
 
+	// Redis connection
+	RedisURL      string
+	RedisPassword string
+
 	// Ethereum addresses
 	ManagerSigningAddress    string
 	TaskExecutionAddress     string
@@ -130,6 +134,10 @@ func loadSecretsFromEnv() (SecretsConfig, bool) {
 		AlchemyAPIKey:   env.GetEnvString("ALCHEMY_API_KEY", ""),
 		PinataHost:      env.GetEnvString("PINATA_HOST", ""),
 		PinataJWT:       env.GetEnvString("PINATA_JWT", ""),
+
+		// Redis connection
+		RedisURL:      env.GetEnvString("UPSTASH_REDIS_REST_URL", ""),
+		RedisPassword: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 
 		// Ethereum addresses
 		ManagerSigningAddress:    env.GetEnvString("MANAGER_SIGNING_ADDRESS", ""),
@@ -420,4 +428,19 @@ func GetImuaTaskExecutionAddress() string {
 		return ""
 	}
 	return cfg.Secrets.ImuaTaskExecutionAddress
+}
+
+// Redis Configuration Getters
+func GetRedisURL() string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Secrets.RedisURL
+}
+
+func GetRedisPassword() string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Secrets.RedisPassword
 }

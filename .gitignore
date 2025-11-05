@@ -5,6 +5,7 @@ othentic/.env
 # release
 release/*
 
+# reports
 scripts/tests/*.html
 
 # cursor
@@ -12,19 +13,12 @@ scripts/tests/*.html
 .keystore
 
 # data
-data/cache/*
+data/*
 !data/cache/.gitkeep
-data/logs/*/*.log*
-data/logs/*/*.json
 !data/logs/*/.gitkeep
 
-# Signing keys
-*.key
-*.pub
-
-# peerstore
-peerstore/
-
-reference/
-
-.log
+# References
+w_data/
+x_frontend/
+y_contracts/
+z_sdk/

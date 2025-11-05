@@ -23,4 +23,5 @@ type DatabaseManagerInterface interface {
 	UpdateAllKeepersStatus(ctx context.Context, onlineKeepers []types.HealthKeeperInfo) error
 	UpdateKeeperChatID(ctx context.Context, keeperAddress string, chatID int64) error
 	GetKeeperChatInfo(ctx context.Context, keeperAddress string) (int64, string, error)
+	AddKeeperPoints(ctx context.Context, keeperAddress string, points int64) error
 }

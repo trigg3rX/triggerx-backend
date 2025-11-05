@@ -17,8 +17,8 @@ help:
 
 # Setup ScyllaDB container
 db-setup:
-    docker compose docker/docker-compose.yaml down
-    docker compose docker/docker-compose.yaml up -d
+    docker compose -f docker/docker-compose.yaml down
+    docker compose -f docker/docker-compose.yaml up -d
     sleep 6
     ./scripts/database/setup-db.sh
 

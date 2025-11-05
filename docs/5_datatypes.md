@@ -88,7 +88,7 @@ Represents the `job_data` table for all job types.
 
 ```go
 type JobDataEntity struct {
-    JobID             string    `cql:"job_id"`              // Unique job identifier
+    JobID             string    `cql:"job_id"`              // Unique job identifier (same as Job Registry)
     JobTitle          string    `cql:"job_title"`           // User-defined job name
     TaskDefinitionID  int       `cql:"task_definition_id"`  // Maps to task type
     CreatedChainID    string    `cql:"created_chain_id"`    // Chain where job was created
@@ -97,11 +97,11 @@ type JobDataEntity struct {
     ChainStatus       int       `cql:"chain_status"`        // 0=None, 1=Chain Head, 2=Chain Block
     Timezone          string    `cql:"timezone"`            // User's timezone (e.g., "America/New_York")
     IsImua            bool      `cql:"is_imua"`             // Special IMUA job type
-    JobType           string    `cql:"job_type"`            // "time", "event", "condition"
+    JobType           string    `cql:"job_type"`            // "frontend", "sdk", "template", "contract"
     TimeFrame         int64     `cql:"time_frame"`          // Job validity duration (seconds)
     Recurring         bool      `cql:"recurring"`           // Recurring job or one-time
-    Status            string    `cql:"status"`              // "created", "running", "completed", "failed", "expired"
-    JobCostPrediction string    `cql:"job_cost_prediction"` // Estimated cost (Wei)
+    Status            string    `cql:"status"`              // "created", "running", "completed", "failed", "expired", "deleted"
+    JobCostPrediction string    `cql:"job_cost_prediction"` // Estimated cost (Wei, for a single task)
     JobCostActual     string    `cql:"job_cost_actual"`     // Actual cost (Wei, sum of task costs)
     TaskIDs           []int64   `cql:"task_ids"`            // Tasks executed for this job
     CreatedAt         time.Time `cql:"created_at"`          // Job creation time
@@ -124,7 +124,7 @@ Represents `time_job_data` table for time-based scheduled jobs.
 
 ```go
 type TimeJobDataEntity struct {
-    JobID                     string    `cql:"job_id"`                      // Reference to JobDataEntity
+    JobID                     string    `cql:"job_id"`                      // Unique job identifier
     TaskDefinitionID          int       `cql:"task_definition_id"`          // Task type
     ScheduleType              string    `cql:"schedule_type"`               // "cron", "interval", "specific"
     TimeInterval              int64     `cql:"time_interval"`               // Interval in seconds (for interval type)
@@ -146,36 +146,30 @@ type TimeJobDataEntity struct {
 
 **Primary Key**: `job_id`
 
-**Field Notes**:
-
-- `ScheduleType`: Determines which schedule field to use
-- `NextExecutionTimestamp`: Updated after each execution for recurring jobs
-- `DynamicArgumentsScriptURL`: IPFS CID for script that generates arguments at runtime
-
 ### 4. EventJobDataEntity
 
 Represents `event_job_data` table for blockchain event-triggered jobs.
 
 ```go
 type EventJobDataEntity struct {
-    JobID                      string    `cql:"job_id"`                       // Reference to JobDataEntity
-    TaskDefinitionID           int       `cql:"task_definition_id"`           // Task type
-    Recurring                  bool      `cql:"recurring"`                    // Trigger on every event or once
+    JobID                      string    `cql:"job_id"`                       // Unique job identifier
+    TaskDefinitionID           int       `cql:"task_definition_id"`
+    Recurring                  bool      `cql:"recurring"`                    // Trigger on every event in time frame or once
     TriggerChainID             string    `cql:"trigger_chain_id"`             // Chain to monitor
     TriggerContractAddress     string    `cql:"trigger_contract_address"`     // Contract to watch
     TriggerEvent               string    `cql:"trigger_event"`                // Event signature (e.g., "Transfer(address,address,uint256)")
     TriggerEventFilterParaName string    `cql:"trigger_event_filter_para_name"` // Indexed parameter to filter (e.g., "to")
     TriggerEventFilterValue    string    `cql:"trigger_event_filter_value"`   // Filter value (e.g., specific address)
-    TargetChainID              string    `cql:"target_chain_id"`              // Chain to execute action
-    TargetContractAddress      string    `cql:"target_contract_address"`      // Action contract
-    TargetFunction             string    `cql:"target_function"`              // Action function
-    ABI                        string    `cql:"abi"`                          // Contract ABI
-    ArgType                    int       `cql:"arg_type"`                     // Argument type
-    Arguments                  []string  `cql:"arguments"`                    // Static arguments
-    DynamicArgumentsScriptURL  string    `cql:"dynamic_arguments_script_url"` // Dynamic arg script CID
-    IsCompleted                bool      `cql:"is_completed"`                 // Job finished
-    LastExecutedAt             time.Time `cql:"last_executed_at"`             // Last trigger time
-    ExpirationTime             time.Time `cql:"expiration_time"`              // Job expiration
+    TargetChainID              string    `cql:"target_chain_id"`
+    TargetContractAddress      string    `cql:"target_contract_address"`
+    TargetFunction             string    `cql:"target_function"`
+    ABI                        string    `cql:"abi"`
+    ArgType                    int       `cql:"arg_type"`
+    Arguments                  []string  `cql:"arguments"`
+    DynamicArgumentsScriptURL  string    `cql:"dynamic_arguments_script_url"`
+    IsCompleted                bool      `cql:"is_completed"`
+    LastExecutedAt             time.Time `cql:"last_executed_at"`
+    ExpirationTime             time.Time `cql:"expiration_time"`
 }
 ```
 
@@ -193,25 +187,25 @@ Represents `condition_job_data` table for condition-based jobs.
 
 ```go
 type ConditionJobDataEntity struct {
-    JobID                     string    `cql:"job_id"`                      // Reference to JobDataEntity
-    TaskDefinitionID          int       `cql:"task_definition_id"`          // Task type
-    Recurring                 bool      `cql:"recurring"`                   // Check continuously or once
+    JobID                     string    `cql:"job_id"`                      // Unique job identifier
+    TaskDefinitionID          int       `cql:"task_definition_id"`
+    Recurring                 bool      `cql:"recurring"`
     ConditionType             string    `cql:"condition_type"`              // "balance", "state", "oracle"
     UpperLimit                float64   `cql:"upper_limit"`                 // Upper threshold
     LowerLimit                float64   `cql:"lower_limit"`                 // Lower threshold
-    ValueSourceType           string    `cql:"value_source_type"`           // "contract", "api", "oracle"
-    ValueSourceURL            string    `cql:"value_source_url"`            // RPC endpoint or API URL
+    ValueSourceType           string    `cql:"value_source_type"`           // "api", "oracle", "websocket"
+    ValueSourceURL            string    `cql:"value_source_url"`            // API URL or Websocket URL
     SelectedKeyRoute          string    `cql:"selected_key_route"`          // JSON path for API responses
-    TargetChainID             string    `cql:"target_chain_id"`             // Action chain
-    TargetContractAddress     string    `cql:"target_contract_address"`     // Action contract
-    TargetFunction            string    `cql:"target_function"`             // Action function
-    ABI                       string    `cql:"abi"`                         // Contract ABI
-    ArgType                   int       `cql:"arg_type"`                    // Argument type
-    Arguments                 []string  `cql:"arguments"`                   // Static arguments
-    DynamicArgumentsScriptURL string    `cql:"dynamic_arguments_script_url"`// Dynamic arg script CID
-    IsCompleted               bool      `cql:"is_completed"`                // Job finished
-    LastExecutedAt            time.Time `cql:"last_executed_at"`            // Last check time
-    ExpirationTime            time.Time `cql:"expiration_time"`             // Job expiration
+    TargetChainID             string    `cql:"target_chain_id"`
+    TargetContractAddress     string    `cql:"target_contract_address"`
+    TargetFunction            string    `cql:"target_function"`
+    ABI                       string    `cql:"abi"`
+    ArgType                   int       `cql:"arg_type"`
+    Arguments                 []string  `cql:"arguments"`
+    DynamicArgumentsScriptURL string    `cql:"dynamic_arguments_script_url"`
+    IsCompleted               bool      `cql:"is_completed"`
+    LastExecutedAt            time.Time `cql:"last_executed_at"`
+    ExpirationTime            time.Time `cql:"expiration_time"`
 }
 ```
 
@@ -220,7 +214,7 @@ type ConditionJobDataEntity struct {
 **Field Notes**:
 
 - `ConditionType`: Type of condition to monitor
-- `UpperLimit` and `LowerLimit`: Trigger when value is outside or inside range
+- `UpperLimit` and `LowerLimit`: Trigger when value is outside or inside range, only upper limit is used for single value conditions
 - `SelectedKeyRoute`: JSON path (e.g., `data.price.usd`) for extracting value from API response
 
 ### 6. TaskDataEntity
@@ -230,13 +224,13 @@ Represents `task_data` table for individual task executions.
 ```go
 type TaskDataEntity struct {
     TaskID               int64     `cql:"task_id"`                // Unique task ID (auto-increment)
-    TaskNumber           int64     `cql:"task_number"`            // Task sequence number for job
+    TaskNumber           int64     `cql:"task_number"`            // Task sequence number on the contract
     JobID                string    `cql:"job_id"`                 // Reference to job
-    TaskDefinitionID     int       `cql:"task_definition_id"`     // Task type
-    CreatedAt            time.Time `cql:"created_at"`             // Task creation time
-    TaskOpxPredictedCost string    `cql:"task_opx_predicted_cost"`// Predicted cost (Wei)
+    TaskDefinitionID     int       `cql:"task_definition_id"`
+    CreatedAt            time.Time `cql:"created_at"`
+    TaskOpxPredictedCost string    `cql:"task_opx_predicted_cost"`// From JobCostPrediction (Wei)
     TaskOpxActualCost    string    `cql:"task_opx_actual_cost"`   // Actual cost including tx gas (Wei)
-    ExecutionTimestamp   time.Time `cql:"execution_timestamp"`    // Execution start time
+    ExecutionTimestamp   time.Time `cql:"execution_timestamp"`    // Execution timestamp
     ExecutionTxHash      string    `cql:"execution_tx_hash"`      // Transaction hash for action
     TaskPerformerID      int64     `cql:"task_performer_id"`      // Keeper who executed
     TaskAttesterIDs      []int64   `cql:"task_attester_ids"`      // Keepers who attested
@@ -251,12 +245,6 @@ type TaskDataEntity struct {
 
 **Primary Key**: `task_id`
 
-**Field Notes**:
-
-- `TaskOpxActualCost`: Total cost in Wei (includes gas used + resource utilization)
-- `TaskPerformerID`: Reference to KeeperDataEntity.OperatorID
-- `TaskAttesterIDs`: Array of attester operator IDs
-
 ### 7. KeeperDataEntity
 
 Represents `keeper_data` table for Keeper node registry.
@@ -268,9 +256,9 @@ type KeeperDataEntity struct {
     RewardsAddress   string    `cql:"rewards_address"`    // Address for reward payouts
     ConsensusAddress string    `cql:"consensus_address"`  // Consensus layer address
     RegisteredTx     string    `cql:"registered_tx"`      // Registration transaction hash
-    OperatorID       int64     `cql:"operator_id"`        // Unique operator ID
+    OperatorID       int64     `cql:"operator_id"`        // Unique operator ID on the contract
     VotingPower      string    `cql:"voting_power"`       // Voting power (Wei-based stake)
-    Whitelisted      bool      `cql:"whitelisted"`        // Whitelisted for special tasks
+    Whitelisted      bool      `cql:"whitelisted"`        // Whitelisted to join
     Registered       bool      `cql:"registered"`         // Registered on-chain
     Online           bool      `cql:"online"`             // Currently online
     Version          string    `cql:"version"`            // Keeper software version
@@ -278,22 +266,16 @@ type KeeperDataEntity struct {
     PublicIP         string    `cql:"public_ip"`          // Public IP for P2P
     ChatID           int64     `cql:"chat_id"`            // Telegram chat ID for alerts
     EmailID          string    `cql:"email_id"`           // Email for alerts
-    RewardsBooster   string    `cql:"rewards_booster"`    // Reward multiplier (Wei-based)
+    RewardsBooster   string    `cql:"rewards_booster"`    // Reward multiplier (for testnets, obsolete for mainnet)
     NoExecutedTasks  int64     `cql:"no_executed_tasks"`  // Total tasks executed
     NoAttestedTasks  int64     `cql:"no_attested_tasks"`  // Total tasks attested
     Uptime           int64     `cql:"uptime"`             // Total uptime (seconds)
-    KeeperPoints     string    `cql:"keeper_points"`      // Total points (Wei, sum of TaskOpxCost executed/attested)
+    KeeperPoints     string    `cql:"keeper_points"`      // Total points (Wei, sum of TaskOpxCost executed/attested, daily rewards)
     LastCheckedIn    time.Time `cql:"last_checked_in"`    // Last heartbeat time
 }
 ```
 
 **Primary Key**: `keeper_address`
-
-**Field Notes**:
-
-- `VotingPower`: Staked amount determining consensus weight
-- `KeeperPoints`: Cumulative resource utilization (performance metric)
-- `Online`: Set to false if `LastCheckedIn` > 10 minutes ago
 
 ### 8. ApiKeyDataEntity
 
@@ -378,10 +360,6 @@ API-specific types for request validation and response formatting.
 
 ### Common Types
 
-#### HealthCheckResponse
-
-Used by all services for health endpoints:
-
 ```go
 type HealthCheckResponse struct {
     Status    string    `json:"status"`    // "ok", "degraded", "error"
@@ -389,38 +367,6 @@ type HealthCheckResponse struct {
     Service   string    `json:"service"`   // Service name
     Version   string    `json:"version"`   // Software version
     Error     string    `json:"error,omitempty"` // Error message if unhealthy
-}
-```
-
-**Example Response**:
-
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-15T10:30:00Z",
-  "service": "dbserver",
-  "version": "1.0.0"
-}
-```
-
-### DBServer-Specific Types
-
-**Location**: `pkg/types/http_dbserver.go`
-
-Examples (typical patterns):
-
-```go
-// Request to create a new job
-type CreateJobRequest struct {
-    JobTitle  string `json:"job_title" binding:"required"`
-    JobType   string `json:"job_type" binding:"required,oneof=time event condition"`
-    // ... other fields with validation tags
-}
-
-// Response after creating a job
-type CreateJobResponse struct {
-    JobID   string `json:"job_id"`
-    Message string `json:"message"`
 }
 
 // Generic error response
@@ -432,37 +378,6 @@ type ErrorResponse struct {
 }
 ```
 
-### Health Service Types
-
-**Location**: `pkg/types/http_health.go`
-
-```go
-// Keeper check-in request
-type KeeperCheckInRequest struct {
-    KeeperAddress string `json:"keeper_address" binding:"required"`
-    Version       string `json:"version"`
-    Uptime        int64  `json:"uptime"`
-}
-```
-
-### Keeper Types
-
-**Location**: `pkg/types/http_keeper.go`
-
-```go
-// Task assignment from TaskDispatcher
-type SendTaskDataToKeeper struct {
-    TaskID           int64       `json:"task_id"`
-    JobID            string      `json:"job_id"`
-    TargetChainID    string      `json:"target_chain_id"`
-    ContractAddress  string      `json:"contract_address"`
-    FunctionName     string      `json:"function_name"`
-    ABI              string      `json:"abi"`
-    Arguments        []string    `json:"arguments"`
-    ScriptURL        string      `json:"script_url"` // IPFS CID if dynamic args
-}
-```
-
 ---
 
 ## RPC Message Types
@@ -470,120 +385,6 @@ type SendTaskDataToKeeper struct {
 Used for gRPC communication between internal services.
 
 **Location**: `pkg/types/rpc_*.go`
-
-### Keeper RPC Types
-
-**Location**: `pkg/types/rpc_keeper.go`
-
-#### PerformerActionData
-
-Data sent by Keeper after executing a task:
-
-```go
-type PerformerActionData struct {
-    TaskID       int64  `json:"task_id"`
-    ActionTxHash string `json:"action_tx_hash"`      // Transaction hash
-    GasUsed      string `json:"gas_used"`            // Gas consumed (Wei)
-    Status       bool   `json:"status"`              // Success/failure
-
-    // Resource utilization metrics
-    MemoryUsage   uint64  `json:"memory_usage"`      // Bytes
-    CPUPercentage float64 `json:"cpu_percentage"`    // 0-100%
-    NetworkRx     uint64  `json:"network_rx"`        // Bytes received
-    NetworkTx     uint64  `json:"network_tx"`        // Bytes transmitted
-    BlockRead     uint64  `json:"block_read"`        // Disk bytes read
-    BlockWrite    uint64  `json:"block_write"`       // Disk bytes written
-    BandwidthRate float64 `json:"bandwidth_rate"`    // Mbps
-
-    // Cost calculation fields
-    TotalFee           string       `json:"total_fee"`            // Total cost (Wei)
-    StaticComplexity   float64      `json:"static_complexity"`    // Pre-execution complexity
-    DynamicComplexity  float64      `json:"dynamic_complexity"`   // Runtime complexity
-    ComplexityIndex    float64      `json:"complexity_index"`     // Combined complexity
-    ExecutionTimestamp time.Time    `json:"execution_timestamp"`  // When executed
-    ConvertedArguments []interface{} `json:"converted_arguments"` // Arguments used
-}
-```
-
-**Usage**: Keeper sends this to Aggregator after executing a task.
-
-#### ProofData
-
-Cryptographic proof generated by Keeper:
-
-```go
-type ProofData struct {
-    TaskID               int64     `json:"task_id"`
-    ProofOfTask          string    `json:"proof_of_task"`          // Merkle proof or signature
-    CertificateHash      string    `json:"certificate_hash"`       // Hash of execution certificate
-    CertificateTimestamp time.Time `json:"certificate_timestamp"`  // Proof generation time
-}
-```
-
-#### PerformerSignatureData
-
-Keeper's signature on task execution:
-
-```go
-type PerformerSignatureData struct {
-    TaskID                  int64  `json:"task_id"`
-    PerformerSigningAddress string `json:"performer_signing_address"` // Keeper's address
-    PerformerSignature      string `json:"performer_signature"`       // ECDSA signature
-}
-```
-
-#### IPFSData
-
-Complete data package uploaded to IPFS:
-
-```go
-type IPFSData struct {
-    TaskData           *SendTaskDataToKeeper   `json:"task_data"`              // Task definition
-    ActionData         *PerformerActionData    `json:"action_data"`            // Execution results
-    ProofData          *ProofData              `json:"proof_data"`             // Cryptographic proof
-    PerformerSignature *PerformerSignatureData `json:"performer_signature_data"` // Signature
-}
-```
-
-#### BroadcastDataForValidators
-
-Data broadcast to attester Keepers for validation:
-
-```go
-type BroadcastDataForValidators struct {
-    ProofOfTask        string `json:"proof_of_task"`        // Proof to verify
-    Data               []byte `json:"data"`                 // Serialized task data
-    TaskDefinitionID   int    `json:"task_definition_id"`   // Task type
-    PerformerAddress   string `json:"performer_address"`    // Executor's address
-    PerformerSignature string `json:"performer_signature"`  // Executor's signature
-    SignatureType      string `json:"signature_type"`       // "ECDSA", "BLS", etc.
-    TargetChainID      int    `json:"target_chain_id"`      // Chain ID
-}
-```
-
-**Usage**: Performer broadcasts this via P2P for attesters to validate.
-
-### Scheduler RPC Types
-
-**Location**: `pkg/types/rpc_schedulers.go`
-
-Examples (typical patterns):
-
-```go
-// Request to fetch jobs from DBServer
-type FetchJobsRequest struct {
-    JobType string `json:"job_type"` // "time", "event", "condition"
-    Limit   int    `json:"limit"`
-    Offset  int    `json:"offset"`
-}
-
-// Task pushed to Redis stream
-type ScheduledTask struct {
-    TaskID      int64     `json:"task_id"`
-    JobID       string    `json:"job_id"`
-    ScheduledAt time.Time `json:"scheduled_at"`
-}
-```
 
 ---
 
@@ -595,10 +396,12 @@ type ScheduledTask struct {
 
 ```go
 const (
-    TaskDefinitionSimple       = 0  // Simple contract call
-    TaskDefinitionComplex      = 1  // Complex contract call with validation
-    TaskDefinitionCrossChain   = 2  // Cross-chain execution
-    TaskDefinitionDataFetch    = 3  // Fetch external data and execute
+    TaskDefTimeBasedStatic        = 1  // Time based job with static arguments
+    TaskDefTimeBasedDynamic       = 2  // Time based job with dynamic arguments
+    TaskDefEventBasedStatic       = 3  // Event based job with static arguments
+    TaskDefEventBasedDynamic      = 4  // Event based job with dynamic arguments
+    TaskDefConditionBasedStatic   = 5  // Condition based job with static arguments
+    TaskDefConditionBasedDynamic  = 6  // Condition based job with dynamic arguments
 )
 ```
 
@@ -606,9 +409,10 @@ const (
 
 ```go
 const (
-    JobTypeTime      = "time"       // Time-based scheduler
-    JobTypeEvent     = "event"      // Event-based scheduler
-    JobTypeCondition = "condition"  // Condition-based scheduler
+    JobTypeFrontend = "frontend"  // Scheduled from Web UI
+    JobTypeSdk      = "sdk"       // Scheduled from SDK
+    JobTypeTemplate = "template"  // Template from frontend
+    JobTypeContract = "contract"  // Created from contract call
 )
 ```
 
@@ -618,10 +422,10 @@ const (
 const (
     JobStatusCreated   = "created"    // Job created but not yet active
     JobStatusRunning   = "running"    // Job actively monitored by scheduler
-    JobStatusCompleted = "completed"  // Job finished (non-recurring)
-    JobStatusFailed    = "failed"     // Job failed permanently
-    JobStatusExpired   = "expired"    // Job expired (past expiration time)
-    JobStatusPaused    = "paused"     // Job temporarily paused by user
+    JobStatusCompleted = "completed"  // Job finished (atleast 1 task completed)
+    JobStatusFailed    = "failed"     // Job failed permanently (2/3rd tasks failed)
+    JobStatusExpired   = "expired"    // Job past expiration time with no tasks completed
+    JobStatusDeleted   = "deleted"    // Job deleted by user (was active when deleted)
 )
 ```
 
@@ -677,36 +481,20 @@ All cost-related fields are stored as **strings** to represent arbitrary-precisi
 **Location**: `pkg/types/bigint_operations.go`
 
 ```go
-// Convert TG to Wei
-func TGToWei(tg float64) *big.Int
+// Parse string to big.Int
+func ParseBigInt(s string) (*big.Int, error)
 
-// Convert Wei to TG
-func WeiToTG(wei *big.Int) float64
-
-// Add two Wei values
-func AddWei(a, b *big.Int) *big.Int
-
-// Calculate percentage
-func PercentageOfWei(amount *big.Int, percentage float64) *big.Int
-```
-
-### Usage Example
-
-```go
-import "math/big"
-
-// Task cost calculation
-gasCost := big.NewInt(500000)  // 500,000 Wei
-resourceCost := big.NewInt(250000) // 250,000 Wei
-totalCost := AddWei(gasCost, resourceCost) // 750,000 Wei
-
-// Store as string
-taskEntity.TaskOpxActualCost = totalCost.String() // "750000"
-
-// User points update
-userPoints, _ := new(big.Int).SetString(userEntity.UserPoints, 10)
-newPoints := AddWei(userPoints, totalCost)
-userEntity.UserPoints = newPoints.String()
+// Mathematical operations
+func Add(x, y string) string
+func Sub(x, y string) string
+func Mul(x, y string) string
+func Div(x, y string) string
+func IsEqual(x, y string) bool
+func IsLess(x, y string) bool
+func IsGreater(x, y string) bool
+func IsZero(x string) bool
+func IsPositive(x string) bool
+func IsNegative(x string) bool
 ```
 
 ### Why Wei?
@@ -715,40 +503,6 @@ userEntity.UserPoints = newPoints.String()
 ✅ **Consistency**: Same unit used in smart contracts  
 ✅ **Deterministic**: Exact calculations, reproducible results  
 ✅ **Ethereum Compatible**: Direct mapping to blockchain values  
-
----
-
-## Validation Rules
-
-Data validation is handled by `go-playground/validator` with struct tags.
-
-**Location**: `pkg/types/validators.go`
-
-### Common Validation Tags
-
-```go
-type ExampleRequest struct {
-    Email       string `json:"email" binding:"required,email"`
-    Address     string `json:"address" binding:"required,eth_addr"`
-    Amount      string `json:"amount" binding:"required,numeric"`
-    JobType     string `json:"job_type" binding:"required,oneof=time event condition"`
-    URL         string `json:"url" binding:"omitempty,url"`
-    ChainID     string `json:"chain_id" binding:"required,min=1"`
-}
-```
-
-### Custom Validators
-
-```go
-// Ethereum address validator
-func ValidateEthAddress(fl validator.FieldLevel) bool
-
-// IPFS CID validator
-func ValidateIPFSCID(fl validator.FieldLevel) bool
-
-// Cron expression validator
-func ValidateCronExpression(fl validator.FieldLevel) bool
-```
 
 ---
 

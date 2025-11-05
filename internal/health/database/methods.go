@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -169,4 +170,55 @@ func (dm *DatabaseManager) GetKeeperChatInfo(ctx context.Context, keeperAddress 
 	}
 
 	return chatID, keeper.EmailID, nil
+}
+
+// AddKeeperPoints adds points to a keeper's rewards balance
+func (dm *DatabaseManager) AddKeeperPoints(ctx context.Context, keeperAddress string, points int64) error {
+	// Get current keeper data
+	keeper, err := dm.keeperRepo.GetByNonID(ctx, "keeper_address", strings.ToLower(keeperAddress))
+	if err != nil {
+		dm.logger.Error("Failed to get keeper for points update",
+			"error", err,
+			"keeper", keeperAddress,
+		)
+		return fmt.Errorf("failed to get keeper: %w", err)
+	}
+
+	// Parse current points
+	currentPoints := int64(0)
+	if keeper.KeeperPoints != "" {
+		var ok bool
+		parsedPoints := new(big.Int)
+		parsedPoints, ok = parsedPoints.SetString(keeper.KeeperPoints, 10)
+		if ok {
+			currentPoints = parsedPoints.Int64()
+		}
+	}
+
+	// Add new points
+	newTotal := currentPoints + points
+	newPointsStr := new(big.Int).SetInt64(newTotal).String()
+
+	// Update keeper points
+	update := &types.KeeperDataEntity{
+		KeeperAddress: strings.ToLower(keeperAddress),
+		KeeperPoints:  newPointsStr,
+	}
+
+	if err := dm.keeperRepo.Update(ctx, update); err != nil {
+		dm.logger.Error("Failed to update keeper points",
+			"error", err,
+			"keeper", keeperAddress,
+			"points_added", points,
+		)
+		return fmt.Errorf("failed to update keeper points: %w", err)
+	}
+
+	dm.logger.Info("Updated keeper points",
+		"keeper", keeperAddress,
+		"points_added", points,
+		"new_total", newTotal,
+	)
+
+	return nil
 }

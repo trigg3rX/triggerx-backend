@@ -55,6 +55,12 @@ func (m *MockDatabaseManager) GetKeeperChatInfo(ctx context.Context, keeperAddre
 	return args.Get(0).(int64), args.Get(1).(string), args.Error(2)
 }
 
+// AddKeeperPoints mocks the AddKeeperPoints method
+func (m *MockDatabaseManager) AddKeeperPoints(ctx context.Context, keeperAddress string, points int64) error {
+	args := m.Called(ctx, keeperAddress, points)
+	return args.Error(0)
+}
+
 // Simplified test helpers for creating test data
 func CreateTestKeepers(count int) []types.HealthKeeperInfo {
 	keepers := make([]types.HealthKeeperInfo, count)

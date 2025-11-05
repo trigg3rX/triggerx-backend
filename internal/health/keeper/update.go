@@ -48,6 +48,21 @@ func (sm *StateManager) UpdateKeeperStatus(ctx context.Context, keeperHealth typ
 	// Don't increment when keeper just came back online (false -> true)
 	if wasActive {
 		existingState.Uptime = existingState.Uptime + 60
+
+		// Also increment daily uptime in Redis cache for rewards tracking
+		// This is a non-blocking operation - if it fails, we log but don't fail the check-in
+		if sm.cache != nil {
+			go func() {
+				cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := sm.cache.IncrementDailyUptime(cacheCtx, address, 60); err != nil {
+					sm.logger.Warn("Failed to increment daily uptime in cache",
+						"keeper", address,
+						"error", err,
+					)
+				}
+			}()
+		}
 	}
 
 	// Create a copy of the state for DB update
