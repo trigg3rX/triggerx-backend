@@ -42,6 +42,10 @@ const (
         SELECT email_id 
         FROM triggerx.user_data 
         WHERE user_id = ?`
+        GetTaskStatusByID = `
+        SELECT task_status
+        FROM triggerx.task_data
+        WHERE task_id = ?`
 
 	// Setters
 	UpdateTaskSubmissionData = `

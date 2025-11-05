@@ -48,6 +48,19 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 }
 
 func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
+	// First, check if the task already has a status (i.e., is already failed or completed)
+	var existingStatus string
+	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if iter.Scan(&existingStatus) && existingStatus != "" {
+		dm.logger.Infof("Task %d already has a status '%s', not updating to failed.", taskID, existingStatus)
+		return nil
+	}
+	// Proceed with marking as failed only if status is absent or empty
 	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
 		return err
