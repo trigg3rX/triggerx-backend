@@ -267,8 +267,8 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 		panic(err)
 	}
 
-	// Create handler w/ HTTP client
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient)
+	// Create handler w/ HTTP client and Redis client
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))

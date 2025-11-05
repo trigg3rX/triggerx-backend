@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"io"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
-	"io"
-	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
@@ -157,9 +158,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				TargetFunction: tempJobs[i].TargetFunction,
 				IsSafe:         tempJobs[i].IsSafe,
 			}
-			valResp, _ := h.ValidateCodeInternal(ctx, valReq)
+			valResp, _ := h.ValidateCodeInternal(ctx, valReq, ipfsUrl)
 			if !valResp.Executable || !valResp.SafeMatch {
-				errMsg := "Dynamic job code validation failed: "
+				errMsg := "IPFS code validation failed: "
 				if valResp.Error != "" {
 					errMsg += valResp.Error
 				} else if !valResp.SafeMatch {
@@ -167,7 +168,21 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				} else {
 					errMsg += "Code not executable."
 				}
-				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg, "output": valResp.Output})
+				// Emit a log for observability of why the request is not proceeding
+				// outputPreview := valResp.Output
+				// if len(outputPreview) > 200 {
+				// 	outputPreview = outputPreview[:200] + "..."
+				// }
+				// h.logger.Infof("[CreateJobData] IPFS code validation failed | user=%s jobID=%s taskDefID=%d isSafe=%t selectedSafe=%s executable=%t safeMatch=%t error=%q outputPreview=%q",
+				// 	tempJobs[i].UserAddress, tempJobs[i].JobID, tempJobs[i].TaskDefinitionID, valReq.IsSafe, valReq.SelectedSafe, valResp.Executable, valResp.SafeMatch, valResp.Error, outputPreview)
+				// Return 200 with structured validation failure so clients can display message without treating as transport error
+				c.JSON(http.StatusOK, gin.H{
+					"status":                "validation_failed",
+					"message":               errMsg,
+					"validation_executable": valResp.Executable,
+					"validation_safe_match": valResp.SafeMatch,
+					"validation_output":     valResp.Output,
+				})
 				return
 			}
 		}

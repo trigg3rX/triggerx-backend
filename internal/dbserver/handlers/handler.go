@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
@@ -34,6 +35,7 @@ type Handler struct {
 	apiKeysRepository      repository.ApiKeysRepository
 	safeAddressRepository  repository.SafeAddressRepository
 	httpClient             http.HTTPClientInterface
+	redisClient            *redis.Client
 	// WebSocket components
 	hub       *websocket.Hub
 	publisher *events.Publisher
@@ -41,7 +43,7 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher, httpClient http.HTTPClientInterface) *Handler {
+func NewHandler(db *database.Connection, logger logging.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher, httpClient http.HTTPClientInterface, redisClient *redis.Client) *Handler {
 	h := &Handler{
 		db:                     db,
 		logger:                 logger,
@@ -59,6 +61,7 @@ func NewHandler(db *database.Connection, logger logging.Logger, config Notificat
 		hub:                    hub,
 		publisher:              publisher,
 		httpClient:             httpClient,
+		redisClient:            redisClient,
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
 
