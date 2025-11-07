@@ -108,7 +108,8 @@ sequenceDiagram
   API->>Repo: INSERT job(s) + time/event/condition rows
   Repo->>DB: INSERT jobs, time_jobs/event_jobs/condition_jobs
 
-  Note over API,SCHED: TDID 1/2 -> Time; 3/4/5/6 -> Condition or Event
+  Note over API,SCHED: TDID 1 and 2 are Time
+  Note over API,SCHED: TDID 3, 4, 5, 6 are Condition or Event
   API-->>SCHED: Notify new job (schedule payload)
 
   SCHED->>DB: Persist scheduler state, next run
