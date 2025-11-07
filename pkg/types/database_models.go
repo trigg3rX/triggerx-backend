@@ -143,6 +143,7 @@ type TaskData struct {
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
 	TaskStatus           string    `json:"task_status"`
+	TaskError            string    `json:"task_error"`
 	IsAccepted           bool      `json:"is_accepted"`
 	IsImua               bool      `json:"is_imua"`
 }

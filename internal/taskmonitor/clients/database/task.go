@@ -69,6 +69,29 @@ func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
 	return nil
 }
 
+// UpdateTaskError updates a task with error information
+func (dm *DatabaseClient) UpdateTaskError(taskID int64, errorMsg string) error {
+	// First, check if the task already has a status (i.e., is already failed or completed)
+	var existingStatus string
+	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if iter.Scan(&existingStatus) && existingStatus != "" {
+		dm.logger.Infof("Task %d already has a status '%s', not updating to failed.", taskID, existingStatus)
+		return nil
+	}
+	// Proceed with marking as failed only if status is absent or empty
+	if err := dm.db.NewQuery(queries.UpdateTaskError, errorMsg, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task error for task ID %d: %v", taskID, err)
+		return err
+	}
+	dm.logger.Infof("Successfully updated task %d with error: %s", taskID, errorMsg)
+	return nil
+}
+
 // GetUserEmailByJobID returns the user's email_id for a given job_id
 func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
 	var userID int64
