@@ -150,6 +150,11 @@ func (m *MockJobRepository) GetJobsByUserIDAndChainID(userID int64, createdChain
 	return args.Get(0).([]commonTypes.JobData), args.Error(1)
 }
 
+func (m *MockJobRepository) GetJobsBySafeAddress(safeAddress string) ([]commonTypes.JobData, error) {
+	args := m.Called(safeAddress)
+	return args.Get(0).([]commonTypes.JobData), args.Error(1)
+}
+
 func (m *MockTimeJobRepository) CreateTimeJob(job *commonTypes.TimeJobData) error {
 	args := m.Called(job)
 	return args.Error(0)

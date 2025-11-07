@@ -8,9 +8,9 @@ const (
 			INSERT INTO triggerx.job_data (
 				job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
 				custom, time_frame, recurring, status, job_cost_prediction,
-				created_at, updated_at, timezone, is_imua, created_chain_id
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	// 15 values to be inserted, so 15 ?s
+				created_at, updated_at, timezone, is_imua, created_chain_id, safe_address
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	// 17 values to be inserted, so 17 ?s
 )
 
 // Write Queries
@@ -42,7 +42,7 @@ const (
 	GetJobDataByJobIDQuery = `
 			SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
 				custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id
+				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id, safe_address
 			FROM triggerx.job_data 
 			WHERE job_id = ?`
 
@@ -63,7 +63,14 @@ const (
 	GetJobsByUserIDAndChainIDQuery = `
 			SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
 				custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
-				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id
+				task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id, safe_address
 			FROM triggerx.job_data
 			WHERE user_id = ? AND created_chain_id = ? ALLOW FILTERING`
 )
+
+const GetJobsBySafeAddressQuery = `
+	SELECT job_id, job_title, task_definition_id, user_id, link_job_id, chain_status,
+		custom, time_frame, recurring, status, job_cost_prediction, job_cost_actual,
+		task_ids, created_at, updated_at, last_executed_at, timezone, is_imua, created_chain_id, safe_address
+	FROM triggerx.job_data
+	WHERE safe_address = ? ALLOW FILTERING`
