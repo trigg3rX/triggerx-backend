@@ -11,11 +11,7 @@ flowchart LR
   end
 
   subgraph DBServer[DBServer Service]
-    API[REST API (Gin)]
-    MW[Middleware: Auth, RateLimit, Retry, Tracing]
-    H[Handlers]
-    PUB[Events Publisher]
-    WS[WebSocket Hub]
+    API["REST API (Gin)"] --> MW["Middleware: Auth, RateLimit, Retry, Tracing"] --> H[Handlers] --> PUB["Events Publisher"] --> WS["WebSocket Hub"]
   end
 
   subgraph Storage
