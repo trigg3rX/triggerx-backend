@@ -18,7 +18,7 @@ flowchart LR
     DB[(Cassandra/ScyllaDB)]
     RDS[(Redis Cache / Rate Limit)]
     MET[(Prometheus Metrics)]
-    TRC[(OTLP Tracing → Tempo)]
+    TRC[(OTLP Tracing -> Tempo)]
   end
 
   subgraph Schedulers
@@ -108,7 +108,7 @@ sequenceDiagram
   API->>Repo: INSERT job(s) + time/event/condition rows
   Repo->>DB: INSERT jobs, time_jobs/event_jobs/condition_jobs
 
-  note over API,SCHED: For TDID 1/2 → Time; 3/4/5/6 → Condition/Event
+  note over API,SCHED: For TDID 1/2 -> Time; 3/4/5/6 -> Condition/Event
   API-->>SCHED: Notify new job (schedule payload)
 
   SCHED->>DB: Persist scheduler state, next run
@@ -240,12 +240,12 @@ flowchart TB
 
   subgraph Event[TDID 3/4]
     E[trigger_chain_id, trigger_contract_address, trigger_event]
-    F[(event_filter_para_name, event_filter_value) optional]
+    F["event_filter_para_name, event_filter_value (optional)"]
   end
 
   subgraph Condition[TDID 5/6]
     G[condition_type, upper_limit/lower_limit]
-    H[(value_source_type, value_source_url, selected_key_route) optional]
+    H["value_source_type, value_source_url, selected_key_route (optional)"]
   end
 
   A --> B --> C --> S
