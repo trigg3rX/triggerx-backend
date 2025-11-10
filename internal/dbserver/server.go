@@ -298,7 +298,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
 	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
-	protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
+	protected.GET("/jobs/user/:user_address/:job_id", handler.GetJobDataByJobIDForUser)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)

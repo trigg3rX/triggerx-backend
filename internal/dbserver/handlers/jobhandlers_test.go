@@ -110,6 +110,11 @@ func (m *MockUserRepository) UpdateUserEmail(address, email string) error {
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) GetUserIDByAddress(address string) (int64, error) {
+	args := m.Called(address)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockJobRepository) CreateNewJob(job *commonTypes.JobData) (*big.Int, error) {
 	args := m.Called(job)
 	return args.Get(0).(*big.Int), args.Error(1)
