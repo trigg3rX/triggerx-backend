@@ -82,7 +82,7 @@ func (em *executionMonitor) startMonitoring() {
 }
 
 func (em *executionMonitor) performHealthCheck() {
-	em.logger.Debugf("Performing health check")
+	// em.logger.Debugf("Performing health check")
 
 	// Get monitoring configuration
 	monitoringConfig := em.config.GetMonitoringConfig()
