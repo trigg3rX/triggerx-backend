@@ -50,6 +50,7 @@ type TaskUpdatedEvent struct {
 	TaskSubmissionTxHash *string    `json:"task_submission_tx_hash,omitempty"`
 	IsSuccessful         *bool      `json:"is_successful,omitempty"`
 	TaskStatus           *string    `json:"task_status,omitempty"`
+	TaskError            *string    `json:"task_error,omitempty"`
 	UserID               string     `json:"user_id,omitempty"`
 }
 

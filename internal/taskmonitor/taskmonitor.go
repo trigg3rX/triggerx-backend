@@ -12,6 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/events"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
@@ -36,6 +37,10 @@ type TaskManager struct {
 	cancel              context.CancelFunc
 	shutdownWg          sync.WaitGroup
 	startTime           time.Time
+	dbClient            *database.DatabaseClient
+	rpcServer           interface {
+		Stop(ctx context.Context) error
+	}
 }
 
 // NewTaskManager creates a new TaskManager instance
@@ -112,6 +117,7 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		ctx:                 ctx,
 		cancel:              cancel,
 		startTime:           time.Now(),
+		dbClient:            databaseClient,
 	}
 
 	logger.Info("TaskManager initialized successfully",
@@ -156,6 +162,45 @@ func (tm *TaskManager) Initialize() error {
 
 	tm.logger.Info("TaskManager initialization completed successfully")
 	return nil
+}
+
+// ReportTaskError handles task error reports from keepers
+func (tm *TaskManager) ReportTaskError(ctx context.Context, req *types.ReportTaskErrorRequest) (*types.ReportTaskErrorResponse, error) {
+	tm.logger.Info("Received task error report",
+		"task_id", req.TaskID,
+		"keeper_address", req.KeeperAddress,
+		"error", req.Error)
+
+	// Update task in database with error
+	if err := tm.dbClient.UpdateTaskError(req.TaskID, req.Error); err != nil {
+		tm.logger.Error("Failed to update task error in database",
+			"task_id", req.TaskID,
+			"error", err)
+		return &types.ReportTaskErrorResponse{
+			Success: false,
+			Message: fmt.Sprintf("failed to update task error: %v", err),
+		}, nil
+	}
+
+	// Move task to failed stream if it's still in dispatched stream
+	// This is best-effort - if it fails, the DB update already succeeded
+	_ = tm.taskStreamManager.MarkTaskFailed(ctx, req.TaskID, req.Error)
+
+	tm.logger.Info("Task error reported successfully",
+		"task_id", req.TaskID,
+		"keeper_address", req.KeeperAddress)
+
+	return &types.ReportTaskErrorResponse{
+		Success: true,
+		Message: "Task error reported successfully",
+	}, nil
+}
+
+// SetRPCServer sets the RPC server for graceful shutdown
+func (tm *TaskManager) SetRPCServer(server interface {
+	Stop(ctx context.Context) error
+}) {
+	tm.rpcServer = server
 }
 
 // startMetricsUpdateWorker periodically updates metrics from Redis client

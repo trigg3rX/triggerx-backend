@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
     task_number bigint,
     task_status text,
+    task_error text,
     job_id varint,
     task_definition_id int,
     created_at timestamp,

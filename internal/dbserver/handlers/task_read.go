@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"math/big"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -98,7 +98,8 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 			TaskAttesterIDs:    task.TaskAttesterIDs,
 			IsAccepted:         task.IsAccepted,
 			TaskStatus:         task.TaskStatus,
-			ConvertedArguments:  task.ConvertedArguments ,
+			TaskError:          task.TaskError,
+			ConvertedArguments: task.ConvertedArguments,
 		}
 	}
 	//find the created_chain id for the job using jobIDBig from database
@@ -134,7 +135,7 @@ func getExplorerBaseURL(chainID string) string {
 	case "11155420": // OP Sepolia
 		return "https://testnet-explorer.optimism.io/tx/"
 	case "84532": // Base Sepolia
-		return "https:/base-sepolia.blockscout.com/tx/"
+		return "https://base-sepolia.blockscout.com/tx/"
 	case "421614": // Arbitrum Sepolia
 		return "https://arbitrum-sepolia.blockscout.com/tx/"
 
@@ -146,7 +147,7 @@ func getExplorerBaseURL(chainID string) string {
 	case "8453": // Base Mainnet
 		return "https://base.blockscout.com/tx/"
 	case "42161": // Arbitrum Mainnet
-		return "https:/arbitrum.blockscout.com/tx/"
+		return "https://arbitrum.blockscout.com/tx/"
 	default:
 		return "https://sepolia.etherscan.io/tx/"
 	}

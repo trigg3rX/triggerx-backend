@@ -42,7 +42,7 @@ const (
         SELECT email_id 
         FROM triggerx.user_data 
         WHERE user_id = ?`
-        GetTaskStatusByID = `
+	GetTaskStatusByID = `
         SELECT task_status
         FROM triggerx.task_data
         WHERE task_id = ?`
@@ -67,6 +67,12 @@ const (
         UPDATE triggerx.task_data 
         SET is_successful = false,
             task_status = 'failed'
+        WHERE task_id = ?`
+	UpdateTaskError = `
+        UPDATE triggerx.task_data 
+        SET is_successful = false,
+            task_status = 'failed',
+            task_error = ?
         WHERE task_id = ?`
 	UpdateAttesterPointsAndNoOfTasks = `
         UPDATE triggerx.keeper_data 

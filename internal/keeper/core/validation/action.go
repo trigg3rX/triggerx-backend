@@ -10,16 +10,15 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-const timeTolerance = 5 * time.Second
-const expirationTimeTolerance = 8 * time.Second
+const timeTolerance = 8 * time.Second
+const expirationTimeTolerance = 11 * time.Second
 
 // getReceiptRetryConfig returns a retry configuration optimized for L2 chains
-func getReceiptRetryConfig(logger logging.Logger) *retry.RetryConfig {
+func getReceiptRetryConfig() *retry.RetryConfig {
 	return &retry.RetryConfig{
 		MaxRetries:      12,                     // Very aggressive for receipt fetching
 		InitialDelay:    300 * time.Millisecond, // Start with 300ms
@@ -80,7 +79,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 	txHash := common.HexToHash(actionData.ActionTxHash)
 
 	// Get retry configuration
-	retryConfig := getReceiptRetryConfig(v.logger)
+	retryConfig := getReceiptRetryConfig()
 
 	// Try to get transaction receipt with retry logic
 	receiptOperation := func() (*ethtypes.Receipt, error) {

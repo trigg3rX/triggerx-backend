@@ -61,6 +61,7 @@ type Config struct {
 	// Backend Service URLs
 	aggregatorRPCUrl string
 	healthRPCUrl     string
+	taskMonitorRPCUrl string
 
 	l1Chain string
 	l2Chain string
@@ -96,6 +97,7 @@ func Init() error {
 		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
 		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
 		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
+		taskMonitorRPCUrl:        env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
 		tlsProofHost:             "www.google.com",
 		tlsProofPort:             "443",
 		// l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
@@ -214,6 +216,10 @@ func GetAggregatorRPCUrl() string {
 
 func GetHealthRPCUrl() string {
 	return cfg.healthRPCUrl
+}
+
+func GetTaskMonitorRPCUrl() string {
+	return cfg.taskMonitorRPCUrl
 }
 
 func GetAvsGovernanceAddress() string {

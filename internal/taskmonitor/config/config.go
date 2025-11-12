@@ -90,7 +90,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                      env.GetEnvBool("DEV_MODE", false),
-		taskMonitorRPCPort:           env.GetEnvString("TASK_MONITOR_RPC_PORT", "9003"),
+		taskMonitorRPCPort:           env.GetEnvString("TASK_MONITOR_RPC_PORT", "9007"),
 		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
 		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
 		rpcProvider:                  env.GetEnvString("RPC_PROVIDER", ""),
