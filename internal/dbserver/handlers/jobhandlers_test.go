@@ -110,6 +110,11 @@ func (m *MockUserRepository) UpdateUserEmail(address, email string) error {
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) GetUserIDByAddress(address string) (int64, error) {
+	args := m.Called(address)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockJobRepository) CreateNewJob(job *commonTypes.JobData) (*big.Int, error) {
 	args := m.Called(job)
 	return args.Get(0).(*big.Int), args.Error(1)
@@ -147,6 +152,11 @@ func (m *MockJobRepository) GetTaskFeesByJobID(jobID *big.Int) ([]types.TaskFeeR
 
 func (m *MockJobRepository) GetJobsByUserIDAndChainID(userID int64, createdChainID string) ([]commonTypes.JobData, error) {
 	args := m.Called(userID, createdChainID)
+	return args.Get(0).([]commonTypes.JobData), args.Error(1)
+}
+
+func (m *MockJobRepository) GetJobsBySafeAddress(safeAddress string) ([]commonTypes.JobData, error) {
+	args := m.Called(safeAddress)
 	return args.Get(0).([]commonTypes.JobData), args.Error(1)
 }
 

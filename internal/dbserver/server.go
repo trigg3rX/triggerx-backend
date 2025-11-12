@@ -17,6 +17,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
+	httpclientpkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
 	"github.com/gin-gonic/gin"
@@ -259,8 +260,15 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	// Create event publisher
 	publisher := events.NewPublisher(s.hub, s.logger)
 
-	// Create handler with WebSocket-enabled repository
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher)
+	// Initialize robust HTTP client
+	httpClient, err := httpclientpkg.NewHTTPClient(httpclientpkg.DefaultHTTPRetryConfig(), s.logger)
+	if err != nil {
+		s.logger.Errorf("Failed to create HTTP client: %v", err)
+		panic(err)
+	}
+
+	// Create handler w/ HTTP client and Redis client
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
@@ -290,7 +298,7 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	protected.GET("/jobs/user/:user_address", handler.GetJobsByUserAddress)
 	protected.GET("/jobs/user/:user_address/chain/:created_chain_id", handler.GetJobsByUserAddressAndChainID)
 	protected.PUT("/jobs/delete/:id", handler.DeleteJobData)
-	protected.GET("/jobs/:job_id", handler.GetJobDataByJobID)
+	protected.GET("/jobs/user/:user_address/:job_id", handler.GetJobDataByJobIDForUser)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
 	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
@@ -337,6 +345,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	api.GET("/ws/tasks", wsHandler.HandleWebSocketConnection)
 	api.GET("/ws/stats", wsHandler.GetWebSocketStats)
 	api.GET("/ws/health", wsHandler.GetWebSocketHealth)
+
+	api.GET("/users/safe-addresses/:user_address", handler.GetSafeAddressesByUser)
+	api.GET("/jobs/safe-address/:safe_address", handler.GetJobsBySafeAddress)
 }
 
 func (s *Server) Start(port string) error {

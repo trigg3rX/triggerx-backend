@@ -150,9 +150,15 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 	execCtx, cancelFunc := context.WithCancel(ctx)
 	defer cancelFunc()
 
+	// Validate language before proceeding
+	langType := types.Language(strings.ToLower(language))
+	if !ep.containerMgr.IsLanguageSupported(langType) {
+		return nil, fmt.Errorf("unsupported language: %s", language)
+	}
+
 	// Create a temporary file with appropriate extension
 	var ext string
-	switch types.Language(strings.ToLower(language)) {
+	switch langType {
 	case types.LanguageGo:
 		ext = ".go"
 	case types.LanguagePy:
@@ -172,7 +178,8 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 	tmpPathNoExt := tmpFile.Name()
 	_ = tmpFile.Close()
 	tmpPath := tmpPathNoExt + ext
-	if err := os.WriteFile(tmpPath, []byte(code), 0644); err != nil {
+	// Use restrictive permissions (0600) to prevent world-readable access to sensitive code
+	if err := os.WriteFile(tmpPath, []byte(code), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write temp source: %w", err)
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
@@ -186,6 +193,9 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 		StartedAt:     startTime,
 		Metadata: map[string]string{
 			"file_path": tmpPath,
+		},
+		State: types.ExecutionState{
+			CancelFunc: cancelFunc,
 		},
 	}
 

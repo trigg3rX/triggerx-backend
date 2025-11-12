@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS condition_job_data;
 DROP TABLE IF EXISTS task_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS apikeys;
+DROP TABLE IF EXISTS safe_addresses;
 
 -- Create User_data table (without counters)
 CREATE TABLE IF NOT EXISTS user_data (
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     timezone text,
     is_imua boolean,
     created_chain_id text,
+    safe_address text,
     PRIMARY KEY (job_id)
 );
 
@@ -204,6 +206,15 @@ CREATE TABLE IF NOT EXISTS apikeys (
     last_used timestamp,
     created_at timestamp,
     PRIMARY KEY (key)
+);
+
+-- Create Safe_addresses table
+CREATE TABLE IF NOT EXISTS safe_addresses (
+    user_address text,
+    safe_address text,
+    safe_name text,
+    created_at timestamp,
+    PRIMARY KEY (user_address, safe_address)
 );
 
 -- Drop existing indexes if they exist

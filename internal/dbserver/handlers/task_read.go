@@ -135,7 +135,7 @@ func getExplorerBaseURL(chainID string) string {
 	case "11155420": // OP Sepolia
 		return "https://testnet-explorer.optimism.io/tx/"
 	case "84532": // Base Sepolia
-		return "https:/base-sepolia.blockscout.com/tx/"
+		return "https://base-sepolia.blockscout.com/tx/"
 	case "421614": // Arbitrum Sepolia
 		return "https://arbitrum-sepolia.blockscout.com/tx/"
 
@@ -147,7 +147,7 @@ func getExplorerBaseURL(chainID string) string {
 	case "8453": // Base Mainnet
 		return "https://base.blockscout.com/tx/"
 	case "42161": // Arbitrum Mainnet
-		return "https:/arbitrum.blockscout.com/tx/"
+		return "https://arbitrum.blockscout.com/tx/"
 	default:
 		return "https://sepolia.etherscan.io/tx/"
 	}

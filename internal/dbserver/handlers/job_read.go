@@ -11,6 +11,58 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 )
 
+// GetJobDataByJobIDForUser handles GET /jobs/user/:user_address/:job_id
+func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetJobDataByJobIDForUser] trace_id=%s - Retrieving job data by job ID with user ownership check", traceID)
+
+	userAddress := strings.ToLower(c.Param("user_address"))
+	if userAddress == "" {
+		h.logger.Error("[GetJobDataByJobIDForUser] user_address param missing")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_address param missing"})
+		return
+	}
+
+	jobIDParam := c.Param("job_id")
+	if jobIDParam == "" {
+		h.logger.Error("[GetJobDataByJobIDForUser] job_id param missing")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "job_id param missing"})
+		return
+	}
+
+	jobID := new(big.Int)
+	_, ok := jobID.SetString(jobIDParam, 10)
+	if !ok {
+		h.logger.Errorf("[GetJobDataByJobIDForUser] invalid job_id: %v", jobIDParam)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid job_id"})
+		return
+	}
+
+	// Resolve user address to user ID
+	userID, err := h.userRepository.GetUserIDByAddress(userAddress)
+	if err != nil {
+		h.logger.Errorf("[GetJobDataByJobIDForUser] failed to resolve user by address %s: %v", userAddress, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	// Fetch the job and check ownership
+	jobData, err := h.jobRepository.GetJobByID(jobID)
+	if err != nil {
+		h.logger.Errorf("[GetJobDataByJobIDForUser] failed to get job data: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get job data"})
+		return
+	}
+
+	if jobData.UserID != userID {
+		h.logger.Warnf("[GetJobDataByJobIDForUser] access denied: user %s (id=%d) attempted to access job %s owned by user_id=%d", userAddress, userID, jobIDParam, jobData.UserID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: job does not belong to user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, jobData)
+}
+
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	traceID := h.getTraceID(c)
 	h.logger.Infof("[GetJobsByUserAddress] trace_id=%s - Retrieving jobs by user address", traceID)

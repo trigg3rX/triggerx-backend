@@ -43,6 +43,7 @@ type JobData struct {
 	Timezone       string    `json:"timezone"`
 	IsImua         bool      `json:"is_imua"`
 	CreatedChainID string    `json:"created_chain_id"`
+	SafeAddress    string    `json:"safe_address"`
 }
 
 type TimeJobData struct {
@@ -184,4 +185,10 @@ type ApiKey struct {
 	FailedCount  int64     `json:"failed_count"`
 	LastUsed     time.Time `json:"last_used"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type SafeAddress struct {
+	SafeAddress string    `json:"safe_address"`
+	SafeName    string    `json:"safe_name"`
+	CreatedAt   time.Time `json:"created_at"`
 }
