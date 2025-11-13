@@ -141,8 +141,6 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetJobsBySafeAddress] Successfully retrieved jobs: %+v", jobsAPI)
-
 	// If we have only jobs and no errors, return success
 	c.JSON(http.StatusOK, gin.H{
 		"jobs": jobsAPI,
