@@ -46,7 +46,23 @@ func (w *EventWorker) Start() {
 		w.Logger.Error("Failed to get current block number", "error", err)
 		return
 	}
-	w.LastBlock = currentBlock
+	
+	// Start from a few blocks back to catch recent events
+	// This helps catch events that might have been missed during worker startup
+	// Using smaller lookback for Alchemy free tier (max 10 blocks per query)
+	lookbackBlocks := uint64(100) // Look back 100 blocks (~5 minutes on most chains)
+	if currentBlock > lookbackBlocks {
+		w.LastBlock = currentBlock - lookbackBlocks
+	} else {
+		w.LastBlock = 0 // Start from genesis if less than lookback blocks exist
+	}
+	
+	w.Logger.Info("Event worker will scan from historical block",
+		"job_id", w.EventWorkerData.JobID,
+		"current_block", currentBlock,
+		"starting_from_block", w.LastBlock,
+		"lookback_blocks", lookbackBlocks,
+	)
 
 	w.Logger.Info("Starting event worker",
 		"job_id", w.EventWorkerData.JobID,
@@ -55,6 +71,9 @@ func (w *EventWorker) Start() {
 		"event", w.EventWorkerData.TriggerEvent,
 		"current_block", currentBlock,
 		"expiration_time", w.EventWorkerData.ExpirationTime,
+		"filter_enabled", w.EventWorkerData.EventFilterParaName != "" && w.EventWorkerData.EventFilterValue != "",
+		"filter_param", w.EventWorkerData.EventFilterParaName,
+		"filter_value", w.EventWorkerData.EventFilterValue,
 	)
 
 	contractAddr := common.HexToAddress(w.EventWorkerData.TriggerContractAddress)

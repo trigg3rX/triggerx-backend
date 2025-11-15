@@ -32,6 +32,7 @@ func (r *eventJobRepository) CreateEventJob(eventJob *commonTypes.EventJobData) 
 	err := r.db.Session().Query(queries.CreateEventJobDataQuery,
 		eventJob.JobID.ToBigInt(), eventJob.TaskDefinitionID, eventJob.ExpirationTime, eventJob.Recurring,
 		eventJob.TriggerChainID, eventJob.TriggerContractAddress, eventJob.TriggerEvent,
+		eventJob.EventFilterParaName, eventJob.EventFilterValue,
 		eventJob.TargetChainID, eventJob.TargetContractAddress, eventJob.TargetFunction,
 		eventJob.ABI, eventJob.ArgType, eventJob.Arguments, eventJob.DynamicArgumentsScriptUrl,
 		eventJob.IsCompleted, eventJob.IsActive, time.Now(), time.Now()).Exec()
@@ -49,8 +50,8 @@ func (r *eventJobRepository) GetEventJobByJobID(jobID *big.Int) (commonTypes.Eve
 	eventJob.JobID = commonTypes.NewBigInt(jobID)
 	err := r.db.Session().Query(queries.GetEventJobDataByJobIDQuery, jobID).Scan(
 		&temp, &eventJob.ExpirationTime, &eventJob.Recurring, &eventJob.TriggerChainID,
-		&eventJob.TriggerContractAddress, &eventJob.TriggerEvent, &eventJob.TargetChainID,
-		&eventJob.TargetContractAddress, &eventJob.TargetFunction, &eventJob.ABI, &eventJob.ArgType,
+		&eventJob.TriggerContractAddress, &eventJob.TriggerEvent, &eventJob.EventFilterParaName, &eventJob.EventFilterValue,
+		&eventJob.TargetChainID, &eventJob.TargetContractAddress, &eventJob.TargetFunction, &eventJob.ABI, &eventJob.ArgType,
 		&eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl, &eventJob.IsCompleted, &eventJob.IsActive)
 	if err != nil {
 		return commonTypes.EventJobData{}, errors.New("failed to get event job by job ID")
@@ -86,12 +87,15 @@ func (r *eventJobRepository) GetActiveEventJobs() ([]commonTypes.EventJobData, e
 	var eventJobs []commonTypes.EventJobData
 	iter := r.db.Session().Query(queries.GetActiveEventJobsQuery).Iter()
 	var eventJob commonTypes.EventJobData
+	var jobIDBigInt *big.Int
 	for iter.Scan(
-		&eventJob.JobID, &eventJob.ExpirationTime, &eventJob.Recurring,
+		&jobIDBigInt, &eventJob.ExpirationTime, &eventJob.Recurring,
 		&eventJob.TriggerChainID, &eventJob.TriggerContractAddress, &eventJob.TriggerEvent,
+		&eventJob.EventFilterParaName, &eventJob.EventFilterValue,
 		&eventJob.TargetChainID, &eventJob.TargetContractAddress, &eventJob.TargetFunction,
 		&eventJob.ABI, &eventJob.ArgType, &eventJob.Arguments, &eventJob.DynamicArgumentsScriptUrl,
 		&eventJob.IsCompleted, &eventJob.IsActive) {
+		eventJob.JobID = commonTypes.NewBigInt(jobIDBigInt)
 		eventJobs = append(eventJobs, eventJob)
 	}
 	if err := iter.Close(); err != nil {

@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"math/big"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
@@ -74,6 +74,8 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 			IsAccepted:         task.IsAccepted,
 			TxURL:              task.TxURL,
 			TaskStatus:         task.TaskStatus,
+			TaskError:          task.TaskError,
+			ConvertedArguments: task.ConvertedArguments,
 		}
 	}
 

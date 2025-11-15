@@ -12,7 +12,7 @@ import (
 
 func TestDockerContainerConfig_JSONMarshaling(t *testing.T) {
 	config := DockerContainerConfig{
-		Image:          "golang:1.21-alpine",
+		Image:          "golang:1.24-alpine",
 		TimeoutSeconds: 300,
 		AutoCleanup:    true,
 		MemoryLimit:    "1024m",
@@ -101,7 +101,7 @@ func TestBasePoolConfig_JSONMarshaling(t *testing.T) {
 func TestLanguageConfig_JSONMarshaling(t *testing.T) {
 	config := LanguageConfig{
 		Language:    types.LanguageGo,
-		ImageName:   "golang:1.21-alpine",
+		ImageName:   "golang:1.24-alpine",
 		SetupScript: "setup.sh",
 		RunCommand:  "go run code.go",
 		Extensions:  []string{".go", ".mod"},
@@ -133,7 +133,7 @@ func TestLanguagePoolConfig_JSONMarshaling(t *testing.T) {
 			HealthCheckInterval: 30 * time.Second,
 		},
 		DockerConfig: DockerContainerConfig{
-			Image:          "golang:1.21-alpine",
+			Image:          "golang:1.24-alpine",
 			TimeoutSeconds: 300,
 			MemoryLimit:    "1024m",
 			CPULimit:       1.0,
@@ -141,7 +141,7 @@ func TestLanguagePoolConfig_JSONMarshaling(t *testing.T) {
 		},
 		LanguageConfig: LanguageConfig{
 			Language:    types.LanguageGo,
-			ImageName:   "golang:1.21-alpine",
+			ImageName:   "golang:1.24-alpine",
 			SetupScript: "setup.sh",
 			RunCommand:  "go run code.go",
 			Extensions:  []string{".go"},
@@ -231,7 +231,7 @@ func TestCodeExecutorConfig_JSONMarshaling(t *testing.T) {
 					MinContainers: 2,
 				},
 				DockerConfig: DockerContainerConfig{
-					Image:          "golang:1.21-alpine",
+					Image:          "golang:1.24-alpine",
 					TimeoutSeconds: 300,
 					MemoryLimit:    "1024m",
 					CPULimit:       1.0,
@@ -239,7 +239,7 @@ func TestCodeExecutorConfig_JSONMarshaling(t *testing.T) {
 				},
 				LanguageConfig: LanguageConfig{
 					Language:   types.LanguageGo,
-					ImageName:  "golang:1.21-alpine",
+					ImageName:  "golang:1.24-alpine",
 					RunCommand: "go run code.go",
 					Extensions: []string{".go"},
 				},
@@ -278,7 +278,7 @@ func TestCodeExecutorConfig_JSONMarshaling(t *testing.T) {
 	// Verify language config is preserved
 	goConfig, exists := unmarshaled.Languages["go"]
 	assert.True(t, exists)
-	assert.Equal(t, "golang:1.21-alpine", goConfig.LanguageConfig.ImageName)
+	assert.Equal(t, "golang:1.24-alpine", goConfig.LanguageConfig.ImageName)
 }
 
 func TestCodeExecutorConfig_EmptyConfig(t *testing.T) {

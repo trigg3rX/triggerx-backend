@@ -11,6 +11,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/health"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/client/taskmonitor"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
@@ -107,9 +108,23 @@ func main() {
 	}
 	logger.Info("[5/6] Dependency: IPFS client Initialised")
 
+	// Initialize taskmonitor client (optional - may not be configured)
+	var taskMonitorClient *taskmonitor.Client
+	if config.GetTaskMonitorRPCUrl() != "" {
+		taskMonitorClient, err = taskmonitor.NewClient(logger)
+		if err != nil {
+			logger.Warn("Failed to initialize taskmonitor client, error reporting will be disabled",
+				"error", err)
+		} else {
+			logger.Info("[6/7] Dependency: TaskMonitor client Initialised")
+		}
+	} else {
+		logger.Info("[6/7] Dependency: TaskMonitor client skipped (not configured)")
+	}
+
 	// Initialize task executor and validator
 	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger, ipfsClient)
-	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, aggregatorClient, logger)
+	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, aggregatorClient, taskMonitorClient, logger)
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -126,14 +141,14 @@ func main() {
 	}
 
 	server := api.NewServer(serverCfg, deps)
-	logger.Info("[6/6] Dependency: API server Initialised")
+	logger.Info("[7/7] Dependency: API server Initialised")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start health check routine
-	go startHealthCheckRoutine(ctx, healthClient, dockerManager, logger, server)
+	go startHealthCheckRoutine(ctx, healthClient, dockerManager, taskMonitorClient, logger, server)
 	logger.Debug("Note: Only first health-check will be logged, subsequent health-checks will not be logged.")
 	logger.Info("[1/3] Process: Health check routine Started")
 
@@ -160,11 +175,11 @@ func main() {
 	logger.Info("Received shutdown signal", "signal", sig.String())
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
+	performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger)
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
-func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, logger logging.Logger, server *api.Server) {
+func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, taskMonitorClient *taskmonitor.Client, logger logging.Logger, server *api.Server) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
@@ -178,7 +193,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 			if err != nil {
 				if errors.Is(err, health.ErrKeeperNotVerified) {
 					logger.Error("Keeper is not verified. Shutting down...", "error", err)
-					performGracefulShutdown(ctx, healthClient, dockerManager, server, logger)
+					performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger)
 					return
 				}
 				logger.Error("Failed health check-in", "error", response.Data)
@@ -190,7 +205,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, taskMonitorClient *taskmonitor.Client, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -204,19 +219,28 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
         
         // Close health client
         healthClient.Close()
-        logger.Info("[1/3] Process: Health client Closed")
+        logger.Info("[1/4] Process: Health client Closed")
 
-	// Close code executor
-	if err := dockerManager.Close(ctx); err != nil {
-		logger.Error("Error closing code executor", "error", err)
-	}
-	logger.Info("[2/3] Process: Code executor Closed")
+		// Close code executor
+		if err := dockerManager.Close(ctx); err != nil {
+			logger.Error("Error closing code executor", "error", err)
+		}
+		logger.Info("[2/4] Process: Code executor Closed")
+
+		// Close taskmonitor client
+		if taskMonitorClient != nil {
+			if err := taskMonitorClient.Close(); err != nil {
+				logger.Error("Error closing taskmonitor client", "error", err)
+			} else {
+				logger.Info("[3/4] Process: TaskMonitor client Closed")
+			}
+		}
 
         // Shutdown server gracefully
         if err := server.Stop(shutdownCtx); err != nil {
             logger.Error("Server forced to shutdown", "error", err)
         }
-        logger.Info("[3/3] Process: API server Stopped")
+        logger.Info("[4/4] Process: API server Stopped")
     }()
 
     // Wait for shutdown to complete or timeout

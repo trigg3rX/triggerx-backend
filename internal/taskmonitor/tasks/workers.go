@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 )
 
@@ -105,6 +106,26 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 			tsm.logger.Error("Failed to update task failed",
 				"task_id", taskID,
 				"error", err)
+		}
+
+		// Notify user on failure
+		if tsm.notifier != nil {
+			email, e := tsm.dbClient.GetUserEmailByTaskID(taskID)
+			if e != nil {
+				tsm.logger.Warn("Could not fetch user email for task failure", "task_id", taskID, "error", e)
+			} else if email != "" {
+				payload := notify.TaskStatusPayload{
+					TaskID:     taskID,
+					JobID:      0,
+					Status:     "failed",
+					IsAccepted: false,
+					Error:      "dispatched timeout",
+					OccurredAt: time.Now(),
+				}
+				if err := tsm.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+					tsm.logger.Warn("Failed to notify user for task failure", "email", email, "task_id", taskID, "error", err)
+				}
+			}
 		}
 	}
 

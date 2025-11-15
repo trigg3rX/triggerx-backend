@@ -86,6 +86,18 @@ func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage
 	return result, nil
 }
 
+// ExecuteSource executes raw source code by writing it to a temp file internally
+func (e *codeExecutor) ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error) {
+	e.logger.Infof("Executing raw source for language: %s", language)
+	result, err := e.pipeline.executeSource(ctx, code, language)
+	if err != nil {
+		e.logger.Errorf("Execution (raw) failed: %v", err)
+		return nil, err
+	}
+	e.logger.Infof("Execution (raw) completed successfully")
+	return result, nil
+}
+
 func (e *codeExecutor) GetHealthStatus() *HealthStatus {
 	return e.monitor.getHealthStatus()
 }

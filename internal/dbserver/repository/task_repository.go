@@ -164,7 +164,7 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int6
 func (r *taskRepository) GetTaskDataByID(taskID int64) (commonTypes.TaskData, error) {
 	var task commonTypes.TaskData
 	var jobIDBigInt *big.Int
-	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpxCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsAccepted, &task.TaskStatus, &task.IsImua)
+	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpxCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.ConvertedArguments, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsAccepted, &task.TaskStatus, &task.TaskError, &task.IsImua)
 	if err != nil {
 		return commonTypes.TaskData{}, errors.New("error getting task data by ID")
 	}
@@ -187,6 +187,8 @@ func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobI
 		&task.TaskAttesterIDs,
 		&task.IsAccepted,
 		&task.TaskStatus,
+		&task.TaskError,
+		&task.ConvertedArguments,
 	) {
 		tasks = append(tasks, task)
 	}

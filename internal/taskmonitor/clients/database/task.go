@@ -21,6 +21,12 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 	}
 	attesterIds := data.AttesterIds
 
+	// Convert []interface{} to []string for Cassandra
+	convertedArgsStrings := make([]string, len(data.ConvertedArguments))
+	for i, arg := range data.ConvertedArguments {
+		convertedArgsStrings[i] = fmt.Sprintf("%v", arg)
+	}
+
 	if err := dm.db.NewQuery(queries.UpdateTaskSubmissionData,
 		data.TaskNumber,
 		data.IsAccepted,
@@ -31,6 +37,7 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 		data.ExecutionTimestamp,
 		data.TaskOpxCost,
 		data.ProofOfTask,
+		convertedArgsStrings,
 		data.TaskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", data.TaskID, err)
 		return err
@@ -41,12 +48,93 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 }
 
 func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
+	// First, check if the task already has a status (i.e., is already failed or completed)
+	var existingStatus string
+	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if iter.Scan(&existingStatus) && existingStatus != "" {
+		dm.logger.Infof("Task %d already has a status '%s', not updating to failed.", taskID, existingStatus)
+		return nil
+	}
+	// Proceed with marking as failed only if status is absent or empty
 	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
 		return err
 	}
 	dm.logger.Infof("Successfully updated task %d as failed", taskID)
 	return nil
+}
+
+// UpdateTaskError updates a task with error information
+func (dm *DatabaseClient) UpdateTaskError(taskID int64, errorMsg string) error {
+	// First, check if the task already has a status (i.e., is already failed or completed)
+	var existingStatus string
+	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if iter.Scan(&existingStatus) && existingStatus != "" {
+		dm.logger.Infof("Task %d already has a status '%s', not updating to failed.", taskID, existingStatus)
+		return nil
+	}
+	// Proceed with marking as failed only if status is absent or empty
+	if err := dm.db.NewQuery(queries.UpdateTaskError, errorMsg, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task error for task ID %d: %v", taskID, err)
+		return err
+	}
+	dm.logger.Infof("Successfully updated task %d with error: %s", taskID, errorMsg)
+	return nil
+}
+
+// GetUserEmailByJobID returns the user's email_id for a given job_id
+func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
+	var userID int64
+	iter := dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&userID) {
+		return "", fmt.Errorf("user not found for job ID %d", jobID)
+	}
+
+	var email string
+	iter = dm.db.NewQuery(queries.GetUserEmailByUserID, userID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&email) {
+		return "", fmt.Errorf("email not found for user ID %d", userID)
+	}
+
+	return email, nil
+}
+
+// GetUserEmailByTaskID returns the user's email_id for a given task_id
+func (dm *DatabaseClient) GetUserEmailByTaskID(taskID int64) (string, error) {
+	var predicted float64
+	var jobID *big.Int
+	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if !iter.Scan(&predicted, &jobID) {
+		return "", fmt.Errorf("job not found for task ID %d", taskID)
+	}
+	return dm.GetUserEmailByJobID(jobID)
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task

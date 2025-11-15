@@ -17,7 +17,7 @@ type Config struct {
 	taskMonitorRPCPort string
 
 	// Contract Addresses to listen for events
-	attestationCenterAddress string
+	attestationCenterAddress     string
 	testAttestationCenterAddress string
 
 	// RPC URLs for Ethereum and Base
@@ -41,6 +41,18 @@ type Config struct {
 
 	// OpenTelemetry endpoint
 	ottempoEndpoint string
+
+	// Notification webhook
+	notifyWebhookURL   string
+	notifyWebhookToken string
+
+	// SMTP email settings
+	smtpHost     string
+	smtpPort     int
+	smtpUser     string
+	smtpPass     string
+	smtpFrom     string
+	smtpStartTLS bool
 
 	// Common settings
 	poolSize     int
@@ -77,36 +89,44 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		taskMonitorRPCPort:       env.GetEnvString("TASK_MONITOR_RPC_PORT", "9003"),
-		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
+		devMode:                      env.GetEnvBool("DEV_MODE", false),
+		taskMonitorRPCPort:           env.GetEnvString("TASK_MONITOR_RPC_PORT", "9007"),
+		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
 		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
-		rpcProvider:              env.GetEnvString("RPC_PROVIDER", ""),
-		rpcAPIKey:                env.GetEnvString("RPC_API_KEY", ""),
-		databaseHostAddress:      env.GetEnvString("DATABASE_HOST_ADDRESS", ""),
-		databaseHostPort:         env.GetEnvString("DATABASE_HOST_PORT", ""),
-		upstashRedisUrl:          env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashRedisRestToken:    env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		pinataJWT:                env.GetEnvString("PINATA_JWT", ""),
-		pinataHost:               env.GetEnvString("PINATA_HOST", ""),
-		poolSize:                 env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		minIdleConns:             env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		maxRetries:               env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:              env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
-		readTimeout:              env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
-		writeTimeout:             env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
-		poolTimeout:              env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
-		streamMaxLen:             env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		jobStreamTTL:             env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
-		taskStreamTTL:            env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
-		cacheTTL:                 env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
-		cleanupInterval:          env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
-		metricsUpdateInterval:    env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
-		retryDelay:               env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
-		requestTimeout:           env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
-		initializationTimeout:    env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
-		maxRetryBackoff:          env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
-		ottempoEndpoint:          env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		rpcProvider:                  env.GetEnvString("RPC_PROVIDER", ""),
+		rpcAPIKey:                    env.GetEnvString("RPC_API_KEY", ""),
+		databaseHostAddress:          env.GetEnvString("DATABASE_HOST_ADDRESS", ""),
+		databaseHostPort:             env.GetEnvString("DATABASE_HOST_PORT", ""),
+		upstashRedisUrl:              env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken:        env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		pinataJWT:                    env.GetEnvString("PINATA_JWT", ""),
+		pinataHost:                   env.GetEnvString("PINATA_HOST", ""),
+		poolSize:                     env.GetEnvInt("REDIS_POOL_SIZE", 10),
+		minIdleConns:                 env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
+		maxRetries:                   env.GetEnvInt("REDIS_MAX_RETRIES", 3),
+		dialTimeout:                  env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
+		readTimeout:                  env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
+		writeTimeout:                 env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
+		poolTimeout:                  env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
+		streamMaxLen:                 env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
+		jobStreamTTL:                 env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
+		taskStreamTTL:                env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
+		cacheTTL:                     env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
+		cleanupInterval:              env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
+		metricsUpdateInterval:        env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
+		retryDelay:                   env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
+		requestTimeout:               env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
+		initializationTimeout:        env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
+		maxRetryBackoff:              env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
+		ottempoEndpoint:              env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		notifyWebhookURL:             env.GetEnvString("TASK_NOTIFY_WEBHOOK_URL", ""),
+		notifyWebhookToken:           env.GetEnvString("TASK_NOTIFY_WEBHOOK_TOKEN", ""),
+		smtpHost:                     env.GetEnvString("SMTP_HOST", ""),
+		smtpPort:                     env.GetEnvInt("SMTP_PORT", 587),
+		smtpUser:                     env.GetEnvString("SMTP_USER", ""),
+		smtpPass:                     env.GetEnvString("SMTP_PASS", ""),
+		smtpFrom:                     env.GetEnvString("SMTP_FROM", ""),
+		smtpStartTLS:                 env.GetEnvBool("SMTP_STARTTLS", true),
 	}
 
 	if !cfg.devMode {
@@ -242,6 +262,21 @@ func GetMaxRetryBackoff() time.Duration {
 func GetOTTempoEndpoint() string {
 	return cfg.ottempoEndpoint
 }
+
+func GetNotifyWebhookURL() string {
+	return cfg.notifyWebhookURL
+}
+
+func GetNotifyWebhookToken() string {
+	return cfg.notifyWebhookToken
+}
+
+func GetSMTPHost() string   { return cfg.smtpHost }
+func GetSMTPPort() int      { return cfg.smtpPort }
+func GetSMTPUser() string   { return cfg.smtpUser }
+func GetSMTPPass() string   { return cfg.smtpPass }
+func GetSMTPFrom() string   { return cfg.smtpFrom }
+func GetSMTPStartTLS() bool { return cfg.smtpStartTLS }
 
 // GetRedisClientConfig returns a RedisConfig for the new Redis client
 func GetRedisClientConfig() redisClient.RedisConfig {

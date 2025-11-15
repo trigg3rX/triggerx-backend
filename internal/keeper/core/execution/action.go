@@ -32,7 +32,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		timeToNextTrigger = timeToNextTrigger - 4*time.Second
 	case 2:
 		timeToNextTrigger = time.Until(triggerData.NextTriggerTimestamp)
-		timeToNextTrigger = timeToNextTrigger - 10*time.Second
+		timeToNextTrigger = timeToNextTrigger - 60*time.Second
 		if timeToNextTrigger < 0 {
 			timeToNextTrigger = 0
 		}
@@ -78,7 +78,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	// Handle args as potentially structured data
 	convertedArgs, err := e.processArguments(argData, method.Inputs, contractABI)
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("error processing arguments: %v", err)
+		return types.PerformerActionData{}, fmt.Errorf("error processing (dynamic) arguments: %v", err)
 	}
 
 	// Pack the target contract's function call data
@@ -86,7 +86,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	callData, err = contractABI.Pack(method.Name, convertedArgs...)
 	if err != nil {
 		e.logger.Warnf("Error packing arguments: %v", err)
-		return types.PerformerActionData{}, fmt.Errorf("error packing arguments: %v", err)
+		return types.PerformerActionData{}, fmt.Errorf("error packing arguments to function call: %v", err)
 	}
 
 	// Create transaction data for execution contract
@@ -137,7 +137,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		privateKey,
 	)
 	if err != nil {
-		return types.PerformerActionData{}, err
+		return types.PerformerActionData{}, fmt.Errorf("failed to submit transaction: %v", err)
 	}
 
 	executionResult := types.PerformerActionData{
@@ -156,6 +156,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		StaticComplexity:   result.Stats.StaticComplexity,
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
+		ConvertedArguments: convertedArgs,
 	}
 	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
 	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))

@@ -34,7 +34,7 @@ RUN addgroup -g 1000 triggerx && \
 
 # Create necessary directories for persistent storage with proper permissions
 RUN mkdir -p /home/triggerx/data/cache \
-    && mkdir -p /home/triggerx/data/logs \
+    && mkdir -p /home/triggerx/data/logs/keeper \
     && mkdir -p /home/triggerx/data/peerstore/attester \
     && chown -R 1000:1000 /home/triggerx/data \
     && chmod -R 755 /home/triggerx/data

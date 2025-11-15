@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
@@ -120,6 +121,7 @@ type TaskEventHandler struct {
 	db                *database.DatabaseClient
 	ipfsClient        ipfs.IPFSClient
 	taskStreamManager *tasks.TaskStreamManager
+	notifier          notify.Notifier
 }
 
 // NewContractEventListener creates a new contract event listener
@@ -211,7 +213,7 @@ func (l *ContractEventListener) startEventProcessors() {
 	processor := &EventProcessor{
 		logger:          l.logger,
 		operatorHandler: &OperatorEventHandler{logger: l.logger},
-		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient, ipfsClient: l.ipfsClient, taskStreamManager: l.taskStreamManager},
+		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient, ipfsClient: l.ipfsClient, taskStreamManager: l.taskStreamManager, notifier: notify.NewCompositeNotifier(l.logger, notify.NewWebhookNotifier(l.logger), notify.NewSMTPNotifier(l.logger))},
 	}
 
 	// Start multiple processing workers
@@ -449,7 +451,7 @@ func (l *ContractEventListener) parseAttestationCenterEvent(eventName string, lg
 	// Debug: Log event structure and raw data
 	// l.logger.Debug("Event structure", "event_name", eventName, "input_count", len(ev.Inputs), "data_length", len(lg.Data))
 	// for i, input := range ev.Inputs {
-		// l.logger.Debug("Event input", "index", i, "name", input.Name, "type", input.Type.String(), "indexed", input.Indexed)
+	// l.logger.Debug("Event input", "index", i, "name", input.Name, "type", input.Type.String(), "indexed", input.Indexed)
 	// }
 	// l.logger.Debug("Raw event data", "data_hex", fmt.Sprintf("%x", lg.Data))
 

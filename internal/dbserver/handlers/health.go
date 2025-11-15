@@ -21,10 +21,9 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	// Track database health check operation
 	trackDBOp := metrics.TrackDBOperation("read", "system_health")
 
-	// Use a simple system query to test the connection
-	query := h.db.Session().Query("SELECT now() FROM system.local")
+	// Use injectable scan function to test DB connectivity
 	var timestamp time.Time
-	if err := query.Scan(&timestamp); err != nil {
+	if err := h.scanNowQuery(&timestamp); err != nil {
 		dbStatus = "unhealthy"
 		dbError = err.Error()
 		h.logger.Errorf("Database health check failed: %v", err)

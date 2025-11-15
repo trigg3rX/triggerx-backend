@@ -39,8 +39,10 @@ type TasksByJobIDResponse struct {
 	TaskPerformerID    int64     `json:"task_performer_id"`
 	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
 	TaskStatus         string    `json:"task_status"`
+	TaskError          string    `json:"task_error"`
 	IsAccepted         bool      `json:"is_accepted"`
 	TxURL              string    `json:"tx_url"`
+	ConvertedArguments []string  `json:"converted_arguments"`
 }
 
 type GetTasksByJobID struct {
@@ -54,4 +56,6 @@ type GetTasksByJobID struct {
 	IsAccepted         bool      `json:"is_accepted"`
 	TxURL              string    `json:"tx_url"`
 	TaskStatus         string    `json:"task_status"`
+	TaskError          string    `json:"task_error"`
+	ConvertedArguments []string  `json:"converted_arguments"`
 }

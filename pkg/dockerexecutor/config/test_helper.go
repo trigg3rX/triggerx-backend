@@ -30,7 +30,7 @@ func NewDefaultMockConfigProvider(t gomock.TestReporter) *MockConfigProviderInte
 					HealthCheckInterval: 60 * time.Second,
 				},
 				DockerConfig: DockerContainerConfig{
-					Image:          "golang:1.21-alpine",
+					Image:          "golang:1.24-alpine",
 					TimeoutSeconds: 30,
 					AutoCleanup:    true,
 					MemoryLimit:    "512m",
@@ -43,7 +43,7 @@ func NewDefaultMockConfigProvider(t gomock.TestReporter) *MockConfigProviderInte
 				},
 				LanguageConfig: LanguageConfig{
 					Language:    types.LanguageGo,
-					ImageName:   "golang:1.21-alpine",
+					ImageName:   "golang:1.24-alpine",
 					SetupScript: "go mod init test",
 					RunCommand:  "go run",
 					Extensions:  []string{".go"},

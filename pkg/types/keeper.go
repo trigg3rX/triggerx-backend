@@ -38,11 +38,12 @@ type PerformerActionData struct {
 	BlockWrite    uint64  `json:"block_write"`
 	BandwidthRate float64 `json:"bandwidth_rate"`
 
-	TotalFee           *big.Int  `json:"total_fee"`
-	StaticComplexity   float64   `json:"static_complexity"`
-	DynamicComplexity  float64   `json:"dynamic_complexity"`
-	ComplexityIndex    float64   `json:"complexity_index"`
-	ExecutionTimestamp time.Time `json:"execution_timestamp"`
+	TotalFee           *big.Int      `json:"total_fee"`
+	StaticComplexity   float64       `json:"static_complexity"`
+	DynamicComplexity  float64       `json:"dynamic_complexity"`
+	ComplexityIndex    float64       `json:"complexity_index"`
+	ExecutionTimestamp time.Time     `json:"execution_timestamp"`
+	ConvertedArguments []interface{} `json:"converted_arguments"`
 }
 
 // Data from keeper's proof generation for execution done above

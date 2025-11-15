@@ -51,7 +51,7 @@ func TestContainerPool_Initialize_Success(t *testing.T) {
 	pool, mockDockerClient, _ := setupPoolTest(t)
 
 	// Add mock image to simulate existing image
-	mockDockerClient.AddMockImage("golang:1.21-alpine")
+	mockDockerClient.AddMockImage("golang:1.24-alpine")
 
 	// Act
 	ctx := context.Background()
