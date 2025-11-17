@@ -37,9 +37,9 @@ type CreateJobData struct {
 	TokenBalance *big.Int `json:"token_balance" validate:"required"`
 
 	JobTitle          string  `json:"job_title" validate:"required,min=3,max=100"`
-	TaskDefinitionID  int     `json:"task_definition_id" validate:"required,min=1,max=6"`
+	TaskDefinitionID  int     `json:"task_definition_id" validate:"required,min=1,max=7"`
 	Custom            bool    `json:"custom"`
-	Language          string  `json:"language,omitempty" validate:"omitempty,oneof=go python nodejs javascript typescript rust cpp java"`
+	Language          string  `json:"language,omitempty"`
 	TimeFrame         int64   `json:"time_frame" validate:"required,min=1"`
 	Recurring         bool    `json:"recurring"`
 	JobCostPrediction float64 `json:"job_cost_prediction" validate:"required,min=0"`

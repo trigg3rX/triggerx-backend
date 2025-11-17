@@ -120,8 +120,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			SafeAddress:       "",
 		}
 
-		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6 & DynamicArgumentsScriptUrl)
-		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6) && tempJobs[i].DynamicArgumentsScriptUrl != "" {
+		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6,7 & DynamicArgumentsScriptUrl)
+		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7) && tempJobs[i].DynamicArgumentsScriptUrl != "" {
 			// Parse CID or gateway URL if needed
 			ipfsUrl := tempJobs[i].DynamicArgumentsScriptUrl
 			ctx := c.Request.Context()
@@ -386,6 +386,43 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
+
+		case 7:
+			// Custom script job (TaskDefinitionID = 7)
+			var nextExecutionTime time.Time
+			nextExecutionTime, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, "", "")
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Error calculating next execution time for custom job: %v", err)
+				nextExecutionTime = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
+			}
+
+			customJobData := commonTypes.CustomJobData{
+				JobID:              commonTypes.NewBigInt(jobID),
+				TargetChainID:      tempJobs[i].TargetChainID,
+				TaskDefinitionID:   7,
+				ExpirationTime:     expirationTime,
+				Recurring:          tempJobs[i].Recurring,
+				CustomScriptUrl:    tempJobs[i].DynamicArgumentsScriptUrl,
+				TimeInterval:       tempJobs[i].TimeInterval,
+				ScriptLanguage:     tempJobs[i].Language,
+				NextExecutionTime:  nextExecutionTime,
+				LastExecutedAt:     time.Now(),
+				IsCompleted:        false,
+				IsActive:           true,
+			}
+
+			// Track custom job creation
+			trackDBOp = metrics.TrackDBOperation("create", "custom_jobs")
+			if err := h.customJobRepository.CreateCustomJob(&customJobData); err != nil {
+				trackDBOp(err)
+				h.logger.Errorf("[CreateJobData] Error inserting custom job data for jobID %d: %v", jobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+			trackDBOp(nil)
+			h.logger.Infof("[CreateJobData] Successfully created custom script job %d with interval %d seconds, language %s",
+				jobID, customJobData.TimeInterval, customJobData.ScriptLanguage)
+
 		default:
 			h.logger.Errorf("[CreateJobData] Invalid task definition ID %d for job %d", tempJobs[i].TaskDefinitionID, i)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})

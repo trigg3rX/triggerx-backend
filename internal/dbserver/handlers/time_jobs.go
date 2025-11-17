@@ -18,6 +18,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	var tasks []commonTypes.ScheduleTimeTaskData
 	var err error
 
+	// Get regular time-based jobs
 	trackDBOp := metrics.TrackDBOperation("read", "time_jobs")
 	tasks, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(lookAheadTime)
 	trackDBOp(err)
@@ -29,6 +30,24 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 			"tasks": tasks,
 		})
 		return
+	}
+
+	// Get custom jobs (TaskDefinitionID = 7)
+	if h.customJobRepository != nil {
+		trackDBOp = metrics.TrackDBOperation("read", "custom_jobs")
+		customJobs, err := h.customJobRepository.GetCustomJobsDueForExecution(lookAheadTime)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Warnf("[GetCustomBasedTasks] Error retrieving custom jobs: %v", err)
+			// Don't fail, just log and continue with time jobs only
+		} else {
+			// Convert custom jobs to ScheduleTimeTaskData format
+			for _, customJob := range customJobs {
+				taskData := h.convertCustomJobToScheduleTimeTaskData(&customJob)
+				tasks = append(tasks, taskData)
+			}
+			h.logger.Infof("[getCustomBasedTasks] Retrieved %d custom jobs", len(customJobs))
+		}
 	}
 
 	for i := range tasks {
@@ -66,4 +85,43 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
 	}
 	c.JSON(http.StatusOK, tasks)
+}
+
+// convertCustomJobToScheduleTimeTaskData converts a CustomJobData to ScheduleTimeTaskData format
+func (h *Handler) convertCustomJobToScheduleTimeTaskData(customJob *commonTypes.CustomJobData) commonTypes.ScheduleTimeTaskData {
+	// Fetch storage for this custom job
+	storage, err := h.scriptStorageRepository.GetStorageByJobID(customJob.JobID.ToBigInt())
+	if err != nil {
+		h.logger.Warnf("[GetTimeBasedTasks] Failed to get storage for job %s: %v", customJob.JobID.String(), err)
+		storage = make(map[string]string) // Continue with empty storage
+	}
+
+	return commonTypes.ScheduleTimeTaskData{
+		TaskID:                 0, // Will be assigned during task creation
+		TaskDefinitionID:       7, // Custom job task definition ID
+		LastExecutedAt:         customJob.LastExecutedAt,
+		ExpirationTime:         customJob.ExpirationTime,
+		NextExecutionTimestamp: customJob.NextExecutionTime,
+		ScheduleType:           "interval",
+		TimeInterval:           customJob.TimeInterval,
+		CronExpression:         "",
+		SpecificSchedule:       "",
+		TaskTargetData: commonTypes.TaskTargetData{
+			JobID:                     customJob.JobID,
+			TaskID:                    0, // Will be assigned later
+			TaskDefinitionID:          7,
+			TargetChainID:             customJob.TargetChainID, // Will be filled by script output
+			TargetContractAddress:     "", // Will be filled by script output
+			TargetFunction:            "", // Will be filled by script output
+			ABI:                       "",
+			ArgType:                   0,
+			Arguments:                 []string{},
+			DynamicArgumentsScriptUrl: customJob.CustomScriptUrl, // Use this field to pass script URL
+			IsImua:                    false,
+			// Custom script fields
+			ScriptStorage:             storage,              // Storage from database
+			ScriptLanguage:            customJob.ScriptLanguage,
+		},
+		IsImua: false,
+	}
 }
