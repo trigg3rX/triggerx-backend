@@ -38,7 +38,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 		case 10001, 10002:
 			h.logger.Debugf("Skipping task processing - Task # %d is Internal Task", taskData.TaskNumber)
 			return
-		case 1, 2, 3, 4, 5, 6:
+		case 1, 2, 3, 4, 5, 6, 7: // Added 7 for custom script jobs
 			dataBytes, err := hex.DecodeString(taskData.Data) // Remove "0x" prefix before decoding
 			if err != nil {
 				h.logger.Error("Failed to hex-decode data", "error", err)
@@ -78,6 +78,20 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 			// Update task submission data in database
 			if err := h.db.UpdateTaskSubmissionData(*taskData); err != nil {
 				h.logger.Errorf("Failed to update task submission data in database: %v", err)
+			}
+
+			// For custom script jobs (TaskDefinitionID = 7), update storage
+			if taskData.TaskDefinitionID == 7 && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+				jobID, err := h.db.GetJobIDByTaskID(taskData.TaskID)
+				if err != nil {
+					h.logger.Errorf("Failed to get job ID for task %d: %v", taskData.TaskID, err)
+				} else {
+					if err := h.db.UpdateScriptStorage(jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+						h.logger.Errorf("Failed to update script storage for job %s: %v", jobID.String(), err)
+					} else {
+						h.logger.Infof("Successfully updated %d storage keys for job %s", len(ipfsData.ActionData.StorageUpdates), jobID.String())
+					}
+				}
 			}
 
 			// Update keeper points in database

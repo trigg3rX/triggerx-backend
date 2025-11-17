@@ -20,7 +20,7 @@ import (
 )
 
 func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client) (types.PerformerActionData, error) {
-	if targetData.TargetContractAddress == "" {
+	if (targetData.TaskDefinitionID != 7 && targetData.TargetContractAddress == "") {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
 	}
@@ -41,15 +41,65 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 	time.Sleep(timeToNextTrigger)
 
+	// Declare variables before switch to avoid goto issues
 	targetContractAddress := ethcommon.HexToAddress(targetData.TargetContractAddress)
-	contractABI, method, err := e.getContractMethodAndABI(targetData.TargetFunction, targetData)
-	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
+	var callData []byte
+	var convertedArgs []interface{}
+	var err error
+
+	// Skip ABI parsing for custom scripts (TaskDefinitionID 7)
+	var contractABI *abi.ABI
+	var method *abi.Method
+	if targetData.TaskDefinitionID != 7 {
+		contractABI, method, err = e.getContractMethodAndABI(targetData.TargetFunction, targetData)
+		if err != nil {
+			return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
+		}
 	}
 
 	var argData []interface{}
 	var result *dockertypes.ExecutionResult
+	var customScriptOutput *types.CustomScriptOutput
+	var storageUpdates map[string]string
+
 	switch targetData.TaskDefinitionID {
+	case 7:
+		// Custom script execution (TaskDefinitionID = 7)
+		scriptOutput, updates, err := e.ExecuteCustomScript(context.Background(), targetData, triggerData)
+		if err != nil {
+			return types.PerformerActionData{}, fmt.Errorf("custom script execution failed: %v", err)
+		}
+		customScriptOutput = scriptOutput
+		storageUpdates = updates
+
+		// If script says don't execute, return early
+		if !customScriptOutput.ShouldExecute {
+			e.logger.Infof("[CustomScript] Script returned shouldExecute=false, skipping execution")
+			return types.PerformerActionData{
+				TaskID:         targetData.TaskID,
+				Status:         true,
+				StorageUpdates: storageUpdates,
+			}, nil
+		}
+
+		// Override target contract address with script output
+		targetContractAddress = ethcommon.HexToAddress(customScriptOutput.TargetContract)
+		// Calldata is already built by the script
+		callData = ethcommon.FromHex(customScriptOutput.Calldata)
+
+		e.logger.Infof("[CustomScript] Script returned: target=%s, calldata=%s",
+			customScriptOutput.TargetContract, customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)])
+
+		// Create dummy result for resource tracking
+		result = &dockertypes.ExecutionResult{
+			Stats: dockertypes.DockerResourceStats{
+				TotalCost: big.NewInt(int64(e.validator.GetDockerExecutor().GetExecutionFeeConfig().TransactionCost * 1e18)),
+			},
+		}
+
+		// Skip normal argument processing for custom scripts
+		goto skipArgumentProcessing
+
 	case 2, 4, 6:
 		var execErr error
 		// Use the DockerManager from the validator to execute the code
@@ -76,19 +126,19 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	}
 
 	// Handle args as potentially structured data
-	convertedArgs, err := e.processArguments(argData, method.Inputs, contractABI)
+	convertedArgs, err = e.processArguments(argData, method.Inputs, contractABI)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("error processing (dynamic) arguments: %v", err)
 	}
 
 	// Pack the target contract's function call data
-	var callData []byte
 	callData, err = contractABI.Pack(method.Name, convertedArgs...)
 	if err != nil {
 		e.logger.Warnf("Error packing arguments: %v", err)
 		return types.PerformerActionData{}, fmt.Errorf("error packing arguments to function call: %v", err)
 	}
 
+skipArgumentProcessing:
 	// Create transaction data for execution contract
 	privateKey, err := crypto.HexToECDSA(config.GetPrivateKeyController())
 	if err != nil {
@@ -157,6 +207,7 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		DynamicComplexity:  result.Stats.DynamicComplexity,
 		ExecutionTimestamp: time.Now().UTC(),
 		ConvertedArguments: convertedArgs,
+		StorageUpdates:     storageUpdates, // Include storage updates for custom scripts
 	}
 	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
 	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))

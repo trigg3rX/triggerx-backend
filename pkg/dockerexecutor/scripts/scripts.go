@@ -101,8 +101,8 @@ const typescriptInitializationScript = `#!/bin/sh
 set -e
 mkdir -p /code
 cd /code
-# Install TypeScript globally in the container during init.
-npm install -g typescript
+# Install TypeScript compiler and Node typings globally so they're reusable across executions.
+npm install -g typescript @types/node
 echo 'console.log("init");' > code.ts
 echo "TypeScript container initialized successfully"
 `
@@ -211,8 +211,10 @@ const typescriptExecutionScript = `#!/bin/sh
 set -e
 cd /code
 V8_MEMORY_LIMIT=${V8_MEMORY_LIMIT:-256}
-# First, compile the user's code.
-tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck
+# Discover global node_modules location to reference Node typings
+NODE_TYPES_DIR="$(npm root -g)/@types"
+# First, compile the user's code with Node types support.
+tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck --types node --typeRoots "${NODE_TYPES_DIR}"
 # Then, execute the compiled JavaScript and redirect output to result.json
 NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js > result.json 2>&1
 # Create a completion marker file

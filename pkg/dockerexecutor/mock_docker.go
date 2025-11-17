@@ -8,9 +8,10 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
+	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	execution "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/execution"
 	types "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockDockerExecutorAPI is a mock of DockerExecutorAPI interface.
@@ -202,6 +203,35 @@ func (m *MockDockerExecutorAPI) GetSupportedLanguages() []types.Language {
 func (mr *MockDockerExecutorAPIMockRecorder) GetSupportedLanguages() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSupportedLanguages", reflect.TypeOf((*MockDockerExecutorAPI)(nil).GetSupportedLanguages))
+}
+
+// GetExecutionFeeConfig mocks base method.
+func (m *MockDockerExecutorAPI) GetExecutionFeeConfig() config.ExecutionFeeConfig {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExecutionFeeConfig")
+	ret0, _ := ret[0].(config.ExecutionFeeConfig)
+	return ret0
+}
+
+// GetExecutionFeeConfig indicates an expected call of GetExecutionFeeConfig.
+func (mr *MockDockerExecutorAPIMockRecorder) GetExecutionFeeConfig() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionFeeConfig", reflect.TypeOf((*MockDockerExecutorAPI)(nil).GetExecutionFeeConfig))
+}
+
+// ExecuteSource mocks base method.
+func (m *MockDockerExecutorAPI) ExecuteSource(ctx context.Context, code, language string) (*types.ExecutionResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteSource", ctx, code, language)
+	ret0, _ := ret[0].(*types.ExecutionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteSource indicates an expected call of ExecuteSource.
+func (mr *MockDockerExecutorAPIMockRecorder) ExecuteSource(ctx, code, language interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSource", reflect.TypeOf((*MockDockerExecutorAPI)(nil).ExecuteSource), ctx, code, language)
 }
 
 // Initialize mocks base method.

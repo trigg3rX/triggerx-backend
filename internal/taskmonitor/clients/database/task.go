@@ -310,3 +310,61 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 	}
 	return keeperIds, nil
 }
+
+// UpdateScriptStorage updates script storage for a custom job (TaskDefinitionID = 7)
+// This is called after task execution to persist storage updates from the custom script
+func (dm *DatabaseClient) UpdateScriptStorage(jobID *big.Int, storageUpdates map[string]string) error {
+	if len(storageUpdates) == 0 {
+		dm.logger.Debugf("No storage updates for job %s", jobID.String())
+		return nil
+	}
+
+	dm.logger.Infof("Updating %d storage keys for job %s", len(storageUpdates), jobID.String())
+
+	// Upsert each storage key-value pair
+	for key, value := range storageUpdates {
+		if err := dm.db.NewQuery(queries.UpsertScriptStorageQuery,
+			jobID, key, value, time.Now().UTC()).Exec(); err != nil {
+			dm.logger.Errorf("Failed to update storage key '%s' for job %s: %v", key, jobID.String(), err)
+			return fmt.Errorf("failed to update storage: %w", err)
+		}
+		dm.logger.Debugf("Updated storage: job=%s, key=%s", jobID.String(), key)
+	}
+
+	dm.logger.Infof("Successfully updated %d storage keys for job %s", len(storageUpdates), jobID.String())
+	return nil
+}
+
+// GetJobIDByTaskID retrieves the job ID for a given task ID
+func (dm *DatabaseClient) GetJobIDByTaskID(taskID int64) (*big.Int, error) {
+	var jobID *big.Int
+	iter := dm.db.NewQuery(queries.GetJobIDByTaskIDQuery, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&jobID) {
+		return nil, fmt.Errorf("job not found for task ID %d", taskID)
+	}
+
+	return jobID, nil
+}
+
+// GetTaskDefinitionIDByTaskID retrieves the task definition ID for a given task ID
+func (dm *DatabaseClient) GetTaskDefinitionIDByTaskID(taskID int64) (int, error) {
+	var taskDefinitionID int
+	iter := dm.db.NewQuery(queries.GetTaskDefinitionIDQuery, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+
+	if !iter.Scan(&taskDefinitionID) {
+		return 0, fmt.Errorf("task definition ID not found for task ID %d", taskID)
+	}
+
+	return taskDefinitionID, nil
+}

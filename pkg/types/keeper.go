@@ -44,6 +44,9 @@ type PerformerActionData struct {
 	ComplexityIndex    float64       `json:"complexity_index"`
 	ExecutionTimestamp time.Time     `json:"execution_timestamp"`
 	ConvertedArguments []interface{} `json:"converted_arguments"`
+
+	// Custom script fields (TaskDefinitionID = 7)
+	StorageUpdates map[string]string `json:"storage_updates,omitempty"` // Storage updates to save in DB
 }
 
 // Data from keeper's proof generation for execution done above
