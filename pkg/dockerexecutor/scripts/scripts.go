@@ -170,6 +170,21 @@ if [ ! -f /code/.warm ]; then
     rm warm.ts warm.js
     touch /code/.warm
 fi
+# Auto-detect and install dependencies from import statements in code.ts
+if [ -f code.ts ]; then
+    # Extract package names from import/require statements
+    # Match patterns like: import ... from 'package' or require('package')
+    PACKAGES=$(grep -E "from ['\"][^'\"./][^'\"]*['\"]|require\(['\"][^'\"./][^'\"]*['\"]\)" code.ts 2>/dev/null | \
+        sed -E "s/.*from ['\"]([^'\"./][^'\"]*)['\"].*/\1/; s/.*require\(['\"]([^'\"./][^'\"]*)['\"].*/\1/" | \
+        sort -u | \
+        tr '\n' ' ' || echo "")
+
+    # Install detected packages if any found
+    if [ -n "$PACKAGES" ]; then
+        echo "Installing detected packages: $PACKAGES"
+        npm install --no-save $PACKAGES 2>&1 || echo "Warning: Some packages may have failed to install"
+    fi
+fi
 # Install dependencies from package.json if it exists.
 if [ -f package.json ]; then
     npm install
@@ -211,10 +226,28 @@ const typescriptExecutionScript = `#!/bin/sh
 set -e
 cd /code
 V8_MEMORY_LIMIT=${V8_MEMORY_LIMIT:-256}
+
+# Verify node_modules exists (dependencies should be installed in setup phase)
+if [ -d "node_modules" ]; then
+    echo "Dependencies found in node_modules"
+    ls -la node_modules/ | head -20
+else
+    echo "Warning: node_modules directory not found"
+fi
+
 # Discover global node_modules location to reference Node typings
 NODE_TYPES_DIR="$(npm root -g)/@types"
+# Get local node_modules for installed packages
+LOCAL_NODE_MODULES="$(pwd)/node_modules"
+
 # First, compile the user's code with Node types support.
-tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck --types node --typeRoots "${NODE_TYPES_DIR}"
+# Include both local node_modules (for installed packages) and global types
+if [ -d "node_modules" ]; then
+    tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck --types node --typeRoots "${NODE_TYPES_DIR}" --moduleResolution node
+else
+    tsc code.ts --target ES2020 --module commonjs --esModuleInterop --skipLibCheck --types node --typeRoots "${NODE_TYPES_DIR}"
+fi
+
 # Then, execute the compiled JavaScript and redirect output to result.json
 NODE_OPTIONS="--no-warnings --max-old-space-size=${V8_MEMORY_LIMIT}" node code.js > result.json 2>&1
 # Create a completion marker file
