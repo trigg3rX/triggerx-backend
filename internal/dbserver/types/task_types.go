@@ -59,3 +59,9 @@ type GetTasksByJobID struct {
 	TaskError          string    `json:"task_error"`
 	ConvertedArguments []string  `json:"converted_arguments"`
 }
+
+// TasksByJobGroupResponse groups task data by job identifier.
+type TasksByJobGroupResponse struct {
+	JobID string                 `json:"job_id"`
+	Tasks []TasksByJobIDResponse `json:"tasks"`
+}

@@ -152,11 +152,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			ipfsCode := string(content)
 
 			valReq := ValidateCodeRequest{
-				Code:           ipfsCode,
-				Language:       tempJobs[i].Language,
-				SelectedSafe:   tempJobs[i].SafeAddress,
-				TargetFunction: tempJobs[i].TargetFunction,
-				IsSafe:         tempJobs[i].IsSafe,
+				Code:             ipfsCode,
+				Language:         tempJobs[i].Language,
+				SelectedSafe:     tempJobs[i].SafeAddress,
+				TargetFunction:   tempJobs[i].TargetFunction,
+				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
+				IsSafe:           tempJobs[i].IsSafe,
 			}
 			valResp, _ := h.ValidateCodeInternal(ctx, valReq, ipfsUrl)
 			if !valResp.Executable || !valResp.SafeMatch {
@@ -397,18 +398,18 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 
 			customJobData := commonTypes.CustomJobData{
-				JobID:              commonTypes.NewBigInt(jobID),
-				TargetChainID:      tempJobs[i].TargetChainID,
-				TaskDefinitionID:   7,
-				ExpirationTime:     expirationTime,
-				Recurring:          tempJobs[i].Recurring,
-				CustomScriptUrl:    tempJobs[i].DynamicArgumentsScriptUrl,
-				TimeInterval:       tempJobs[i].TimeInterval,
-				ScriptLanguage:     tempJobs[i].Language,
-				NextExecutionTime:  nextExecutionTime,
-				LastExecutedAt:     time.Now(),
-				IsCompleted:        false,
-				IsActive:           true,
+				JobID:             commonTypes.NewBigInt(jobID),
+				TargetChainID:     tempJobs[i].TargetChainID,
+				TaskDefinitionID:  7,
+				ExpirationTime:    expirationTime,
+				Recurring:         tempJobs[i].Recurring,
+				CustomScriptUrl:   tempJobs[i].DynamicArgumentsScriptUrl,
+				TimeInterval:      tempJobs[i].TimeInterval,
+				ScriptLanguage:    tempJobs[i].Language,
+				NextExecutionTime: nextExecutionTime,
+				LastExecutedAt:    time.Now(),
+				IsCompleted:       false,
+				IsActive:          true,
 			}
 
 			// Track custom job creation

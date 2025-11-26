@@ -14,11 +14,12 @@ import (
 )
 
 type ValidateCodeRequest struct {
-	Code           string `json:"code" binding:"required"`
-	Language       string `json:"language" binding:"required"`
-	SelectedSafe   string `json:"selected_safe" binding:"required_if=IsSafe true"`
-	TargetFunction string `json:"target_function" binding:"required"`
-	IsSafe         bool   `json:"is_safe"`
+	Code             string `json:"code" binding:"required"`
+	Language         string `json:"language" binding:"required"`
+	SelectedSafe     string `json:"selected_safe" binding:"required_if=IsSafe true"`
+	TargetFunction   string `json:"target_function" binding:"required_unless=TaskDefinitionID 7"`
+	TaskDefinitionID int    `json:"task_definition_id" binding:"required"`
+	IsSafe           bool   `json:"is_safe"`
 }
 
 type ValidateCodeResponse struct {

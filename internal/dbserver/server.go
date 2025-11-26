@@ -307,6 +307,9 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	// api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
 	api.PUT("/tasks/execution/:id", handler.UpdateTaskExecutionData)
 	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
+	protected.GET("/tasks/user/:user_address", handler.GetTasksByUserAddress)
+	protected.GET("/tasks/by-apikey/:api_key", handler.GetTasksByApiKey)
+	protected.GET("/tasks/safe-address/:safe_address", handler.GetTasksBySafeAddress)
 
 	api.POST("/keepers", s.validator.GinMiddleware(), handler.CreateKeeperData)
 	api.POST("/keepers/form", s.validator.GinMiddleware(), handler.CreateKeeperDataGoogleForm)
