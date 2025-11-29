@@ -23,11 +23,19 @@ type DockerContainerConfig struct {
 
 // ExecutionFeeConfig is the configuration for the execution fee
 type ExecutionFeeConfig struct {
-	PricePerTG      float64 `yaml:"price_per_tg"`     // Price per TG in ether
-	TransactionCost float64 `yaml:"transaction_cost"` // Cost of the action transaction
-	FixedCost       float64 `yaml:"fixed_cost"`       // TriggerX fee - 0.1%
-	StaticComplexityFactor    float64 `yaml:"static_complexity_factor"`    // Static complexity factor
-	DynamicComplexityFactor   float64 `yaml:"dynamic_complexity_factor"`   // Dynamic complexity factor
+	PricePerTG              float64 `yaml:"price_per_tg"`               // Price per TG in ether
+	TransactionCost         float64 `yaml:"transaction_cost"`           // Cost of the action transaction
+	FixedCost               float64 `yaml:"fixed_cost"`                 // TriggerX fee - 0.1%
+	StaticComplexityFactor  float64 `yaml:"static_complexity_factor"`   // Static complexity factor
+	DynamicComplexityFactor float64 `yaml:"dynamic_complexity_factor"`  // Dynamic complexity factor
+
+	// Off-chain fee rates in USD
+	StaticOffChainFeeUSD   float64 `yaml:"static_offchain_fee_usd"`    // Fee for static tasks (IDs 1,3,5) - default 0.006 USD
+	DynamicOffChainFeeUSD  float64 `yaml:"dynamic_offchain_fee_usd"`   // Fee for dynamic tasks (IDs 2,4,6) - default 0.007 USD
+	CustomScriptFeeUSD     float64 `yaml:"custom_script_fee_usd"`      // Fee for custom script tasks (ID 7) - default 0.01 USD
+
+	// Ethereum to USD conversion rate (should be updated periodically)
+	EthToUSDRate float64 `yaml:"eth_to_usd_rate"` // Current ETH/USD rate
 }
 
 type BasePoolConfig struct {

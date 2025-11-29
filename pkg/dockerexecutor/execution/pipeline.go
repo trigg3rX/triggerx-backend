@@ -69,7 +69,7 @@ func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManage
 	}
 }
 
-func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata map[string]string) (*types.ExecutionResult, error) {
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
@@ -86,6 +86,11 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 	execCtx, cancelFunc := context.WithCancel(ctx)
 	defer cancelFunc() // Ensure cleanup
 
+	// Initialize metadata if nil
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
 	// Create execution context
 	executionContext := &types.ExecutionContext{
 		FileURL:       fileURL,
@@ -93,7 +98,7 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 		NoOfAttesters: noOfAttesters,
 		TraceID:       executionID,
 		StartedAt:     startTime,
-		Metadata:      make(map[string]string),
+		Metadata:      metadata,
 		State: types.ExecutionState{
 			CancelFunc: cancelFunc,
 		},
@@ -135,7 +140,7 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 }
 
 // executeSource accepts raw code and language, writes to a temp file, then runs through the same stages
-func (ep *executionPipeline) executeSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) executeSource(ctx context.Context, code string, language string, metadata map[string]string) (*types.ExecutionResult, error) {
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
@@ -184,6 +189,12 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 	}
 	defer func() { _ = os.Remove(tmpPath) }()
 
+	// Initialize metadata if nil and add file path
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	metadata["file_path"] = tmpPath
+
 	// Build a minimal execution context compatible with executeStages
 	executionContext := &types.ExecutionContext{
 		FileURL:       "inline://source",
@@ -191,9 +202,7 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 		NoOfAttesters: 1,
 		TraceID:       executionID,
 		StartedAt:     startTime,
-		Metadata: map[string]string{
-			"file_path": tmpPath,
-		},
+		Metadata:      metadata,
 		State: types.ExecutionState{
 			CancelFunc: cancelFunc,
 		},
@@ -324,9 +333,105 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big.Int {
 	feesConfig := ep.config.GetFeesConfig()
 
-	// Get complexity values from execution result
-	// We need to get these from the execution result, but since we don't have direct access here,
-	// we'll need to pass them through the execution context or get them from metadata
+	// Get task definition ID from metadata
+	var taskDefinitionID int
+	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
+		if parsed, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err != nil || parsed != 1 {
+			ep.logger.Warnf("Failed to parse task_definition_id: %s", taskDefStr)
+			taskDefinitionID = 0
+		}
+	}
+
+	// Calculate off-chain fees based on task definition ID
+	var offChainFeeUSD float64
+	switch taskDefinitionID {
+	case 1, 3, 5:
+		// Static tasks
+		offChainFeeUSD = feesConfig.StaticOffChainFeeUSD
+		ep.logger.Debugf("Using static off-chain fee: $%.6f USD", offChainFeeUSD)
+	case 2, 4, 6:
+		// Dynamic tasks
+		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
+		ep.logger.Debugf("Using dynamic off-chain fee: $%.6f USD", offChainFeeUSD)
+	case 7:
+		// Custom script - only off-chain, no on-chain
+		offChainFeeUSD = feesConfig.CustomScriptFeeUSD
+		ep.logger.Debugf("Using custom script off-chain fee: $%.6f USD", offChainFeeUSD)
+	default:
+		// Fallback to old calculation for unknown task types
+		ep.logger.Warnf("Unknown task_definition_id: %d, using legacy fee calculation", taskDefinitionID)
+		return ep.calculateLegacyFees(execCtx, feesConfig)
+	}
+
+	// Convert off-chain fee from USD to Wei
+	offChainFeeInEther := offChainFeeUSD / feesConfig.EthToUSDRate
+	offChainFeeFloat := big.NewFloat(offChainFeeInEther)
+	weiMultiplier := big.NewFloat(1e18) // 10^18
+	offChainFeeFloat.Mul(offChainFeeFloat, weiMultiplier)
+	offChainFeeWei, _ := offChainFeeFloat.Int(nil)
+
+	// For task definition ID 7 (custom script), only return off-chain fees
+	if taskDefinitionID == 7 {
+		ep.logger.Debugf("Fee calculation for custom script (ID 7): offchain_fee_usd=%.6f, offchain_fee_wei=%s",
+			offChainFeeUSD, offChainFeeWei.String())
+		return offChainFeeWei
+	}
+
+	// For other task types (1-6), calculate on-chain fees via gas estimation
+	var onChainFeeWei *big.Int
+	if chainID, hasChain := execCtx.Metadata["target_chain_id"]; hasChain && chainID != "" {
+		contractAddr := execCtx.Metadata["target_contract_address"]
+		function := execCtx.Metadata["target_function"]
+		contractABI := execCtx.Metadata["abi"]
+
+		if contractAddr != "" && function != "" && contractABI != "" {
+			// Estimate gas for the on-chain transaction
+			ctx := context.Background()
+			gasEstimator := NewGasEstimator(ep.logger)
+			defer gasEstimator.Close()
+
+			// For now, we estimate with empty args - you may need to pass actual args
+			gasLimit, gasPrice, err := gasEstimator.EstimateGasForFunction(
+				ctx,
+				chainID,
+				contractAddr,
+				function,
+				contractABI,
+				[]interface{}{}, // Empty args for estimation
+			)
+
+			if err != nil {
+				ep.logger.Warnf("Failed to estimate gas: %v, using default on-chain fee", err)
+				// Use a default on-chain fee if estimation fails (e.g., 0.001 ETH)
+				defaultOnChainFee := big.NewFloat(0.001)
+				defaultOnChainFee.Mul(defaultOnChainFee, weiMultiplier)
+				onChainFeeWei, _ = defaultOnChainFee.Int(nil)
+			} else {
+				// Calculate gas cost in Wei
+				onChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
+				ep.logger.Debugf("Gas estimation: gasLimit=%d, gasPrice=%s, gasCost=%s Wei",
+					gasLimit, gasPrice.String(), onChainFeeWei.String())
+			}
+		} else {
+			ep.logger.Warnf("Missing contract details for on-chain fee calculation")
+			onChainFeeWei = big.NewInt(0)
+		}
+	} else {
+		ep.logger.Debugf("No chain ID provided, skipping on-chain fee calculation")
+		onChainFeeWei = big.NewInt(0)
+	}
+
+	// Total fee = off-chain fee + on-chain fee
+	totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
+
+	ep.logger.Debugf("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, total_fee_wei=%s",
+		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), totalFeeWei.String())
+
+	return totalFeeWei
+}
+
+// calculateLegacyFees is the old fee calculation method for backward compatibility
+func (ep *executionPipeline) calculateLegacyFees(execCtx *types.ExecutionContext, feesConfig config.ExecutionFeeConfig) *big.Int {
 	var staticComplexity, dynamicComplexity float64
 
 	// Try to get complexity from metadata first (set in processResults)
@@ -365,7 +470,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big
 	// Convert to big.Int (Wei)
 	feeWei, _ := feeFloat.Int(nil)
 
-	ep.logger.Debugf("Fee calculation: static_complexity=%.6f, dynamic_complexity=%.6f, x=%.6f, fee_in_tg=%.6f, fee_in_ether=%.6f, fee_in_wei=%s",
+	ep.logger.Debugf("Legacy fee calculation: static_complexity=%.6f, dynamic_complexity=%.6f, x=%.6f, fee_in_tg=%.6f, fee_in_ether=%.6f, fee_in_wei=%s",
 		staticComplexity, dynamicComplexity, x, feeInTG, feeInEther, feeWei.String())
 
 	return feeWei

@@ -78,18 +78,23 @@ func (mr *MockDockerExecutorAPIMockRecorder) Close(ctx interface{}) *gomock.Call
 }
 
 // Execute mocks base method.
-func (m *MockDockerExecutorAPI) Execute(ctx context.Context, fileURL, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (m *MockDockerExecutorAPI) Execute(ctx context.Context, fileURL, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Execute", ctx, fileURL, fileLanguage, noOfAttesters)
+	varargs := []interface{}{ctx, fileURL, fileLanguage, noOfAttesters}
+	for _, a := range metadata {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Execute", varargs...)
 	ret0, _ := ret[0].(*types.ExecutionResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockDockerExecutorAPIMockRecorder) Execute(ctx, fileURL, fileLanguage, noOfAttesters interface{}) *gomock.Call {
+func (mr *MockDockerExecutorAPIMockRecorder) Execute(ctx, fileURL, fileLanguage, noOfAttesters interface{}, metadata ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockDockerExecutorAPI)(nil).Execute), ctx, fileURL, fileLanguage, noOfAttesters)
+	varargs := append([]interface{}{ctx, fileURL, fileLanguage, noOfAttesters}, metadata...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockDockerExecutorAPI)(nil).Execute), varargs...)
 }
 
 // GetActiveExecutions mocks base method.
@@ -220,18 +225,23 @@ func (mr *MockDockerExecutorAPIMockRecorder) GetExecutionFeeConfig() *gomock.Cal
 }
 
 // ExecuteSource mocks base method.
-func (m *MockDockerExecutorAPI) ExecuteSource(ctx context.Context, code, language string) (*types.ExecutionResult, error) {
+func (m *MockDockerExecutorAPI) ExecuteSource(ctx context.Context, code, language string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteSource", ctx, code, language)
+	varargs := []interface{}{ctx, code, language}
+	for _, a := range metadata {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ExecuteSource", varargs...)
 	ret0, _ := ret[0].(*types.ExecutionResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ExecuteSource indicates an expected call of ExecuteSource.
-func (mr *MockDockerExecutorAPIMockRecorder) ExecuteSource(ctx, code, language interface{}) *gomock.Call {
+func (mr *MockDockerExecutorAPIMockRecorder) ExecuteSource(ctx, code, language interface{}, metadata ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSource", reflect.TypeOf((*MockDockerExecutorAPI)(nil).ExecuteSource), ctx, code, language)
+	varargs := append([]interface{}{ctx, code, language}, metadata...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteSource", reflect.TypeOf((*MockDockerExecutorAPI)(nil).ExecuteSource), varargs...)
 }
 
 // Initialize mocks base method.

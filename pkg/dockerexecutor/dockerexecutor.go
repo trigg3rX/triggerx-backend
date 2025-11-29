@@ -15,8 +15,8 @@ import (
 
 // CodeExecutor defines what the DockerManager needs from a code executor
 type CodeExecutor interface {
-	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
-	ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error)
+	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetStats() *types.PerformanceMetrics
 	GetPoolStats() map[types.Language]*types.PoolStats
@@ -115,7 +115,8 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 }
 
 // Execute runs code from the specified URL with the given number of attestations
-func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+// Optionally accepts metadata map for task definition and contract details
+func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	de.mutex.RLock()
 	if !de.initialized {
 		de.mutex.RUnlock()
@@ -129,7 +130,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 
 	de.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
 
-	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters)
+	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, metadata...)
 	if err != nil {
 		de.logger.Errorf("Execution failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)
@@ -140,7 +141,8 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 }
 
 // ExecuteSource runs raw source code with the specified language
-func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error) {
+// Optionally accepts metadata map for task definition and contract details
+func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, language string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	de.mutex.RLock()
 	if !de.initialized {
 		de.mutex.RUnlock()
@@ -153,7 +155,7 @@ func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, langua
 	de.mutex.RUnlock()
 
 	de.logger.Infof("Executing raw source for language: %s", language)
-	result, err := de.executor.ExecuteSource(ctx, code, language)
+	result, err := de.executor.ExecuteSource(ctx, code, language, metadata...)
 	if err != nil {
 		de.logger.Errorf("Execution (raw) failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)

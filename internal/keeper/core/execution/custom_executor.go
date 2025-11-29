@@ -11,8 +11,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ExecuteCustomScript handles custom script execution (TaskDefinitionID = 7)

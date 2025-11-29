@@ -72,11 +72,17 @@ func NewCodeExecutor(ctx context.Context, cfg config.ConfigProviderInterface, ht
 	}, nil
 }
 
-func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	e.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
 
+	// Extract metadata if provided
+	var metadataMap map[string]string
+	if len(metadata) > 0 {
+		metadataMap = metadata[0]
+	}
+
 	// Execute through pipeline
-	result, err := e.pipeline.execute(ctx, fileURL, fileLanguage, noOfAttesters)
+	result, err := e.pipeline.execute(ctx, fileURL, fileLanguage, noOfAttesters, metadataMap)
 	if err != nil {
 		e.logger.Errorf("Execution failed: %v", err)
 		return nil, err
@@ -87,9 +93,16 @@ func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage
 }
 
 // ExecuteSource executes raw source code by writing it to a temp file internally
-func (e *codeExecutor) ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error) {
+func (e *codeExecutor) ExecuteSource(ctx context.Context, code string, language string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	e.logger.Infof("Executing raw source for language: %s", language)
-	result, err := e.pipeline.executeSource(ctx, code, language)
+
+	// Extract metadata if provided
+	var metadataMap map[string]string
+	if len(metadata) > 0 {
+		metadataMap = metadata[0]
+	}
+
+	result, err := e.pipeline.executeSource(ctx, code, language, metadataMap)
 	if err != nil {
 		e.logger.Errorf("Execution (raw) failed: %v", err)
 		return nil, err

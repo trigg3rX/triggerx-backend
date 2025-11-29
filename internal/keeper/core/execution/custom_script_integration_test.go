@@ -51,7 +51,7 @@ func TestTaskExecutor_ExecuteCustomScript_SingleExecution(t *testing.T) {
 	}`
 
 	mockDocker.EXPECT().
-		Execute(gomock.Any(), targetData.DynamicArgumentsScriptUrl, targetData.ScriptLanguage, 1).
+		Execute(gomock.Any(), targetData.DynamicArgumentsScriptUrl, targetData.ScriptLanguage, 1, gomock.Any()).
 		Return(&dockertypes.ExecutionResult{
 			Success: true,
 			Output:  outputJSON,
@@ -85,7 +85,7 @@ func TestTaskExecutor_ExecuteCustomScript_PropagatesDockerErrors(t *testing.T) {
 	}
 
 	mockDocker.EXPECT().
-		Execute(gomock.Any(), gomock.Any(), gomock.Any(), 1).
+		Execute(gomock.Any(), gomock.Any(), gomock.Any(), 1, gomock.Any()).
 		Return(nil, errors.New("docker unavailable"))
 
 	_, _, err := executor.ExecuteCustomScript(context.Background(), targetData, &types.TaskTriggerData{})
