@@ -3,16 +3,19 @@ package websocket
 import (
 	"context"
 	"fmt"
-	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"encoding/json"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/gorilla/websocket"
+	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	wsclient "github.com/trigg3rX/triggerx-backend/pkg/websocket"
 )
 
 // Client manages WebSocket connections to multiple blockchains
@@ -28,19 +31,24 @@ type Client struct {
 
 // ChainConnection represents a WebSocket connection to a specific blockchain
 type ChainConnection struct {
-	chainID       string
-	chainName     string
-	ethClient     *ethclient.Client
-	wsConn        *websocket.Conn
-	subscriptions map[string]*Subscription
-	subManager    *SubscriptionManager
-	reconnectMgr  *ReconnectManager
-	eventChan     chan *ChainEvent
-	logger        logging.Logger
-	mu            sync.RWMutex
-	isConnected   bool
-	lastMessage   time.Time
-	websocketURL  string
+	chainID           string
+	chainName         string
+	nodeClient        *nodeclient.NodeClient
+	subscriptions     map[string]*Subscription
+	nodeSubscriptions map[string]*NodeSubscription // Maps our subscription ID to nodeclient subscription info
+	subManager        *SubscriptionManager
+	eventChan         chan *ChainEvent
+	logger            logging.Logger
+	mu                sync.RWMutex
+	websocketURL      string
+	rpcURL            string
+	wg                sync.WaitGroup
+}
+
+// NodeSubscription holds information about a nodeclient subscription
+type NodeSubscription struct {
+	NodeSubID        string
+	NotificationChan <-chan *nodeclient.SubscriptionNotification
 }
 
 // Subscription represents an event subscription
@@ -92,30 +100,30 @@ func (c *Client) AddChain(config ChainConfig) error {
 		return fmt.Errorf("chain %s already exists", config.ChainID)
 	}
 
-	// Create Ethereum client
-	ethClient, err := ethclient.Dial(config.RPCURL)
+	// Create node client config with WebSocket support
+	nodeCfg := createNodeClientConfig(config, c.logger)
+
+	nodeClient, err := nodeclient.NewNodeClient(nodeCfg)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s RPC: %w", config.Name, err)
+		return fmt.Errorf("failed to create node client for %s: %w", config.Name, err)
 	}
 
 	// Create subscription manager
 	subManager := NewSubscriptionManager(config.ChainID, c.logger)
 
-	// Create reconnection manager
-	reconnectMgr := NewReconnectManagerWithConfig(config.WebSocketURL, config.Reconnect, c.logger)
-
 	// Create chain connection
 	chainConn := &ChainConnection{
-		chainID:       config.ChainID,
-		chainName:     config.Name,
-		ethClient:     ethClient,
-		subscriptions: make(map[string]*Subscription),
-		subManager:    subManager,
-		reconnectMgr:  reconnectMgr,
-		eventChan:     c.eventChan,
-		logger:        c.logger,
-		isConnected:   false,
-		websocketURL:  config.WebSocketURL,
+		chainID:           config.ChainID,
+		chainName:         config.Name,
+		nodeClient:        nodeClient,
+		subscriptions:     make(map[string]*Subscription),
+		nodeSubscriptions: make(map[string]*NodeSubscription),
+		subManager:        subManager,
+		eventChan:         c.eventChan,
+		logger:            c.logger,
+		websocketURL:      config.WebSocketURL,
+		rpcURL:            config.RPCURL,
+		wg:                sync.WaitGroup{},
 	}
 
 	c.chains[config.ChainID] = chainConn
@@ -129,27 +137,21 @@ func (c *Client) AddChain(config ChainConfig) error {
 		}
 	}
 
-	// c.logger.Infof("Added chain %s (%s) for monitoring", config.Name, config.ChainID)
 	return nil
 }
 
 // Start begins monitoring all configured chains
 func (c *Client) Start() error {
-	// c.logger.Info("Starting multi-chain WebSocket client")
-
 	for chainID, chainConn := range c.chains {
 		c.wg.Add(1)
 		go c.startChainConnection(chainID, chainConn)
 	}
 
-	// c.logger.Infof("Started monitoring %d chains", len(c.chains))
 	return nil
 }
 
 // Stop gracefully stops all chain connections
 func (c *Client) Stop() error {
-	// c.logger.Info("Stopping multi-chain WebSocket client")
-
 	c.cancel()
 	c.wg.Wait()
 
@@ -163,7 +165,6 @@ func (c *Client) Stop() error {
 	c.mu.Unlock()
 
 	close(c.eventChan)
-	// c.logger.Info("Multi-chain WebSocket client stopped")
 	return nil
 }
 
@@ -227,192 +228,139 @@ func (c *Client) startChainConnection(chainID string, chainConn *ChainConnection
 
 	c.logger.Infof("Starting connection for chain %s", chainID)
 
-	// Start the reconnection manager with the connect function
-	chainConn.reconnectMgr.Start(c.ctx, chainConn.connect)
+	// Connect to WebSocket via nodeclient
+	if err := chainConn.connect(c.ctx); err != nil {
+		c.logger.Errorf("Failed to connect to chain %s: %v", chainID, err)
+		return
+	}
 
-	// Start processing events from the subscription manager
+	// Start processing events from nodeclient subscriptions
 	go chainConn.processEvents(c.ctx)
 
-	// Keep the connection alive
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case <-time.After(30 * time.Second):
-			chainConn.mu.RLock()
-			isConnected := chainConn.isConnected
-			chainConn.mu.RUnlock()
-
-			if isConnected {
-				if err := chainConn.ping(); err != nil {
-					c.logger.Warnf("Ping failed for chain %s: %v", chainID, err)
-					chainConn.markDisconnected()
-					// Trigger reconnection
-					chainConn.reconnectMgr.TriggerReconnect(c.ctx, chainConn.connect)
-				}
-			}
-		}
-	}
+	// Wait for context cancellation
+	<-c.ctx.Done()
 }
 
-// processEvents processes events from the WebSocket connection
+// processEvents waits for context cancellation (subscriptions are handled individually)
 func (cc *ChainConnection) processEvents(ctx context.Context) {
 	cc.logger.Infof("Starting event processing for chain %s", cc.chainName)
+	<-ctx.Done()
+	cc.wg.Wait()
+	cc.logger.Infof("Stopping event processing for chain %s", cc.chainName)
+}
 
-	// Start ping ticker to keep connection alive
-	pingTicker := time.NewTicker(30 * time.Second)
-	defer pingTicker.Stop()
+// processSubscriptionNotifications processes notifications for a specific subscription
+func (cc *ChainConnection) processSubscriptionNotifications(ctx context.Context, subID string, notifChan <-chan *nodeclient.SubscriptionNotification) {
+	defer cc.wg.Done()
+
+	cc.subManager.mu.RLock()
+	sub, exists := cc.subManager.subscriptions[subID]
+	cc.subManager.mu.RUnlock()
+
+	if !exists {
+		return
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			cc.logger.Infof("Stopping event processing for chain %s", cc.chainName)
 			return
-		case <-pingTicker.C:
-			// Send ping to keep connection alive
-			if err := cc.ping(); err != nil {
-				cc.logger.Errorf("Failed to ping WebSocket for chain %s: %v", cc.chainName, err)
-				cc.markDisconnected()
-				// Trigger reconnection
-				cc.reconnectMgr.TriggerReconnect(ctx, cc.connect)
+		case notif, ok := <-notifChan:
+			if !ok {
+				cc.logger.Infof("Notification channel closed for subscription %s", subID)
 				return
 			}
-		default:
-			// Read WebSocket messages
-			if err := cc.readMessage(); err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					cc.logger.Errorf("WebSocket connection closed unexpectedly for chain %s: %v", cc.chainName, err)
-				} else {
-					cc.logger.Debugf("WebSocket read error for chain %s: %v", cc.chainName, err)
-				}
-				cc.markDisconnected()
-				// Trigger reconnection
-				cc.reconnectMgr.TriggerReconnect(ctx, cc.connect)
-				return
+			// Process the notification
+			if err := cc.processNotification(sub, notif); err != nil {
+				cc.logger.Errorf("Failed to process notification for subscription %s: %v", subID, err)
 			}
 		}
 	}
 }
 
-// readMessage reads and processes a single WebSocket message
-func (cc *ChainConnection) readMessage() error {
-	cc.mu.RLock()
-	conn := cc.wsConn
-	cc.mu.RUnlock()
-
-	if conn == nil {
-		return fmt.Errorf("WebSocket connection not established")
+// processNotification processes a single subscription notification
+func (cc *ChainConnection) processNotification(sub *EventSubscription, notif *nodeclient.SubscriptionNotification) error {
+	// Parse the log from the notification result
+	var log types.Log
+	if err := json.Unmarshal(notif.Result, &log); err != nil {
+		return fmt.Errorf("failed to unmarshal log: %w", err)
 	}
 
-	// Set read deadline
-	err := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-	if err != nil {
-		cc.logger.Errorf("Failed to set read deadline: %v", err)
-	}
-
-	// Read message
-	_, message, err := conn.ReadMessage()
-	if err != nil {
-		return err
-	}
-
-	// Update last message time
-	cc.mu.Lock()
-	cc.lastMessage = time.Now()
-	cc.mu.Unlock()
-
-	// Process the message using subscription manager
-	if err := cc.subManager.ProcessWebSocketMessage(message, cc.eventChan); err != nil {
-		cc.logger.Errorf("Failed to process WebSocket message for chain %s: %v", cc.chainName, err)
-		// Don't return error here as we want to continue processing other messages
-	}
-
-	return nil
+	// Process the log entry using subscription manager
+	return cc.subManager.processLogEntry(log, cc.eventChan)
 }
 
-// connect establishes WebSocket connection for the chain
-func (cc *ChainConnection) connect() error {
+// connect establishes WebSocket connection for the chain via nodeclient
+func (cc *ChainConnection) connect(ctx context.Context) error {
 	cc.logger.Infof("Connecting to chain %s WebSocket at %s", cc.chainName, cc.websocketURL)
 
 	if cc.websocketURL == "" {
 		return fmt.Errorf("WebSocket URL not configured for chain %s", cc.chainName)
 	}
 
-	// Create dialer with timeout and other options
-	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
-		Proxy:            http.ProxyFromEnvironment,
+	// Connect WebSocket via nodeclient (it handles connection internally)
+	if err := cc.nodeClient.ConnectWebSocket(ctx); err != nil {
+		return fmt.Errorf("failed to connect WebSocket: %w", err)
 	}
-
-	// Connect to WebSocket
-	conn, resp, err := dialer.Dial(cc.websocketURL, nil)
-	if err != nil {
-		if resp != nil {
-			return fmt.Errorf("failed to connect to WebSocket %s (status: %d): %w", cc.websocketURL, resp.StatusCode, err)
-		}
-		return fmt.Errorf("failed to connect to WebSocket %s: %w", cc.websocketURL, err)
-	}
-
-	// Set connection parameters for reliability
-	conn.SetReadLimit(512 * 1024) // 512KB max message size
-	err = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-	if err != nil {
-		cc.logger.Errorf("Failed to set read deadline: %v", err)
-	}
-	conn.SetPongHandler(func(string) error {
-		err = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		if err != nil {
-			cc.logger.Errorf("Failed to set read deadline: %v", err)
-		}
-		return nil
-	})
-
-	// Set ping handler to keep connection alive
-	conn.SetPingHandler(func(appData string) error {
-		// cc.logger.Debugf("Received ping from %s", cc.chainName)
-		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(30*time.Second))
-	})
-
-	cc.mu.Lock()
-	cc.wsConn = conn
-	cc.isConnected = true
-	cc.lastMessage = time.Now()
-	cc.mu.Unlock()
 
 	cc.logger.Infof("Successfully connected to chain %s WebSocket", cc.chainName)
 
-	// Send subscription message for all active subscriptions
-	if err := cc.sendSubscription(); err != nil {
-		cc.logger.Errorf("Failed to send subscription for chain %s: %v", cc.chainName, err)
+	// Subscribe to all active subscriptions using nodeclient
+	if err := cc.subscribeAll(ctx); err != nil {
+		cc.logger.Errorf("Failed to subscribe for chain %s: %v", cc.chainName, err)
 		// Don't fail the connection for subscription errors
 	}
 
 	return nil
 }
 
-// sendSubscription sends the WebSocket subscription message for all active subscriptions
-func (cc *ChainConnection) sendSubscription() error {
-	cc.mu.RLock()
-	conn := cc.wsConn
-	cc.mu.RUnlock()
+// subscribeAll subscribes to all active subscriptions using nodeclient
+func (cc *ChainConnection) subscribeAll(ctx context.Context) error {
+	cc.subManager.mu.RLock()
+	activeSubs := make([]*EventSubscription, 0)
+	for _, sub := range cc.subManager.subscriptions {
+		if sub.Active {
+			activeSubs = append(activeSubs, sub)
+		}
+	}
+	cc.subManager.mu.RUnlock()
 
-	if conn == nil {
-		return fmt.Errorf("WebSocket connection not established")
+	for _, sub := range activeSubs {
+		if err := cc.subscribeToEvent(ctx, sub); err != nil {
+			cc.logger.Errorf("Failed to subscribe to %s.%s: %v", sub.ContractType, sub.EventName, err)
+			continue
+		}
 	}
 
-	// Build subscription message
-	subscriptionMsg, err := cc.subManager.BuildWebSocketSubscription()
+	return nil
+}
+
+// subscribeToEvent subscribes to a specific event using nodeclient.EthSubscribe
+func (cc *ChainConnection) subscribeToEvent(ctx context.Context, sub *EventSubscription) error {
+	// Build filter params for eth_subscribe
+	filterParams := map[string]interface{}{
+		"address": []string{sub.ContractAddr.Hex()},
+		"topics":  [][]string{{sub.EventSig.Hex()}},
+	}
+
+	// Subscribe using nodeclient
+	nodeSubID, notifChan, err := cc.nodeClient.EthSubscribe(ctx, "logs", filterParams)
 	if err != nil {
-		return fmt.Errorf("failed to build subscription message: %w", err)
+		return fmt.Errorf("failed to subscribe via nodeclient: %w", err)
 	}
 
-	// Send subscription message
-	err = conn.WriteMessage(websocket.TextMessage, subscriptionMsg)
-	if err != nil {
-		return fmt.Errorf("failed to send subscription message: %w", err)
+	cc.mu.Lock()
+	cc.nodeSubscriptions[sub.ID] = &NodeSubscription{
+		NodeSubID:        nodeSubID,
+		NotificationChan: notifChan,
 	}
+	cc.mu.Unlock()
 
-	cc.logger.Infof("Sent subscription message for chain %s", cc.chainName)
+	// Start processing notifications for this subscription
+	cc.wg.Add(1)
+	go cc.processSubscriptionNotifications(ctx, sub.ID, notifChan)
+
+	cc.logger.Infof("Subscribed to %s.%s with nodeclient subscription ID: %s", sub.ContractType, sub.EventName, nodeSubID)
 	return nil
 }
 
@@ -431,18 +379,16 @@ func (cc *ChainConnection) subscribeToContractWithType(contractAddr string, cont
 
 	for _, eventName := range events {
 		// Add subscription using the subscription manager
-		_, err := cc.subManager.AddContractSubscription(contractAddr, contractType, eventName)
+		sub, err := cc.subManager.AddContractSubscription(contractAddr, contractType, eventName)
 		if err != nil {
 			cc.logger.Errorf("Failed to add contract subscription for %s.%s: %v", contractType, eventName, err)
 			continue
 		}
 
 		// Also add to local subscriptions for tracking
-		subID := fmt.Sprintf("%s_%s_%s_%s", cc.chainID, contractAddr, contractType, eventName)
 		addr := common.HexToAddress(contractAddr)
-
 		subscription := &Subscription{
-			ID:           subID,
+			ID:           sub.ID,
 			ChainID:      cc.chainID,
 			ContractAddr: addr,
 			ContractType: contractType,
@@ -451,8 +397,16 @@ func (cc *ChainConnection) subscribeToContractWithType(contractAddr string, cont
 			CreatedAt:    time.Now(),
 		}
 
-		cc.subscriptions[subID] = subscription
-		// cc.logger.Infof("Subscribed to %s.%s events from %s on chain %s", contractType, eventName, contractAddr, cc.chainID)
+		cc.subscriptions[sub.ID] = subscription
+
+		// Subscribe via nodeclient if WebSocket is connected
+		if cc.nodeClient != nil && cc.nodeClient.IsWebSocketConnected() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := cc.subscribeToEvent(ctx, sub); err != nil {
+				cc.logger.Errorf("Failed to subscribe via nodeclient for %s.%s: %v", contractType, eventName, err)
+			}
+		}
 	}
 
 	return nil
@@ -484,7 +438,6 @@ func (cc *ChainConnection) subscribeToContract(contractAddr string, events []str
 		}
 
 		cc.subscriptions[subID] = subscription
-		// cc.logger.Infof("Subscribed to %s events from %s on chain %s", eventName, contractAddr, cc.chainID)
 	}
 
 	return nil
@@ -496,49 +449,39 @@ func (cc *ChainConnection) getStatus() ChainStatus {
 	defer cc.mu.RUnlock()
 
 	var latestBlock uint64
-	if cc.ethClient != nil {
-		if block, err := cc.ethClient.BlockNumber(context.Background()); err == nil {
-			latestBlock = block
+	if cc.nodeClient != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if blockHex, err := cc.nodeClient.EthBlockNumber(ctx); err == nil {
+			if block, err := hexToUint64(blockHex); err == nil {
+				latestBlock = block
+			}
 		}
+	}
+
+	var isConnected bool
+	if cc.nodeClient != nil {
+		isConnected = cc.nodeClient.IsWebSocketConnected()
 	}
 
 	return ChainStatus{
 		ChainID:        cc.chainID,
 		ChainName:      cc.chainName,
-		Connected:      cc.isConnected,
-		LastMessage:    cc.lastMessage,
+		Connected:      isConnected,
+		LastMessage:    time.Time{}, // Not tracked separately anymore
 		Subscriptions:  len(cc.subscriptions),
-		ReconnectCount: cc.reconnectMgr.GetReconnectCount(),
+		ReconnectCount: 0, // Managed internally by nodeclient
 		LatestBlock:    latestBlock,
 	}
 }
 
-// ping sends a ping to keep the connection alive
-func (cc *ChainConnection) ping() error {
-	cc.mu.RLock()
-	conn := cc.wsConn
-	cc.mu.RUnlock()
-
-	if conn == nil {
-		return fmt.Errorf("WebSocket connection not established")
+// hexToUint64 converts a hex string (with or without 0x prefix) to uint64
+func hexToUint64(hexStr string) (uint64, error) {
+	// Remove 0x prefix if present
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		hexStr = hexStr[2:]
 	}
-
-	// Send ping with current timestamp as data
-	pingData := []byte(fmt.Sprintf("ping_%d", time.Now().Unix()))
-	err := conn.WriteControl(websocket.PingMessage, pingData, time.Now().Add(10*time.Second))
-	if err != nil {
-		return fmt.Errorf("failed to send ping: %w", err)
-	}
-
-	// cc.logger.Debugf("Sent ping to chain %s", cc.chainName)
-	return nil
-}
-
-// markDisconnected marks the connection as disconnected
-func (cc *ChainConnection) markDisconnected() {
-	cc.mu.Lock()
-	cc.isConnected = false
-	cc.mu.Unlock()
+	return strconv.ParseUint(hexStr, 16, 64)
 }
 
 // close closes the chain connection
@@ -546,23 +489,22 @@ func (cc *ChainConnection) close() error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
-	cc.isConnected = false
-
-	if cc.wsConn != nil {
-		err := cc.wsConn.Close()
-		if err != nil {
-			cc.logger.Errorf("Failed to close WebSocket connection: %v", err)
+	// Unsubscribe from all nodeclient subscriptions
+	for subID, nodeSub := range cc.nodeSubscriptions {
+		if cc.nodeClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := cc.nodeClient.EthUnsubscribe(ctx, nodeSub.NodeSubID); err != nil {
+				cc.logger.Errorf("Failed to unsubscribe %s: %v", subID, err)
+			}
+			cancel()
 		}
-		cc.wsConn = nil
 	}
 
-	if cc.ethClient != nil {
-		cc.ethClient.Close()
-	}
+	// Wait for all notification processors to finish
+	cc.wg.Wait()
 
-	// Reset reconnection count when closing
-	if cc.reconnectMgr != nil {
-		cc.reconnectMgr.resetReconnectCount()
+	if cc.nodeClient != nil {
+		cc.nodeClient.Close()
 	}
 
 	return nil
@@ -605,8 +547,14 @@ func (c *Client) TriggerReconnect(chainID string) error {
 	}
 
 	chainConn.logger.Infof("Manual reconnection triggered for chain %s", chainID)
-	chainConn.reconnectMgr.TriggerReconnect(c.ctx, chainConn.connect)
-	return nil
+
+	// Disconnect and reconnect WebSocket via nodeclient
+	if chainConn.nodeClient != nil {
+		_ = chainConn.nodeClient.DisconnectWebSocket()
+	}
+
+	// Reconnect
+	return chainConn.connect(c.ctx)
 }
 
 // GetReconnectStats returns reconnection statistics for all chains
@@ -616,12 +564,60 @@ func (c *Client) GetReconnectStats() map[string]interface{} {
 
 	stats := make(map[string]interface{})
 	for chainID, chainConn := range c.chains {
+		chainConn.mu.RLock()
+		var isConnected bool
+		if chainConn.nodeClient != nil {
+			isConnected = chainConn.nodeClient.IsWebSocketConnected()
+		}
+		chainConn.mu.RUnlock()
+
 		stats[chainID] = map[string]interface{}{
-			"reconnect_count": chainConn.reconnectMgr.GetReconnectCount(),
-			"is_running":      chainConn.reconnectMgr.IsRunning(),
-			"config":          chainConn.reconnectMgr.GetConfig(),
+			"is_connected":  isConnected,
+			"subscriptions": len(chainConn.nodeSubscriptions),
 		}
 	}
 
 	return stats
+}
+
+// createNodeClientConfig creates a nodeclient.Config from ChainConfig
+func createNodeClientConfig(config ChainConfig, logger logging.Logger) *nodeclient.Config {
+	// Extract API key from RPC URL if it's an Alchemy/Blast URL
+	apiKey := extractAPIKeyFromURL(config.RPCURL)
+
+	nodeCfg := nodeclient.DefaultConfig(apiKey, "", logger)
+	nodeCfg.BaseURL = config.RPCURL
+	nodeCfg.WebSocketURL = config.WebSocketURL
+	nodeCfg.RequestTimeout = 30 * time.Second
+
+	// Create WebSocket config from ReconnectConfig
+	wsConfig := wsclient.DefaultWebSocketRetryConfig()
+	if config.Reconnect.MaxRetries > 0 {
+		wsConfig.ReconnectConfig.MaxRetries = config.Reconnect.MaxRetries
+	}
+	if config.Reconnect.BaseDelay > 0 {
+		wsConfig.ReconnectConfig.BaseDelay = config.Reconnect.BaseDelay
+	}
+	if config.Reconnect.MaxDelay > 0 {
+		wsConfig.ReconnectConfig.MaxDelay = config.Reconnect.MaxDelay
+	}
+	if config.Reconnect.BackoffFactor > 0 {
+		wsConfig.ReconnectConfig.BackoffFactor = config.Reconnect.BackoffFactor
+	}
+	wsConfig.ReconnectConfig.Jitter = config.Reconnect.Jitter
+	nodeCfg.WebSocketConfig = wsConfig
+
+	return nodeCfg
+}
+
+// extractAPIKeyFromURL extracts API key from RPC URL
+func extractAPIKeyFromURL(url string) string {
+	// For Alchemy/Blast URLs, the API key is typically at the end
+	// Format: https://base-mainnet.g.alchemy.com/v2/API_KEY
+	// or: https://base-mainnet.blastapi.io/API_KEY
+	parts := strings.Split(url, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return ""
 }
