@@ -235,6 +235,24 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 }
 
 func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
+	// If task_definition_id is 2, 4, or 6, skip to Stage 4 (Process Results, e.g., fee calculation)
+	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
+		var taskDefinitionID int
+		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
+			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
+				ep.logger.Debugf("Skipping to Stage 4: Only processing results for task_definition_id=%d", taskDefinitionID)
+				// No execution result available, so construct a minimal ExecutionResult to allow fee calculation
+				result := &types.ExecutionResult{
+					Stats:   types.DockerResourceStats{},
+					Output:  "",
+					Success: true,
+					Error:   nil,
+				}
+				finalResult := ep.processResults(result, execCtx)
+				return finalResult, nil
+			}
+		}
+	}
 	// Stage 1: Prepare file (download/validate) unless already provided (inline code)
 	var fileCtx *types.ExecutionContext
 	if existingPath := execCtx.Metadata["file_path"]; existingPath != "" {
