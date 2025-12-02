@@ -35,7 +35,7 @@ type ExecutionFeeConfig struct {
 	CustomScriptFeeUSD     float64 `yaml:"custom_script_fee_usd"`      // Fee for custom script tasks (ID 7) - default 0.01 USD
 
 	// Ethereum to USD conversion rate (should be updated periodically)
-	EthToUSDRate float64 `yaml:"eth_to_usd_rate"` // Current ETH/USD rate
+	// EthToUSDRate float64 `yaml:"eth_to_usd_rate"` // Current ETH/USD rate
 }
 
 type BasePoolConfig struct {

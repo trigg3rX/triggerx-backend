@@ -2,8 +2,10 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -322,15 +324,38 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	execCtx.Metadata["static_complexity"] = fmt.Sprintf("%.6f", result.Stats.StaticComplexity)
 	execCtx.Metadata["dynamic_complexity"] = fmt.Sprintf("%.6f", result.Stats.DynamicComplexity)
 
+	// Extract arguments for dynamic tasks (2, 4, 6)
+	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
+		var taskDefinitionID int
+		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
+			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
+				// For dynamic tasks, the output is expected to be a JSON array of arguments
+				// We store this in metadata to be used by calculateFees
+				// Clean up output - sometimes it might have newlines or extra whitespace
+				cleanOutput := strings.TrimSpace(result.Output)
+				// Basic validation that it looks like a JSON array
+				if strings.HasPrefix(cleanOutput, "[") && strings.HasSuffix(cleanOutput, "]") {
+					execCtx.Metadata["on_chain_args"] = cleanOutput
+				} else {
+					// If it's not a JSON array, we might want to log a warning or handle it
+					// For now, we'll just log it
+					// ep.logger.Warnf("Dynamic task output does not look like a JSON array: %s", cleanOutput)
+				}
+			}
+		}
+	}
+
 	// Calculate fees
-	fees := ep.calculateFees(execCtx)
+	fees, currentFees := ep.calculateFees(execCtx)
 	execCtx.Metadata["fees"] = fees.String()
+	execCtx.Metadata["current_fees"] = currentFees.String()
 	result.Stats.TotalCost = fees
+	result.Stats.CurrentTotalCost = currentFees
 
 	return result
 }
 
-func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big.Int {
+func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*big.Int, *big.Int) {
 	feesConfig := ep.config.GetFeesConfig()
 
 	// Get task definition ID from metadata
@@ -360,11 +385,30 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big
 	default:
 		// Fallback to old calculation for unknown task types
 		ep.logger.Warnf("Unknown task_definition_id: %d, using legacy fee calculation", taskDefinitionID)
-		return ep.calculateLegacyFees(execCtx, feesConfig)
+		return ep.calculateLegacyFees(execCtx, feesConfig), big.NewInt(0)
 	}
 
+	// Fetch ETH to USD conversion rate from CoinGecko API
+	resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
+	if err != nil {
+		ep.logger.Warnf("failed to fetch ETH-USD rate from CoinGecko: %v", err)
+		return big.NewInt(0), big.NewInt(0)
+	}
+	defer resp.Body.Close()
+
+	var coingeckoResp struct {
+		Ethereum struct {
+			USD float64 `json:"usd"`
+		} `json:"ethereum"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&coingeckoResp); err != nil {
+		ep.logger.Warnf("failed to decode CoinGecko response: %v", err)
+		return big.NewInt(0), big.NewInt(0)
+	}
+	EthToUSDRate := coingeckoResp.Ethereum.USD
+
 	// Convert off-chain fee from USD to Wei
-	offChainFeeInEther := offChainFeeUSD / feesConfig.EthToUSDRate
+	offChainFeeInEther := offChainFeeUSD / EthToUSDRate
 	offChainFeeFloat := big.NewFloat(offChainFeeInEther)
 	weiMultiplier := big.NewFloat(1e18) // 10^18
 	offChainFeeFloat.Mul(offChainFeeFloat, weiMultiplier)
@@ -374,30 +418,45 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big
 	if taskDefinitionID == 7 {
 		ep.logger.Debugf("Fee calculation for custom script (ID 7): offchain_fee_usd=%.6f, offchain_fee_wei=%s",
 			offChainFeeUSD, offChainFeeWei.String())
-		return offChainFeeWei
+		return offChainFeeWei, offChainFeeWei
 	}
 
 	// For other task types (1-6), calculate on-chain fees via gas estimation
 	var onChainFeeWei *big.Int
+	var currentOnChainFeeWei *big.Int
 	if chainID, hasChain := execCtx.Metadata["target_chain_id"]; hasChain && chainID != "" {
 		contractAddr := execCtx.Metadata["target_contract_address"]
 		function := execCtx.Metadata["target_function"]
 		contractABI := execCtx.Metadata["abi"]
 
 		if contractAddr != "" && function != "" && contractABI != "" {
+			// Parse arguments from metadata if available
+			var args []interface{}
+			if argsStr, ok := execCtx.Metadata["on_chain_args"]; ok && argsStr != "" {
+				if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
+					ep.logger.Warnf("Failed to parse on_chain_args: %v, using empty args", err)
+					args = []interface{}{}
+				}
+			} else {
+				args = []interface{}{}
+			}
+
+			// Get from address if provided
+			fromAddress := execCtx.Metadata["from_address"]
+
 			// Estimate gas for the on-chain transaction
 			ctx := context.Background()
 			gasEstimator := NewGasEstimator(ep.logger)
 			defer gasEstimator.Close()
 
-			// For now, we estimate with empty args - you may need to pass actual args
-			gasLimit, gasPrice, err := gasEstimator.EstimateGasForFunction(
+			gasLimit, gasPrice, currentGasPrice, err := gasEstimator.EstimateGasForFunction(
 				ctx,
 				chainID,
 				contractAddr,
 				function,
 				contractABI,
-				[]interface{}{}, // Empty args for estimation
+				args,
+				fromAddress,
 			)
 
 			if err != nil {
@@ -409,25 +468,75 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) *big
 			} else {
 				// Calculate gas cost in Wei
 				onChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
-				ep.logger.Debugf("Gas estimation: gasLimit=%d, gasPrice=%s, gasCost=%s Wei",
-					gasLimit, gasPrice.String(), onChainFeeWei.String())
+				currentOnChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
+				ep.logger.Debugf("Gas estimation: gasLimit=%d, gasPrice=%s, currentGasPrice=%s, gasCost=%s Wei, currentGasCost=%s Wei",
+					gasLimit, gasPrice.String(), currentGasPrice.String(), onChainFeeWei.String(), currentOnChainFeeWei.String())
 			}
 		} else {
 			ep.logger.Warnf("Missing contract details for on-chain fee calculation")
 			onChainFeeWei = big.NewInt(0)
+			currentOnChainFeeWei = big.NewInt(0)
 		}
 	} else {
 		ep.logger.Debugf("No chain ID provided, skipping on-chain fee calculation")
 		onChainFeeWei = big.NewInt(0)
+		currentOnChainFeeWei = big.NewInt(0)
 	}
 
-	// Total fee = off-chain fee + on-chain fee
+	// Aggregator onchain fee calculation (always added to total fee)
+	// Gas used is static at 720000, gas price is fetched from Base chain, chosen according to our chain id
+	var aggregatorOnChainFeeWei *big.Int
+	const aggregatorGasUsed = uint64(720000)
+
+	// Logic:
+	// If target_chain_id is mainnet (e.g. 8453, or any set you want to consider mainnet-extendable), use Base mainnet (8453) for aggregator fee.
+	// If target_chain_id is testnet (e.g. 84532), use Base testnet/Sepolia (84532) for aggregator fee.
+	// This mapping can be extended as needed.
+	// NOTE: Only chain IDs 8453 (mainnet) and 84532 (testnet) are considered for Base aggregator fee.
+	// If unknown, default to testnet (84532, safer to overestimate on test).
+
+	targetChainID := execCtx.Metadata["target_chain_id"]
+	const (
+		baseMainnetChainID = "8453"
+		baseTestnetChainID = "84532"
+	)
+	var baseAggregatorFeeChainID string
+	if targetChainID == "42161" || targetChainID == "8453" {
+		baseAggregatorFeeChainID = baseMainnetChainID
+	} else {
+		baseAggregatorFeeChainID = baseTestnetChainID
+	}
+
+	ctx := context.Background()
+	gasEstimator := NewGasEstimator(ep.logger)
+	defer gasEstimator.Close()
+	gasPrice, err := gasEstimator.GetGasPrice(ctx, baseAggregatorFeeChainID)
+	ep.logger.Infof("gasPrice: %s", gasPrice.String())
+	if err != nil {
+		ep.logger.Warnf("Failed to get gas price for aggregator fee on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+		gasPrice = big.NewInt(1000000000) // 1 gwei default fallback
+	} else {
+		ep.logger.Debugf("Got gas price for aggregator fee, chain %s: %s Wei", baseAggregatorFeeChainID, gasPrice.String())
+	}
+	aggregatorOnChainFeeWei = gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, gasPrice)
+
+	//Log aggregator fee calculation
+	ep.logger.Debugf("Aggregator on-chain fee: baseAggregatorFeeChainID=%s, gasUsed=%d, gasPrice=%s Wei, aggregatorFee=%s Wei",
+		baseAggregatorFeeChainID, aggregatorGasUsed, gasPrice.String(), aggregatorOnChainFeeWei.String())
+
+	// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
 	totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
+	currentTotalFeeWei := new(big.Int).Add(totalFeeWei, currentOnChainFeeWei)
+	currentTotalFeeWei.Add(currentTotalFeeWei, aggregatorOnChainFeeWei)
+	totalFeeWei.Add(totalFeeWei, aggregatorOnChainFeeWei)
+	totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
+	totalFeeWei.Div(totalFeeWei, big.NewInt(100)) // 20% buffer
 
-	ep.logger.Debugf("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, total_fee_wei=%s",
-		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), totalFeeWei.String())
-
-	return totalFeeWei
+	ep.logger.Infof("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, aggregator_onchain_fee_wei=%s, total_fee_wei=%s",
+		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String())
+	ep.logger.Infof("Current fee calculation: task_definition_id=%d, current_offchain_fee_usd=%.6f, current_offchain_fee_wei=%s, current_onchain_fee_wei=%s, current_aggregator_onchain_fee_wei=%s, current_total_fee_wei=%s",
+		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), currentOnChainFeeWei.String(), aggregatorOnChainFeeWei.String(), currentTotalFeeWei.String())
+	return totalFeeWei, currentTotalFeeWei
 }
 
 // calculateLegacyFees is the old fee calculation method for backward compatibility
@@ -612,7 +721,7 @@ func (ep *executionPipeline) updateStats(success bool, duration time.Duration, c
 	// Update cost statistics
 	cost := ep.calculateCost(duration, complexity)
 	ep.stats.TotalCost += cost
-
+	
 	// Calculate average cost - only if we have successful executions
 	if ep.stats.SuccessfulExecutions > 0 {
 		ep.stats.AverageCost = ep.stats.TotalCost / float64(ep.stats.SuccessfulExecutions)

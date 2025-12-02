@@ -160,7 +160,7 @@ skipArgumentProcessing:
 		jobIDBigInt = big.NewInt(0)
 	}
 
-	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, result.Stats.TotalCost, targetContractAddress, callData)
+	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, result.Stats.CurrentTotalCost, targetContractAddress, callData)
 	if err != nil {
 		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}

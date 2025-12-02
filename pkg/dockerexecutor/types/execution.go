@@ -24,6 +24,7 @@ type DockerResourceStats struct {
 	TxDropped         uint64        `json:"tx_dropped"`
 	BandwidthRate     float64       `json:"bandwidth_rate"`
 	TotalCost         *big.Int      `json:"total_cost"`
+	CurrentTotalCost  *big.Int      `json:"current_total_cost"`
 	StaticComplexity  float64       `json:"static_complexity"`
 	DynamicComplexity float64       `json:"dynamic_complexity"`
 	ExecutionTime     time.Duration `json:"execution_time"`

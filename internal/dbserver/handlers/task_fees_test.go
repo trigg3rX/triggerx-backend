@@ -93,7 +93,7 @@ func TestCalculateTaskFees_EmptyInput(t *testing.T) {
 		logger:         &MockLogger{},
 	}
 
-	total, err := h.CalculateTaskFees("", 0, "", "", "", "")
+	total, _, err := h.CalculateTaskFees("", 0, "", "", "", "", "", "")
 	if err == nil {
 		t.Fatalf("expected error for empty input, got nil")
 	}
@@ -111,7 +111,7 @@ func TestCalculateTaskFees_SingleURL_Success(t *testing.T) {
 		logger:         &MockLogger{},
 	}
 
-	total, err := h.CalculateTaskFees("ipfs://file1", 0, "", "", "", "")
+	total, _, err := h.CalculateTaskFees("ipfs://file1", 0, "", "", "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestCalculateTaskFees_MultipleURLs_PartialFailures(t *testing.T) {
 		logger:         &MockLogger{},
 	}
 
-	total, err := h.CalculateTaskFees("ipfs://file1, ipfs://file2, ipfs://file3", 0, "", "", "", "")
+	total, _, err := h.CalculateTaskFees("ipfs://file1, ipfs://file2, ipfs://file3", 0, "", "", "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
