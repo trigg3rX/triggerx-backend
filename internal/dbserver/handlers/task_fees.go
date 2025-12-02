@@ -15,57 +15,82 @@ import (
 )
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress string) (*big.Int, *big.Int, error) {
-	if ipfsURLs == "" {
+	// Only for taskDefinitionID 2, 4, 6 require ipfsURL(s)
+	needsIPFS := taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6
+
+	if needsIPFS && ipfsURLs == "" {
 		return big.NewInt(0), big.NewInt(0), fmt.Errorf("missing IPFS URLs")
 	}
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_fees")
-	urlList := strings.Split(ipfsURLs, ",")
 	totalFee := big.NewInt(0)
 	currentTotalFee := big.NewInt(0)
+
+	ctx := context.Background()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	ctx := context.Background()
+	if needsIPFS {
+		urlList := strings.Split(ipfsURLs, ",")
+		for _, ipfsURL := range urlList {
+			ipfsURL = strings.TrimSpace(ipfsURL)
+			wg.Add(1)
 
-	for _, ipfsURL := range urlList {
-		ipfsURL = strings.TrimSpace(ipfsURL)
-		wg.Add(1)
+			go func(url, from string) {
+				defer wg.Done()
 
-		go func(url, from string) {
-			defer wg.Done()
+				metadata := map[string]string{
+					"task_definition_id":      fmt.Sprintf("%d", taskDefinitionID),
+					"target_chain_id":         targetChainID,
+					"target_contract_address": targetContractAddress,
+					"target_function":         targetFunction,
+					"abi":                     abi,
+					"on_chain_args":           args,
+					"from_address":            from,
+				}
 
-			// Prepare metadata for fee calculation
-			metadata := map[string]string{
-				"task_definition_id":      fmt.Sprintf("%d", taskDefinitionID),
-				"target_chain_id":         targetChainID,
-				"target_contract_address": targetContractAddress,
-				"target_function":         targetFunction,
-				"abi":                     abi,
-				"on_chain_args":           args,
-				"from_address":            from,
-			}
+				result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, metadata)
+				if err != nil {
+					h.logger.Errorf("Error executing code: %v", err)
+					return
+				}
 
-			// Use the Execute method with metadata for accurate fee calculation
-			result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, metadata)
-			if err != nil {
-				h.logger.Errorf("Error executing code: %v", err)
-				return
-			}
+				if !result.Success {
+					h.logger.Errorf("Code execution failed: %v", result.Error)
+					return
+				}
 
-			if !result.Success {
-				h.logger.Errorf("Code execution failed: %v", result.Error)
-				return
-			}
-
-			mu.Lock()
-			totalFee.Add(totalFee, result.Stats.TotalCost)
-			currentTotalFee.Add(currentTotalFee, result.Stats.CurrentTotalCost)
-			mu.Unlock()
-		}(ipfsURL, fromAddress)
+				mu.Lock()
+				totalFee.Add(totalFee, result.Stats.TotalCost)
+				currentTotalFee.Add(currentTotalFee, result.Stats.CurrentTotalCost)
+				mu.Unlock()
+			}(ipfsURL, fromAddress)
+		}
+		wg.Wait()
+	} else {
+		// No IPFS required; just invoke Execute with empty code/url and rely on metadata for fee calculation
+		metadata := map[string]string{
+			"task_definition_id":      fmt.Sprintf("%d", taskDefinitionID),
+			"target_chain_id":         targetChainID,
+			"target_contract_address": targetContractAddress,
+			"target_function":         targetFunction,
+			"abi":                     abi,
+			"on_chain_args":           args,
+			"from_address":            fromAddress,
+		}
+		result, err := h.dockerExecutor.Execute(ctx, "", string(types.LanguageGo), 10, metadata)
+		if err != nil {
+			h.logger.Errorf("Error executing code: %v", err)
+			return big.NewInt(0), big.NewInt(0), err
+		}
+		if !result.Success {
+			h.logger.Errorf("Code execution failed: %v", result.Error)
+			return big.NewInt(0), big.NewInt(0), fmt.Errorf("code execution failed")
+		}
+		totalFee.Set(result.Stats.TotalCost)
+		currentTotalFee.Set(result.Stats.CurrentTotalCost)
 	}
 
-	wg.Wait()
 	trackDBOp(nil)
 	return totalFee, currentTotalFee, nil
 }
