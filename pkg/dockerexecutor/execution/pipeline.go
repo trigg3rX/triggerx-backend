@@ -510,19 +510,30 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 	ctx := context.Background()
 	gasEstimator := NewGasEstimator(ep.logger)
 	defer gasEstimator.Close()
-	gasPrice, err := gasEstimator.GetGasPrice(ctx, baseAggregatorFeeChainID)
-	ep.logger.Infof("gasPrice: %s", gasPrice.String())
-	if err != nil {
-		ep.logger.Warnf("Failed to get gas price for aggregator fee on chain %s: %v, using default", baseAggregatorFeeChainID, err)
-		gasPrice = big.NewInt(1000000000) // 1 gwei default fallback
-	} else {
-		ep.logger.Debugf("Got gas price for aggregator fee, chain %s: %s Wei", baseAggregatorFeeChainID, gasPrice.String())
-	}
-	aggregatorOnChainFeeWei = gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, gasPrice)
 
-	//Log aggregator fee calculation
-	ep.logger.Debugf("Aggregator on-chain fee: baseAggregatorFeeChainID=%s, gasUsed=%d, gasPrice=%s Wei, aggregatorFee=%s Wei",
-		baseAggregatorFeeChainID, aggregatorGasUsed, gasPrice.String(), aggregatorOnChainFeeWei.String())
+	// Use eth client to fetch current gas price (not historical/cached)
+	ethClient, err := gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID)
+	var aggregatorGasPrice *big.Int
+	if err != nil {
+		ep.logger.Warnf("Failed to get eth client for aggregator gas estimation on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+		aggregatorGasPrice = big.NewInt(1000000000) // 1 gwei fallback
+	} else {
+		aggregatorGasPrice, err = ethClient.SuggestGasPrice(ctx)
+		if err != nil {
+			ep.logger.Warnf("Failed to get current gas price for aggregator on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+			aggregatorGasPrice = big.NewInt(1000000000)
+		} else {
+			ep.logger.Debugf("Current gas price for aggregator fee, chain %s: %s Wei", baseAggregatorFeeChainID, aggregatorGasPrice.String())
+		}
+	}
+
+	aggregatorOnChainFeeWei = gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
+
+	ep.logger.Infof("Aggregator gas price: %s Wei", aggregatorGasPrice.String())
+
+	// Log aggregator fee calculation
+	ep.logger.Debugf("Aggregator on-chain fee: baseAggregatorFeeChainID=%s, gasUsed=%d, currentGasPrice=%s Wei, aggregatorFee=%s Wei",
+		baseAggregatorFeeChainID, aggregatorGasUsed, aggregatorGasPrice.String(), aggregatorOnChainFeeWei.String())
 
 	// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
 	totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
@@ -532,10 +543,8 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 	totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
 	totalFeeWei.Div(totalFeeWei, big.NewInt(100)) // 20% buffer
 
-	ep.logger.Infof("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, aggregator_onchain_fee_wei=%s, total_fee_wei=%s",
-		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String())
-	ep.logger.Infof("Current fee calculation: task_definition_id=%d, current_offchain_fee_usd=%.6f, current_offchain_fee_wei=%s, current_onchain_fee_wei=%s, current_aggregator_onchain_fee_wei=%s, current_total_fee_wei=%s",
-		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), currentOnChainFeeWei.String(), aggregatorOnChainFeeWei.String(), currentTotalFeeWei.String())
+	ep.logger.Infof("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, current_onchain_fee_wei=%s, aggregator_onchain_fee_wei=%s, total_fee_wei=%s",
+		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), currentOnChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String())
 	return totalFeeWei, currentTotalFeeWei
 }
 
@@ -721,7 +730,7 @@ func (ep *executionPipeline) updateStats(success bool, duration time.Duration, c
 	// Update cost statistics
 	cost := ep.calculateCost(duration, complexity)
 	ep.stats.TotalCost += cost
-	
+
 	// Calculate average cost - only if we have successful executions
 	if ep.stats.SuccessfulExecutions > 0 {
 		ep.stats.AverageCost = ep.stats.TotalCost / float64(ep.stats.SuccessfulExecutions)
