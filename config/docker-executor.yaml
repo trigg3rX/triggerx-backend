@@ -7,6 +7,9 @@ fees:
   fixed_cost: 0.0001       # TriggerX fee - 0.1%
   static_complexity_factor: 0.001 # Static complexity factor
   dynamic_complexity_factor: 0.01 # Dynamic complexity factor
+  static_offchain_fee_usd: 0.006 # Fee for static tasks (IDs 1,3,5) - default 0.006 USD
+  dynamic_offchain_fee_usd: 0.007 # Fee for dynamic tasks (IDs 2,4,6) - default 0.007 USD
+  custom_script_fee_usd: 0.01 # Fee for custom script tasks (ID 7) - default 0.01 USD
 
 languages:
   go:
