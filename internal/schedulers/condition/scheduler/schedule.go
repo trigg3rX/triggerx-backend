@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
+	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
@@ -197,27 +198,34 @@ func (s *ConditionBasedScheduler) createWebSocketWorker(conditionWorkerData *typ
 		URL: conditionWorkerData.ValueSourceUrl,
 	}
 	worker := &worker.WebSocketWorker{
-		WebSocketConfig: wsConfig,
+		WebSocketConfig:     wsConfig,
 		ConditionWorkerData: conditionWorkerData,
-		Logger: s.logger,
-		Ctx: ctx,
-		Cancel: cancel,
-		IsActive: false,
-		TriggerCallback: s.handleTriggerNotification,
-		CleanupCallback: s.cleanupJobData,
+		Logger:              s.logger,
+		Ctx:                 ctx,
+		Cancel:              cancel,
+		IsActive:            false,
+		TriggerCallback:     s.handleTriggerNotification,
+		CleanupCallback:     s.cleanupJobData,
 	}
 	return worker, nil
 }
 
 // createEventWorker creates a new event worker instance
-func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.EventWorkerData, client *ethclient.Client) (*worker.EventWorker, error) {
+func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.EventWorkerData, client *nodeclient.NodeClient) (*worker.EventWorker, error) {
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	// Get current block number
-	currentBlock, err := client.BlockNumber(ctx)
+	blockHex, err := client.EthBlockNumber(ctx)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to get current block number: %w", err)
+	}
+
+	// Convert hex to uint64
+	currentBlock, err := hexToUint64(blockHex)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to parse block number: %w", err)
 	}
 
 	worker := &worker.EventWorker{
@@ -233,6 +241,15 @@ func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.Event
 	}
 
 	return worker, nil
+}
+
+// hexToUint64 converts a hex string (with or without 0x prefix) to uint64
+func hexToUint64(hexStr string) (uint64, error) {
+	// Remove 0x prefix if present
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		hexStr = hexStr[2:]
+	}
+	return strconv.ParseUint(hexStr, 16, 64)
 }
 
 // cleanupJobData removes job data from the scheduler's store when a worker stops

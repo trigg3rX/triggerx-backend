@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
+	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
@@ -23,12 +23,12 @@ type ConditionBasedScheduler struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	logger               logging.Logger
-	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker       // jobID -> condition worker
-	eventWorkers         map[*types.BigInt]*worker.EventWorker           // jobID -> event worker
+	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker  // jobID -> condition worker
+	eventWorkers         map[*types.BigInt]*worker.EventWorker      // jobID -> event worker
 	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	workersMutex         sync.RWMutex
-	notificationMutex    sync.Mutex                   // Protect job data during notification processing
-	chainClients         map[string]*ethclient.Client // chainID -> client
+	notificationMutex    sync.Mutex                        // Protect job data during notification processing
+	chainClients         map[string]*nodeclient.NodeClient // chainID -> client
 	HTTPClient           *httppkg.HTTPClient
 	dbClient             *dbserver.DBServerClient
 	taskDispatcherClient *rpcclient.Client // RPC client for task dispatcher
@@ -58,7 +58,7 @@ func NewConditionBasedScheduler(managerID string, logger logging.Logger, dbClien
 		conditionWorkers:     make(map[*types.BigInt]*worker.ConditionWorker),
 		eventWorkers:         make(map[*types.BigInt]*worker.EventWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
-		chainClients:         make(map[string]*ethclient.Client),
+		chainClients:         make(map[string]*nodeclient.NodeClient),
 		dbClient:             dbClient,
 		taskDispatcherClient: taskDispatcherClient,
 		metrics:              metrics.NewCollector(),
@@ -136,7 +136,7 @@ func (s *ConditionBasedScheduler) Stop() {
 		client.Close()
 		s.logger.Info("Closed chain client", "chain_id", chainID)
 	}
-	s.chainClients = make(map[string]*ethclient.Client)
+	s.chainClients = make(map[string]*nodeclient.NodeClient)
 
 	// Close task dispatcher RPC client
 	if s.taskDispatcherClient != nil {

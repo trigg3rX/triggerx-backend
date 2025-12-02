@@ -3,13 +3,14 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -17,7 +18,7 @@ import (
 // EventWorker monitors blockchain events for specific contracts
 type EventWorker struct {
 	EventWorkerData    *types.EventWorkerData
-	ChainClient        *ethclient.Client
+	ChainClient        *nodeclient.NodeClient
 	Logger             logging.Logger
 	Ctx                context.Context
 	Cancel             context.CancelFunc
@@ -41,12 +42,17 @@ func (w *EventWorker) Start() {
 	metrics.TrackWorkerStart(fmt.Sprintf("%d", w.EventWorkerData.JobID))
 
 	// Get current block number
-	currentBlock, err := w.ChainClient.BlockNumber(w.Ctx)
+	blockHex, err := w.ChainClient.EthBlockNumber(w.Ctx)
 	if err != nil {
 		w.Logger.Error("Failed to get current block number", "error", err)
 		return
 	}
-	
+	currentBlock, err := hexToUint64(blockHex)
+	if err != nil {
+		w.Logger.Error("Failed to parse block number", "error", err)
+		return
+	}
+
 	// Start from a few blocks back to catch recent events
 	// This helps catch events that might have been missed during worker startup
 	// Using smaller lookback for Alchemy free tier (max 10 blocks per query)
@@ -56,7 +62,7 @@ func (w *EventWorker) Start() {
 	} else {
 		w.LastBlock = 0 // Start from genesis if less than lookback blocks exist
 	}
-	
+
 	w.Logger.Info("Event worker will scan from historical block",
 		"job_id", w.EventWorkerData.JobID,
 		"current_block", currentBlock,
@@ -144,4 +150,13 @@ func (w *EventWorker) IsRunning() bool {
 	w.Mutex.RLock()
 	defer w.Mutex.RUnlock()
 	return w.IsActive
+}
+
+// hexToUint64 converts a hex string (with or without 0x prefix) to uint64
+func hexToUint64(hexStr string) (uint64, error) {
+	// Remove 0x prefix if present
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		hexStr = hexStr[2:]
+	}
+	return strconv.ParseUint(hexStr, 16, 64)
 }
