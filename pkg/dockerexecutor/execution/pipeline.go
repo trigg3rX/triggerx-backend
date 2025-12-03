@@ -239,7 +239,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
+			if taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7 {
 				ep.logger.Debugf("Skipping to Stage 4: Only processing results for task_definition_id=%d", taskDefinitionID)
 				// No execution result available, so construct a minimal ExecutionResult to allow fee calculation
 				result := &types.ExecutionResult{
@@ -439,9 +439,12 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 		return offChainFeeWei, offChainFeeWei
 	}
 
+	// Initialize on-chain related fee variables to zero by default
+	var onChainFeeWei = big.NewInt(0)
+	var currentOnChainFeeWei = big.NewInt(0)
+	var aggregatorOnChainFeeWei = big.NewInt(0)
+
 	// For other task types (1-6), calculate on-chain fees via gas estimation
-	var onChainFeeWei *big.Int
-	var currentOnChainFeeWei *big.Int
 	if chainID, hasChain := execCtx.Metadata["target_chain_id"]; hasChain && chainID != "" {
 		contractAddr := execCtx.Metadata["target_contract_address"]
 		function := execCtx.Metadata["target_function"]
@@ -503,7 +506,6 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 
 	// Aggregator onchain fee calculation (always added to total fee)
 	// Gas used is static at 720000, gas price is fetched from Base chain, chosen according to our chain id
-	var aggregatorOnChainFeeWei *big.Int
 	const aggregatorGasUsed = uint64(720000)
 
 	// Logic:
@@ -513,11 +515,11 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 	// NOTE: Only chain IDs 8453 (mainnet) and 84532 (testnet) are considered for Base aggregator fee.
 	// If unknown, default to testnet (84532, safer to overestimate on test).
 
-	targetChainID := execCtx.Metadata["target_chain_id"]
 	const (
 		baseMainnetChainID = "8453"
 		baseTestnetChainID = "84532"
 	)
+	targetChainID := execCtx.Metadata["target_chain_id"]
 	var baseAggregatorFeeChainID string
 	if targetChainID == "42161" || targetChainID == "8453" {
 		baseAggregatorFeeChainID = baseMainnetChainID

@@ -128,15 +128,35 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	}
 	de.mutex.RUnlock()
 
-	de.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
+	var metadataMap map[string]string
+	if len(metadata) > 0 {
+		metadataMap = metadata[0]
+	}
+	// Read and parse task_definition_id for job type selection
+	taskDefID := 0
+	if metadataMap != nil {
+		if taskDefStr, ok := metadataMap["task_definition_id"]; ok {
+			fmt.Sscanf(taskDefStr, "%d", &taskDefID)
+		}
+	}
+	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
+	if !(taskDefID == 2 || taskDefID == 4 || taskDefID == 6) {
+		de.logger.Infof("Skipping code execution for static task. Only calculating fees for task_definition_id=%d", taskDefID)
+		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, metadataMap)
+		if err != nil {
+			de.logger.Errorf("Fee calculation (static) failed: %v", err)
+			return nil, fmt.Errorf("fee calculation failed: %w", err)
+		}
+		return result, nil
+	}
 
-	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, metadata...)
+	// Dynamic tasks (2,4,6): perform full execution as before
+	de.logger.Infof("Executing code for dynamic task task_definition_id=%d (should run code)", taskDefID)
+	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, metadataMap)
 	if err != nil {
 		de.logger.Errorf("Execution failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
-
-	de.logger.Infof("Execution completed successfully")
 	return result, nil
 }
 
