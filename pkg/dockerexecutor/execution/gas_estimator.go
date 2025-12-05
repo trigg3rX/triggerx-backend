@@ -175,13 +175,13 @@ func (ge *GasEstimator) convertArgsToABITypes(args []interface{}, inputs abi.Arg
 }
 
 // getOrCreateClient gets or creates an eth client for the given chain ID
-func (ge *GasEstimator) getOrCreateClient(ctx context.Context, chainID string) (*ethclient.Client, error) {
+func (ge *GasEstimator) getOrCreateClient(ctx context.Context, chainID string, alchemyAPIKey string) (*ethclient.Client, error) {
 	// Check if client already exists
 	if client, exists := ge.clients[chainID]; exists {
 		return client, nil
 	}
 	// Read Alchemy API key from environment (if set)
-	alchemyAPIKey := os.Getenv("ALCHEMY_API_KEY")
+	alchemyAPIKey = os.Getenv("ALCHEMY_API_KEY")
 
 	// Map of chain IDs to RPC URLs (you should configure this based on your setup)
 	rpcURLs := map[string]string{
@@ -243,8 +243,8 @@ func calculatePercentile(values []*big.Int, percentile float64) *big.Int {
 }
 
 // fetchHistoricalGasPrices fetches historical gas prices for the last 7 days and calculates 75th percentile
-func (ge *GasEstimator) fetchHistoricalGasPrices(ctx context.Context, chainID string) (*big.Int, error) {
-	client, err := ge.getOrCreateClient(ctx, chainID)
+func (ge *GasEstimator) fetchHistoricalGasPrices(ctx context.Context, chainID string, alchemyAPIKey string) (*big.Int, error) {
+	client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +344,7 @@ func (ge *GasEstimator) fetchHistoricalGasPrices(ctx context.Context, chainID st
 }
 
 // getOrUpdateCachedGasPrice gets cached gas price or updates it if expired
-func (ge *GasEstimator) getOrUpdateCachedGasPrice(ctx context.Context, chainID string) (*big.Int, error) {
+func (ge *GasEstimator) getOrUpdateCachedGasPrice(ctx context.Context, chainID string, alchemyAPIKey string) (*big.Int, error) {
 	ge.cacheMu.RLock()
 	cache, exists := ge.gasPriceCache[chainID]
 	ge.cacheMu.RUnlock()
@@ -364,11 +364,11 @@ func (ge *GasEstimator) getOrUpdateCachedGasPrice(ctx context.Context, chainID s
 
 	// Cache expired or doesn't exist, fetch new historical data
 	ge.logger.Infof("Cache expired or missing for chain %s, fetching historical gas prices...", chainID)
-	gasPrice, err := ge.fetchHistoricalGasPrices(ctx, chainID)
+	gasPrice, err := ge.fetchHistoricalGasPrices(ctx, chainID, alchemyAPIKey)
 	if err != nil {
 		// If historical fetch fails, try to use current gas price
 		ge.logger.Warnf("Failed to fetch historical gas prices for chain %s: %v, using current gas price", chainID, err)
-		client, err := ge.getOrCreateClient(ctx, chainID)
+		client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 		if err != nil {
 			return big.NewInt(1000000000), nil // Default fallback
 		}
@@ -404,9 +404,10 @@ func (ge *GasEstimator) EstimateGasForFunction(
 	contractABI string,
 	args []interface{},
 	fromAddress string,
+	alchemyAPIKey string,
 ) (uint64, *big.Int, *big.Int, error) {
 	// Get or create client for the chain
-	client, err := ge.getOrCreateClient(ctx, chainID)
+	client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -458,7 +459,7 @@ func (ge *GasEstimator) EstimateGasForFunction(
 	}
 
 	// Get cached historical gas price (75th percentile of last 7 days)
-	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID)
+	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID, alchemyAPIKey)
 	if err != nil {
 		ge.logger.Warnf("Failed to get cached gas price, using current gas price: %v", err)
 		// Fallback to current gas price if cache fails
@@ -484,13 +485,13 @@ func (ge *GasEstimator) EstimateGasForFunction(
 }
 
 // GetGasPrice gets the cached historical gas price (75th percentile of last 7 days) for a chain
-func (ge *GasEstimator) GetGasPrice(ctx context.Context, chainID string) (*big.Int, error) {
+func (ge *GasEstimator) GetGasPrice(ctx context.Context, chainID string, alchemyAPIKey string) (*big.Int, error) {
 	// Get cached historical gas price (75th percentile of last 7 days)
-	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID)
+	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID, alchemyAPIKey)
 	if err != nil {
 		ge.logger.Warnf("Failed to get cached gas price, using current gas price: %v", err)
 		// Fallback to current gas price if cache fails
-		client, err := ge.getOrCreateClient(ctx, chainID)
+		client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 		if err != nil {
 			return big.NewInt(1000000000), nil // Default fallback
 		}

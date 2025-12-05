@@ -13,6 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -159,7 +160,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
 				IsSafe:           tempJobs[i].IsSafe,
 			}
-			valResp, _ := h.ValidateCodeInternal(ctx, valReq, ipfsUrl)
+			valResp, _ := h.ValidateCodeInternal(ctx, valReq, ipfsUrl, config.GetAlchemyAPIKey())
 			if !valResp.Executable || !valResp.SafeMatch {
 				errMsg := "IPFS code validation failed: "
 				if valResp.Error != "" {

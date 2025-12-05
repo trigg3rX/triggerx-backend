@@ -15,8 +15,8 @@ import (
 
 // CodeExecutor defines what the DockerManager needs from a code executor
 type CodeExecutor interface {
-	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*types.ExecutionResult, error)
-	ExecuteSource(ctx context.Context, code string, language string, metadata ...map[string]string) (*types.ExecutionResult, error)
+	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetStats() *types.PerformanceMetrics
 	GetPoolStats() map[types.Language]*types.PoolStats
@@ -116,7 +116,7 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 
 // Execute runs code from the specified URL with the given number of attestations
 // Optionally accepts metadata map for task definition and contract details
-func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*types.ExecutionResult, error) {
+func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	de.mutex.RLock()
 	if !de.initialized {
 		de.mutex.RUnlock()
@@ -142,7 +142,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
 	if !(taskDefID == 2 || taskDefID == 4 || taskDefID == 6) {
 		de.logger.Infof("Skipping code execution for static task. Only calculating fees for task_definition_id=%d", taskDefID)
-		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, metadataMap)
+		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, alchemyAPIKey, metadataMap)
 		if err != nil {
 			de.logger.Errorf("Fee calculation (static) failed: %v", err)
 			return nil, fmt.Errorf("fee calculation failed: %w", err)
@@ -152,7 +152,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 
 	// Dynamic tasks (2,4,6): perform full execution as before
 	de.logger.Infof("Executing code for dynamic task task_definition_id=%d (should run code)", taskDefID)
-	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, metadataMap)
+	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadataMap)
 	if err != nil {
 		de.logger.Errorf("Execution failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)
@@ -162,7 +162,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 
 // ExecuteSource runs raw source code with the specified language
 // Optionally accepts metadata map for task definition and contract details
-func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, language string, metadata ...map[string]string) (*types.ExecutionResult, error) {
+func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	de.mutex.RLock()
 	if !de.initialized {
 		de.mutex.RUnlock()
@@ -175,7 +175,7 @@ func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, langua
 	de.mutex.RUnlock()
 
 	de.logger.Infof("Executing raw source for language: %s", language)
-	result, err := de.executor.ExecuteSource(ctx, code, language, metadata...)
+	result, err := de.executor.ExecuteSource(ctx, code, language, alchemyAPIKey, metadata...)
 	if err != nil {
 		de.logger.Errorf("Execution (raw) failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)

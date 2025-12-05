@@ -11,6 +11,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
+	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -39,11 +40,21 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	e.logger.Infof("[CustomScript] Executing %s script from: %s", scriptLanguage, scriptURL)
 
 	// Use standard Execute method (env var injection deferred to Phase 2)
+	metadata := map[string]string{
+		"task_definition_id":      fmt.Sprintf("%d", targetData.TaskDefinitionID),
+		"target_chain_id":         targetData.TargetChainID,
+		"target_contract_address": targetData.TargetContractAddress,
+		"target_function":         targetData.TargetFunction,
+		"abi":                     targetData.ABI,
+	}
+
 	result, err := e.validator.GetDockerExecutor().Execute(
 		ctx,
 		scriptURL,
 		scriptLanguage,
 		1, // noOfAttesters
+		config.GetAlchemyAPIKey(),
+		metadata,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("docker execution failed: %w", err)

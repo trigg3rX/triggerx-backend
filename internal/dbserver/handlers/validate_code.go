@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/challenger/config"
 )
 
 type ValidateCodeRequest struct {
@@ -39,7 +40,7 @@ func (h *Handler) generateCacheKey(ipfsUrl string, req ValidateCodeRequest) stri
 }
 
 // ValidateCodeInternal does the actual validation and can be used by other logic (not just HTTP handler)
-func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequest, ipfsUrl string) (ValidateCodeResponse, error) {
+func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequest, ipfsUrl string, alchemyAPIKey string) (ValidateCodeResponse, error) {
 	// Check cache if Redis client is available and IPFS URL is provided
 	// Use validation parameters in the cache key so different req contexts revalidate
 	if h.redisClient != nil && ipfsUrl != "" {
@@ -59,7 +60,7 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 		}
 	}
 
-	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language)
+	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language, alchemyAPIKey)
 	if err != nil {
 		// If IsSafe is false, SafeMatch is always true
 		safeMatch := !req.IsSafe
@@ -164,7 +165,7 @@ func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
 		return
 	}
 	// For HTTP endpoint, no IPFS URL is provided, so pass empty string
-	resp, _ := h.ValidateCodeInternal(c.Request.Context(), req, "")
+	resp, _ := h.ValidateCodeInternal(c.Request.Context(), req, "", config.GetAlchemyAPIKey())
 	// Log the HTTP request + response coupling with trace if available
 	traceID := h.getTraceID(c)
 	h.logger.Infof("[ValidateCodeExecutable] trace=%s lang=%s target=%s isSafe=%t selectedSafe=%s -> executable=%t safeMatch=%t error=%q",

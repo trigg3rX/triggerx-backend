@@ -20,7 +20,7 @@ import (
 )
 
 func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client) (types.PerformerActionData, error) {
-	if (targetData.TaskDefinitionID != 7 && targetData.TargetContractAddress == "") {
+	if targetData.TaskDefinitionID != 7 && targetData.TargetContractAddress == "" {
 		e.logger.Errorf("Execution contract address not configured")
 		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
 	}
@@ -100,26 +100,31 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		// Skip normal argument processing for custom scripts
 		goto skipArgumentProcessing
 
-	case 2, 4, 6:
+	case 1, 2, 3, 4, 5, 6:
 		var execErr error
 		// Use the DockerManager from the validator to execute the code
-		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1)
+		metadata := map[string]string{
+			"task_definition_id":      fmt.Sprintf("%d", targetData.TaskDefinitionID),
+			"target_chain_id":         targetData.TargetChainID,
+			"target_contract_address": targetData.TargetContractAddress,
+			"target_function":         targetData.TargetFunction,
+			"abi":                     targetData.ABI,
+		}
+
+		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1, config.GetAlchemyAPIKey(), metadata)
 		if execErr != nil {
-			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", execErr)
+			return types.PerformerActionData{}, fmt.Errorf("failed to execute script: %v", execErr)
 		}
 
 		if !result.Success {
-			return types.PerformerActionData{}, fmt.Errorf("failed to execute dynamic arguments script: %v", result.Error)
+			return types.PerformerActionData{}, fmt.Errorf("failed to execute script: %v", result.Error)
 		}
 
-		argData = e.parseDynamicArgs(result.Output)
-		e.logger.Debugf("Parsed dynamic arguments: %+v", argData)
-	case 1, 3, 5:
-		argData = e.parseStaticArgs(targetData.Arguments)
-		result = &dockertypes.ExecutionResult{
-			Stats: dockertypes.DockerResourceStats{
-				TotalCost: big.NewInt(int64(e.validator.GetDockerExecutor().GetExecutionFeeConfig().TransactionCost * 1e18)),
-			},
+		if targetData.TaskDefinitionID == 2 || targetData.TaskDefinitionID == 4 || targetData.TaskDefinitionID == 6 {
+			argData = e.parseDynamicArgs(result.Output)
+			e.logger.Debugf("Parsed dynamic arguments: %+v", argData)
+		} else {
+			argData = e.parseStaticArgs(targetData.Arguments)
 		}
 	default:
 		return types.PerformerActionData{}, fmt.Errorf("unsupported task definition id: %d", targetData.TaskDefinitionID)

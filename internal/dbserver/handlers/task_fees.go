@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 )
@@ -49,7 +50,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 					"from_address":            from,
 				}
 
-				result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, metadata)
+				result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 				if err != nil {
 					h.logger.Errorf("Error executing code: %v", err)
 					return
@@ -78,7 +79,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 			"on_chain_args":           args,
 			"from_address":            fromAddress,
 		}
-		result, err := h.dockerExecutor.Execute(ctx, "", string(types.LanguageGo), 10, metadata)
+		result, err := h.dockerExecutor.Execute(ctx, "", string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 		if err != nil {
 			h.logger.Errorf("Error executing code: %v", err)
 			return big.NewInt(0), big.NewInt(0), err

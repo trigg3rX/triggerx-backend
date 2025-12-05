@@ -71,7 +71,7 @@ func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManage
 	}
 }
 
-func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata map[string]string) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata map[string]string) (*types.ExecutionResult, error) {
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
@@ -127,7 +127,7 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 	}()
 
 	// Execute pipeline stages
-	result, err := ep.executeStages(execCtx, executionContext)
+	result, err := ep.executeStages(execCtx, executionContext, alchemyAPIKey)
 	if err != nil {
 		executionContext.CompletedAt = time.Now()
 		ep.updateStats(false, time.Since(startTime), 0.0)
@@ -142,7 +142,7 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 }
 
 // executeSource accepts raw code and language, writes to a temp file, then runs through the same stages
-func (ep *executionPipeline) executeSource(ctx context.Context, code string, language string, metadata map[string]string) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) executeSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata map[string]string) (*types.ExecutionResult, error) {
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
@@ -224,7 +224,7 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 		ep.updateStats(true, duration, 0.0)
 	}()
 
-	result, err := ep.executeStages(execCtx, executionContext)
+	result, err := ep.executeStages(execCtx, executionContext, alchemyAPIKey)
 	if err != nil {
 		executionContext.CompletedAt = time.Now()
 		ep.updateStats(false, time.Since(startTime), 0.0)
@@ -234,7 +234,7 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 	return result, nil
 }
 
-func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext) (*types.ExecutionResult, error) {
+func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.ExecutionContext, alchemyAPIKey string) (*types.ExecutionResult, error) {
 	// If task_definition_id is 2, 4, or 6, skip to Stage 4 (Process Results, e.g., fee calculation)
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
@@ -248,7 +248,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 					Success: true,
 					Error:   nil,
 				}
-				finalResult := ep.processResults(result, execCtx)
+				finalResult := ep.processResults(result, execCtx, alchemyAPIKey)
 				return finalResult, nil
 			}
 		}
@@ -325,7 +325,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 
 	// Stage 4: Process Results
 	ep.logger.Debugf("Stage 4: Processing results")
-	finalResult := ep.processResults(result, execCtx)
+	finalResult := ep.processResults(result, execCtx, alchemyAPIKey)
 
 	// Stage 5: Cleanup
 	// ep.logger.Debugf("Stage 5: Cleaning up")
@@ -336,7 +336,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	return finalResult, nil
 }
 
-func (ep *executionPipeline) processResults(result *types.ExecutionResult, execCtx *types.ExecutionContext) *types.ExecutionResult {
+func (ep *executionPipeline) processResults(result *types.ExecutionResult, execCtx *types.ExecutionContext, alchemyAPIKey string) *types.ExecutionResult {
 	// Add execution metadata
 	execCtx.Metadata["execution_time"] = result.Stats.ExecutionTime.String()
 	execCtx.Metadata["static_complexity"] = fmt.Sprintf("%.6f", result.Stats.StaticComplexity)
@@ -346,6 +346,7 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
+			ep.logger.Infof("task defination id in process %d",taskDefinitionID)
 			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
 				// For dynamic tasks, the output is expected to be a JSON array of arguments
 				// We store this in metadata to be used by calculateFees
@@ -364,7 +365,7 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	}
 
 	// Calculate fees
-	fees, currentFees := ep.calculateFees(execCtx)
+	fees, currentFees := ep.calculateFees(execCtx, alchemyAPIKey)
 	execCtx.Metadata["fees"] = fees.String()
 	execCtx.Metadata["current_fees"] = currentFees.String()
 	result.Stats.TotalCost = fees
@@ -373,7 +374,7 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	return result
 }
 
-func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*big.Int, *big.Int) {
+func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alchemyAPIKey string) (*big.Int, *big.Int) {
 	feesConfig := ep.config.GetFeesConfig()
 
 	// Get task definition ID from metadata
@@ -384,6 +385,8 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 			taskDefinitionID = 0
 		}
 	}
+
+	ep.logger.Infof("task defination id in the calculate fees: %d",taskDefinitionID)
 
 	// Calculate off-chain fees based on task definition ID
 	var offChainFeeUSD float64
@@ -478,6 +481,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 				contractABI,
 				args,
 				fromAddress,
+				alchemyAPIKey,
 			)
 
 			if err != nil {
@@ -532,7 +536,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 	defer gasEstimator.Close()
 
 	// Use eth client to fetch current gas price (not historical/cached)
-	ethClient, err := gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID)
+	ethClient, err := gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
 	var aggregatorGasPrice *big.Int
 	if err != nil {
 		ep.logger.Warnf("Failed to get eth client for aggregator gas estimation on chain %s: %v, using default", baseAggregatorFeeChainID, err)

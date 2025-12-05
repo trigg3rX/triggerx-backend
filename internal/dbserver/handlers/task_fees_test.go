@@ -37,7 +37,7 @@ func NewFakeDockerExecutor() *FakeDockerExecutor {
 }
 
 func (f *FakeDockerExecutor) Initialize(ctx context.Context) error { return nil }
-func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
+func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
 	if err, ok := f.errors[fileURL]; ok {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLa
 	}
 	return newExecResult(0, true, nil), nil
 }
-func (f *FakeDockerExecutor) ExecuteSource(ctx context.Context, code string, language string, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
+func (f *FakeDockerExecutor) ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
 	if err, ok := f.errors[code]; ok {
 		return nil, err
 	}
