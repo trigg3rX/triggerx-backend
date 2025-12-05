@@ -549,22 +549,20 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext) (*bi
 
 	aggregatorOnChainFeeWei = gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
 
-	ep.logger.Infof("Aggregator gas price: %s Wei", aggregatorGasPrice.String())
-
 	// Log aggregator fee calculation
 	ep.logger.Debugf("Aggregator on-chain fee: baseAggregatorFeeChainID=%s, gasUsed=%d, currentGasPrice=%s Wei, aggregatorFee=%s Wei",
 		baseAggregatorFeeChainID, aggregatorGasUsed, aggregatorGasPrice.String(), aggregatorOnChainFeeWei.String())
 
 	// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
 	totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
-	currentTotalFeeWei := new(big.Int).Add(totalFeeWei, currentOnChainFeeWei)
+	currentTotalFeeWei := new(big.Int).Add(offChainFeeWei, currentOnChainFeeWei)
 	currentTotalFeeWei.Add(currentTotalFeeWei, aggregatorOnChainFeeWei)
 	totalFeeWei.Add(totalFeeWei, aggregatorOnChainFeeWei)
 	totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
 	totalFeeWei.Div(totalFeeWei, big.NewInt(100)) // 20% buffer
 
-	ep.logger.Infof("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, current_onchain_fee_wei=%s, aggregator_onchain_fee_wei=%s, total_fee_wei=%s",
-		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), currentOnChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String())
+	ep.logger.Infof("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, current_onchain_fee_wei=%s, aggregator_onchain_fee_wei=%s, total_fee_wei=%s, current_total_fee_wei=%s",
+		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), currentOnChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String(), currentTotalFeeWei.String())
 	return totalFeeWei, currentTotalFeeWei
 }
 
