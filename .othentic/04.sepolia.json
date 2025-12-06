@@ -1,0 +1,22 @@
+{
+  "L1": {
+    "chainId": 11155111,
+    "L1MessageHandler": "0x4944096992138b8B443ec70fAe43A78daF66b807",
+    "L1AvsTreasury": "0x2224d0DB2B729bE7DA26Bf500244C269921C9b4D",
+    "AvsGovernance": "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1",
+    "RewardsToken": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+  },
+  "L2s": [
+    {
+      "chainId": 84532,
+      "OBLS": "0xD1764D750Fa7091d5FE81ccA346c8829EF6ceAb5",
+      "L2MessageHandler": "0x7909FdA830b1eb3A3AF2164d86c6ed5737442bBe",
+      "AttestationCenter": "0x21B099554F6D27E47D57991D2B44251DaFa9323b",
+      "L2AvsTreasury": "0x69ACbE12aBC068cd0C5117f356EE49AFE4226EF3",
+      "RewardsToken": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "l2Rewards": true,
+      "InternalTaskHandler": "0x71750E2FfC63465f9B9A7718d4FFBf02597e9Ca3"
+    }
+  ],
+  "timestamp": "2025-08-27T04:32:48.281Z"
+}

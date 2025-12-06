@@ -3,7 +3,6 @@ package websocket
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -12,33 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
-
-// processSubscriptionNotification processes subscription notification messages
-func (sm *SubscriptionManager) processSubscriptionNotification(params interface{}, eventChan chan<- *ChainEvent) error {
-	paramsMap, ok := params.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("invalid subscription params format")
-	}
-
-	result, ok := paramsMap["result"]
-	if !ok {
-		return fmt.Errorf("no result in subscription notification")
-	}
-
-	// Parse the log entry
-	logData, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("failed to marshal log data: %w", err)
-	}
-
-	var log types.Log
-	if err := json.Unmarshal(logData, &log); err != nil {
-		return fmt.Errorf("failed to unmarshal log: %w", err)
-	}
-
-	// Process the log entry
-	return sm.processLogEntry(log, eventChan)
-}
 
 // processLogEntry processes a single log entry and routes it to the appropriate handler
 func (sm *SubscriptionManager) processLogEntry(log types.Log, eventChan chan<- *ChainEvent) error {

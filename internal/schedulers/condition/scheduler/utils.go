@@ -2,10 +2,12 @@ package scheduler
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
+	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 )
 
@@ -49,9 +51,17 @@ func (s *ConditionBasedScheduler) initChainClients() error {
 	chainRPCs := config.GetChainRPCUrls()
 
 	for chainID, rpcURL := range chainRPCs {
-		client, err := ethclient.Dial(rpcURL)
+		// Extract API key from RPC URL if it's an Alchemy/Blast URL
+		apiKey := extractAPIKeyFromURL(rpcURL)
+
+		// Create node client config
+		nodeCfg := nodeclient.DefaultConfig(apiKey, "", s.logger)
+		nodeCfg.BaseURL = rpcURL
+		nodeCfg.RequestTimeout = 30 * time.Second
+
+		client, err := nodeclient.NewNodeClient(nodeCfg)
 		if err != nil {
-			s.logger.Warn("Failed to connect to chain",
+			s.logger.Warn("Failed to create node client for chain",
 				"chain_id", chainID,
 				"rpc_url", rpcURL,
 				"error", err,
@@ -71,4 +81,16 @@ func (s *ConditionBasedScheduler) initChainClients() error {
 	}
 
 	return nil
+}
+
+// extractAPIKeyFromURL extracts API key from RPC URL
+func extractAPIKeyFromURL(url string) string {
+	// For Alchemy/Blast URLs, the API key is typically at the end
+	// Format: https://base-mainnet.g.alchemy.com/v2/API_KEY
+	// or: https://base-mainnet.blastapi.io/API_KEY
+	parts := strings.Split(url, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return ""
 }

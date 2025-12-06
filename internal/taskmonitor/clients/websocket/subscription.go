@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -31,6 +30,15 @@ type ContractConfig struct {
 	Events       []string // Event names to monitor
 }
 
+// ReconnectConfig holds reconnection configuration
+type ReconnectConfig struct {
+	MaxRetries    int           `default:"10"`
+	BaseDelay     time.Duration `default:"5s"`
+	MaxDelay      time.Duration `default:"300s"` // 5 minutes
+	BackoffFactor float64       `default:"2.0"`
+	Jitter        bool          `default:"true"`
+}
+
 // ChainConfig represents configuration for a specific blockchain
 type ChainConfig struct {
 	ChainID      string
@@ -45,7 +53,6 @@ type ChainConfig struct {
 type SubscriptionManager struct {
 	chainID       string
 	subscriptions map[string]*EventSubscription
-	eventFilters  map[string][]common.Hash // event name -> topic hashes
 	contractABIs  map[ContractType]abi.ABI
 	logger        logging.Logger
 	mu            sync.RWMutex
@@ -66,45 +73,6 @@ type EventSubscription struct {
 	EventCount   uint64
 }
 
-// ContractABI represents the ABI for a contract
-type ContractABI struct {
-	Address string           `json:"address"`
-	Events  map[string]Event `json:"events"`
-}
-
-// Event represents an ABI event definition
-type Event struct {
-	Name      string       `json:"name"`
-	Signature string       `json:"signature"`
-	Inputs    []EventInput `json:"inputs"`
-}
-
-// EventInput represents an event input parameter
-type EventInput struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Indexed bool   `json:"indexed"`
-}
-
-// WebSocketMessage represents incoming WebSocket messages
-type WebSocketMessage struct {
-	ID     int         `json:"id"`
-	Method string      `json:"method"`
-	Params interface{} `json:"params"`
-}
-
-// SubscriptionResult represents a subscription result
-type SubscriptionResult struct {
-	Subscription string      `json:"subscription"`
-	Result       interface{} `json:"result"`
-}
-
-// LogsSubscription represents the logs subscription parameters
-type LogsSubscription struct {
-	Address []string   `json:"address,omitempty"`
-	Topics  [][]string `json:"topics,omitempty"`
-}
-
 // ContractEventData represents parsed contract event data
 type ContractEventData struct {
 	EventType    string                 `json:"event_type"`
@@ -122,7 +90,6 @@ func NewSubscriptionManager(chainID string, logger logging.Logger) *Subscription
 	sm := &SubscriptionManager{
 		chainID:       chainID,
 		subscriptions: make(map[string]*EventSubscription),
-		eventFilters:  make(map[string][]common.Hash),
 		contractABIs:  make(map[ContractType]abi.ABI),
 		logger:        logger,
 	}
@@ -183,15 +150,6 @@ func (sm *SubscriptionManager) AddContractSubscription(contractAddr string, cont
 
 	sm.subscriptions[subID] = subscription
 
-	// Add to event filters
-	if sm.eventFilters[eventName] == nil {
-		sm.eventFilters[eventName] = make([]common.Hash, 0)
-	}
-	sm.eventFilters[eventName] = append(sm.eventFilters[eventName], eventSig)
-
-	// sm.logger.Infof("Added subscription %s for %s.%s events from %s on chain %s",
-	// 	subID, contractType, eventName, contractAddr, sm.chainID)
-
 	return subscription, nil
 }
 
@@ -222,15 +180,6 @@ func (sm *SubscriptionManager) AddEventSubscription(contractAddr string, eventNa
 
 	sm.subscriptions[subID] = subscription
 
-	// Add to event filters
-	if sm.eventFilters[eventName] == nil {
-		sm.eventFilters[eventName] = make([]common.Hash, 0)
-	}
-	sm.eventFilters[eventName] = append(sm.eventFilters[eventName], sigHash)
-
-	// sm.logger.Infof("Added subscription %s for %s events from %s on chain %s",
-	// 	subID, eventName, contractAddr, sm.chainID)
-
 	return subscription, nil
 }
 
@@ -247,9 +196,6 @@ func (sm *SubscriptionManager) RemoveSubscription(subID string) error {
 	subscription.Active = false
 	delete(sm.subscriptions, subID)
 
-	// sm.logger.Infof("Removed subscription %s for %s events on chain %s",
-	// 	subID, subscription.EventName, sm.chainID)
-
 	return nil
 }
 
@@ -265,64 +211,6 @@ func (sm *SubscriptionManager) GetActiveSubscriptions() map[string]*EventSubscri
 		}
 	}
 	return active
-}
-
-// BuildWebSocketSubscription creates a WebSocket subscription message
-func (sm *SubscriptionManager) BuildWebSocketSubscription() ([]byte, error) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	// Collect all contract addresses and topics
-	addresses := make(map[common.Address]bool)
-	var allTopics []common.Hash
-
-	for _, sub := range sm.subscriptions {
-		if sub.Active {
-			addresses[sub.ContractAddr] = true
-			allTopics = append(allTopics, sub.EventSig)
-		}
-	}
-
-	// Convert to string arrays for JSON
-	addressStrings := make([]string, 0, len(addresses))
-	for addr := range addresses {
-		addressStrings = append(addressStrings, addr.Hex())
-	}
-
-	topicStrings := make([]string, 0, len(allTopics))
-	for _, topic := range allTopics {
-		topicStrings = append(topicStrings, topic.Hex())
-	}
-
-	// Build subscription parameters
-	params := map[string]interface{}{
-		"id":     1,
-		"method": "eth_subscribe",
-		"params": []interface{}{
-			"logs",
-			LogsSubscription{
-				Address: addressStrings,
-				Topics:  [][]string{topicStrings},
-			},
-		},
-	}
-
-	return json.Marshal(params)
-}
-
-// ProcessWebSocketMessage processes incoming WebSocket messages
-func (sm *SubscriptionManager) ProcessWebSocketMessage(data []byte, eventChan chan<- *ChainEvent) error {
-	var msg WebSocketMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return fmt.Errorf("failed to unmarshal WebSocket message: %w", err)
-	}
-
-	// Handle subscription notifications
-	if msg.Method == "eth_subscription" {
-		return sm.processSubscriptionNotification(msg.Params, eventChan)
-	}
-
-	return nil
 }
 
 // GetSubscriptionStats returns statistics for all subscriptions

@@ -17,8 +17,8 @@ help:
 
 # Setup ScyllaDB container
 db-setup:
-    docker compose down
-    docker compose up -d
+    docker compose -f docker/docker-compose.yaml down
+    docker compose -f docker/docker-compose.yaml up -d
     sleep 6
     ./scripts/database/setup-db.sh
 
@@ -112,24 +112,16 @@ benchmark:
 
 # Install the tools for GitHub Actions
 install-tools:
-    go install github.com/golang/mock/mockgen@latest
-    go install github.com/axw/gocov/gocov@latest
-    go install github.com/matm/gocov-html/cmd/gocov-html@latest
-# curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.6
+    ./scripts/go/install-tools.sh
 
 # Format the Go code (active)
 format-go:
-    @which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first." && exit 1)
+    @which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first using install-tools." && exit 1)
     golangci-lint run --fix
-
-# Update the Go dependencies (inactive)
-dependency-update:
-    @which go-mod-outdated > /dev/null 2>&1 || (echo "Error: go-mod-outdated is not installed. Please install it first." && exit 1)
-    go list -u -m -json all | go-mod-outdated -update -direct
 
 # Build the Go code (active)
 build-go:
-    go build -v ./...
+    go build -v ./cmd/... ./internal/... ./pkg/...
     go mod tidy
     git diff --exit-code go.mod go.sum
 
@@ -148,8 +140,14 @@ docker-build service version:
     ./scripts/docker/build.sh -n {{service}} -v {{version}}
 
 # Push the Docker image
-docker-push:
-    ./scripts/docker/publish.sh
+docker-push service version:
+    @if [ -z "{{service}}" ] || [ -z "{{version}}" ]; then \
+        echo "Error: SERVICE and VERSION are required"; \
+        echo "Usage: just docker-push <service> <version>"; \
+        echo "Example: just docker-push all 0.0.7"; \
+        exit 1; \
+    fi
+    ./scripts/docker/publish.sh -n {{service}} -v {{version}}
 
 # Run the Docker image, pull if not present
 docker-run:

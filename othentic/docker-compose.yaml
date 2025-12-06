@@ -8,6 +8,7 @@ x-otnode: &otnode
 
 services:
   aggregator:
+    profiles: [agg]
     container_name: aggregator
     <<: *otnode
     network_mode: host
@@ -37,6 +38,7 @@ services:
       - ../data/logs/aggregator:/data/logs
 
   performer:
+    profiles: [node]
     container_name: performer
     <<: *otnode
     network_mode: host
@@ -56,8 +58,8 @@ services:
       "--p2p.port", "9875"
     ]
     environment:
-      - PRIVATE_KEY=${PRIVATE_KEY}
-      - OPERATOR_ADDRESS=${OPERATOR_ADDRESS}
+      - PRIVATE_KEY=${PERFORMER_PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${PERFORMER_OPERATOR_ADDRESS}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}

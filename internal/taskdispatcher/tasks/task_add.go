@@ -110,13 +110,49 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		}
 	}
 
+	// Track expiration for this stream entry with stream-specific TTL
+	var entryTTL time.Duration
+	switch stream {
+	case StreamTaskDispatched:
+		entryTTL = TasksProcessingTTL
+	case StreamTaskCompleted:
+		entryTTL = TasksCompletedTTL
+	case StreamTaskFailed:
+		entryTTL = TasksFailedTTL
+	case StreamTaskRetry:
+		entryTTL = TasksRetryTTL
+	default:
+		entryTTL = TasksProcessingTTL // Default fallback
+	}
+
+	// Track expiration using sorted set (similar to timeout tracking)
+	expirationKey := fmt.Sprintf("stream:expiration:%s", stream)
+	expirationTimestamp := float64(time.Now().Add(entryTTL).Unix())
+	member := fmt.Sprintf("%s:%s", stream, res)
+	_, err = tsm.client.ZAdd(ctx, expirationKey, redis.Z{
+		Score:  expirationTimestamp,
+		Member: member,
+	})
+	if err != nil {
+		tsm.logger.Warn("Failed to add stream entry expiration, but task was added to stream",
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
+			"stream", stream,
+			"message_id", res,
+			"error", err)
+		// Don't fail the entire operation if expiration tracking fails
+	} else {
+		// Set TTL on the sorted set (should be longer than max entry TTL)
+		_ = tsm.client.SetTTL(ctx, expirationKey, 48*time.Hour)
+	}
+
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
 	tsm.logger.Debug("Task added to stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"stream", stream,
 		"stream_id", res,
 		"duration", duration,
-		"task_json_size", len(taskJSON))
+		"task_json_size", len(taskJSON),
+		"entry_ttl", entryTTL)
 
 	return true, nil
 }

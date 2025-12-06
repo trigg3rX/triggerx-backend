@@ -355,7 +355,7 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 				// Basic validation that it looks like a JSON array
 				if strings.HasPrefix(cleanOutput, "[") && strings.HasSuffix(cleanOutput, "]") {
 					execCtx.Metadata["on_chain_args"] = cleanOutput
-				} else {
+				// } else {
 					// If it's not a JSON array, we might want to log a warning or handle it
 					// For now, we'll just log it
 					// ep.logger.Warnf("Dynamic task output does not look like a JSON array: %s", cleanOutput)
@@ -415,7 +415,11 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		ep.logger.Warnf("failed to fetch ETH-USD rate from CoinGecko: %v", err)
 		return big.NewInt(0), big.NewInt(0)
 	}
-	defer resp.Body.Close()
+	defer func () {
+		if err := resp.Body.Close(); err != nil {
+			ep.logger.Errorf("Error closing response body: %v", err)
+		}
+	}()
 
 	var coingeckoResp struct {
 		Ethereum struct {

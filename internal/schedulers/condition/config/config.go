@@ -30,6 +30,9 @@ type Config struct {
 
 	// API Keys for Alchemy
 	alchemyAPIKey string
+
+	// Event Monitor Service URL
+	eventMonitorServiceURL string
 }
 
 var cfg Config
@@ -53,6 +56,7 @@ func Init() error {
 		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
 		maxWorkers:                env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
 		alchemyAPIKey:             env.GetEnvString("ALCHEMY_API_KEY", ""),
+		eventMonitorServiceURL:    env.GetEnvString("EVENT_MONITOR_SERVICE_URL", "http://localhost:9009"),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -133,7 +137,7 @@ func GetChainRPCUrls() map[string]string {
 		// Fallback to public endpoints if no Alchemy key
 		return map[string]string{
 			"11155420": "https://sepolia.optimism.io",
-			"84532":    "https://sepolia.base.org", 
+			"84532":    "https://sepolia.base.org",
 			"11155111": "https://ethereum-sepolia.publicnode.com",
 			"421614":   "https://sepolia-rollup.arbitrum.io/rpc",
 		}
@@ -145,4 +149,9 @@ func GetChainRPCUrls() map[string]string {
 		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
 		"421614":   fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Arbitrum Sepolia
 	}
+}
+
+// GetEventMonitorServiceURL returns the Event Monitor Service URL
+func GetEventMonitorServiceURL() string {
+	return cfg.eventMonitorServiceURL
 }

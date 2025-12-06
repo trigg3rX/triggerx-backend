@@ -148,7 +148,7 @@ func (tm *TaskManager) Initialize() error {
 	}
 
 	// Start background workers with proper synchronization
-	tm.shutdownWg.Add(3) // Track all background goroutines
+	tm.shutdownWg.Add(2) // Track all background goroutines (metrics worker + timeout worker)
 
 	go func() {
 		defer tm.shutdownWg.Done()
