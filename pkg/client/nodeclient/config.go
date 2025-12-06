@@ -41,8 +41,9 @@ type Config struct {
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
-	if c.APIKey == "" {
-		return fmt.Errorf("API key cannot be empty")
+	// Allow empty API key if BaseURL is set (BaseURL may already contain authentication)
+	if c.APIKey == "" && c.BaseURL == "" {
+		return fmt.Errorf("API key cannot be empty when BaseURL is not set")
 	}
 
 	if c.Network == "" && c.BaseURL == "" {
@@ -77,8 +78,14 @@ func (c *Config) GetBaseURL() string {
 }
 
 // GetFullURL returns the full URL including the API key
+// If BaseURL is set and APIKey is empty, returns BaseURL as-is (assumes BaseURL already contains authentication)
 func (c *Config) GetFullURL() string {
-	return fmt.Sprintf("%s%s", c.GetBaseURL(), c.APIKey)
+	baseURL := c.GetBaseURL()
+	// If BaseURL is explicitly set and APIKey is empty, assume BaseURL already contains authentication
+	if c.BaseURL != "" && c.APIKey == "" {
+		return baseURL
+	}
+	return fmt.Sprintf("%s%s", baseURL, c.APIKey)
 }
 
 // DefaultConfig returns a default configuration with sensible defaults

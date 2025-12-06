@@ -121,11 +121,11 @@ func (c *NodeClient) call(ctx context.Context, method string, params []interface
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	c.config.Logger.Debug("Making RPC call",
-		"method", method,
-		"url", c.config.GetFullURL(),
-		"request_id", req.ID,
-	)
+	// c.config.Logger.Debug("Making RPC call",
+	// 	"method", method,
+	// 	"url", c.config.GetFullURL(),
+	// 	"request_id", req.ID,
+	// )
 
 	// Create request with context
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.config.GetFullURL(), bytes.NewBuffer(reqBody))

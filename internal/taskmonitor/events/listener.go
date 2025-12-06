@@ -283,9 +283,15 @@ type pollSubscription struct {
 // startChainPoller starts a polling loop for a given chain
 func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error {
 	// Create node client config
-	nodeCfg := nodeclient.DefaultConfig(config.GetRPCAPIKey(), "", l.logger)
-	nodeCfg.BaseURL = chainConfig.RPCURL
-	nodeCfg.RequestTimeout = 30 * time.Second
+	// Note: chainConfig.RPCURL already contains the API key (from GetChainRPCUrl),
+	// so we don't need to pass it separately. We'll use an empty API key since
+	// the BaseURL already includes authentication.
+	nodeCfg := &nodeclient.Config{
+		APIKey:         "", // Empty because BaseURL already contains the API key
+		BaseURL:        chainConfig.RPCURL,
+		RequestTimeout: 30 * time.Second,
+		Logger:         l.logger,
+	}
 
 	client, err := nodeclient.NewNodeClient(nodeCfg)
 	if err != nil {
@@ -370,10 +376,24 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 			to := new(big.Int).SetUint64(currentBlock)
 
 			for _, sub := range subs {
+				// Check for context cancellation before processing each subscription
+				select {
+				case <-l.ctx.Done():
+					return nil
+				default:
+				}
+
 				start := from.Uint64()
 				end := to.Uint64()
 				const maxRange uint64 = 10
 				for cur := start; cur <= end; {
+					// Check for context cancellation before processing each chunk
+					select {
+					case <-l.ctx.Done():
+						return nil
+					default:
+					}
+
 					chunkEnd := cur + maxRange - 1
 					if chunkEnd > end {
 						chunkEnd = end
@@ -386,6 +406,10 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 
 					logs, err := client.EthGetLogs(l.ctx, params)
 					if err != nil {
+						// Check if error is due to context cancellation
+						if l.ctx.Err() != nil {
+							return nil
+						}
 						l.logger.Errorf("[%s] EthGetLogs failed for %s.%s range [%#x, %#x]: %v", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd, err)
 						// proceed to next chunk to avoid blocking entire range
 						cur = chunkEnd + 1
@@ -397,6 +421,12 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 					// l.logger.Infof("[%s] Fetched %d logs for %s.%s in chunk [%d, %d]", chainConfig.Name, len(logs), sub.ContractType, sub.EventName, cur, chunkEnd)
 					// }
 					for _, nodeLog := range logs {
+						// Check for context cancellation while processing logs
+						select {
+						case <-l.ctx.Done():
+							return nil
+						default:
+						}
 						lg, err := convertNodeLogToTypesLog(nodeLog)
 						if err != nil {
 							l.logger.Errorf("[%s] Failed to convert log: %v", chainConfig.Name, err)
