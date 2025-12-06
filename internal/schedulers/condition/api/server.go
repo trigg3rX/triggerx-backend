@@ -104,6 +104,9 @@ func (s *Server) setupRoutes(deps Dependencies) {
 		api.POST("/job/schedule", schedulerHandler.ScheduleJob)
 		api.POST("/job/pause", schedulerHandler.UnscheduleJob)
 		api.GET("/job/stats/:job_id", schedulerHandler.GetJobStats)
+
+		// Event notification webhook from Event Monitor Service
+		api.POST("/events/notify", handlers.HandleEventNotification(deps.Logger, deps.Scheduler))
 	}
 }
 
