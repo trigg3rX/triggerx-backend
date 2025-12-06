@@ -45,6 +45,9 @@ type MockRedisClient struct {
 	MockXPending                      func(ctx context.Context, stream, group string) (*redis.XPending, error)
 	MockXPendingExt                   func(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error)
 	MockXClaim                        func(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd
+	MockXDel                          func(ctx context.Context, stream string, ids ...string) (int64, error)
+	MockXTrim                         func(ctx context.Context, stream string, maxLen int64, approx bool) (int64, error)
+	MockXTrimMinID                    func(ctx context.Context, stream, minID string, approx bool) (int64, error)
 	MockZAdd                          func(ctx context.Context, key string, members ...redis.Z) (int64, error)
 	MockZAddWithExists                func(ctx context.Context, key string, members ...redis.Z) (newElements int64, keyExisted bool, err error)
 	MockZRevRange                     func(ctx context.Context, key string, start, stop int64) ([]string, error)
@@ -328,6 +331,30 @@ func (m *MockRedisClient) XClaim(ctx context.Context, args *redis.XClaimArgs) *r
 	}
 	m.t.Fatal("unexpected call to MockRedisClient.XClaim")
 	return nil
+}
+
+func (m *MockRedisClient) XDel(ctx context.Context, stream string, ids ...string) (int64, error) {
+	if m.MockXDel != nil {
+		return m.MockXDel(ctx, stream, ids...)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.XDel")
+	return 0, nil
+}
+
+func (m *MockRedisClient) XTrim(ctx context.Context, stream string, maxLen int64, approx bool) (int64, error) {
+	if m.MockXTrim != nil {
+		return m.MockXTrim(ctx, stream, maxLen, approx)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.XTrim")
+	return 0, nil
+}
+
+func (m *MockRedisClient) XTrimMinID(ctx context.Context, stream, minID string, approx bool) (int64, error) {
+	if m.MockXTrimMinID != nil {
+		return m.MockXTrimMinID(ctx, stream, minID, approx)
+	}
+	m.t.Fatal("unexpected call to MockRedisClient.XTrimMinID")
+	return 0, nil
 }
 
 func (m *MockRedisClient) ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error) {

@@ -54,6 +54,9 @@ type RedisClientInterface interface {
 	XPending(ctx context.Context, stream, group string) (*redis.XPending, error)
 	XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) ([]redis.XPendingExt, error)
 	XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd
+	XDel(ctx context.Context, stream string, ids ...string) (int64, error)
+	XTrim(ctx context.Context, stream string, maxLen int64, approx bool) (int64, error)
+	XTrimMinID(ctx context.Context, stream, minID string, approx bool) (int64, error)
 
 	// Sorted Set operations
 	ZAdd(ctx context.Context, key string, members ...redis.Z) (int64, error)

@@ -50,7 +50,7 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 			}
 
 			// Remove the task from timeout tracking since it's been completed
-			err = tsm.timeoutManager.RemoveTaskTimeout(ctx, taskID)
+			err = tsm.expirationManager.RemoveTaskTimeout(ctx, taskID)
 			if err != nil {
 				tsm.logger.Warn("failed to remove task from timeout tracking",
 					"task_id", taskID,
@@ -107,7 +107,7 @@ func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, 
 			}
 
 			// Remove the task from timeout tracking since it's been failed
-			err = tsm.timeoutManager.RemoveTaskTimeout(ctx, taskID)
+			err = tsm.expirationManager.RemoveTaskTimeout(ctx, taskID)
 			if err != nil {
 				tsm.logger.Warn("failed to remove failed task from timeout tracking",
 					"task_id", taskID,
@@ -199,13 +199,40 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		return fmt.Errorf("failed to add task to stream: %w", err)
 	}
 
+	// Add entry to expiration tracking with stream-specific TTL
+	var entryTTL time.Duration
+	switch stream {
+	case StreamTaskDispatched:
+		entryTTL = TasksProcessingTTL
+	case StreamTaskCompleted:
+		entryTTL = TasksCompletedTTL
+	case StreamTaskFailed:
+		entryTTL = TasksFailedTTL
+	case StreamTaskRetry:
+		entryTTL = TasksRetryTTL
+	default:
+		entryTTL = TasksProcessingTTL // Default fallback
+	}
+
+	// Track expiration for this stream entry
+	err = tsm.expirationManager.AddMessageExpiration(ctx, stream, res, entryTTL)
+	if err != nil {
+		tsm.logger.Warn("Failed to add stream entry expiration, but task was added to stream",
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
+			"stream", stream,
+			"message_id", res,
+			"error", err)
+		// Don't fail the entire operation if expiration tracking fails
+	}
+
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
 	tsm.logger.Debug("Task added to stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"stream", stream,
 		"stream_id", res,
 		"duration", duration,
-		"task_json_size", len(taskJSON))
+		"task_json_size", len(taskJSON),
+		"entry_ttl", entryTTL)
 
 	return nil
 }

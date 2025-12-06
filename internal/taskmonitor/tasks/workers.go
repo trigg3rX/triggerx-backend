@@ -33,7 +33,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	// tsm.logger.Debug("Checking for dispatched timeouts")
 
 	// Get expired tasks efficiently using sorted set
-	expiredTaskIDs, err := tsm.timeoutManager.GetExpiredTasks(ctx)
+	expiredTaskIDs, err := tsm.expirationManager.GetExpiredTasks(ctx)
 	if err != nil {
 		tsm.logger.Error("Failed to get expired tasks", "error", err)
 		return
@@ -131,7 +131,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 
 	// Remove all processed tasks from timeout tracking in batch
 	if len(processedTaskIDs) > 0 {
-		err = tsm.timeoutManager.RemoveMultipleTaskTimeouts(ctx, processedTaskIDs)
+		err = tsm.expirationManager.RemoveMultipleTaskTimeouts(ctx, processedTaskIDs)
 		if err != nil {
 			tsm.logger.Error("Failed to remove processed tasks from timeout tracking",
 				"task_count", len(processedTaskIDs),
@@ -147,17 +147,24 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	}
 }
 
-// AckTaskProcessed acknowledges that a task has been processed
+// AckTaskProcessed acknowledges that a task has been processed and optionally deletes it from the stream
 func (tsm *TaskStreamManager) AckTaskProcessed(ctx context.Context, stream, consumerGroup, messageID string) error {
+	return tsm.AckTaskProcessedWithDelete(ctx, stream, consumerGroup, messageID, true)
+}
+
+// AckTaskProcessedWithDelete acknowledges that a task has been processed and optionally deletes it from the stream
+func (tsm *TaskStreamManager) AckTaskProcessedWithDelete(ctx context.Context, stream, consumerGroup, messageID string, deleteFromStream bool) error {
 	tsm.logger.Debug("Acknowledging task processed",
 		"stream", stream,
 		"consumer_group", consumerGroup,
-		"message_id", messageID)
+		"message_id", messageID,
+		"delete_from_stream", deleteFromStream)
 
 	// Increase timeout for acknowledgment operations
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	// First acknowledge the message (removes from PEL)
 	err := tsm.redisClient.XAck(ctx, stream, consumerGroup, messageID)
 	if err != nil {
 		tsm.logger.Error("Failed to acknowledge task",
@@ -168,9 +175,37 @@ func (tsm *TaskStreamManager) AckTaskProcessed(ctx context.Context, stream, cons
 		return err
 	}
 
-	tsm.logger.Debug("Task acknowledged successfully",
-		"stream", stream,
-		"message_id", messageID)
+	// Remove from expiration tracking since the message has been processed
+	err = tsm.expirationManager.RemoveMessageExpiration(ctx, stream, messageID)
+	if err != nil {
+		tsm.logger.Warn("Failed to remove stream entry expiration after acknowledgment",
+			"stream", stream,
+			"message_id", messageID,
+			"error", err)
+		// Don't return error - message was acknowledged, just couldn't remove from expiration tracking
+	}
+
+	// If deleteFromStream is true, delete the message from the stream itself
+	// This is important because XACK only removes from PEL, not from the stream
+	if deleteFromStream {
+		deleted, err := tsm.redisClient.XDel(ctx, stream, messageID)
+		if err != nil {
+			tsm.logger.Warn("Failed to delete message from stream after acknowledgment",
+				"stream", stream,
+				"message_id", messageID,
+				"error", err)
+			// Don't return error - message was acknowledged, just couldn't delete
+			// The message will be cleaned up by periodic trimming or expiration
+		} else if deleted > 0 {
+			tsm.logger.Debug("Task acknowledged and deleted from stream successfully",
+				"stream", stream,
+				"message_id", messageID)
+		} else {
+			tsm.logger.Debug("Task acknowledged but message not found in stream (may have been already deleted)",
+				"stream", stream,
+				"message_id", messageID)
+		}
+	}
 
 	return nil
 }

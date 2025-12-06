@@ -80,3 +80,45 @@ func (c *Client) XPendingExt(ctx context.Context, args *redis.XPendingExtArgs) (
 func (c *Client) XClaim(ctx context.Context, args *redis.XClaimArgs) *redis.XMessageSliceCmd {
 	return c.redisClient.XClaim(ctx, args)
 }
+
+// XDel deletes one or more messages from a stream
+func (c *Client) XDel(ctx context.Context, stream string, ids ...string) (int64, error) {
+	var result int64
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.XDel(ctx, stream, ids...).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "XDel")
+	return result, err
+}
+
+// XTrim trims a stream to a maximum length, optionally using approximate trimming
+func (c *Client) XTrim(ctx context.Context, stream string, maxLen int64, approx bool) (int64, error) {
+	var result int64
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.XTrimMaxLen(ctx, stream, maxLen).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "XTrim")
+	return result, err
+}
+
+// XTrimMinID trims a stream to keep only messages with ID >= minID, optionally using approximate trimming
+func (c *Client) XTrimMinID(ctx context.Context, stream, minID string, approx bool) (int64, error) {
+	var result int64
+	err := c.executeWithRetry(ctx, func() error {
+		val, err := c.redisClient.XTrimMinID(ctx, stream, minID).Result()
+		if err != nil {
+			return err
+		}
+		result = val
+		return nil
+	}, "XTrimMinID")
+	return result, err
+}
