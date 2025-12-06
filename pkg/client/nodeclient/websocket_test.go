@@ -63,7 +63,11 @@ func TestNodeClient_ConnectWebSocket_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		time.Sleep(100 * time.Millisecond)
 	}))
@@ -133,7 +137,11 @@ func TestNodeClient_DisconnectWebSocket_ClosesConnection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		time.Sleep(100 * time.Millisecond)
 	}))
@@ -169,7 +177,11 @@ func TestNodeClient_EthSubscribe_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Read subscription request
 		_, message, err := conn.ReadMessage()
@@ -188,7 +200,10 @@ func TestNodeClient_EthSubscribe_Success(t *testing.T) {
 				Result:  json.RawMessage(`"0x1234"`),
 			}
 			respJSON, _ := json.Marshal(resp)
-			conn.WriteMessage(websocket.TextMessage, respJSON)
+			err = conn.WriteMessage(websocket.TextMessage, respJSON)
+			if err != nil {
+				t.Fatalf("Failed to write message: %v", err)
+			}
 		}
 
 		time.Sleep(200 * time.Millisecond)
@@ -232,7 +247,11 @@ func TestNodeClient_EthUnsubscribe_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Read messages
 		for {
@@ -255,7 +274,10 @@ func TestNodeClient_EthUnsubscribe_Success(t *testing.T) {
 					Result:  json.RawMessage(`"0x1234"`),
 				}
 				respJSON, _ := json.Marshal(resp)
-				conn.WriteMessage(websocket.TextMessage, respJSON)
+				err := conn.WriteMessage(websocket.TextMessage, respJSON)
+				if err != nil {
+					break
+				}
 			} else if req.Method == "eth_unsubscribe" {
 				unsubscribeReceived = true
 				// Send unsubscribe response
@@ -265,7 +287,10 @@ func TestNodeClient_EthUnsubscribe_Success(t *testing.T) {
 					Result:  json.RawMessage(`true`),
 				}
 				respJSON, _ := json.Marshal(resp)
-				conn.WriteMessage(websocket.TextMessage, respJSON)
+				err := conn.WriteMessage(websocket.TextMessage, respJSON)
+				if err != nil {
+					break
+				}
 				break
 			}
 		}

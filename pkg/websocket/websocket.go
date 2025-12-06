@@ -218,7 +218,10 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	// Close existing connection if any
 	if c.conn != nil {
-		c.conn.Close()
+		err := c.conn.Close()
+		if err != nil {
+			c.logger.Errorf("Error closing WebSocket connection: %v", err)
+		}
 	}
 	c.conn = conn
 	c.isConnected = true
@@ -228,12 +231,18 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 
 	// Configure connection
 	conn.SetReadLimit(c.config.MaxMessageSize)
-	conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
+	err = conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
+	if err != nil {
+		return err
+	}
 	conn.SetPongHandler(func(string) error {
 		c.mu.Lock()
 		c.lastMessage = time.Now()
 		c.mu.Unlock()
-		conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
+		err := conn.SetReadDeadline(time.Now().Add(c.config.PongWait))
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	conn.SetPingHandler(func(appData string) error {
@@ -337,7 +346,10 @@ func (c *WebSocketClient) handleDisconnection() {
 	}
 	c.isConnected = false
 	if c.conn != nil {
-		c.conn.Close()
+		err := c.conn.Close()
+		if err != nil {
+			c.logger.Errorf("Error closing WebSocket connection: %v", err)
+		}
 		c.conn = nil
 	}
 	c.mu.Unlock()
@@ -460,8 +472,15 @@ func (c *WebSocketClient) WriteMessage(ctx context.Context, messageType int, dat
 		return fmt.Errorf("WebSocket not connected")
 	}
 
-	conn.SetWriteDeadline(time.Now().Add(c.config.WriteDeadline))
-	return conn.WriteMessage(messageType, data)
+	err := conn.SetWriteDeadline(time.Now().Add(c.config.WriteDeadline))
+	if err != nil {
+		return err
+	}
+	err = conn.WriteMessage(messageType, data)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // WriteTextMessage writes a text message to the WebSocket connection
@@ -521,8 +540,14 @@ func (c *WebSocketClient) Close() error {
 	if c.conn != nil {
 		// Send close message
 		closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
-		c.conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(c.config.WriteDeadline))
+		err = c.conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(c.config.WriteDeadline))
+		if err != nil {
+			return err
+		}
 		err = c.conn.Close()
+		if err != nil {
+			return err
+		}
 		c.conn = nil
 	}
 

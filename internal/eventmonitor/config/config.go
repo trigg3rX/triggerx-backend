@@ -36,7 +36,7 @@ var cfg Config
 // Init initializes the configuration
 func Init() error {
 	if err := godotenv.Load(); err != nil {
-		// Don't fail if .env file doesn't exist
+		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
 	cfg = Config{

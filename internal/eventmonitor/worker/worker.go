@@ -246,15 +246,16 @@ func (w *Worker) matchesFilter(log nodeclient.Log, subscriber *types.Subscriber)
 	// Topic 0 is always the event signature, so filter params start at topic 1
 	// But we'll allow topic 0 for flexibility
 	topicIndex := 0
-	if subscriber.FilterParam == "topic0" || subscriber.FilterParam == "0" {
+	switch subscriber.FilterParam {
+	case "topic0", "0":
 		topicIndex = 0
-	} else if subscriber.FilterParam == "topic1" || subscriber.FilterParam == "1" {
+	case "topic1", "1":
 		topicIndex = 1
-	} else if subscriber.FilterParam == "topic2" || subscriber.FilterParam == "2" {
+	case "topic2", "2":
 		topicIndex = 2
-	} else if subscriber.FilterParam == "topic3" || subscriber.FilterParam == "3" {
+	case "topic3", "3":
 		topicIndex = 3
-	} else {
+	default:
 		// Try to parse as number
 		var err error
 		if strings.HasPrefix(subscriber.FilterParam, "topic") {

@@ -237,7 +237,11 @@ func TestWebSocketClient_Connect_SuccessfulConnection_ReturnsNoError(t *testing.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Keep connection alive for a bit
 		time.Sleep(100 * time.Millisecond)
@@ -270,7 +274,11 @@ func TestWebSocketClient_Connect_AlreadyConnected_ReturnsNoError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		time.Sleep(100 * time.Millisecond)
 	}))
@@ -305,7 +313,11 @@ func TestWebSocketClient_WriteTextMessage_SuccessfulWrite_ReturnsNoError(t *test
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Read message
 		_, message, err := conn.ReadMessage()
@@ -356,7 +368,11 @@ func TestWebSocketClient_ReadMessage_SuccessfulRead_ReturnsMessage(t *testing.T)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Send message
 		err = conn.WriteMessage(websocket.TextMessage, []byte("test message"))
@@ -466,7 +482,11 @@ func TestWebSocketClient_Close_GracefullyClosesConnection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		time.Sleep(100 * time.Millisecond)
 	}))
@@ -516,7 +536,11 @@ func TestWebSocketClient_SetHeaders_SetsHeaders(t *testing.T) {
 		headersReceived["Authorization"] = r.Header.Get("Authorization")
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		time.Sleep(100 * time.Millisecond)
 	}))
@@ -554,7 +578,11 @@ func TestWebSocketClient_ContextCancelled_ClosesConnection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Keep connection alive
 		for {
@@ -648,7 +676,11 @@ func TestWebSocketClient_WriteBinaryMessage_SuccessfulWrite_ReturnsNoError(t *te
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		// Read message
 		messageType, message, err := conn.ReadMessage()
@@ -685,7 +717,11 @@ func TestWebSocketClient_GetConn_ReturnsConnection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func () {
+			if err := conn.Close(); err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		time.Sleep(100 * time.Millisecond)
 	}))

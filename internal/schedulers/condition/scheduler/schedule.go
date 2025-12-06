@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"strconv"
+	// "strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
+	// nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 
 	eventmonitorTypes "github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
@@ -217,46 +217,46 @@ func (s *ConditionBasedScheduler) createWebSocketWorker(conditionWorkerData *typ
 }
 
 // createEventWorker creates a new event worker instance
-func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.EventWorkerData, client *nodeclient.NodeClient) (*worker.EventWorker, error) {
-	ctx, cancel := context.WithCancel(s.ctx)
+// func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.EventWorkerData, client *nodeclient.NodeClient) (*worker.EventWorker, error) {
+// 	ctx, cancel := context.WithCancel(s.ctx)
 
-	// Get current block number
-	blockHex, err := client.EthBlockNumber(ctx)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to get current block number: %w", err)
-	}
+// 	// Get current block number
+// 	blockHex, err := client.EthBlockNumber(ctx)
+// 	if err != nil {
+// 		cancel()
+// 		return nil, fmt.Errorf("failed to get current block number: %w", err)
+// 	}
 
-	// Convert hex to uint64
-	currentBlock, err := hexToUint64(blockHex)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to parse block number: %w", err)
-	}
+// 	// Convert hex to uint64
+// 	currentBlock, err := hexToUint64(blockHex)
+// 	if err != nil {
+// 		cancel()
+// 		return nil, fmt.Errorf("failed to parse block number: %w", err)
+// 	}
 
-	worker := &worker.EventWorker{
-		EventWorkerData: eventWorkerData,
-		ChainClient:     client,
-		Logger:          s.logger,
-		Ctx:             ctx,
-		Cancel:          cancel,
-		LastBlock:       currentBlock,
-		IsActive:        false,
-		TriggerCallback: s.HandleTriggerNotification,
-		CleanupCallback: s.cleanupJobData,
-	}
+// 	worker := &worker.EventWorker{
+// 		EventWorkerData: eventWorkerData,
+// 		ChainClient:     client,
+// 		Logger:          s.logger,
+// 		Ctx:             ctx,
+// 		Cancel:          cancel,
+// 		LastBlock:       currentBlock,
+// 		IsActive:        false,
+// 		TriggerCallback: s.HandleTriggerNotification,
+// 		CleanupCallback: s.cleanupJobData,
+// 	}
 
-	return worker, nil
-}
+// 	return worker, nil
+// }
 
 // hexToUint64 converts a hex string (with or without 0x prefix) to uint64
-func hexToUint64(hexStr string) (uint64, error) {
-	// Remove 0x prefix if present
-	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
-		hexStr = hexStr[2:]
-	}
-	return strconv.ParseUint(hexStr, 16, 64)
-}
+// func hexToUint64(hexStr string) (uint64, error) {
+// 	// Remove 0x prefix if present
+// 	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+// 		hexStr = hexStr[2:]
+// 	}
+// 	return strconv.ParseUint(hexStr, 16, 64)
+// }
 
 // cleanupJobData removes job data from the scheduler's store when a worker stops
 func (s *ConditionBasedScheduler) cleanupJobData(jobID *big.Int) error {

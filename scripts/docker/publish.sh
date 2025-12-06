@@ -40,8 +40,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|imua-keeper|dbserver|health|taskdispatcher|taskmonitor|schedulers/time|schedulers/condition|all)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: keeper, imua-keeper, dbserver, health, taskdispatcher, taskmonitor, schedulers/time, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|health|taskdispatcher|taskmonitor|schedulers/time|schedulers/condition|all)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: keeper, dbserver, health, taskdispatcher, taskmonitor, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 

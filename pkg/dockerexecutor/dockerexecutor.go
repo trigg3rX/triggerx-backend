@@ -136,11 +136,15 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	taskDefID := 0
 	if metadataMap != nil {
 		if taskDefStr, ok := metadataMap["task_definition_id"]; ok {
-			fmt.Sscanf(taskDefStr, "%d", &taskDefID)
+			_, err := fmt.Sscanf(taskDefStr, "%d", &taskDefID)
+			if err != nil {
+				de.logger.Errorf("Error scanning task_definition_id: %v", err)
+				return nil, fmt.Errorf("error scanning task_definition_id: %w", err)
+			}
 		}
 	}
 	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
-	if !(taskDefID == 2 || taskDefID == 4 || taskDefID == 6) {
+	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 {
 		de.logger.Infof("Skipping code execution for static task. Only calculating fees for task_definition_id=%d", taskDefID)
 		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, alchemyAPIKey, metadataMap)
 		if err != nil {

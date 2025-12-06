@@ -2,15 +2,15 @@ package execution
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	// "crypto/sha256"
+	// "encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
+	// "time"
 
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/google/uuid"
+	// "github.com/ethereum/go-ethereum/crypto"
+	// "github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
@@ -140,93 +140,93 @@ func validateCustomScriptOutput(output *types.CustomScriptOutput) error {
 
 // parseStorageUpdates parses STORAGE_SET commands from stderr
 // Format: STORAGE_SET:key=value
-func parseStorageUpdates(stderr string) map[string]string {
-	updates := make(map[string]string)
-	lines := strings.Split(stderr, "\n")
+// func parseStorageUpdates(stderr string) map[string]string {
+// 	updates := make(map[string]string)
+// 	lines := strings.Split(stderr, "\n")
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "STORAGE_SET:") {
-			// Remove prefix
-			kvPair := strings.TrimPrefix(line, "STORAGE_SET:")
-			// Split by first =
-			parts := strings.SplitN(kvPair, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-				updates[key] = value
-			}
-		}
-	}
+// 	for _, line := range lines {
+// 		line = strings.TrimSpace(line)
+// 		if strings.HasPrefix(line, "STORAGE_SET:") {
+// 			// Remove prefix
+// 			kvPair := strings.TrimPrefix(line, "STORAGE_SET:")
+// 			// Split by first =
+// 			parts := strings.SplitN(kvPair, "=", 2)
+// 			if len(parts) == 2 {
+// 				key := strings.TrimSpace(parts[0])
+// 				value := strings.TrimSpace(parts[1])
+// 				updates[key] = value
+// 			}
+// 		}
+// 	}
 
-	return updates
-}
+// 	return updates
+// }
 
 // generateExecutionID generates a unique execution identifier
-func generateExecutionID(jobID *types.BigInt, timestamp time.Time) string {
-	return fmt.Sprintf("exec_%s_%s", jobID.String(), uuid.New().String()[:8])
-}
+// func generateExecutionID(jobID *types.BigInt, timestamp time.Time) string {
+// 	return fmt.Sprintf("exec_%s_%s", jobID.String(), uuid.New().String()[:8])
+// }
 
 // generateExecutionProof generates cryptographic proof of execution
-func generateExecutionProof(
-	executionID string,
-	jobID *types.BigInt,
-	storage map[string]string,
-	output *types.CustomScriptOutput,
-	timestamp time.Time,
-	performerAddress string,
-) *types.ExecutionProof {
-	// Calculate input hash
-	inputData := fmt.Sprintf("%d:%s:%s",
-		timestamp.Unix(),
-		jobID.String(),
-		hashStorage(storage),
-	)
-	inputHash := crypto.Keccak256Hash([]byte(inputData)).Hex()
+// func generateExecutionProof(
+// 	executionID string,
+// 	jobID *types.BigInt,
+// 	storage map[string]string,
+// 	output *types.CustomScriptOutput,
+// 	timestamp time.Time,
+// 	performerAddress string,
+// ) *types.ExecutionProof {
+// 	// Calculate input hash
+// 	inputData := fmt.Sprintf("%d:%s:%s",
+// 		timestamp.Unix(),
+// 		jobID.String(),
+// 		hashStorage(storage),
+// 	)
+// 	inputHash := crypto.Keccak256Hash([]byte(inputData)).Hex()
 
-	// Calculate output hash
-	outputData := fmt.Sprintf("%t:%s:%s",
-		output.ShouldExecute,
-		output.TargetContract,
-		output.Calldata,
-	)
-	outputHash := crypto.Keccak256Hash([]byte(outputData)).Hex()
+// 	// Calculate output hash
+// 	outputData := fmt.Sprintf("%t:%s:%s",
+// 		output.ShouldExecute,
+// 		output.TargetContract,
+// 		output.Calldata,
+// 	)
+// 	outputHash := crypto.Keccak256Hash([]byte(outputData)).Hex()
 
-	// Sign the proof
-	signature := signProof(inputHash, outputHash)
+// 	// Sign the proof
+// 	signature := signProof(inputHash, outputHash)
 
-	return &types.ExecutionProof{
-		ExecutionID:      executionID,
-		JobID:            jobID.String(),
-		Timestamp:        timestamp.Unix(),
-		InputHash:        inputHash,
-		OutputHash:       outputHash,
-		Signature:        signature,
-		PerformerAddress: performerAddress,
-	}
-}
+// 	return &types.ExecutionProof{
+// 		ExecutionID:      executionID,
+// 		JobID:            jobID.String(),
+// 		Timestamp:        timestamp.Unix(),
+// 		InputHash:        inputHash,
+// 		OutputHash:       outputHash,
+// 		Signature:        signature,
+// 		PerformerAddress: performerAddress,
+// 	}
+// }
 
 // Helper functions
 
-func hashStorage(storage map[string]string) string {
-	if len(storage) == 0 {
-		return "0x0"
-	}
+// func hashStorage(storage map[string]string) string {
+// 	if len(storage) == 0 {
+// 		return "0x0"
+// 	}
 
-	// Create deterministic hash
-	data := ""
-	for k, v := range storage {
-		data += fmt.Sprintf("%s=%s;", k, v)
-	}
+// 	// Create deterministic hash
+// 	data := ""
+// 	for k, v := range storage {
+// 		data += fmt.Sprintf("%s=%s;", k, v)
+// 	}
 
-	hash := sha256.Sum256([]byte(data))
-	return "0x" + hex.EncodeToString(hash[:])
-}
+// 	hash := sha256.Sum256([]byte(data))
+// 	return "0x" + hex.EncodeToString(hash[:])
+// }
 
-func signProof(inputHash, outputHash string) string {
-	// TODO: Implement actual signature with keeper's private key
-	// For now, just combine hashes
-	combined := inputHash + outputHash
-	hash := sha256.Sum256([]byte(combined))
-	return "0x" + hex.EncodeToString(hash[:])
-}
+// func signProof(inputHash, outputHash string) string {
+// 	// TODO: Implement actual signature with keeper's private key
+// 	// For now, just combine hashes
+// 	combined := inputHash + outputHash
+// 	hash := sha256.Sum256([]byte(combined))
+// 	return "0x" + hex.EncodeToString(hash[:])
+// }

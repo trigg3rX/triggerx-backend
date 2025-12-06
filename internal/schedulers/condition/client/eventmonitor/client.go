@@ -57,7 +57,11 @@ func (c *Client) Register(req *types.MonitoringRequest) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func () {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Errorf("Error closing response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		var errorResp map[string]interface{}
@@ -110,7 +114,11 @@ func (c *Client) Unregister(requestID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func () {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Errorf("Error closing response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		var errorResp map[string]interface{}

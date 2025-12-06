@@ -144,12 +144,13 @@ func (ge *GasEstimator) convertArgsToABITypes(args []interface{}, inputs abi.Arg
 				return nil, fmt.Errorf("argument %d: expected string for bytes, got %T", i, arg)
 			}
 			// Remove 0x prefix if present
-			if strings.HasPrefix(strVal, "0x") {
-				strVal = strVal[2:]
+			if strings.TrimPrefix(strVal, "0x") != strVal {
+				// Convert hex string to bytes
+				bytes := common.Hex2Bytes(strVal)
+				converted[i] = bytes
+			} else {
+				return nil, fmt.Errorf("argument %d: invalid hex string: %s", i, strVal)
 			}
-			// Convert hex string to bytes
-			bytes := common.Hex2Bytes(strVal)
-			converted[i] = bytes
 
 		case abi.BoolTy:
 			boolVal, ok := arg.(bool)

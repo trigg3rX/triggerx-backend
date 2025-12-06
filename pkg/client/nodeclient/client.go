@@ -144,7 +144,11 @@ func (c *NodeClient) call(ctx context.Context, method string, params []interface
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func () {
+		if err := resp.Body.Close(); err != nil {
+			c.config.Logger.Errorf("Error closing response body: %v", err)
+		}
+	}()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)

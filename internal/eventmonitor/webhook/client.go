@@ -73,7 +73,11 @@ func (c *Client) Send(webhookURL string, notification *types.EventNotification) 
 		}
 
 		// Check response status
-		resp.Body.Close()
+		defer func () {
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Errorf("Error closing response body: %v", err)
+			}
+		}()
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			c.logger.Debug("Webhook delivered successfully",
 				"webhook_url", webhookURL,

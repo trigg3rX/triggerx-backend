@@ -179,7 +179,10 @@ func createMockRPCServer(t *testing.T, handler func(method string, params []inte
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			err = json.NewEncoder(w).Encode(resp)
+			if err != nil {
+				t.Fatalf("Failed to encode response: %v", err)
+			}
 			return
 		}
 
@@ -194,7 +197,10 @@ func createMockRPCServer(t *testing.T, handler func(method string, params []inte
 			Result:  resultJSON,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		err = json.NewEncoder(w).Encode(resp)
+		if err != nil {
+			t.Fatalf("Failed to encode response: %v", err)
+		}
 	}))
 }
 
@@ -537,7 +543,10 @@ func TestNodeClient_RPCError_ReturnsError(t *testing.T) {
 func TestNodeClient_HTTPError_ReturnsError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, err := w.Write([]byte("Internal Server Error"))
+		if err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -564,7 +573,10 @@ func TestNodeClient_HTTPError_ReturnsError(t *testing.T) {
 func TestNodeClient_InvalidJSON_ReturnsError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("invalid json"))
+		_, err := w.Write([]byte("invalid json"))
+		if err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -653,7 +665,10 @@ func TestNodeClient_ContextCancellation_ReturnsError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x1"}`))
+		_, err := w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"0x1"}`))
+		if err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

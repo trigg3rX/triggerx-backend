@@ -1,5 +1,5 @@
-# Use golang:1.24.2 as the base image (not alpine) for better CGO support
-FROM golang:1.24.2 AS builder
+# Use golang:1.25.5-alpine as the base image
+FROM golang:1.25.5-alpine AS builder
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY . .
 RUN go mod tidy
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o triggerx-imua-keeper ./cmd/imua-keeper
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o triggerx-keeper ./cmd/keeper
 
 # Use Alpine 3.18 for the final stage (has Docker 25.0.5 compatible with API 1.44)
 FROM alpine:3.18
@@ -34,7 +34,7 @@ RUN addgroup -g 1000 triggerx && \
 
 # Create necessary directories for persistent storage with proper permissions
 RUN mkdir -p /home/triggerx/data/cache \
-    && mkdir -p /home/triggerx/data/logs \
+    && mkdir -p /home/triggerx/data/logs/keeper \
     && mkdir -p /home/triggerx/data/peerstore/attester \
     && chown -R 1000:1000 /home/triggerx/data \
     && chmod -R 755 /home/triggerx/data
@@ -43,13 +43,19 @@ RUN mkdir -p /home/triggerx/data/cache \
 WORKDIR /home/triggerx
 
 # Copy the built binary from the builder stage
-COPY --from=builder /app/triggerx-imua-keeper .
+COPY --from=builder /app/triggerx-keeper .
+
+# Copy the config files
+RUN mkdir -p /home/triggerx/config/
+COPY ./config/ /home/triggerx/config/
+RUN chown -R triggerx:triggerx /home/triggerx/config/
+
 
 # Copy the startup script and set proper permissions
-COPY ./scripts/docker/services/start-imua-keeper.sh /home/triggerx/start-imua-keeper.sh
-RUN chmod +x /home/triggerx/start-imua-keeper.sh \
-    && chown 1000:1000 /home/triggerx/start-imua-keeper.sh \
-    && chown 1000:1000 /home/triggerx/triggerx-imua-keeper
+COPY ./scripts/docker/services/start-keeper.sh /home/triggerx/start-keeper.sh
+RUN chmod +x /home/triggerx/start-keeper.sh \
+    && chown 1000:1000 /home/triggerx/start-keeper.sh \
+    && chown 1000:1000 /home/triggerx/triggerx-keeper
 
 # Create .env file with proper ownership
 RUN touch .env && chown 1000:1000 .env
@@ -66,4 +72,4 @@ ENV HTTP_PROXY=""
 ENV DOCKER_API_VERSION=1.44
 
 # Run the startup script
-CMD ["sh", "./start-imua-keeper.sh"]
+CMD ["sh", "./start-keeper.sh"]
