@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "1.0.1"
+	version = "0.2.4"
 	isImua  = false
 )
 
@@ -59,8 +59,8 @@ type Config struct {
 	managerSigningAddress string
 
 	// Backend Service URLs
-	aggregatorRPCUrl string
-	healthRPCUrl     string
+	aggregatorRPCUrl  string
+	healthRPCUrl      string
 	taskMonitorRPCUrl string
 
 	l1Chain string
@@ -82,32 +82,32 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnvString("L1_RPC", ""),
-		baseRPCUrl:               env.GetEnvString("L2_RPC", ""),
-		privateKeyConsensus:      env.GetEnvString("PRIVATE_KEY", ""),
-		privateKeyController:     env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
-		keeperAddress:            env.GetEnvString("OPERATOR_ADDRESS", ""),
-		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnvString("PRIVATE_KEY", ""))).PublicKey).Hex(),
-		publicIPV4Address:        env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
-		peerID:                   env.GetEnvString("PEER_ID", ""),
-		keeperRPCPort:            env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
-		keeperP2PPort:            env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
-		keeperMetricsPort:        env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
-		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
-		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
-		taskMonitorRPCUrl:        env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
-		tlsProofHost:             "www.google.com",
-		tlsProofPort:             "443",
-		// l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
-		// l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		// avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
-		// attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0x21B099554F6D27E47D57991D2B44251DaFa9323b"),
-		l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
-		l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
-		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
-		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		ethRPCUrl:            env.GetEnvString("L1_RPC", ""),
+		baseRPCUrl:           env.GetEnvString("L2_RPC", ""),
+		privateKeyConsensus:  env.GetEnvString("PRIVATE_KEY", ""),
+		privateKeyController: env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
+		keeperAddress:        env.GetEnvString("OPERATOR_ADDRESS", ""),
+		consensusAddress:     crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnvString("PRIVATE_KEY", ""))).PublicKey).Hex(),
+		publicIPV4Address:    env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
+		peerID:               env.GetEnvString("PEER_ID", ""),
+		keeperRPCPort:        env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
+		keeperP2PPort:        env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
+		keeperMetricsPort:    env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
+		grafanaPort:          env.GetEnvString("GRAFANA_PORT", "3000"),
+		aggregatorRPCUrl:     env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:         env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
+		taskMonitorRPCUrl:    env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
+		tlsProofHost:         "www.google.com",
+		tlsProofPort:         "443",
+		l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
+		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
+		avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
+		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0x21B099554F6D27E47D57991D2B44251DaFa9323b"),
+		// l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
+		// l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
+		// avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
+		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
 		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 	}
 	if err := validateConfig(cfg); err != nil {

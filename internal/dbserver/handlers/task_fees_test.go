@@ -37,7 +37,7 @@ func NewFakeDockerExecutor() *FakeDockerExecutor {
 }
 
 func (f *FakeDockerExecutor) Initialize(ctx context.Context) error { return nil }
-func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*dextypes.ExecutionResult, error) {
+func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
 	if err, ok := f.errors[fileURL]; ok {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (f *FakeDockerExecutor) Execute(ctx context.Context, fileURL string, fileLa
 	}
 	return newExecResult(0, true, nil), nil
 }
-func (f *FakeDockerExecutor) ExecuteSource(ctx context.Context, code string, language string) (*dextypes.ExecutionResult, error) {
+func (f *FakeDockerExecutor) ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
 	if err, ok := f.errors[code]; ok {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func TestCalculateTaskFees_EmptyInput(t *testing.T) {
 		logger:         &MockLogger{},
 	}
 
-	total, err := h.CalculateTaskFees("")
+	total, _, err := h.CalculateTaskFees("", 0, "", "", "", "", "", "")
 	if err == nil {
 		t.Fatalf("expected error for empty input, got nil")
 	}
@@ -111,7 +111,7 @@ func TestCalculateTaskFees_SingleURL_Success(t *testing.T) {
 		logger:         &MockLogger{},
 	}
 
-	total, err := h.CalculateTaskFees("ipfs://file1")
+	total, _, err := h.CalculateTaskFees("ipfs://file1", 0, "", "", "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestCalculateTaskFees_MultipleURLs_PartialFailures(t *testing.T) {
 		logger:         &MockLogger{},
 	}
 
-	total, err := h.CalculateTaskFees("ipfs://file1, ipfs://file2, ipfs://file3")
+	total, _, err := h.CalculateTaskFees("ipfs://file1, ipfs://file2, ipfs://file3", 0, "", "", "", "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

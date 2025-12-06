@@ -143,6 +143,16 @@ func (m *MockTaskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber 
 	return args.Error(0)
 }
 
+func (m *MockTaskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error) {
+	args := m.Called(jobID)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockTaskRepository) GetRecentTasks(limit int) ([]types.RecentTaskResponse, error) {
+	args := m.Called(limit)
+	return args.Get(0).([]types.RecentTaskResponse), args.Error(1)
+}
+
 // Test setup helper
 func setupTestKeeperHandler() (*Handler, *MockKeeperRepository, *MockTaskRepository) {
 	mockKeeperRepo := new(MockKeeperRepository)

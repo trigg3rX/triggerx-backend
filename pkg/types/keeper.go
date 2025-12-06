@@ -44,6 +44,19 @@ type PerformerActionData struct {
 	ComplexityIndex    float64       `json:"complexity_index"`
 	ExecutionTimestamp time.Time     `json:"execution_timestamp"`
 	ConvertedArguments []interface{} `json:"converted_arguments"`
+
+	// Custom script fields (TaskDefinitionID = 7)
+	StorageUpdates        map[string]string `json:"storage_updates,omitempty"`          // Storage updates to save in DB
+	ScriptTargetContract  string            `json:"script_target_contract,omitempty"`   // Target contract from script output
+	ScriptCalldata        string            `json:"script_calldata,omitempty"`          // Calldata from script output
+	ScriptMetadata        *ScriptMetadata   `json:"script_metadata,omitempty"`          // Script execution metadata
+}
+
+// ScriptMetadata contains metadata from custom script execution
+type ScriptMetadata struct {
+	Timestamp   int64  `json:"timestamp"`
+	Reason      string `json:"reason,omitempty"`
+	GasEstimate uint64 `json:"gas_estimate,omitempty"`
 }
 
 // Data from keeper's proof generation for execution done above

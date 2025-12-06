@@ -20,8 +20,10 @@ type fakeTaskRepo struct {
 	createdChainID    string
 	createdChainIDErr error
 
-	taskData   pkgtypes.TaskData
-	tasksByJob []dbtypes.GetTasksByJobID
+	taskData           pkgtypes.TaskData
+	tasksByJob         []dbtypes.GetTasksByJobID
+	getRecentTasksResp []dbtypes.RecentTaskResponse
+	getRecentTasksErr  error
 }
 
 func (f *fakeTaskRepo) CreateTaskDataInDB(task *dbtypes.CreateTaskDataRequest) (int64, error) {
@@ -48,6 +50,9 @@ func (f *fakeTaskRepo) UpdateTaskFee(taskID int64, fee float64) error     { retu
 func (f *fakeTaskRepo) GetTaskFee(taskID int64) (float64, error)          { return 0, nil }
 func (f *fakeTaskRepo) GetCreatedChainIDByJobID(jobID *big.Int) (string, error) {
 	return f.createdChainID, f.createdChainIDErr
+}
+func (f *fakeTaskRepo) GetRecentTasks(limit int) ([]dbtypes.RecentTaskResponse, error) {
+	return f.getRecentTasksResp, f.getRecentTasksErr
 }
 
 func TestGetTaskDataByID_ErrorsAndSuccess(t *testing.T) {
@@ -186,6 +191,103 @@ func TestGetTasksByJobID_ErrorsAndSuccess(t *testing.T) {
 		// ensure explorer base added
 		if !strings.Contains(w.Body.String(), "blockscout.com/tx/") {
 			t.Fatalf("expected explorer URL, got %s", w.Body.String())
+		}
+	}
+}
+func TestGetRecentTasks_SuccessAndErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Default limit (200)
+	{
+		tasks := []dbtypes.RecentTaskResponse{
+			{TaskID: 1, TaskNumber: 1, JobID: "123", TaskDefinitionID: 1},
+			{TaskID: 2, TaskNumber: 2, JobID: "456", TaskDefinitionID: 2},
+		}
+		fake := &fakeTaskRepo{}
+		fake.getRecentTasksResp = tasks
+		h := &Handler{taskRepository: fake, logger: &MockLogger{}}
+		r := gin.New()
+		r.GET("/tasks/recent", h.GetRecentTasks)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/tasks/recent", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "\"count\":2") {
+			t.Fatalf("expected count:2 in response, got %s", w.Body.String())
+		}
+	}
+
+	// Custom limit
+	{
+		tasks := []dbtypes.RecentTaskResponse{
+			{TaskID: 1, TaskNumber: 1, JobID: "123"},
+		}
+		fake := &fakeTaskRepo{}
+		fake.getRecentTasksResp = tasks
+		h := &Handler{taskRepository: fake, logger: &MockLogger{}}
+		r := gin.New()
+		r.GET("/tasks/recent", h.GetRecentTasks)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/tasks/recent?limit=50", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "\"limit\":50") {
+			t.Fatalf("expected limit:50 in response, got %s", w.Body.String())
+		}
+	}
+
+	// Limit exceeding max (should cap at 200)
+	{
+		tasks := []dbtypes.RecentTaskResponse{}
+		fake := &fakeTaskRepo{}
+		fake.getRecentTasksResp = tasks
+		h := &Handler{taskRepository: fake, logger: &MockLogger{}}
+		r := gin.New()
+		r.GET("/tasks/recent", h.GetRecentTasks)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/tasks/recent?limit=300", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "\"limit\":200") {
+			t.Fatalf("expected limit capped at 200, got %s", w.Body.String())
+		}
+	}
+
+	// Invalid limit
+	{
+		h := &Handler{taskRepository: &fakeTaskRepo{}, logger: &MockLogger{}}
+		r := gin.New()
+		r.GET("/tasks/recent", h.GetRecentTasks)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/tasks/recent?limit=invalid", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for invalid limit, got %d", w.Code)
+		}
+	}
+
+	// Repository error
+	{
+		fake := &fakeTaskRepo{getRecentTasksErr: assertErr{}}
+		h := &Handler{taskRepository: fake, logger: &MockLogger{}}
+		r := gin.New()
+		r.GET("/tasks/recent", h.GetRecentTasks)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/tasks/recent", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500 on repo error, got %d", w.Code)
 		}
 	}
 }

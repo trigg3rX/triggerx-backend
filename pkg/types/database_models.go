@@ -126,6 +126,27 @@ type ConditionJobData struct {
 	ExpirationTime            time.Time `json:"expiration_time"`
 }
 
+type CustomJobData struct {
+	JobID            *BigInt `json:"job_id"`
+	TaskDefinitionID int     `json:"task_definition_id"`
+	Recurring        bool    `json:"recurring"`
+	CustomScriptUrl  string  `json:"custom_script_url"`
+	TimeInterval     int64   `json:"time_interval"`
+	TargetChainID    string  `json:"target_chain_id"`
+	IsCompleted      bool    `json:"is_completed"`
+	IsActive         bool    `json:"is_active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	LastExecutedAt   time.Time `json:"last_executed_at"`
+	ExpirationTime   time.Time `json:"expiration_time"`
+	// Phase 1 fields
+	ScriptLanguage     string    `json:"script_language"`      // 'ts', 'go', 'python', 'javascript'
+	ScriptHash         string    `json:"script_hash"`          // keccak256(scriptCode)
+	NextExecutionTime  time.Time `json:"next_execution_time"`  // Next scheduled execution
+	MaxExecutionTime   int64     `json:"max_execution_time"`   // Script timeout in seconds
+	ChallengePeriod    int64     `json:"challenge_period"`     // Challenge period in seconds (6 hours default)
+}
+
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`

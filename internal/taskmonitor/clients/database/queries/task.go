@@ -89,7 +89,24 @@ const (
         SET user_points = ?, total_tasks = ?, last_updated_at = ?
         WHERE user_id = ?`
 	UpdateJobCostActual = `
-        UPDATE triggerx.job_data 
+        UPDATE triggerx.job_data
         SET job_cost_actual = ?
         WHERE job_id = ?`
+
+	// Custom script storage queries (TaskDefinitionID = 7)
+	UpsertScriptStorageQuery = `
+        UPDATE triggerx.script_storage
+        SET storage_value = ?,
+            updated_at = ?
+        WHERE job_id = ? AND storage_key = ?`
+
+	GetJobIDByTaskIDQuery = `
+        SELECT job_id
+        FROM triggerx.task_data
+        WHERE task_id = ?`
+
+	GetTaskDefinitionIDQuery = `
+        SELECT task_definition_id
+        FROM triggerx.task_data
+        WHERE task_id = ?`
 )
