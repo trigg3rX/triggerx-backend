@@ -352,3 +352,46 @@ func convertTasksData(tasksData []types.GetTasksByJobID) []types.TasksByJobIDRes
 	}
 	return tasks
 }
+
+func (h *Handler) GetRecentTasks(c *gin.Context) {
+	traceID := h.getTraceID(c)
+	h.logger.Infof("[GetRecentTasks] trace_id=%s - Retrieving recent tasks", traceID)
+
+	// Parse limit from query parameter, default to 200
+	limitStr := c.DefaultQuery("limit", "200")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		h.logger.Errorf("[GetRecentTasks] Invalid limit parameter: %s", limitStr)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid limit parameter",
+			"code":  "INVALID_LIMIT",
+		})
+		return
+	}
+
+	// Enforce maximum limit of 200
+	if limit > 200 {
+		limit = 200
+	}
+
+	h.logger.Infof("[GetRecentTasks] Fetching recent tasks with limit: %d", limit)
+
+	trackDBOp := metrics.TrackDBOperation("read", "task_data")
+	tasks, err := h.taskRepository.GetRecentTasks(limit)
+	trackDBOp(err)
+	if err != nil {
+		h.logger.Errorf("[GetRecentTasks] Error retrieving recent tasks: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve recent tasks",
+			"code":  "TASKS_FETCH_ERROR",
+		})
+		return
+	}
+
+	h.logger.Infof("[GetRecentTasks] Successfully retrieved %d recent tasks", len(tasks))
+	c.JSON(http.StatusOK, gin.H{
+		"tasks": tasks,
+		"count": len(tasks),
+		"limit": limit,
+	})
+}
