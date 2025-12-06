@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/challenger/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 )
 
 type ValidateCodeRequest struct {
