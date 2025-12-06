@@ -133,6 +133,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			defer client.Close()
 			e.logger.Debugf("Connected to chain: %s", rpcURL)
 
+			//simulate the transaction before doing any action
+
 			// execute the action with the allocated nonce
 			var actionData types.PerformerActionData
 			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client)

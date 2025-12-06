@@ -44,6 +44,9 @@ func (f *fakeTaskRepoUpdate) AddTaskIDToJob(jobID *big.Int, taskID int64) error 
 func (f *fakeTaskRepoUpdate) UpdateTaskFee(taskID int64, fee float64) error           { return f.updateFeeErr }
 func (f *fakeTaskRepoUpdate) GetTaskFee(taskID int64) (float64, error)                { return 0, nil }
 func (f *fakeTaskRepoUpdate) GetCreatedChainIDByJobID(jobID *big.Int) (string, error) { return "", nil }
+func (f *fakeTaskRepoUpdate) GetRecentTasks(limit int) ([]dbtypes.RecentTaskResponse, error) {
+	return []dbtypes.RecentTaskResponse{}, nil
+}
 
 func TestUpdateTaskExecutionData_ValidationAndRepoErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)

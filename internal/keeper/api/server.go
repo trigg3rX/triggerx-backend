@@ -55,7 +55,7 @@ func NewServer(cfg Config, deps *Dependencies) *Server {
 		router: router,
 		logger: deps.Logger,
 		httpServer: &http.Server{
-			Addr:           fmt.Sprintf(":%s", cfg.Port),
+			Addr:           fmt.Sprintf("0.0.0.0:%s", cfg.Port),
 			Handler:        router,
 			ReadTimeout:    cfg.ReadTimeout,
 			WriteTimeout:   cfg.WriteTimeout,

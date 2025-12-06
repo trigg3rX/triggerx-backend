@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/go-units"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-units"
 )
 
 func MemoryLimitBytes(memoryLimit string) uint64 {

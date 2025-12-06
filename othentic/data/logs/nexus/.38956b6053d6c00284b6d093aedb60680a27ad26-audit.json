@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/data/logs/nexus/.38956b6053d6c00284b6d093aedb60680a27ad26-audit.json",
+    "files": [
+        {
+            "date": 1763294934500,
+            "name": "/data/logs/nexus/2025-11-16-attester-output.log",
+            "hash": "a9d6765c2ecd0ec79917ed1f001d3ce872cd6a165f54cbd74e15072a9f0f36cf"
+        },
+        {
+            "date": 1763340691210,
+            "name": "/data/logs/nexus/2025-11-17-attester-output.log",
+            "hash": "9e5c55c7c15572325d68226cff32f352bf382916b3001daa13fe8142eaa8037a"
+        }
+    ],
+    "hashType": "sha256"
+}

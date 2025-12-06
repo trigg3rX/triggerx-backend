@@ -1,109 +1,66 @@
-x-othentic-cli: &othentic-cli
+x-otnode: &otnode
   env_file:
     - .env
   build:
     context: .
     dockerfile: ./Dockerfile
+    no_cache: true
 
 services:
   aggregator:
     container_name: aggregator
-    <<: *othentic-cli
+    <<: *otnode
+    network_mode: host
     env_file:
       - .env
     command: [
-      "node",
+      "run",
       "aggregator",
+      "--l1-chain", "sepolia",
+      "--l2-chain", "base-sepolia",
       "--json-rpc",
-      "--json-rpc.port", "${AGGREGATOR_RPC_PORT}",
+      "--json-rpc.port", "9001",
       "--json-rpc.custom-message-enabled",
-      "--p2p.port", "${AGGREGATOR_P2P_PORT}",
-      "--p2p.datadir", "/peerstore/aggregator",
-      "--p2p.discovery-interval", "${AGGREGATOR_P2P_DISCOVERY_INTERVAL}",
-      "--internal-tasks",
-      "--metrics",
-      "--delay", "10000",
-      "--aggregator.simulate-transactions", "true",
-      "--metrics.port", "${AGGREGATOR_METRICS_PORT}",
-      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}"
+      "--p2p.port", "9876"
     ]
     environment:
       - PRIVATE_KEY=${AGGREGATOR_OPERATOR_PRIVATE_KEY}
       - OPERATOR_ADDRESS=${AGGREGATOR_OPERATOR_ADDRESS}
+      - BLS_PRIVATE_KEY=${AGGREGATOR_BLS_PRIVATE_KEY}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
-      - INTERNAL_TASKS=${INTERNAL_TASKS}
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
       - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
       - OTHENTIC_BOOTSTRAP_SEED=${OTHENTIC_BOOTSTRAP_SEED}
-      - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
-      - LOG_DIR=${LOG_DIR_AGGREGATOR}
-      - AGGREGATOR_RPC_PORT=${AGGREGATOR_RPC_PORT}
-      - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
-      - AGGREGATOR_P2P_DISCOVERY_INTERVAL=${AGGREGATOR_P2P_DISCOVERY_INTERVAL}
-      - AGGREGATOR_METRICS_PORT=${AGGREGATOR_METRICS_PORT}
     volumes:
-      - ./data/peerstore/aggregator:/peeerstore/aggregator
-      - ./data/logs/aggregator:/data/logs/aggregator
-    ports:
-      - "${AGGREGATOR_P2P_PORT}:${AGGREGATOR_P2P_PORT}"
-      - "${AGGREGATOR_RPC_PORT}:${AGGREGATOR_RPC_PORT}"
-    networks:
-      p2p:
-        ipv4_address: 172.28.0.69
+      - ../data/logs/aggregator:/data/logs
 
-  nexus:
-    container_name: nexus
-    <<: *othentic-cli
+  performer:
+    container_name: performer
+    <<: *otnode
+    network_mode: host
     env_file:
       - .env
     command: [
-      "node",
+      "run",
       "attester",
-      "/ip4/172.28.0.69/tcp/${AGGREGATOR_P2P_PORT}/p2p/${OTHENTIC_BOOTSTRAP_ID}",
-      "--avs-webapi", "http://host.docker.internal",
-      "--avs-webapi-port", "${NEXUS_RPC_PORT}",
-      "--l1-chain", "holesky",
+      "/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
+      "--avs-webapi", "http://127.0.0.1",
+      "--avs-webapi-port", "9008",
+      "--l1-chain", "sepolia",
       "--l2-chain", "base-sepolia",
+      "--json-rpc",
+      "--json-rpc.port", "9010",
       "--json-rpc.custom-message-enabled",
-      "--p2p.port", "${NEXUS_P2P_PORT}",
-      "--p2p.discovery-interval", "60000",
-      "--metrics",
-      "--metrics.port", "${NEXUS_METRICS_PORT}",
-      "--announced-addresses", "/ip4/${PUBLIC_IPV4_ADDRESS}/tcp/${NEXUS_P2P_PORT}/p2p/${PEER_ID}"
+      "--p2p.port", "9875"
     ]
     environment:
-      - PRIVATE_KEY=${NEXUS_PRIVATE_KEY}
-      - OPERATOR_ADDRESS=${NEXUS_OPERATOR_ADDRESS}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - OPERATOR_ADDRESS=${OPERATOR_ADDRESS}
       - L1_RPC=${L1_RPC}
       - L2_RPC=${L2_RPC}
       - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
       - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
-      - LOG_DIR=${LOG_DIR_NEXUS}
-      - PUBLIC_IPV4_ADDRESS=${PUBLIC_IPV4_ADDRESS}
-      - AGGREGATOR_P2P_PORT=${AGGREGATOR_P2P_PORT}
-      - PEER_ID=${PEER_ID}
-      - NEXUS_P2P_PORT=${NEXUS_P2P_PORT}
-      - NEXUS_RPC_PORT=${NEXUS_RPC_PORT}
-      - NEXUS_METRICS_PORT=${NEXUS_METRICS_PORT}
     volumes:
-      - ./data/logs/nexus:/data/logs/nexus
-    ports:
-      - "${NEXUS_P2P_PORT}:${NEXUS_P2P_PORT}"
-    networks:
-      p2p:
-        ipv4_address: 172.28.0.70
-    depends_on:
-      aggregator:
-        condition: service_started
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-networks:
-  p2p:
-    driver: bridge
-    ipam:
-     config:
-       - subnet: 172.28.0.0/16
-         gateway: 172.28.0.1
+      - ../data/logs/performer:/data/logs

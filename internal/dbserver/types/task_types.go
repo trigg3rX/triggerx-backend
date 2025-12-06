@@ -59,3 +59,27 @@ type GetTasksByJobID struct {
 	TaskError          string    `json:"task_error"`
 	ConvertedArguments []string  `json:"converted_arguments"`
 }
+
+// TasksByJobGroupResponse groups task data by job identifier.
+type TasksByJobGroupResponse struct {
+	JobID string                 `json:"job_id"`
+	Tasks []TasksByJobIDResponse `json:"tasks"`
+}
+
+// RecentTaskResponse represents a task in the recent tasks list for the landing page
+type RecentTaskResponse struct {
+	TaskID             int64     `json:"task_id"`
+	TaskNumber         int64     `json:"task_number"`
+	JobID              string    `json:"job_id"`
+	TaskDefinitionID   int       `json:"task_definition_id"`
+	CreatedAt          time.Time `json:"created_at"`
+	TaskOpXCost        float64   `json:"task_opx_cost"`
+	ExecutionTimestamp time.Time `json:"execution_timestamp"`
+	ExecutionTxHash    string    `json:"execution_tx_hash"`
+	TxURL              string    `json:"tx_url"`
+	TaskPerformerID    int64     `json:"task_performer_id"`
+	TaskAttesterIDs    []int64   `json:"task_attester_ids"`
+	TaskStatus         string    `json:"task_status"`
+	TaskError          string    `json:"task_error"`
+	IsImua             bool      `json:"is_imua"`
+}
