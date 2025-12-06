@@ -18,6 +18,9 @@ type TaskTargetData struct {
 	Arguments                 []string `json:"arguments"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url"`
 	IsImua                    bool     `json:"is_imua"`
+	// Custom script fields (TaskDefinitionID = 7)
+	ScriptStorage             map[string]string `json:"script_storage,omitempty"`      // Storage passed from scheduler
+	ScriptLanguage            string            `json:"script_language,omitempty"`     // typescript, go, python
 }
 
 // Monitoring Data for even and condition workers
@@ -28,6 +31,8 @@ type EventWorkerData struct {
 	TriggerChainID         string    `json:"trigger_chain_id"`
 	TriggerContractAddress string    `json:"trigger_contract_address"`
 	TriggerEvent           string    `json:"trigger_event"`
+	EventFilterParaName    string    `json:"event_filter_para_name"`
+	EventFilterValue       string    `json:"event_filter_value"`
 }
 type ConditionWorkerData struct {
 	JobID            *BigInt  `json:"job_id"`

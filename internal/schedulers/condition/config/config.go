@@ -30,6 +30,9 @@ type Config struct {
 
 	// API Keys for Alchemy
 	alchemyAPIKey string
+
+	// Event Monitor Service URL
+	eventMonitorServiceURL string
 }
 
 var cfg Config
@@ -53,6 +56,7 @@ func Init() error {
 		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
 		maxWorkers:                env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
 		alchemyAPIKey:             env.GetEnvString("ALCHEMY_API_KEY", ""),
+		eventMonitorServiceURL:    env.GetEnvString("EVENT_MONITOR_SERVICE_URL", "http://localhost:9009"),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -116,9 +120,10 @@ func GetSchedulerID() int {
 func GetChainRPCUrlsTest() map[string]string {
 	local := "http://127.0.0.1:8545"
 	return map[string]string{
-		"11155420": local,
-		"84532":    local,
-		"11155111": local,
+		"11155420": local, // OP Sepolia
+		"84532":    local, // Base Sepolia
+		"11155111": local, // Ethereum Sepolia
+		"421614":   local, // Arbitrum Sepolia
 	}
 }
 
@@ -134,6 +139,7 @@ func GetChainRPCUrls() map[string]string {
 			"11155420": "https://sepolia.optimism.io",
 			"84532":    "https://sepolia.base.org",
 			"11155111": "https://ethereum-sepolia.publicnode.com",
+			"421614":   "https://sepolia-rollup.arbitrum.io/rpc",
 		}
 	}
 
@@ -141,5 +147,11 @@ func GetChainRPCUrls() map[string]string {
 		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // OP Sepolia
 		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
 		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
+		"421614":   fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Arbitrum Sepolia
 	}
+}
+
+// GetEventMonitorServiceURL returns the Event Monitor Service URL
+func GetEventMonitorServiceURL() string {
+	return cfg.eventMonitorServiceURL
 }

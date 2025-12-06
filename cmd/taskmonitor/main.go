@@ -6,10 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
 )
 
 func main() {
@@ -36,17 +39,27 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to create TaskManager", "error", err)
 	}
-	logger.Info("[1/5] TaskManager created successfully")
+	logger.Info("[1/6] TaskManager created successfully")
 
 	// Initialize all components
 	if err := taskManager.Initialize(); err != nil {
 		logger.Fatal("Failed to initialize TaskManager components", "error", err)
 	}
-	logger.Info("[2/5] TaskManager components initialized successfully")
+	logger.Info("[2/6] TaskManager components initialized successfully")
 
 	// Create context for graceful shutdown
-	_, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Initialize and start gRPC server
+	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, "0.0.0.0", config.GetTaskMonitorRPCPort())
+	if err != nil {
+		logger.Fatal("Failed to start gRPC server", "error", err)
+	}
+	logger.Info("[3/6] gRPC server started successfully", "port", config.GetTaskMonitorRPCPort())
+
+	// Store RPC server in TaskManager for graceful shutdown
+	taskManager.SetRPCServer(rpcServer)
 
 	// Log service status
 	logger.Info("Task Monitor service is running")
@@ -59,11 +72,23 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(taskManager, logger)
+	performGracefulShutdown(ctx, taskManager, rpcServer, logger)
 }
 
-func performGracefulShutdown(taskManager *taskmonitor.TaskManager, logger logging.Logger) {
+func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskManager, rpcServer *rpcserver.Server, logger logging.Logger) {
 	logger.Info("Initiating graceful shutdown...")
+
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Shutdown gRPC server gracefully
+	logger.Info("Shutting down gRPC server...")
+	if err := rpcServer.Stop(shutdownCtx); err != nil {
+		logger.Error("RPC server forced to shutdown", "error", err)
+	} else {
+		logger.Info("RPC server stopped successfully")
+	}
 
 	// Close TaskManager (handles all components)
 	logger.Info("Closing TaskManager...")

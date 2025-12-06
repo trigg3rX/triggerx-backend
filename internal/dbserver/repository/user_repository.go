@@ -26,6 +26,7 @@ type UserRepository interface {
 	GetUserLeaderboard() ([]types.UserLeaderboardEntry, error)
 	GetUserLeaderboardByAddress(address string) (types.UserLeaderboardEntry, error)
 	UpdateUserEmail(address string, email string) error
+	GetUserIDByAddress(address string) (int64, error)
 }
 
 type userRepository struct {
@@ -220,4 +221,16 @@ func (r *userRepository) GetUserLeaderboardByAddress(address string) (types.User
 	}
 
 	return userEntry, nil
+}
+
+func (r *userRepository) GetUserIDByAddress(address string) (int64, error) {
+	var userID int64
+	err := r.db.Session().Query(queries.GetUserIDByAddressQuery, address).Scan(&userID)
+	if err == gocql.ErrNotFound {
+		return -1, errors.New("user address not found")
+	}
+	if err != nil {
+		return -1, err
+	}
+	return userID, nil
 }

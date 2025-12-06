@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS condition_job_data;
 DROP TABLE IF EXISTS task_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS apikeys;
+DROP TABLE IF EXISTS safe_addresses;
 
 -- Create User_data table (without counters)
 CREATE TABLE IF NOT EXISTS user_data (
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS job_data (
     timezone text,
     is_imua boolean,
     created_chain_id text,
+    safe_address text,
     PRIMARY KEY (job_id)
 );
 
@@ -92,6 +94,8 @@ CREATE TABLE IF NOT EXISTS event_job_data (
     trigger_chain_id text,
     trigger_contract_address text,
     trigger_event text,
+    event_filter_para_name text,
+    event_filter_value text,
     target_chain_id text,
     target_contract_address text,
     target_function text,
@@ -142,6 +146,7 @@ CREATE TABLE IF NOT EXISTS task_data (
     task_id bigint,
     task_number bigint,
     task_status text,
+    task_error text,
     job_id varint,
     task_definition_id int,
     created_at timestamp,
@@ -203,6 +208,15 @@ CREATE TABLE IF NOT EXISTS apikeys (
     PRIMARY KEY (key)
 );
 
+-- Create Safe_addresses table
+CREATE TABLE IF NOT EXISTS safe_addresses (
+    user_address text,
+    safe_address text,
+    safe_name text,
+    created_at timestamp,
+    PRIMARY KEY (user_address, safe_address)
+);
+
 -- Drop existing indexes if they exist
 DROP INDEX IF EXISTS triggerx.job_data_status_idx;
 DROP INDEX IF EXISTS triggerx.job_data_created_at_idx;
@@ -251,4 +265,129 @@ CREATE INDEX IF NOT EXISTS condition_job_data_created_at_idx ON triggerx.conditi
 CREATE INDEX IF NOT EXISTS condition_job_data_updated_at_idx ON triggerx.condition_job_data (updated_at);
 CREATE INDEX IF NOT EXISTS condition_job_data_last_executed_at_idx ON triggerx.condition_job_data (last_executed_at);
 CREATE INDEX IF NOT EXISTS condition_job_data_timezone_idx ON triggerx.condition_job_data (timezone);
+
+-- Custom Script Jobs Schema
+-- TaskDefinitionID = 7
+
+-- Custom jobs table (extends existing job pattern)
+CREATE TABLE IF NOT EXISTS triggerx.custom_jobs (
+    job_id varint PRIMARY KEY,
+    task_definition_id int,
+    recurring boolean,
+    custom_script_url text,
+    time_interval bigint,              -- Execution interval in seconds
+    is_completed boolean,
+    is_active boolean,
+    target_chain_id text,
+    created_at timestamp,
+    updated_at timestamp,
+    last_executed_at timestamp,
+    expiration_time timestamp,
+    -- Script metadata
+    script_language text,              -- 'ts', 'go', 'python', 'javascript'
+    script_hash text,                  -- keccak256(scriptCode) for verification
+    next_execution_time timestamp,     -- Next scheduled execution
+    max_execution_time int,            -- Script timeout in seconds (default 60)
+    challenge_period bigint            -- Challenge period in seconds (default 21600 = 6 hours)
+);
+
+-- Indexes for scheduler queries
+CREATE INDEX IF NOT EXISTS custom_jobs_active_idx
+ON triggerx.custom_jobs (is_active);
+
+-- Script executions tracking table
+CREATE TABLE IF NOT EXISTS triggerx.custom_script_executions (
+    execution_id text PRIMARY KEY,     -- Unique execution identifier (UUID)
+    job_id varint,
+    task_id bigint,                    -- Link to task_data table
+    scheduled_time timestamp,          -- When it was supposed to execute
+    actual_time timestamp,             -- When it actually executed
+    performer_address text,
+
+    -- Input data (for deterministic re-execution)
+    input_timestamp bigint,
+    input_storage text,                -- JSON snapshot of storage at execution time
+    input_hash text,                   -- Hash of inputs for verification
+
+    -- Output data
+    should_execute boolean,
+    target_contract text,              -- Contract address to call
+    calldata text,                     -- Encoded function call
+    output_hash text,                  -- Hash of outputs for verification
+
+    -- Metadata (CRITICAL: API calls, contract calls, block numbers)
+    execution_metadata text,           -- JSON containing:
+                                       -- - API calls made: [{url, blockNumber, response}, ...]
+                                       -- - Contract calls: [{contract, blockNumber, function, response}, ...]
+                                       -- - Oracle calls: [{oracle, blockNumber, data}, ...]
+
+    -- Proof
+    script_hash text,
+    signature text,                    -- Performer's signature
+
+    -- Execution result
+    tx_hash text,                      -- Transaction hash if executed
+    execution_status text,             -- 'success', 'failed', 'no_execution'
+    execution_error text,              -- Error message if failed
+
+    -- Verification status
+    verification_status text,          -- 'pending', 'verified', 'challenged', 'slashed'
+    challenge_deadline timestamp,      -- Deadline for challenges
+    is_challenged boolean,
+    challenge_count int,
+
+    created_at timestamp
+);
+
+-- Indexes for execution queries
+CREATE INDEX IF NOT EXISTS executions_job_id_idx
+ON triggerx.custom_script_executions (job_id);
+
+CREATE INDEX IF NOT EXISTS executions_verification_status_idx
+ON triggerx.custom_script_executions (verification_status);
+
+CREATE INDEX IF NOT EXISTS executions_performer_idx
+ON triggerx.custom_script_executions (performer_address);
+
+CREATE INDEX IF NOT EXISTS executions_task_id_idx
+ON triggerx.custom_script_executions (task_id);
+
+-- Script storage table (persistent key-value storage per job)
+CREATE TABLE IF NOT EXISTS triggerx.script_storage (
+    job_id varint,
+    storage_key text,
+    storage_value text,
+    updated_at timestamp,
+    PRIMARY KEY (job_id, storage_key)
+);
+
+-- Execution challenges table
+CREATE TABLE IF NOT EXISTS triggerx.execution_challenges (
+    challenge_id text PRIMARY KEY,
+    execution_id text,
+    challenger_address text,
+    challenge_reason text,             -- 'wrong_output', 'missing_execution', 'invalid_calldata'
+
+    -- Challenger's claimed output
+    challenger_output_hash text,
+    challenger_should_execute boolean,
+    challenger_target_contract text,
+    challenger_calldata text,
+    challenger_signature text,
+
+    -- Resolution
+    resolution_status text,            -- 'pending', 'approved', 'rejected'
+    resolution_time timestamp,
+    validator_count int,
+    approve_count int,
+    reject_count int,
+
+    created_at timestamp
+);
+
+CREATE INDEX IF NOT EXISTS challenges_execution_idx
+ON triggerx.execution_challenges (execution_id);
+
+CREATE INDEX IF NOT EXISTS challenges_status_idx
+ON triggerx.execution_challenges (resolution_status);
 

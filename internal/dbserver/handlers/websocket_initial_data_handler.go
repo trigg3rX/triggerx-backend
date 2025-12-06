@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"math/big"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
@@ -74,6 +74,8 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 			IsAccepted:         task.IsAccepted,
 			TxURL:              task.TxURL,
 			TaskStatus:         task.TaskStatus,
+			TaskError:          task.TaskError,
+			ConvertedArguments: task.ConvertedArguments,
 		}
 	}
 
@@ -96,13 +98,22 @@ func (h *InitialDataHandler) handleJobRoomSubscription(room string, client *webs
 	// Create and send snapshot message
 	snapshotMessage := websocket.NewJobTasksSnapshotMessage(jobIDStr, snapshotTasks)
 
-	// Send the message to the client
-	select {
-	case client.Send <- snapshotMessage:
-		h.logger.Infof("Sent initial snapshot with %d tasks for job %s to client %s", len(snapshotTasks), jobIDStr, client.ID)
-	default:
-		h.logger.Errorf("Failed to send initial snapshot to client %s - channel full", client.ID)
-	}
+	// Send the message to the client safely (handle closed channel)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Channel is closed, client disconnected
+				h.logger.Warnf("Client %s disconnected while sending initial snapshot for job %s: %v", client.ID, jobIDStr, r)
+			}
+		}()
+
+		select {
+		case client.Send <- snapshotMessage:
+			h.logger.Infof("Sent initial snapshot with %d tasks for job %s to client %s", len(snapshotTasks), jobIDStr, client.ID)
+		default:
+			h.logger.Errorf("Failed to send initial snapshot to client %s - channel full", client.ID)
+		}
+	}()
 
 	return nil
 }

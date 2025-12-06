@@ -20,10 +20,8 @@ OPTIONS:
     -h, --help       Display this help message
 
 AVAILABLE SERVICES:
-    keeper              - TriggerX Keeper service (uses Dockerfile.keeper)
-    imua-keeper         - TriggerX Imua Keeper service (uses Dockerfile.imua-keeper)
+    keeper              - TriggerX Keeper service (uses docker/Dockerfile.keeper)
     dbserver            - Database server service
-    registrar           - Registrar service
     health              - Health monitoring service
     taskdispatcher      - Task dispatcher service
     taskmonitor         - Task monitor service
@@ -105,8 +103,8 @@ if [ -z "$VERSION" ]; then
 fi
 
 # Validate the service from the list of allowed services
-if [[ ! "$SERVICE" =~ ^(keeper|imua-keeper|dbserver|health|taskdispatcher|taskmonitor|schedulers/time|schedulers/condition|all)$ ]]; then
-    echo "Error: Invalid service. Allowed services are: keeper, imua-keeper, dbserver, health, taskdispatcher, taskmonitor, schedulers/time, schedulers/condition" 1>&2
+if [[ ! "$SERVICE" =~ ^(keeper|dbserver|health|taskdispatcher|taskmonitor|schedulers/time|schedulers/condition|all)$ ]]; then
+    echo "Error: Invalid service. Allowed services are: keeper, dbserver, health, taskdispatcher, taskmonitor, schedulers/time, schedulers/condition" 1>&2
     exit 1
 fi
 
@@ -130,7 +128,7 @@ if [[ "$SERVICE" == "all" ]]; then
         
         echo "[$(date '+%H:%M:%S')] Starting build for $service..."
         if docker build --no-cache \
-            -f Dockerfile.backend \
+            -f docker/Dockerfile.backend \
             --build-arg SERVICE=${service} \
             --build-arg DOCKER_NAME=${docker_name} \
             -t triggerx-${docker_name}:${version} . > "build_${docker_name}.log" 2>&1; then
@@ -181,13 +179,8 @@ if [[ "$SERVICE" == "all" ]]; then
 elif [[ "$SERVICE" == "keeper" ]]; then
     echo "Building $SERVICE..."
     docker build --no-cache \
-        -f Dockerfile.keeper \
+        -f docker/Dockerfile.keeper \
         -t triggerx-keeper:${VERSION} .
-elif [[ "$SERVICE" == "imua-keeper" ]]; then
-    echo "Building $SERVICE..."
-    docker build --no-cache \
-        -f Dockerfile.imua-keeper \
-        -t triggerx-imua-keeper:${VERSION} .
 else
     echo "Building $SERVICE..."
     # Convert service name to Docker-compatible name
@@ -197,14 +190,10 @@ else
     # Build a single service
     echo "Building $SERVICE..."
     docker build --no-cache \
-        -f Dockerfile.backend \
+        -f docker/Dockerfile.backend \
         --build-arg SERVICE=${SERVICE} \
         --build-arg DOCKER_NAME=${DOCKER_NAME} \
         -t triggerx-${DOCKER_NAME}:${VERSION} .
 fi
 
-if [[ "$SERVICE" == "all" ]]; then
-    echo "All services built successfully with version ${VERSION}"
-else
-    echo "Successfully built: triggerx-${SERVICE}:${VERSION}"
-fi
+echo "Successfully built: ${VERSION}"

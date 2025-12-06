@@ -2,8 +2,10 @@ package events
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strconv"
 	"sync"
 	"time"
 
@@ -11,10 +13,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
+	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 
@@ -120,6 +123,7 @@ type TaskEventHandler struct {
 	db                *database.DatabaseClient
 	ipfsClient        ipfs.IPFSClient
 	taskStreamManager *tasks.TaskStreamManager
+	notifier          notify.Notifier
 }
 
 // NewContractEventListener creates a new contract event listener
@@ -211,7 +215,7 @@ func (l *ContractEventListener) startEventProcessors() {
 	processor := &EventProcessor{
 		logger:          l.logger,
 		operatorHandler: &OperatorEventHandler{logger: l.logger},
-		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient, ipfsClient: l.ipfsClient, taskStreamManager: l.taskStreamManager},
+		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient, ipfsClient: l.ipfsClient, taskStreamManager: l.taskStreamManager, notifier: notify.NewCompositeNotifier(l.logger, notify.NewWebhookNotifier(l.logger), notify.NewSMTPNotifier(l.logger))},
 	}
 
 	// Start multiple processing workers
@@ -278,9 +282,20 @@ type pollSubscription struct {
 
 // startChainPoller starts a polling loop for a given chain
 func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error {
-	client, err := ethclient.Dial(chainConfig.RPCURL)
+	// Create node client config
+	// Note: chainConfig.RPCURL already contains the API key (from GetChainRPCUrl),
+	// so we don't need to pass it separately. We'll use an empty API key since
+	// the BaseURL already includes authentication.
+	nodeCfg := &nodeclient.Config{
+		APIKey:         "", // Empty because BaseURL already contains the API key
+		BaseURL:        chainConfig.RPCURL,
+		RequestTimeout: 30 * time.Second,
+		Logger:         l.logger,
+	}
+
+	client, err := nodeclient.NewNodeClient(nodeCfg)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s RPC: %w", chainConfig.Name, err)
+		return fmt.Errorf("failed to create node client for %s: %w", chainConfig.Name, err)
 	}
 	defer client.Close()
 
@@ -322,9 +337,13 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 	}
 
 	// Initialize from the current block
-	lastBlock, err := client.BlockNumber(l.ctx)
+	blockNumberHex, err := client.EthBlockNumber(l.ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current block number: %w", err)
+	}
+	lastBlock, err := hexToUint64(blockNumberHex)
+	if err != nil {
+		return fmt.Errorf("failed to parse block number: %w", err)
 	}
 	l.logger.Infof("[%s] Starting poller at block %d", chainConfig.Name, lastBlock)
 
@@ -337,9 +356,14 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 		case <-l.ctx.Done():
 			return nil
 		case <-ticker.C:
-			currentBlock, err := client.BlockNumber(l.ctx)
+			blockNumberHex, err := client.EthBlockNumber(l.ctx)
 			if err != nil {
 				l.logger.Errorf("[%s] Failed to get current block number: %v", chainConfig.Name, err)
+				continue
+			}
+			currentBlock, err := hexToUint64(blockNumberHex)
+			if err != nil {
+				l.logger.Errorf("[%s] Failed to parse block number: %v", chainConfig.Name, err)
 				continue
 			}
 			if currentBlock <= lastBlock {
@@ -352,10 +376,24 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 			to := new(big.Int).SetUint64(currentBlock)
 
 			for _, sub := range subs {
+				// Check for context cancellation before processing each subscription
+				select {
+				case <-l.ctx.Done():
+					return nil
+				default:
+				}
+
 				start := from.Uint64()
 				end := to.Uint64()
 				const maxRange uint64 = 10
 				for cur := start; cur <= end; {
+					// Check for context cancellation before processing each chunk
+					select {
+					case <-l.ctx.Done():
+						return nil
+					default:
+					}
+
 					chunkEnd := cur + maxRange - 1
 					if chunkEnd > end {
 						chunkEnd = end
@@ -363,13 +401,16 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 
 					// l.logger.Debugf("[%s] Querying %s.%s logs in chunk [%d, %d]", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd)
 
-					fq := sub.FilterQuery
-					fq.FromBlock = new(big.Int).SetUint64(cur)
-					fq.ToBlock = new(big.Int).SetUint64(chunkEnd)
+					// Convert FilterQuery to EthGetLogsParams
+					params := convertFilterQueryToEthGetLogsParams(sub.FilterQuery, cur, chunkEnd)
 
-					logs, err := client.FilterLogs(l.ctx, fq)
+					logs, err := client.EthGetLogs(l.ctx, params)
 					if err != nil {
-						l.logger.Errorf("[%s] FilterLogs failed for %s.%s range [%#x, %#x]: %v", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd, err)
+						// Check if error is due to context cancellation
+						if l.ctx.Err() != nil {
+							return nil
+						}
+						l.logger.Errorf("[%s] EthGetLogs failed for %s.%s range [%#x, %#x]: %v", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd, err)
 						// proceed to next chunk to avoid blocking entire range
 						cur = chunkEnd + 1
 						continue
@@ -379,7 +420,18 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 					// } else {
 					// l.logger.Infof("[%s] Fetched %d logs for %s.%s in chunk [%d, %d]", chainConfig.Name, len(logs), sub.ContractType, sub.EventName, cur, chunkEnd)
 					// }
-					for _, lg := range logs {
+					for _, nodeLog := range logs {
+						// Check for context cancellation while processing logs
+						select {
+						case <-l.ctx.Done():
+							return nil
+						default:
+						}
+						lg, err := convertNodeLogToTypesLog(nodeLog)
+						if err != nil {
+							l.logger.Errorf("[%s] Failed to convert log: %v", chainConfig.Name, err)
+							continue
+						}
 						if err := l.emitChainEventFromLog(chainConfig, sub, lg); err != nil {
 							l.logger.Errorf("[%s] Failed to emit event for %s.%s: %v", chainConfig.Name, sub.ContractType, sub.EventName, err)
 						}
@@ -449,7 +501,7 @@ func (l *ContractEventListener) parseAttestationCenterEvent(eventName string, lg
 	// Debug: Log event structure and raw data
 	// l.logger.Debug("Event structure", "event_name", eventName, "input_count", len(ev.Inputs), "data_length", len(lg.Data))
 	// for i, input := range ev.Inputs {
-		// l.logger.Debug("Event input", "index", i, "name", input.Name, "type", input.Type.String(), "indexed", input.Indexed)
+	// l.logger.Debug("Event input", "index", i, "name", input.Name, "type", input.Type.String(), "indexed", input.Indexed)
 	// }
 	// l.logger.Debug("Raw event data", "data_hex", fmt.Sprintf("%x", lg.Data))
 
@@ -608,4 +660,125 @@ func (l *ContractEventListener) parseTopicData(input abi.Argument, topic common.
 	default:
 		return topic.Hex()
 	}
+}
+
+// hexToUint64 converts a hex string (with or without 0x prefix) to uint64
+func hexToUint64(hexStr string) (uint64, error) {
+	// Remove 0x prefix if present
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		hexStr = hexStr[2:]
+	}
+	return strconv.ParseUint(hexStr, 16, 64)
+}
+
+// uint64ToHex converts uint64 to hex string with 0x prefix
+func uint64ToHex(val uint64) string {
+	return fmt.Sprintf("0x%x", val)
+}
+
+// convertFilterQueryToEthGetLogsParams converts ethereum.FilterQuery to nodeclient.EthGetLogsParams
+func convertFilterQueryToEthGetLogsParams(fq ethereum.FilterQuery, fromBlock, toBlock uint64) nodeclient.EthGetLogsParams {
+	fromHex := uint64ToHex(fromBlock)
+	toHex := uint64ToHex(toBlock)
+	fromBlockNum := nodeclient.BlockNumber(fromHex)
+	toBlockNum := nodeclient.BlockNumber(toHex)
+
+	params := nodeclient.EthGetLogsParams{
+		FromBlock: &fromBlockNum,
+		ToBlock:   &toBlockNum,
+	}
+
+	// Convert addresses
+	if len(fq.Addresses) > 0 {
+		if len(fq.Addresses) == 1 {
+			params.Address = fq.Addresses[0].Hex()
+		} else {
+			addrs := make([]string, len(fq.Addresses))
+			for i, addr := range fq.Addresses {
+				addrs[i] = addr.Hex()
+			}
+			params.Address = addrs
+		}
+	}
+
+	// Convert topics
+	if len(fq.Topics) > 0 {
+		topics := make([]interface{}, len(fq.Topics))
+		for i, topicGroup := range fq.Topics {
+			if len(topicGroup) == 0 {
+				continue
+			}
+			if len(topicGroup) == 1 {
+				topics[i] = topicGroup[0].Hex()
+			} else {
+				topicStrs := make([]string, len(topicGroup))
+				for j, topic := range topicGroup {
+					topicStrs[j] = topic.Hex()
+				}
+				topics[i] = topicStrs
+			}
+		}
+		params.Topics = topics
+	}
+
+	return params
+}
+
+// convertNodeLogToTypesLog converts nodeclient.Log to types.Log
+func convertNodeLogToTypesLog(nodeLog nodeclient.Log) (types.Log, error) {
+	// Parse block number
+	blockNumber, err := hexToUint64(nodeLog.BlockNumber)
+	if err != nil {
+		return types.Log{}, fmt.Errorf("failed to parse block number: %w", err)
+	}
+
+	// Parse log index
+	logIndex, err := hexToUint64(nodeLog.LogIndex)
+	if err != nil {
+		return types.Log{}, fmt.Errorf("failed to parse log index: %w", err)
+	}
+
+	// Parse transaction index
+	txIndex, err := hexToUint64(nodeLog.TransactionIndex)
+	if err != nil {
+		return types.Log{}, fmt.Errorf("failed to parse transaction index: %w", err)
+	}
+
+	// Parse address
+	address := common.HexToAddress(nodeLog.Address)
+
+	// Parse topics
+	topics := make([]common.Hash, len(nodeLog.Topics))
+	for i, topicStr := range nodeLog.Topics {
+		topics[i] = common.HexToHash(topicStr)
+	}
+
+	// Parse data
+	var data []byte
+	if len(nodeLog.Data) >= 2 && nodeLog.Data[:2] == "0x" {
+		data, err = hex.DecodeString(nodeLog.Data[2:]) // Remove 0x prefix
+	} else {
+		data, err = hex.DecodeString(nodeLog.Data)
+	}
+	if err != nil {
+		return types.Log{}, fmt.Errorf("failed to decode data: %w", err)
+	}
+
+	// Parse block hash
+	blockHash := common.HexToHash(nodeLog.BlockHash)
+
+	// Parse transaction hash
+	txHash := common.HexToHash(nodeLog.TransactionHash)
+
+	return types.Log{
+		Address:     address,
+		Topics:      topics,
+		Data:        data,
+		BlockNumber: blockNumber,
+		TxHash:      txHash,
+		TxIndex:     uint(txIndex),
+		BlockHash:   blockHash,
+		Index:       uint(logIndex),
+		Removed:     nodeLog.Removed,
+	}, nil
 }

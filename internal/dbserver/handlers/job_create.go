@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"io"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -115,6 +118,103 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			Timezone:          tempJobs[i].Timezone,
 			IsImua:            tempJobs[i].IsImua,
 			CreatedChainID:    tempJobs[i].CreatedChainID,
+			SafeAddress:       "",
+		}
+
+		// Before creating job, validate IPFS code for dynamic jobs (TaskDefinitionID==2,4,6,7 & DynamicArgumentsScriptUrl)
+		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7) && tempJobs[i].DynamicArgumentsScriptUrl != "" {
+			// Parse CID or gateway URL if needed
+			ipfsUrl := tempJobs[i].DynamicArgumentsScriptUrl
+			ctx := c.Request.Context()
+			resp, err := h.httpClient.Get(ctx, ipfsUrl)
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Failed to download file: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to download file: " + err.Error()})
+				return
+			}
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					h.logger.Errorf("[CreateJobData] Error closing response body: %v", err)
+				}
+			}()
+
+			if resp.StatusCode != http.StatusOK {
+				h.logger.Errorf("[CreateJobData] Unexpected status code: %d", resp.StatusCode)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Unexpected status code: " + strconv.Itoa(resp.StatusCode)})
+				return
+			}
+
+			content, err := io.ReadAll(resp.Body)
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Failed to read response body: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read response body: " + err.Error()})
+				return
+			}
+			ipfsCode := string(content)
+
+			valReq := ValidateCodeRequest{
+				Code:             ipfsCode,
+				Language:         tempJobs[i].Language,
+				SelectedSafe:     tempJobs[i].SafeAddress,
+				TargetFunction:   tempJobs[i].TargetFunction,
+				TaskDefinitionID: tempJobs[i].TaskDefinitionID,
+				IsSafe:           tempJobs[i].IsSafe,
+			}
+			valResp, _ := h.ValidateCodeInternal(ctx, valReq, ipfsUrl, config.GetAlchemyAPIKey())
+			if !valResp.Executable || !valResp.SafeMatch {
+				errMsg := "IPFS code validation failed: "
+				if valResp.Error != "" {
+					errMsg += valResp.Error
+				} else if !valResp.SafeMatch {
+					errMsg += "SafeAddress does not match code output."
+				} else {
+					errMsg += "Code not executable."
+				}
+				// Emit a log for observability of why the request is not proceeding
+				// outputPreview := valResp.Output
+				// if len(outputPreview) > 200 {
+				// 	outputPreview = outputPreview[:200] + "..."
+				// }
+				// h.logger.Infof("[CreateJobData] IPFS code validation failed | user=%s jobID=%s taskDefID=%d isSafe=%t selectedSafe=%s executable=%t safeMatch=%t error=%q outputPreview=%q",
+				// 	tempJobs[i].UserAddress, tempJobs[i].JobID, tempJobs[i].TaskDefinitionID, valReq.IsSafe, valReq.SelectedSafe, valResp.Executable, valResp.SafeMatch, valResp.Error, outputPreview)
+				// Return 200 with structured validation failure so clients can display message without treating as transport error
+				c.JSON(http.StatusOK, gin.H{
+					"status":                "validation_failed",
+					"message":               errMsg,
+					"validation_executable": valResp.Executable,
+					"validation_safe_match": valResp.SafeMatch,
+					"validation_output":     valResp.Output,
+				})
+				return
+			}
+		}
+
+		// Handle safe address if IsSafe is true
+		if tempJobs[i].IsSafe {
+			if tempJobs[i].SafeAddress == "" {
+				h.logger.Errorf("[CreateJobData] IsSafe is true but SafeAddress is empty for job %s", tempJobs[i].JobID)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "SafeAddress is required when IsSafe is true"})
+				return
+			}
+
+			// Lowercase the safe address for consistency
+			safeAddr := strings.ToLower(tempJobs[i].SafeAddress)
+
+			// Check if safe address already exists for this user
+			exists, err := h.safeAddressRepository.CheckSafeAddressExists(strings.ToLower(tempJobs[i].UserAddress), safeAddr)
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Error checking safe address existence: %v", err)
+			} else if !exists {
+				// Create safe address entry if it doesn't exist
+				if err := h.safeAddressRepository.CreateSafeAddress(strings.ToLower(tempJobs[i].UserAddress), safeAddr, tempJobs[i].SafeName); err != nil {
+					h.logger.Errorf("[CreateJobData] Error creating safe address: %v", err)
+				} else {
+					h.logger.Infof("[CreateJobData] Created safe address %s for user %s", safeAddr, tempJobs[i].UserAddress)
+				}
+			}
+
+			// Set the safe address in job data
+			jobData.SafeAddress = safeAddr
 		}
 
 		// Track job creation
@@ -186,6 +286,8 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				TriggerChainID:            tempJobs[i].TriggerChainID,
 				TriggerContractAddress:    tempJobs[i].TriggerContractAddress,
 				TriggerEvent:              tempJobs[i].TriggerEvent,
+				EventFilterParaName:       tempJobs[i].EventFilterParaName,
+				EventFilterValue:          tempJobs[i].EventFilterValue,
 				TargetChainID:             tempJobs[i].TargetChainID,
 				TargetContractAddress:     tempJobs[i].TargetContractAddress,
 				TargetFunction:            tempJobs[i].TargetFunction,
@@ -223,9 +325,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				TriggerChainID:         tempJobs[i].TriggerChainID,
 				TriggerContractAddress: tempJobs[i].TriggerContractAddress,
 				TriggerEvent:           tempJobs[i].TriggerEvent,
+				EventFilterParaName:    tempJobs[i].EventFilterParaName,
+				EventFilterValue:       tempJobs[i].EventFilterValue,
 			}
-			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s",
-				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress)
+			filterEnabled := eventJobData.EventFilterParaName != "" && eventJobData.EventFilterValue != ""
+			h.logger.Infof("[CreateJobData] Successfully created event-based job %d for event %s on contract %s (filter_enabled=%t)",
+				jobID, eventJobData.TriggerEvent, eventJobData.TriggerContractAddress, filterEnabled)
 
 		case 5, 6:
 			// Condition-based job
@@ -283,6 +388,43 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 			h.logger.Infof("[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)",
 				jobID, conditionJobData.ConditionType, conditionJobData.LowerLimit, conditionJobData.UpperLimit)
+
+		case 7:
+			// Custom script job (TaskDefinitionID = 7)
+			var nextExecutionTime time.Time
+			nextExecutionTime, err := parser.CalculateNextExecutionTime(time.Now(), "interval", tempJobs[i].TimeInterval, "", "")
+			if err != nil {
+				h.logger.Errorf("[CreateJobData] Error calculating next execution time for custom job: %v", err)
+				nextExecutionTime = time.Now().Add(time.Duration(tempJobs[i].TimeInterval) * time.Second)
+			}
+
+			customJobData := commonTypes.CustomJobData{
+				JobID:             commonTypes.NewBigInt(jobID),
+				TargetChainID:     tempJobs[i].TargetChainID,
+				TaskDefinitionID:  7,
+				ExpirationTime:    expirationTime,
+				Recurring:         tempJobs[i].Recurring,
+				CustomScriptUrl:   tempJobs[i].DynamicArgumentsScriptUrl,
+				TimeInterval:      tempJobs[i].TimeInterval,
+				ScriptLanguage:    tempJobs[i].Language,
+				NextExecutionTime: nextExecutionTime,
+				LastExecutedAt:    time.Now(),
+				IsCompleted:       false,
+				IsActive:          true,
+			}
+
+			// Track custom job creation
+			trackDBOp = metrics.TrackDBOperation("create", "custom_jobs")
+			if err := h.customJobRepository.CreateCustomJob(&customJobData); err != nil {
+				trackDBOp(err)
+				h.logger.Errorf("[CreateJobData] Error inserting custom job data for jobID %d: %v", jobID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
+			trackDBOp(nil)
+			h.logger.Infof("[CreateJobData] Successfully created custom script job %d with interval %d seconds, language %s",
+				jobID, customJobData.TimeInterval, customJobData.ScriptLanguage)
+
 		default:
 			h.logger.Errorf("[CreateJobData] Invalid task definition ID %d for job %d", tempJobs[i].TaskDefinitionID, i)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})

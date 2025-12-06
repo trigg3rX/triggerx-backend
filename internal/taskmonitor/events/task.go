@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 )
@@ -37,7 +38,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 		case 10001, 10002:
 			h.logger.Debugf("Skipping task processing - Task # %d is Internal Task", taskData.TaskNumber)
 			return
-		case 1, 2, 3, 4, 5, 6:
+		case 1, 2, 3, 4, 5, 6, 7: // Added 7 for custom script jobs
 			dataBytes, err := hex.DecodeString(taskData.Data) // Remove "0x" prefix before decoding
 			if err != nil {
 				h.logger.Error("Failed to hex-decode data", "error", err)
@@ -58,6 +59,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 			taskData.ExecutionTimestamp = ipfsData.ActionData.ExecutionTimestamp
 			taskData.TaskOpxCost = taskOpxCostFloat
 			taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
+			taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
 
 			// h.logger.Infof("Task data: %+v", taskData)
 
@@ -78,10 +80,50 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 				h.logger.Errorf("Failed to update task submission data in database: %v", err)
 			}
 
+			// For custom script jobs (TaskDefinitionID = 7), update storage
+			if taskData.TaskDefinitionID == 7 && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+				jobID, err := h.db.GetJobIDByTaskID(taskData.TaskID)
+				if err != nil {
+					h.logger.Errorf("Failed to get job ID for task %d: %v", taskData.TaskID, err)
+				} else {
+					if err := h.db.UpdateScriptStorage(jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+						h.logger.Errorf("Failed to update script storage for job %s: %v", jobID.String(), err)
+					} else {
+						h.logger.Infof("Successfully updated %d storage keys for job %s", len(ipfsData.ActionData.StorageUpdates), jobID.String())
+					}
+				}
+			}
+
 			// Update keeper points in database
 			if err := h.db.UpdateKeeperPointsInDatabase(*taskData); err != nil {
 				h.logger.Errorf("Failed to update keeper points in database: %v", err)
 				return
+			}
+
+			// Notify user about task completion/rejection
+			if h.notifier != nil {
+				// Fetch user email by task id -> job id mapping
+				email, err := h.db.GetUserEmailByTaskID(taskData.TaskID)
+				if err != nil {
+					h.logger.Warnf("Could not fetch user email for task %d: %v", taskData.TaskID, err)
+				} else if email != "" {
+					payload := notify.TaskStatusPayload{
+						TaskID:          taskData.TaskID,
+						JobID:           0,
+						Status:          "completed",
+						IsAccepted:      taskData.IsAccepted,
+						SubmissionTx:    taskData.TaskSubmissionTxHash,
+						ExecutionTxHash: taskData.ExecutionTxHash,
+						ProofOfTask:     taskData.ProofOfTask,
+						OccurredAt:      time.Now(),
+					}
+					if !taskData.IsAccepted {
+						payload.Status = "failed"
+					}
+					if err := h.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+						h.logger.Warnf("Failed to notify user %s for task %d: %v", email, taskData.TaskID, err)
+					}
+				}
 			}
 		default:
 			return
@@ -249,7 +291,7 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 			attestersIds = append(attestersIds, id.Int64())
 		}
 	// case nil:
-		// h.logger.Debug("attestersIds is nil")
+	// h.logger.Debug("attestersIds is nil")
 	default:
 		// h.logger.Warn("attestersIds has unexpected type", "type", fmt.Sprintf("%T", v), "value", v)
 

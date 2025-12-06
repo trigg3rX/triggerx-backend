@@ -140,3 +140,8 @@ The **Aggregator** ensures the consensus of tasks by:
      - ```sh
        make start-keeper
        ```
+
+**Note:**
+
+- These services have been pruned from the codebase. If you need to restore them, they can be accessed in this [commit](https://github.com/trigg3rX/triggerx-backend/tree/d3eefa44a139cdacd71e1df436d39f2b59bbdcc7).
+- Services: `checker/`, `cli/`, `internal/aggregator`, `internal/challenger`, `internal/registrar`, `internal/imua-keeper`, `pkg/network`.

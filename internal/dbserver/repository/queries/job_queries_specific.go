@@ -14,11 +14,11 @@ const (
 	CreateEventJobDataQuery = `
 			INSERT INTO triggerx.event_job_data (
 				job_id, task_definition_id, expiration_time, recurring, trigger_chain_id, trigger_contract_address, 
-				trigger_event, target_chain_id, target_contract_address, target_function,
+				trigger_event, event_filter_para_name, event_filter_value, target_chain_id, target_contract_address, target_function,
 				abi, arg_type, arguments, dynamic_arguments_script_url, is_completed, is_active,
 				created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`
-	// 18 values to be inserted, so 18 ?s
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`
+	// 20 values to be inserted, so 20 ?s
 
 	CreateConditionJobDataQuery = `
 			INSERT INTO triggerx.condition_job_data (
@@ -92,7 +92,7 @@ const (
 
 	GetEventJobDataByJobIDQuery = `
 			SELECT job_id, expiration_time, recurring,
-				trigger_chain_id, trigger_contract_address, trigger_event,
+				trigger_chain_id, trigger_contract_address, trigger_event, event_filter_para_name, event_filter_value,
 				target_chain_id, target_contract_address, target_function,
 				abi, arg_type, arguments, dynamic_arguments_script_url,
 				is_completed, is_active
@@ -120,7 +120,7 @@ const (
 
 	GetActiveEventJobsQuery string = `
 			SELECT job_id, expiration_time, recurring,
-				trigger_chain_id, trigger_contract_address, trigger_event,
+				trigger_chain_id, trigger_contract_address, trigger_event, event_filter_para_name, event_filter_value,
 				target_chain_id, target_contract_address, target_function,
 				abi, arg_type, arguments, dynamic_arguments_script_url,
 				is_completed, is_active

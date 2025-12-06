@@ -15,4 +15,5 @@ type TaskSubmissionData struct {
 	TaskOpxCost          float64
 	ProofOfTask          string
 	Data                 string
+	ConvertedArguments   []interface{}
 }

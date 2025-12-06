@@ -20,7 +20,7 @@ func TestNewConfigProvider_EmptyPath_ShouldUseDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that it contains default values
-	assert.Equal(t, "golang:1.21-alpine", provider.cfg.Languages["go"].DockerConfig.Image)
+	assert.Equal(t, "golang:1.24-alpine", provider.cfg.Languages["go"].DockerConfig.Image)
 	assert.Equal(t, 0.0001, provider.cfg.Fees.PricePerTG)
 	assert.Equal(t, "data/cache", provider.cfg.Cache.CacheDir)
 }
@@ -36,7 +36,7 @@ func TestNewConfigProvider_NonExistentFile_ShouldUseDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that it contains default values
-	assert.Equal(t, "golang:1.21-alpine", provider.cfg.Languages["go"].DockerConfig.Image)
+	assert.Equal(t, "golang:1.24-alpine", provider.cfg.Languages["go"].DockerConfig.Image)
 }
 
 func TestNewConfigProvider_ValidYAMLFile_ShouldOverrideDefaults(t *testing.T) {
@@ -456,7 +456,7 @@ func TestConfigProvider_GetLanguagePoolConfig_SpecificLanguageProperties(t *test
 	goConfig, exists := provider.GetLanguagePoolConfig(types.LanguageGo)
 	assert.True(t, exists)
 	assert.Equal(t, types.LanguageGo, goConfig.LanguageConfig.Language)
-	assert.Equal(t, "golang:1.21-alpine", goConfig.LanguageConfig.ImageName)
+	assert.Equal(t, "golang:1.24-alpine", goConfig.LanguageConfig.ImageName)
 	assert.Equal(t, "go run code.go", goConfig.LanguageConfig.RunCommand)
 	assert.Contains(t, goConfig.LanguageConfig.Extensions, ".go")
 
@@ -477,7 +477,7 @@ func TestConfigProvider_GetDockerConfig(t *testing.T) {
 	// Test default values in go language config
 	goConfig, exists := provider.cfg.Languages["go"]
 	assert.True(t, exists)
-	assert.Equal(t, "golang:1.21-alpine", goConfig.DockerConfig.Image)
+	assert.Equal(t, "golang:1.24-alpine", goConfig.DockerConfig.Image)
 	assert.Equal(t, 300, goConfig.DockerConfig.TimeoutSeconds)
 	assert.True(t, goConfig.DockerConfig.AutoCleanup)
 	assert.Equal(t, "1024m", goConfig.DockerConfig.MemoryLimit)
@@ -713,7 +713,7 @@ languages:
       health_check_interval: "30s"
     config:
       language: "go"
-      image_name: "golang:1.21-alpine"
+      image_name: "golang:1.24-alpine"
       run_command: "go run code.go"
       extensions: [".go"]
   py:
@@ -811,7 +811,7 @@ func TestGetLanguagePoolConfig_SpecificLanguageProperties(t *testing.T) {
 	goConfig, exists := provider.GetLanguagePoolConfig(types.LanguageGo)
 	assert.True(t, exists)
 	assert.Equal(t, types.LanguageGo, goConfig.LanguageConfig.Language)
-	assert.Equal(t, "golang:1.21-alpine", goConfig.LanguageConfig.ImageName)
+	assert.Equal(t, "golang:1.24-alpine", goConfig.LanguageConfig.ImageName)
 	assert.Equal(t, "go run code.go", goConfig.LanguageConfig.RunCommand)
 	assert.Contains(t, goConfig.LanguageConfig.Extensions, ".go")
 

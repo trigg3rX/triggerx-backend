@@ -25,6 +25,7 @@ type TaskRepository interface {
 	UpdateTaskFee(taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
 	GetCreatedChainIDByJobID(jobID *big.Int) (string, error)
+	GetRecentTasks(limit int) ([]types.RecentTaskResponse, error)
 }
 
 type taskRepository struct {
@@ -164,7 +165,7 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int6
 func (r *taskRepository) GetTaskDataByID(taskID int64) (commonTypes.TaskData, error) {
 	var task commonTypes.TaskData
 	var jobIDBigInt *big.Int
-	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpxCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsAccepted, &task.TaskStatus, &task.IsImua)
+	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpxCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.ConvertedArguments, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsAccepted, &task.TaskStatus, &task.TaskError, &task.IsImua)
 	if err != nil {
 		return commonTypes.TaskData{}, errors.New("error getting task data by ID")
 	}
@@ -187,6 +188,8 @@ func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobI
 		&task.TaskAttesterIDs,
 		&task.IsAccepted,
 		&task.TaskStatus,
+		&task.TaskError,
+		&task.ConvertedArguments,
 	) {
 		tasks = append(tasks, task)
 	}
@@ -251,6 +254,81 @@ func (r *taskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error
 		return "", errors.New("error getting created chain ID by job ID")
 	}
 	return createdChainID, nil
+}
+
+func (r *taskRepository) GetRecentTasks(limit int) ([]types.RecentTaskResponse, error) {
+	iter := r.db.Session().Query(queries.GetRecentTasksQuery, limit).Iter()
+	var tasks []types.RecentTaskResponse
+
+	for {
+		var task types.RecentTaskResponse
+		var jobIDBigInt *big.Int
+
+		if !iter.Scan(
+			&task.TaskID,
+			&task.TaskNumber,
+			&jobIDBigInt,
+			&task.TaskDefinitionID,
+			&task.CreatedAt,
+			&task.TaskOpXCost,
+			&task.ExecutionTimestamp,
+			&task.ExecutionTxHash,
+			&task.TaskPerformerID,
+			&task.TaskAttesterIDs,
+			&task.TaskStatus,
+			&task.TaskError,
+			&task.IsImua,
+		) {
+			break
+		}
+
+		// Convert job ID to string
+		if jobIDBigInt != nil {
+			task.JobID = jobIDBigInt.String()
+
+			// Get chain ID and generate TxURL if execution tx hash exists
+			if task.ExecutionTxHash != "" {
+				createdChainID, err := r.GetCreatedChainIDByJobID(jobIDBigInt)
+				if err == nil {
+					task.TxURL = getExplorerBaseURL(createdChainID) + task.ExecutionTxHash
+				}
+			}
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	if err := iter.Close(); err != nil {
+		return []types.RecentTaskResponse{}, errors.New("error getting recent tasks: " + err.Error())
+	}
+
+	return tasks, nil
+}
+
+// getExplorerBaseURL is a helper to get explorer URL - mirrors the one in handlers
+func getExplorerBaseURL(chainID string) string {
+	switch chainID {
+	// Testnets
+	case "11155111":
+		return "https://eth-sepolia.blockscout.com/tx/"
+	case "11155420": // OP Sepolia
+		return "https://testnet-explorer.optimism.io/tx/"
+	case "84532": // Base Sepolia
+		return "https://base-sepolia.blockscout.com/tx/"
+	case "421614": // Arbitrum Sepolia
+		return "https://arbitrum-sepolia.blockscout.com/tx/"
+	// Mainnets
+	case "1": // Ethereum Mainnet
+		return "https://eth.blockscout.com/tx/"
+	case "10": // Optimism Mainnet
+		return "https://explorer.optimism.io/tx/"
+	case "8453": // Base Mainnet
+		return "https://base.blockscout.com/tx/"
+	case "42161": // Arbitrum Mainnet
+		return "https://arbitrum.blockscout.com/tx/"
+	default:
+		return "https://sepolia.etherscan.io/tx/"
+	}
 }
 
 // Helper methods for WebSocket event emission

@@ -12,7 +12,8 @@ import (
 
 type DockerExecutorAPI interface {
 	Initialize(ctx context.Context) error
-	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
+	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetExecutionFeeConfig() config.ExecutionFeeConfig
 	GetStats() *types.PerformanceMetrics

@@ -14,8 +14,9 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-// handleTriggerNotification processes trigger notifications and submits individual tasks to Redis API
-func (s *ConditionBasedScheduler) handleTriggerNotification(notification *worker.TriggerNotification) error {
+// HandleTriggerNotification processes trigger notifications and submits individual tasks to Redis API
+// This is called by workers and the Event Monitor Service webhook handler
+func (s *ConditionBasedScheduler) HandleTriggerNotification(notification *worker.TriggerNotification) error {
 	startTime := time.Now()
 
 	s.logger.Info("Processing trigger notification - submitting task to task dispatcher",

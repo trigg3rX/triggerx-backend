@@ -50,7 +50,7 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 			}
 
 			// Remove the task from timeout tracking since it's been completed
-			err = tsm.timeoutManager.RemoveTaskTimeout(ctx, taskID)
+			err = tsm.expirationManager.RemoveTaskTimeout(ctx, taskID)
 			if err != nil {
 				tsm.logger.Warn("failed to remove task from timeout tracking",
 					"task_id", taskID,
@@ -61,6 +61,63 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 
 	tsm.logger.Info("Task marked as completed successfully", "task_id", taskID)
 	metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
+
+	return nil
+}
+
+// MarkTaskFailed marks a task as failed with an error message
+func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, errorMsg string) error {
+	tsm.logger.Info("Marking task as failed",
+		"task_id", taskID,
+		"error", errorMsg)
+
+	// Find task in dispatched stream
+	task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
+	if err != nil {
+		tsm.logger.Warn("Failed to find task in dispatched stream, may already be processed",
+			"task_id", taskID,
+			"error", err)
+		// Don't return error - task may have already been processed
+		return nil
+	}
+
+	// Move to failed stream
+	if err := tsm.moveTaskToFailed(ctx, *task, errorMsg); err != nil {
+		tsm.logger.Error("Failed to move task to failed stream",
+			"task_id", taskID,
+			"error", err)
+		return err
+	}
+
+	// Acknowledge the task if we have the messageID
+	if messageID != "" {
+		err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
+		if err != nil {
+			tsm.logger.Error("Failed to acknowledge failed task",
+				"task_id", taskID,
+				"message_id", messageID,
+				"error", err)
+		} else {
+			// Remove the task from the index since it's been processed
+			err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
+			if err != nil {
+				tsm.logger.Warn("failed to remove failed task from index",
+					"task_id", taskID,
+					"error", err)
+			}
+
+			// Remove the task from timeout tracking since it's been failed
+			err = tsm.expirationManager.RemoveTaskTimeout(ctx, taskID)
+			if err != nil {
+				tsm.logger.Warn("failed to remove failed task from timeout tracking",
+					"task_id", taskID,
+					"error", err)
+			}
+		}
+	}
+
+	tsm.logger.Info("Task marked as failed successfully", "task_id", taskID)
+	metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
 
 	return nil
 }
@@ -142,13 +199,40 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		return fmt.Errorf("failed to add task to stream: %w", err)
 	}
 
+	// Add entry to expiration tracking with stream-specific TTL
+	var entryTTL time.Duration
+	switch stream {
+	case StreamTaskDispatched:
+		entryTTL = TasksProcessingTTL
+	case StreamTaskCompleted:
+		entryTTL = TasksCompletedTTL
+	case StreamTaskFailed:
+		entryTTL = TasksFailedTTL
+	case StreamTaskRetry:
+		entryTTL = TasksRetryTTL
+	default:
+		entryTTL = TasksProcessingTTL // Default fallback
+	}
+
+	// Track expiration for this stream entry
+	err = tsm.expirationManager.AddMessageExpiration(ctx, stream, res, entryTTL)
+	if err != nil {
+		tsm.logger.Warn("Failed to add stream entry expiration, but task was added to stream",
+			"task_id", task.SendTaskDataToKeeper.TaskID[0],
+			"stream", stream,
+			"message_id", res,
+			"error", err)
+		// Don't fail the entire operation if expiration tracking fails
+	}
+
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
 	tsm.logger.Debug("Task added to stream successfully",
 		"task_id", task.SendTaskDataToKeeper.TaskID[0],
 		"stream", stream,
 		"stream_id", res,
 		"duration", duration,
-		"task_json_size", len(taskJSON))
+		"task_json_size", len(taskJSON),
+		"entry_ttl", entryTTL)
 
 	return nil
 }

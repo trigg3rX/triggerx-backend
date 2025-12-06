@@ -20,12 +20,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
+// TaskMonitorClientInterface defines the interface for taskmonitor client operations
+type TaskMonitorClientInterface interface {
+	ReportTaskError(ctx context.Context, taskID int64, errorMsg string) error
+}
+
 // TaskExecutor is the default implementation of TaskExecutor
 type TaskExecutor struct {
 	alchemyAPIKey    string
 	argConverter     *ArgumentConverter
 	validator        *validation.TaskValidator
 	aggregatorClient *aggregator.AggregatorClient
+	taskMonitorClient TaskMonitorClientInterface
 	logger           logging.Logger
 	nonceManagers    map[string]*NonceManager // Chain ID -> NonceManager
 	nonceMutex       sync.RWMutex
@@ -36,12 +42,14 @@ func NewTaskExecutor(
 	alchemyAPIKey string,
 	validator *validation.TaskValidator,
 	aggregatorClient *aggregator.AggregatorClient,
+	taskMonitorClient TaskMonitorClientInterface,
 	logger logging.Logger) *TaskExecutor {
 	return &TaskExecutor{
 		alchemyAPIKey:    alchemyAPIKey,
 		argConverter:     &ArgumentConverter{},
 		validator:        validator,
 		aggregatorClient: aggregatorClient,
+		taskMonitorClient: taskMonitorClient,
 		logger:           logger,
 		nonceManagers:    make(map[string]*NonceManager),
 	}
@@ -129,11 +137,15 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			defer client.Close()
 			e.logger.Debugf("Connected to chain: %s", rpcURL)
 
+			//simulate the transaction before doing any action
+
 			// execute the action with the allocated nonce
 			var actionData types.PerformerActionData
 			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client)
 			if err != nil {
 				e.logger.Error("Failed to execute action", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Report error to taskmonitor
+				e.reportTaskError(task.TargetData[idx].TaskID, fmt.Sprintf("action execution failed: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -210,6 +222,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			cid, err := e.validator.IpfsClient.Upload(ctx, filename, ipfsDataBytes)
 			if err != nil {
 				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Report error to taskmonitor
+				e.reportTaskError(task.TargetData[idx].TaskID, fmt.Sprintf("IPFS upload failed: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -228,6 +242,12 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)
 			if !success {
 				e.logger.Error("Failed to send task result to aggregator", "task_id", task.TaskID, "error", err, "trace_id", traceID)
+				// Report error to taskmonitor
+				errorMsg := "failed to send task result to aggregator"
+				if err != nil {
+					errorMsg = fmt.Sprintf("%s: %v", errorMsg, err)
+				}
+				e.reportTaskError(task.TargetData[idx].TaskID, errorMsg)
 				resultCh <- struct {
 					success bool
 					err     error
@@ -282,6 +302,27 @@ func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
 
 	e.nonceManagers[chainID] = nm
 	return nm, nil
+}
+
+// reportTaskError reports a task error to taskmonitor (best-effort, doesn't block)
+func (e *TaskExecutor) reportTaskError(taskID int64, errorMsg string) {
+	if e.taskMonitorClient == nil {
+		e.logger.Debug("TaskMonitor client not available, skipping error report",
+			"task_id", taskID)
+		return
+	}
+
+	// Report error asynchronously to avoid blocking
+	go func() {
+		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := e.taskMonitorClient.ReportTaskError(reportCtx, taskID, errorMsg); err != nil {
+			e.logger.Warn("Failed to report task error to taskmonitor",
+				"task_id", taskID,
+				"error", err)
+		}
+	}()
 }
 
 // func parseStringToInt(str string) int {

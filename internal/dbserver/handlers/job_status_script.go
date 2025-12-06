@@ -39,7 +39,7 @@ func NewJobStatusChecker(
 
 // StartStatusCheckLoop begins the periodic job status check
 func (c *JobStatusChecker) StartStatusCheckLoop() {
-	ticker := time.NewTicker(15 * time.Minute)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -53,7 +53,7 @@ func (c *JobStatusChecker) checkJobStatuses() {
 	currentTime := time.Now()
 
 	//log the current time and checking for jobs
-	c.logger.Info(fmt.Sprintf("Checking for jobs at %s", currentTime.Format(time.RFC3339)))
+	// c.logger.Info(fmt.Sprintf("Checking for jobs at %s", currentTime.Format(time.RFC3339)))
 
 	// Check event jobs
 	wg.Add(1)
@@ -78,7 +78,7 @@ func (c *JobStatusChecker) checkJobStatuses() {
 
 	wg.Wait()
 
-	c.logger.Info("Job status check completed")
+	// c.logger.Info("Job status check completed")
 }
 
 // checkEventJobs checks all active event jobs for expiration

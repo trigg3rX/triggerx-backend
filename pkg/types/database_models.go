@@ -5,8 +5,8 @@ import (
 )
 
 type UserData struct {
-	UserID      int64   `json:"user_id"`
-	UserAddress string  `json:"user_address"`
+	UserID      int64     `json:"user_id"`
+	UserAddress string    `json:"user_address"`
 	JobIDs      []*BigInt `json:"job_ids"`
 	// Current staked ether balance on TriggerGasRegistry
 	EtherBalance *BigInt `json:"ether_balance"`
@@ -22,15 +22,15 @@ type UserData struct {
 
 type JobData struct {
 	JobID            *BigInt `json:"job_id"`
-	JobTitle         string   `json:"job_title"`
-	TaskDefinitionID int      `json:"task_definition_id"`
-	UserID           int64    `json:"user_id"`
+	JobTitle         string  `json:"job_title"`
+	TaskDefinitionID int     `json:"task_definition_id"`
+	UserID           int64   `json:"user_id"`
 	LinkJobID        *BigInt `json:"link_job_id"`
-	ChainStatus      int      `json:"chain_status"`
-	Custom           bool     `json:"custom"`
-	TimeFrame        int64    `json:"time_frame"`
-	Recurring        bool     `json:"recurring"`
-	Status           string   `json:"status"`
+	ChainStatus      int     `json:"chain_status"`
+	Custom           bool    `json:"custom"`
+	TimeFrame        int64   `json:"time_frame"`
+	Recurring        bool    `json:"recurring"`
+	Status           string  `json:"status"`
 	// Intial cost prediction for the job
 	JobCostPrediction float64 `json:"job_cost_prediction"`
 	// Actual cost of the job, updated after each task execution
@@ -43,11 +43,12 @@ type JobData struct {
 	Timezone       string    `json:"timezone"`
 	IsImua         bool      `json:"is_imua"`
 	CreatedChainID string    `json:"created_chain_id"`
+	SafeAddress    string    `json:"safe_address"`
 }
 
 type TimeJobData struct {
 	JobID            *BigInt `json:"job_id"`
-	TaskDefinitionID int      `json:"task_definition_id"`
+	TaskDefinitionID int     `json:"task_definition_id"`
 	// Time based job specific fields
 	Timezone               string    `json:"timezone"`
 	ScheduleType           string    `json:"schedule_type"`
@@ -74,12 +75,14 @@ type TimeJobData struct {
 
 type EventJobData struct {
 	JobID            *BigInt `json:"job_id"`
-	TaskDefinitionID int      `json:"task_definition_id"`
-	Recurring        bool     `json:"recurring"`
+	TaskDefinitionID int     `json:"task_definition_id"`
+	Recurring        bool    `json:"recurring"`
 	// Event based job specific fields
 	TriggerChainID         string `json:"trigger_chain_id"`
 	TriggerContractAddress string `json:"trigger_contract_address"`
 	TriggerEvent           string `json:"trigger_event"`
+	EventFilterParaName    string `json:"event_filter_para_name"`
+	EventFilterValue       string `json:"event_filter_value"`
 	// Target fields (common for all job types)
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
@@ -98,15 +101,15 @@ type EventJobData struct {
 
 type ConditionJobData struct {
 	JobID            *BigInt `json:"job_id"`
-	TaskDefinitionID int      `json:"task_definition_id"`
-	Recurring        bool     `json:"recurring"`
+	TaskDefinitionID int     `json:"task_definition_id"`
+	Recurring        bool    `json:"recurring"`
 	// Condition based job specific fields
-	ConditionType   string  `json:"condition_type"`
-	UpperLimit      float64 `json:"upper_limit"`
-	LowerLimit      float64 `json:"lower_limit"`
-	ValueSourceType string  `json:"value_source_type"`
-	ValueSourceUrl  string  `json:"value_source_url"`
-	SelectedKeyRoute string    `json:"selected_key_route"`
+	ConditionType    string  `json:"condition_type"`
+	UpperLimit       float64 `json:"upper_limit"`
+	LowerLimit       float64 `json:"lower_limit"`
+	ValueSourceType  string  `json:"value_source_type"`
+	ValueSourceUrl   string  `json:"value_source_url"`
+	SelectedKeyRoute string  `json:"selected_key_route"`
 	// Target fields (common for all job types)
 	TargetChainID             string    `json:"target_chain_id"`
 	TargetContractAddress     string    `json:"target_contract_address"`
@@ -123,6 +126,27 @@ type ConditionJobData struct {
 	ExpirationTime            time.Time `json:"expiration_time"`
 }
 
+type CustomJobData struct {
+	JobID            *BigInt `json:"job_id"`
+	TaskDefinitionID int     `json:"task_definition_id"`
+	Recurring        bool    `json:"recurring"`
+	CustomScriptUrl  string  `json:"custom_script_url"`
+	TimeInterval     int64   `json:"time_interval"`
+	TargetChainID    string  `json:"target_chain_id"`
+	IsCompleted      bool    `json:"is_completed"`
+	IsActive         bool    `json:"is_active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	LastExecutedAt   time.Time `json:"last_executed_at"`
+	ExpirationTime   time.Time `json:"expiration_time"`
+	// Phase 1 fields
+	ScriptLanguage     string    `json:"script_language"`      // 'ts', 'go', 'python', 'javascript'
+	ScriptHash         string    `json:"script_hash"`          // keccak256(scriptCode)
+	NextExecutionTime  time.Time `json:"next_execution_time"`  // Next scheduled execution
+	MaxExecutionTime   int64     `json:"max_execution_time"`   // Script timeout in seconds
+	ChallengePeriod    int64     `json:"challenge_period"`     // Challenge period in seconds (6 hours default)
+}
+
 type TaskData struct {
 	TaskID               int64     `json:"task_id"`
 	TaskNumber           int64     `json:"task_number"`
@@ -135,11 +159,13 @@ type TaskData struct {
 	TaskPerformerID      int64     `json:"task_performer_id"`
 	TaskAttesterIDs      []int64   `json:"task_attester_ids"`
 	ProofOfTask          string    `json:"proof_of_task"`
+	ConvertedArguments   []string  `json:"converted_arguments"`
 	TriggerData          []byte    `json:"trigger_data"`
 	TpSignature          []byte    `json:"tp_signature"`
 	TaSignature          []byte    `json:"ta_signature"`
 	TaskSubmissionTxHash string    `json:"task_submission_tx_hash"`
 	TaskStatus           string    `json:"task_status"`
+	TaskError            string    `json:"task_error"`
 	IsAccepted           bool      `json:"is_accepted"`
 	IsImua               bool      `json:"is_imua"`
 }
@@ -180,4 +206,10 @@ type ApiKey struct {
 	FailedCount  int64     `json:"failed_count"`
 	LastUsed     time.Time `json:"last_used"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type SafeAddress struct {
+	SafeAddress string    `json:"safe_address"`
+	SafeName    string    `json:"safe_name"`
+	CreatedAt   time.Time `json:"created_at"`
 }

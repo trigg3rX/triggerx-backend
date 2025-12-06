@@ -15,7 +15,8 @@ import (
 
 // CodeExecutor defines what the DockerManager needs from a code executor
 type CodeExecutor interface {
-	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
+	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetStats() *types.PerformanceMetrics
 	GetPoolStats() map[types.Language]*types.PoolStats
@@ -114,7 +115,8 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 }
 
 // Execute runs code from the specified URL with the given number of attestations
-func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error) {
+// Optionally accepts metadata map for task definition and contract details
+func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	de.mutex.RLock()
 	if !de.initialized {
 		de.mutex.RUnlock()
@@ -126,15 +128,63 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	}
 	de.mutex.RUnlock()
 
-	de.logger.Infof("Executing code from URL: %s with %d attestations", fileURL, noOfAttesters)
+	var metadataMap map[string]string
+	if len(metadata) > 0 {
+		metadataMap = metadata[0]
+	}
+	// Read and parse task_definition_id for job type selection
+	taskDefID := 0
+	if metadataMap != nil {
+		if taskDefStr, ok := metadataMap["task_definition_id"]; ok {
+			_, err := fmt.Sscanf(taskDefStr, "%d", &taskDefID)
+			if err != nil {
+				de.logger.Errorf("Error scanning task_definition_id: %v", err)
+				return nil, fmt.Errorf("error scanning task_definition_id: %w", err)
+			}
+		}
+	}
+	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
+	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 {
+		de.logger.Infof("Skipping code execution for static task. Only calculating fees for task_definition_id=%d", taskDefID)
+		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, alchemyAPIKey, metadataMap)
+		if err != nil {
+			de.logger.Errorf("Fee calculation (static) failed: %v", err)
+			return nil, fmt.Errorf("fee calculation failed: %w", err)
+		}
+		return result, nil
+	}
 
-	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters)
+	// Dynamic tasks (2,4,6): perform full execution as before
+	de.logger.Infof("Executing code for dynamic task task_definition_id=%d (should run code)", taskDefID)
+	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadataMap)
 	if err != nil {
 		de.logger.Errorf("Execution failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
+	return result, nil
+}
 
-	de.logger.Infof("Execution completed successfully")
+// ExecuteSource runs raw source code with the specified language
+// Optionally accepts metadata map for task definition and contract details
+func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
+	de.mutex.RLock()
+	if !de.initialized {
+		de.mutex.RUnlock()
+		return nil, fmt.Errorf("docker manager not initialized")
+	}
+	if de.closed {
+		de.mutex.RUnlock()
+		return nil, fmt.Errorf("docker manager is closed")
+	}
+	de.mutex.RUnlock()
+
+	de.logger.Infof("Executing raw source for language: %s", language)
+	result, err := de.executor.ExecuteSource(ctx, code, language, alchemyAPIKey, metadata...)
+	if err != nil {
+		de.logger.Errorf("Execution (raw) failed: %v", err)
+		return nil, fmt.Errorf("execution failed: %w", err)
+	}
+	de.logger.Infof("Execution (raw) completed successfully")
 	return result, nil
 }
 

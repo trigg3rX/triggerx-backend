@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "1.0.0"
+	version = "0.2.4"
 	isImua  = false
 )
 
@@ -59,8 +59,9 @@ type Config struct {
 	managerSigningAddress string
 
 	// Backend Service URLs
-	aggregatorRPCUrl string
-	healthRPCUrl     string
+	aggregatorRPCUrl  string
+	healthRPCUrl      string
+	taskMonitorRPCUrl string
 
 	l1Chain string
 	l2Chain string
@@ -81,23 +82,24 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                  env.GetEnvBool("DEV_MODE", false),
-		ethRPCUrl:                env.GetEnvString("L1_RPC", ""),
-		baseRPCUrl:               env.GetEnvString("L2_RPC", ""),
-		privateKeyConsensus:      env.GetEnvString("PRIVATE_KEY", ""),
-		privateKeyController:     env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
-		keeperAddress:            env.GetEnvString("OPERATOR_ADDRESS", ""),
-		consensusAddress:         crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnvString("PRIVATE_KEY", ""))).PublicKey).Hex(),
-		publicIPV4Address:        env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
-		peerID:                   env.GetEnvString("PEER_ID", ""),
-		keeperRPCPort:            env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
-		keeperP2PPort:            env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
-		keeperMetricsPort:        env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
-		grafanaPort:              env.GetEnvString("GRAFANA_PORT", "3000"),
-		aggregatorRPCUrl:         env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
-		healthRPCUrl:             env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
-		tlsProofHost:             "www.google.com",
-		tlsProofPort:             "443",
+		devMode:              env.GetEnvBool("DEV_MODE", false),
+		ethRPCUrl:            env.GetEnvString("L1_RPC", ""),
+		baseRPCUrl:           env.GetEnvString("L2_RPC", ""),
+		privateKeyConsensus:  env.GetEnvString("PRIVATE_KEY", ""),
+		privateKeyController: env.GetEnvString("OPERATOR_PRIVATE_KEY", ""),
+		keeperAddress:        env.GetEnvString("OPERATOR_ADDRESS", ""),
+		consensusAddress:     crypto.PubkeyToAddress(crypto.ToECDSAUnsafe(common.FromHex(env.GetEnvString("PRIVATE_KEY", ""))).PublicKey).Hex(),
+		publicIPV4Address:    env.GetEnvString("PUBLIC_IPV4_ADDRESS", ""),
+		peerID:               env.GetEnvString("PEER_ID", ""),
+		keeperRPCPort:        env.GetEnvString("OPERATOR_RPC_PORT", "9011"),
+		keeperP2PPort:        env.GetEnvString("OPERATOR_P2P_PORT", "9012"),
+		keeperMetricsPort:    env.GetEnvString("OPERATOR_METRICS_PORT", "9013"),
+		grafanaPort:          env.GetEnvString("GRAFANA_PORT", "3000"),
+		aggregatorRPCUrl:     env.GetEnvString("OTHENTIC_CLIENT_RPC_ADDRESS", "https://aggregator.triggerx.network"),
+		healthRPCUrl:         env.GetEnvString("HEALTH_IP_ADDRESS", "https://health.triggerx.network"),
+		taskMonitorRPCUrl:    env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
+		tlsProofHost:         "www.google.com",
+		tlsProofPort:         "443",
 		l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
 		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
 		avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
@@ -214,6 +216,10 @@ func GetAggregatorRPCUrl() string {
 
 func GetHealthRPCUrl() string {
 	return cfg.healthRPCUrl
+}
+
+func GetTaskMonitorRPCUrl() string {
+	return cfg.taskMonitorRPCUrl
 }
 
 func GetAvsGovernanceAddress() string {

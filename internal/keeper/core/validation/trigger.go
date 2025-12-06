@@ -42,6 +42,11 @@ func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, trac
 		if !isValid {
 			return isValid, err
 		}
+	case 7:
+		isValid, err := e.IsValidTimeBasedTrigger(triggerData)
+		if !isValid {
+			return isValid, err
+		}
 	default:
 		return false, fmt.Errorf("invalid task definition id: %d", triggerData.TaskDefinitionID)
 	}

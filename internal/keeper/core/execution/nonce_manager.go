@@ -191,7 +191,7 @@ func (nm *NonceManager) submitNewTransaction(
 		return nil, "", fmt.Errorf("gas price is required for transaction")
 	}
 
-	tx := types.NewTransaction(nonce, to, big.NewInt(0), 300000, gasPrice, data)
+	tx := types.NewTransaction(nonce, to, big.NewInt(0), 600000, gasPrice, data)
 	signedTx, signErr := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if signErr != nil {
 		return nil, "", fmt.Errorf("failed to sign transaction: %w", signErr)
@@ -226,7 +226,7 @@ func (nm *NonceManager) replaceTransaction(
 	gasPrice = new(big.Int).Div(gasPrice, big.NewInt(100))
 
 	// Create legacy replacement transaction
-	tx := types.NewTransaction(existingTx.Nonce, to, big.NewInt(0), 300000, gasPrice, data)
+	tx := types.NewTransaction(existingTx.Nonce, to, big.NewInt(0), 600000, gasPrice, data)
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to sign replacement transaction: %w", err)
@@ -376,7 +376,7 @@ func (nm *NonceManager) createReplacementTransaction(originalTx *types.Transacti
 	gasPrice.Div(gasPrice, feeDivisor)
 
 	// Create and sign the replacement transaction
-	tx := types.NewTransaction(originalTx.Nonce(), to, big.NewInt(0), 300000, gasPrice, data)
+	tx := types.NewTransaction(originalTx.Nonce(), to, big.NewInt(0), 600000, gasPrice, data)
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign replacement transaction: %w", err)

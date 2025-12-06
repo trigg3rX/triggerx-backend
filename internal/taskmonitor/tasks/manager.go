@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
@@ -17,18 +18,20 @@ import (
 type TaskStreamManager struct {
 	redisClient    redisClient.RedisClientInterface
 	dbClient       *database.DatabaseClient
+	notifier       notify.Notifier
 	logger         logging.Logger
 	consumerGroups map[string]bool
 	mu             sync.RWMutex
 	startTime      time.Time
 	taskIndex      *TaskIndexManager
-	timeoutManager *TimeoutManager
+	expirationManager *ExpirationManager
 }
 
 func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger logging.Logger) (*TaskStreamManager, error) {
 	tsm := &TaskStreamManager{
 		redisClient:    redisClient,
 		dbClient:       dbClient,
+		notifier:       notify.NewCompositeNotifier(logger, notify.NewWebhookNotifier(logger), notify.NewSMTPNotifier(logger)),
 		logger:         logger,
 		consumerGroups: make(map[string]bool),
 		startTime:      time.Now(),
@@ -37,8 +40,8 @@ func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient
 	// Initialize the task index manager
 	tsm.taskIndex = NewTaskIndexManager(tsm)
 
-	// Initialize the timeout manager
-	tsm.timeoutManager = NewTimeoutManager(tsm)
+	// Initialize the unified expiration manager (handles both task timeouts and stream entry expirations)
+	tsm.expirationManager = NewExpirationManager(tsm)
 
 	logger.Info("TaskStreamManager initialized successfully")
 	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
@@ -196,9 +199,9 @@ func (tsm *TaskStreamManager) GetTaskIndexManager() *TaskIndexManager {
 	return tsm.taskIndex
 }
 
-// GetTimeoutManager returns the timeout manager
-func (tsm *TaskStreamManager) GetTimeoutManager() *TimeoutManager {
-	return tsm.timeoutManager
+// GetExpirationManager returns the expiration manager
+func (tsm *TaskStreamManager) GetExpirationManager() *ExpirationManager {
+	return tsm.expirationManager
 }
 
 // GetPendingEntriesInfo returns information about pending entries in consumer groups
@@ -333,8 +336,12 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 
 	ticker := time.NewTicker(30 * time.Second)       // Check health every 30 seconds
 	cleanupTicker := time.NewTicker(5 * time.Minute) // Cleanup every 5 minutes
+	trimTicker := time.NewTicker(10 * time.Minute)      // Trim streams every 10 minutes
+	expirationTicker := time.NewTicker(1 * time.Minute) // Check for expired entries every minute
 	defer ticker.Stop()
 	defer cleanupTicker.Stop()
+	defer trimTicker.Stop()
+	defer expirationTicker.Stop()
 
 	for {
 		select {
@@ -374,6 +381,113 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 			if err := tsm.CleanupPendingEntries(ctx); err != nil {
 				tsm.logger.Error("Failed to cleanup pending entries", "error", err)
 			}
+		case <-trimTicker.C:
+			// Periodic trimming of streams to remove old messages
+			if err := tsm.TrimStreams(ctx); err != nil {
+				tsm.logger.Error("Failed to trim streams", "error", err)
+			}
+		case <-expirationTicker.C:
+			// Periodic cleanup of expired stream entries
+			if err := tsm.CleanupExpiredStreamEntries(ctx); err != nil {
+				tsm.logger.Error("Failed to cleanup expired stream entries", "error", err)
+			}
 		}
 	}
+}
+
+// TrimStreams periodically trims old messages from streams to prevent unbounded growth
+func (tsm *TaskStreamManager) TrimStreams(ctx context.Context) error {
+	tsm.logger.Debug("Starting periodic stream trimming")
+
+	// Define streams and their max lengths
+	streamConfigs := map[string]int64{
+		StreamTaskDispatched: 10000, // Keep max 10000 messages in dispatched stream
+		StreamTaskCompleted:  5000,  // Keep max 5000 messages in completed stream
+		StreamTaskFailed:     5000,  // Keep max 5000 messages in failed stream
+		StreamTaskRetry:      5000,  // Keep max 5000 messages in retry stream
+	}
+
+	totalTrimmed := int64(0)
+	for stream, maxLen := range streamConfigs {
+		trimmed, err := tsm.redisClient.XTrim(ctx, stream, maxLen, true) // Use approximate trimming for better performance
+		if err != nil {
+			tsm.logger.Warn("Failed to trim stream",
+				"stream", stream,
+				"max_len", maxLen,
+				"error", err)
+			continue
+		}
+
+		if trimmed > 0 {
+			totalTrimmed += trimmed
+			tsm.logger.Info("Trimmed old messages from stream",
+				"stream", stream,
+				"messages_trimmed", trimmed,
+				"max_len", maxLen)
+		}
+	}
+
+	if totalTrimmed > 0 {
+		tsm.logger.Info("Periodic stream trimming completed",
+			"total_messages_trimmed", totalTrimmed)
+	}
+
+	return nil
+}
+
+// CleanupExpiredStreamEntries periodically removes expired entries from all streams
+func (tsm *TaskStreamManager) CleanupExpiredStreamEntries(ctx context.Context) error {
+	tsm.logger.Debug("Starting periodic cleanup of expired stream entries")
+
+	// Get expired entries for all streams
+	expiredEntries, err := tsm.expirationManager.GetExpiredMessagesForAllStreams(ctx)
+	if err != nil {
+		tsm.logger.Error("Failed to get expired stream entries", "error", err)
+		return err
+	}
+
+	totalDeleted := 0
+	for stream, messageIDs := range expiredEntries {
+		if len(messageIDs) == 0 {
+			continue
+		}
+
+		tsm.logger.Info("Found expired entries for cleanup",
+			"stream", stream,
+			"expired_count", len(messageIDs))
+
+		// Delete expired messages from streams
+		for _, messageID := range messageIDs {
+			deleted, err := tsm.redisClient.XDel(ctx, stream, messageID)
+			if err != nil {
+				tsm.logger.Warn("Failed to delete expired message from stream",
+					"stream", stream,
+					"message_id", messageID,
+					"error", err)
+				continue
+			}
+			if deleted > 0 {
+				totalDeleted++
+				tsm.logger.Debug("Deleted expired stream entry",
+					"stream", stream,
+					"message_id", messageID)
+			}
+		}
+
+		// Remove from expiration tracking
+		err = tsm.expirationManager.RemoveMultipleMessageExpirations(ctx, stream, messageIDs)
+		if err != nil {
+			tsm.logger.Warn("Failed to remove expired entries from expiration tracking",
+				"stream", stream,
+				"count", len(messageIDs),
+				"error", err)
+		}
+	}
+
+	if totalDeleted > 0 {
+		tsm.logger.Info("Periodic cleanup of expired stream entries completed",
+			"total_deleted", totalDeleted)
+	}
+
+	return nil
 }
