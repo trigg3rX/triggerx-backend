@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -109,7 +110,18 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 			"target_contract_address": targetData.TargetContractAddress,
 			"target_function":         targetData.TargetFunction,
 			"abi":                     targetData.ABI,
+			"from_address":            config.GetTaskExecutionAddress(),
 		}
+		if targetData.TaskDefinitionID == 1 || targetData.TaskDefinitionID == 3 || targetData.TaskDefinitionID == 5 {
+			argData = e.parseStaticArgs(targetData.Arguments)
+			argDataJSON, err := json.Marshal(argData)
+			if err != nil {
+				return types.PerformerActionData{}, fmt.Errorf("failed to marshal static args: %v", err)
+			}
+			metadata["on_chain_args"] = string(argDataJSON)
+		}
+
+		// e.logger.Infof("Metadata: %+v", metadata)
 
 		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1, config.GetAlchemyAPIKey(), metadata)
 		if execErr != nil {

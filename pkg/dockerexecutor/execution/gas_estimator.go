@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"os"
+	// "os"
 	"sort"
 	"strings"
 	"sync"
@@ -181,7 +181,7 @@ func (ge *GasEstimator) getOrCreateClient(ctx context.Context, chainID string, a
 		return client, nil
 	}
 	// Read Alchemy API key from environment (if set)
-	alchemyAPIKey = os.Getenv("ALCHEMY_API_KEY")
+	// alchemyAPIKey = os.Getenv("ALCHEMY_API_KEY")
 
 	// Map of chain IDs to RPC URLs (you should configure this based on your setup)
 	rpcURLs := map[string]string{

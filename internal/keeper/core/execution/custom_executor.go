@@ -46,6 +46,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		"target_contract_address": targetData.TargetContractAddress,
 		"target_function":         targetData.TargetFunction,
 		"abi":                     targetData.ABI,
+		"from_address":            config.GetTaskExecutionAddress(),
 	}
 
 	result, err := e.validator.GetDockerExecutor().Execute(
