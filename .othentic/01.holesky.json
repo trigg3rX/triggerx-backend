@@ -1,0 +1,18 @@
+{
+  "L1": {
+    "L1MessageHandler": "0x1C1dC9B8F015156181d21ade71B0C8Aa460dBAff",
+    "L1AvsTreasury": "0x7EC0a7Bcf2E451324E42F302d9D7e2E1Fbac2742",
+    "AvsGovernance": "0x0C77B6273F4852200b17193837960b2f253518FC",
+    "ERC20": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+  },
+  "L2": {
+    "OBLS": "0x2a0E3002C0Ba495F8ff0A71261667D3a5eC5eB3D",
+    "L2MessageHandler": "0x21Eb6e582F37304C3a24154B6fdc3783Fb678A93",
+    "AttestationCenter": "0x710DAb96f318b16F0fC9962D3466C00275414Ff0",
+    "L2AvsTreasury": "0x99E93d49D44617ad63A0e27614676575eF305DB6",
+    "ERC20": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "l2Rewards": false,
+    "InternalTaskHandler": "0xB4d098EbFf5D2144d7040a1Fc1a84cF4C883acb1"
+  },
+  "timestamp": "2025-02-11T06:50:11.575Z"
+}
