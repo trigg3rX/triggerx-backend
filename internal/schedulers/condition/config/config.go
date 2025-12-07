@@ -56,7 +56,7 @@ func Init() error {
 		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
 		maxWorkers:                env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
 		alchemyAPIKey:             env.GetEnvString("ALCHEMY_API_KEY", ""),
-		eventMonitorServiceURL:    env.GetEnvString("EVENT_MONITOR_SERVICE_URL", "http://localhost:9009"),
+		eventMonitorServiceURL:    env.GetEnvString("EVENT_MONITOR_SERVICE_URL", "http://localhost:9007"),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)

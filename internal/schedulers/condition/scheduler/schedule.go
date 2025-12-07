@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	// "strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	// nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 
 	eventmonitorTypes "github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
@@ -216,48 +214,6 @@ func (s *ConditionBasedScheduler) createWebSocketWorker(conditionWorkerData *typ
 	return worker, nil
 }
 
-// createEventWorker creates a new event worker instance
-// func (s *ConditionBasedScheduler) createEventWorker(eventWorkerData *types.EventWorkerData, client *nodeclient.NodeClient) (*worker.EventWorker, error) {
-// 	ctx, cancel := context.WithCancel(s.ctx)
-
-// 	// Get current block number
-// 	blockHex, err := client.EthBlockNumber(ctx)
-// 	if err != nil {
-// 		cancel()
-// 		return nil, fmt.Errorf("failed to get current block number: %w", err)
-// 	}
-
-// 	// Convert hex to uint64
-// 	currentBlock, err := hexToUint64(blockHex)
-// 	if err != nil {
-// 		cancel()
-// 		return nil, fmt.Errorf("failed to parse block number: %w", err)
-// 	}
-
-// 	worker := &worker.EventWorker{
-// 		EventWorkerData: eventWorkerData,
-// 		ChainClient:     client,
-// 		Logger:          s.logger,
-// 		Ctx:             ctx,
-// 		Cancel:          cancel,
-// 		LastBlock:       currentBlock,
-// 		IsActive:        false,
-// 		TriggerCallback: s.HandleTriggerNotification,
-// 		CleanupCallback: s.cleanupJobData,
-// 	}
-
-// 	return worker, nil
-// }
-
-// hexToUint64 converts a hex string (with or without 0x prefix) to uint64
-// func hexToUint64(hexStr string) (uint64, error) {
-// 	// Remove 0x prefix if present
-// 	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
-// 		hexStr = hexStr[2:]
-// 	}
-// 	return strconv.ParseUint(hexStr, 16, 64)
-// }
-
 // cleanupJobData removes job data from the scheduler's store when a worker stops
 func (s *ConditionBasedScheduler) cleanupJobData(jobID *big.Int) error {
 	s.notificationMutex.Lock()
@@ -291,8 +247,15 @@ func (s *ConditionBasedScheduler) UnregisterEventJob(jobID *big.Int) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
-	// Check if this is an event job
-	if _, exists := s.eventWorkers[types.NewBigInt(jobID)]; !exists {
+	// Get the original JobID pointer from jobDataStore to match the map key
+	jobData, exists := s.jobDataStore[jobID.String()]
+	if !exists || jobData == nil {
+		return fmt.Errorf("job %d is not an event job", jobID)
+	}
+
+	// Use the original JobID pointer to check if this is an event job
+	originalJobID := jobData.JobID
+	if _, exists := s.eventWorkers[originalJobID]; !exists {
 		return fmt.Errorf("job %d is not an event job", jobID)
 	}
 
@@ -304,8 +267,8 @@ func (s *ConditionBasedScheduler) UnregisterEventJob(jobID *big.Int) error {
 		s.logger.Info("Unregistered event job from Event Monitor Service", "job_id", jobID)
 	}
 
-	// Remove from event workers map
-	delete(s.eventWorkers, types.NewBigInt(jobID))
+	// Remove from event workers map using the original JobID pointer
+	delete(s.eventWorkers, originalJobID)
 
 	// Clean up job data
 	delete(s.jobDataStore, jobID.String())
@@ -321,15 +284,45 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
+	jobIDStr := jobID.String()
+	var originalJobID *types.BigInt
+
+	// Get the original JobID pointer from jobDataStore to match the map keys
+	jobData, exists := s.jobDataStore[jobIDStr]
+	if exists && jobData != nil {
+		originalJobID = jobData.JobID
+	} else {
+		// If job data doesn't exist, find the key by iterating through the maps
+		for k := range s.conditionWorkers {
+			if k != nil && k.String() == jobIDStr {
+				originalJobID = k
+				break
+			}
+		}
+		if originalJobID == nil {
+			for k := range s.eventWorkers {
+				if k != nil && k.String() == jobIDStr {
+					originalJobID = k
+					break
+				}
+			}
+		}
+	}
+
+	if originalJobID == nil {
+		metrics.TrackCriticalError("job_not_found")
+		return fmt.Errorf("job %d is not scheduled", jobID)
+	}
+
 	// Try condition workers first
-	if conditionWorker, exists := s.conditionWorkers[types.NewBigInt(jobID)]; exists {
+	if conditionWorker, exists := s.conditionWorkers[originalJobID]; exists {
 		conditionWorker.Stop()
-		delete(s.conditionWorkers, types.NewBigInt(jobID))
-		delete(s.jobDataStore, jobID.String()) // Clean up job data
-	} else if eventWorker, exists := s.eventWorkers[types.NewBigInt(jobID)]; exists {
+		delete(s.conditionWorkers, originalJobID)
+		delete(s.jobDataStore, jobIDStr) // Clean up job data
+	} else if eventWorker, exists := s.eventWorkers[originalJobID]; exists {
 		// If event worker exists, unregister from Event Monitor Service
 		if s.eventMonitorClient != nil {
-			if err := s.eventMonitorClient.Unregister(jobID.String()); err != nil {
+			if err := s.eventMonitorClient.Unregister(jobIDStr); err != nil {
 				s.logger.Warn("Failed to unregister from Event Monitor Service",
 					"job_id", jobID,
 					"error", err)
@@ -342,8 +335,8 @@ func (s *ConditionBasedScheduler) UnscheduleJob(jobID *big.Int) error {
 			eventWorker.Stop()
 		}
 
-		delete(s.eventWorkers, types.NewBigInt(jobID))
-		delete(s.jobDataStore, jobID.String()) // Clean up job data
+		delete(s.eventWorkers, originalJobID)
+		delete(s.jobDataStore, jobIDStr) // Clean up job data
 	} else {
 		metrics.TrackCriticalError("job_not_found")
 		return fmt.Errorf("job %d is not scheduled", jobID)

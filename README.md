@@ -93,36 +93,43 @@ The **Aggregator** ensures the consensus of tasks by:
 4. Set up the database.
 
    - ```sh
-     make db-setup
+     just db-setup
      ```
 
 5. Start the database server.
 
    - ```sh
-     make start-db-server
+     just start-db-server
      ```
 
 6. Start the Aggregator.
 
    - ```sh
-     make start-othentic
+     just start-othentic
      ```
 
 7. Start the Redis.
 
    - ```sh
-     make start-redis
+     just start-redis
      ```
 
 8. Start the Schedulers.
 
    - ```sh
-     make start-time-scheduler
-     make start-event-schedulers
-     make start-condition-scheduler
+     just start-time-scheduler
+     just start-event-schedulers
+     just start-condition-scheduler
      ```
 
-9. Start the Keepers.
+9. Start the Event Monitor.
+
+   - ```sh
+     just start-eventmonitor
+     ```
+
+10. Start the Keepers.
+
    - Clone the repo:
 
      - ```sh
@@ -135,10 +142,10 @@ The **Aggregator** ensures the consensus of tasks by:
        ./triggerx.sh start
        ```
 
-10. Run the Keeper node without docker.
+11. Run the Keeper node without docker.
 
      - ```sh
-       make start-keeper
+       just start-keeper
        ```
 
 **Note:**

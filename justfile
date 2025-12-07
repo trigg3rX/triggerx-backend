@@ -60,6 +60,10 @@ start-time-scheduler:
 start-condition-scheduler:
     ./scripts/services/start-condition-scheduler.sh
 
+# Start the Event Monitor
+start-eventmonitor:
+    ./scripts/services/start-eventmonitor.sh
+
 # Start the Keeper
 start-keeper:
     ./scripts/services/start-keeper.sh
