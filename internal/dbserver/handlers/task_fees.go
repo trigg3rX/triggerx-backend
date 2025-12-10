@@ -16,7 +16,9 @@ import (
 )
 
 func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress string) (*big.Int, *big.Int, error) {
-	// Only for taskDefinitionID 2, 4, 6 require ipfsURL(s)
+	// TaskDefinitionID 2, 4, 6 require ipfsURL(s) for dynamic argument scripts
+	// TaskDefinitionID 7 (Custom Script) does NOT require IPFS script execution during job creation
+	// For ID 7, fee estimation uses fixed 1M gas (handled in pipeline.go calculateFees)
 	needsIPFS := taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6
 
 	if needsIPFS && ipfsURLs == "" {
@@ -50,6 +52,7 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 					"from_address":            from,
 				}
 
+				// Dynamic argument scripts (2, 4, 6) use Go
 				result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 				if err != nil {
 					h.logger.Errorf("Error executing code: %v", err)
@@ -139,9 +142,9 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_fee":     totalFee,
-		"total_fee_wei": totalFee.String(),
-		"current_total_fee": currentTotalFee,
+		"total_fee":             totalFee,
+		"total_fee_wei":         totalFee.String(),
+		"current_total_fee":     currentTotalFee,
 		"current_total_fee_wei": currentTotalFee.String(),
 	})
 }

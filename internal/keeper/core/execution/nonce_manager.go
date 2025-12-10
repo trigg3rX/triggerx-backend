@@ -120,6 +120,41 @@ func (nm *NonceManager) GetNextNonce(ctx context.Context) (uint64, error) {
 	return nonce, nil
 }
 
+// ReleaseNonce handles the case when a transaction was not submitted after nonce allocation.
+// This can happen if there's an error between nonce allocation and transaction submission.
+//
+// Behavior:
+// - If the nonce is the last allocated one, simply decrement the counter
+// - If the nonce is out of sequence (concurrent execution), force a sync on next allocation
+//
+// Note: With the current architecture (nonce allocated just before submission), this is rarely needed.
+func (nm *NonceManager) ReleaseNonce(nonce uint64) {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	// Case 1: Simple decrement if this is the last allocated nonce
+	if nonce == nm.currentNonce-1 {
+		nm.currentNonce--
+		nm.logger.Debugf("Released nonce: %d (new current: %d)", nonce, nm.currentNonce)
+		return
+	}
+
+	// Case 2: Out of sequence - force sync on next GetNextNonce call
+	// This handles concurrent execution scenarios where simple decrement won't work
+	nm.lastSyncTime = time.Time{} // Reset to force re-sync
+	nm.logger.Warnf("Nonce %d out of sequence (current: %d), will force sync on next allocation", nonce, nm.currentNonce)
+}
+
+// ForceSync forces an immediate synchronization with the blockchain.
+// Use this after transaction failures or when the local nonce state may be stale.
+func (nm *NonceManager) ForceSync(ctx context.Context) error {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	nm.logger.Info("Forcing nonce sync with blockchain")
+	return nm.syncWithBlockchain(ctx)
+}
+
 // syncWithBlockchain updates the current nonce from the blockchain
 func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
 	operation := func() (uint64, error) {

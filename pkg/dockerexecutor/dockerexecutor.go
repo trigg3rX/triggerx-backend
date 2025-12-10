@@ -144,7 +144,8 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 		}
 	}
 	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
-	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 {
+	// Note: TaskDefinitionID 7 (Custom Script) also needs code execution as it runs IPFS scripts
+	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 && taskDefID != 7 {
 		de.logger.Infof("Skipping code execution for static task. Only calculating fees for task_definition_id=%d", taskDefID)
 		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, alchemyAPIKey, metadataMap)
 		if err != nil {
@@ -154,7 +155,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 		return result, nil
 	}
 
-	// Dynamic tasks (2,4,6): perform full execution as before
+	// Dynamic tasks (2,4,6,7): perform full execution as before
 	de.logger.Infof("Executing code for dynamic task task_definition_id=%d (should run code)", taskDefID)
 	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadataMap)
 	if err != nil {

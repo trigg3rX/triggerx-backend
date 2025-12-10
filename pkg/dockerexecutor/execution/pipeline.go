@@ -239,7 +239,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			if taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7 {
+			if (taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7) && execCtx.FileURL == "" {
 				ep.logger.Debugf("Skipping to Stage 4: Only processing results for task_definition_id=%d", taskDefinitionID)
 				// No execution result available, so construct a minimal ExecutionResult to allow fee calculation
 				result := &types.ExecutionResult{
@@ -342,11 +342,11 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	execCtx.Metadata["static_complexity"] = fmt.Sprintf("%.6f", result.Stats.StaticComplexity)
 	execCtx.Metadata["dynamic_complexity"] = fmt.Sprintf("%.6f", result.Stats.DynamicComplexity)
 
-	// Extract arguments for dynamic tasks (2, 4, 6)
+	// Extract arguments for dynamic tasks (2, 4, 6) and custom scripts (7)
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			ep.logger.Infof("task defination id in process %d",taskDefinitionID)
+			ep.logger.Infof("task defination id in process %d", taskDefinitionID)
 			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
 				// For dynamic tasks, the output is expected to be a JSON array of arguments
 				// We store this in metadata to be used by calculateFees
@@ -355,10 +355,30 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 				// Basic validation that it looks like a JSON array
 				if strings.HasPrefix(cleanOutput, "[") && strings.HasSuffix(cleanOutput, "]") {
 					execCtx.Metadata["on_chain_args"] = cleanOutput
-				// } else {
+					// } else {
 					// If it's not a JSON array, we might want to log a warning or handle it
 					// For now, we'll just log it
 					// ep.logger.Warnf("Dynamic task output does not look like a JSON array: %s", cleanOutput)
+				}
+			} else if taskDefinitionID == 7 {
+				// For custom scripts, parse the JSON output to extract targetContract and calldata
+				cleanOutput := strings.TrimSpace(result.Output)
+				if cleanOutput != "" && strings.HasPrefix(cleanOutput, "{") {
+					var scriptOutput struct {
+						ShouldExecute  bool   `json:"shouldExecute"`
+						TargetContract string `json:"targetContract"`
+						Calldata       string `json:"calldata"`
+					}
+					if err := json.Unmarshal([]byte(cleanOutput), &scriptOutput); err == nil {
+						if scriptOutput.ShouldExecute && scriptOutput.TargetContract != "" && scriptOutput.Calldata != "" {
+							execCtx.Metadata["script_target_contract"] = scriptOutput.TargetContract
+							execCtx.Metadata["script_calldata"] = scriptOutput.Calldata
+							ep.logger.Debugf("Custom script output: target=%s, calldata=%s",
+								scriptOutput.TargetContract, scriptOutput.Calldata[:min(len(scriptOutput.Calldata), 66)])
+						}
+					} else {
+						ep.logger.Warnf("Failed to parse custom script output: %v", err)
+					}
 				}
 			}
 		}
@@ -386,7 +406,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		}
 	}
 
-	ep.logger.Infof("task defination id in the calculate fees: %d",taskDefinitionID)
+	ep.logger.Infof("task defination id in the calculate fees: %d", taskDefinitionID)
 
 	// Calculate off-chain fees based on task definition ID
 	var offChainFeeUSD float64
@@ -439,11 +459,55 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	offChainFeeFloat.Mul(offChainFeeFloat, weiMultiplier)
 	offChainFeeWei, _ := offChainFeeFloat.Int(nil)
 
-	// For task definition ID 7 (custom script), only return off-chain fees
+	// For task definition ID 7 (custom script), calculate on-chain fees using fixed 1M gas
+	// Note: During job creation, we use fixed 1M gas as a conservative estimate
+	// During actual execution (in keeper), real gas estimation is used
 	if taskDefinitionID == 7 {
-		ep.logger.Debugf("Fee calculation for custom script (ID 7): offchain_fee_usd=%.6f, offchain_fee_wei=%s",
-			offChainFeeUSD, offChainFeeWei.String())
-		return offChainFeeWei, offChainFeeWei
+		var onChainFeeWei = big.NewInt(0)
+		var currentOnChainFeeWei = big.NewInt(0)
+
+		chainID := execCtx.Metadata["target_chain_id"]
+
+		if chainID != "" {
+			// Fixed 1M gas for job creation fee estimation
+			const fixedGasLimit = uint64(1000000)
+
+			ctx := context.Background()
+			gasEstimator := NewGasEstimator(ep.logger)
+			defer gasEstimator.Close()
+
+			// Get gas prices for the target chain
+			gasPrice, err := gasEstimator.GetGasPrice(ctx, chainID, alchemyAPIKey)
+			if err != nil {
+				ep.logger.Warnf("Failed to get gas price for custom script: %v, using default", err)
+				gasPrice = big.NewInt(1000000000) // 1 gwei fallback
+			}
+
+			// Get current gas price from the chain
+			currentGasPrice, err := gasEstimator.GetCurrentGasPrice(ctx, chainID, alchemyAPIKey)
+			if err != nil {
+				ep.logger.Warnf("Failed to get current gas price: %v, using historical price", err)
+				currentGasPrice = gasPrice
+			}
+
+			// Calculate on-chain fee with fixed 1M gas
+			onChainFeeWei = gasEstimator.CalculateGasCostInWei(fixedGasLimit, gasPrice)
+			currentOnChainFeeWei = gasEstimator.CalculateGasCostInWei(fixedGasLimit, currentGasPrice)
+
+			ep.logger.Debugf("Custom script fee estimation (job creation): fixedGasLimit=%d, gasPrice=%s, currentGasPrice=%s, gasCost=%s Wei",
+				fixedGasLimit, gasPrice.String(), currentGasPrice.String(), onChainFeeWei.String())
+		} else {
+			ep.logger.Debugf("Custom script: no chain ID provided, skipping on-chain fee calculation")
+		}
+
+		// Calculate total fee (off-chain + on-chain)
+		totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
+		currentTotalFeeWei := new(big.Int).Add(offChainFeeWei, currentOnChainFeeWei)
+
+		ep.logger.Debugf("Fee calculation for custom script (ID 7): offchain=%.6f USD (%s Wei), onchain=%s Wei, total=%s Wei",
+			offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), totalFeeWei.String())
+
+		return totalFeeWei, currentTotalFeeWei
 	}
 
 	// Initialize on-chain related fee variables to zero by default
