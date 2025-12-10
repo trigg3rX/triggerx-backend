@@ -27,14 +27,14 @@ type TaskMonitorClientInterface interface {
 
 // TaskExecutor is the default implementation of TaskExecutor
 type TaskExecutor struct {
-	alchemyAPIKey    string
-	argConverter     *ArgumentConverter
-	validator        *validation.TaskValidator
-	aggregatorClient *aggregator.AggregatorClient
+	alchemyAPIKey     string
+	argConverter      *ArgumentConverter
+	validator         *validation.TaskValidator
+	aggregatorClient  *aggregator.AggregatorClient
 	taskMonitorClient TaskMonitorClientInterface
-	logger           logging.Logger
-	nonceManagers    map[string]*NonceManager // Chain ID -> NonceManager
-	nonceMutex       sync.RWMutex
+	logger            logging.Logger
+	nonceManagers     map[string]*NonceManager // Chain ID -> NonceManager
+	nonceMutex        sync.RWMutex
 }
 
 // NewTaskExecutor creates a new instance of TaskExecutor
@@ -45,13 +45,13 @@ func NewTaskExecutor(
 	taskMonitorClient TaskMonitorClientInterface,
 	logger logging.Logger) *TaskExecutor {
 	return &TaskExecutor{
-		alchemyAPIKey:    alchemyAPIKey,
-		argConverter:     &ArgumentConverter{},
-		validator:        validator,
-		aggregatorClient: aggregatorClient,
+		alchemyAPIKey:     alchemyAPIKey,
+		argConverter:      &ArgumentConverter{},
+		validator:         validator,
+		aggregatorClient:  aggregatorClient,
 		taskMonitorClient: taskMonitorClient,
-		logger:           logger,
-		nonceManagers:    make(map[string]*NonceManager),
+		logger:            logger,
+		nonceManagers:     make(map[string]*NonceManager),
 	}
 }
 
@@ -101,28 +101,6 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			}
 			e.logger.Info("Trigger validation passed", "task_id", task.TaskID, "trace_id", traceID)
 
-			// Get nonce manager for this chain
-			nonceManager, err := e.getNonceManager(task.TargetData[idx].TargetChainID)
-			if err != nil {
-				e.logger.Error("Failed to get nonce manager", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
-
-			// Get next nonce atomically
-			nonce, err := nonceManager.GetNextNonce(context.Background())
-			if err != nil {
-				e.logger.Error("Failed to get nonce", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				resultCh <- struct {
-					success bool
-					err     error
-				}{false, err}
-				return
-			}
-
 			// create a client for validating event based and performing action
 			rpcURL := utils.GetChainRpcUrl(task.TargetData[idx].TargetChainID)
 			client, err := ethclient.Dial(rpcURL)
@@ -139,9 +117,10 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 			//simulate the transaction before doing any action
 
-			// execute the action with the allocated nonce
+			// execute the action (nonce is allocated inside executeAction just before tx submission)
 			var actionData types.PerformerActionData
-			actionData, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], nonce, client)
+			var transactionSubmitted bool
+			actionData, transactionSubmitted, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], client)
 			if err != nil {
 				e.logger.Error("Failed to execute action", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				// Report error to taskmonitor
@@ -151,6 +130,11 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 					err     error
 				}{false, err}
 				return
+			}
+
+			// If execution was skipped (e.g., custom script returned shouldExecute=false)
+			if !transactionSubmitted {
+				e.logger.Info("Execution skipped (no transaction submitted)", "task_id", task.TaskID, "trace_id", traceID)
 			}
 			e.logger.Info("Action execution completed", "task_id", task.TaskID, "trace_id", traceID)
 
