@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	dockerexecution "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/execution"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -67,7 +66,8 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	switch targetData.TaskDefinitionID {
 	case 7:
 		// Custom script execution (TaskDefinitionID = 7)
-		scriptOutput, updates, err := e.ExecuteCustomScript(context.Background(), targetData, triggerData)
+		// ExecuteCustomScript runs the script and calculates fees via Docker executor (pipeline.go)
+		scriptOutput, updates, dockerResult, err := e.ExecuteCustomScript(context.Background(), targetData, triggerData)
 		if err != nil {
 			return types.PerformerActionData{}, false, fmt.Errorf("custom script execution failed: %v", err)
 		}
@@ -92,39 +92,11 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		e.logger.Infof("[CustomScript] Script returned: target=%s, calldata=%s",
 			customScriptOutput.TargetContract, customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)])
 
-		// Use dockerexecutor's GasEstimator for composability
-		// This ensures consistent gas estimation across the codebase
-		gasEstimator := dockerexecution.NewGasEstimator(e.logger)
-		defer gasEstimator.Close()
-
-		gasLimit, _, currentGasPrice, err := gasEstimator.EstimateGasWithCalldata(
-			context.Background(),
-			targetData.TargetChainID,
-			customScriptOutput.TargetContract,
-			callData,
-			config.GetKeeperAddress(),
-			config.GetAlchemyAPIKey(),
-		)
-		if err != nil {
-			e.logger.Warnf("[CustomScript] Failed to estimate gas via GasEstimator, using fallback: %v", err)
-			gasLimit = 600000                        // Fallback gas limit
-			currentGasPrice = big.NewInt(1000000000) // 1 gwei fallback
-		}
-
-		// Add 20% buffer to gas limit
-		gasLimit = gasLimit * 120 / 100
-
-		// Calculate execution fee: gasLimit * currentGasPrice
-		execFee := gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
-		e.logger.Infof("[CustomScript] Gas estimation: gasLimit=%d, gasPrice=%s, execFee=%s wei",
-			gasLimit, currentGasPrice.String(), execFee.String())
-
-		result = &dockertypes.ExecutionResult{
-			Stats: dockertypes.DockerResourceStats{
-				TotalCost:        execFee,
-				CurrentTotalCost: execFee, // Required for ABI packing on line 180
-			},
-		}
+		// Use the fee calculated by Docker executor (pipeline.go calculateFees)
+		// This reuses the same logic and avoids duplication
+		result = dockerResult
+		e.logger.Infof("[CustomScript] Using fee from Docker execution: totalCost=%s wei, currentCost=%s wei",
+			result.Stats.TotalCost.String(), result.Stats.CurrentTotalCost.String())
 
 		// Skip normal argument processing for custom scripts
 		goto skipArgumentProcessing
