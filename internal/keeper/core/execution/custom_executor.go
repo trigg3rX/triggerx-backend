@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
 	// "time"
 
 	// "github.com/ethereum/go-ethereum/crypto"
@@ -17,7 +18,7 @@ import (
 )
 
 // ExecuteCustomScript handles custom script execution (TaskDefinitionID = 7)
-// Returns: script output, storage updates, error
+// Returns: script output, storage updates, execution result (with fees), error
 //
 // Phase 1: Scripts execute without environment variable injection
 // - Scripts can OUTPUT storage via stderr: STORAGE_SET:key=value
@@ -27,7 +28,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	ctx context.Context,
 	targetData *types.TaskTargetData,
 	triggerData *types.TaskTriggerData,
-) (*types.CustomScriptOutput, map[string]string, error) {
+) (*types.CustomScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
 	e.logger.Infof("[CustomScript] Starting execution for job %s", targetData.JobID.String())
 
 	// Execute script in Docker (Phase 1: no env var injection)
@@ -58,23 +59,23 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		metadata,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("docker execution failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("docker execution failed: %w", err)
 	}
 
 	if !result.Success {
-		return nil, nil, fmt.Errorf("script execution failed: %s", result.Error)
+		return nil, nil, nil, fmt.Errorf("script execution failed: %s", result.Error)
 	}
 
 	// Parse script output (JSON from stdout)
 	var scriptOutput types.CustomScriptOutput
 	err = json.Unmarshal([]byte(result.Output), &scriptOutput)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse script output: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse script output: %w", err)
 	}
 
 	// Validate output
 	if err := validateCustomScriptOutput(&scriptOutput); err != nil {
-		return nil, nil, fmt.Errorf("invalid script output: %w", err)
+		return nil, nil, nil, fmt.Errorf("invalid script output: %w", err)
 	}
 
 	e.logger.Infof("[CustomScript] Script output: shouldExecute=%v, targetContract=%s",
@@ -89,7 +90,12 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		e.logger.Infof("[CustomScript] Found %d storage updates", len(storageUpdates))
 	}
 
-	return &scriptOutput, storageUpdates, nil
+	// Log the calculated fees from Docker execution
+	if result.Stats.CurrentTotalCost != nil {
+		e.logger.Infof("[CustomScript] Fee from Docker execution: %s wei", result.Stats.CurrentTotalCost.String())
+	}
+
+	return &scriptOutput, storageUpdates, result, nil
 }
 
 // prepareCustomScriptEnv prepares environment variables for script execution
