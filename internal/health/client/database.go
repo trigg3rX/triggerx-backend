@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"bytes"
 	// "encoding/json"
 	"errors"
@@ -14,15 +15,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // DatabaseManager handles database operations
 type DatabaseManager struct {
-	logger      logging.Logger
+	logger      observability.Logger
 	db          *database.Connection
 	telegramBot *telegram.Bot
 }
@@ -30,7 +30,7 @@ type DatabaseManager struct {
 var instance *DatabaseManager
 
 // InitDatabaseManager initializes the database manager with a logger
-func InitDatabaseManager(logger logging.Logger, connection *database.Connection, telegramBot *telegram.Bot) {
+func InitDatabaseManager(ctx context.Context, logger observability.Logger, connection *database.Connection, telegramBot *telegram.Bot) {
 	if logger == nil {
 		panic("logger cannot be nil")
 	}
@@ -38,11 +38,11 @@ func InitDatabaseManager(logger logging.Logger, connection *database.Connection,
 		panic("database connection cannot be nil")
 	}
 	if telegramBot == nil {
-		logger.Warn("Telegram bot is nil, notifications will not be sent")
+		logger.Warn(ctx, "Telegram bot is nil, notifications will not be sent")
 	}
 
 	// Create a new logger with component field and proper level
-	dbLogger := logger.With("component", "database")
+	dbLogger := logger.With(observability.String("component", "database"))
 
 	instance = &DatabaseManager{
 		logger:      dbLogger,
@@ -60,18 +60,18 @@ func GetInstance() *DatabaseManager {
 }
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)
-func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
-	dm.logger.Debug("Updating keeper status in database",
-		"keeper", keeperHealth.KeeperAddress,
-		"active", isActive,
+func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+	dm.logger.Debug(ctx, "Updating keeper status in database",
+		observability.String("keeper", keeperHealth.KeeperAddress),
+		observability.Bool("active", isActive),
 	)
 
 	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
 
 	if len(keeperHealth.KeeperAddress) > 0 && !bytes.HasPrefix([]byte(keeperHealth.KeeperAddress), []byte("0x")) {
-		dm.logger.Debug("Adding 0x prefix to keeper address",
-			"keeper", keeperHealth.KeeperAddress,
+		dm.logger.Debug(ctx, "Adding 0x prefix to keeper address",
+			observability.String("keeper", keeperHealth.KeeperAddress),
 		)
 		keeperHealth.KeeperAddress = "0x" + keeperHealth.KeeperAddress
 	}
@@ -85,15 +85,17 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 	if err := dm.db.Session().Query(`
 		SELECT keeper_id, online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime); err != nil {
-		dm.logger.Error("Failed to retrieve keeper_id and previous status",
-			"keeper", keeperHealth.KeeperAddress,
-			"error", err,
+		dm.logger.Error(ctx, "Failed to retrieve keeper_id and previous status",
+			observability.String("keeper", keeperHealth.KeeperAddress),
+			observability.Error(err),
 		)
 		return err
 	}
 
 	if keeperID == 0 {
-		dm.logger.Errorf("[KeeperHealthCheckIn] No keeper found with address: %s", keeperHealth.KeeperAddress)
+		dm.logger.Error(ctx, "No keeper found with address",
+			observability.String("keeper", keeperHealth.KeeperAddress),
+		)
 		return errors.New("keeper not found")
 	}
 
@@ -101,7 +103,10 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 		keeperHealth.PeerID = "no-peer-id"
 	}
 
-	dm.logger.Infof("[KeeperHealthCheckIn] Keeper ID: %d | Online: %t", keeperID, isActive)
+	dm.logger.Info(ctx, "Keeper ID",
+		observability.Int64("keeper_id", keeperID),
+		observability.Bool("online", isActive),
+	)
 
 	// --- UPTIME LOGIC ---
 	// If previously online, add to uptime (regardless of new isActive)
@@ -119,10 +124,10 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 			SET uptime = ?
 			WHERE keeper_id = ?`,
 			newUptime, keeperID).Exec(); err != nil {
-			dm.logger.Error("Failed to update keeper uptime",
-				"error", err,
-				"keeper_id", keeperID,
-				"keeper", keeperHealth.KeeperAddress,
+			dm.logger.Error(ctx, "Failed to update keeper uptime",
+				observability.Error(err),
+				observability.Int64("keeper_id", keeperID),
+				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
 			return err
 		}
@@ -136,10 +141,10 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 			SET online = ?
 			WHERE keeper_id = ?`,
 			false, keeperID).Exec(); err != nil {
-			dm.logger.Error("Failed to update keeper inactive status",
-				"error", err,
-				"keeper_id", keeperID,
-				"keeper", keeperHealth.KeeperAddress,
+			dm.logger.Error(ctx, "Failed to update keeper inactive status",
+				observability.Error(err),
+				observability.Int64("keeper_id", keeperID),
+				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
 			return err
 		}
@@ -152,29 +157,29 @@ func (dm *DatabaseManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHea
 		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
 		WHERE keeper_id = ?`,
 		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec(); err != nil {
-		dm.logger.Error("Failed to update keeper status",
-			"error", err,
-			"keeper_id", keeperID,
+		dm.logger.Error(ctx, "Failed to update keeper status",
+			observability.Error(err),
+			observability.Int64("keeper_id", keeperID),
 		)
 		return err
 	}
 
 	if !isActive {
-		go dm.checkAndNotifyOfflineKeeper(keeperID)
+		go dm.checkAndNotifyOfflineKeeper(ctx, keeperID)
 	}
 
-	dm.logger.Info("Successfully updated keeper status",
-		"keeper_id", keeperID,
-		"active", isActive,
+	dm.logger.Info(ctx, "Successfully updated keeper status",
+		observability.Int64("keeper_id", keeperID),
+		observability.Bool("active", isActive),
 	)
 	return nil
 }
 
-func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
+func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keeperID int64) {
 	time.Sleep(10 * time.Minute)
 
-	dm.logger.Debug("Checking current status for offline keeper",
-		"keeper_id", keeperID,
+	dm.logger.Debug(ctx, "Checking current status for offline keeper",
+		observability.Int64("keeper_id", keeperID),
 	)
 
 	var online bool
@@ -183,9 +188,9 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 		keeperID).Scan(&online)
 
 	if err != nil {
-		dm.logger.Error("Failed to check keeper online status",
-			"error", err,
-			"keeper_id", keeperID,
+		dm.logger.Error(ctx, "Failed to check keeper online status",
+			observability.Error(err),
+			observability.Int64("keeper_id", keeperID),
 		)
 		return
 	}
@@ -200,9 +205,9 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 			keeperID).Scan(&chatID, &keeperName, &emailID)
 
 		if err != nil {
-			dm.logger.Error("Failed to fetch keeper communication info",
-				"error", err,
-				"keeper_id", keeperID,
+			dm.logger.Error(ctx, "Failed to fetch keeper communication info",
+				observability.Error(err),
+				observability.Int64("keeper_id", keeperID),
 			)
 			return
 		}
@@ -210,16 +215,16 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 		if chatID != 0 {
 			telegramMsg := fmt.Sprintf("Keeper %s is down for more than 10 minutes. Please check and start it.", keeperName)
 			if err := dm.telegramBot.SendMessage(chatID, telegramMsg); err != nil {
-				dm.logger.Error("Failed to send Telegram notification",
-					"error", err,
-					"keeper", keeperName,
-					"keeper_id", keeperID,
+				dm.logger.Error(ctx, "Failed to send Telegram notification",
+					observability.Error(err),
+					observability.String("keeper", keeperName),
+					observability.Int64("keeper_id", keeperID),
 				)
 			}
 		} else {
-			dm.logger.Warn("No Telegram chat ID found",
-				"keeper", keeperName,
-				"keeper_id", keeperID,
+			dm.logger.Warn(ctx, "No Telegram chat ID found",
+				observability.String("keeper", keeperName),
+				observability.Int64("keeper_id", keeperID),
 			)
 		}
 
@@ -231,27 +236,27 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 				<p>Regards,<br>TriggerX Team</p>
 			`, keeperName)
 
-			if err := dm.sendEmailNotification(emailID, subject, emailBody); err != nil {
-				dm.logger.Error("Failed to send email notification",
-					"error", err,
-					"keeper", keeperName,
-					"keeper_id", keeperID,
+			if err := dm.sendEmailNotification(ctx, emailID, subject, emailBody); err != nil {
+				dm.logger.Error(ctx, "Failed to send email notification",
+					observability.Error(err),
+					observability.String("keeper", keeperName),
+					observability.Int64("keeper_id", keeperID),
 				)
 			}
 		} else {
-			dm.logger.Warn("No email address found",
-				"keeper", keeperName,
-				"keeper_id", keeperID,
+			dm.logger.Warn(ctx, "No email address found",
+				observability.String("keeper", keeperName),
+				observability.Int64("keeper_id", keeperID),
 			)
 		}
 
-		dm.logger.Info("Completed notification process for offline keeper",
-			"keeper", keeperName,
-			"keeper_id", keeperID,
+		dm.logger.Info(ctx, "Completed notification process for offline keeper",
+			observability.String("keeper", keeperName),
+			observability.Int64("keeper_id", keeperID),
 		)
 	} else {
-		dm.logger.Info("Keeper is back online",
-			"keeper_id", keeperID,
+		dm.logger.Info(ctx, "Keeper is back online",
+			observability.Int64("keeper_id", keeperID),
 		)
 	}
 }
@@ -280,7 +285,7 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(keeperID int64) {
 // 	return nil
 // }
 
-func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error {
+func (dm *DatabaseManager) sendEmailNotification(ctx context.Context, to, subject, body string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", config.GetEmailUser())
 	m.SetHeader("To", to)
@@ -289,16 +294,21 @@ func (dm *DatabaseManager) sendEmailNotification(to, subject, body string) error
 
 	d := gomail.NewDialer("smtp.zeptomail.in", 587, config.GetEmailUser(), config.GetEmailPassword())
 	if err := d.DialAndSend(m); err != nil {
-		dm.logger.Errorf("[Notification] Failed to send email to %s: %v", to, err)
+		dm.logger.Error(ctx, "Failed to send email to %s",
+			observability.String("to", to),
+			observability.Error(err),
+		)
 		return err
 	}
 
-	dm.logger.Infof("[Notification] Email sent successfully to: %s", to)
+	dm.logger.Info(ctx, "Email sent successfully to",
+		observability.String("to", to),
+	)
 	return nil
 }
 
 // GetVerifiedKeepers retrieves only verified keepers from the database
-func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
+func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.KeeperInfo, error) {
 	var keepers []types.KeeperInfo
 
 	iter := dm.db.Session().Query(`
@@ -328,8 +338,8 @@ func (dm *DatabaseManager) GetVerifiedKeepers() ([]types.KeeperInfo, error) {
 		return nil, fmt.Errorf("error closing iterator: %w", err)
 	}
 
-	dm.logger.Debug("Retrieved verified keepers from database",
-		"count", len(keepers),
+	dm.logger.Debug(ctx, "Retrieved verified keepers from database",
+		observability.Int("count", len(keepers)),
 	)
 	return keepers, nil
 }

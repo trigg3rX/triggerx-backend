@@ -25,6 +25,9 @@ type Config struct {
 	databaseHostAddress string
 	databaseHostPort    string
 
+	// OTel exporter endpoint
+	otelExporterEndpoint string
+
 	// IPFS configuration
 	pinataHost string
 	pinataJWT  string
@@ -39,7 +42,7 @@ type Config struct {
 	alchemyAPIKey string
 
 	// Task Execution Address
-	taskExecutionAddress string
+	taskExecutionAddress     string
 	testTaskExecutionAddress string
 	imuaTaskExecutionAddress string
 }
@@ -51,21 +54,22 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
-		devMode:                        env.GetEnvBool("DEV_MODE", false),
-		healthRPCPort:                  env.GetEnvString("HEALTH_RPC_PORT", "9003"),
-		botToken:                       env.GetEnvString("BOT_TOKEN", ""),
-		emailUser:                      env.GetEnvString("EMAIL_USER", ""),
-		emailPassword:                  env.GetEnvString("EMAIL_PASS", ""),
-		databaseHostAddress:            env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:               env.GetEnvString("DATABASE_HOST_PORT", "9042"),
-		pinataHost:                     env.GetEnvString("PINATA_HOST", ""),
-		pinataJWT:                      env.GetEnvString("PINATA_JWT", ""),
-		managerSigningAddress:          env.GetEnvString("MANAGER_SIGNING_ADDRESS", ""),
-		etherscanAPIKey:                env.GetEnvString("ETHERSCAN_API_KEY", ""),
-		alchemyAPIKey:                  env.GetEnvString("ALCHEMY_API_KEY", ""),
-		taskExecutionAddress:            env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
-		testTaskExecutionAddress:        env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
-		imuaTaskExecutionAddress:       env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
+		devMode:                  env.GetEnvBool("DEV_MODE", false),
+		healthRPCPort:            env.GetEnvString("HEALTH_RPC_PORT", "9003"),
+		botToken:                 env.GetEnvString("BOT_TOKEN", ""),
+		emailUser:                env.GetEnvString("EMAIL_USER", ""),
+		emailPassword:            env.GetEnvString("EMAIL_PASS", ""),
+		databaseHostAddress:      env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
+		databaseHostPort:         env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		otelExporterEndpoint:     env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
+		pinataHost:               env.GetEnvString("PINATA_HOST", ""),
+		pinataJWT:                env.GetEnvString("PINATA_JWT", ""),
+		managerSigningAddress:    env.GetEnvString("MANAGER_SIGNING_ADDRESS", ""),
+		etherscanAPIKey:          env.GetEnvString("ETHERSCAN_API_KEY", ""),
+		alchemyAPIKey:            env.GetEnvString("ALCHEMY_API_KEY", ""),
+		taskExecutionAddress:     env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
+		testTaskExecutionAddress: env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
+		imuaTaskExecutionAddress: env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -97,6 +101,9 @@ func validateConfig() error {
 	}
 	if !env.IsValidPort(cfg.databaseHostPort) {
 		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
+	}
+	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
+		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
 	}
 	if !env.IsValidEthAddress(cfg.taskExecutionAddress) {
 		return fmt.Errorf("invalid task execution address: %s", cfg.taskExecutionAddress)
@@ -131,6 +138,10 @@ func GetDatabaseHostAddress() string {
 
 func GetDatabaseHostPort() string {
 	return cfg.databaseHostPort
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 func GetBotToken() string {
@@ -179,4 +190,10 @@ func GetImuaTaskExecutionAddress() string {
 
 func GetManagerSigningAddress() string {
 	return cfg.managerSigningAddress
+}
+
+// GetVersion returns the service version
+// TODO: This should be set from build flags or environment variable
+func GetVersion() string {
+	return "1.0.0"
 }

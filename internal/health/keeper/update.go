@@ -1,11 +1,13 @@
 package keeper
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 const (
@@ -18,7 +20,7 @@ var (
 )
 
 // UpdateKeeperHealth updates the health status of a keeper
-func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealthCheckIn) error {
+func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckIn) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -27,8 +29,8 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealth
 
 	existingState, exists := sm.keepers[address]
 	if !exists {
-		sm.logger.Warn("Received health check-in from unverified keeper",
-			"keeper", address,
+		sm.logger.Warn(ctx, "Received health check-in from unverified keeper",
+			observability.String("keeper", address),
 		)
 		return ErrKeeperNotVerified
 	}
@@ -41,29 +43,29 @@ func (sm *StateManager) UpdateKeeperHealth(keeperHealth commonTypes.KeeperHealth
 	existingState.IsImua = keeperHealth.IsImua
 
 	// Update database
-	if err := sm.retryWithBackoff(func() error {
-		return sm.updateKeeperStatusInDatabase(keeperHealth, true)
+	if err := sm.retryWithBackoff(ctx, func() error {
+		return sm.updateKeeperStatusInDatabase(ctx, keeperHealth, true)
 	}, maxRetries); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
 
-	sm.logger.Info("Updated keeper health status",
-		"keeper", address,
-		"version", keeperHealth.Version,
-		"is_imua", keeperHealth.IsImua,
+	sm.logger.Info(ctx, "Updated keeper health status",
+		observability.String("keeper", address),
+		observability.String("version", keeperHealth.Version),
+		observability.Bool("is_imua", keeperHealth.IsImua),
 	)
 	return nil
 }
 
-func (sm *StateManager) updateKeeperStatusInDatabase(keeperHealth commonTypes.KeeperHealthCheckIn, isActive bool) error {
-	if err := sm.db.UpdateKeeperHealth(keeperHealth, isActive); err != nil {
+func (sm *StateManager) updateKeeperStatusInDatabase(ctx context.Context, keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+	if err := sm.db.UpdateKeeperHealth(ctx, keeperHealth, isActive); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
 
-	sm.logger.Debug("Updated keeper status in database",
-		"keeper", keeperHealth.KeeperAddress,
-		"active", isActive,
-		"version", keeperHealth.Version,
+	sm.logger.Debug(ctx, "Updated keeper status in database",
+		observability.String("keeper", keeperHealth.KeeperAddress),
+		observability.Bool("active", isActive),
+		observability.String("version", keeperHealth.Version),
 	)
 	return nil
 }
