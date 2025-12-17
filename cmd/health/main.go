@@ -48,7 +48,7 @@ func main() {
 
 	// Extract individual components
 	obsLogger := obs.Logger()
-	// obsTracer := obs.Tracer()
+	obsTracer := obs.Tracer()
 	obsMetrics := obs.Metrics()
 
 	// Use observability logger for initial startup log
@@ -81,11 +81,11 @@ func main() {
 	}
 
 	// Initialize database manager
-	client.InitDatabaseManager(ctx, obsLogger, dbConn, telegramBot)
+	client.InitDatabaseManager(ctx, obsLogger, obsTracer, dbConn, telegramBot)
 	obsLogger.Info(ctx, "Database manager initialized")
 
 	// Initialize state manager
-	stateManager := keeper.InitializeStateManager(ctx, obsLogger)
+	stateManager := keeper.InitializeStateManager(ctx, obsLogger, obsTracer)
 	obsLogger.Info(ctx, "Keeper state manager initialized")
 
 	// Initialize metrics using observability metrics
@@ -98,10 +98,10 @@ func main() {
 		// Continue anyway, as we can still operate with an empty state
 	}
 
-	// Setup HTTP server
-	srv := setupHTTPServer(obsLogger)
+	// Setup HTTP server with tracing
+	srv := setupHTTPServer(obsLogger, obsTracer)
 
-	// Start server
+	// Start HTTP server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -110,6 +110,12 @@ func main() {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
+
+	// TODO: When adding gRPC server, use the tracing interceptor:
+	// import "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
+	// grpcServer := grpc.NewServer(
+	//     grpc.UnaryInterceptor(tracing.TraceInterceptor(obsTracer, "health")),
+	// )
 
 	obsLogger.Info(ctx, "Health service is ready",
 		observability.String("port", config.GetHealthRPCPort()),
@@ -131,43 +137,20 @@ func main() {
 	performGracefulShutdown(ctx, srv, &wg, obs, obsLogger, stateManager)
 }
 
-func setupHTTPServer(logger observability.Logger) *http.Server {
+func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Add tracing middleware before logging middleware to ensure trace context is available
+	router.Use(health.TraceMiddleware(tracer))
 	router.Use(health.LoggerMiddleware(logger))
 
 	// Register routes
 	health.RegisterRoutes(router, logger)
-
-	return &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),
-		Handler: router,
-	}
-}
-
-// setupHTTPServerMinimal creates an HTTP server with observability components
-// This is a temporary solution until health package is migrated to observability
-func setupHTTPServerMinimal(logger observability.Logger, tracer observability.Tracer, metrics observability.Metrics) *http.Server {
-	if !config.IsDevMode() {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	router := gin.New()
-	router.Use(gin.Recovery())
-	// TODO: Add observability middleware when health package is migrated
-
-	// Register basic routes
-	router.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"service":   "TriggerX Health Service",
-			"status":    "running",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		})
-	})
 
 	return &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),

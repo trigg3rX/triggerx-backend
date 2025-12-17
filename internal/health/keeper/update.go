@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -58,10 +61,23 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 }
 
 func (sm *StateManager) updateKeeperStatusInDatabase(ctx context.Context, keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+	// Start a span for the database update operation
+	ctx, span := sm.tracer.Start(ctx, "state_manager.update_keeper_status",
+		observability.WithSpanKind(trace.SpanKindInternal),
+		observability.WithAttributes(
+			attribute.String("keeper.address", keeperHealth.KeeperAddress),
+			attribute.Bool("keeper.active", isActive),
+			attribute.String("keeper.version", keeperHealth.Version),
+		),
+	)
+	defer span.End()
+
 	if err := sm.db.UpdateKeeperHealth(ctx, keeperHealth, isActive); err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
 
+	span.SetStatus(codes.Ok, "")
 	sm.logger.Debug(ctx, "Updated keeper status in database",
 		observability.String("keeper", keeperHealth.KeeperAddress),
 		observability.Bool("active", isActive),

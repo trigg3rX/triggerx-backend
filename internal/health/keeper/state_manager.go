@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // StateManager manages the state of all keepers
@@ -14,6 +14,7 @@ type StateManager struct {
 	keepers     map[string]*types.KeeperInfo
 	mu          sync.RWMutex
 	logger      observability.Logger
+	tracer      observability.Tracer
 	initialized bool
 	db          *client.DatabaseManager
 }
@@ -24,7 +25,7 @@ var (
 )
 
 // InitializeStateManager creates and initializes the state manager
-func InitializeStateManager(ctx context.Context, logger observability.Logger) *StateManager {
+func InitializeStateManager(ctx context.Context, logger observability.Logger, tracer observability.Tracer) *StateManager {
 	stateManagerOnce.Do(func() {
 		// Create a new logger with component field and proper level
 		stateLogger := logger.With(observability.String("component", "state_manager"))
@@ -32,6 +33,7 @@ func InitializeStateManager(ctx context.Context, logger observability.Logger) *S
 		stateManager = &StateManager{
 			keepers:     make(map[string]*types.KeeperInfo),
 			logger:      stateLogger,
+			tracer:      tracer,
 			initialized: true,
 			db:          client.GetInstance(),
 		}

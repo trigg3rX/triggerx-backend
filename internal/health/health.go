@@ -54,9 +54,8 @@ func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 		status := c.Writer.Status()
 
 		// Record HTTP metrics
-		
 
-		middlewareLogger.Debug(context.Background(), "HTTP Request",
+		middlewareLogger.Debug(c.Request.Context(), "HTTP Request",
 			observability.String("method", method),
 			observability.String("path", path),
 			observability.Int("status", status),
@@ -90,10 +89,11 @@ func (h *Handler) handleRoot(c *gin.Context) {
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
+	ctx := c.Request.Context()
 	var keeperHealth types.KeeperHealthCheckIn
 	var response types.KeeperHealthCheckInResponse
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
-		h.logger.Error(context.Background(), "Failed to parse keeper health check-in request",
+		h.logger.Error(ctx, "Failed to parse keeper health check-in request",
 			observability.Error(err),
 		)
 		response.Status = false
@@ -117,12 +117,11 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// )
 
 	// Record check-in by version metric
-	
 
 	// Verify signature for all versions
 	ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 	if !ok {
-		h.logger.Error(context.Background(), "Invalid keeper signature",
+		h.logger.Error(ctx, "Invalid keeper signature",
 			observability.String("keeper", keeperHealth.KeeperAddress),
 			observability.Error(err),
 		)
@@ -142,9 +141,9 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
 
 	// Update keeper state for all versions
-	if err := h.stateManager.UpdateKeeperHealth(context.Background(), keeperHealth); err != nil {
+	if err := h.stateManager.UpdateKeeperHealth(ctx, keeperHealth); err != nil {
 		if errors.Is(err, keeper.ErrKeeperNotVerified) {
-			h.logger.Warn(context.Background(), "Unverified keeper attempted health check-in",
+			h.logger.Warn(ctx, "Unverified keeper attempted health check-in",
 				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
 			c.JSON(http.StatusForbidden, gin.H{
@@ -154,7 +153,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error(context.Background(), "Failed to update keeper state",
+		h.logger.Error(ctx, "Failed to update keeper state",
 			observability.Error(err),
 			observability.String("keeper", keeperHealth.KeeperAddress),
 		)
@@ -162,7 +161,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(context.Background(), "CheckIn Successful",
+	h.logger.Info(ctx, "CheckIn Successful",
 		observability.String("keeper", keeperHealth.KeeperAddress),
 		observability.String("version", keeperHealth.Version),
 	)
@@ -228,7 +227,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
-			h.logger.Error(context.Background(), "Failed to encrypt message for keeper",
+			h.logger.Error(ctx, "Failed to encrypt message for keeper",
 				observability.Error(err),
 			)
 			response.Status = false
@@ -256,11 +255,11 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperStatus(c *gin.Context) {
-	total, active := h.stateManager.GetKeeperCount(context.Background())
-	activeKeepers := h.stateManager.GetAllActiveKeepers(context.Background())
+	ctx := c.Request.Context()
+	total, active := h.stateManager.GetKeeperCount(ctx)
+	activeKeepers := h.stateManager.GetAllActiveKeepers(ctx)
 
 	// Update keeper metrics
-	
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":      total,
@@ -270,11 +269,11 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 }
 
 func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
-	total, active := h.stateManager.GetKeeperCount(context.Background())
-	detailedInfo := h.stateManager.GetDetailedKeeperInfo(context.Background())
+	ctx := c.Request.Context()
+	total, active := h.stateManager.GetKeeperCount(ctx)
+	detailedInfo := h.stateManager.GetDetailedKeeperInfo(ctx)
 
 	// Update keeper metrics
-	
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":  total,

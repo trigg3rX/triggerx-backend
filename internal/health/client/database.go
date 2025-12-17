@@ -1,8 +1,9 @@
 package client
 
 import (
-	"context"
 	"bytes"
+	"context"
+
 	// "encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,9 @@ import (
 	"github.com/go-gomail/gomail"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -23,16 +27,20 @@ import (
 // DatabaseManager handles database operations
 type DatabaseManager struct {
 	logger      observability.Logger
+	tracer      observability.Tracer
 	db          *database.Connection
 	telegramBot *telegram.Bot
 }
 
 var instance *DatabaseManager
 
-// InitDatabaseManager initializes the database manager with a logger
-func InitDatabaseManager(ctx context.Context, logger observability.Logger, connection *database.Connection, telegramBot *telegram.Bot) {
+// InitDatabaseManager initializes the database manager with a logger and tracer
+func InitDatabaseManager(ctx context.Context, logger observability.Logger, tracer observability.Tracer, connection *database.Connection, telegramBot *telegram.Bot) {
 	if logger == nil {
 		panic("logger cannot be nil")
+	}
+	if tracer == nil {
+		panic("tracer cannot be nil")
 	}
 	if connection == nil {
 		panic("database connection cannot be nil")
@@ -46,6 +54,7 @@ func InitDatabaseManager(ctx context.Context, logger observability.Logger, conne
 
 	instance = &DatabaseManager{
 		logger:      dbLogger,
+		tracer:      tracer,
 		db:          connection,
 		telegramBot: telegramBot,
 	}
@@ -61,6 +70,19 @@ func GetInstance() *DatabaseManager {
 
 // KeeperRegistered registers a new keeper or updates an existing one (status = true)
 func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth types.KeeperHealthCheckIn, isActive bool) error {
+	// Start a span for the database update operation
+	ctx, span := dm.tracer.Start(ctx, "db.update_keeper_health",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "update"),
+			attribute.String("db.collection", "keeper_data"),
+			attribute.String("keeper.address", keeperHealth.KeeperAddress),
+			attribute.Bool("keeper.active", isActive),
+		),
+	)
+	defer span.End()
+
 	dm.logger.Debug(ctx, "Updating keeper status in database",
 		observability.String("keeper", keeperHealth.KeeperAddress),
 		observability.Bool("active", isActive),
@@ -82,15 +104,28 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	var prevUptime int64
 
 	// Fetch previous online status, last_checked_in, and uptime
-	if err := dm.db.Session().Query(`
+	_, selectSpan := dm.tracer.Start(ctx, "db.select_keeper_data",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "select"),
+			attribute.String("db.collection", "keeper_data"),
+		),
+	)
+	err := dm.db.Session().Query(`
 		SELECT keeper_id, online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
-		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime); err != nil {
+		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime)
+	selectSpan.End()
+	if err != nil {
+		selectSpan.SetStatus(codes.Error, err.Error())
 		dm.logger.Error(ctx, "Failed to retrieve keeper_id and previous status",
 			observability.String("keeper", keeperHealth.KeeperAddress),
 			observability.Error(err),
 		)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	selectSpan.SetStatus(codes.Ok, "")
 
 	if keeperID == 0 {
 		dm.logger.Error(ctx, "No keeper found with address",
@@ -119,50 +154,94 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		newUptime := prevUptime + uptimeToAdd
 
 		// Update uptime field
-		if err := dm.db.Session().Query(`
+		uptimeCtx, uptimeSpan := dm.tracer.Start(ctx, "db.update_keeper_uptime",
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
+				attribute.String("db.system", "cassandra"),
+				attribute.String("db.operation", "update"),
+				attribute.String("db.collection", "keeper_data"),
+				attribute.Int64("keeper.id", keeperID),
+			),
+		)
+		err = dm.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET uptime = ?
 			WHERE keeper_id = ?`,
-			newUptime, keeperID).Exec(); err != nil {
-			dm.logger.Error(ctx, "Failed to update keeper uptime",
+			newUptime, keeperID).Exec()
+		uptimeSpan.End()
+		if err != nil {
+			uptimeSpan.SetStatus(codes.Error, err.Error())
+			dm.logger.Error(uptimeCtx, "Failed to update keeper uptime",
 				observability.Error(err),
 				observability.Int64("keeper_id", keeperID),
 				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
+			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+		uptimeSpan.SetStatus(codes.Ok, "")
 	}
 	// --- END UPTIME LOGIC ---
 
 	if !isActive {
 		// If not active, just set online = false
-		if err := dm.db.Session().Query(`
+		updateCtx, updateSpan := dm.tracer.Start(ctx, "db.update_keeper_inactive",
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
+				attribute.String("db.system", "cassandra"),
+				attribute.String("db.operation", "update"),
+				attribute.String("db.collection", "keeper_data"),
+				attribute.Int64("keeper.id", keeperID),
+			),
+		)
+		err = dm.db.Session().Query(`
 			UPDATE triggerx.keeper_data 
 			SET online = ?
 			WHERE keeper_id = ?`,
-			false, keeperID).Exec(); err != nil {
-			dm.logger.Error(ctx, "Failed to update keeper inactive status",
+			false, keeperID).Exec()
+		updateSpan.End()
+		if err != nil {
+			updateSpan.SetStatus(codes.Error, err.Error())
+			dm.logger.Error(updateCtx, "Failed to update keeper inactive status",
 				observability.Error(err),
 				observability.Int64("keeper_id", keeperID),
 				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
+			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+		updateSpan.SetStatus(codes.Ok, "")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
 	// If active, update all fields including last_checked_in
-	if err := dm.db.Session().Query(`
+	updateActiveCtx, updateActiveSpan := dm.tracer.Start(ctx, "db.update_keeper_active",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "update"),
+			attribute.String("db.collection", "keeper_data"),
+			attribute.Int64("keeper.id", keeperID),
+		),
+	)
+	err = dm.db.Session().Query(`
 		UPDATE triggerx.keeper_data 
 		SET consensus_address = ?, online = ?, peer_id = ?, version = ?, last_checked_in = ? 
 		WHERE keeper_id = ?`,
-		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Failed to update keeper status",
+		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec()
+	updateActiveSpan.End()
+	if err != nil {
+		updateActiveSpan.SetStatus(codes.Error, err.Error())
+		dm.logger.Error(updateActiveCtx, "Failed to update keeper status",
 			observability.Error(err),
 			observability.Int64("keeper_id", keeperID),
 		)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	updateActiveSpan.SetStatus(codes.Ok, "")
+	span.SetStatus(codes.Ok, "")
 
 	if !isActive {
 		go dm.checkAndNotifyOfflineKeeper(ctx, keeperID)
@@ -309,6 +388,17 @@ func (dm *DatabaseManager) sendEmailNotification(ctx context.Context, to, subjec
 
 // GetVerifiedKeepers retrieves only verified keepers from the database
 func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.KeeperInfo, error) {
+	// Start a span for the database query operation
+	ctx, span := dm.tracer.Start(ctx, "db.get_verified_keepers",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "select"),
+			attribute.String("db.collection", "keeper_data"),
+		),
+	)
+	defer span.End()
+
 	var keepers []types.KeeperInfo
 
 	iter := dm.db.Session().Query(`
@@ -335,8 +425,12 @@ func (dm *DatabaseManager) GetVerifiedKeepers(ctx context.Context) ([]types.Keep
 	}
 
 	if err := iter.Close(); err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("error closing iterator: %w", err)
 	}
+
+	span.SetAttributes(attribute.Int("db.rows_returned", len(keepers)))
+	span.SetStatus(codes.Ok, "")
 
 	dm.logger.Debug(ctx, "Retrieved verified keepers from database",
 		observability.Int("count", len(keepers)),

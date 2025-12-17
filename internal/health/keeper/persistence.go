@@ -5,17 +5,27 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LoadVerifiedKeepers loads only verified keepers from the database
 func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
+	// Start a span for loading keepers
+	ctx, span := sm.tracer.Start(ctx, "state_manager.load_verified_keepers",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
 	sm.logger.Info(ctx, "Loading verified keepers from database...")
 
 	// Get only verified keepers from database
 	keepers, err := sm.db.GetVerifiedKeepers(ctx)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("failed to load verified keepers from database: %w", err)
 	}
 
@@ -41,6 +51,8 @@ func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 		sm.keepers[keeper.KeeperAddress] = state
 	}
 
+	span.SetAttributes(attribute.Int("keepers.loaded", len(sm.keepers)))
+	span.SetStatus(codes.Ok, "")
 	sm.logger.Info(ctx, "Successfully loaded verified keepers",
 		observability.Int("count", len(sm.keepers)),
 	)
@@ -49,13 +61,21 @@ func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 
 // DumpState updates all keepers to inactive in the database
 func (sm *StateManager) DumpState(ctx context.Context) error {
+	// Start a span for the state dump operation
+	ctx, span := sm.tracer.Start(ctx, "state_manager.dump_state",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	sm.logger.Info(ctx, "Dumping keeper state to database...")
 
+	activeCount := 0
 	for address, state := range sm.keepers {
 		if state.IsActive {
+			activeCount++
 			// Create a minimal health check-in with just the address
 			health := types.KeeperHealthCheckIn{
 				KeeperAddress: address,
@@ -73,6 +93,8 @@ func (sm *StateManager) DumpState(ctx context.Context) error {
 		}
 	}
 
+	span.SetAttributes(attribute.Int("keepers.dumped", activeCount))
+	span.SetStatus(codes.Ok, "")
 	sm.logger.Info(ctx, "Successfully dumped keeper state")
 	return nil
 }
