@@ -14,7 +14,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -113,23 +112,20 @@ func TestHTTPError_Error_ReturnsFormattedMessage(t *testing.T) {
 
 // TestNewHTTPClient_ValidConfig_ReturnsClient tests client creation with valid config
 func TestNewHTTPClient_ValidConfig_ReturnsClient(t *testing.T) {
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, config, client.HTTPConfig)
-	assert.Equal(t, logger, client.logger)
 	assert.NotNil(t, client.client)
 }
 
 // TestNewHTTPClient_NilConfig_UsesDefaultConfig tests client creation with nil config
 func TestNewHTTPClient_NilConfig_UsesDefaultConfig(t *testing.T) {
-	logger := logging.NewNoOpLogger()
 
-	client, err := NewHTTPClient(nil, logger)
+	client, err := NewHTTPClient(nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -139,7 +135,6 @@ func TestNewHTTPClient_NilConfig_UsesDefaultConfig(t *testing.T) {
 
 // TestNewHTTPClient_InvalidConfig_ReturnsError tests client creation with invalid config
 func TestNewHTTPClient_InvalidConfig_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
 	config := &HTTPRetryConfig{
 		RetryConfig:     retry.DefaultRetryConfig(),
 		Timeout:         0, // Invalid
@@ -147,7 +142,7 @@ func TestNewHTTPClient_InvalidConfig_ReturnsError(t *testing.T) {
 		MaxResponseSize: 4096,
 	}
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 
 	assert.Error(t, err)
 	assert.Nil(t, client)
@@ -163,8 +158,7 @@ func TestHTTPClient_DoWithRetry_SuccessfulRequest_ReturnsResponse(t *testing.T) 
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
@@ -199,13 +193,12 @@ func TestHTTPClient_DoWithRetry_RetryableError_RetriesAndSucceeds(t *testing.T) 
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 	config.RetryConfig.MaxRetries = 3
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
 	config.RetryConfig.MaxDelay = 50 * time.Millisecond
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
@@ -233,8 +226,7 @@ func TestHTTPClient_DoWithRetry_NonRetryableError_ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
@@ -262,8 +254,7 @@ func TestHTTPClient_DoWithRetry_ContextCancelled_ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -291,8 +282,7 @@ func TestHTTPClient_Get_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	resp, err := client.Get(context.Background(), server.URL)
@@ -322,8 +312,7 @@ func TestHTTPClient_Post_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	body := strings.NewReader(`{"test":"data"}`)
@@ -354,8 +343,7 @@ func TestHTTPClient_Put_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	body := strings.NewReader(`{"test":"data"}`)
@@ -381,8 +369,7 @@ func TestHTTPClient_Delete_SuccessfulRequest_ReturnsResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	resp, err := client.Delete(context.Background(), server.URL)
@@ -408,8 +395,7 @@ func TestHTTPClient_DoWithRetry_RequestWithBody_HandlesBodyCorrectly(t *testing.
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	body := strings.NewReader("test body")
@@ -430,11 +416,10 @@ func TestHTTPClient_DoWithRetry_RequestWithBody_HandlesBodyCorrectly(t *testing.
 
 // TestHTTPClient_GetTimeout_ReturnsConfiguredTimeout tests timeout getter
 func TestHTTPClient_GetTimeout_ReturnsConfiguredTimeout(t *testing.T) {
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 	config.Timeout = 15 * time.Second
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 	require.NoError(t, err)
 
 	assert.Equal(t, 15*time.Second, client.GetTimeout())
@@ -442,11 +427,10 @@ func TestHTTPClient_GetTimeout_ReturnsConfiguredTimeout(t *testing.T) {
 
 // TestHTTPClient_GetIdleConnTimeout_ReturnsConfiguredTimeout tests idle connection timeout getter
 func TestHTTPClient_GetIdleConnTimeout_ReturnsConfiguredTimeout(t *testing.T) {
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 	config.IdleConnTimeout = 45 * time.Second
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 	require.NoError(t, err)
 
 	assert.Equal(t, 45*time.Second, client.GetIdleConnTimeout())
@@ -454,8 +438,7 @@ func TestHTTPClient_GetIdleConnTimeout_ReturnsConfiguredTimeout(t *testing.T) {
 
 // TestHTTPClient_Close_ClosesIdleConnections tests connection cleanup
 func TestHTTPClient_Close_ClosesIdleConnections(t *testing.T) {
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	// This should not panic
@@ -464,8 +447,7 @@ func TestHTTPClient_Close_ClosesIdleConnections(t *testing.T) {
 
 // TestHTTPClient_DoWithRetry_RequestBodyReadError_ReturnsError tests body read error handling
 func TestHTTPClient_DoWithRetry_RequestBodyReadError_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	// Create a request with a body that will fail to read
@@ -503,7 +485,6 @@ func TestHTTPClient_DoWithRetry_CustomShouldRetry_RespectsCustomLogic(t *testing
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 	config.RetryConfig.ShouldRetry = func(err error, attempt int) bool {
 		// Custom logic: only retry on specific errors
@@ -512,7 +493,7 @@ func TestHTTPClient_DoWithRetry_CustomShouldRetry_RespectsCustomLogic(t *testing
 	config.RetryConfig.MaxRetries = 2
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", server.URL, nil)
@@ -552,13 +533,12 @@ func TestHTTPClient_DoWithRetry_RequestWithoutGetBody_UsesFallback(t *testing.T)
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 	config.RetryConfig.MaxRetries = 2
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
 	config.RetryConfig.MaxDelay = 50 * time.Millisecond
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 	require.NoError(t, err)
 
 	// Create a request with a body but without GetBody function
@@ -605,13 +585,12 @@ func TestHTTPClient_DoWithRetry_RequestWithGetBody_UsesGetBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
 	config := DefaultHTTPRetryConfig()
 	config.RetryConfig.MaxRetries = 2
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
 	config.RetryConfig.MaxDelay = 50 * time.Millisecond
 
-	client, err := NewHTTPClient(config, logger)
+	client, err := NewHTTPClient(config)
 	require.NoError(t, err)
 
 	// Create a request with a body and GetBody function
@@ -642,8 +621,7 @@ func TestHTTPClient_DoWithRetry_RequestWithGetBody_UsesGetBody(t *testing.T) {
 
 // TestHTTPClient_DoWithRetry_InvalidURL_ReturnsError tests invalid URL handling
 func TestHTTPClient_DoWithRetry_InvalidURL_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(context.Background(), "GET", "http://invalid.localhost:99999", nil)
@@ -665,8 +643,7 @@ func TestHTTPClient_DoWithRetry_RequestBodyCloseError_LogsWarning(t *testing.T) 
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
-	client, err := NewHTTPClient(DefaultHTTPRetryConfig(), logger)
+	client, err := NewHTTPClient(DefaultHTTPRetryConfig())
 	require.NoError(t, err)
 
 	// Create a request with a body that will fail to close

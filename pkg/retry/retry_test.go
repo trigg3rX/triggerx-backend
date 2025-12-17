@@ -8,10 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -35,12 +33,11 @@ func TestRetry(t *testing.T) {
 
 	t.Run("Success on first attempt", func(t *testing.T) {
 		// Arrange
-		logger := logging.NewNoOpLogger()
 		operation, callCount := failingOperation(0, "success", nil)
 		config := retry.DefaultRetryConfig()
 
 		// Act
-		result, err := retry.Retry(context.Background(), operation, config, logger)
+		result, err := retry.Retry(context.Background(), operation, config)
 
 		// Assert
 		require.NoError(t, err)
@@ -50,9 +47,6 @@ func TestRetry(t *testing.T) {
 
 	t.Run("Success after failures", func(t *testing.T) {
 		// Arrange
-		mockLogger := &logging.MockLogger{}
-		// Expect Warnf to be called twice (for the 2 failures)
-		mockLogger.On("Warnf", "Attempt %d/%d failed: %v. Retrying in %v...", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
 
 		operation, callCount := failingOperation(2, "success", errors.New("transient error"))
 
@@ -61,30 +55,25 @@ func TestRetry(t *testing.T) {
 		config.InitialDelay = 1 * time.Millisecond // Speed up test
 
 		// Act
-		result, err := retry.Retry(context.Background(), operation, config, mockLogger)
+		result, err := retry.Retry(context.Background(), operation, config)
 
 		// Assert
 		require.NoError(t, err)
 		assert.Equal(t, "success", result)
 		assert.Equal(t, 3, *callCount, "Should be called 3 times (2 failures + 1 success)")
-
-		// Verify that Warnf was called for each failure
-		mockLogger.AssertCalled(t, "Warnf", mock.AnythingOfType("string"), mock.Anything)
-		mockLogger.AssertNumberOfCalls(t, "Warnf", 2)
 	})
 
 	t.Run("Failure after all attempts", func(t *testing.T) {
 		// Arrange
 		finalError := errors.New("permanent error")
 		operation, callCount := failingOperation(5, "success", finalError)
-		logger := logging.NewNoOpLogger()
 
 		config := retry.DefaultRetryConfig()
 		config.MaxRetries = 3
 		config.InitialDelay = 1 * time.Millisecond
 
 		// Act
-		_, err := retry.Retry(context.Background(), operation, config, logger)
+		_, err := retry.Retry(context.Background(), operation, config)
 
 		// Assert
 		require.Error(t, err)
@@ -96,7 +85,6 @@ func TestRetry(t *testing.T) {
 	t.Run("Context cancellation during sleep", func(t *testing.T) {
 		// Arrange
 		operation, callCount := failingOperation(5, "success", errors.New("timeout"))
-		logger := logging.NewNoOpLogger()
 
 		config := retry.DefaultRetryConfig()
 		config.InitialDelay = 100 * time.Millisecond // A noticeable delay
@@ -110,7 +98,7 @@ func TestRetry(t *testing.T) {
 			cancel()
 		}()
 
-		_, err := retry.Retry(ctx, operation, config, logger)
+		_, err := retry.Retry(ctx, operation, config)
 
 		// Assert
 		require.Error(t, err)
@@ -121,7 +109,6 @@ func TestRetry(t *testing.T) {
 	t.Run("Context cancellation at start of retry attempt", func(t *testing.T) {
 		// Arrange
 		operation, callCount := failingOperation(3, "success", errors.New("transient error"))
-		logger := logging.NewNoOpLogger()
 
 		config := retry.DefaultRetryConfig()
 		config.InitialDelay = 10 * time.Millisecond
@@ -136,7 +123,7 @@ func TestRetry(t *testing.T) {
 			cancel()
 		}()
 
-		_, err := retry.Retry(ctx, operation, config, logger)
+		_, err := retry.Retry(ctx, operation, config)
 
 		// Assert
 		require.Error(t, err)
@@ -149,7 +136,6 @@ func TestRetry(t *testing.T) {
 	t.Run("Context cancellation between retry attempts", func(t *testing.T) {
 		// Arrange
 		operation, callCount := failingOperation(3, "success", errors.New("transient error"))
-		logger := logging.NewNoOpLogger()
 
 		config := retry.DefaultRetryConfig()
 		config.InitialDelay = 5 * time.Millisecond
@@ -164,7 +150,7 @@ func TestRetry(t *testing.T) {
 			cancel()
 		}()
 
-		_, err := retry.Retry(ctx, operation, config, logger)
+		_, err := retry.Retry(ctx, operation, config)
 
 		// Assert
 		require.Error(t, err)
@@ -178,7 +164,6 @@ func TestRetry(t *testing.T) {
 		// Arrange
 		nonRetryableError := errors.New("do not retry")
 		operation, callCount := failingOperation(5, "success", nonRetryableError)
-		logger := logging.NewNoOpLogger()
 
 		config := retry.DefaultRetryConfig()
 		config.ShouldRetry = func(err error, attempt int) bool {
@@ -186,7 +171,7 @@ func TestRetry(t *testing.T) {
 		}
 
 		// Act
-		_, err := retry.Retry(context.Background(), operation, config, logger)
+		_, err := retry.Retry(context.Background(), operation, config)
 
 		// Assert
 		require.Error(t, err)
@@ -197,63 +182,15 @@ func TestRetry(t *testing.T) {
 	t.Run("Invalid config returns error", func(t *testing.T) {
 		// Arrange
 		operation, _ := failingOperation(0, "success", nil)
-		logger := logging.NewNoOpLogger()
 		config := retry.DefaultRetryConfig()
 		config.BackoffFactor = 0.5 // Invalid value
 
 		// Act
-		_, err := retry.Retry(context.Background(), operation, config, logger)
+		_, err := retry.Retry(context.Background(), operation, config)
 
 		// Assert
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid retry config")
-	})
-}
-
-func TestRetryFunc(t *testing.T) {
-
-	t.Run("Success after one failure", func(t *testing.T) {
-		// Arrange
-		callCount := 0
-		operation := func() error {
-			callCount++
-			if callCount > 1 {
-				return nil
-			}
-			return errors.New("transient error")
-		}
-		logger := logging.NewNoOpLogger()
-		config := retry.DefaultRetryConfig()
-		config.InitialDelay = 1 * time.Millisecond
-
-		// Act
-		err := retry.RetryFunc(context.Background(), operation, config, logger)
-
-		// Assert
-		require.NoError(t, err)
-		assert.Equal(t, 2, callCount)
-	})
-
-	t.Run("Failure after all attempts", func(t *testing.T) {
-		// Arrange
-		callCount := 0
-		finalError := errors.New("permanent error")
-		operation := func() error {
-			callCount++
-			return finalError
-		}
-		logger := logging.NewNoOpLogger()
-		config := retry.DefaultRetryConfig()
-		config.MaxRetries = 4
-		config.InitialDelay = 1 * time.Millisecond
-
-		// Act
-		err := retry.RetryFunc(context.Background(), operation, config, logger)
-
-		// Assert
-		require.Error(t, err)
-		assert.ErrorIs(t, err, finalError)
-		assert.Equal(t, 4, callCount)
 	})
 }
 
@@ -444,11 +381,10 @@ func TestCalculateNextDelay(t *testing.T) {
 func TestRetry_NilConfigUsesDefault(t *testing.T) {
 	t.Run("nil config should use default configuration", func(t *testing.T) {
 		// Arrange
-		logger := logging.NewNoOpLogger()
 		operation, callCount := failingOperation(0, "success", nil)
 
 		// Act - Pass nil config
-		result, err := retry.Retry(context.Background(), operation, nil, logger)
+		result, err := retry.Retry(context.Background(), operation, nil)
 
 		// Assert
 		require.NoError(t, err)
@@ -458,23 +394,15 @@ func TestRetry_NilConfigUsesDefault(t *testing.T) {
 
 	t.Run("nil config should use default retry behavior", func(t *testing.T) {
 		// Arrange
-		mockLogger := &logging.MockLogger{}
-		// Expect Warnf to be called for the failure
-		mockLogger.On("Warnf", "Attempt %d/%d failed: %v. Retrying in %v...", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(1)
-
 		operation, callCount := failingOperation(1, "success", errors.New("transient error"))
 
 		// Act - Pass nil config
-		result, err := retry.Retry(context.Background(), operation, nil, mockLogger)
+		result, err := retry.Retry(context.Background(), operation, nil)
 
 		// Assert
 		require.NoError(t, err)
 		assert.Equal(t, "success", result)
 		assert.Equal(t, 2, *callCount, "Should be called 2 times (1 failure + 1 success)")
-
-		// Verify that Warnf was called for the failure
-		mockLogger.AssertCalled(t, "Warnf", mock.AnythingOfType("string"), mock.Anything)
-		mockLogger.AssertNumberOfCalls(t, "Warnf", 1)
 	})
 }
 
@@ -547,7 +475,6 @@ func TestSecureFloat64FallbackBehavior(t *testing.T) {
 		// This indirectly tests the fallback behavior in a real-world context
 
 		// Arrange
-		logger := logging.NewNoOpLogger()
 		config := retry.DefaultRetryConfig()
 		config.InitialDelay = 1 * time.Millisecond
 		config.JitterFactor = 0.5 // This will use SecureFloat64
@@ -563,7 +490,7 @@ func TestSecureFloat64FallbackBehavior(t *testing.T) {
 		}
 
 		// Act
-		result, err := retry.Retry(context.Background(), operation, config, logger)
+		result, err := retry.Retry(context.Background(), operation, config)
 
 		// Assert
 		require.NoError(t, err)

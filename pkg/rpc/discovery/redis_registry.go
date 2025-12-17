@@ -8,19 +8,19 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/rpc"
 )
 
 // RedisRegistry implements the ServiceRegistry interface using Redis as the backend
 type RedisRegistry struct {
 	client     *redis.Client
-	logger     logging.Logger
+	logger     observability.Logger
 	config     RedisRegistryConfig
 	watchers   map[string][]chan rpc.ServiceInfo
 	watcherMu  sync.RWMutex
 	stopChan   chan struct{}
-	processMap map[string]logging.ProcessName
+	processMap map[string]observability.ServiceName
 }
 
 // RedisRegistryConfig holds configuration for the Redis registry
@@ -64,12 +64,12 @@ func DefaultRedisRegistryConfig() RedisRegistryConfig {
 }
 
 // NewRedisRegistry creates a new Redis-based service registry
-func NewRedisRegistry(logger logging.Logger, config RedisRegistryConfig) (*RedisRegistry, error) {
+func NewRedisRegistry(ctx context.Context, logger observability.Logger, config RedisRegistryConfig) (*RedisRegistry, error) {
 	if config.RedisConfig.UpstashConfig.URL == "" {
 		return nil, fmt.Errorf("redis URL is required")
 	}
 
-	client, err := redis.NewRedisClient(logger, config.RedisConfig)
+	client, err := redis.NewRedisClient(ctx, logger, config.RedisConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Redis client: %w", err)
 	}
@@ -80,24 +80,24 @@ func NewRedisRegistry(logger logging.Logger, config RedisRegistryConfig) (*Redis
 		config:   config,
 		watchers: make(map[string][]chan rpc.ServiceInfo),
 		stopChan: make(chan struct{}),
-		processMap: map[string]logging.ProcessName{
-			"aggregator":           logging.AggregatorProcess,
-			"dbserver":             logging.DatabaseProcess,
-			"keeper":               logging.KeeperProcess,
-			"registrar":            logging.RegistrarProcess,
-			"health":               logging.HealthProcess,
-			"taskdispatcher":       logging.TaskDispatcherProcess,
-			"taskmonitor":          logging.TaskMonitorProcess,
-			"schedulers-time":      logging.TimeSchedulerProcess,
-			"schedulers-condition": logging.ConditionSchedulerProcess,
-			"test":                 logging.TestProcess,
+		processMap: map[string]observability.ServiceName{
+			"aggregator":           observability.ServiceName("aggregator"),
+			"dbserver":             observability.ServiceName("dbserver"),
+			"keeper":               observability.ServiceName("keeper"),
+			"registrar":            observability.ServiceName("registrar"),
+			"health":               observability.ServiceName("health"),
+			"taskdispatcher":       observability.ServiceName("taskdispatcher"),
+			"taskmonitor":          observability.ServiceName("taskmonitor"),
+			"schedulers-time":      observability.ServiceName("schedulers-time"),
+			"schedulers-condition": observability.ServiceName("schedulers-condition"),
+			"test":                 observability.ServiceName("test"),
 		},
 	}
 
 	// Start the background refresh goroutine
 	go registry.refreshLoop()
 
-	logger.Infof("Redis registry initialized with prefix: %s", config.KeyPrefix)
+	logger.Info(ctx, "Redis registry initialized with prefix: %s", observability.String("prefix", config.KeyPrefix))
 	return registry, nil
 }
 
@@ -120,10 +120,10 @@ func (r *RedisRegistry) Register(ctx context.Context, info rpc.ServiceInfo) erro
 		return fmt.Errorf("failed to register service in Redis: %w", err)
 	}
 
-	r.logger.Infof("Registered service: %s at %s:%d", info.Name, info.Address, info.Port)
+	r.logger.Info(ctx, "Registered service: %s at %s:%d", observability.String("name", info.Name), observability.String("address", info.Address), observability.Int("port", info.Port))
 
 	// Notify watchers
-	r.notifyWatchers(info.Name, info)
+	r.notifyWatchers(ctx, info.Name, info)
 
 	return nil
 }
@@ -137,10 +137,10 @@ func (r *RedisRegistry) Deregister(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to deregister service from Redis: %w", err)
 	}
 
-	r.logger.Infof("Deregistered service: %s", name)
+	r.logger.Info(ctx, "Deregistered service: %s", observability.String("name", name))
 
 	// Notify watchers with empty service info to indicate deregistration
-	r.notifyWatchers(name, rpc.ServiceInfo{Name: name})
+	r.notifyWatchers(ctx, name, rpc.ServiceInfo{Name: name})
 
 	return nil
 }
@@ -186,7 +186,7 @@ func (r *RedisRegistry) ListServices(ctx context.Context) ([]rpc.ServiceInfo, er
 		for _, key := range keys {
 			value, exists, err := r.client.GetWithExists(ctx, key)
 			if err != nil {
-				r.logger.Warnf("Failed to get value for key %s: %v", key, err)
+				r.logger.Warn(ctx, "Failed to get value for key %s: %v", observability.String("key", key), observability.String("error", fmt.Sprintf("%v", err)))
 				continue
 			}
 
@@ -197,7 +197,7 @@ func (r *RedisRegistry) ListServices(ctx context.Context) ([]rpc.ServiceInfo, er
 			var info rpc.ServiceInfo
 			err = json.Unmarshal([]byte(value), &info)
 			if err != nil {
-				r.logger.Warnf("Failed to unmarshal service info for key %s: %v", key, err)
+				r.logger.Warn(ctx, "Failed to unmarshal service info for key %s: %v", observability.String("key", key), observability.String("error", fmt.Sprintf("%v", err)))
 				continue
 			}
 
@@ -230,11 +230,11 @@ func (r *RedisRegistry) Watch(ctx context.Context, name string) (<-chan rpc.Serv
 		select {
 		case ch <- *info:
 		default:
-			r.logger.Warnf("Failed to send initial state to watcher for service: %s", name)
+			r.logger.Warn(ctx, "Failed to send initial state to watcher for service: %s", observability.String("name", name))
 		}
 	}
 
-	r.logger.Infof("Started watching service: %s", name)
+	r.logger.Info(ctx, "Started watching service: %s", observability.String("name", name))
 	return ch, nil
 }
 
@@ -257,7 +257,7 @@ func (r *RedisRegistry) Close() error {
 }
 
 // GetProcessName returns the ProcessName for a given service name
-func (r *RedisRegistry) GetProcessName(serviceName string) (logging.ProcessName, bool) {
+func (r *RedisRegistry) GetProcessName(serviceName string) (observability.ServiceName, bool) {
 	processName, exists := r.processMap[serviceName]
 	return processName, exists
 }
@@ -290,7 +290,7 @@ func (r *RedisRegistry) serviceKey(name string) string {
 }
 
 // notifyWatchers notifies all watchers of a service about changes
-func (r *RedisRegistry) notifyWatchers(serviceName string, info rpc.ServiceInfo) {
+func (r *RedisRegistry) notifyWatchers(ctx context.Context, serviceName string, info rpc.ServiceInfo) {
 	r.watcherMu.RLock()
 	defer r.watcherMu.RUnlock()
 
@@ -303,7 +303,7 @@ func (r *RedisRegistry) notifyWatchers(serviceName string, info rpc.ServiceInfo)
 		select {
 		case ch <- info:
 		default:
-			r.logger.Warnf("Failed to notify watcher for service: %s", serviceName)
+			r.logger.Warn(ctx, "Failed to notify watcher for service: %s", observability.String("service_name", serviceName))
 		}
 	}
 }
@@ -330,7 +330,7 @@ func (r *RedisRegistry) refreshServices() {
 
 	services, err := r.ListServices(ctx)
 	if err != nil {
-		r.logger.Errorf("Failed to list services for refresh: %v", err)
+		r.logger.Error(ctx, "Failed to list services for refresh: %v", observability.String("error", fmt.Sprintf("%v", err)))
 		return
 	}
 
@@ -339,7 +339,7 @@ func (r *RedisRegistry) refreshServices() {
 		if service.Health.Status == "healthy" {
 			err := r.Register(ctx, service)
 			if err != nil {
-				r.logger.Warnf("Failed to refresh service %s: %v", service.Name, err)
+				r.logger.Warn(ctx, "Failed to refresh service %s: %v", observability.String("name", service.Name), observability.String("error", fmt.Sprintf("%v", err)))
 			}
 		}
 	}

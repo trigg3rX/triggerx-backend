@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	rpcproto "github.com/trigg3rX/triggerx-backend/pkg/rpc/proto"
@@ -19,7 +19,7 @@ import (
 // Server represents a gRPC server
 type Server struct {
 	config       Config
-	logger       logging.Logger
+	logger       observability.Logger
 	handlers     map[string]rpcpkg.RPCHandler
 	interceptors []grpc.UnaryServerInterceptor
 	registry     rpcpkg.ServiceRegistry
@@ -46,7 +46,7 @@ type Config struct {
 }
 
 // NewServer creates a new gRPC server
-func NewServer(config Config, logger logging.Logger) *Server {
+func NewServer(config Config, logger observability.Logger) *Server {
 	if config.Timeout == 0 {
 		config.Timeout = 30 * time.Second
 	}
@@ -104,7 +104,7 @@ func (s *Server) Start(ctx context.Context) error {
 	for serviceName, handler := range s.handlers {
 		genericService := NewGenericService(serviceName, handler, s.logger)
 		rpcproto.RegisterGenericServiceServer(s.grpcServer, genericService)
-		s.logger.Info("Registered gRPC handler", "service", serviceName)
+		s.logger.Info(ctx, "Registered gRPC handler", observability.String("service", serviceName))
 	}
 
 	// Enable reflection for debugging
@@ -129,25 +129,22 @@ func (s *Server) Start(ctx context.Context) error {
 		retryCfg.MaxDelay = 5 * time.Second
 		retryCfg.BackoffFactor = 2.0
 		retryCfg.JitterFactor = 0.2
-		retryCfg.LogRetryAttempt = true
 		retryCfg.ShouldRetry = func(err error, attempt int) bool { return err != nil }
 
 		if err := retry.RetryFunc(ctx, func() error {
 			return s.registry.Register(ctx, s.serviceInfo)
-		}, retryCfg, s.logger); err != nil {
-			s.logger.Warn("Failed to register with service registry after retries", "error", err)
+		}, retryCfg); err != nil {
+			s.logger.Warn(ctx, "Failed to register with service registry after retries", observability.Error(err))
 		}
 	}
 
 	// Start server
 	s.isRunning = true
-	s.logger.Info("Starting gRPC server",
-		"address", s.listener.Addr().String(),
-		"services", len(s.handlers))
+	s.logger.Info(ctx, "Starting gRPC server", observability.String("address", s.listener.Addr().String()), observability.Int("services", len(s.handlers)))
 
 	go func() {
 		if err := s.grpcServer.Serve(listener); err != nil {
-			s.logger.Error("gRPC server error", "error", err)
+			s.logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
 
@@ -163,7 +160,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	s.logger.Info("Stopping gRPC server")
+	s.logger.Info(ctx, "Stopping gRPC server")
 
 	// Deregister from service registry (with retry)
 	if s.registry != nil {
@@ -173,13 +170,12 @@ func (s *Server) Stop(ctx context.Context) error {
 		retryCfg.MaxDelay = 3 * time.Second
 		retryCfg.BackoffFactor = 2.0
 		retryCfg.JitterFactor = 0.2
-		retryCfg.LogRetryAttempt = false
 		retryCfg.ShouldRetry = func(err error, attempt int) bool { return err != nil }
 
 		if err := retry.RetryFunc(ctx, func() error {
 			return s.registry.Deregister(ctx, s.config.Name)
-		}, retryCfg, s.logger); err != nil {
-			s.logger.Warn("Failed to deregister from service registry after retries", "error", err)
+		}, retryCfg); err != nil {
+			s.logger.Warn(ctx, "Failed to deregister from service registry after retries", observability.Error(err))
 		}
 	}
 
@@ -190,7 +186,7 @@ func (s *Server) Stop(ctx context.Context) error {
 	}
 
 	s.isRunning = false
-	s.logger.Info("gRPC server stopped")
+	s.logger.Info(ctx, "gRPC server stopped")
 	return nil
 }
 

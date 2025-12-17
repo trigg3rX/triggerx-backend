@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	rpcproto "github.com/trigg3rX/triggerx-backend/pkg/rpc/proto"
 )
@@ -18,7 +18,7 @@ import (
 // Client represents a gRPC client
 type Client struct {
 	config   Config
-	logger   logging.Logger
+	logger   observability.Logger
 	registry rpcpkg.ServiceRegistry
 	pool     *ConnectionPool
 }
@@ -34,7 +34,7 @@ type Config struct {
 }
 
 // NewClient creates a new gRPC client
-func NewClient(config Config, logger logging.Logger) *Client {
+func NewClient(config Config, logger observability.Logger) *Client {
 	if config.Timeout == 0 {
 		config.Timeout = 30 * time.Second
 	}
@@ -104,10 +104,10 @@ func (c *Client) Call(ctx context.Context, method string, request interface{}, r
 		// Make gRPC call
 		callErr := c.makeGRPCCall(ctx, conn, method, request, response)
 		// Return connection to pool (mark failed if callErr != nil)
-		c.pool.ReturnConnection(conn, callErr != nil)
+		c.pool.ReturnConnection(ctx, conn, callErr != nil)
 
 		return callErr
-	}, retryCfg, c.logger)
+	}, retryCfg)
 
 	return err
 }
@@ -197,8 +197,8 @@ func (c *Client) makeGRPCCall(ctx context.Context, conn *grpc.ClientConn, method
 }
 
 // Close closes the client and connection pool
-func (c *Client) Close() error {
-	return c.pool.Close()
+func (c *Client) Close(ctx context.Context) error {
+	return c.pool.Close(ctx)
 }
 
 // HealthCheck performs a health check on the service

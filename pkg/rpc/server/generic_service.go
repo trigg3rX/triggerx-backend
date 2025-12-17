@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	rpcproto "github.com/trigg3rX/triggerx-backend/pkg/rpc/proto"
 )
@@ -19,11 +19,11 @@ type GenericService struct {
 	rpcproto.UnimplementedGenericServiceServer
 	serviceName string
 	handler     rpcpkg.RPCHandler
-	logger      logging.Logger
+	logger      observability.Logger
 }
 
 // NewGenericService creates a new GenericService
-func NewGenericService(serviceName string, handler rpcpkg.RPCHandler, logger logging.Logger) *GenericService {
+func NewGenericService(serviceName string, handler rpcpkg.RPCHandler, logger observability.Logger) *GenericService {
 	return &GenericService{
 		serviceName: serviceName,
 		handler:     handler,
@@ -33,9 +33,7 @@ func NewGenericService(serviceName string, handler rpcpkg.RPCHandler, logger log
 
 // Call handles generic RPC calls
 func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*rpcproto.RPCResponse, error) {
-	s.logger.Debug("gRPC call received",
-		"service", s.serviceName,
-		"method", req.Method)
+	s.logger.Debug(ctx, "gRPC call received", observability.String("service", s.serviceName), observability.String("method", req.Method))
 
 	// Extract request payload
 	var request interface{}
@@ -44,10 +42,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 			// Deserialize JSON payload
 			var jsonData map[string]interface{}
 			if err := json.Unmarshal(req.Payload.Value, &jsonData); err != nil {
-				s.logger.Error("Failed to deserialize JSON payload",
-					"service", s.serviceName,
-					"method", req.Method,
-					"error", err)
+				s.logger.Error(ctx, "Failed to deserialize JSON payload", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
 				return &rpcproto.RPCResponse{
 					Error: fmt.Sprintf("failed to deserialize JSON payload: %v", err),
 				}, nil
@@ -62,10 +57,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 	// Call the handler
 	result, err := s.handler.Handle(ctx, req.Method, request)
 	if err != nil {
-		s.logger.Error("gRPC call failed",
-			"service", s.serviceName,
-			"method", req.Method,
-			"error", err)
+		s.logger.Error(ctx, "gRPC call failed", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
 
 		return &rpcproto.RPCResponse{
 			Error: err.Error(),
@@ -79,10 +71,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 			var err error
 			resultAny, err = anypb.New(protoMsg)
 			if err != nil {
-				s.logger.Error("Failed to convert result to Any",
-					"service", s.serviceName,
-					"method", req.Method,
-					"error", err)
+				s.logger.Error(ctx, "Failed to convert result to Any", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))
 				return &rpcproto.RPCResponse{
 					Error: fmt.Sprintf("failed to serialize result: %v", err),
 				}, nil
@@ -91,10 +80,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 			// For non-proto messages, serialize as JSON
 			jsonData, err := json.Marshal(result)
 			if err != nil {
-				s.logger.Error("Failed to serialize result as JSON",
-					"service", s.serviceName,
-					"method", req.Method,
-					"error", err)
+				s.logger.Error(ctx, "Failed to serialize result as JSON", observability.String("service", s.serviceName), observability.String("method", req.Method), observability.Error(err))	
 				return &rpcproto.RPCResponse{
 					Error: fmt.Sprintf("failed to serialize result as JSON: %v", err),
 				}, nil
@@ -106,9 +92,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 		}
 	}
 
-	s.logger.Debug("gRPC call completed",
-		"service", s.serviceName,
-		"method", req.Method)
+	s.logger.Debug(ctx, "gRPC call completed", observability.String("service", s.serviceName), observability.String("method", req.Method))
 
 	return &rpcproto.RPCResponse{
 		Result: resultAny,
@@ -117,8 +101,7 @@ func (s *GenericService) Call(ctx context.Context, req *rpcproto.RPCRequest) (*r
 
 // HealthCheck performs a health check
 func (s *GenericService) HealthCheck(ctx context.Context, req *rpcproto.HealthCheckRequest) (*rpcproto.HealthCheckResponse, error) {
-	s.logger.Debug("Health check requested",
-		"service", s.serviceName)
+	s.logger.Debug(ctx, "Health check requested", observability.String("service", s.serviceName))
 
 	// Create a simple health status
 	healthStatus := &rpcproto.HealthStatus{
@@ -133,8 +116,7 @@ func (s *GenericService) HealthCheck(ctx context.Context, req *rpcproto.HealthCh
 
 // GetMethods returns available methods
 func (s *GenericService) GetMethods(ctx context.Context, _ *emptypb.Empty) (*rpcproto.GetMethodsResponse, error) {
-	s.logger.Debug("Get methods requested",
-		"service", s.serviceName)
+	s.logger.Debug(ctx, "Get methods requested", observability.String("service", s.serviceName))
 
 	methods := s.handler.GetMethods()
 	protoMethods := make([]*rpcproto.RPCMethod, len(methods))
