@@ -65,6 +65,8 @@ type Counter interface {
 // Gauge defines the interface for gauge metrics
 type Gauge interface {
 	Record(ctx context.Context, value float64, attrs ...attribute.KeyValue)
+	// Set sets the gauge to a specific value (convenience method for Prometheus compatibility)
+	Set(ctx context.Context, value float64, attrs ...attribute.KeyValue)
 }
 
 // Histogram defines the interface for histogram metrics

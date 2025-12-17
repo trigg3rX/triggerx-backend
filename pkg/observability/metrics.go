@@ -135,6 +135,7 @@ func (n *noOpCounter) Inc(ctx context.Context, attrs ...attribute.KeyValue)     
 type noOpGauge struct{}
 
 func (n *noOpGauge) Record(ctx context.Context, value float64, attrs ...attribute.KeyValue) {}
+func (n *noOpGauge) Set(ctx context.Context, value float64, attrs ...attribute.KeyValue)    {}
 
 // noOpHistogram is a no-op histogram implementation for error cases
 type noOpHistogram struct{}

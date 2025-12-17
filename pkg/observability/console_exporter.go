@@ -127,7 +127,7 @@ func formatAttributes(attrs []otellog.KeyValue) string {
 	var parts []string
 	for _, attr := range attrs {
 		key := string(attr.Key)
-		value := attr.Value.AsString()
+		value := formatValue(attr.Value)
 		parts = append(parts, fmt.Sprintf("%s=%s", key, value))
 	}
 
@@ -135,6 +135,45 @@ func formatAttributes(attrs []otellog.KeyValue) string {
 		return ""
 	}
 	return fmt.Sprintf("{%s}", fmt.Sprint(parts))
+}
+
+// formatValue converts an OpenTelemetry log value to a string representation
+func formatValue(value otellog.Value) string {
+	switch value.Kind() {
+	case otellog.KindString:
+		return value.AsString()
+	case otellog.KindInt64:
+		return fmt.Sprintf("%d", value.AsInt64())
+	case otellog.KindFloat64:
+		// Use %g to avoid unnecessary trailing zeros
+		return fmt.Sprintf("%g", value.AsFloat64())
+	case otellog.KindBool:
+		return fmt.Sprintf("%t", value.AsBool())
+	case otellog.KindBytes:
+		return fmt.Sprintf("%x", value.AsBytes())
+	case otellog.KindSlice:
+		return formatSliceValue(value)
+	default:
+		return fmt.Sprintf("%v", value)
+	}
+}
+
+// formatSliceValue formats a slice value
+func formatSliceValue(value otellog.Value) string {
+	switch value.Kind() {
+	case otellog.KindSlice:
+		slice := value.AsSlice()
+		if len(slice) == 0 {
+			return "[]"
+		}
+		var parts []string
+		for _, v := range slice {
+			parts = append(parts, formatValue(v))
+		}
+		return fmt.Sprintf("[%s]", fmt.Sprint(parts))
+	default:
+		return fmt.Sprintf("%v", value)
+	}
 }
 
 // formatTraceContext formats trace context if available

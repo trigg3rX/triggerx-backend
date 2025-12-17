@@ -67,7 +67,7 @@ func validateConfig(cfg Config) error {
 	if env.IsEmpty(cfg.InstanceID) {
 		return fmt.Errorf("InstanceID is required")
 	}
-	if !env.IsValidURL(cfg.OTELExporterEndpoint) {
+	if !env.IsValidHostPort(cfg.OTELExporterEndpoint) {
 		return fmt.Errorf("invalid OTELExporterEndpoint: %s", cfg.OTELExporterEndpoint)
 	}
 	return nil
@@ -100,6 +100,92 @@ func getBaseDataDir() string {
 		}
 	}
 	return baseDataDir
+}
+
+// NewConfig creates a new Config with the provided service information and sensible defaults.
+// This is the recommended way to create observability configuration for services.
+//
+// Parameters:
+//   - serviceName: The name of the service (use ServiceName constants)
+//   - serviceVersion: The version of the service (e.g., "1.0.0")
+//   - otelEndpoint: The OTLP exporter endpoint (e.g., "http://localhost:4318")
+//   - devMode: Whether the service is running in development mode
+//
+// Returns a Config with default values for:
+//   - BatchTimeout: 5 seconds
+//   - ExportTimeout: 30 seconds
+//   - MaxExportBatch: 512
+//   - LogLevel: "info" (or "debug" if devMode is true)
+//   - SuccessSamplingRate: 0.03 (3%)
+//   - ErrorSamplingRate: 1.0 (100%)
+func NewConfig(serviceName ServiceName, serviceVersion, otelEndpoint string, devMode bool) Config {
+	logLevel := "info"
+	if devMode {
+		logLevel = "debug"
+	}
+
+	return Config{
+		ServiceName:          serviceName,
+		ServiceVersion:       serviceVersion,
+		InstanceID:           InstanceID,
+		OTELExporterEndpoint: otelEndpoint,
+		DevMode:              devMode,
+		LogLevel:             logLevel,
+		BatchTimeout:         5 * time.Second,
+		ExportTimeout:        30 * time.Second,
+		MaxExportBatch:       512,
+		SuccessSamplingRate:  0.03, // 3% for success
+		ErrorSamplingRate:    1.0,  // 100% for errors
+	}
+}
+
+// NewConfigWithOptions creates a new Config with custom options.
+// Use this when you need to override default values.
+func NewConfigWithOptions(serviceName ServiceName, serviceVersion, otelEndpoint string, devMode bool, opts ...ConfigOption) Config {
+	cfg := NewConfig(serviceName, serviceVersion, otelEndpoint, devMode)
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
+}
+
+// ConfigOption is a function that modifies a Config
+type ConfigOption func(*Config)
+
+// WithBatchTimeout sets the batch timeout for exports
+func WithBatchTimeout(timeout time.Duration) ConfigOption {
+	return func(cfg *Config) {
+		cfg.BatchTimeout = timeout
+	}
+}
+
+// WithExportTimeout sets the export timeout
+func WithExportTimeout(timeout time.Duration) ConfigOption {
+	return func(cfg *Config) {
+		cfg.ExportTimeout = timeout
+	}
+}
+
+// WithMaxExportBatch sets the maximum export batch size
+func WithMaxExportBatch(size int) ConfigOption {
+	return func(cfg *Config) {
+		cfg.MaxExportBatch = size
+	}
+}
+
+// WithLogLevel sets the log level
+func WithLogLevel(level string) ConfigOption {
+	return func(cfg *Config) {
+		cfg.LogLevel = level
+	}
+}
+
+// WithSamplingRates sets the trace sampling rates
+func WithSamplingRates(successRate, errorRate float64) ConfigOption {
+	return func(cfg *Config) {
+		cfg.SuccessSamplingRate = successRate
+		cfg.ErrorSamplingRate = errorRate
+	}
 }
 
 // SetTestConfig returns a Config with sensible defaults from environment variables
