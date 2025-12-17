@@ -51,16 +51,15 @@ func NewLogger(cfg Config, res *resource.Resource) (Logger, func(context.Context
 	if len(exporters) == 1 {
 		processor = log.NewSimpleProcessor(exporters[0])
 	} else if len(exporters) > 1 {
-		// Use batch processor for multiple exporters
+		// Create a multi-exporter that forwards to all exporters
+		multiExporter := NewMultiExporter(exporters...)
+		// Use batch processor with the multi-exporter
 		processor = log.NewBatchProcessor(
-			exporters[0],
+			multiExporter,
 			log.WithExportInterval(cfg.BatchTimeout),
 			log.WithExportTimeout(cfg.ExportTimeout),
 			log.WithExportMaxBatchSize(cfg.MaxExportBatch),
 		)
-		// For multiple exporters, we'd need a multi-exporter wrapper
-		// For now, use the first exporter in batch processor
-		// TODO: implement multi-exporter support
 	} else {
 		// No exporters - use noop
 		processor = log.NewSimpleProcessor(NewConsoleExporter())
