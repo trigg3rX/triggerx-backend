@@ -17,8 +17,8 @@ help:
 
 # Setup ScyllaDB container
 db-setup:
-    docker compose -f docker/docker-compose.yaml down
-    docker compose -f docker/docker-compose.yaml up -d
+    docker compose -f docker/docker-compose.yaml --profile scylla down
+    docker compose -f docker/docker-compose.yaml --profile scylla up -d
     sleep 6
     ./scripts/database/setup-db.sh
 
@@ -29,6 +29,16 @@ db-shell:
 # Backup data
 db-backup:
     docker exec -it triggerx-scylla nodetool snapshot -t triggerx_backup triggerx -cf keeper_data
+
+########################### OBSERVABILITY #########################
+
+# Start the Observability Services
+start-observability:
+    ./scripts/observability/start-observability.sh
+
+# Stop the Observability Services
+stop-observability:
+    ./scripts/observability/stop-observability.sh
 
 ############################# SERVICES #############################
 

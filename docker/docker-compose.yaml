@@ -1,5 +1,6 @@
 services:
   scylla:
+    profiles: [scylla]
     image: scylladb/scylla
     container_name: triggerx-scylla
     ports:
@@ -8,12 +9,80 @@ services:
       - scylla_data:/var/lib/scylla
     logging:
       driver: "json-file"
+    networks:
+      - triggerx-network
 
-  # redis:
-  #   image: "redis:7-alpine"
-  #   container_name: triggerx-redis
-  #   ports:
-  #     - "6379:6379"
+  otel-collector:
+    profiles: [lgtm]
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./../config/otel-collector.yaml:/etc/otel-collector.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+
+  loki:
+    profiles: [lgtm]
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki.yaml
+    volumes:
+      - ./../config/loki.yaml:/etc/loki.yaml
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  tempo:
+    profiles: [lgtm]
+    image: grafana/tempo:latest
+    command: -config.file=/etc/tempo.yaml
+    volumes:
+      - ./../config/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+
+  mimir:
+    profiles: [lgtm]
+    image: grafana/mimir:latest
+    command: -config.file=/etc/mimir.yaml
+    volumes:
+      - ./../config/mimir.yaml:/etc/mimir.yaml
+      - mimir-data:/mimir
+    ports:
+      - "9090:9090"
+
+  grafana:
+    profiles: [lgtm]
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./../config/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+
+  redis:
+    profiles: [redis]
+    image: "redis:7-alpine"
+    container_name: triggerx-redis
+    ports:
+      - "6379:6379"
+
+networks:
+  triggerx-network:
+    driver: bridge
 
 volumes:
-  scylla_data: 
+  scylla_data:
+  loki-data:
+  tempo-data:
+  mimir-data:
+  grafana-data:

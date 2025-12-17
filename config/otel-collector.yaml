@@ -1,0 +1,58 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+  resource:
+    attributes:
+      - key: service.namespace
+        value: p2p-network
+        action: upsert
+
+exporters:
+  # Logs
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+      instance: true
+      level: true
+
+  # Traces
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Metrics
+  prometheusremotewrite:
+    endpoint: http://mimir:9009/api/v1/push
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki]
+
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite]

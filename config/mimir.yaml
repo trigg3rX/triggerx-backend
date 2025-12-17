@@ -1,0 +1,18 @@
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9090
+
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /mimir
+
+blocks_storage:
+  storage_prefix: blocks
+  tsdb:
+    dir: /mimir/tsdb
+
+limits:
+  max_label_names_per_series: 50
