@@ -25,6 +25,8 @@ services:
       - loki
       - tempo
       - mimir
+    networks:
+      - triggerx-obs
 
   loki:
     profiles: [lgtm]
@@ -35,6 +37,8 @@ services:
       - loki-data:/loki
     ports:
       - "3100:3100"
+    networks:
+      - triggerx-obs
 
   tempo:
     profiles: [lgtm]
@@ -45,16 +49,20 @@ services:
       - tempo-data:/var/tempo
     ports:
       - "3200:3200"
+    networks:
+      - triggerx-obs
 
   mimir:
     profiles: [lgtm]
     image: grafana/mimir:latest
-    command: -config.file=/etc/mimir.yaml
+    command: -config.file=/etc/mimir.yaml -target=all
     volumes:
       - ./../config/mimir.yaml:/etc/mimir.yaml
       - mimir-data:/mimir
     ports:
       - "9090:9090"
+    networks:
+      - triggerx-obs
 
   grafana:
     profiles: [lgtm]
@@ -68,6 +76,8 @@ services:
       - loki
       - tempo
       - mimir
+    networks:
+      - triggerx-obs
 
   redis:
     profiles: [redis]
@@ -78,6 +88,8 @@ services:
 
 networks:
   triggerx-network:
+    driver: bridge
+  triggerx-obs:
     driver: bridge
 
 volumes:

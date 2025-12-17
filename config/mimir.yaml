@@ -1,5 +1,7 @@
 multitenancy_enabled: false
 
+target: all
+
 server:
   http_listen_port: 9090
 
@@ -9,6 +11,18 @@ common:
     filesystem:
       dir: /mimir
 
+distributor:
+  pool:
+    health_check_ingesters: false
+  ha_tracker:
+    enable_ha_tracker: false
+
+ingester:
+  ring:
+    kvstore:
+      store: inmemory
+    replication_factor: 1
+
 blocks_storage:
   storage_prefix: blocks
   tsdb:
@@ -16,3 +30,5 @@ blocks_storage:
 
 limits:
   max_label_names_per_series: 50
+  ingestion_rate: 10000
+  ingestion_burst_size: 20000
