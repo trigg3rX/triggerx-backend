@@ -148,7 +148,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		}
 	}
 
-	d.logger.Info("[Dispatcher] Task forwarded to aggregator", "task_id", req.SendTaskDataToKeeper.TaskID[0])
+	d.logger.Info("[Dispatcher] Task forwarded to performer", "task_id", req.SendTaskDataToKeeper.TaskID[0])
 	return &types.TaskManagerAPIResponse{
 		Success:   true,
 		TaskID:    []int64{req.SendTaskDataToKeeper.TaskID[0]},
