@@ -20,6 +20,7 @@ type otelLogger struct {
 	loggerProvider *log.LoggerProvider
 	baseFields     []Field
 	cfg            Config
+	devMode        bool
 }
 
 // NewLogger creates a new logger instance with the provided configuration and resource
@@ -30,11 +31,10 @@ func NewLogger(cfg Config, res *resource.Resource) (Logger, func(context.Context
 		return nil, nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Add console exporter for dev mode
-	if cfg.DevMode {
-		consoleExporter := NewConsoleExporter()
-		exporters = append(exporters, consoleExporter)
-	}
+	// Always add console exporter for INFO level and above
+	// DEBUG level will be filtered based on DevMode flag
+	consoleExporter := NewConsoleExporter(cfg.DevMode)
+	exporters = append(exporters, consoleExporter)
 
 	otlpExporter, err := otlploghttp.New(
 		context.Background(),
@@ -61,8 +61,8 @@ func NewLogger(cfg Config, res *resource.Resource) (Logger, func(context.Context
 			log.WithExportMaxBatchSize(cfg.MaxExportBatch),
 		)
 	} else {
-		// No exporters - use noop
-		processor = log.NewSimpleProcessor(NewConsoleExporter())
+		// No exporters - use console exporter as fallback
+		processor = log.NewSimpleProcessor(NewConsoleExporter(cfg.DevMode))
 	}
 
 	// Create logger provider
@@ -85,11 +85,16 @@ func NewLogger(cfg Config, res *resource.Resource) (Logger, func(context.Context
 		logger:         apiLogger,
 		loggerProvider: loggerProvider,
 		cfg:            cfg,
+		devMode:        cfg.DevMode,
 	}, shutdown, nil
 }
 
 // Debug logs a debug message
 func (l *otelLogger) Debug(ctx context.Context, msg string, fields ...Field) {
+	// Only log DEBUG level if DevMode is enabled
+	if !l.devMode {
+		return
+	}
 	l.log(ctx, otellog.SeverityDebug1, msg, fields...)
 }
 
@@ -121,6 +126,7 @@ func (l *otelLogger) With(fields ...Field) Logger {
 		loggerProvider: l.loggerProvider,
 		baseFields:     append(l.baseFields, fields...),
 		cfg:            l.cfg,
+		devMode:        l.devMode,
 	}
 }
 

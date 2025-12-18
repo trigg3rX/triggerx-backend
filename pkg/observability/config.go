@@ -49,6 +49,10 @@ type Config struct {
 	ExportTimeout  time.Duration
 	MaxExportBatch int
 
+	// Prometheus export settings
+	// EnablePrometheusExport: if true, exposes metrics endpoint for Prometheus scraping
+	EnablePrometheusExport bool
+
 	// Trace sampling settings
 	// SuccessSamplingRate: sampling rate for successful traces (0.0 to 1.0)
 	// ErrorSamplingRate: sampling rate for traces with errors (0.0 to 1.0)
@@ -125,17 +129,18 @@ func NewConfig(serviceName ServiceName, serviceVersion, otelEndpoint string, dev
 	}
 
 	return Config{
-		ServiceName:          serviceName,
-		ServiceVersion:       serviceVersion,
-		InstanceID:           InstanceID,
-		OTELExporterEndpoint: otelEndpoint,
-		DevMode:              devMode,
-		LogLevel:             logLevel,
-		BatchTimeout:         5 * time.Second,
-		ExportTimeout:        30 * time.Second,
-		MaxExportBatch:       512,
-		SuccessSamplingRate:  0.03, // 3% for success
-		ErrorSamplingRate:    1.0,  // 100% for errors
+		ServiceName:            serviceName,
+		ServiceVersion:         serviceVersion,
+		InstanceID:             InstanceID,
+		OTELExporterEndpoint:   otelEndpoint,
+		DevMode:                devMode,
+		LogLevel:               logLevel,
+		BatchTimeout:           5 * time.Second,
+		ExportTimeout:          30 * time.Second,
+		MaxExportBatch:         512,
+		EnablePrometheusExport: false, // Default: disabled
+		SuccessSamplingRate:    0.03,  // 3% for success
+		ErrorSamplingRate:      1.0,   // 100% for errors
 	}
 }
 
@@ -188,6 +193,13 @@ func WithSamplingRates(successRate, errorRate float64) ConfigOption {
 	}
 }
 
+// WithPrometheusExport enables Prometheus metrics export and sets the metrics path
+func WithPrometheusExport(enabled bool) ConfigOption {
+	return func(cfg *Config) {
+		cfg.EnablePrometheusExport = enabled
+	}
+}
+
 // SetTestConfig returns a Config with sensible defaults from environment variables
 func SetTestConfig() Config {
 	cfg := Config{
@@ -199,6 +211,7 @@ func SetTestConfig() Config {
 		ExportTimeout:        30 * time.Second,
 		MaxExportBatch:       512,
 		DevMode:              true,
+		EnablePrometheusExport: false,
 		LogLevel:             "debug",
 		SuccessSamplingRate:  0.03, // 3% for success
 		ErrorSamplingRate:    1.0,  // 100% for errors

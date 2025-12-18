@@ -23,19 +23,32 @@ const (
 
 // ConsoleExporter exports logs to the console with colors in dev mode
 type ConsoleExporter struct {
-	writer io.Writer
+	writer  io.Writer
+	devMode bool
 }
 
 // NewConsoleExporter creates a new console exporter
-func NewConsoleExporter() *ConsoleExporter {
+// devMode controls whether DEBUG level logs are exported
+func NewConsoleExporter(devMode bool) *ConsoleExporter {
 	return &ConsoleExporter{
-		writer: os.Stderr,
+		writer:  os.Stderr,
+		devMode: devMode,
 	}
 }
 
 // Export exports log records to the console
+// Filters out DEBUG level logs if devMode is false
 func (e *ConsoleExporter) Export(ctx context.Context, records []sdklog.Record) error {
 	for _, record := range records {
+		// Filter DEBUG level logs if not in dev mode
+		// INFO and above are always logged
+		if !e.devMode {
+			severity := record.Severity()
+			// Skip DEBUG level logs (SeverityDebug1-4)
+			if severity >= otellog.SeverityDebug1 && severity <= otellog.SeverityDebug4 {
+				continue
+			}
+		}
 		e.writeRecord(record)
 	}
 	return nil

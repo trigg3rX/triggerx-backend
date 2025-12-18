@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"go.opentelemetry.io/otel/sdk/resource"
 )
@@ -29,6 +30,15 @@ func (o *Observability) Tracer() Tracer {
 // Metrics returns the metrics instance
 func (o *Observability) Metrics() Metrics {
 	return o.metrics
+}
+
+// PrometheusHandler returns the HTTP handler for Prometheus metrics scraping
+// Returns nil if Prometheus export is not enabled in the config
+func (o *Observability) PrometheusHandler() http.Handler {
+	if otelMetrics, ok := o.metrics.(*otelMetrics); ok {
+		return otelMetrics.PrometheusHandler()
+	}
+	return nil
 }
 
 // Resource returns the OpenTelemetry resource
