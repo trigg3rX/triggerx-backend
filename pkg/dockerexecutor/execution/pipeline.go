@@ -748,6 +748,8 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 				defaultOnChainFee := big.NewFloat(0.001)
 				defaultOnChainFee.Mul(defaultOnChainFee, weiMultiplier)
 				onChainFeeWei, _ = defaultOnChainFee.Int(nil)
+				// Also set currentOnChainFeeWei to the same default to prevent nil pointer dereference
+				currentOnChainFeeWei, _ = defaultOnChainFee.Int(nil)
 			} else {
 				// Calculate gas cost in Wei
 				onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
@@ -809,6 +811,20 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 	// Log aggregator fee calculation
 	ep.logger.Debug(ctx, "Aggregator on-chain fee", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.Uint64("gasUsed", aggregatorGasUsed), observability.String("aggregatorGasPrice", aggregatorGasPrice.String()), observability.String("aggregatorOnChainFeeWei", aggregatorOnChainFeeWei.String()))
 	// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
+	// Ensure all fee components are non-nil to prevent panic
+	if offChainFeeWei == nil {
+		offChainFeeWei = big.NewInt(0)
+	}
+	if onChainFeeWei == nil {
+		onChainFeeWei = big.NewInt(0)
+	}
+	if currentOnChainFeeWei == nil {
+		currentOnChainFeeWei = big.NewInt(0)
+	}
+	if aggregatorOnChainFeeWei == nil {
+		aggregatorOnChainFeeWei = big.NewInt(0)
+	}
+
 	totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
 	currentTotalFeeWei := new(big.Int).Add(offChainFeeWei, currentOnChainFeeWei)
 	currentTotalFeeWei.Add(currentTotalFeeWei, aggregatorOnChainFeeWei)
