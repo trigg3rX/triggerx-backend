@@ -41,12 +41,14 @@ func NewClient(logger logging.Logger) (*Client, error) {
 
 // ReportTaskStatusRequest represents the request to report task execution status
 type ReportTaskStatusRequest struct {
-	TaskID        int64  `json:"task_id"`
-	KeeperAddress string `json:"keeper_address"`
-	Success       bool   `json:"success"`
-	ProofCID      string `json:"proof_cid,omitempty"`
-	Error         string `json:"error,omitempty"`
-	Signature     string `json:"signature"`
+	TaskID              int64  `json:"task_id" validate:"required"`
+	KeeperAddress       string `json:"keeper_address" validate:"required"`
+	ExecutionSuccessful bool   `json:"execution_successful"`          // Whether the task execution itself succeeded
+	AggregatorSubmitted bool   `json:"aggregator_submitted"`          // Whether the aggregator submission succeeded
+	Error               string `json:"error,omitempty"`               // Error message if any step failed
+	ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`   // Transaction hash from on-chain execution
+	ProofCID            string `json:"proof_cid,omitempty"`           // IPFS CID of the proof data
+	Signature           string `json:"signature" validate:"required"` // Keeper's signature for authentication
 }
 
 // ReportTaskStatusResponse represents the response from taskmonitor
@@ -57,22 +59,26 @@ type ReportTaskStatusResponse struct {
 
 // ReportTaskStatus reports task execution status to taskmonitor
 // This should be called after the aggregator submission attempt (regardless of success or failure)
-func (c *Client) ReportTaskStatus(ctx context.Context, taskID int64, success bool, proofCID, errorMsg string) error {
+func (c *Client) ReportTaskStatus(ctx context.Context, taskID int64, executionSuccessful, aggregatorSubmitted bool, executionTxHash, proofCID, errorMsg string) error {
 	keeperAddress := config.GetKeeperAddress()
 
 	// Create request data for signing (without signature field)
 	signData := struct {
-		TaskID        int64  `json:"task_id"`
-		KeeperAddress string `json:"keeper_address"`
-		Success       bool   `json:"success"`
-		ProofCID      string `json:"proof_cid,omitempty"`
-		Error         string `json:"error,omitempty"`
+		TaskID              int64  `json:"task_id"`
+		KeeperAddress       string `json:"keeper_address"`
+		ExecutionSuccessful bool   `json:"execution_successful"`
+		AggregatorSubmitted bool   `json:"aggregator_submitted"`
+		ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`
+		ProofCID            string `json:"proof_cid,omitempty"`
+		Error               string `json:"error,omitempty"`
 	}{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       success,
-		ProofCID:      proofCID,
-		Error:         errorMsg,
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: executionSuccessful,
+		AggregatorSubmitted: aggregatorSubmitted,
+		ExecutionTxHash:     executionTxHash,
+		ProofCID:            proofCID,
+		Error:               errorMsg,
 	}
 
 	// Sign the request data
@@ -83,12 +89,14 @@ func (c *Client) ReportTaskStatus(ctx context.Context, taskID int64, success boo
 
 	// Create request
 	request := ReportTaskStatusRequest{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       success,
-		ProofCID:      proofCID,
-		Error:         errorMsg,
-		Signature:     signature,
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: executionSuccessful,
+		AggregatorSubmitted: aggregatorSubmitted,
+		ExecutionTxHash:     executionTxHash,
+		ProofCID:            proofCID,
+		Error:               errorMsg,
+		Signature:           signature,
 	}
 
 	// Make RPC call
@@ -104,7 +112,9 @@ func (c *Client) ReportTaskStatus(ctx context.Context, taskID int64, success boo
 
 	c.logger.Info("Task status reported successfully to taskmonitor",
 		"task_id", taskID,
-		"success", success,
+		"execution_successful", executionSuccessful,
+		"aggregator_submitted", aggregatorSubmitted,
+		"execution_tx_hash", executionTxHash,
 		"proof_cid", proofCID)
 
 	return nil
