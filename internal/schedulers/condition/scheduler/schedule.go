@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -272,6 +273,49 @@ func (s *ConditionBasedScheduler) UnregisterEventJob(jobID *big.Int) error {
 
 	// Clean up job data
 	delete(s.jobDataStore, jobID.String())
+
+	return nil
+}
+
+// unregisterEventJobByPointer unregisters an event job using the original *types.BigInt pointer
+// This avoids the pointer-to-value conversion issue when using map keys
+func (s *ConditionBasedScheduler) unregisterEventJobByPointer(jobID *types.BigInt) error {
+	s.workersMutex.Lock()
+	defer s.workersMutex.Unlock()
+
+	jobIDStr := jobID.String()
+
+	// Check if this job exists in eventWorkers
+	if _, exists := s.eventWorkers[jobID]; !exists {
+		// Job may have already been unregistered by another goroutine
+		return fmt.Errorf("job %s is not in eventWorkers (may already be unregistered)", jobIDStr)
+	}
+
+	// Unregister from Event Monitor Service
+	// Note: Event Monitor has its own internal expiration cleanup that may have already
+	// removed the subscriber. In that case, we get a "not found" error which is fine -
+	// the job is already unregistered which is the desired outcome.
+	if s.eventMonitorClient != nil {
+		if err := s.eventMonitorClient.Unregister(jobIDStr); err != nil {
+			// Check if this is a "not found" error (job already expired/removed by Event Monitor)
+			errStr := err.Error()
+			if strings.Contains(errStr, "not found") || strings.Contains(errStr, "404") {
+				s.logger.Info("Event job already removed from Event Monitor Service (expired)",
+					"job_id", jobIDStr)
+			} else {
+				// This is a real error, return it
+				return fmt.Errorf("failed to unregister from Event Monitor Service: %w", err)
+			}
+		} else {
+			s.logger.Info("Unregistered event job from Event Monitor Service", "job_id", jobIDStr)
+		}
+	}
+
+	// Remove from event workers map using the original pointer
+	delete(s.eventWorkers, jobID)
+
+	// Clean up job data from store
+	delete(s.jobDataStore, jobIDStr)
 
 	return nil
 }
