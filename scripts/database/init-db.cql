@@ -18,6 +18,10 @@ DROP TABLE IF EXISTS task_data;
 DROP TABLE IF EXISTS keeper_data;
 DROP TABLE IF EXISTS apikeys;
 DROP TABLE IF EXISTS safe_addresses;
+DROP TABLE IF EXISTS custom_jobs;
+DROP TABLE IF EXISTS custom_script_executions;
+DROP TABLE IF EXISTS script_storage;
+DROP TABLE IF EXISTS execution_challenges;
 
 -- Create User_data table (without counters)
 CREATE TABLE IF NOT EXISTS user_data (
