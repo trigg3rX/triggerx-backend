@@ -74,6 +74,22 @@ const (
             task_status = 'failed',
             task_error = ?
         WHERE task_id = ?`
+	// UpdateTaskAggregatorFailed - Task failed (execution or aggregator submission failed)
+	UpdateTaskAggregatorFailed = `
+        UPDATE triggerx.task_data 
+        SET task_status = 'failed',
+            is_successful = false,
+            task_error = ?,
+            proof_of_task = ?
+        WHERE task_id = ?`
+	// UpdateTaskAggregatorSubmitted - Task succeeded (both execution and aggregator submission)
+	// The task is now pending on-chain confirmation
+	UpdateTaskAggregatorSubmitted = `
+        UPDATE triggerx.task_data 
+        SET task_status = 'pending_confirmation',
+            is_successful = true,
+            proof_of_task = ?
+        WHERE task_id = ?`
 	UpdateAttesterPointsAndNoOfTasks = `
         UPDATE triggerx.keeper_data 
         SET keeper_points = ?,
