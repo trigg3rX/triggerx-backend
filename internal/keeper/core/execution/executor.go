@@ -23,8 +23,7 @@ import (
 // TaskMonitorClientInterface defines the interface for taskmonitor client operations
 type TaskMonitorClientInterface interface {
 	// ReportTaskStatus reports task execution status to taskmonitor (both success and failure)
-	// proofCID contains all execution data (task data, action data, proof, signatures)
-	ReportTaskStatus(ctx context.Context, taskID int64, success bool, proofCID, errorMsg string) error
+	ReportTaskStatus(ctx context.Context, taskID int64, executionSuccessful, aggregatorSubmitted bool, executionTxHash, proofCID, errorMsg string) error
 }
 
 // TaskExecutor is the default implementation of TaskExecutor
@@ -126,7 +125,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			if err != nil {
 				e.logger.Error("Failed to execute action", "task_id", task.TaskID, "trace_id", traceID, "error", err)
 				// Report execution failure to taskmonitor (no CID yet)
-				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("action execution failed: %v", err))
+				e.reportTaskStatus(task.TargetData[idx].TaskID, false, false, actionData.ActionTxHash, "", fmt.Sprintf("action execution failed: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -183,8 +182,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			performerSignature, err := cryptography.SignJSONMessage(ipfsDataForSigning, config.GetPrivateKeyConsensus())
 			if err != nil {
 				e.logger.Error("Failed to sign the ipfs data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				// Report failure (no CID yet)
-				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("failed to sign IPFS data: %v", err))
+				// Report failure (execution succeeded, but signing failed)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, transactionSubmitted, false, actionData.ActionTxHash, "", fmt.Sprintf("failed to sign IPFS data: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -201,8 +200,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			filename := fmt.Sprintf("proof_of_task_%d_%s.json", task.TaskID, time.Now().Format("20060102150405"))
 			ipfsDataBytes, err := json.Marshal(ipfsData)
 			if err != nil {
-				// Report failure (no CID yet)
-				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("failed to marshal IPFS data: %v", err))
+				// Report failure (execution succeeded, but JSON marshal failed)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, transactionSubmitted, false, actionData.ActionTxHash, "", fmt.Sprintf("failed to marshal IPFS data: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -212,8 +211,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			cid, err := e.validator.IpfsClient.Upload(ctx, filename, ipfsDataBytes)
 			if err != nil {
 				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				// Report failure (no CID yet)
-				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("IPFS upload failed: %v", err))
+				// Report failure (execution succeeded, but IPFS upload failed)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, transactionSubmitted, false, actionData.ActionTxHash, "", fmt.Sprintf("IPFS upload failed: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -237,7 +236,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				if err != nil {
 					errorMsg = fmt.Sprintf("%s: %v", errorMsg, err)
 				}
-				e.reportTaskStatus(task.TargetData[idx].TaskID, false, cid, errorMsg)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, transactionSubmitted, false, actionData.ActionTxHash, cid, errorMsg)
 				resultCh <- struct {
 					success bool
 					err     error
@@ -247,7 +246,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 			// Both execution and aggregator submission succeeded
 			e.logger.Info("Task result sent to aggregator", "task_id", task.TaskID, "trace_id", traceID)
-			e.reportTaskStatus(task.TargetData[idx].TaskID, true, cid, "")
+			e.reportTaskStatus(task.TargetData[idx].TaskID, transactionSubmitted, true, actionData.ActionTxHash, cid, "")
 
 			resultCh <- struct {
 				success bool
@@ -300,8 +299,7 @@ func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
 
 // reportTaskStatus reports task execution status to taskmonitor (best-effort, doesn't block)
 // This should be called after the aggregator submission attempt (regardless of success or failure)
-// proofCID contains all execution data (task data, action data, proof, signatures)
-func (e *TaskExecutor) reportTaskStatus(taskID int64, success bool, proofCID, errorMsg string) {
+func (e *TaskExecutor) reportTaskStatus(taskID int64, executionSuccessful, aggregatorSubmitted bool, executionTxHash, proofCID, errorMsg string) {
 	if e.taskMonitorClient == nil {
 		e.logger.Debug("TaskMonitor client not available, skipping status report",
 			"task_id", taskID)
@@ -313,10 +311,12 @@ func (e *TaskExecutor) reportTaskStatus(taskID int64, success bool, proofCID, er
 		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := e.taskMonitorClient.ReportTaskStatus(reportCtx, taskID, success, proofCID, errorMsg); err != nil {
+		if err := e.taskMonitorClient.ReportTaskStatus(reportCtx, taskID, executionSuccessful, aggregatorSubmitted, executionTxHash, proofCID, errorMsg); err != nil {
 			e.logger.Warn("Failed to report task status to taskmonitor",
 				"task_id", taskID,
-				"success", success,
+				"execution_successful", executionSuccessful,
+				"aggregator_submitted", aggregatorSubmitted,
+				"execution_tx_hash", executionTxHash,
 				"proof_cid", proofCID,
 				"error", err)
 		}
