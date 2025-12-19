@@ -92,6 +92,57 @@ func (dm *DatabaseClient) UpdateTaskError(taskID int64, errorMsg string) error {
 	return nil
 }
 
+// UpdateTaskAggregatorFailed updates task when it failed (execution or aggregator submission)
+// proofCID contains all execution data if available
+func (dm *DatabaseClient) UpdateTaskAggregatorFailed(taskID int64, errorMsg, proofCID string) error {
+	// Check if task already has a final status
+	var existingStatus string
+	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
+		dm.logger.Infof("Task %d already has final status '%s', not updating to failed.", taskID, existingStatus)
+		return nil
+	}
+
+	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorFailed,
+		errorMsg, proofCID, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
+		return err
+	}
+	dm.logger.Infof("Successfully updated task %d as failed: %s", taskID, errorMsg)
+	return nil
+}
+
+// UpdateTaskAggregatorSubmitted updates task when both execution and aggregator submission succeeded
+// The task is now pending on-chain confirmation
+// proofCID contains all execution data
+func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(taskID int64, proofCID string) error {
+	// Check if task already has a final status
+	var existingStatus string
+	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Errorf("Error closing iterator: %v", cerr)
+		}
+	}()
+	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
+		dm.logger.Infof("Task %d already has final status '%s', not updating to pending_confirmation.", taskID, existingStatus)
+		return nil
+	}
+
+	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorSubmitted,
+		proofCID, taskID).Exec(); err != nil {
+		dm.logger.Errorf("Error updating task submitted for task ID %d: %v", taskID, err)
+		return err
+	}
+	dm.logger.Infof("Successfully updated task %d as pending_confirmation", taskID)
+	return nil
+}
+
 // GetUserEmailByJobID returns the user's email_id for a given job_id
 func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
 	var userID int64

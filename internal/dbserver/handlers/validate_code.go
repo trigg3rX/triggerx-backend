@@ -23,7 +23,7 @@ type ValidateCodeRequest struct {
 	IsSafe           bool   `json:"is_safe"`
 }
 
-type ValidateCodeResponse struct {
+type ValidateCodeResponse struct { 
 	Executable bool   `json:"executable"`
 	Output     string `json:"output"`
 	Error      string `json:"error,omitempty"`

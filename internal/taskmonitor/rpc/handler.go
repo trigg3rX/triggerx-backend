@@ -20,7 +20,8 @@ type TaskMonitorHandler struct {
 
 // TaskMonitorInterface defines the interface for task monitor operations
 type TaskMonitorInterface interface {
-	ReportTaskError(ctx context.Context, req *types.ReportTaskErrorRequest) (*types.ReportTaskErrorResponse, error)
+	// ReportTaskStatus handles task status reports from keepers (both success and failure)
+	ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error)
 }
 
 // NewTaskMonitorHandler creates a new RPC handler
@@ -34,32 +35,33 @@ func NewTaskMonitorHandler(logger logging.Logger, monitor TaskMonitorInterface) 
 // Handle routes incoming RPC requests based on the method name
 func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request interface{}) (interface{}, error) {
 	switch method {
-	case "report-task-error":
+		
+	case "report-task-status":
 		// Convert request to the expected type
-		req, ok := request.(*types.ReportTaskErrorRequest)
+		req, ok := request.(*types.ReportTaskStatusRequest)
 		if !ok {
 			// Try to convert from map if it's JSON-decoded
 			if reqMap, ok := request.(map[string]interface{}); ok {
 				var err error
-				req, err = h.convertMapToRequest(reqMap)
+				req, err = h.convertMapToStatusRequest(reqMap)
 				if err != nil {
 					return nil, fmt.Errorf("failed to convert request: %w", err)
 				}
 			} else {
-				return nil, fmt.Errorf("invalid request type for report-task-error: %T", request)
+				return nil, fmt.Errorf("invalid request type for report-task-status: %T", request)
 			}
 		}
 
 		// Validate keeper signature
-		if err := h.validateSignature(req); err != nil {
-			h.logger.Error("Invalid keeper signature for task error report",
+		if err := h.validateStatusSignature(req); err != nil {
+			h.logger.Error("Invalid keeper signature for task status report",
 				"task_id", req.TaskID,
 				"keeper_address", req.KeeperAddress,
 				"error", err)
 			return nil, fmt.Errorf("invalid signature: %w", err)
 		}
 
-		resp, err := h.monitor.ReportTaskError(ctx, req)
+		resp, err := h.monitor.ReportTaskStatus(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -74,25 +76,24 @@ func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request 
 func (h *TaskMonitorHandler) GetMethods() []rpcpkg.RPCMethod {
 	return []rpcpkg.RPCMethod{
 		{
-			Name:         "report-task-error",
-			Description:  "Report a task execution error from a keeper",
-			RequestType:  &types.ReportTaskErrorRequest{},
-			ResponseType: &types.ReportTaskErrorResponse{},
+			Name:         "report-task-status",
+			Description:  "Report task execution status from a keeper (success or failure)",
+			RequestType:  &types.ReportTaskStatusRequest{},
+			ResponseType: &types.ReportTaskStatusResponse{},
 			Timeout:      30 * time.Second,
 		},
 	}
 }
 
-// convertMapToRequest converts a map to ReportTaskErrorRequest
+// convertMapToStatusRequest converts a map to ReportTaskStatusRequest
 // This is used when the request comes as JSON-decoded map
-func (h *TaskMonitorHandler) convertMapToRequest(reqMap map[string]interface{}) (*types.ReportTaskErrorRequest, error) {
-	// Convert map back to JSON and then unmarshal to proper struct
+func (h *TaskMonitorHandler) convertMapToStatusRequest(reqMap map[string]interface{}) (*types.ReportTaskStatusRequest, error) {
 	jsonData, err := json.Marshal(reqMap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request map: %w", err)
 	}
 
-	var req types.ReportTaskErrorRequest
+	var req types.ReportTaskStatusRequest
 	if err := json.Unmarshal(jsonData, &req); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
 	}
@@ -100,16 +101,21 @@ func (h *TaskMonitorHandler) convertMapToRequest(reqMap map[string]interface{}) 
 	return &req, nil
 }
 
-// validateSignature validates the keeper's signature for the error report
-func (h *TaskMonitorHandler) validateSignature(req *types.ReportTaskErrorRequest) error {
+// validateStatusSignature validates the keeper's signature for the status report
+func (h *TaskMonitorHandler) validateStatusSignature(req *types.ReportTaskStatusRequest) error {
 	// Create a struct for signing (without signature field)
+	// Must match exactly what the keeper signs
 	signData := struct {
 		TaskID        int64  `json:"task_id"`
 		KeeperAddress string `json:"keeper_address"`
-		Error         string `json:"error"`
+		Success       bool   `json:"success"`
+		ProofCID      string `json:"proof_cid,omitempty"`
+		Error         string `json:"error,omitempty"`
 	}{
 		TaskID:        req.TaskID,
 		KeeperAddress: req.KeeperAddress,
+		Success:       req.Success,
+		ProofCID:      req.ProofCID,
 		Error:         req.Error,
 	}
 
