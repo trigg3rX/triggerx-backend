@@ -1,15 +1,17 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, task TaskStreamData) (bool, error) {
@@ -20,29 +22,88 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		return false, fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
-	broadcast := types.BroadcastDataForPerformer{
-		TaskID:           task.SendTaskDataToKeeper.TaskID[0],
-		TaskDefinitionID: task.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
-		PerformerAddress: task.SendTaskDataToKeeper.PerformerData.KeeperAddress,
-		Data:             []byte(jsonData),
-	}
+	// COMMENTED OUT: Aggregator send logic - now sending directly to performer
+	// broadcast := types.BroadcastDataForPerformer{
+	// 	TaskID:           task.SendTaskDataToKeeper.TaskID[0],
+	// 	TaskDefinitionID: task.SendTaskDataToKeeper.TargetData[0].TaskDefinitionID,
+	// 	PerformerAddress: task.SendTaskDataToKeeper.PerformerData.KeeperAddress,
+	// 	Data:             []byte(jsonData),
+	// }
 
-	var success bool
-	if task.IsMainnet {
-		success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)
-	} else {
-		success, err = tsm.testAggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	// var success bool
+	// if task.IsMainnet {
+	// 	success, err = tsm.aggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	// } else {
+	// 	success, err = tsm.testAggregatorClient.SendTaskToPerformer(ctx, &broadcast)
+	// }
+	// if err != nil {
+	// 	tsm.logger.Error("Failed to send task to aggregator", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+	// 	return false, err
+	// }
+	// if !success {
+	// 	tsm.logger.Warn("Aggregator send returned unsuccessful", "task_id", task.SendTaskDataToKeeper.TaskID[0])
+	// 	return false, fmt.Errorf("aggregator send unsuccessful")
+	// }
+
+	// Send directly to performer's /p2p/message endpoint
+	// The format is: POST with JSON body { "data": "0x<hex-encoded-json>" }
+	hexEncodedData := "0x" + hex.EncodeToString(jsonData)
+	requestBody := map[string]string{
+		"data": hexEncodedData,
 	}
+	requestBodyJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		tsm.logger.Error("Failed to send task to aggregator", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
-		return false, err
-	}
-	if !success {
-		tsm.logger.Warn("Aggregator send returned unsuccessful", "task_id", task.SendTaskDataToKeeper.TaskID[0])
-		return false, fmt.Errorf("aggregator send unsuccessful")
+		tsm.logger.Error("Failed to marshal request body for performer", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		return false, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	success, err = tsm.addTaskToStream(ctx, StreamTaskDispatched, &task)
+	// Select performer URL based on mainnet/testnet
+	var performerURL string
+	if task.IsMainnet {
+		performerURL = config.GetPerformerAPIUrl() + "/p2p/message"
+	} else {
+		performerURL = config.GetTestPerformerAPIUrl() + "/p2p/message"
+	}
+
+	tsm.logger.Info("Sending task directly to performer",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
+		"performer_url", performerURL,
+		"is_mainnet", task.IsMainnet)
+
+	// Create HTTP request with timeout
+	httpCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(httpCtx, http.MethodPost, performerURL, bytes.NewBuffer(requestBodyJSON))
+	if err != nil {
+		tsm.logger.Error("Failed to create HTTP request for performer", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		return false, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send request to performer
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		tsm.logger.Error("Failed to send task to performer", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		return false, fmt.Errorf("failed to send task to performer: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Accept both 200 OK (legacy) and 202 Accepted (async acknowledgement)
+	// 202 means the performer accepted the task and will process it asynchronously
+	// Task completion will be reported to TaskMonitor, not back to this caller
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		tsm.logger.Error("Performer returned error status", "task_id", task.SendTaskDataToKeeper.TaskID[0], "status", resp.StatusCode)
+		return false, fmt.Errorf("performer returned status %d", resp.StatusCode)
+	}
+
+	tsm.logger.Info("Task accepted by performer",
+		"task_id", task.SendTaskDataToKeeper.TaskID[0],
+		"performer_url", performerURL,
+		"status_code", resp.StatusCode)
+
+	success, err := tsm.addTaskToStream(ctx, StreamTaskDispatched, &task)
 	if err != nil {
 		return false, err
 	}

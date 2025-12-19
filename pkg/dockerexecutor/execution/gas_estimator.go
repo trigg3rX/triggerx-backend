@@ -482,7 +482,7 @@ func (ge *GasEstimator) EstimateGasForFunction(
 
 	ge.logger.Debugf("Gas estimation for %s.%s: gasLimit=%d, gasPrice=%s (75th percentile from last 7 days)", contractAddress, functionName, gasLimit, gasPrice.String())
 
-	return gasLimit, gasPrice,currentGasPrice, nil
+	return gasLimit, gasPrice, currentGasPrice, nil
 }
 
 // GetGasPrice gets the cached historical gas price (75th percentile of last 7 days) for a chain
@@ -507,11 +507,93 @@ func (ge *GasEstimator) GetGasPrice(ctx context.Context, chainID string, alchemy
 	return gasPrice, nil
 }
 
+// GetCurrentGasPrice gets the current real-time gas price from the blockchain
+func (ge *GasEstimator) GetCurrentGasPrice(ctx context.Context, chainID string, alchemyAPIKey string) (*big.Int, error) {
+	client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
+	if err != nil {
+		ge.logger.Warnf("Failed to get client for current gas price: %v", err)
+		return big.NewInt(1000000000), err // 1 gwei default fallback
+	}
+
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		ge.logger.Warnf("Failed to get current gas price: %v", err)
+		return big.NewInt(1000000000), err // 1 gwei default fallback
+	}
+
+	return gasPrice, nil
+}
+
 // CalculateGasCostInWei calculates the total gas cost in Wei
 func (ge *GasEstimator) CalculateGasCostInWei(gasLimit uint64, gasPrice *big.Int) *big.Int {
 	gasCost := new(big.Int).SetUint64(gasLimit)
 	gasCost.Mul(gasCost, gasPrice)
 	return gasCost
+}
+
+// EstimateGasWithCalldata estimates gas for a transaction with pre-built calldata
+// This is used for custom scripts (TaskDefinitionID 7) where the script returns targetContract and calldata
+func (ge *GasEstimator) EstimateGasWithCalldata(
+	ctx context.Context,
+	chainID string,
+	contractAddress string,
+	calldata []byte,
+	fromAddress string,
+	alchemyAPIKey string,
+) (uint64, *big.Int, *big.Int, error) {
+	// Get or create client for the chain
+	client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	// Create the call message with the pre-built calldata
+	to := common.HexToAddress(contractAddress)
+
+	// Use provided from address if available, otherwise use a default
+	var from common.Address
+	if fromAddress != "" {
+		from = common.HexToAddress(fromAddress)
+	}
+	msg := ethereum.CallMsg{
+		To:   &to,
+		Data: calldata,
+		From: from,
+	}
+
+	// Estimate gas
+	gasLimit, err := client.EstimateGas(ctx, msg)
+	if err != nil {
+		ge.logger.Warnf("Gas estimation with calldata failed, using default value: %v", err)
+		// Use a default gas limit if estimation fails
+		gasLimit = 1000000 // Default fallback
+	}
+
+	// Get cached historical gas price (75th percentile of last 7 days)
+	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID, alchemyAPIKey)
+	if err != nil {
+		ge.logger.Warnf("Failed to get cached gas price, using current gas price: %v", err)
+		// Fallback to current gas price if cache fails
+		gasPrice, err = client.SuggestGasPrice(ctx)
+		if err != nil {
+			ge.logger.Warnf("Failed to get gas price, using default: %v", err)
+			// Use a default gas price if suggestion fails (e.g., 1 gwei)
+			gasPrice = big.NewInt(1000000000)
+		}
+	}
+
+	// Get current gas price
+	currentGasPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		ge.logger.Warnf("Failed to get current gas price, using default: %v", err)
+		// Use a default gas price if suggestion fails (e.g., 1 gwei)
+		currentGasPrice = big.NewInt(1000000000)
+	}
+
+	ge.logger.Debugf("Gas estimation with calldata for %s: gasLimit=%d, gasPrice=%s (75th percentile from last 7 days)",
+		contractAddress, gasLimit, gasPrice.String())
+
+	return gasLimit, gasPrice, currentGasPrice, nil
 }
 
 // Close closes all eth clients and clears the cache

@@ -164,35 +164,69 @@ func (tm *TaskManager) Initialize() error {
 	return nil
 }
 
-// ReportTaskError handles task error reports from keepers
-func (tm *TaskManager) ReportTaskError(ctx context.Context, req *types.ReportTaskErrorRequest) (*types.ReportTaskErrorResponse, error) {
-	tm.logger.Info("Received task error report",
+// ReportTaskStatus handles task status reports from keepers
+// This is called after the aggregator submission attempt (regardless of success or failure)
+// ProofCID contains all execution data (task data, action data, proof, signatures)
+func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error) {
+	tm.logger.Info("Received task status report",
 		"task_id", req.TaskID,
 		"keeper_address", req.KeeperAddress,
+		"execution_successful", req.ExecutionSuccessful,
+		"aggregator_submitted", req.AggregatorSubmitted,
+		"execution_tx_hash", req.ExecutionTxHash,
+		"proof_cid", req.ProofCID,
 		"error", req.Error)
 
-	// Update task in database with error
-	if err := tm.dbClient.UpdateTaskError(req.TaskID, req.Error); err != nil {
-		tm.logger.Error("Failed to update task error in database",
+	// Case 1: Task failed (execution failed or aggregator submission failed)
+	if !req.ExecutionSuccessful || !req.AggregatorSubmitted {
+		if err := tm.dbClient.UpdateTaskAggregatorFailed(req.TaskID, req.Error, req.ExecutionTxHash, req.ProofCID); err != nil {
+			tm.logger.Error("Failed to update task failure in database",
+				"task_id", req.TaskID,
+				"error", err)
+			return &types.ReportTaskStatusResponse{
+				Success: false,
+				Message: fmt.Sprintf("failed to update task failure: %v", err),
+			}, nil
+		}
+
+		// Move task to failed stream
+		_ = tm.taskStreamManager.MarkTaskFailed(ctx, req.TaskID, req.Error)
+
+		tm.logger.Info("Task failure recorded",
 			"task_id", req.TaskID,
-			"error", err)
-		return &types.ReportTaskErrorResponse{
-			Success: false,
-			Message: fmt.Sprintf("failed to update task error: %v", err),
+			"keeper_address", req.KeeperAddress,
+			"execution_successful", req.ExecutionSuccessful,
+			"aggregator_submitted", req.AggregatorSubmitted,
+			"execution_tx_hash", req.ExecutionTxHash,
+			"error", req.Error)
+
+		return &types.ReportTaskStatusResponse{
+			Success: true,
+			Message: "Task failure recorded",
 		}, nil
 	}
 
-	// Move task to failed stream if it's still in dispatched stream
-	// This is best-effort - if it fails, the DB update already succeeded
-	_ = tm.taskStreamManager.MarkTaskFailed(ctx, req.TaskID, req.Error)
+	// Case 2: Task succeeded (both execution and aggregator submission succeeded)
+	// Update task status to pending confirmation (waiting for on-chain event)
+	if err := tm.dbClient.UpdateTaskAggregatorSubmitted(req.TaskID, req.ExecutionTxHash, req.ProofCID); err != nil {
+		tm.logger.Error("Failed to update task success in database",
+			"task_id", req.TaskID,
+			"error", err)
+		return &types.ReportTaskStatusResponse{
+			Success: false,
+			Message: fmt.Sprintf("failed to update task success: %v", err),
+		}, nil
+	}
 
-	tm.logger.Info("Task error reported successfully",
+	tm.logger.Info("Task success recorded, pending on-chain confirmation",
 		"task_id", req.TaskID,
-		"keeper_address", req.KeeperAddress)
+		"keeper_address", req.KeeperAddress,
+		"execution_tx_hash", req.ExecutionTxHash,
+		"proof_cid", req.ProofCID)
 
-	return &types.ReportTaskErrorResponse{
+	return &types.ReportTaskStatusResponse{
 		Success: true,
-		Message: "Task error reported successfully",
+		Message: "Task status updated, pending on-chain confirmation",
 	}, nil
 }
 

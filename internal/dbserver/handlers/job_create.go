@@ -102,7 +102,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
 			return
 		}
-
+ 
 		jobData := &commonTypes.JobData{
 			JobID:             commonTypes.FromBigInt(jobID),
 			JobTitle:          tempJobs[i].JobTitle,

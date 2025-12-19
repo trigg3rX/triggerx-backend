@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
@@ -47,6 +48,7 @@ type executionPipeline struct {
 	activeExecutionsWG sync.WaitGroup // Track active executions for graceful shutdown
 	shutdownChan       chan struct{}  // Signal for shutdown
 	closed             bool
+	gasEstimator       *GasEstimator // Shared gas estimator with 7-day cache
 }
 
 func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManager, containerMgr ContainerManager, logger logging.Logger) *executionPipeline {
@@ -57,6 +59,7 @@ func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManage
 		logger:           logger,
 		activeExecutions: make(map[string]*types.ExecutionContext),
 		shutdownChan:     make(chan struct{}),
+		gasEstimator:     NewGasEstimator(logger), // Shared gas estimator instance
 		stats: &types.PerformanceMetrics{
 			TotalExecutions:      0,
 			SuccessfulExecutions: 0,
@@ -239,7 +242,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			if taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7 {
+			if (taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7) && execCtx.FileURL == "" {
 				ep.logger.Debugf("Skipping to Stage 4: Only processing results for task_definition_id=%d", taskDefinitionID)
 				// No execution result available, so construct a minimal ExecutionResult to allow fee calculation
 				result := &types.ExecutionResult{
@@ -342,11 +345,11 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	execCtx.Metadata["static_complexity"] = fmt.Sprintf("%.6f", result.Stats.StaticComplexity)
 	execCtx.Metadata["dynamic_complexity"] = fmt.Sprintf("%.6f", result.Stats.DynamicComplexity)
 
-	// Extract arguments for dynamic tasks (2, 4, 6)
+	// Extract arguments for dynamic tasks (2, 4, 6) and custom scripts (7)
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			ep.logger.Infof("task defination id in process %d",taskDefinitionID)
+			ep.logger.Infof("task defination id in process %d", taskDefinitionID)
 			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
 				// For dynamic tasks, the output is expected to be a JSON array of arguments
 				// We store this in metadata to be used by calculateFees
@@ -355,10 +358,30 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 				// Basic validation that it looks like a JSON array
 				if strings.HasPrefix(cleanOutput, "[") && strings.HasSuffix(cleanOutput, "]") {
 					execCtx.Metadata["on_chain_args"] = cleanOutput
-				// } else {
+					// } else {
 					// If it's not a JSON array, we might want to log a warning or handle it
 					// For now, we'll just log it
 					// ep.logger.Warnf("Dynamic task output does not look like a JSON array: %s", cleanOutput)
+				}
+			} else if taskDefinitionID == 7 {
+				// For custom scripts, parse the JSON output to extract targetContract and calldata
+				cleanOutput := strings.TrimSpace(result.Output)
+				if cleanOutput != "" && strings.HasPrefix(cleanOutput, "{") {
+					var scriptOutput struct {
+						ShouldExecute  bool   `json:"shouldExecute"`
+						TargetContract string `json:"targetContract"`
+						Calldata       string `json:"calldata"`
+					}
+					if err := json.Unmarshal([]byte(cleanOutput), &scriptOutput); err == nil {
+						if scriptOutput.ShouldExecute && scriptOutput.TargetContract != "" && scriptOutput.Calldata != "" {
+							execCtx.Metadata["script_target_contract"] = scriptOutput.TargetContract
+							execCtx.Metadata["script_calldata"] = scriptOutput.Calldata
+							ep.logger.Debugf("Custom script output: target=%s, calldata=%s",
+								scriptOutput.TargetContract, scriptOutput.Calldata[:min(len(scriptOutput.Calldata), 66)])
+						}
+					} else {
+						ep.logger.Warnf("Failed to parse custom script output: %v", err)
+					}
 				}
 			}
 		}
@@ -386,7 +409,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		}
 	}
 
-	ep.logger.Infof("task defination id in the calculate fees: %d",taskDefinitionID)
+	ep.logger.Infof("task defination id in the calculate fees: %d", taskDefinitionID)
 
 	// Calculate off-chain fees based on task definition ID
 	var offChainFeeUSD float64
@@ -400,9 +423,9 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
 		ep.logger.Debugf("Using dynamic off-chain fee: $%.6f USD", offChainFeeUSD)
 	case 7:
-		// Custom script - only off-chain, no on-chain
-		offChainFeeUSD = feesConfig.CustomScriptFeeUSD
-		ep.logger.Debugf("Using custom script off-chain fee: $%.6f USD", offChainFeeUSD)
+		// Custom script - uses dynamic off-chain fee (same as 2, 4, 6)
+		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
+		ep.logger.Debugf("Using dynamic off-chain fee for custom script: $%.6f USD", offChainFeeUSD)
 	default:
 		// Fallback to old calculation for unknown task types
 		ep.logger.Warnf("Unknown task_definition_id: %d, using legacy fee calculation", taskDefinitionID)
@@ -415,7 +438,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		ep.logger.Warnf("failed to fetch ETH-USD rate from CoinGecko: %v", err)
 		return big.NewInt(0), big.NewInt(0)
 	}
-	defer func () {
+	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			ep.logger.Errorf("Error closing response body: %v", err)
 		}
@@ -439,11 +462,123 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	offChainFeeFloat.Mul(offChainFeeFloat, weiMultiplier)
 	offChainFeeWei, _ := offChainFeeFloat.Int(nil)
 
-	// For task definition ID 7 (custom script), only return off-chain fees
+	// For task definition ID 7 (custom script), calculate on-chain fees using fixed 1M gas
+	// During actual execution (in keeper), real gas estimation with actual calldata is used
 	if taskDefinitionID == 7 {
-		ep.logger.Debugf("Fee calculation for custom script (ID 7): offchain_fee_usd=%.6f, offchain_fee_wei=%s",
-			offChainFeeUSD, offChainFeeWei.String())
-		return offChainFeeWei, offChainFeeWei
+		var onChainFeeWei = big.NewInt(0)
+		var currentOnChainFeeWei = big.NewInt(0)
+		var aggregatorOnChainFeeWei = big.NewInt(0)
+
+		chainID := execCtx.Metadata["target_chain_id"]
+		ctx := context.Background()
+
+		if chainID != "" {
+			// Check if we have real calldata from script execution
+			scriptTargetContract := execCtx.Metadata["script_target_contract"]
+			scriptCalldata := execCtx.Metadata["script_calldata"]
+			fromAddress := execCtx.Metadata["from_address"]
+
+			var gasLimit uint64
+			var gasPrice, currentGasPrice *big.Int
+
+			if scriptTargetContract != "" && scriptCalldata != "" {
+				// EXECUTION: Use real gas estimation with actual calldata
+				ep.logger.Debugf("Custom script: using real calldata for gas estimation")
+
+				var err error
+				gasLimit, gasPrice, currentGasPrice, err = ep.gasEstimator.EstimateGasWithCalldata(
+					ctx,
+					chainID,
+					scriptTargetContract,
+					common.FromHex(scriptCalldata), // Properly decode hex string to bytes
+					fromAddress,
+					alchemyAPIKey,
+				)
+				if err != nil {
+					ep.logger.Warnf("Failed to estimate gas with calldata: %v, using fallback 600K gas", err)
+					gasLimit = 600000
+					gasPrice = big.NewInt(1000000000)
+					currentGasPrice = gasPrice
+				}
+
+				// Add 20% buffer to gas limit (for execution safety margin)
+				gasLimit = gasLimit * 120 / 100
+
+				ep.logger.Debugf("Custom script execution: real gas estimation gasLimit=%d, gasPrice=%s, currentGasPrice=%s",
+					gasLimit, gasPrice.String(), currentGasPrice.String())
+			} else {
+				// JOB CREATION: Use fixed 1M gas (conservative estimate)
+				gasLimit = uint64(1000000)
+
+				var err error
+				gasPrice, err = ep.gasEstimator.GetGasPrice(ctx, chainID, alchemyAPIKey)
+				if err != nil {
+					ep.logger.Warnf("Failed to get gas price for custom script: %v, using default", err)
+					gasPrice = big.NewInt(1000000000) // 1 gwei fallback
+				}
+
+				currentGasPrice, err = ep.gasEstimator.GetCurrentGasPrice(ctx, chainID, alchemyAPIKey)
+				if err != nil {
+					ep.logger.Warnf("Failed to get current gas price: %v, using historical price", err)
+					currentGasPrice = gasPrice
+				}
+
+				ep.logger.Debugf("Custom script job creation: fixed gas estimation gasLimit=%d, gasPrice=%s, currentGasPrice=%s",
+					gasLimit, gasPrice.String(), currentGasPrice.String())
+			}
+
+			// Calculate on-chain fee
+			onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
+			currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
+		} else {
+			ep.logger.Debugf("Custom script: no chain ID provided, skipping on-chain fee calculation")
+		}
+
+		// Calculate aggregator fee (same as other task types)
+		const aggregatorGasUsed = uint64(720000)
+		const (
+			baseMainnetChainID = "8453"
+			baseTestnetChainID = "84532"
+		)
+		targetChainID := execCtx.Metadata["target_chain_id"]
+		var baseAggregatorFeeChainID string
+		if targetChainID == "42161" || targetChainID == "8453" {
+			baseAggregatorFeeChainID = baseMainnetChainID
+		} else {
+			baseAggregatorFeeChainID = baseTestnetChainID
+		}
+
+		// Use shared gasEstimator for aggregator fee
+		ethClient, err := ep.gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
+		var aggregatorGasPrice *big.Int
+		if err != nil {
+			ep.logger.Warnf("Failed to get eth client for aggregator gas estimation on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+			aggregatorGasPrice = big.NewInt(1000000000) // 1 gwei fallback
+		} else {
+			aggregatorGasPrice, err = ethClient.SuggestGasPrice(ctx)
+			if err != nil {
+				ep.logger.Warnf("Failed to get current gas price for aggregator on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+				aggregatorGasPrice = big.NewInt(1000000000)
+			} else {
+				ep.logger.Debugf("Current gas price for aggregator fee (custom script), chain %s: %s Wei", baseAggregatorFeeChainID, aggregatorGasPrice.String())
+			}
+		}
+
+		aggregatorOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
+
+		// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
+		totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
+		currentTotalFeeWei := new(big.Int).Add(offChainFeeWei, currentOnChainFeeWei)
+		currentTotalFeeWei.Add(currentTotalFeeWei, aggregatorOnChainFeeWei)
+		totalFeeWei.Add(totalFeeWei, aggregatorOnChainFeeWei)
+		// Apply 20% buffer (same as other task types)
+		totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
+		totalFeeWei.Div(totalFeeWei, big.NewInt(100))
+
+		ep.logger.Infof("Fee calculation for custom script (ID 7): offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, aggregator_fee_wei=%s, total_fee_wei=%s, current_total_fee_wei=%s",
+			offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String(), currentTotalFeeWei.String())
+
+		return totalFeeWei, currentTotalFeeWei
 	}
 
 	// Initialize on-chain related fee variables to zero by default
@@ -472,12 +607,10 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 			// Get from address if provided
 			fromAddress := execCtx.Metadata["from_address"]
 
-			// Estimate gas for the on-chain transaction
+			// Estimate gas for the on-chain transaction using shared gasEstimator
 			ctx := context.Background()
-			gasEstimator := NewGasEstimator(ep.logger)
-			defer gasEstimator.Close()
 
-			gasLimit, gasPrice, currentGasPrice, err := gasEstimator.EstimateGasForFunction(
+			gasLimit, gasPrice, currentGasPrice, err := ep.gasEstimator.EstimateGasForFunction(
 				ctx,
 				chainID,
 				contractAddr,
@@ -496,8 +629,8 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 				onChainFeeWei, _ = defaultOnChainFee.Int(nil)
 			} else {
 				// Calculate gas cost in Wei
-				onChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
-				currentOnChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
+				onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
+				currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
 				ep.logger.Debugf("Gas estimation: gasLimit=%d, gasPrice=%s, currentGasPrice=%s, gasCost=%s Wei, currentGasCost=%s Wei",
 					gasLimit, gasPrice.String(), currentGasPrice.String(), onChainFeeWei.String(), currentOnChainFeeWei.String())
 			}
@@ -536,11 +669,9 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	}
 
 	ctx := context.Background()
-	gasEstimator := NewGasEstimator(ep.logger)
-	defer gasEstimator.Close()
 
-	// Use eth client to fetch current gas price (not historical/cached)
-	ethClient, err := gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
+	// Use shared gasEstimator to fetch current gas price
+	ethClient, err := ep.gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
 	var aggregatorGasPrice *big.Int
 	if err != nil {
 		ep.logger.Warnf("Failed to get eth client for aggregator gas estimation on chain %s: %v, using default", baseAggregatorFeeChainID, err)
@@ -555,7 +686,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		}
 	}
 
-	aggregatorOnChainFeeWei = gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
+	aggregatorOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
 
 	// Log aggregator fee calculation
 	ep.logger.Debugf("Aggregator on-chain fee: baseAggregatorFeeChainID=%s, gasUsed=%d, currentGasPrice=%s Wei, aggregatorFee=%s Wei",
