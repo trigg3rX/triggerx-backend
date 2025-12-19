@@ -22,7 +22,9 @@ import (
 
 // TaskMonitorClientInterface defines the interface for taskmonitor client operations
 type TaskMonitorClientInterface interface {
-	ReportTaskError(ctx context.Context, taskID int64, errorMsg string) error
+	// ReportTaskStatus reports task execution status to taskmonitor (both success and failure)
+	// proofCID contains all execution data (task data, action data, proof, signatures)
+	ReportTaskStatus(ctx context.Context, taskID int64, success bool, proofCID, errorMsg string) error
 }
 
 // TaskExecutor is the default implementation of TaskExecutor
@@ -123,8 +125,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			actionData, transactionSubmitted, err = e.executeAction(&task.TargetData[idx], &task.TriggerData[idx], client)
 			if err != nil {
 				e.logger.Error("Failed to execute action", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				// Report error to taskmonitor
-				e.reportTaskError(task.TargetData[idx].TaskID, fmt.Sprintf("action execution failed: %v", err))
+				// Report execution failure to taskmonitor (no CID yet)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("action execution failed: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -181,6 +183,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			performerSignature, err := cryptography.SignJSONMessage(ipfsDataForSigning, config.GetPrivateKeyConsensus())
 			if err != nil {
 				e.logger.Error("Failed to sign the ipfs data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
+				// Report failure (no CID yet)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("failed to sign IPFS data: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -197,6 +201,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			filename := fmt.Sprintf("proof_of_task_%d_%s.json", task.TaskID, time.Now().Format("20060102150405"))
 			ipfsDataBytes, err := json.Marshal(ipfsData)
 			if err != nil {
+				// Report failure (no CID yet)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("failed to marshal IPFS data: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -206,8 +212,8 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			cid, err := e.validator.IpfsClient.Upload(ctx, filename, ipfsDataBytes)
 			if err != nil {
 				e.logger.Error("Failed to upload IPFS data", "task_id", task.TaskID, "trace_id", traceID, "error", err)
-				// Report error to taskmonitor
-				e.reportTaskError(task.TargetData[idx].TaskID, fmt.Sprintf("IPFS upload failed: %v", err))
+				// Report failure (no CID yet)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, false, "", fmt.Sprintf("IPFS upload failed: %v", err))
 				resultCh <- struct {
 					success bool
 					err     error
@@ -226,19 +232,23 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			success, err := e.aggregatorClient.SendTaskToValidators(ctx, &aggregatorData)
 			if !success {
 				e.logger.Error("Failed to send task result to aggregator", "task_id", task.TaskID, "error", err, "trace_id", traceID)
-				// Report error to taskmonitor
+				// Report failure with CID (execution succeeded, aggregator failed)
 				errorMsg := "failed to send task result to aggregator"
 				if err != nil {
 					errorMsg = fmt.Sprintf("%s: %v", errorMsg, err)
 				}
-				e.reportTaskError(task.TargetData[idx].TaskID, errorMsg)
+				e.reportTaskStatus(task.TargetData[idx].TaskID, false, cid, errorMsg)
 				resultCh <- struct {
 					success bool
 					err     error
 				}{false, fmt.Errorf("failed to send task result to aggregator")}
 				return
 			}
+
+			// Both execution and aggregator submission succeeded
 			e.logger.Info("Task result sent to aggregator", "task_id", task.TaskID, "trace_id", traceID)
+			e.reportTaskStatus(task.TargetData[idx].TaskID, true, cid, "")
+
 			resultCh <- struct {
 				success bool
 				err     error
@@ -288,31 +298,47 @@ func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
 	return nm, nil
 }
 
-// reportTaskError reports a task error to taskmonitor (best-effort, doesn't block)
-func (e *TaskExecutor) reportTaskError(taskID int64, errorMsg string) {
+// reportTaskStatus reports task execution status to taskmonitor (best-effort, doesn't block)
+// This should be called after the aggregator submission attempt (regardless of success or failure)
+// proofCID contains all execution data (task data, action data, proof, signatures)
+func (e *TaskExecutor) reportTaskStatus(taskID int64, success bool, proofCID, errorMsg string) {
 	if e.taskMonitorClient == nil {
-		e.logger.Debug("TaskMonitor client not available, skipping error report",
+		e.logger.Debug("TaskMonitor client not available, skipping status report",
 			"task_id", taskID)
 		return
 	}
 
-	// Report error asynchronously to avoid blocking
+	// Report status asynchronously to avoid blocking
 	go func() {
 		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := e.taskMonitorClient.ReportTaskError(reportCtx, taskID, errorMsg); err != nil {
-			e.logger.Warn("Failed to report task error to taskmonitor",
+		if err := e.taskMonitorClient.ReportTaskStatus(reportCtx, taskID, success, proofCID, errorMsg); err != nil {
+			e.logger.Warn("Failed to report task status to taskmonitor",
 				"task_id", taskID,
+				"success", success,
+				"proof_cid", proofCID,
 				"error", err)
 		}
 	}()
 }
 
-// func parseStringToInt(str string) int {
-// 	num, err := strconv.Atoi(str)
-// 	if err != nil {
-// 		return 0
+// --- DEPRECATED: ---
+// Since executor and validator are controlled by us, backward compatibility is unnecessary.
+//
+// func (e *TaskExecutor) reportTaskError(taskID int64, errorMsg string) {
+// 	if e.taskMonitorClient == nil {
+// 		e.logger.Debug("TaskMonitor client not available, skipping error report",
+// 			"task_id", taskID)
+// 		return
 // 	}
-// 	return num
+// 	go func() {
+// 		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 		defer cancel()
+// 		if err := e.taskMonitorClient.ReportTaskError(reportCtx, taskID, errorMsg); err != nil {
+// 			e.logger.Warn("Failed to report task error to taskmonitor",
+// 				"task_id", taskID,
+// 				"error", err)
+// 		}
+// 	}()
 // }
