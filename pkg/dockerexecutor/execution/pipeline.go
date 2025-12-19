@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
@@ -397,6 +399,105 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	return result
 }
 
+// getChainlinkETHUSDPrice fetches ETH/USD price from Chainlink oracle on Arbitrum One
+// Returns price in USD (float64) and error
+// We use Arbitrum One as a single source of truth since ETH/USD price is the same across all chains
+func (ep *executionPipeline) getChainlinkETHUSDPrice(ctx context.Context, alchemyAPIKey string) (float64, error) {
+	// Always use Arbitrum One's Chainlink ETH/USD price feed
+	const arbitrumOneChainID = "42161"
+	const arbitrumOnePriceFeedAddr = "0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6" // Arbitrum One ETH/USD
+
+	// Get Ethereum client for Arbitrum One
+	client, err := ep.gasEstimator.getOrCreateClient(ctx, arbitrumOneChainID, alchemyAPIKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get eth client for Arbitrum One (chain %s): %w", arbitrumOneChainID, err)
+	}
+
+	// Chainlink Aggregator V3 ABI for latestRoundData()
+	// function latestRoundData() external view returns (
+	//     uint80 roundId,
+	//     int256 answer,
+	//     uint256 startedAt,
+	//     uint256 updatedAt,
+	//     uint80 answeredInRound
+	// )
+	// The answer is in 8 decimals (e.g., 300000000000 = $3000)
+	priceFeedABI := `[{"inputs":[],"name":"latestRoundData","outputs":[{"internalType":"uint80","name":"roundId","type":"uint80"},{"internalType":"int256","name":"answer","type":"int256"},{"internalType":"uint256","name":"startedAt","type":"uint256"},{"internalType":"uint256","name":"updatedAt","type":"uint256"},{"internalType":"uint80","name":"answeredInRound","type":"uint80"}],"stateMutability":"view","type":"function"}]`
+
+	// Parse ABI
+	abiParsed, err := abi.JSON(strings.NewReader(priceFeedABI))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse Chainlink ABI: %w", err)
+	}
+
+	// Pack the function call
+	callData, err := abiParsed.Pack("latestRoundData")
+	if err != nil {
+		return 0, fmt.Errorf("failed to pack latestRoundData call: %w", err)
+	}
+
+	// Call the contract
+	priceFeedAddress := common.HexToAddress(arbitrumOnePriceFeedAddr)
+	result, err := client.CallContract(ctx, ethereum.CallMsg{
+		To:   &priceFeedAddress,
+		Data: callData,
+	}, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to call Chainlink contract on Arbitrum One: %w", err)
+	}
+
+	// Unpack the result
+	// Unpack returns (roundId, answer, startedAt, updatedAt, answeredInRound)
+	outputs, err := abiParsed.Unpack("latestRoundData", result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unpack Chainlink response: %w", err)
+	}
+
+	// Extract values from outputs
+	if len(outputs) < 5 {
+		return 0, fmt.Errorf("invalid Chainlink response: expected 5 values, got %d", len(outputs))
+	}
+
+	// uint80 is represented as *big.Int in Go
+	var answer *big.Int
+	var updatedAt *big.Int
+
+	// Extract answer (index 1) and updatedAt (index 3)
+	if answerBig, ok := outputs[1].(*big.Int); ok {
+		answer = answerBig
+	} else {
+		return 0, fmt.Errorf("invalid answer type: expected *big.Int")
+	}
+
+	if updatedAtBig, ok := outputs[3].(*big.Int); ok {
+		updatedAt = updatedAtBig
+	}
+
+	// Check if answer is valid (not zero or negative)
+	if answer == nil || answer.Sign() <= 0 {
+		return 0, fmt.Errorf("invalid Chainlink price: answer is zero or negative")
+	}
+
+	// Check if price is stale (updated more than 1 hour ago)
+	if updatedAt != nil {
+		now := time.Now().Unix()
+		updatedAtUnix := updatedAt.Int64()
+		if updatedAtUnix > 0 && now-updatedAtUnix > 3600 {
+			ep.logger.Warnf("Chainlink price feed is stale: updated %d seconds ago", now-updatedAtUnix)
+		}
+	}
+
+	// Convert answer from 8 decimals to USD price
+	// answer is in 8 decimals, so divide by 1e8
+	priceFloat := new(big.Float).SetInt(answer)
+	decimals := new(big.Float).SetInt(big.NewInt(1e8))
+	priceFloat.Quo(priceFloat, decimals)
+	price, _ := priceFloat.Float64()
+
+	ep.logger.Debugf("Fetched ETH/USD price from Chainlink on Arbitrum One (feed %s): $%.2f", arbitrumOnePriceFeedAddr, price)
+	return price, nil
+}
+
 func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alchemyAPIKey string) (*big.Int, *big.Int) {
 	feesConfig := ep.config.GetFeesConfig()
 
@@ -455,12 +556,37 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	}
 	EthToUSDRate := coingeckoResp.Ethereum.USD
 
+	// Check if ETH/USD rate is valid (not zero or negative)
+	if EthToUSDRate <= 0 {
+		ep.logger.Warnf("invalid ETH/USD rate from CoinGecko: %f, fetching from Chainlink oracle on Arbitrum One", EthToUSDRate)
+		// Fetch from Chainlink oracle on Arbitrum One as fallback
+		ctx := context.Background()
+		chainlinkPrice, err := ep.getChainlinkETHUSDPrice(ctx, alchemyAPIKey)
+		if err != nil {
+			ep.logger.Errorf("failed to fetch ETH/USD rate from Chainlink on Arbitrum One: %v, returning zero fees", err)
+			return big.NewInt(0), big.NewInt(0)
+		}
+		EthToUSDRate = chainlinkPrice
+		ep.logger.Infof("Using Chainlink ETH/USD rate from Arbitrum One: $%.2f", EthToUSDRate)
+	}
+
 	// Convert off-chain fee from USD to Wei
 	offChainFeeInEther := offChainFeeUSD / EthToUSDRate
 	offChainFeeFloat := big.NewFloat(offChainFeeInEther)
 	weiMultiplier := big.NewFloat(1e18) // 10^18
 	offChainFeeFloat.Mul(offChainFeeFloat, weiMultiplier)
 	offChainFeeWei, _ := offChainFeeFloat.Int(nil)
+
+	// Safety check: ensure offChainFeeWei is not nil (could happen if float is Inf or NaN)
+	if offChainFeeWei == nil {
+		ep.logger.Warnf("offChainFeeWei conversion resulted in nil, using $3000 USD fallback")
+		// Use $3000 USD as fallback
+		fallbackFeeInEther := 3000.0 / EthToUSDRate
+		fallbackFeeFloat := big.NewFloat(fallbackFeeInEther)
+		weiMultiplierFallback := big.NewFloat(1e18)
+		fallbackFeeFloat.Mul(fallbackFeeFloat, weiMultiplierFallback)
+		offChainFeeWei, _ = fallbackFeeFloat.Int(nil)
+	}
 
 	// For task definition ID 7 (custom script), calculate on-chain fees using fixed 1M gas
 	// During actual execution (in keeper), real gas estimation with actual calldata is used
