@@ -40,7 +40,7 @@ func Init() error {
 	}
 
 	cfg = Config{
-		Port:              env.GetEnvString("EVENT_MONITOR_PORT", "9007"),
+		Port:              env.GetEnvString("EVENT_MONITOR_PORT", "9009"),
 		Host:              env.GetEnvString("EVENT_MONITOR_HOST", "0.0.0.0"),
 		AlchemyAPIKey:     env.GetEnvString("ALCHEMY_API_KEY", ""),
 		PollInterval:      parseDuration(env.GetEnvString("POLL_INTERVAL", "1s")),
