@@ -90,14 +90,18 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		tsm.logger.Error("Performer returned non-OK status", "task_id", task.SendTaskDataToKeeper.TaskID[0], "status", resp.StatusCode)
+	// Accept both 200 OK (legacy) and 202 Accepted (async acknowledgement)
+	// 202 means the performer accepted the task and will process it asynchronously
+	// Task completion will be reported to TaskMonitor, not back to this caller
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		tsm.logger.Error("Performer returned error status", "task_id", task.SendTaskDataToKeeper.TaskID[0], "status", resp.StatusCode)
 		return false, fmt.Errorf("performer returned status %d", resp.StatusCode)
 	}
 
-	tsm.logger.Info("Task sent successfully to performer",
+	tsm.logger.Info("Task accepted by performer",
 		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"performer_url", performerURL)
+		"performer_url", performerURL,
+		"status_code", resp.StatusCode)
 
 	success, err := tsm.addTaskToStream(ctx, StreamTaskDispatched, &task)
 	if err != nil {

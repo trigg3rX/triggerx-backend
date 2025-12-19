@@ -24,12 +24,14 @@ import (
 
 // ReportTaskStatusRequest mirrors the request type
 type ReportTaskStatusRequest struct {
-	TaskID        int64  `json:"task_id"`
-	KeeperAddress string `json:"keeper_address"`
-	Success       bool   `json:"success"`
-	ProofCID      string `json:"proof_cid,omitempty"`
-	Error         string `json:"error,omitempty"`
-	Signature     string `json:"signature"`
+	TaskID              int64  `json:"task_id"`
+	KeeperAddress       string `json:"keeper_address"`
+	ExecutionSuccessful bool   `json:"execution_successful"`
+	AggregatorSubmitted bool   `json:"aggregator_submitted"`
+	ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`
+	ProofCID            string `json:"proof_cid,omitempty"`
+	Error               string `json:"error,omitempty"`
+	Signature           string `json:"signature"`
 }
 
 // ReportTaskStatusResponse mirrors the response type
@@ -87,17 +89,21 @@ func testReportSuccess(ctx context.Context, rpcClient *client.Client, keeperAddr
 
 	// Create signing data (must match server expectations)
 	signData := struct {
-		TaskID        int64  `json:"task_id"`
-		KeeperAddress string `json:"keeper_address"`
-		Success       bool   `json:"success"`
-		ProofCID      string `json:"proof_cid,omitempty"`
-		Error         string `json:"error,omitempty"`
+		TaskID              int64  `json:"task_id"`
+		KeeperAddress       string `json:"keeper_address"`
+		ExecutionSuccessful bool   `json:"execution_successful"`
+		AggregatorSubmitted bool   `json:"aggregator_submitted"`
+		ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`
+		ProofCID            string `json:"proof_cid,omitempty"`
+		Error               string `json:"error,omitempty"`
 	}{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       true,
-		ProofCID:      "QmTestSuccessCID12345",
-		Error:         "",
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: true,
+		AggregatorSubmitted: true,
+		ExecutionTxHash:     "0xabc123def456",
+		ProofCID:            "QmTestSuccessCID12345",
+		Error:               "",
 	}
 
 	signature, err := cryptography.SignJSONMessage(signData, privateKey)
@@ -107,12 +113,14 @@ func testReportSuccess(ctx context.Context, rpcClient *client.Client, keeperAddr
 	}
 
 	request := ReportTaskStatusRequest{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       true,
-		ProofCID:      "QmTestSuccessCID12345",
-		Error:         "",
-		Signature:     signature,
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: true,
+		AggregatorSubmitted: true,
+		ExecutionTxHash:     "0xabc123def456",
+		ProofCID:            "QmTestSuccessCID12345",
+		Error:               "",
+		Signature:           signature,
 	}
 
 	var response ReportTaskStatusResponse
@@ -130,17 +138,21 @@ func testReportFailure(ctx context.Context, rpcClient *client.Client, keeperAddr
 	taskID := int64(time.Now().Unix()) + 1 // Different task ID
 
 	signData := struct {
-		TaskID        int64  `json:"task_id"`
-		KeeperAddress string `json:"keeper_address"`
-		Success       bool   `json:"success"`
-		ProofCID      string `json:"proof_cid,omitempty"`
-		Error         string `json:"error,omitempty"`
+		TaskID              int64  `json:"task_id"`
+		KeeperAddress       string `json:"keeper_address"`
+		ExecutionSuccessful bool   `json:"execution_successful"`
+		AggregatorSubmitted bool   `json:"aggregator_submitted"`
+		ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`
+		ProofCID            string `json:"proof_cid,omitempty"`
+		Error               string `json:"error,omitempty"`
 	}{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       false,
-		ProofCID:      "QmTestFailureCID67890",
-		Error:         "aggregator submission failed: connection timeout",
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: true,
+		AggregatorSubmitted: false,
+		ExecutionTxHash:     "0xdef789abc123",
+		ProofCID:            "QmTestFailureCID67890",
+		Error:               "aggregator submission failed: connection timeout",
 	}
 
 	signature, err := cryptography.SignJSONMessage(signData, privateKey)
@@ -150,12 +162,14 @@ func testReportFailure(ctx context.Context, rpcClient *client.Client, keeperAddr
 	}
 
 	request := ReportTaskStatusRequest{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       false,
-		ProofCID:      "QmTestFailureCID67890",
-		Error:         "aggregator submission failed: connection timeout",
-		Signature:     signature,
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: true,
+		AggregatorSubmitted: false,
+		ExecutionTxHash:     "0xdef789abc123",
+		ProofCID:            "QmTestFailureCID67890",
+		Error:               "aggregator submission failed: connection timeout",
+		Signature:           signature,
 	}
 
 	var response ReportTaskStatusResponse
@@ -173,17 +187,21 @@ func testReportEarlyFailure(ctx context.Context, rpcClient *client.Client, keepe
 	taskID := int64(time.Now().Unix()) + 2 // Different task ID
 
 	signData := struct {
-		TaskID        int64  `json:"task_id"`
-		KeeperAddress string `json:"keeper_address"`
-		Success       bool   `json:"success"`
-		ProofCID      string `json:"proof_cid,omitempty"`
-		Error         string `json:"error,omitempty"`
+		TaskID              int64  `json:"task_id"`
+		KeeperAddress       string `json:"keeper_address"`
+		ExecutionSuccessful bool   `json:"execution_successful"`
+		AggregatorSubmitted bool   `json:"aggregator_submitted"`
+		ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`
+		ProofCID            string `json:"proof_cid,omitempty"`
+		Error               string `json:"error,omitempty"`
 	}{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       false,
-		ProofCID:      "", // No CID - failed before IPFS upload
-		Error:         "action execution failed: contract reverted",
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: false,
+		AggregatorSubmitted: false,
+		ExecutionTxHash:     "", // No tx hash - failed before tx submission
+		ProofCID:            "", // No CID - failed before IPFS upload
+		Error:               "action execution failed: contract reverted",
 	}
 
 	signature, err := cryptography.SignJSONMessage(signData, privateKey)
@@ -193,12 +211,14 @@ func testReportEarlyFailure(ctx context.Context, rpcClient *client.Client, keepe
 	}
 
 	request := ReportTaskStatusRequest{
-		TaskID:        taskID,
-		KeeperAddress: keeperAddress,
-		Success:       false,
-		ProofCID:      "",
-		Error:         "action execution failed: contract reverted",
-		Signature:     signature,
+		TaskID:              taskID,
+		KeeperAddress:       keeperAddress,
+		ExecutionSuccessful: false,
+		AggregatorSubmitted: false,
+		ExecutionTxHash:     "",
+		ProofCID:            "",
+		Error:               "action execution failed: contract reverted",
+		Signature:           signature,
 	}
 
 	var response ReportTaskStatusResponse

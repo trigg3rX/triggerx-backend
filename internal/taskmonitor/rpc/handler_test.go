@@ -41,16 +41,18 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 			name:   "Success - Task succeeded",
 			method: "report-task-status",
 			request: &types.ReportTaskStatusRequest{
-				TaskID:        123,
-				KeeperAddress: "0x1234567890abcdef",
-				Success:       true,
-				ProofCID:      "QmTestCID123",
-				Error:         "",
-				Signature:     "valid_signature",
+				TaskID:              123,
+				KeeperAddress:       "0x1234567890abcdef",
+				ExecutionSuccessful: true,
+				AggregatorSubmitted: true,
+				ExecutionTxHash:     "0xabc123",
+				ProofCID:            "QmTestCID123",
+				Error:               "",
+				Signature:           "valid_signature",
 			},
 			setupMock: func() {
 				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskStatusRequest) bool {
-					return req.TaskID == 123 && req.Success == true
+					return req.TaskID == 123 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == true
 				})).Return(&types.ReportTaskStatusResponse{
 					Success: true,
 					Message: "Task status updated",
@@ -63,19 +65,21 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:   "Success - Task failed",
+			name:   "Success - Task failed (aggregator submission failed)",
 			method: "report-task-status",
 			request: &types.ReportTaskStatusRequest{
-				TaskID:        456,
-				KeeperAddress: "0xabcdef1234567890",
-				Success:       false,
-				ProofCID:      "QmTestCID456",
-				Error:         "aggregator submission failed",
-				Signature:     "valid_signature",
+				TaskID:              456,
+				KeeperAddress:       "0xabcdef1234567890",
+				ExecutionSuccessful: true,
+				AggregatorSubmitted: false,
+				ExecutionTxHash:     "0xdef456",
+				ProofCID:            "QmTestCID456",
+				Error:               "aggregator submission failed",
+				Signature:           "valid_signature",
 			},
 			setupMock: func() {
 				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskStatusRequest) bool {
-					return req.TaskID == 456 && req.Success == false
+					return req.TaskID == 456 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == false
 				})).Return(&types.ReportTaskStatusResponse{
 					Success: true,
 					Message: "Task failure recorded",
@@ -100,16 +104,18 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 			name:   "Success - Request from map (JSON decoded)",
 			method: "report-task-status",
 			request: map[string]interface{}{
-				"task_id":        float64(789), // JSON numbers are float64
-				"keeper_address": "0x9876543210fedcba",
-				"success":        true,
-				"proof_cid":      "QmTestCID789",
-				"error":          "",
-				"signature":      "valid_signature",
+				"task_id":              float64(789), // JSON numbers are float64
+				"keeper_address":       "0x9876543210fedcba",
+				"execution_successful": true,
+				"aggregator_submitted": true,
+				"execution_tx_hash":    "0x789abc",
+				"proof_cid":            "QmTestCID789",
+				"error":                "",
+				"signature":            "valid_signature",
 			},
 			setupMock: func() {
 				mockMonitor.On("ReportTaskStatus", mock.Anything, mock.MatchedBy(func(req *types.ReportTaskStatusRequest) bool {
-					return req.TaskID == 789 && req.Success == true
+					return req.TaskID == 789 && req.ExecutionSuccessful == true && req.AggregatorSubmitted == true
 				})).Return(&types.ReportTaskStatusResponse{
 					Success: true,
 					Message: "Task status updated",
@@ -180,40 +186,48 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 		{
 			name: "Valid map - success case",
 			input: map[string]interface{}{
-				"task_id":        float64(123),
-				"keeper_address": "0x1234",
-				"success":        true,
-				"proof_cid":      "QmTest",
-				"error":          "",
-				"signature":      "sig123",
+				"task_id":              float64(123),
+				"keeper_address":       "0x1234",
+				"execution_successful": true,
+				"aggregator_submitted": true,
+				"execution_tx_hash":    "0xabc123",
+				"proof_cid":            "QmTest",
+				"error":                "",
+				"signature":            "sig123",
 			},
 			expected: &types.ReportTaskStatusRequest{
-				TaskID:        123,
-				KeeperAddress: "0x1234",
-				Success:       true,
-				ProofCID:      "QmTest",
-				Error:         "",
-				Signature:     "sig123",
+				TaskID:              123,
+				KeeperAddress:       "0x1234",
+				ExecutionSuccessful: true,
+				AggregatorSubmitted: true,
+				ExecutionTxHash:     "0xabc123",
+				ProofCID:            "QmTest",
+				Error:               "",
+				Signature:           "sig123",
 			},
 			expectError: false,
 		},
 		{
 			name: "Valid map - failure case",
 			input: map[string]interface{}{
-				"task_id":        float64(456),
-				"keeper_address": "0x5678",
-				"success":        false,
-				"proof_cid":      "",
-				"error":          "execution failed",
-				"signature":      "sig456",
+				"task_id":              float64(456),
+				"keeper_address":       "0x5678",
+				"execution_successful": true,
+				"aggregator_submitted": false,
+				"execution_tx_hash":    "0xdef456",
+				"proof_cid":            "",
+				"error":                "aggregator submission failed",
+				"signature":            "sig456",
 			},
 			expected: &types.ReportTaskStatusRequest{
-				TaskID:        456,
-				KeeperAddress: "0x5678",
-				Success:       false,
-				ProofCID:      "",
-				Error:         "execution failed",
-				Signature:     "sig456",
+				TaskID:              456,
+				KeeperAddress:       "0x5678",
+				ExecutionSuccessful: true,
+				AggregatorSubmitted: false,
+				ExecutionTxHash:     "0xdef456",
+				ProofCID:            "",
+				Error:               "aggregator submission failed",
+				Signature:           "sig456",
 			},
 			expectError: false,
 		},
@@ -229,7 +243,9 @@ func TestConvertMapToStatusRequest(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.TaskID, result.TaskID)
 				assert.Equal(t, tt.expected.KeeperAddress, result.KeeperAddress)
-				assert.Equal(t, tt.expected.Success, result.Success)
+				assert.Equal(t, tt.expected.ExecutionSuccessful, result.ExecutionSuccessful)
+				assert.Equal(t, tt.expected.AggregatorSubmitted, result.AggregatorSubmitted)
+				assert.Equal(t, tt.expected.ExecutionTxHash, result.ExecutionTxHash)
 				assert.Equal(t, tt.expected.ProofCID, result.ProofCID)
 				assert.Equal(t, tt.expected.Error, result.Error)
 				assert.Equal(t, tt.expected.Signature, result.Signature)
