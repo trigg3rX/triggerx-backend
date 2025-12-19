@@ -171,13 +171,15 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 	tm.logger.Info("Received task status report",
 		"task_id", req.TaskID,
 		"keeper_address", req.KeeperAddress,
-		"success", req.Success,
+		"execution_successful", req.ExecutionSuccessful,
+		"aggregator_submitted", req.AggregatorSubmitted,
+		"execution_tx_hash", req.ExecutionTxHash,
 		"proof_cid", req.ProofCID,
 		"error", req.Error)
 
-	// Case 1: Task failed (execution or aggregator submission failed)
-	if !req.Success {
-		if err := tm.dbClient.UpdateTaskAggregatorFailed(req.TaskID, req.Error, req.ProofCID); err != nil {
+	// Case 1: Task failed (execution failed or aggregator submission failed)
+	if !req.ExecutionSuccessful || !req.AggregatorSubmitted {
+		if err := tm.dbClient.UpdateTaskAggregatorFailed(req.TaskID, req.Error, req.ExecutionTxHash, req.ProofCID); err != nil {
 			tm.logger.Error("Failed to update task failure in database",
 				"task_id", req.TaskID,
 				"error", err)
@@ -193,6 +195,9 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		tm.logger.Info("Task failure recorded",
 			"task_id", req.TaskID,
 			"keeper_address", req.KeeperAddress,
+			"execution_successful", req.ExecutionSuccessful,
+			"aggregator_submitted", req.AggregatorSubmitted,
+			"execution_tx_hash", req.ExecutionTxHash,
 			"error", req.Error)
 
 		return &types.ReportTaskStatusResponse{
@@ -203,7 +208,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 
 	// Case 2: Task succeeded (both execution and aggregator submission succeeded)
 	// Update task status to pending confirmation (waiting for on-chain event)
-	if err := tm.dbClient.UpdateTaskAggregatorSubmitted(req.TaskID, req.ProofCID); err != nil {
+	if err := tm.dbClient.UpdateTaskAggregatorSubmitted(req.TaskID, req.ExecutionTxHash, req.ProofCID); err != nil {
 		tm.logger.Error("Failed to update task success in database",
 			"task_id", req.TaskID,
 			"error", err)
@@ -216,6 +221,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 	tm.logger.Info("Task success recorded, pending on-chain confirmation",
 		"task_id", req.TaskID,
 		"keeper_address", req.KeeperAddress,
+		"execution_tx_hash", req.ExecutionTxHash,
 		"proof_cid", req.ProofCID)
 
 	return &types.ReportTaskStatusResponse{

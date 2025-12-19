@@ -35,7 +35,7 @@ func NewTaskMonitorHandler(logger logging.Logger, monitor TaskMonitorInterface) 
 // Handle routes incoming RPC requests based on the method name
 func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request interface{}) (interface{}, error) {
 	switch method {
-		
+
 	case "report-task-status":
 		// Convert request to the expected type
 		req, ok := request.(*types.ReportTaskStatusRequest)
@@ -106,17 +106,21 @@ func (h *TaskMonitorHandler) validateStatusSignature(req *types.ReportTaskStatus
 	// Create a struct for signing (without signature field)
 	// Must match exactly what the keeper signs
 	signData := struct {
-		TaskID        int64  `json:"task_id"`
-		KeeperAddress string `json:"keeper_address"`
-		Success       bool   `json:"success"`
-		ProofCID      string `json:"proof_cid,omitempty"`
-		Error         string `json:"error,omitempty"`
+		TaskID              int64  `json:"task_id"`
+		KeeperAddress       string `json:"keeper_address"`
+		ExecutionSuccessful bool   `json:"execution_successful"`
+		AggregatorSubmitted bool   `json:"aggregator_submitted"`
+		ExecutionTxHash     string `json:"execution_tx_hash,omitempty"`
+		ProofCID            string `json:"proof_cid,omitempty"`
+		Error               string `json:"error,omitempty"`
 	}{
-		TaskID:        req.TaskID,
-		KeeperAddress: req.KeeperAddress,
-		Success:       req.Success,
-		ProofCID:      req.ProofCID,
-		Error:         req.Error,
+		TaskID:              req.TaskID,
+		KeeperAddress:       req.KeeperAddress,
+		ExecutionSuccessful: req.ExecutionSuccessful,
+		AggregatorSubmitted: req.AggregatorSubmitted,
+		ExecutionTxHash:     req.ExecutionTxHash,
+		ProofCID:            req.ProofCID,
+		Error:               req.Error,
 	}
 
 	// Verify signature using JSON verification (same as other services)

@@ -93,8 +93,9 @@ func (dm *DatabaseClient) UpdateTaskError(taskID int64, errorMsg string) error {
 }
 
 // UpdateTaskAggregatorFailed updates task when it failed (execution or aggregator submission)
+// executionTxHash is the transaction hash from on-chain execution (may be empty if tx was never sent)
 // proofCID contains all execution data if available
-func (dm *DatabaseClient) UpdateTaskAggregatorFailed(taskID int64, errorMsg, proofCID string) error {
+func (dm *DatabaseClient) UpdateTaskAggregatorFailed(taskID int64, errorMsg, executionTxHash, proofCID string) error {
 	// Check if task already has a final status
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
@@ -109,18 +110,19 @@ func (dm *DatabaseClient) UpdateTaskAggregatorFailed(taskID int64, errorMsg, pro
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorFailed,
-		errorMsg, proofCID, taskID).Exec(); err != nil {
+		errorMsg, executionTxHash, proofCID, taskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
 		return err
 	}
-	dm.logger.Infof("Successfully updated task %d as failed: %s", taskID, errorMsg)
+	dm.logger.Infof("Successfully updated task %d as failed: %s (tx_hash: %s)", taskID, errorMsg, executionTxHash)
 	return nil
 }
 
 // UpdateTaskAggregatorSubmitted updates task when both execution and aggregator submission succeeded
 // The task is now pending on-chain confirmation
+// executionTxHash is the transaction hash from on-chain execution
 // proofCID contains all execution data
-func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(taskID int64, proofCID string) error {
+func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(taskID int64, executionTxHash, proofCID string) error {
 	// Check if task already has a final status
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
@@ -135,11 +137,11 @@ func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(taskID int64, proofCID s
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorSubmitted,
-		proofCID, taskID).Exec(); err != nil {
+		executionTxHash, proofCID, taskID).Exec(); err != nil {
 		dm.logger.Errorf("Error updating task submitted for task ID %d: %v", taskID, err)
 		return err
 	}
-	dm.logger.Infof("Successfully updated task %d as pending_confirmation", taskID)
+	dm.logger.Infof("Successfully updated task %d as pending_confirmation (tx_hash: %s)", taskID, executionTxHash)
 	return nil
 }
 
