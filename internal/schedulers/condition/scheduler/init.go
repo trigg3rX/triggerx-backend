@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
@@ -209,7 +208,8 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 			return
 		case <-ticker.C:
 			now := time.Now()
-			expiredJobIDs := make([]*big.Int, 0)
+			// Store original *types.BigInt pointers to properly key into maps later
+			expiredJobIDs := make([]*types.BigInt, 0)
 
 			// Find expired event jobs
 			s.workersMutex.RLock()
@@ -221,7 +221,7 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 					if exists && jobData != nil {
 						// Check if job has expired
 						if jobData.EventWorkerData.ExpirationTime.Before(now) {
-							expiredJobIDs = append(expiredJobIDs, jobIDBigInt.ToBigInt())
+							expiredJobIDs = append(expiredJobIDs, jobIDBigInt)
 						}
 					}
 				}
@@ -233,8 +233,10 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 				s.logger.Info("Found expired event job, unregistering from Event Monitor Service",
 					"job_id", jobID)
 
-				if err := s.UnregisterEventJob(jobID); err != nil {
-					s.logger.Error("Failed to unregister expired event job",
+				if err := s.unregisterEventJobByPointer(jobID); err != nil {
+					// Only log as warning since the job may have been already unregistered
+					// by another goroutine (e.g., event notification handler)
+					s.logger.Warn("Could not unregister expired event job (may already be unregistered)",
 						"job_id", jobID,
 						"error", err)
 				} else {

@@ -60,7 +60,51 @@ func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, jobData)
+	jobResponse := types.JobResponse{JobData: *jobData}
+
+	// Check task_definition_id to determine job type
+	switch jobData.TaskDefinitionID {
+	case 1, 2:
+		// Time-based job
+		trackDBOp := metrics.TrackDBOperation("read", "time_job")
+		timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[GetJobDataByJobIDForUser] Error getting time job data for jobID %s: %v", jobIDParam, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get time job data"})
+			return
+		}
+		jobResponse.TimeJobData = &timeJobData
+
+	case 3, 4:
+		// Event-based job
+		trackDBOp := metrics.TrackDBOperation("read", "event_job")
+		eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[GetJobDataByJobIDForUser] Error getting event job data for jobID %s: %v", jobIDParam, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get event job data"})
+			return
+		}
+		jobResponse.EventJobData = &eventJobData
+
+	case 5, 6:
+		// Condition-based job
+		trackDBOp := metrics.TrackDBOperation("read", "condition_job")
+		conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
+		trackDBOp(err)
+		if err != nil {
+			h.logger.Errorf("[GetJobDataByJobIDForUser] Error getting condition job data for jobID %s: %v", jobIDParam, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get condition job data"})
+			return
+		}
+		jobResponse.ConditionJobData = &conditionJobData
+
+	default:
+		h.logger.Errorf("[GetJobDataByJobIDForUser] Unknown task definition ID %d for jobID %s", jobData.TaskDefinitionID, jobIDParam)
+	}
+
+	c.JSON(http.StatusOK, types.ConvertJobResponseToAPI(jobResponse))
 }
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
