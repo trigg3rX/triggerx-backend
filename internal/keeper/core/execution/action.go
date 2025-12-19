@@ -209,9 +209,14 @@ skipArgumentProcessing:
 		ethcommon.HexToAddress(executionContractAddress),
 		executionInput,
 		chainID,
-		privateKey,
+		privateKey, 
 	)
 	if err != nil {
+		// CRITICAL: Release the nonce when submission fails after all retries
+		// This prevents nonce gaps that would cause subsequent transactions to get stuck
+		nonceManager.ReleaseNonce(nonce, privateKey)
+		e.logger.Warnf("Released nonce %d after failed submission for task %d", nonce, targetData.TaskID)
+		metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "failed").Inc()
 		return types.PerformerActionData{}, false, fmt.Errorf("failed to submit transaction: %v", err)
 	}
 
