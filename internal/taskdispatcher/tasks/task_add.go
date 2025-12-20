@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -81,6 +84,10 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		return false, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+
+	// Inject trace context into HTTP headers
+	propagator := otel.GetTextMapPropagator()
+	propagator.Inject(httpCtx, propagation.HeaderCarrier(req.Header))
 
 	// Send request to performer
 	client := &http.Client{Timeout: 30 * time.Second}

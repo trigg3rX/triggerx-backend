@@ -889,11 +889,11 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 
 ### Phase 2: TaskDispatcher Implementation
 
-- [ ] Verify gRPC interceptor extracts trace context (already implemented)
-- [ ] Add child span creation in `SubmitTaskFromScheduler`
-- [ ] Add span attributes for dispatcher metadata
-- [ ] Add span events for performer selection and task signing
-- [ ] Ensure trace context is passed to Performer
+- [x] Verify gRPC interceptor extracts trace context (already implemented)
+- [x] Add child span creation in `SubmitTaskFromScheduler`
+- [x] Add span attributes for dispatcher metadata
+- [x] Add span events for performer selection and task signing
+- [x] Ensure trace context is passed to Performer
 
 ### Phase 3: Performer Implementation
 

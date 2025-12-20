@@ -17,6 +17,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
+	rpctracing "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -45,6 +46,12 @@ func main() {
 	logger, loggerShutdown, err := observability.NewLogger(obsCfg, res)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+	}
+
+	// Initialize tracer
+	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
 	}
 
 	ctx := context.Background()
@@ -105,6 +112,7 @@ func main() {
 	// TaskDispatcher is the main orchestrator. It needs all the other components.
 	dispatcher, err := taskdispatcher.NewTaskDispatcher(
 		logger,
+		tracer,
 		taskStreamMgr,
 		healthClient,
 		config.GetTaskDispatcherSigningKey(),
@@ -124,6 +132,10 @@ func main() {
 	}
 	srv := rpcserver.NewServer(serverConfig, logger)
 	srv.AddInterceptor(rpcserver.LoggingInterceptor(logger))
+
+	// Add trace interceptor for automatic trace context extraction
+	tracingInterceptor := rpctracing.TraceInterceptor(tracer, "task-dispatcher")
+	srv.AddInterceptor(tracingInterceptor)
 
 	// Create and register the generic RPC handler
 	handler := rpc.NewTaskDispatcherHandler(logger, dispatcher)
@@ -145,11 +157,11 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, srv, dispatcher, logger, loggerShutdown)
+	performGracefulShutdown(ctx, srv, dispatcher, logger, loggerShutdown, tracerShutdown)
 }
 
 // performGracefulShutdown handles graceful shutdown of the service
-func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger observability.Logger, loggerShutdown func(context.Context) error) {
+func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -169,6 +181,13 @@ func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, disp
 		logger.Error(shutdownCtx, "Failed to close dispatcher", observability.Error(err))
 	} else {
 		logger.Info(shutdownCtx, "Dispatcher closed successfully")
+	}
+
+	// Shutdown tracer
+	if tracerShutdown != nil {
+		if err := tracerShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		}
 	}
 
 	// Shutdown logger
