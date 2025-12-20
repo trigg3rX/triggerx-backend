@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 var cacheCfg = config.FileCacheConfig{
@@ -25,10 +26,10 @@ func TestNewFileCache_ValidConfig_ReturnsCache(t *testing.T) {
 	// Arrange
 	tempDir := t.TempDir()
 	cacheCfg.CacheDir = tempDir
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	// Act
-	cache, err := newFileCache(cacheCfg, logger, fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, logger, fs.NewMockFileSystem())
 
 	// Assert
 	require.NoError(t, err)
@@ -46,7 +47,7 @@ func TestNewFileCache_EmptyCacheDir_UsesDefaultDirectory(t *testing.T) {
 	cacheCfg.CacheDir = ""
 
 	// Act
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 
 	// Assert
 	require.NoError(t, err)
@@ -59,7 +60,7 @@ func TestNewFileCache_InvalidCacheDir_ReturnsError(t *testing.T) {
 	cacheCfg.CacheDir = "/nonexistent/path"
 
 	// Act
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), &fs.FailingMockFS{})
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), &fs.FailingMockFS{})
 
 	// Assert
 	assert.Error(t, err)
@@ -70,13 +71,13 @@ func TestNewFileCache_InvalidCacheDir_ReturnsError(t *testing.T) {
 func TestFileCache_GetOrDownloadFile_CacheHit_ReturnsCachedFile(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Pre-populate cache with a file
 	key := "test-key"
 	content := []byte("package main\n\nfunc main() {\n\tfmt.Println(\"Hello\")\n}")
-	filePath, err := cache.storeFile(key, "go", content)
+	filePath, err := cache.storeFile(context.Background(), key, "go", content)
 	require.NoError(t, err)
 
 	// Mock download function (should not be called)
@@ -87,7 +88,7 @@ func TestFileCache_GetOrDownloadFile_CacheHit_ReturnsCachedFile(t *testing.T) {
 	}
 
 	// Act
-	resultPath, err := cache.getOrDownloadFile(key, "go", downloadFunc)
+	resultPath, err := cache.getOrDownloadFile(context.Background(), key, "go", downloadFunc)
 
 	// Assert
 	assert.NoError(t, err)
@@ -98,7 +99,7 @@ func TestFileCache_GetOrDownloadFile_CacheHit_ReturnsCachedFile(t *testing.T) {
 func TestFileCache_GetOrDownloadFile_CacheMiss_DownloadsAndStores(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	key := "new-key"
@@ -112,7 +113,7 @@ func TestFileCache_GetOrDownloadFile_CacheMiss_DownloadsAndStores(t *testing.T) 
 	}
 
 	// Act
-	resultPath, err := cache.getOrDownloadFile(key, "go", downloadFunc)
+	resultPath, err := cache.getOrDownloadFile(context.Background(), key, "go", downloadFunc)
 
 	// Assert
 	assert.NoError(t, err)
@@ -135,7 +136,7 @@ func TestFileCache_GetOrDownloadFile_CacheMiss_DownloadsAndStores(t *testing.T) 
 func TestFileCache_GetOrDownloadFile_DownloadFails_ReturnsError(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	key := "fail-key"
@@ -146,7 +147,7 @@ func TestFileCache_GetOrDownloadFile_DownloadFails_ReturnsError(t *testing.T) {
 	}
 
 	// Act
-	resultPath, err := cache.getOrDownloadFile(key, "go", downloadFunc)
+	resultPath, err := cache.getOrDownloadFile(context.Background(), key, "go", downloadFunc)
 
 	// Assert
 	assert.Error(t, err)
@@ -157,13 +158,13 @@ func TestFileCache_GetOrDownloadFile_DownloadFails_ReturnsError(t *testing.T) {
 func TestFileCache_AccessCachedFile_FileExists_ReturnsPath(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Create a cached file
 	key := "test-key"
 	content := []byte("package main")
-	filePath, err := cache.storeFile(key, "go", content)
+	filePath, err := cache.storeFile(context.Background(), key, "go", content)
 	require.NoError(t, err)
 
 	cache.mutex.RLock()
@@ -171,7 +172,7 @@ func TestFileCache_AccessCachedFile_FileExists_ReturnsPath(t *testing.T) {
 	cache.mutex.RUnlock()
 
 	// Act
-	resultPath, err := cache.accessCachedFile(cachedFile)
+	resultPath, err := cache.accessCachedFile(context.Background(), cachedFile)
 
 	// Assert
 	assert.NoError(t, err)
@@ -181,13 +182,13 @@ func TestFileCache_AccessCachedFile_FileExists_ReturnsPath(t *testing.T) {
 func TestFileCache_AccessCachedFile_FileDeleted_ReturnsError(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Create a cached file
 	key := "test-key"
 	content := []byte("package main")
-	filePath, err := cache.storeFile(key, "go", content)
+	filePath, err := cache.storeFile(context.Background(), key, "go", content)
 	require.NoError(t, err)
 
 	// Delete the file from disk
@@ -199,7 +200,7 @@ func TestFileCache_AccessCachedFile_FileDeleted_ReturnsError(t *testing.T) {
 	cache.mutex.RUnlock()
 
 	// Act
-	resultPath, err := cache.accessCachedFile(cachedFile)
+	resultPath, err := cache.accessCachedFile(context.Background(), cachedFile)
 
 	// Assert
 	assert.Error(t, err)
@@ -216,14 +217,14 @@ func TestFileCache_AccessCachedFile_FileDeleted_ReturnsError(t *testing.T) {
 func TestFileCache_StoreFile_ValidContent_StoresSuccessfully(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	key := "test-key"
 	content := []byte("package main\n\nfunc main() {\n\tfmt.Println(\"Hello\")\n}")
 
 	// Act
-	filePath, err := cache.storeFile(key, "go", content)
+	filePath, err := cache.storeFile(context.Background(), key, "go", content)
 
 	// Assert
 	assert.NoError(t, err)
@@ -250,14 +251,14 @@ func TestFileCache_StoreFile_ValidContent_StoresSuccessfully(t *testing.T) {
 func TestFileCache_StoreFile_KeyWithSpecialChars_SanitizesFilename(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	key := "https://example.com/path/to/file"
 	content := []byte("package main")
 
 	// Act
-	filePath, err := cache.storeFile(key, "go", content)
+	filePath, err := cache.storeFile(context.Background(), key, "go", content)
 
 	// Assert
 	assert.NoError(t, err)
@@ -268,17 +269,17 @@ func TestFileCache_StoreFile_KeyWithSpecialChars_SanitizesFilename(t *testing.T)
 func TestFileCache_EnsureSpace_EnoughSpace_NoEviction(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Add a small file
 	key1 := "key1"
 	content1 := []byte("small content")
-	_, err = cache.storeFile(key1, "go", content1)
+	_, err = cache.storeFile(context.Background(), key1, "go", content1)
 	require.NoError(t, err)
 
 	// Act - try to ensure space for another small file
-	err = cache.ensureSpace(100)
+	err = cache.ensureSpace(context.Background(), 100)
 
 	// Assert
 	assert.NoError(t, err)
@@ -297,13 +298,13 @@ func TestFileCache_EnsureSpace_NotEnoughSpace_EvictsOldestFiles(t *testing.T) {
 	localCacheCfg.CacheDir = t.TempDir()
 	// Set a small cache size to force eviction
 	localCacheCfg.MaxCacheSize = 50 // Very small cache size
-	cache, err := newFileCache(localCacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), localCacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Add two files
 	key1 := "key1"
 	content1 := []byte("first file content")
-	_, err = cache.storeFile(key1, "go", content1)
+	_, err = cache.storeFile(context.Background(), key1, "go", content1)
 	require.NoError(t, err)
 
 	// Wait a bit to ensure different access times
@@ -311,7 +312,7 @@ func TestFileCache_EnsureSpace_NotEnoughSpace_EvictsOldestFiles(t *testing.T) {
 
 	key2 := "key2"
 	content2 := []byte("second file content")
-	_, err = cache.storeFile(key2, "go", content2)
+	_, err = cache.storeFile(context.Background(), key2, "go", content2)
 	require.NoError(t, err)
 
 	// Verify both files exist
@@ -321,7 +322,7 @@ func TestFileCache_EnsureSpace_NotEnoughSpace_EvictsOldestFiles(t *testing.T) {
 	assert.Equal(t, 2, initialCount)
 
 	// Act - try to ensure space for a large file
-	err = cache.ensureSpace(200)
+	err = cache.ensureSpace(context.Background(), 200)
 
 	// Assert
 	assert.NoError(t, err)
@@ -336,11 +337,11 @@ func TestFileCache_EnsureSpace_NotEnoughSpace_EvictsOldestFiles(t *testing.T) {
 func TestFileCache_LoadExistingFiles_EmptyDirectory_LoadsNothing(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Act
-	err = cache.loadExistingFiles()
+	err = cache.loadExistingFiles(context.Background())
 
 	// Assert
 	assert.NoError(t, err)
@@ -366,11 +367,11 @@ func TestFileCache_LoadExistingFiles_WithGoFiles_LoadsFiles(t *testing.T) {
 	mockFS.AddFile(file2, []byte("package main"))
 	mockFS.AddFile(file3, []byte("not a go file"))
 
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), mockFS)
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), mockFS)
 	require.NoError(t, err)
 
 	// Act
-	err = cache.loadExistingFiles()
+	err = cache.loadExistingFiles(context.Background())
 
 	// Assert
 	assert.NoError(t, err)
@@ -397,7 +398,7 @@ func TestFileCache_LoadMetadata_ValidMetadata_LoadsSuccessfully(t *testing.T) {
 	metadataContent := `{"key1":{"path":"` + testFilePath + `","hash":"key1","last_accessed":"` + time.Now().Format(time.RFC3339) + `","size":100,"created_at":"` + time.Now().Format(time.RFC3339) + `"}}`
 	mockFS.AddFile(metadataPath, []byte(metadataContent))
 
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), mockFS)
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), mockFS)
 	require.NoError(t, err)
 
 	// Act
@@ -417,13 +418,13 @@ func TestFileCache_SaveMetadata_ValidCache_SavesSuccessfully(t *testing.T) {
 	// Arrange
 	tempDir := t.TempDir()
 	cacheCfg.CacheDir = tempDir
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Add a file to cache
 	key := "test-key"
 	content := []byte("package main")
-	_, err = cache.storeFile(key, "go", content)
+	_, err = cache.storeFile(context.Background(), key, "go", content)
 	require.NoError(t, err)
 
 	// Act
@@ -441,7 +442,7 @@ func TestFileCache_SaveMetadata_ValidCache_SavesSuccessfully(t *testing.T) {
 func TestFileCache_UpdateHitRate_ValidStats_UpdatesCorrectly(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Set some stats
@@ -463,18 +464,18 @@ func TestFileCache_UpdateHitRate_ValidStats_UpdatesCorrectly(t *testing.T) {
 func TestFileCache_GetCacheStats_ValidCache_ReturnsStats(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Add some files to cache
 	key1 := "key1"
 	content1 := []byte("content1")
-	_, err = cache.storeFile(key1, "go", content1)
+	_, err = cache.storeFile(context.Background(), key1, "go", content1)
 	require.NoError(t, err)
 
 	key2 := "key2"
 	content2 := []byte("content2")
-	_, err = cache.storeFile(key2, "go", content2)
+	_, err = cache.storeFile(context.Background(), key2, "go", content2)
 	require.NoError(t, err)
 
 	// Act
@@ -490,7 +491,7 @@ func TestFileCache_GetCacheStats_ValidCache_ReturnsStats(t *testing.T) {
 func TestFileCache_Close_ValidCache_ClosesSuccessfully(t *testing.T) {
 	// Arrange
 	cacheCfg.CacheDir = t.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(t, err)
 
 	// Act
@@ -504,7 +505,7 @@ func TestFileCache_Close_ValidCache_ClosesSuccessfully(t *testing.T) {
 func BenchmarkFileCache_StoreFile_SmallFile(b *testing.B) {
 	// Arrange
 	cacheCfg.CacheDir = b.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(b, err)
 
 	content := []byte("package main\n\nfunc main() {\n\tfmt.Println(\"Hello\")\n}")
@@ -513,7 +514,7 @@ func BenchmarkFileCache_StoreFile_SmallFile(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i)
-		_, err := cache.storeFile(key, "go", content)
+		_, err := cache.storeFile(context.Background(), key, "go", content)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -523,13 +524,13 @@ func BenchmarkFileCache_StoreFile_SmallFile(b *testing.B) {
 func BenchmarkFileCache_GetOrDownloadFile_CacheHit(b *testing.B) {
 	// Arrange
 	cacheCfg.CacheDir = b.TempDir()
-	cache, err := newFileCache(cacheCfg, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	cache, err := newFileCache(context.Background(), cacheCfg, observability.NewNoOpLogger(), fs.NewMockFileSystem())
 	require.NoError(b, err)
 
 	// Pre-populate cache
 	key := "test-key"
 	content := []byte("package main")
-	_, err = cache.storeFile(key, "go", content)
+	_, err = cache.storeFile(context.Background(), key, "go", content)
 	require.NoError(b, err)
 
 	downloadFunc := func() ([]byte, error) {
@@ -539,7 +540,7 @@ func BenchmarkFileCache_GetOrDownloadFile_CacheHit(b *testing.B) {
 	// Act
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := cache.getOrDownloadFile(key, "go", downloadFunc)
+		_, err := cache.getOrDownloadFile(context.Background(), key, "go", downloadFunc)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -48,7 +48,7 @@ func DefaultRetryConfig() *RetryConfig {
 }
 
 // RetryMiddleware creates a new retry middleware
-func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc {
+func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observability.Logger) gin.HandlerFunc {
 	if config == nil {
 		config = DefaultRetryConfig()
 	}
@@ -71,7 +71,7 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			var err error
 			bodyBytes, err = io.ReadAll(c.Request.Body)
 			if err != nil {
-				logger.Errorf("Failed to read request body: %v", err)
+				logger.Error(ctx, "Failed to read request body: %v", observability.Error(err))
 				c.AbortWithStatus(http.StatusInternalServerError)
 				return
 			}
@@ -142,8 +142,7 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			}
 
 			if config.LogRetryAttempt {
-				logger.Warnf("Retry attempt %d for %s %s with status code %d",
-					attempts, c.Request.Method, c.Request.URL.Path, statusCode)
+				logger.Warn(ctx, "Retry attempt %d for %s %s with status code %d", observability.Int("attempts", attempts), observability.String("method", c.Request.Method), observability.String("path", c.Request.URL.Path), observability.Int("status", statusCode))
 			}
 
 			lastErr = fmt.Errorf("received retryable status code: %d", statusCode)
@@ -151,16 +150,15 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 			finalBody = w.body.Bytes()
 			return nil, lastErr
 		}, &retry.RetryConfig{
-			MaxRetries:      config.MaxRetries,
-			InitialDelay:    config.InitialDelay,
-			MaxDelay:        config.MaxDelay,
-			BackoffFactor:   config.BackoffFactor,
-			JitterFactor:    config.JitterFactor,
-			LogRetryAttempt: config.LogRetryAttempt,
-		}, logger)
+			MaxRetries:    config.MaxRetries,
+			InitialDelay:  config.InitialDelay,
+			MaxDelay:      config.MaxDelay,
+			BackoffFactor: config.BackoffFactor,
+			JitterFactor:  config.JitterFactor,
+		})
 
 		if err != nil {
-			logger.Errorf("Error retrying request: %v", err)
+			logger.Error(ctx, "Error retrying request: %v", observability.Error(err))
 			metrics.RetryFailuresTotal.WithLabelValues(endpoint).Inc()
 			if finalStatus == 0 {
 				finalStatus = http.StatusInternalServerError
@@ -171,7 +169,7 @@ func RetryMiddleware(config *RetryConfig, logger logging.Logger) gin.HandlerFunc
 		// Write the final response only once
 		origWriter.WriteHeader(finalStatus)
 		if _, err := origWriter.Write(finalBody); err != nil {
-			logger.Errorf("Error writing final response: %v", err)
+			logger.Error(ctx, "Error writing final response: %v", observability.Error(err))
 		}
 
 		// Abort the context to prevent further handlers from writing

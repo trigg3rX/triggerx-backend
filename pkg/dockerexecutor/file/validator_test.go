@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func TestNewCodeValidator_ValidInput_ReturnsValidator(t *testing.T) {
@@ -22,7 +23,7 @@ func TestNewCodeValidator_ValidInput_ReturnsValidator(t *testing.T) {
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	// Act
 	validator := newCodeValidator(cfg, logger, &fs.OSFileSystem{})
@@ -41,7 +42,7 @@ func TestCodeValidator_ValidateFile_ValidFile_ReturnsSuccess(t *testing.T) {
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Create a temporary valid file
 	tempDir := t.TempDir()
@@ -57,7 +58,7 @@ func main() {
 	require.NoError(t, err)
 
 	// Act
-	result, err := validator.validateFile(filePath)
+	result, err := validator.validateFile(context.Background(), filePath)
 
 	// Assert
 	require.NoError(t, err)
@@ -76,7 +77,7 @@ func TestCodeValidator_ValidateFile_FileTooLarge_ReturnsError(t *testing.T) {
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Create a temporary file that exceeds size limit
 	tempDir := t.TempDir()
@@ -86,7 +87,7 @@ func TestCodeValidator_ValidateFile_FileTooLarge_ReturnsError(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act
-	result, err := validator.validateFile(filePath)
+	result, err := validator.validateFile(context.Background(), filePath)
 
 	// Assert
 	require.NoError(t, err)
@@ -104,7 +105,7 @@ func TestCodeValidator_ValidateFile_InvalidExtension_ReturnsError(t *testing.T) 
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Crea	te a temporary file with invalid extension
 	tempDir := t.TempDir()
@@ -114,7 +115,7 @@ func TestCodeValidator_ValidateFile_InvalidExtension_ReturnsError(t *testing.T) 
 	require.NoError(t, err)
 
 	// Act
-	result, err := validator.validateFile(filePath)
+	result, err := validator.validateFile(context.Background(), filePath)
 
 	// Assert
 	require.NoError(t, err)
@@ -132,7 +133,7 @@ func TestCodeValidator_ValidateFile_BlockedPattern_ReturnsError(t *testing.T) {
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Create a temporary file with blocked pattern
 	tempDir := t.TempDir()
@@ -148,7 +149,7 @@ func main() {
 	require.NoError(t, err)
 
 	// Act
-	result, err := validator.validateFile(filePath)
+	result, err := validator.validateFile(context.Background(), filePath)
 
 	// Assert
 	require.NoError(t, err)
@@ -166,7 +167,7 @@ func TestCodeValidator_ValidateFile_SuspiciousPattern_ReturnsWarning(t *testing.
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Create a temporary file with suspicious pattern
 	tempDir := t.TempDir()
@@ -182,7 +183,7 @@ func main() {
 	require.NoError(t, err)
 
 	// Act
-	result, err := validator.validateFile(filePath)
+	result, err := validator.validateFile(context.Background(), filePath)
 
 	// Assert
 	require.NoError(t, err)
@@ -201,10 +202,10 @@ func TestCodeValidator_ValidateFile_NonexistentFile_ReturnsError(t *testing.T) {
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Act
-	result, err := validator.validateFile("/nonexistent/file.go")
+	result, err := validator.validateFile(context.Background(), "/nonexistent/file.go")
 
 	// Assert
 	assert.Error(t, err)
@@ -217,7 +218,7 @@ func TestCodeValidator_ValidateFileSize_ValidSize_ReturnsSuccess(t *testing.T) {
 	cfg := config.ValidationConfig{
 		MaxFileSize: 1024,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	tempDir := t.TempDir()
 	content := "small content"
@@ -245,7 +246,7 @@ func TestCodeValidator_ValidateFileSize_ExceedsLimit_ReturnsError(t *testing.T) 
 	cfg := config.ValidationConfig{
 		MaxFileSize: 10, // Very small limit
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	tempDir := t.TempDir()
 	content := "this content is too large for the limit"
@@ -274,7 +275,7 @@ func TestCodeValidator_ValidateFileExtension_ValidExtensions_ReturnsSuccess(t *t
 	cfg := config.ValidationConfig{
 		AllowedExtensions: []string{".go", ".js", ".py"},
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	testCases := []struct {
 		name     string
@@ -309,7 +310,7 @@ func TestCodeValidator_ValidateFileExtension_InvalidExtension_ReturnsError(t *te
 	cfg := config.ValidationConfig{
 		AllowedExtensions: []string{".go", ".js"},
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	testCases := []struct {
 		name     string
@@ -345,7 +346,7 @@ func TestCodeValidator_CalculateComplexity_ValidFile_ReturnsComplexity(t *testin
 	cfg := config.ValidationConfig{
 		MaxFileSize: 1024,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	tempDir := t.TempDir()
 	content := `package main
@@ -364,7 +365,7 @@ func main() {
 	require.NoError(t, err)
 
 	// Act
-	complexity := validator.calculateComplexity(filePath)
+	complexity := validator.calculateComplexity(context.Background(), filePath)
 
 	// Assert
 	assert.Greater(t, complexity, 0.0)
@@ -375,10 +376,10 @@ func TestCodeValidator_CalculateComplexity_NonexistentFile_ReturnsZero(t *testin
 	cfg := config.ValidationConfig{
 		MaxFileSize: 1024,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Act
-	complexity := validator.calculateComplexity("/nonexistent/file.go")
+	complexity := validator.calculateComplexity(context.Background(), "/nonexistent/file.go")
 
 	// Assert
 	assert.Equal(t, 0.0, complexity)
@@ -389,7 +390,7 @@ func TestCodeValidator_CalculateContentComplexity_EmptyContent_ReturnsZero(t *te
 	cfg := config.ValidationConfig{
 		MaxFileSize: 1024,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	// Act
 	complexity := validator.calculateContentComplexity([]byte{})
@@ -403,7 +404,7 @@ func TestCodeValidator_CalculateContentComplexity_ComplexContent_ReturnsHigherCo
 	cfg := config.ValidationConfig{
 		MaxFileSize: 1024,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	simpleContent := `package main
 func main() {
@@ -459,7 +460,7 @@ func BenchmarkCodeValidator_ValidateFile_SimpleFile(b *testing.B) {
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	tempDir := b.TempDir()
 	content := `package main
@@ -474,7 +475,7 @@ func main() {
 	// Act
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := validator.validateFile(filePath)
+		_, err := validator.validateFile(context.Background(), filePath)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -489,7 +490,7 @@ func BenchmarkCodeValidator_CalculateContentComplexity_ComplexFile(b *testing.B)
 		MaxComplexity:     10,
 		TimeoutSeconds:    30,
 	}
-	validator := newCodeValidator(cfg, logging.NewNoOpLogger(), &fs.OSFileSystem{})
+	validator := newCodeValidator(cfg, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 
 	content := `package main
 

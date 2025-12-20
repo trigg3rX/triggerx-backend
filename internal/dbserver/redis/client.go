@@ -7,15 +7,15 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type Client struct {
 	client *redis.Client
-	logger logging.Logger
+	logger observability.Logger
 }
 
-func NewClient(logger logging.Logger) (*Client, error) {
+func NewClient(logger observability.Logger) (*Client, error) {
 	opt, err := redis.ParseURL(config.GetUpstashRedisUrl())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
@@ -45,11 +45,11 @@ func (c *Client) CheckConnection() error {
 
 	_, err := c.client.Ping(ctx).Result()
 	if err != nil {
-		c.logger.Errorf("Failed to connect to Redis: %v", err)
+		c.logger.Error(ctx, "Failed to connect to Redis: %v", observability.Error(err))
 		return fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
-	c.logger.Info("Successfully connected to Redis")
+	c.logger.Info(ctx, "Successfully connected to Redis")
 	return nil
 }
 

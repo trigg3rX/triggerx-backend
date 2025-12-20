@@ -10,18 +10,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type FileManager struct {
 	downloader *downloader
-	logger     logging.Logger
+	logger     observability.Logger
 	mutex      sync.RWMutex
 	stats      *types.PerformanceMetrics
 }
 
-func NewFileManager(cfg config.ConfigProviderInterface, httpClient httppkg.HTTPClientInterface, logger logging.Logger) (*FileManager, error) {
-	downloader, err := newDownloader(cfg.GetCacheConfig(), cfg.GetValidationConfig(), httpClient, logger, &fs.OSFileSystem{})
+func NewFileManager(ctx context.Context, cfg config.ConfigProviderInterface, httpClient httppkg.HTTPClientInterface, logger observability.Logger) (*FileManager, error) {
+	downloader, err := newDownloader(ctx, cfg.GetCacheConfig(), cfg.GetValidationConfig(), httpClient, logger, &fs.OSFileSystem{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create downloader: %w", err)
 	}
@@ -45,7 +45,7 @@ func NewFileManager(cfg config.ConfigProviderInterface, httpClient httppkg.HTTPC
 
 func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLanguage string) (*types.ExecutionContext, error) {
 	startTime := time.Now()
-	fm.logger.Debugf("Processing file: %s", fileURL)
+	fm.logger.Debug(ctx, "Processing file: %s", observability.String("file_url", fileURL))
 
 	// Download and validate file
 	result, err := fm.downloader.downloadFile(ctx, fileURL, fileURL, fileLanguage)
@@ -56,7 +56,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLa
 
 	// Check validation results
 	if !result.Validation.IsValid {
-		fm.logger.Warnf("File validation failed: %v", result.Validation.Errors)
+		fm.logger.Warn(ctx, "File validation failed: %v", observability.Any("validation_errors", result.Validation.Errors))
 		fm.updateStats(false, time.Since(startTime))
 		return &types.ExecutionContext{
 			FileURL:   fileURL,
@@ -85,7 +85,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLa
 	// Update statistics
 	fm.updateStats(true, time.Since(startTime))
 
-	fm.logger.Debugf("File processed successfully (cached: %v, size: %d bytes)", result.IsCached, result.Size)
+	fm.logger.Debug(ctx, "File processed successfully (cached: %v, size: %d bytes)", observability.Bool("is_cached", result.IsCached), observability.Int64("size", result.Size))
 
 	return execCtx, nil
 }

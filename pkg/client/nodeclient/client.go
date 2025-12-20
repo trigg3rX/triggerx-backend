@@ -11,6 +11,7 @@ import (
 	"time"
 
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	wsclient "github.com/trigg3rX/triggerx-backend/pkg/websocket"
 )
 
@@ -44,7 +45,7 @@ func NewNodeClient(cfg *Config) (*NodeClient, error) {
 	var httpClient *httppkg.HTTPClient
 	var err error
 	if cfg.HTTPConfig != nil {
-		httpClient, err = httppkg.NewHTTPClient(cfg.HTTPConfig, cfg.Logger)
+		httpClient, err = httppkg.NewHTTPClient(cfg.HTTPConfig)
 	} else {
 		// Use default HTTP config
 		httpConfig := httppkg.DefaultHTTPRetryConfig()
@@ -52,7 +53,7 @@ func NewNodeClient(cfg *Config) (*NodeClient, error) {
 		if cfg.RequestTimeout > 0 {
 			httpConfig.Timeout = cfg.RequestTimeout
 		}
-		httpClient, err = httppkg.NewHTTPClient(httpConfig, cfg.Logger)
+		httpClient, err = httppkg.NewHTTPClient(httpConfig)
 	}
 
 	if err != nil {
@@ -88,7 +89,7 @@ func (c *NodeClient) SetRequestTimeout(timeout time.Duration) error {
 	c.config.HTTPConfig.Timeout = timeout
 
 	// Recreate HTTP client with new timeout
-	newHTTPClient, err := httppkg.NewHTTPClient(c.config.HTTPConfig, c.config.Logger)
+	newHTTPClient, err := httppkg.NewHTTPClient(c.config.HTTPConfig)
 	if err != nil {
 		return fmt.Errorf("failed to recreate HTTP client: %w", err)
 	}
@@ -146,7 +147,7 @@ func (c *NodeClient) call(ctx context.Context, method string, params []interface
 	}
 	defer func () {
 		if err := resp.Body.Close(); err != nil {
-			c.config.Logger.Errorf("Error closing response body: %v", err)
+			c.config.Logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 
@@ -174,9 +175,9 @@ func (c *NodeClient) call(ctx context.Context, method string, params []interface
 
 	// Check if request ID matches (basic validation)
 	if rpcResp.ID != req.ID {
-		c.config.Logger.Warn("Request ID mismatch",
-			"expected", req.ID,
-			"received", rpcResp.ID,
+		c.config.Logger.Warn(ctx, "Request ID mismatch",
+			observability.Int("expected", req.ID),
+			observability.Int("received", rpcResp.ID),
 		)
 	}
 

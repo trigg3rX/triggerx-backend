@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"fmt"
+	"context"
 	// "math/big"
 	"sync"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 const (
@@ -19,7 +19,7 @@ type JobStatusChecker struct {
 	eventJobRepo     repository.EventJobRepository
 	conditionJobRepo repository.ConditionJobRepository
 	timeJobRepo      repository.TimeJobRepository
-	logger           logging.Logger
+	logger           observability.Logger
 }
 
 // NewJobStatusChecker creates a new JobStatusChecker instance
@@ -27,7 +27,7 @@ func NewJobStatusChecker(
 	eventJobRepo repository.EventJobRepository,
 	conditionJobRepo repository.ConditionJobRepository,
 	timeJobRepo repository.TimeJobRepository,
-	logger logging.Logger,
+	logger observability.Logger,
 ) *JobStatusChecker {
 	return &JobStatusChecker{
 		eventJobRepo:     eventJobRepo,
@@ -38,17 +38,17 @@ func NewJobStatusChecker(
 }
 
 // StartStatusCheckLoop begins the periodic job status check
-func (c *JobStatusChecker) StartStatusCheckLoop() {
+func (c *JobStatusChecker) StartStatusCheckLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		c.checkJobStatuses()
+		c.checkJobStatuses(ctx)
 	}
 }
 
 // checkJobStatuses checks all active jobs for expiration
-func (c *JobStatusChecker) checkJobStatuses() {
+func (c *JobStatusChecker) checkJobStatuses(ctx context.Context) {
 	var wg sync.WaitGroup
 	currentTime := time.Now()
 
@@ -59,21 +59,21 @@ func (c *JobStatusChecker) checkJobStatuses() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.checkEventJobs(currentTime)
+		c.checkEventJobs(ctx, currentTime)
 	}()
 
 	// Check condition jobs
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.checkConditionJobs(currentTime)
+		c.checkConditionJobs(ctx, currentTime)
 	}()
 
 	// Check time jobs
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.checkTimeJobs(currentTime)
+		c.checkTimeJobs(ctx, currentTime)
 	}()
 
 	wg.Wait()
@@ -82,58 +82,58 @@ func (c *JobStatusChecker) checkJobStatuses() {
 }
 
 // checkEventJobs checks all active event jobs for expiration
-func (c *JobStatusChecker) checkEventJobs(currentTime time.Time) {
+func (c *JobStatusChecker) checkEventJobs(ctx context.Context, currentTime time.Time) {
 	eventJobs, err := c.eventJobRepo.GetActiveEventJobs()
 	if err != nil {
-		c.logger.Error("Failed to fetch active event jobs", err)
+		c.logger.Error(ctx, "Failed to fetch active event jobs", observability.Error(err))
 		return
 	}
 
 	for _, job := range eventJobs {
 		if job.ExpirationTime.Before(currentTime) {
 			if err := c.eventJobRepo.UpdateEventJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to update event job status for job ID %s", job.JobID.String()), err)
+				c.logger.Error(ctx, "Failed to update event job status for job ID %s", observability.String("job_id", job.JobID.String()), observability.Error(err))
 				continue
 			}
-			c.logger.Info(fmt.Sprintf("Event job %s marked as inactive due to expiration", job.JobID.String()))
+			c.logger.Info(ctx, "Event job %s marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
 		}
 	}
 }
 
 // checkConditionJobs checks all active condition jobs for expiration
-func (c *JobStatusChecker) checkConditionJobs(currentTime time.Time) {
+func (c *JobStatusChecker) checkConditionJobs(ctx context.Context, currentTime time.Time) {
 	conditionJobs, err := c.conditionJobRepo.GetActiveConditionJobs()
 	if err != nil {
-		c.logger.Error("Failed to fetch active condition jobs", err)
+		c.logger.Error(ctx, "Failed to fetch active condition jobs", observability.Error(err))
 		return
 	}
 
 	for _, job := range conditionJobs {
 		if job.ExpirationTime.Before(currentTime) {
 			if err := c.conditionJobRepo.UpdateConditionJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to update condition job status for job ID %s", job.JobID.String()), err)
+				c.logger.Error(ctx, "Failed to update condition job status for job ID %s", observability.String("job_id", job.JobID.String()), observability.Error(err))
 				continue
 			}
-			c.logger.Info(fmt.Sprintf("Condition job %s marked as inactive due to expiration", job.JobID.String()))
+			c.logger.Info(ctx, "Condition job %s marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
 		}
 	}
 }
 
 // checkTimeJobs checks all active time jobs for expiration
-func (c *JobStatusChecker) checkTimeJobs(currentTime time.Time) {
+func (c *JobStatusChecker) checkTimeJobs(ctx context.Context, currentTime time.Time) {
 	timeJobs, err := c.timeJobRepo.GetActiveTimeJobs()
 	if err != nil {
-		c.logger.Error("Failed to fetch active time jobs", err)
+		c.logger.Error(ctx, "Failed to fetch active time jobs", observability.Error(err))
 		return
 	}
 
 	for _, job := range timeJobs {
 		if job.ExpirationTime.Before(currentTime) {
 			if err := c.timeJobRepo.UpdateTimeJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(fmt.Sprintf("Failed to update time job status for job ID %s", job.JobID.String()), err)
+				c.logger.Error(ctx, "Failed to update time job status for job ID %s", observability.String("job_id", job.JobID.String()), observability.Error(err))
 				continue
 			}
-			c.logger.Info(fmt.Sprintf("Time job %s marked as inactive due to expiration", job.JobID.String()))
+			c.logger.Info(ctx, "Time job %s marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 
 	// Contract bindings
 	contractAttestationCenter "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
@@ -54,7 +55,7 @@ type SubscriptionManager struct {
 	chainID       string
 	subscriptions map[string]*EventSubscription
 	contractABIs  map[ContractType]abi.ABI
-	logger        logging.Logger
+	logger        observability.Logger
 	mu            sync.RWMutex
 }
 
@@ -86,7 +87,7 @@ type ContractEventData struct {
 }
 
 // NewSubscriptionManager creates a new subscription manager
-func NewSubscriptionManager(chainID string, logger logging.Logger) *SubscriptionManager {
+func NewSubscriptionManager(ctx context.Context, chainID string, logger observability.Logger) *SubscriptionManager {
 	sm := &SubscriptionManager{
 		chainID:       chainID,
 		subscriptions: make(map[string]*EventSubscription),
@@ -95,23 +96,23 @@ func NewSubscriptionManager(chainID string, logger logging.Logger) *Subscription
 	}
 
 	// Initialize contract ABIs
-	sm.initializeContractABIs()
+	sm.initializeContractABIs(ctx)
 
 	return sm
 }
 
 // initializeContractABIs initializes the contract ABIs
-func (sm *SubscriptionManager) initializeContractABIs() {
+func (sm *SubscriptionManager) initializeContractABIs(ctx context.Context) {
 	// Initialize AttestationCenter ABI
 	if attestationCenterABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi(); err == nil {
 		sm.contractABIs[ContractTypeAttestationCenter] = *attestationCenterABI
 	} else {
-		sm.logger.Errorf("Failed to initialize AttestationCenter ABI: %v", err)
+		sm.logger.Error(ctx, "Failed to initialize AttestationCenter ABI: %v", observability.Error(err))
 	}
 }
 
 // AddContractSubscription adds a new contract event subscription
-func (sm *SubscriptionManager) AddContractSubscription(contractAddr string, contractType ContractType, eventName string) (*EventSubscription, error) {
+func (sm *SubscriptionManager) AddContractSubscription(ctx context.Context, contractAddr string, contractType ContractType, eventName string) (*EventSubscription, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -128,7 +129,7 @@ func (sm *SubscriptionManager) AddContractSubscription(contractAddr string, cont
 	}
 
 	// Generate unique subscription ID
-	subID := sm.generateSubscriptionID()
+	subID := sm.generateSubscriptionID(ctx)
 
 	addr := common.HexToAddress(contractAddr)
 	eventSig := event.ID
@@ -154,12 +155,12 @@ func (sm *SubscriptionManager) AddContractSubscription(contractAddr string, cont
 }
 
 // AddEventSubscription adds a new event subscription (legacy method)
-func (sm *SubscriptionManager) AddEventSubscription(contractAddr string, eventName string, eventSig string) (*EventSubscription, error) {
+func (sm *SubscriptionManager) AddEventSubscription(ctx context.Context, contractAddr string, eventName string, eventSig string) (*EventSubscription, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	// Generate unique subscription ID
-	subID := sm.generateSubscriptionID()
+	subID := sm.generateSubscriptionID(ctx)
 
 	addr := common.HexToAddress(contractAddr)
 	sigHash := crypto.Keccak256Hash([]byte(eventSig))

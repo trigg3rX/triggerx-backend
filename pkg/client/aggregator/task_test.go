@@ -15,13 +15,13 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TestSendTaskToValidators validates the ECDSA signing and sending logic.
 func TestSendTaskToValidators(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	privateKey, privateKeyHex := generateTestPrivateKey(t)
 	senderAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 

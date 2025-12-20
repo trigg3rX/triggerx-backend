@@ -15,10 +15,10 @@ import (
 type poolAPI interface {
 	initialize(ctx context.Context) error
 	getContainer(ctx context.Context) (*types.PooledContainer, error)
-	returnContainer(container *types.PooledContainer) error
+	returnContainer(ctx context.Context, container *types.PooledContainer) error
 	getStats() *types.PoolStats
 	getHealthCheckStats() (total, toCheck, inError int)
-	markContainerAsFailed(containerID string, err error)
+	markContainerAsFailed(ctx context.Context, containerID string, err error)
 	close(ctx context.Context) error
 }
 
@@ -28,7 +28,7 @@ type ContainerManagerAPI interface {
 	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
 	GetDockerClient() docker.DockerClientAPI
 	GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error)
-	ReturnContainer(container *types.PooledContainer) error
+	ReturnContainer(ctx context.Context, container *types.PooledContainer) error
 	GetPoolStats() map[types.Language]*types.PoolStats
 	GetLanguageStats(language types.Language) (*types.PoolStats, bool)
 	GetHealthCheckStats() map[types.Language]map[string]int
@@ -38,7 +38,7 @@ type ContainerManagerAPI interface {
 	PullImage(ctx context.Context, imageName string) error
 	CleanupContainer(ctx context.Context, containerID string) error
 	KillExecProcess(ctx context.Context, execID string) error
-	MarkContainerAsFailed(containerID string, language types.Language, err error)
+	MarkContainerAsFailed(ctx context.Context, containerID string, language types.Language, err error)
 	Close(ctx context.Context) error
 }
 

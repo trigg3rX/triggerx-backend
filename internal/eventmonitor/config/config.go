@@ -8,7 +8,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
+	devMode bool
+	otelExporterEndpoint string
+
 	// Service Configuration
 	Port string
 	Host string
@@ -28,7 +35,6 @@ type Config struct {
 
 	// Logging
 	LogLevel string
-	DevMode  bool
 }
 
 var cfg Config
@@ -40,6 +46,8 @@ func Init() error {
 	}
 
 	cfg = Config{
+		devMode:           env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
 		Port:              env.GetEnvString("EVENT_MONITOR_PORT", "9009"),
 		Host:              env.GetEnvString("EVENT_MONITOR_HOST", "0.0.0.0"),
 		AlchemyAPIKey:     env.GetEnvString("ALCHEMY_API_KEY", ""),
@@ -50,7 +58,6 @@ func Init() error {
 		WebhookMaxRetries: env.GetEnvInt("WEBHOOK_MAX_RETRIES", 3),
 		WebhookRetryDelay: parseDuration(env.GetEnvString("WEBHOOK_RETRY_DELAY", "1s")),
 		LogLevel:          env.GetEnvString("LOG_LEVEL", "info"),
-		DevMode:           env.GetEnvBool("DEV_MODE", false),
 	}
 
 	return validateConfig()
@@ -69,6 +76,14 @@ func validateConfig() error {
 		return fmt.Errorf("invalid port: %s", cfg.Port)
 	}
 	return nil
+}
+
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 // GetPort returns the service port
@@ -123,7 +138,7 @@ func GetLogLevel() string {
 
 // IsDevMode returns whether the service is in dev mode
 func IsDevMode() bool {
-	return cfg.DevMode
+	return cfg.devMode
 }
 
 // GetChainRPCUrls returns chain RPC URLs

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	// "fmt"
 	"io"
 	"net/http"
@@ -11,29 +12,29 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type Validator struct {
 	validate *validator.Validate
-	logger   logging.Logger
+	logger   observability.Logger
 }
 
-func NewValidator(logger logging.Logger) *Validator {
+func NewValidator(ctx context.Context, logger observability.Logger) *Validator {
 	v := validator.New()
 
 	// Register custom validations
 	err := v.RegisterValidation("ethereum_address", validateEthereumAddress)
 	if err != nil {
-		logger.Errorf("Error registering validation: %v", err)
+		logger.Error(ctx, "Error registering validation: %v", observability.Error(err))
 	}
 	err = v.RegisterValidation("ipfs_url", validateIPFSURL)
 	if err != nil {
-		logger.Errorf("Error registering validation: %v", err)
+		logger.Error(ctx, "Error registering validation: %v", observability.Error(err))
 	}
 	err = v.RegisterValidation("chain_id", validateChainID)
 	if err != nil {
-		logger.Errorf("Error registering validation: %v", err)
+		logger.Error(ctx, "Error registering validation: %v", observability.Error(err))
 	}
 
 	return &Validator{
@@ -47,7 +48,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		// Read the request body first
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			v.logger.Errorf("Error reading request body: %v", err)
+			v.logger.Error(c.Request.Context(), "Error reading request body: %v", observability.Error(err))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Invalid request body",
 				"details": err.Error(),
@@ -109,7 +110,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		}
 
 		if validationError != nil {
-			v.logger.Errorf("Validation error: %v", validationError)
+			v.logger.Error(c.Request.Context(), "Validation error: %v", observability.Error(validationError))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Validation failed",
 				"details": validationError.Error(),

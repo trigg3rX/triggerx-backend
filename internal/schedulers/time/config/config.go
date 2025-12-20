@@ -10,8 +10,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
 	devMode bool
+	otelExporterEndpoint string
 
 	// Scheduler RPC Port
 	timeSchedulerRPCPort string
@@ -43,6 +48,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:              env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
 		timeSchedulerRPCPort: env.GetEnvString("TIME_SCHEDULER_RPC_PORT", "9005"),
 		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9003"),
 		dbServerURL:          env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
@@ -80,6 +86,14 @@ func validateConfig() error {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 func GetSchedulerRPCPort() string {

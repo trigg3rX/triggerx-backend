@@ -7,18 +7,18 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
 )
 
 // Client represents a client for communicating with the taskmonitor service
 type Client struct {
 	rpcClient *client.Client
-	logger    logging.Logger
+	logger    observability.Logger
 }
 
 // NewClient creates a new taskmonitor client
-func NewClient(logger logging.Logger) (*Client, error) {
+func NewClient(logger observability.Logger) (*Client, error) {
 	rpcUrl := config.GetTaskMonitorRPCUrl()
 	if rpcUrl == "" {
 		return nil, fmt.Errorf("task monitor RPC URL is not configured")
@@ -110,20 +110,20 @@ func (c *Client) ReportTaskStatus(ctx context.Context, taskID int64, executionSu
 		return fmt.Errorf("taskmonitor reported failure: %s", response.Message)
 	}
 
-	c.logger.Info("Task status reported successfully to taskmonitor",
-		"task_id", taskID,
-		"execution_successful", executionSuccessful,
-		"aggregator_submitted", aggregatorSubmitted,
-		"execution_tx_hash", executionTxHash,
-		"proof_cid", proofCID)
+	c.logger.Info(ctx, "Task status reported successfully to taskmonitor",
+		observability.Int64("task_id", taskID),
+		observability.Bool("execution_successful", executionSuccessful),
+		observability.Bool("aggregator_submitted", aggregatorSubmitted),
+		observability.String("execution_tx_hash", executionTxHash),
+		observability.String("proof_cid", proofCID))
 
 	return nil
 }
 
 // Close closes the taskmonitor client
-func (c *Client) Close() error {
+func (c *Client) Close(ctx context.Context) error {
 	if c.rpcClient != nil {
-		return c.rpcClient.Close()
+		return c.rpcClient.Close(ctx)
 	}
 	return nil
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -51,7 +51,7 @@ func TestWebSocketWorker_TriggersOnMessage(t *testing.T) {
 	wsConfig := &WebSocketConfig{URL: wsURL}
 	var triggered bool
 	var triggerMu sync.Mutex
-	cb := func(notification *TriggerNotification) error {
+	cb := func(ctx context.Context, notification *TriggerNotification) error {
 		triggerMu.Lock()
 		defer triggerMu.Unlock()
 		triggered = true
@@ -62,12 +62,12 @@ func TestWebSocketWorker_TriggersOnMessage(t *testing.T) {
 	worker := &WebSocketWorker{
 		WebSocketConfig:     wsConfig,
 		ConditionWorkerData: condData,
-		Logger:              &noopLogger{},
+		Logger:              observability.NewNoOpLogger(),
 		Ctx:                 ctx,
 		Cancel:              cancel,
 		TriggerCallback:     cb,
 	}
-	worker.Start()
+	worker.Start(ctx)
 	triggerMu.Lock()
 	wasTriggered := triggered
 	triggerMu.Unlock()
@@ -139,7 +139,7 @@ func TestWebSocketWorker_ConditionCases(t *testing.T) {
 
 			var triggered bool
 			var mu sync.Mutex
-			cb := func(notification *TriggerNotification) error {
+			cb := func(ctx context.Context, notification *TriggerNotification) error {
 				mu.Lock()
 				triggered = true
 				mu.Unlock()
@@ -152,13 +152,13 @@ func TestWebSocketWorker_ConditionCases(t *testing.T) {
 			worker := &WebSocketWorker{
 				WebSocketConfig:     wsConfig,
 				ConditionWorkerData: condData,
-				Logger:              &noopLogger{},
+				Logger:              observability.NewNoOpLogger(),
 				Ctx:                 ctx,
 				Cancel:              cancel,
 				TriggerCallback:     cb,
 			}
 
-			worker.Start()
+			worker.Start(ctx)
 
 			mu.Lock()
 			got := triggered
@@ -172,17 +172,3 @@ func TestWebSocketWorker_ConditionCases(t *testing.T) {
 		})
 	}
 }
-
-type noopLogger struct{}
-
-func (n *noopLogger) Info(msg string, tags ...interface{})      {}
-func (n *noopLogger) Error(msg string, tags ...interface{})     {}
-func (n *noopLogger) Warn(msg string, tags ...interface{})      {}
-func (n *noopLogger) Debug(msg string, tags ...interface{})     {}
-func (n *noopLogger) Errorf(format string, args ...interface{}) {}
-func (n *noopLogger) Debugf(format string, args ...interface{}) {}
-func (n *noopLogger) Fatal(msg string, tags ...interface{})     {}
-func (n *noopLogger) Fatalf(format string, args ...interface{}) {}
-func (n *noopLogger) Infof(format string, args ...interface{})  {}
-func (n *noopLogger) Warnf(format string, args ...interface{})  {}
-func (n *noopLogger) With(tags ...interface{}) logging.Logger   { return n }

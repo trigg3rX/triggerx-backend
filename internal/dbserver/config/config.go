@@ -9,8 +9,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
 	devMode bool
+	otelExporterEndpoint string
 
 	// Scheduler RPC URLs
 	timeSchedulerRPCUrl      string
@@ -51,6 +56,8 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
+		devMode:                       env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
 		timeSchedulerRPCUrl:           env.GetEnvString("TIME_SCHEDULER_RPC_URL", "http://localhost:9005"),
 		conditionSchedulerRPCUrl:      env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9006"),
 		dbserverRPCPort:               env.GetEnvString("DBSERVER_RPC_PORT", "9002"),
@@ -65,7 +72,6 @@ func Init() error {
 		upstashRedisUrl:               env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		otTempoEndpoint:               env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
-		devMode:                       env.GetEnvBool("DEV_MODE", false),
 		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
 	}
 	if err := validateConfig(cfg); err != nil {
@@ -120,6 +126,14 @@ func validateConfig(cfg Config) error {
 		}
 	}
 	return nil
+}
+
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 func GetTimeSchedulerRPCUrl() string {

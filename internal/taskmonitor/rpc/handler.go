@@ -8,13 +8,13 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 )
 
 // TaskMonitorHandler implements the generic RPC handler interface
 type TaskMonitorHandler struct {
-	logger  logging.Logger
+	logger  observability.Logger
 	monitor TaskMonitorInterface
 }
 
@@ -25,7 +25,7 @@ type TaskMonitorInterface interface {
 }
 
 // NewTaskMonitorHandler creates a new RPC handler
-func NewTaskMonitorHandler(logger logging.Logger, monitor TaskMonitorInterface) *TaskMonitorHandler {
+func NewTaskMonitorHandler(logger observability.Logger, monitor TaskMonitorInterface) *TaskMonitorHandler {
 	return &TaskMonitorHandler{
 		logger:  logger,
 		monitor: monitor,
@@ -54,10 +54,10 @@ func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request 
 
 		// Validate keeper signature
 		if err := h.validateStatusSignature(req); err != nil {
-			h.logger.Error("Invalid keeper signature for task status report",
-				"task_id", req.TaskID,
-				"keeper_address", req.KeeperAddress,
-				"error", err)
+			h.logger.Error(ctx, "Invalid keeper signature for task status report",
+				observability.Int64("task_id", req.TaskID),
+				observability.String("keeper_address", req.KeeperAddress),
+				observability.Error(err))
 			return nil, fmt.Errorf("invalid signature: %w", err)
 		}
 

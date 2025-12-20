@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -19,7 +19,7 @@ import (
 type EventWorker struct {
 	EventWorkerData    *types.EventWorkerData
 	ChainClient        *nodeclient.NodeClient
-	Logger             logging.Logger
+	Logger             observability.Logger
 	Ctx                context.Context
 	Cancel             context.CancelFunc
 	IsActive           bool
@@ -31,7 +31,7 @@ type EventWorker struct {
 }
 
 // Start begins the event worker's monitoring loop
-func (w *EventWorker) Start() {
+func (w *EventWorker) Start(ctx context.Context) {
 	startTime := time.Now()
 
 	w.Mutex.Lock()
@@ -44,12 +44,12 @@ func (w *EventWorker) Start() {
 	// Get current block number
 	blockHex, err := w.ChainClient.EthBlockNumber(w.Ctx)
 	if err != nil {
-		w.Logger.Error("Failed to get current block number", "error", err)
+		w.Logger.Error(ctx, "Failed to get current block number", observability.Error(err))
 		return
 	}
 	currentBlock, err := hexToUint64(blockHex)
 	if err != nil {
-		w.Logger.Error("Failed to parse block number", "error", err)
+		w.Logger.Error(ctx, "Failed to parse block number", observability.Error(err))
 		return
 	}
 
@@ -63,23 +63,23 @@ func (w *EventWorker) Start() {
 		w.LastBlock = 0 // Start from genesis if less than lookback blocks exist
 	}
 
-	w.Logger.Info("Event worker will scan from historical block",
-		"job_id", w.EventWorkerData.JobID,
-		"current_block", currentBlock,
-		"starting_from_block", w.LastBlock,
-		"lookback_blocks", lookbackBlocks,
+	w.Logger.Info(ctx, "Event worker will scan from historical block",
+		observability.String("job_id", w.EventWorkerData.JobID.String()),
+		observability.Uint64("current_block", currentBlock),
+		observability.Uint64("starting_from_block", w.LastBlock),
+		observability.Uint64("lookback_blocks", lookbackBlocks),
 	)
 
-	w.Logger.Info("Starting event worker",
-		"job_id", w.EventWorkerData.JobID,
-		"chain_id", w.EventWorkerData.TriggerChainID,
-		"contract", w.EventWorkerData.TriggerContractAddress,
-		"event", w.EventWorkerData.TriggerEvent,
-		"current_block", currentBlock,
-		"expiration_time", w.EventWorkerData.ExpirationTime,
-		"filter_enabled", w.EventWorkerData.EventFilterParaName != "" && w.EventWorkerData.EventFilterValue != "",
-		"filter_param", w.EventWorkerData.EventFilterParaName,
-		"filter_value", w.EventWorkerData.EventFilterValue,
+	w.Logger.Info(ctx, "Starting event worker",
+		observability.String("job_id", w.EventWorkerData.JobID.String()),
+		observability.String("chain_id", w.EventWorkerData.TriggerChainID),
+		observability.String("contract", w.EventWorkerData.TriggerContractAddress),
+		observability.String("event", w.EventWorkerData.TriggerEvent),
+		observability.Uint64("current_block", currentBlock),
+		observability.Time("expiration_time", w.EventWorkerData.ExpirationTime),
+		observability.Bool("filter_enabled", w.EventWorkerData.EventFilterParaName != "" && w.EventWorkerData.EventFilterValue != ""),
+		observability.String("filter_param", w.EventWorkerData.EventFilterParaName),
+		observability.String("filter_value", w.EventWorkerData.EventFilterValue),
 	)
 
 	contractAddr := common.HexToAddress(w.EventWorkerData.TriggerContractAddress)
@@ -94,26 +94,28 @@ func (w *EventWorker) Start() {
 			stopTime := time.Now()
 			duration := stopTime.Sub(startTime)
 
-			w.Logger.Info("Event worker stopped",
-				"job_id", w.EventWorkerData.JobID,
-				"runtime", duration,
-				"final_block", w.LastBlock,
+			w.Logger.Info(ctx, "Event worker stopped",
+				observability.String("job_id", w.EventWorkerData.JobID.String()),
+				observability.Duration("runtime", duration),
+				observability.Uint64("final_block", w.LastBlock),
 			)
 			metrics.JobsCompleted.WithLabelValues("success").Inc()
 			return
 		case <-ticker.C:
 			// Check if job has expired
 			if time.Now().After(w.EventWorkerData.ExpirationTime) {
-				w.Logger.Info("Job has expired, stopping worker",
-					"job_id", w.EventWorkerData.JobID,
-					"expiration_time", w.EventWorkerData.ExpirationTime,
+				w.Logger.Info(ctx, "Job has expired, stopping worker",
+					observability.String("job_id", w.EventWorkerData.JobID.String()),
+					observability.Time("expiration_time", w.EventWorkerData.ExpirationTime),
 				)
-				go w.Stop() // Stop in a goroutine to avoid deadlock
+				go w.Stop(ctx) // Stop in a goroutine to avoid deadlock
 				return
 			}
 
-			if err := w.checkForEvents(contractAddr, eventSig); err != nil {
-				w.Logger.Error("Error checking for events", "job_id", w.EventWorkerData.JobID, "error", err)
+			if err := w.checkForEvents(ctx, contractAddr, eventSig); err != nil {
+				w.Logger.Error(ctx, "Error checking for events",
+					observability.String("job_id", w.EventWorkerData.JobID.String()),
+					observability.Error(err))
 				metrics.JobsCompleted.WithLabelValues("failed").Inc()
 			}
 		}
@@ -121,7 +123,7 @@ func (w *EventWorker) Start() {
 }
 
 // Stop gracefully stops the event worker
-func (w *EventWorker) Stop() {
+func (w *EventWorker) Stop(ctx context.Context) {
 	w.Mutex.Lock()
 	defer w.Mutex.Unlock()
 
@@ -134,14 +136,15 @@ func (w *EventWorker) Stop() {
 
 		// Clean up job data from scheduler store
 		if w.CleanupCallback != nil {
-			if err := w.CleanupCallback(w.EventWorkerData.JobID.ToBigInt()); err != nil {
-				w.Logger.Error("Failed to clean up job data",
-					"job_id", w.EventWorkerData.JobID,
-					"error", err)
+			if err := w.CleanupCallback(ctx, w.EventWorkerData.JobID.ToBigInt()); err != nil {
+				w.Logger.Error(ctx, "Failed to clean up job data",
+					observability.String("job_id", w.EventWorkerData.JobID.String()),
+					observability.Error(err))
 			}
 		}
 
-		w.Logger.Info("Event worker stopped", "job_id", w.EventWorkerData.JobID)
+		w.Logger.Info(ctx, "Event worker stopped",
+			observability.String("job_id", w.EventWorkerData.JobID.String()))
 	}
 }
 

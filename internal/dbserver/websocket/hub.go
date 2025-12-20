@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Hub maintains the set of active clients and broadcasts messages to the clients
@@ -44,7 +44,7 @@ type Hub struct {
 	// Mutex for thread safety
 	mu sync.RWMutex
 
-	logger logging.Logger
+	logger observability.Logger
 }
 
 // BroadcastMessage represents a message to be broadcasted to specific rooms
@@ -60,10 +60,10 @@ type Subscription struct {
 }
 
 // InitialDataCallback is a function type for fetching initial data when subscribing to a room
-type InitialDataCallback func(room string, client *Client) error
+type InitialDataCallback func(ctx context.Context, room string, client *Client) error
 
 // NewHub creates a new WebSocket hub
-func NewHub(logger logging.Logger) *Hub {
+func NewHub(logger observability.Logger) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Hub{
@@ -87,47 +87,47 @@ func (h *Hub) SetInitialDataCallback(callback InitialDataCallback) {
 }
 
 // Run starts the hub's main loop
-func (h *Hub) Run() {
-	h.logger.Info("Starting WebSocket hub")
+func (h *Hub) Run(ctx context.Context) {
+	h.logger.Info(ctx, "Starting WebSocket hub")
 
 	// Start task event processor
-	go h.processTaskEvents()
+	go h.processTaskEvents(ctx)
 
 	for {
 		select {
 		case client := <-h.register:
-			h.registerClient(client)
+			h.registerClient(ctx, client)
 
 		case client := <-h.unregister:
-			h.unregisterClient(client)
+			h.unregisterClient(ctx, client)
 
 		case subscription := <-h.subscribe:
-			h.subscribeToRoom(subscription)
+			h.subscribeToRoom(ctx, subscription)
 
 		case subscription := <-h.unsubscribe:
-			h.unsubscribeFromRoom(subscription)
+			h.unsubscribeFromRoom(ctx, subscription)
 
 		case broadcastMsg := <-h.broadcast:
-			h.broadcastToRooms(broadcastMsg)
+			h.broadcastToRooms(ctx, broadcastMsg)
 
 		case <-h.ctx.Done():
-			h.logger.Info("WebSocket hub shutting down")
+			h.logger.Info(ctx, "WebSocket hub shutting down")
 			return
 		}
 	}
 }
 
 // registerClient registers a new client
-func (h *Hub) registerClient(client *Client) {
+func (h *Hub) registerClient(ctx context.Context, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.clients[client] = true
-	h.logger.Infof("Client %s registered. Total clients: %d", client.ID, len(h.clients))
+	h.logger.Info(ctx, "Client %s registered. Total clients: %d", observability.String("client_id", client.ID), observability.Int("total_clients", len(h.clients)))
 }
 
 // unregisterClient unregisters a client
-func (h *Hub) unregisterClient(client *Client) {
+func (h *Hub) unregisterClient(ctx context.Context, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -145,12 +145,12 @@ func (h *Hub) unregisterClient(client *Client) {
 			}
 		}
 
-		h.logger.Infof("Client %s unregistered. Total clients: %d", client.ID, len(h.clients))
+		h.logger.Info(ctx, "Client %s unregistered. Total clients: %d", observability.String("client_id", client.ID), observability.Int("total_clients", len(h.clients)))
 	}
 }
 
 // subscribeToRoom subscribes a client to a room
-func (h *Hub) subscribeToRoom(subscription *Subscription) {
+func (h *Hub) subscribeToRoom(ctx context.Context, subscription *Subscription) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -162,20 +162,20 @@ func (h *Hub) subscribeToRoom(subscription *Subscription) {
 	}
 
 	h.rooms[room][client] = true
-	h.logger.Infof("Client %s subscribed to room %s", client.ID, room)
+	h.logger.Info(ctx, "Client %s subscribed to room %s", observability.String("client_id", client.ID), observability.String("room", room))
 
 	// Call initial data callback if set
 	if h.initialDataCallback != nil {
 		go func() {
-			if err := h.initialDataCallback(room, client); err != nil {
-				h.logger.Errorf("Error fetching initial data for room %s: %v", room, err)
+			if err := h.initialDataCallback(ctx, room, client); err != nil {
+				h.logger.Error(ctx, "Error fetching initial data for room %s: %v", observability.String("room", room), observability.Error(err))
 			}
 		}()
 	}
 }
 
 // unsubscribeFromRoom unsubscribes a client from a room
-func (h *Hub) unsubscribeFromRoom(subscription *Subscription) {
+func (h *Hub) unsubscribeFromRoom(ctx context.Context, subscription *Subscription) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -187,12 +187,12 @@ func (h *Hub) unsubscribeFromRoom(subscription *Subscription) {
 		if len(clients) == 0 {
 			delete(h.rooms, room)
 		}
-		h.logger.Infof("Client %s unsubscribed from room %s", client.ID, room)
+		h.logger.Info(ctx, "Client %s unsubscribed from room %s", observability.String("client_id", client.ID), observability.String("room", room))
 	}
 }
 
 // broadcastToRooms broadcasts a message to specific rooms
-func (h *Hub) broadcastToRooms(broadcastMsg *BroadcastMessage) {
+func (h *Hub) broadcastToRooms(ctx context.Context, broadcastMsg *BroadcastMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -229,11 +229,11 @@ func (h *Hub) broadcastToRooms(broadcastMsg *BroadcastMessage) {
 }
 
 // processTaskEvents processes task events and broadcasts them to appropriate rooms
-func (h *Hub) processTaskEvents() {
+func (h *Hub) processTaskEvents(ctx context.Context) {
 	for {
 		select {
 		case taskEvent := <-h.taskEvents:
-			h.broadcastTaskEvent(taskEvent)
+			h.broadcastTaskEvent(ctx, taskEvent)
 		case <-h.ctx.Done():
 			return
 		}
@@ -241,7 +241,7 @@ func (h *Hub) processTaskEvents() {
 }
 
 // broadcastTaskEvent broadcasts a task event to relevant rooms
-func (h *Hub) broadcastTaskEvent(taskEvent *TaskEventData) {
+func (h *Hub) broadcastTaskEvent(ctx context.Context, taskEvent *TaskEventData) {
 	var messageType MessageType
 	var rooms []string
 
@@ -266,46 +266,46 @@ func (h *Hub) broadcastTaskEvent(taskEvent *TaskEventData) {
 		Rooms:   rooms,
 	}
 
-	h.logger.Infof("Broadcasted task event %s for task %d to %d rooms", messageType, taskEvent.TaskID, len(rooms))
+	h.logger.Info(ctx, "Broadcasted task event %s for task %d to %d rooms", observability.String("message_type", string(messageType)), observability.Int64("task_id", taskEvent.TaskID), observability.Int("total_rooms", len(rooms)))
 }
 
 // BroadcastTaskCreated broadcasts a task created event
-func (h *Hub) BroadcastTaskCreated(taskData *TaskEventData) {
+func (h *Hub) BroadcastTaskCreated(ctx context.Context, taskData *TaskEventData) {
 	taskData.Timestamp = time.Now()
 	select {
 	case h.taskEvents <- taskData:
 	default:
-		h.logger.Warn("Task events channel is full, dropping task created event")
+		h.logger.Warn(ctx, "Task events channel is full, dropping task created event")
 	}
 }
 
 // BroadcastTaskUpdated broadcasts a task updated event
-func (h *Hub) BroadcastTaskUpdated(taskData *TaskEventData) {
+func (h *Hub) BroadcastTaskUpdated(ctx context.Context, taskData *TaskEventData) {
 	taskData.Timestamp = time.Now()
 	select {
 	case h.taskEvents <- taskData:
 	default:
-		h.logger.Warn("Task events channel is full, dropping task updated event")
+		h.logger.Warn(ctx, "Task events channel is full, dropping task updated event")
 	}
 }
 
 // BroadcastTaskStatusChanged broadcasts a task status changed event
-func (h *Hub) BroadcastTaskStatusChanged(taskData *TaskEventData) {
+func (h *Hub) BroadcastTaskStatusChanged(ctx context.Context, taskData *TaskEventData) {
 	taskData.Timestamp = time.Now()
 	select {
 	case h.taskEvents <- taskData:
 	default:
-		h.logger.Warn("Task events channel is full, dropping task status changed event")
+		h.logger.Warn(ctx, "Task events channel is full, dropping task status changed event")
 	}
 }
 
 // BroadcastTaskFeeUpdated broadcasts a task fee updated event
-func (h *Hub) BroadcastTaskFeeUpdated(taskData *TaskEventData) {
+func (h *Hub) BroadcastTaskFeeUpdated(ctx context.Context, taskData *TaskEventData) {
 	taskData.Timestamp = time.Now()
 	select {
 	case h.taskEvents <- taskData:
 	default:
-		h.logger.Warn("Task events channel is full, dropping task fee updated event")
+		h.logger.Warn(ctx, "Task events channel is full, dropping task fee updated event")
 	}
 }
 
@@ -331,8 +331,8 @@ func (h *Hub) getRoomStats() map[string]int {
 }
 
 // Shutdown gracefully shuts down the hub
-func (h *Hub) Shutdown() {
-	h.logger.Info("Shutting down WebSocket hub")
+func (h *Hub) Shutdown(ctx context.Context) {
+	h.logger.Info(ctx, "Shutting down WebSocket hub")
 	h.cancel()
 
 	// Close all client connections

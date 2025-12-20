@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -237,14 +237,13 @@ func TestConfig_Validate_EdgeCases(t *testing.T) {
 	})
 }
 
-func createTestClient() (*ipfsClient, *httppkg.MockHTTPClient, *logging.MockLogger) {
+func createTestClient() (*ipfsClient, *httppkg.MockHTTPClient, *observability.MockLogger) {
 	config := createTestConfig()
 	mockHTTPClient := &httppkg.MockHTTPClient{}
-	mockLogger := &logging.MockLogger{}
+	mockLogger := &observability.MockLogger{}
 
 	return &ipfsClient{
 		config:     config,
-		logger:     mockLogger,
 		httpClient: mockHTTPClient,
 	}, mockHTTPClient, mockLogger
 }
@@ -252,9 +251,8 @@ func createTestClient() (*ipfsClient, *httppkg.MockHTTPClient, *logging.MockLogg
 // Unit Tests for NewClient
 func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
 	config := createTestConfig()
-	mockLogger := &logging.MockLogger{}
 
-	client, err := NewClient(config, mockLogger)
+	client, err := NewClient(config)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
@@ -281,9 +279,7 @@ func TestNewClient_InvalidConfig_ReturnsError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := &logging.MockLogger{}
-
-			client, err := NewClient(tt.config, mockLogger)
+			client, err := NewClient(tt.config)
 
 			assert.Error(t, err)
 			assert.Nil(t, client)

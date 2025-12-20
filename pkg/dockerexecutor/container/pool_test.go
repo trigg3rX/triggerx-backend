@@ -15,11 +15,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/client/docker/mocks"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func setupPoolTest(t *testing.T) (*containerPool, *mocks.MockDockerClient, *config.MockConfigProviderInterface) {
-	mockLogger := logging.NewNoOpLogger()
+	mockLogger := observability.NewNoOpLogger()
 	mockDockerClient := mocks.NewMockDockerClient()
 	mockConfigProvider := config.NewDefaultMockConfigProvider(t)
 
@@ -28,7 +28,7 @@ func setupPoolTest(t *testing.T) (*containerPool, *mocks.MockDockerClient, *conf
 	require.NoError(t, err)
 
 	poolConfig := mockConfigProvider.GetConfig().Languages[string(types.LanguageGo)]
-	pool := newContainerPool(poolConfig, manager, mockLogger)
+	pool := newContainerPool(context.Background(), poolConfig, manager, mockLogger)
 
 	return pool, mockDockerClient, mockConfigProvider
 }
@@ -234,7 +234,7 @@ func TestContainerPool_ReturnContainer_Success(t *testing.T) {
 	pool.containers[containerID] = pooledContainer
 
 	// Act
-	err := pool.returnContainer(pooledContainer)
+	err := pool.returnContainer(context.Background(), pooledContainer)
 
 	// Assert
 	assert.NoError(t, err)
@@ -259,7 +259,7 @@ func TestContainerPool_ReturnContainer_ContainerNotFound(t *testing.T) {
 	}
 
 	// Act
-	err := pool.returnContainer(pooledContainer)
+	err := pool.returnContainer(context.Background(), pooledContainer)
 
 	// Assert
 	assert.NoError(t, err) // Should not error, just log warning
@@ -287,7 +287,7 @@ func TestContainerPool_ReturnContainer_ResetFailure(t *testing.T) {
 	mockDockerClient.ShouldFailContainerExecCreate = true
 
 	// Act
-	err := pool.returnContainer(pooledContainer)
+	err := pool.returnContainer(context.Background(), pooledContainer)
 
 	// Assert
 	assert.Error(t, err)
@@ -318,7 +318,7 @@ func TestContainerPool_GetStats_Success(t *testing.T) {
 	}
 
 	// Act
-	pool.updateStats()
+	pool.updateStats(context.Background())
 	stats := pool.getStats()
 
 	// Assert
@@ -428,7 +428,7 @@ func TestContainerPool_StatsUpdate(t *testing.T) {
 	}
 
 	// Act
-	pool.updateStats()
+	pool.updateStats(context.Background())
 	stats := pool.getStats()
 
 	// Assert
@@ -440,7 +440,7 @@ func TestContainerPool_StatsUpdate(t *testing.T) {
 
 func TestContainerPool_Initialize_PartialFailure(t *testing.T) {
 	// Arrange
-	mockLogger := logging.NewNoOpLogger()
+	mockLogger := observability.NewNoOpLogger()
 	mockDockerClient := mocks.NewMockDockerClient()
 	mockManager := &containerManager{
 		dockerClient: mockDockerClient,
@@ -464,7 +464,7 @@ func TestContainerPool_Initialize_PartialFailure(t *testing.T) {
 			ImageName: "golang:1.21",
 		},
 	}
-	pool := newContainerPool(cfg, mockManager, mockLogger)
+	pool := newContainerPool(context.Background(), cfg, mockManager, mockLogger)
 
 	// Add mock image to simulate existing image
 	mockDockerClient.AddMockImage("golang:1.21")
@@ -484,13 +484,10 @@ func TestContainerPool_Initialize_PartialFailure(t *testing.T) {
 
 func TestContainerPool_GetContainer_HealthCheckFails(t *testing.T) {
 	// Arrange
-	mockLogger := logging.NewNoOpLogger()
+	mockLogger := observability.NewNoOpLogger()
 	mockDockerClient := mocks.NewMockDockerClient()
-	mockManager := &containerManager{
-		dockerClient: mockDockerClient,
-		logger:       mockLogger,
-		config:       config.NewDefaultMockConfigProvider(t),
-	}
+	mockManager, err := NewContainerManager(mockDockerClient, nil, config.NewDefaultMockConfigProvider(t), mockLogger)
+	require.NoError(t, err)
 	cfg := config.LanguagePoolConfig{
 		BasePoolConfig: config.BasePoolConfig{
 			MaxContainers: 2,
@@ -508,7 +505,7 @@ func TestContainerPool_GetContainer_HealthCheckFails(t *testing.T) {
 			ImageName: "golang:1.21",
 		},
 	}
-	pool := newContainerPool(cfg, mockManager, mockLogger)
+	pool := newContainerPool(context.Background(), cfg, mockManager, mockLogger)
 	ctx := context.Background()
 
 	// Add a ready but unhealthy (not running) container to the pool
@@ -535,13 +532,10 @@ func TestContainerPool_GetContainer_HealthCheckFails(t *testing.T) {
 
 func TestContainerPool_ReturnContainer_SignalsWaiter(t *testing.T) {
 	// Arrange
-	mockLogger := logging.NewNoOpLogger()
+	mockLogger := observability.NewNoOpLogger()
 	mockDockerClient := mocks.NewMockDockerClient()
-	mockManager := &containerManager{
-		dockerClient: mockDockerClient,
-		logger:       mockLogger,
-		config:       config.NewDefaultMockConfigProvider(t),
-	}
+	mockManager, err := NewContainerManager(mockDockerClient, nil, config.NewDefaultMockConfigProvider(t), mockLogger)
+	require.NoError(t, err)
 	cfg := config.LanguagePoolConfig{
 		BasePoolConfig: config.BasePoolConfig{
 			MaxContainers: 1, // Only one container allowed
@@ -560,9 +554,9 @@ func TestContainerPool_ReturnContainer_SignalsWaiter(t *testing.T) {
 			ImageName: "golang:1.21",
 		},
 	}
-	pool := newContainerPool(cfg, mockManager, mockLogger)
+	pool := newContainerPool(context.Background(), cfg, mockManager, mockLogger)
 	ctx := context.Background()
-	err := pool.initialize(ctx) // Creates one container
+	err = pool.initialize(ctx) // Creates one container
 	assert.NoError(t, err)
 
 	// Get the only container, making the pool busy
@@ -582,7 +576,7 @@ func TestContainerPool_ReturnContainer_SignalsWaiter(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	// Act: Return the container. This should unblock the waiter.
-	err = pool.returnContainer(c1)
+	err = pool.returnContainer(context.Background(), c1)
 	assert.NoError(t, err)
 
 	// Assert: The waiter goroutine should complete
@@ -596,7 +590,7 @@ func TestContainerPool_ReturnContainer_SignalsWaiter(t *testing.T) {
 
 func TestContainerPool_healthCheck_UpdatesUnhealthyContainer(t *testing.T) {
 	// Arrange
-	mockLogger := logging.NewNoOpLogger()
+	mockLogger := observability.NewNoOpLogger()
 	mockDockerClient := mocks.NewMockDockerClient()
 	mockManager := &containerManager{
 		dockerClient: mockDockerClient,
@@ -619,7 +613,7 @@ func TestContainerPool_healthCheck_UpdatesUnhealthyContainer(t *testing.T) {
 			ImageName: "golang:1.21",
 		},
 	}
-	pool := newContainerPool(cfg, mockManager, mockLogger)
+	pool := newContainerPool(context.Background(), cfg, mockManager, mockLogger)
 
 	// Add a ready container that is about to be found as stopped
 	containerID := "test-container"
@@ -627,7 +621,7 @@ func TestContainerPool_healthCheck_UpdatesUnhealthyContainer(t *testing.T) {
 	mockDockerClient.SetContainerState(containerID, container.State{Running: false, Status: "exited"})
 
 	// Act
-	pool.healthCheck() // Manually trigger health check
+	pool.healthCheck(context.Background()) // Manually trigger health check
 
 	// Assert
 	checkedContainer := pool.containers[containerID]
@@ -638,13 +632,10 @@ func TestContainerPool_healthCheck_UpdatesUnhealthyContainer(t *testing.T) {
 // BenchmarkContainerPool_GetContainer benchmarks container retrieval performance
 func BenchmarkContainerPool_GetContainer(b *testing.B) {
 	// Arrange
-	mockLogger := logging.NewNoOpLogger()
+	mockLogger := observability.NewNoOpLogger()
 	mockDockerClient := mocks.NewMockDockerClient()
-	mockManager := &containerManager{
-		dockerClient: mockDockerClient,
-		logger:       mockLogger,
-		config:       config.NewDefaultMockConfigProvider(b),
-	}
+	mockManager, err := NewContainerManager(mockDockerClient, nil, config.NewDefaultMockConfigProvider(b), mockLogger)
+	require.NoError(b, err)
 	cfg := config.LanguagePoolConfig{
 		BasePoolConfig: config.BasePoolConfig{
 			MaxContainers:       10,
@@ -664,7 +655,7 @@ func BenchmarkContainerPool_GetContainer(b *testing.B) {
 			ImageName: "golang:1.21",
 		},
 	}
-	pool := newContainerPool(cfg, mockManager, mockLogger)
+	pool := newContainerPool(context.Background(), cfg, mockManager, mockLogger)
 
 	// Add a ready container
 	containerID := "benchmark-container"
@@ -700,7 +691,7 @@ func BenchmarkContainerPool_GetContainer(b *testing.B) {
 			b.Fatal("Container is nil")
 		}
 		// Return container for next iteration
-		err = pool.returnContainer(container)
+		err = pool.returnContainer(context.Background(), container)
 		assert.NoError(b, err)
 	}
 }

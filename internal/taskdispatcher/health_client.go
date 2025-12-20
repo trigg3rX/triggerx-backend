@@ -1,18 +1,19 @@
 package taskdispatcher
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // HealthClient handles communication with the health service
 type HealthClient struct {
 	client  *http.Client
-	logger  logging.Logger
+	logger  observability.Logger
 	baseURL string
 }
 
@@ -24,7 +25,7 @@ type PerformerResponse struct {
 }
 
 // NewHealthClient creates a new health client
-func NewHealthClient(logger logging.Logger, baseURL string) *HealthClient {
+func NewHealthClient(logger observability.Logger, baseURL string) *HealthClient {
 	return &HealthClient{
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -35,11 +36,11 @@ func NewHealthClient(logger logging.Logger, baseURL string) *HealthClient {
 }
 
 // GetPerformerData gets a performer using the dynamic selection system
-func (hc *HealthClient) GetPerformerData(isImua bool, isMainnet bool) (types.PerformerData, error) {
-	hc.logger.Debug("Getting performer data from health service", "is_imua", isImua)
+func (hc *HealthClient) GetPerformerData(ctx context.Context, isImua bool, isMainnet bool) (types.PerformerData, error) {
+	hc.logger.Debug(ctx, "Getting performer data from health service", observability.Bool("is_imua", isImua))
 
 	if isMainnet {
-		return types.PerformerData			{
+		return types.PerformerData{
 			OperatorID:    1002,
 			KeeperAddress: "0x235813b36eea7e48b7069821a78c0bc8384a3c79",
 			IsImua:        false,
@@ -62,7 +63,7 @@ func (hc *HealthClient) GetPerformerData(isImua bool, isMainnet bool) (types.Per
 	// pm.logger.Debug("Available performers count", "count", len(availablePerformers))
 
 	if len(availablePerformers) == 0 {
-		hc.logger.Warn("No performers available from health service, using fallback")
+		hc.logger.Warn(ctx, "No performers available from health service, using fallback")
 		fallbackPerformers := []types.PerformerData{
 			{
 				OperatorID:    2,
@@ -76,7 +77,7 @@ func (hc *HealthClient) GetPerformerData(isImua bool, isMainnet bool) (types.Per
 			},
 		}
 		availablePerformers = fallbackPerformers
-		hc.logger.Info("Using fallback performers", "count", len(availablePerformers))
+		hc.logger.Info(ctx, "Using fallback performers", observability.Int("count", len(availablePerformers)))
 	}
 
 	// Log available performers for debugging
@@ -96,22 +97,22 @@ func (hc *HealthClient) GetPerformerData(isImua bool, isMainnet bool) (types.Per
 		}
 	}
 
-	hc.logger.Debug("Filtered performers by Imua status",
-		"is_imua", isImua,
-		"total_available", len(availablePerformers),
-		"filtered_count", 1)
+	hc.logger.Debug(ctx, "Filtered performers by Imua status",
+		observability.Bool("is_imua", isImua),
+		observability.Int("total_available", len(availablePerformers)),
+		observability.Int("filtered_count", 1))
 
 	if filteredPerformer == (types.PerformerData{}) {
-		hc.logger.Error("No suitable performers available after Imua filtering",
-			"is_imua", isImua,
-			"total_available", len(availablePerformers))
+		hc.logger.Error(ctx, "No suitable performers available after Imua filtering",
+			observability.Bool("is_imua", isImua),
+			observability.Int("total_available", len(availablePerformers)))
 		return types.PerformerData{}, fmt.Errorf("no suitable performers available for isImua=%v", isImua)
 	}
 
-	hc.logger.Info("Selected performer from health service",
-		"performer_id", filteredPerformer.OperatorID,
-		"performer_address", filteredPerformer.KeeperAddress,
-		"performer_is_imua", filteredPerformer.IsImua)
+	hc.logger.Info(ctx, "Selected performer from health service",
+		observability.Int64("performer_id", filteredPerformer.OperatorID),
+		observability.String("performer_address", filteredPerformer.KeeperAddress),
+		observability.Bool("performer_is_imua", filteredPerformer.IsImua))
 
 	return filteredPerformer, nil
 }

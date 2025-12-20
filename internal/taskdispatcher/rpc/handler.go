@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TaskDispatcherHandler implements the generic RPC handler interface
 type TaskDispatcherHandler struct {
-	logger     logging.Logger
+	logger     observability.Logger
 	dispatcher TaskDispatcherInterface
 }
 
@@ -23,7 +23,7 @@ type TaskDispatcherInterface interface {
 }
 
 // NewTaskDispatcherHandler creates a new RPC handler
-func NewTaskDispatcherHandler(logger logging.Logger, dispatcher TaskDispatcherInterface) *TaskDispatcherHandler {
+func NewTaskDispatcherHandler(logger observability.Logger, dispatcher TaskDispatcherInterface) *TaskDispatcherHandler {
 	return &TaskDispatcherHandler{
 		logger:     logger,
 		dispatcher: dispatcher,

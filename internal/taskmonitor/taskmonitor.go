@@ -16,7 +16,7 @@ import (
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -27,7 +27,7 @@ const (
 
 // TaskManager orchestrates all Redis-based task management components
 type TaskManager struct {
-	logger              logging.Logger
+	logger              observability.Logger
 	redisClient         *redisClient.Client
 	taskStreamManager   *tasks.TaskStreamManager
 	eventListener       *events.ContractEventListener
@@ -44,18 +44,18 @@ type TaskManager struct {
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
-	logger.Info("Initializing TaskManager...")
+func NewTaskManager(ctx context.Context, logger observability.Logger) (*TaskManager, error) {
+	logger.Info(ctx, "Initializing TaskManager...")
 
 	// Create context for managing background workers
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create Redis client with monitoring
 	redisConfig := config.GetRedisClientConfig()
-	client, err := redisClient.NewRedisClient(logger, redisConfig)
+	client, err := redisClient.NewRedisClient(ctx, logger, redisConfig)
 	if err != nil {
 		cancel() // Clean up context on error
-		logger.Error("Failed to create Redis client for TaskManager", "error", err)
+		logger.Error(ctx, "Failed to create Redis client for TaskManager", observability.Error(err))
 		metrics.ServiceStatus.WithLabelValues("task_manager").Set(0)
 		return nil, fmt.Errorf("failed to create redis client: %w", err)
 	}
@@ -85,21 +85,21 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 
 	// Initialize IPFS client
 	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())
-	ipfsClient, err := ipfs.NewClient(ipfsCfg, logger)
+	ipfsClient, err := ipfs.NewClient(ipfsCfg)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to initialize IPFS client: %w", err)
 	}
 
 	// Initialize task stream manager
-	taskStreamManager, err := tasks.NewTaskStreamManager(client, databaseClient, logger)
+	taskStreamManager, err := tasks.NewTaskStreamManager(ctx, client, databaseClient, logger)
 	if err != nil {
 		// Clean up resources on error
 		cancel()
 		if closeErr := client.Close(); closeErr != nil {
-			logger.Error("Failed to close Redis client during error cleanup", "error", closeErr)
+			logger.Error(ctx, "Failed to close Redis client during error cleanup", observability.Error(closeErr))
 		}
-		logger.Error("Failed to create TaskStreamManager", "error", err)
+		logger.Error(ctx, "Failed to create TaskStreamManager", observability.Error(err))
 		return nil, fmt.Errorf("failed to create task stream manager: %w", err)
 	}
 
@@ -120,8 +120,8 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 		dbClient:            databaseClient,
 	}
 
-	logger.Info("TaskManager initialized successfully",
-		"metrics_update_interval", config.GetMetricsUpdateInterval())
+	logger.Info(ctx, "TaskManager initialized successfully",
+		observability.Duration("metrics_update_interval", config.GetMetricsUpdateInterval()))
 
 	metrics.ServiceStatus.WithLabelValues("task_manager").Set(1)
 	return tm, nil
@@ -129,22 +129,22 @@ func NewTaskManager(logger logging.Logger) (*TaskManager, error) {
 
 // Initialize initializes all stream managers and starts background workers
 func (tm *TaskManager) Initialize() error {
-	tm.logger.Info("Initializing TaskManager components...")
+	tm.logger.Info(tm.ctx, "Initializing TaskManager components...")
 
 	// Initialize task streams
-	if err := tm.taskStreamManager.Initialize(); err != nil {
+	if err := tm.taskStreamManager.Initialize(tm.ctx); err != nil {
 		return fmt.Errorf("failed to initialize task stream manager: %w", err)
 	}
 
 	// Start event listener
-	if err := tm.eventListener.Start(); err != nil {
-		tm.logger.Errorf("Failed to start event listener: %v", err)
-		tm.logger.Info("Falling back to polling mode")
+	if err := tm.eventListener.Start(tm.ctx); err != nil {
+		tm.logger.Error(tm.ctx, "Failed to start event listener", observability.Error(err))
+		tm.logger.Info(tm.ctx, "Falling back to polling mode")
 	}
 
-	if err := tm.testEventListener.Start(); err != nil {
-		tm.logger.Errorf("Failed to start test event listener: %v", err)
-		tm.logger.Info("Falling back to polling mode")
+	if err := tm.testEventListener.Start(tm.ctx); err != nil {
+		tm.logger.Error(tm.ctx, "Failed to start test event listener", observability.Error(err))
+		tm.logger.Info(tm.ctx, "Falling back to polling mode")
 	}
 
 	// Start background workers with proper synchronization
@@ -160,7 +160,7 @@ func (tm *TaskManager) Initialize() error {
 		tm.taskStreamManager.StartTimeoutWorker(tm.ctx)
 	}()
 
-	tm.logger.Info("TaskManager initialization completed successfully")
+	tm.logger.Info(tm.ctx, "TaskManager initialization completed successfully")
 	return nil
 }
 
@@ -168,21 +168,21 @@ func (tm *TaskManager) Initialize() error {
 // This is called after the aggregator submission attempt (regardless of success or failure)
 // ProofCID contains all execution data (task data, action data, proof, signatures)
 func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error) {
-	tm.logger.Info("Received task status report",
-		"task_id", req.TaskID,
-		"keeper_address", req.KeeperAddress,
-		"execution_successful", req.ExecutionSuccessful,
-		"aggregator_submitted", req.AggregatorSubmitted,
-		"execution_tx_hash", req.ExecutionTxHash,
-		"proof_cid", req.ProofCID,
-		"error", req.Error)
+	tm.logger.Info(ctx, "Received task status report",
+		observability.Int64("task_id", req.TaskID),
+		observability.String("keeper_address", req.KeeperAddress),
+		observability.Bool("execution_successful", req.ExecutionSuccessful),
+		observability.Bool("aggregator_submitted", req.AggregatorSubmitted),
+		observability.String("execution_tx_hash", req.ExecutionTxHash),
+		observability.String("proof_cid", req.ProofCID),
+		observability.String("error", req.Error))
 
 	// Case 1: Task failed (execution failed or aggregator submission failed)
 	if !req.ExecutionSuccessful || !req.AggregatorSubmitted {
-		if err := tm.dbClient.UpdateTaskAggregatorFailed(req.TaskID, req.Error, req.ExecutionTxHash, req.ProofCID); err != nil {
-			tm.logger.Error("Failed to update task failure in database",
-				"task_id", req.TaskID,
-				"error", err)
+		if err := tm.dbClient.UpdateTaskAggregatorFailed(ctx, req.TaskID, req.Error, req.ExecutionTxHash, req.ProofCID); err != nil {
+			tm.logger.Error(ctx, "Failed to update task failure in database",
+				observability.Int64("task_id", req.TaskID),
+				observability.Error(err))
 			return &types.ReportTaskStatusResponse{
 				Success: false,
 				Message: fmt.Sprintf("failed to update task failure: %v", err),
@@ -192,13 +192,13 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		// Move task to failed stream
 		_ = tm.taskStreamManager.MarkTaskFailed(ctx, req.TaskID, req.Error)
 
-		tm.logger.Info("Task failure recorded",
-			"task_id", req.TaskID,
-			"keeper_address", req.KeeperAddress,
-			"execution_successful", req.ExecutionSuccessful,
-			"aggregator_submitted", req.AggregatorSubmitted,
-			"execution_tx_hash", req.ExecutionTxHash,
-			"error", req.Error)
+		tm.logger.Info(ctx, "Task failure recorded",
+			observability.Int64("task_id", req.TaskID),
+			observability.String("keeper_address", req.KeeperAddress),
+			observability.Bool("execution_successful", req.ExecutionSuccessful),
+			observability.Bool("aggregator_submitted", req.AggregatorSubmitted),
+			observability.String("execution_tx_hash", req.ExecutionTxHash),
+			observability.String("error", req.Error))
 
 		return &types.ReportTaskStatusResponse{
 			Success: true,
@@ -208,21 +208,21 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 
 	// Case 2: Task succeeded (both execution and aggregator submission succeeded)
 	// Update task status to pending confirmation (waiting for on-chain event)
-	if err := tm.dbClient.UpdateTaskAggregatorSubmitted(req.TaskID, req.ExecutionTxHash, req.ProofCID); err != nil {
-		tm.logger.Error("Failed to update task success in database",
-			"task_id", req.TaskID,
-			"error", err)
+	if err := tm.dbClient.UpdateTaskAggregatorSubmitted(ctx, req.TaskID, req.ExecutionTxHash, req.ProofCID); err != nil {
+		tm.logger.Error(ctx, "Failed to update task success in database",
+			observability.Int64("task_id", req.TaskID),
+			observability.Error(err))
 		return &types.ReportTaskStatusResponse{
 			Success: false,
 			Message: fmt.Sprintf("failed to update task success: %v", err),
 		}, nil
 	}
 
-	tm.logger.Info("Task success recorded, pending on-chain confirmation",
-		"task_id", req.TaskID,
-		"keeper_address", req.KeeperAddress,
-		"execution_tx_hash", req.ExecutionTxHash,
-		"proof_cid", req.ProofCID)
+	tm.logger.Info(ctx, "Task success recorded, pending on-chain confirmation",
+		observability.Int64("task_id", req.TaskID),
+		observability.String("keeper_address", req.KeeperAddress),
+		observability.String("execution_tx_hash", req.ExecutionTxHash),
+		observability.String("proof_cid", req.ProofCID))
 
 	return &types.ReportTaskStatusResponse{
 		Success: true,
@@ -239,12 +239,12 @@ func (tm *TaskManager) SetRPCServer(server interface {
 
 // startMetricsUpdateWorker periodically updates metrics from Redis client
 func (tm *TaskManager) startMetricsUpdateWorker() {
-	tm.logger.Info("Starting metrics update worker")
+	tm.logger.Info(tm.ctx, "Starting metrics update worker")
 
 	for {
 		select {
 		case <-tm.ctx.Done():
-			tm.logger.Info("Metrics update worker stopping")
+			tm.logger.Info(tm.ctx, "Metrics update worker stopping")
 			return
 		case <-tm.metricsUpdateTicker.C:
 			tm.updateMetrics()
@@ -256,7 +256,7 @@ func (tm *TaskManager) startMetricsUpdateWorker() {
 func (tm *TaskManager) updateMetrics() {
 	defer func() {
 		if r := recover(); r != nil {
-			tm.logger.Error("Panic in metrics update", "panic", r)
+			tm.logger.Error(tm.ctx, "Panic in metrics update", observability.Any("panic", r))
 		}
 	}()
 
@@ -265,7 +265,7 @@ func (tm *TaskManager) updateMetrics() {
 	metrics.UpdateRedisClientMetrics(operationMetrics)
 
 	// Update stream length metrics
-	taskStreamInfo := tm.taskStreamManager.GetStreamInfo()
+	taskStreamInfo := tm.taskStreamManager.GetStreamInfo(tm.ctx)
 	if lengths, ok := taskStreamInfo["stream_lengths"].(map[string]int64); ok {
 		for stream, length := range lengths {
 			switch stream {
@@ -297,7 +297,7 @@ func (tm *TaskManager) GetTaskStreamManager() *tasks.TaskStreamManager {
 
 // HealthCheck performs a comprehensive health check
 func (tm *TaskManager) HealthCheck() map[string]interface{} {
-	tm.logger.Debug("Performing TaskManager health check")
+	tm.logger.Debug(tm.ctx, "Performing TaskManager health check")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -321,7 +321,7 @@ func (tm *TaskManager) HealthCheck() map[string]interface{} {
 
 	// Get stream information
 	if tm.taskStreamManager != nil {
-		healthStatus["task_streams"] = tm.taskStreamManager.GetStreamInfo()
+		healthStatus["task_streams"] = tm.taskStreamManager.GetStreamInfo(tm.ctx)
 	}
 
 	return healthStatus
@@ -329,7 +329,7 @@ func (tm *TaskManager) HealthCheck() map[string]interface{} {
 
 // Close gracefully shuts down the TaskManager
 func (tm *TaskManager) Close() error {
-	tm.logger.Info("Closing TaskManager...")
+	tm.logger.Info(tm.ctx, "Closing TaskManager...")
 
 	// Cancel context to stop all workers
 	if tm.cancel != nil {
@@ -348,18 +348,18 @@ func (tm *TaskManager) Close() error {
 
 	select {
 	case <-shutdownDone:
-		tm.logger.Info("All background workers stopped successfully")
+		tm.logger.Info(tm.ctx, "All background workers stopped successfully")
 	case <-shutdownCtx.Done():
-		tm.logger.Warn("Timeout waiting for background workers to stop")
+		tm.logger.Warn(tm.ctx, "Timeout waiting for background workers to stop")
 	}
 
 	// Stop event listener
-	if err := tm.eventListener.Stop(); err != nil {
-		tm.logger.Errorf("Error stopping event listener: %v", err)
+	if err := tm.eventListener.Stop(tm.ctx); err != nil {
+		tm.logger.Error(tm.ctx, "Error stopping event listener", observability.Error(err))
 	}
 
-	if err := tm.testEventListener.Stop(); err != nil {
-		tm.logger.Errorf("Error stopping test event listener: %v", err)
+	if err := tm.testEventListener.Stop(tm.ctx); err != nil {
+		tm.logger.Error(tm.ctx, "Error stopping test event listener", observability.Error(err))
 	}
 
 	// Stop metrics ticker
@@ -371,8 +371,8 @@ func (tm *TaskManager) Close() error {
 	var errors []error
 
 	if tm.taskStreamManager != nil {
-		if err := tm.taskStreamManager.Close(); err != nil {
-			tm.logger.Error("Failed to close TaskStreamManager", "error", err)
+		if err := tm.taskStreamManager.Close(tm.ctx); err != nil {
+			tm.logger.Error(tm.ctx, "Failed to close TaskStreamManager", observability.Error(err))
 			errors = append(errors, fmt.Errorf("task stream manager: %w", err))
 		}
 		// TaskStreamManager handles Redis client closure, so we don't need to close it again
@@ -381,7 +381,7 @@ func (tm *TaskManager) Close() error {
 		// Only close Redis client if TaskStreamManager is nil
 		if tm.redisClient != nil {
 			if err := tm.redisClient.Close(); err != nil {
-				tm.logger.Error("Failed to close Redis client", "error", err)
+				tm.logger.Error(tm.ctx, "Failed to close Redis client", observability.Error(err))
 				errors = append(errors, fmt.Errorf("redis client: %w", err))
 			}
 		}
@@ -390,13 +390,13 @@ func (tm *TaskManager) Close() error {
 	metrics.ServiceStatus.WithLabelValues("task_manager").Set(0)
 
 	if len(errors) > 0 {
-		tm.logger.Warn("Some non-critical errors occurred during shutdown", "error_count", len(errors))
+		tm.logger.Warn(tm.ctx, "Some non-critical errors occurred during shutdown", observability.Int("error_count", len(errors)))
 		for i, err := range errors {
-			tm.logger.Debug("Shutdown error", "index", i, "error", err)
+			tm.logger.Debug(tm.ctx, "Shutdown error", observability.Int("index", i), observability.Error(err))
 		}
 		// Don't return error for cleanup issues - shutdown was successful
 	}
 
-	tm.logger.Info("TaskManager closed successfully")
+	tm.logger.Info(tm.ctx, "TaskManager closed successfully")
 	return nil
 }

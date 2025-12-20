@@ -7,14 +7,14 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TaskDispatcher encapsulates dependencies for handling scheduler submissions
 // and forwarding them to the aggregator.
 type TaskDispatcher struct {
-	logger            logging.Logger
+	logger            observability.Logger
 	taskStreamManager *tasks.TaskStreamManager
 	healthClient      *HealthClient
 	signingKey        string
@@ -23,7 +23,7 @@ type TaskDispatcher struct {
 
 // NewTaskDispatcher constructs a new dispatcher with an initialized aggregator client.
 func NewTaskDispatcher(
-	logger logging.Logger,
+	logger observability.Logger,
 	taskStreamManager *tasks.TaskStreamManager,
 	healthClient *HealthClient,
 	signingKey string,
@@ -56,20 +56,20 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	}
 
 	taskCount := len(req.SendTaskDataToKeeper.TaskID)
-	d.logger.Info("Receiving task from scheduler",
-		"task_ids", req.SendTaskDataToKeeper.TaskID,
-		"task_count", taskCount,
-		"scheduler_id", req.SendTaskDataToKeeper.SchedulerID,
-		"source", req.Source)
-	
+	d.logger.Info(ctx, "Receiving task from scheduler",
+		observability.Int64("task_ids", req.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int("task_count", taskCount),
+		observability.Int("scheduler_id", req.SendTaskDataToKeeper.SchedulerID),
+		observability.String("source", req.Source))
+
 	isMainnet := req.SendTaskDataToKeeper.TargetData[0].TargetChainID == "42161"
 
 	// Use dynamic performer selection instead of hardcoded selection
-	performer, err := d.healthClient.GetPerformerData(req.SendTaskDataToKeeper.TargetData[0].IsImua, isMainnet)
+	performer, err := d.healthClient.GetPerformerData(ctx, req.SendTaskDataToKeeper.TargetData[0].IsImua, isMainnet)
 	if err != nil {
-		d.logger.Error("Failed to get performer data dynamically",
-			"task_id", req.SendTaskDataToKeeper.TaskID[0],
-			"error", err)
+		d.logger.Error(ctx, "Failed to get performer data dynamically",
+			observability.Int64("task_id", req.SendTaskDataToKeeper.TaskID[0]),
+			observability.Error(err))
 		return nil, fmt.Errorf("failed to get performer: %w", err)
 	}
 	// Update task with performer information
@@ -78,9 +78,9 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	// Sign the task data with improved error handling
 	signature, err := cryptography.SignJSONMessage(req.SendTaskDataToKeeper, d.signingKey)
 	if err != nil {
-		d.logger.Error("Failed to sign batch task data",
-			"task_id", req.SendTaskDataToKeeper.TaskID[0],
-			"error", err)
+		d.logger.Error(ctx, "Failed to sign batch task data",
+			observability.Int64("task_id", req.SendTaskDataToKeeper.TaskID[0]),
+			observability.Error(err))
 		return nil, fmt.Errorf("failed to sign task data: %w", err)
 	}
 	req.SendTaskDataToKeeper.ManagerSignature = signature
@@ -88,7 +88,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	// Handle batch requests by creating individual task stream data for each task
 	if taskCount > 1 {
 		// This is a batch request (likely from time scheduler)
-		d.logger.Info("Processing batch request", "task_count", taskCount)
+		d.logger.Info(ctx, "Processing batch request", observability.Int("task_count", taskCount))
 
 		for i := 0; i < taskCount; i++ {
 			// Create individual task data for each task in the batch
@@ -113,18 +113,18 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 			// Add individual task to batch processor
 			_, err := d.taskStreamManager.AddTaskToDispatchedStream(ctx, taskStreamData)
 			if err != nil {
-				d.logger.Error("Failed to add individual task to batch processor",
-					"task_id", individualTaskData.TaskID[0],
-					"batch_index", i,
-					"source", req.Source,
-					"error", err)
+				d.logger.Error(ctx, "Failed to add individual task to batch processor",
+					observability.Int64("task_id", individualTaskData.TaskID[0]),
+					observability.Int("batch_index", i),
+					observability.String("source", req.Source),
+					observability.Error(err))
 				// Continue processing other tasks in the batch
 				continue
 			}
 
-			d.logger.Debug("Individual task added to batch processor",
-				"task_id", individualTaskData.TaskID[0],
-				"batch_index", i)
+			d.logger.Debug(ctx, "Individual task added to batch processor",
+				observability.Int64("task_id", individualTaskData.TaskID[0]),
+				observability.Int("batch_index", i))
 		}
 	} else {
 		// This is a single task request (likely from condition scheduler)
@@ -140,15 +140,15 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 		// Add task to batch processor for improved performance
 		_, err := d.taskStreamManager.AddTaskToDispatchedStream(ctx, taskStreamData)
 		if err != nil {
-			d.logger.Error("Failed to add task to batch processor",
-				"task_id", req.SendTaskDataToKeeper.TaskID[0],
-				"source", req.Source,
-				"error", err)
+			d.logger.Error(ctx, "Failed to add task to batch processor",
+				observability.Int64("task_id", req.SendTaskDataToKeeper.TaskID[0]),
+				observability.String("source", req.Source),
+				observability.Error(err))
 			return nil, fmt.Errorf("failed to add task to batch processor: %w", err)
 		}
 	}
 
-	d.logger.Info("[Dispatcher] Task forwarded to performer", "task_id", req.SendTaskDataToKeeper.TaskID[0])
+	d.logger.Info(ctx, "Task forwarded to performer", observability.Int64("task_id", req.SendTaskDataToKeeper.TaskID[0]))
 	return &types.TaskManagerAPIResponse{
 		Success:   true,
 		TaskID:    []int64{req.SendTaskDataToKeeper.TaskID[0]},
@@ -157,6 +157,6 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	}, nil
 }
 
-func (d *TaskDispatcher) Close() error {
-	return d.taskStreamManager.Close()
+func (d *TaskDispatcher) Close(ctx context.Context) error {
+	return d.taskStreamManager.Close(ctx)
 }

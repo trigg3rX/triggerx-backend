@@ -18,7 +18,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/scripts"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Events when containers are created, started, stopped, error, etc.
@@ -34,7 +34,7 @@ type containerManager struct {
 	dockerClient docker.DockerClientAPI
 	fileSystem   fs.FileSystemAPI
 	config       config.ConfigProviderInterface
-	logger       logging.Logger
+	logger       observability.Logger
 	pools        map[types.Language]poolAPI
 	mutex        sync.RWMutex
 	initialized  bool
@@ -49,7 +49,7 @@ func NewContainerManager(
 	dockerClient docker.DockerClientAPI,
 	fileSystem fs.FileSystemAPI,
 	cfg config.ConfigProviderInterface,
-	logger logging.Logger,
+	logger observability.Logger,
 ) (*containerManager, error) {
 	manager := &containerManager{
 		dockerClient: dockerClient,
@@ -86,7 +86,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 	}
 	m.mutex.Unlock()
 
-	m.logger.Info("Initializing language-specific container pools")
+	m.logger.Info(ctx, "Initializing language-specific container pools")
 
 	// Use goroutines and WaitGroup for parallel initialization
 	var wg sync.WaitGroup
@@ -97,7 +97,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 	for _, lang := range languages {
 		poolConfig, exists := m.config.GetLanguagePoolConfig(lang)
 		if !exists {
-			m.logger.Warnf("No configuration found for language %s, skipping", lang)
+			m.logger.Warn(ctx, "No configuration found for language, skipping", observability.String("language", string(lang)))
 			continue
 		}
 
@@ -107,10 +107,10 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 
 			// Create adapter for the pool
 			poolAdapter := NewContainerManagerAdapter(m)
-			pool := newContainerPool(config, poolAdapter, m.logger)
+			pool := newContainerPool(ctx, config, poolAdapter, m.logger)
 
 			if err := pool.initialize(ctx); err != nil {
-				m.logger.Warnf("Failed to initialize pool for language %s: %v", language, err)
+				m.logger.Warn(ctx, "Failed to initialize pool for language", observability.String("language", string(language)), observability.Error(err))
 				errors <- fmt.Errorf("failed to initialize pool for language %s: %w", language, err)
 				return
 			}
@@ -124,7 +124,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 			m.pools[language] = pool
 			m.mutex.Unlock()
 
-			m.logger.Infof("Initialized pool for language: %s", language)
+			m.logger.Info(ctx, "Initialized pool for language", observability.String("language", string(language)))
 		}(lang, poolConfig)
 	}
 
@@ -134,11 +134,11 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 
 	// Check for any errors
 	for err := range errors {
-		m.logger.Warnf("Pool initialization error: %v", err)
+		m.logger.Warn(ctx, "Pool initialization error", observability.Error(err))
 	}
 
 	m.initialized = true
-	m.logger.Infof("Language-specific container pools initialized with %d pools", successCount)
+	m.logger.Info(ctx, "Language-specific container pools initialized with %d pools", observability.Int("success_count", successCount))
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (m *containerManager) GetContainer(ctx context.Context, language types.Lang
 }
 
 // ReturnContainer returns a container to its language-specific pool
-func (m *containerManager) ReturnContainer(container *types.PooledContainer) error {
+func (m *containerManager) ReturnContainer(ctx context.Context, container *types.PooledContainer) error {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
@@ -178,7 +178,7 @@ func (m *containerManager) ReturnContainer(container *types.PooledContainer) err
 		return fmt.Errorf("no pool available for language: %s", container.Language)
 	}
 
-	return pool.returnContainer(container)
+	return pool.returnContainer(ctx, container)
 }
 
 // GetPoolStats returns statistics for all language pools
@@ -249,46 +249,46 @@ func (m *containerManager) IsLanguageSupported(language types.Language) bool {
 
 // MarkContainerAsFailed marks a container as failed and removes it from the pool
 // This should be called when a container fails during command execution
-func (m *containerManager) MarkContainerAsFailed(containerID string, language types.Language, err error) {
+func (m *containerManager) MarkContainerAsFailed(ctx context.Context, containerID string, language types.Language, err error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
 	if !m.initialized {
-		m.logger.Warnf("Docker manager not initialized, cannot mark container as failed")
+		m.logger.Warn(ctx, "Docker manager not initialized, cannot mark container as failed")
 		return
 	}
 
 	pool, exists := m.pools[language]
 	if !exists {
-		m.logger.Warnf("No pool available for language: %s, cannot mark container as failed", language)
+		m.logger.Warn(ctx, "No pool available for language, cannot mark container as failed", observability.String("language", string(language)))
 		return
 	}
 
-	pool.markContainerAsFailed(containerID, err)
+	pool.markContainerAsFailed(ctx, containerID, err)
 }
 
 // ExecuteInContainerWithLanguage executes code in a container using language-specific setup
 func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
-	m.logger.Infof("Executing file %s in container %s with language %s", filePath, containerID, language)
+	m.logger.Info(ctx, "Executing file in container with language", observability.String("file_path", filePath), observability.String("container_id", containerID), observability.String("language", string(language)))
 
 	// Verify container is running before execution
 	inspect, err := m.dockerClient.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to inspect container before execution: %w", err)
 	}
-	m.logger.Debugf("Container %s state: %s, running: %v", containerID, inspect.State.Status, inspect.State.Running)
+	m.logger.Debug(ctx, "Container state", observability.String("container_id", containerID), observability.String("status", inspect.State.Status), observability.Bool("running", inspect.State.Running))
 
 	if !inspect.State.Running {
 		return nil, "", fmt.Errorf("container %s is not running (status: %s)", containerID, inspect.State.Status)
 	}
 
 	// Execute the code with combined file copy and execution
-	m.logger.Debugf("Starting combined file copy and code execution in container %s", containerID)
+	m.logger.Debug(ctx, "Starting combined file copy and code execution in container", observability.String("container_id", containerID))
 	result, execID, err := m.executeCodeWithFileCopy(ctx, containerID, filePath, language)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to execute code: %w", err)
 	}
-	m.logger.Debugf("Code execution completed for container %s", containerID)
+	m.logger.Debug(ctx, "Code execution completed for container", observability.String("container_id", containerID))
 
 	return result, execID, nil
 }
@@ -299,12 +299,12 @@ func (m *containerManager) PullImage(ctx context.Context, imageName string) erro
 	// Check if image already exists locally
 	images, err := m.dockerClient.ImageList(ctx, image.ListOptions{})
 	if err != nil {
-		m.logger.Warnf("Failed to list images: %v", err)
+		m.logger.Warn(ctx, "Failed to list images", observability.Error(err))
 	} else {
 		for _, img := range images {
 			for _, tag := range img.RepoTags {
 				if tag == imageName || tag == imageName+":latest" {
-					m.logger.Debugf("Image %s already exists locally, skipping pull", imageName)
+					m.logger.Debug(ctx, "Image already exists locally, skipping pull", observability.String("image_name", imageName))
 					return nil
 				}
 			}
@@ -314,20 +314,20 @@ func (m *containerManager) PullImage(ctx context.Context, imageName string) erro
 	// Image doesn't exist locally, pull it
 	reader, err := m.dockerClient.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
-		m.logger.Errorf("Failed to pull image: %v", err)
+		m.logger.Error(ctx, "Failed to pull image", observability.Error(err))
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 	defer func() {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Errorf("Failed to close image pull reader: %v", err)
+			m.logger.Error(ctx, "Failed to close image pull reader", observability.Error(err))
 		}
 	}()
 
 	// Read the output to ensure the pull completes
 	buf := new(bytes.Buffer)
 	if _, err := io.Copy(buf, reader); err != nil {
-		m.logger.Errorf("Error reading image pull response: %v", err)
+		m.logger.Error(ctx, "Error reading image pull response", observability.Error(err))
 		return fmt.Errorf("error reading image pull response: %w", err)
 	}
 
@@ -339,17 +339,17 @@ func (m *containerManager) PullImage(ctx context.Context, imageName string) erro
 	}
 	for _, line := range lines {
 		if line != "" {
-			m.logger.Debugf("Pull output: %s", line)
+			m.logger.Debug(ctx, "Pull output", observability.String("line", line))
 		}
 	}
 
-	m.logger.Infof("Successfully pulled image: %s", imageName)
+	m.logger.Info(ctx, "Successfully pulled image", observability.String("image_name", imageName))
 	return nil
 }
 
 func (m *containerManager) CleanupContainer(ctx context.Context, containerID string) error {
 	if !m.config.GetManagerConfig().AutoCleanup {
-		m.logger.Infof("auto cleanup is disabled, skipping container cleanup")
+		m.logger.Info(ctx, "auto cleanup is disabled, skipping container cleanup")
 		return nil
 	}
 
@@ -360,37 +360,37 @@ func (m *containerManager) CleanupContainer(ctx context.Context, containerID str
 // Since Docker doesn't provide a direct API to kill exec processes,
 // we rely on context cancellation and container signaling
 func (m *containerManager) KillExecProcess(ctx context.Context, execID string) error {
-	m.logger.Infof("Attempting to terminate exec process %s", execID)
+	m.logger.Info(ctx, "Attempting to terminate exec process", observability.String("exec_id", execID))
 
 	// First, check if the exec process is still running
 	inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execID)
 	if err != nil {
-		m.logger.Warnf("Failed to inspect exec process %s: %v", execID, err)
+		m.logger.Warn(ctx, "Failed to inspect exec process", observability.String("exec_id", execID), observability.Error(err))
 		return fmt.Errorf("failed to inspect exec process: %w", err)
 	}
 
 	if !inspectResp.Running {
-		m.logger.Infof("Exec process %s is already terminated", execID)
+		m.logger.Info(ctx, "Exec process is already terminated", observability.String("exec_id", execID))
 		return nil
 	}
 
 	// Since Docker doesn't provide a direct API to kill exec processes,
 	// we can try to signal the container to terminate the process
 	// This is a best-effort approach
-	m.logger.Infof("Exec process %s is still running. Attempting to signal container %s", execID, inspectResp.ContainerID)
+	m.logger.Info(ctx, "Exec process is still running. Attempting to signal container", observability.String("exec_id", execID), observability.String("container_id", inspectResp.ContainerID))
 
 	// Try to send a signal to the container (this might help terminate the exec process)
 	// Note: This is not guaranteed to work for all exec processes
 	if inspectResp.ContainerID != "" {
 		// Send SIGTERM to the container as a best-effort approach
 		// This might help terminate the exec process
-		m.logger.Debugf("Sending SIGTERM to container %s to help terminate exec process", inspectResp.ContainerID)
+		m.logger.Debug(ctx, "Sending SIGTERM to container to help terminate exec process", observability.String("container_id", inspectResp.ContainerID))
 		// Note: We don't actually call ContainerKill here as it would kill the entire container
 		// Instead, we rely on context cancellation and let the Docker daemon handle cleanup
 	}
 
-	m.logger.Infof("Exec process %s termination initiated. The process will terminate when the context is cancelled "+
-		"or when the Docker daemon handles the cleanup.", execID)
+	m.logger.Info(ctx, "Exec process termination initiated. The process will terminate when the context is cancelled "+
+		"or when the Docker daemon handles the cleanup.", observability.String("exec_id", execID))
 
 	return nil
 }
@@ -433,7 +433,7 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 	if result.Success {
 		resultContent, err := m.readResultFile(ctx, containerID)
 		if err != nil {
-			m.logger.Warnf("Failed to read result file from container %s: %v", containerID, err)
+			m.logger.Warn(ctx, "Failed to read result file from container", observability.String("container_id", containerID), observability.Error(err))
 			// Fall back to stdout/stderr output
 			result.Output = outputBuffer.String()
 		} else {
@@ -448,7 +448,7 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 	// Step 4: Run cleanup script asynchronously (don't wait for it)
 	go func() {
 		if err := m.runCleanupScript(context.Background(), containerID, language); err != nil {
-			m.logger.Warnf("Failed to run cleanup script for container %s: %v", containerID, err)
+			m.logger.Warn(ctx, "Failed to run cleanup script for container", observability.String("container_id", containerID), observability.Error(err))
 		}
 	}()
 
@@ -463,7 +463,7 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 
 // runSetupScript runs the setup script for warming up caches and preparing the environment
 func (m *containerManager) runSetupScript(ctx context.Context, containerID string, language types.Language) error {
-	m.logger.Debugf("Running setup script for container %s", containerID)
+	m.logger.Debug(ctx, "Running setup script for container", observability.String("container_id", containerID))
 
 	setupScript := scripts.GetSetupScript(language)
 	execConfig := container.ExecOptions{
@@ -517,7 +517,7 @@ func (m *containerManager) runSetupScript(ctx context.Context, containerID strin
 
 // runExecutionScript runs the actual code execution with precise timing
 func (m *containerManager) runExecutionScript(ctx context.Context, containerID string, language types.Language, outputBuffer *bytes.Buffer) (string, error) {
-	m.logger.Debugf("Running execution script for container %s", containerID)
+	m.logger.Debug(ctx, "Running execution script for container", observability.String("container_id", containerID))
 
 	executionScript := scripts.GetExecutionScript(language)
 	execConfig := container.ExecOptions{
@@ -589,7 +589,7 @@ func (m *containerManager) runExecutionScript(ctx context.Context, containerID s
 		return "", fmt.Errorf("execution failed with exit code: %d", exitCode)
 	}
 
-	m.logger.Debugf("Execution script completed for container %s", containerID)
+	m.logger.Debug(ctx, "Execution script completed for container", observability.String("container_id", containerID))
 	return execResp.ID, nil
 }
 
@@ -626,7 +626,7 @@ func (m *containerManager) checkExecutionComplete(ctx context.Context, container
 
 // readResultFile reads the result.json file from the container
 func (m *containerManager) readResultFile(ctx context.Context, containerID string) (string, error) {
-	m.logger.Debugf("Reading result file from container %s", containerID)
+	m.logger.Debug(ctx, "Reading result file from container", observability.String("container_id", containerID))
 
 	// Copy result.json from container to host
 	reader, _, err := m.dockerClient.CopyFromContainer(ctx, containerID, "/code/result.json")
@@ -636,7 +636,7 @@ func (m *containerManager) readResultFile(ctx context.Context, containerID strin
 	defer func() {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Warnf("Failed to close reader: %v", err)
+			m.logger.Warn(ctx, "Failed to close reader", observability.Error(err))
 		}
 	}()
 
@@ -665,7 +665,7 @@ func (m *containerManager) readResultFile(ctx context.Context, containerID strin
 
 // runCleanupScript runs the cleanup script asynchronously
 func (m *containerManager) runCleanupScript(ctx context.Context, containerID string, language types.Language) error {
-	m.logger.Debugf("Running cleanup script for container %s", containerID)
+	m.logger.Debug(ctx, "Running cleanup script for container", observability.String("container_id", containerID))
 
 	cleanupScript := scripts.GetCleanupScript(language)
 	execConfig := container.ExecOptions{
@@ -685,7 +685,7 @@ func (m *containerManager) runCleanupScript(ctx context.Context, containerID str
 	}
 
 	// Don't wait for cleanup to complete - it's asynchronous
-	m.logger.Debugf("Cleanup script started for container %s", containerID)
+	m.logger.Debug(ctx, "Cleanup script started for container", observability.String("container_id", containerID))
 	return nil
 }
 
@@ -790,10 +790,10 @@ func (m *containerManager) Close(ctx context.Context) error {
 	// Close all language pools
 	for lang, pool := range m.pools {
 		if err := pool.close(ctx); err != nil {
-			m.logger.Warnf("Failed to close pool for language %s: %v", lang, err)
+			m.logger.Warn(ctx, "Failed to close pool for language", observability.String("language", string(lang)), observability.Error(err))
 		}
 	}
 
-	m.logger.Info("Docker manager closed")
+	m.logger.Info(ctx, "Docker manager closed")
 	return nil
 }

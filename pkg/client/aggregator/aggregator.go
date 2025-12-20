@@ -11,13 +11,13 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
 // AggregatorClient handles communication with the aggregator service
 type AggregatorClient struct {
-	logger     logging.Logger
+	logger     observability.Logger
 	config     AggregatorClientConfig
 	privateKey *ecdsa.PrivateKey
 	publicKey  *ecdsa.PublicKey
@@ -26,7 +26,7 @@ type AggregatorClient struct {
 }
 
 // NewAggregatorClient creates a new instance of AggregatorClient
-func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*AggregatorClient, error) {
+func NewAggregatorClient(logger observability.Logger, cfg AggregatorClientConfig) (*AggregatorClient, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
@@ -50,7 +50,7 @@ func NewAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*Ag
 	// Create retry client with configuration
 	retryConfig := httppkg.DefaultHTTPRetryConfig()
 
-	httpClient, err := httppkg.NewHTTPClient(retryConfig, logger)
+	httpClient, err := httppkg.NewHTTPClient(retryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
@@ -114,8 +114,7 @@ func (c *AggregatorClient) executeWithRetry(ctx context.Context, method string, 
 		MaxDelay:        c.httpClient.HTTPConfig.RetryConfig.MaxDelay,
 		BackoffFactor:   2.0,
 		JitterFactor:    0.1,
-		LogRetryAttempt: true,
-	}, c.logger)
+	})
 
 	return err
 }

@@ -44,7 +44,11 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize observability: %v", err))
 	}
-	defer obs.Shutdown(context.Background())
+	defer func() {
+		if err := obs.Shutdown(context.Background()); err != nil {
+			panic(fmt.Sprintf("Failed to shutdown observability: %v", err))
+		}
+	}()
 
 	// Extract individual components
 	obsLogger := obs.Logger()

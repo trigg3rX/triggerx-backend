@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // MockTaskMonitor implements TaskMonitorInterface for testing
@@ -24,7 +24,7 @@ func (m *MockTaskMonitor) ReportTaskStatus(ctx context.Context, req *types.Repor
 }
 
 func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
 	handler := NewTaskMonitorHandler(logger, mockMonitor)
 
@@ -160,7 +160,7 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 }
 
 func TestTaskMonitorHandler_GetMethods(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
 	handler := NewTaskMonitorHandler(logger, mockMonitor)
 
@@ -173,7 +173,7 @@ func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 }
 
 func TestConvertMapToStatusRequest(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
 	handler := NewTaskMonitorHandler(logger, mockMonitor)
 

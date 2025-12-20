@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -24,7 +24,7 @@ type NonceManager struct {
 	currentNonce uint64
 	client       *ethclient.Client
 	address      common.Address
-	logger       logging.Logger
+	logger       observability.Logger
 	lastSyncTime time.Time
 	syncInterval time.Duration
 
@@ -52,7 +52,7 @@ type PendingTransaction struct {
 }
 
 // NewNonceManager creates a new nonce manager optimized for L2 chains
-func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceManager {
+func NewNonceManager(client *ethclient.Client, logger observability.Logger) *NonceManager {
 	return &NonceManager{
 		client:       client,
 		address:      common.HexToAddress(config.GetKeeperAddress()),
@@ -66,7 +66,6 @@ func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceMana
 			MaxDelay:        5 * time.Second,
 			BackoffFactor:   1.5,
 			JitterFactor:    0.3,
-			LogRetryAttempt: true,
 			ShouldRetry:     shouldRetryRPCError,
 		},
 		submitRetryConfig: &retry.RetryConfig{
@@ -75,7 +74,6 @@ func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceMana
 			MaxDelay:        3 * time.Second,
 			BackoffFactor:   1.3,
 			JitterFactor:    0.4,
-			LogRetryAttempt: true,
 			ShouldRetry:     shouldRetrySubmissionError,
 		},
 		confirmRetryConfig: &retry.RetryConfig{
@@ -84,7 +82,6 @@ func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceMana
 			MaxDelay:        8 * time.Second,
 			BackoffFactor:   1.2,
 			JitterFactor:    0.2,
-			LogRetryAttempt: true,
 			ShouldRetry:     shouldRetryConfirmationError,
 		},
 	}
@@ -110,35 +107,35 @@ func (nm *NonceManager) GetNextNonce(ctx context.Context) (uint64, error) {
 
 	nonce := nm.currentNonce
 	nm.currentNonce++
-	nm.logger.Debugf("Allocated nonce: %d", nonce)
+	nm.logger.Debug(ctx, "Allocated nonce: %d", observability.Uint64("nonce", nonce))
 	return nonce, nil
 }
 
 // ReleaseNonce handles failed nonce allocation by either filling the gap or syncing
-func (nm *NonceManager) ReleaseNonce(nonce uint64, privateKey *ecdsa.PrivateKey) {
+func (nm *NonceManager) ReleaseNonce(ctx context.Context, nonce uint64, privateKey *ecdsa.PrivateKey) {
 	nm.mu.Lock()
 	snapshotNonce := nm.currentNonce
 	nm.mu.Unlock()
 
 	if nonce+1 < snapshotNonce {
 		// Higher nonces allocated - must fill the gap
-		nm.logger.Warnf("Filling nonce gap %d (allocated up to %d)", nonce, snapshotNonce-1)
-		nm.fillNonceGap(nonce, privateKey)
+		nm.logger.Warn(ctx, "Filling nonce gap %d (allocated up to %d)", observability.Uint64("nonce", nonce), observability.Uint64("snapshot_nonce", snapshotNonce-1))
+		nm.fillNonceGap(ctx, nonce, privateKey)
 	} else {
 		// No higher nonces - safe to sync with blockchain
-		nm.logger.Infof("Nonce %d released, syncing with blockchain", nonce)
+		nm.logger.Info(ctx, "Nonce %d released, syncing with blockchain", observability.Uint64("nonce", nonce))
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := nm.safeSyncFromBlockchain(ctx, snapshotNonce); err != nil {
-			nm.logger.Errorf("Failed to sync after release: %v", err)
+			nm.logger.Error(ctx, "Failed to sync after release: %v", observability.Error(err))
 		}
 	}
 }
 
 // fillNonceGap submits a self-transaction to fill a nonce gap
-func (nm *NonceManager) fillNonceGap(nonce uint64, privateKey *ecdsa.PrivateKey) {
+func (nm *NonceManager) fillNonceGap(ctx context.Context, nonce uint64, privateKey *ecdsa.PrivateKey) {
 	if privateKey == nil {
-		nm.logger.Errorf("Cannot fill nonce gap %d: nil private key", nonce)
+		nm.logger.Error(ctx, "Cannot fill nonce gap %d: nil private key", observability.Uint64("nonce", nonce))
 		return
 	}
 
@@ -147,20 +144,20 @@ func (nm *NonceManager) fillNonceGap(nonce uint64, privateKey *ecdsa.PrivateKey)
 
 	chainID, err := retry.Retry(ctx, func() (*big.Int, error) {
 		return nm.client.ChainID(ctx)
-	}, nm.rpcRetryConfig, nm.logger)
+	}, nm.rpcRetryConfig)
 	if err != nil {
-		nm.logger.Errorf("Failed to get chain ID for gap fill: %v", err)
+		nm.logger.Error(ctx, "Failed to get chain ID for gap fill: %v", observability.Error(err))
 		return
 	}
 
 	txHash, err := retry.Retry(ctx, func() (string, error) {
 		return nm.submitGapFillTx(ctx, nonce, chainID, privateKey)
-	}, nm.submitRetryConfig, nm.logger)
+	}, nm.submitRetryConfig)
 
 	if err != nil {
-		nm.logger.Errorf("Failed to fill nonce gap %d: %v", nonce, err)
+		nm.logger.Error(ctx, "Failed to fill nonce gap %d: %v", observability.Uint64("nonce", nonce), observability.Error(err))
 	} else {
-		nm.logger.Infof("Gap-fill tx submitted: %s (nonce: %d)", txHash, nonce)
+		nm.logger.Info(ctx, "Gap-fill tx submitted: %s (nonce: %d)", observability.String("tx_hash", txHash), observability.Uint64("nonce", nonce))
 	}
 }
 
@@ -205,14 +202,14 @@ func (nm *NonceManager) submitGapFillTx(ctx context.Context, nonce uint64, chain
 func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
 	pendingNonce, err := retry.Retry(ctx, func() (uint64, error) {
 		return nm.client.PendingNonceAt(ctx, nm.address)
-	}, nm.rpcRetryConfig, nm.logger)
+	}, nm.rpcRetryConfig)
 	if err != nil {
 		return fmt.Errorf("failed to get pending nonce: %w", err)
 	}
 
 	if pendingNonce > nm.currentNonce {
 		nm.currentNonce = pendingNonce
-		nm.logger.Infof("Synced nonce: %d", nm.currentNonce)
+		nm.logger.Info(ctx, "Synced nonce: %d", observability.Uint64("nonce", nm.currentNonce))
 	}
 	nm.lastSyncTime = time.Now()
 	return nil
@@ -222,7 +219,7 @@ func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
 func (nm *NonceManager) safeSyncFromBlockchain(ctx context.Context, snapshotNonce uint64) error {
 	pendingNonce, err := retry.Retry(ctx, func() (uint64, error) {
 		return nm.client.PendingNonceAt(ctx, nm.address)
-	}, nm.rpcRetryConfig, nm.logger)
+	}, nm.rpcRetryConfig)
 	if err != nil {
 		return fmt.Errorf("failed to get pending nonce: %w", err)
 	}
@@ -232,7 +229,7 @@ func (nm *NonceManager) safeSyncFromBlockchain(ctx context.Context, snapshotNonc
 
 	// Skip if other threads allocated nonces
 	if nm.currentNonce > snapshotNonce {
-		nm.logger.Infof("Skipping sync: nonces allocated (snapshot=%d, current=%d)", snapshotNonce, nm.currentNonce)
+		nm.logger.Info(ctx, "Skipping sync: nonces allocated (snapshot=%d, current=%d)", observability.Uint64("snapshot_nonce", snapshotNonce), observability.Uint64("current_nonce", nm.currentNonce))
 		return nil
 	}
 
@@ -241,7 +238,7 @@ func (nm *NonceManager) safeSyncFromBlockchain(ctx context.Context, snapshotNonc
 	nm.lastSyncTime = time.Now()
 
 	if pendingNonce != oldNonce {
-		nm.logger.Infof("Safe synced nonce: %d -> %d", oldNonce, pendingNonce)
+		nm.logger.Info(ctx, "Safe synced nonce: %d -> %d", observability.Uint64("old_nonce", oldNonce), observability.Uint64("pending_nonce", pendingNonce))
 	}
 	return nil
 }
@@ -298,7 +295,7 @@ func (nm *NonceManager) replaceTransaction(
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
 ) (*types.Receipt, string, error) {
-	nm.logger.Infof("Replacing stuck tx (nonce %d)", existingTx.Nonce)
+	nm.logger.Info(ctx, "Replacing stuck tx (nonce %d)", observability.Uint64("nonce", existingTx.Nonce))
 
 	gasPrice, err := nm.getGasPrice(ctx)
 	if err != nil {
@@ -330,9 +327,9 @@ func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Tra
 			}
 			return "", err
 		}
-		nm.logger.Infof("Transaction sent: %s", signedTx.Hash().Hex())
+		nm.logger.Info(ctx, "Transaction sent: %s", observability.String("tx_hash", signedTx.Hash().Hex()))
 		return signedTx.Hash().Hex(), nil
-	}, nm.submitRetryConfig, nm.logger)
+	}, nm.submitRetryConfig)
 	if err != nil {
 		return nil, "", fmt.Errorf("submit failed: %w", err)
 	}
@@ -346,11 +343,11 @@ func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Tra
 			return nil, fmt.Errorf("confirmation timeout")
 		}
 		return receipt, err
-	}, nm.confirmRetryConfig, nm.logger)
+	}, nm.confirmRetryConfig)
 
 	if err != nil {
 		// Try replacement
-		nm.logger.Warnf("Confirmation failed, replacing: %v", err)
+		nm.logger.Warn(ctx, "Confirmation failed, replacing: %v", observability.Error(err))
 		replacementTx, replaceErr := nm.createReplacementTx(signedTx, 1, privateKey)
 		if replaceErr != nil {
 			return nil, "", fmt.Errorf("replacement failed: %w", replaceErr)
@@ -360,14 +357,14 @@ func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Tra
 	}
 
 	nm.markConfirmed(nonce, txHash)
-	nm.logger.Infof("Transaction confirmed: %s", txHash)
+	nm.logger.Info(ctx, "Transaction confirmed: %s", observability.String("tx_hash", txHash))
 	return receipt, txHash, nil
 }
 
 func (nm *NonceManager) getGasPrice(ctx context.Context) (*big.Int, error) {
 	gasPrice, err := retry.Retry(ctx, func() (*big.Int, error) {
 		return nm.client.SuggestGasPrice(ctx)
-	}, nm.rpcRetryConfig, nm.logger)
+	}, nm.rpcRetryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gas price: %w", err)
 	}

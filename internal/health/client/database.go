@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-gomail/gomail"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
+	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -104,6 +105,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	var prevUptime int64
 
 	// Fetch previous online status, last_checked_in, and uptime
+	selectStart := time.Now()
 	_, selectSpan := dm.tracer.Start(ctx, "db.select_keeper_data",
 		observability.WithSpanKind(trace.SpanKindClient),
 		observability.WithAttributes(
@@ -116,6 +118,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		SELECT keeper_id, online, last_checked_in, uptime FROM triggerx.keeper_data WHERE keeper_address = ? ALLOW FILTERING`,
 		keeperHealth.KeeperAddress).Scan(&keeperID, &prevOnline, &prevLastCheckedIn, &prevUptime)
 	selectSpan.End()
+	metrics.RecordDBOperationDuration(ctx, "select", time.Since(selectStart))
 	if err != nil {
 		selectSpan.SetStatus(codes.Error, err.Error())
 		dm.logger.Error(ctx, "Failed to retrieve keeper_id and previous status",
@@ -154,6 +157,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		newUptime := prevUptime + uptimeToAdd
 
 		// Update uptime field
+		uptimeStart := time.Now()
 		uptimeCtx, uptimeSpan := dm.tracer.Start(ctx, "db.update_keeper_uptime",
 			observability.WithSpanKind(trace.SpanKindClient),
 			observability.WithAttributes(
@@ -169,6 +173,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 			WHERE keeper_id = ?`,
 			newUptime, keeperID).Exec()
 		uptimeSpan.End()
+		metrics.RecordDBOperationDuration(uptimeCtx, "update", time.Since(uptimeStart))
 		if err != nil {
 			uptimeSpan.SetStatus(codes.Error, err.Error())
 			dm.logger.Error(uptimeCtx, "Failed to update keeper uptime",
@@ -185,6 +190,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 
 	if !isActive {
 		// If not active, just set online = false
+		updateStart := time.Now()
 		updateCtx, updateSpan := dm.tracer.Start(ctx, "db.update_keeper_inactive",
 			observability.WithSpanKind(trace.SpanKindClient),
 			observability.WithAttributes(
@@ -200,6 +206,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 			WHERE keeper_id = ?`,
 			false, keeperID).Exec()
 		updateSpan.End()
+		metrics.RecordDBOperationDuration(updateCtx, "update", time.Since(updateStart))
 		if err != nil {
 			updateSpan.SetStatus(codes.Error, err.Error())
 			dm.logger.Error(updateCtx, "Failed to update keeper inactive status",
@@ -216,6 +223,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	}
 
 	// If active, update all fields including last_checked_in
+	updateActiveStart := time.Now()
 	updateActiveCtx, updateActiveSpan := dm.tracer.Start(ctx, "db.update_keeper_active",
 		observability.WithSpanKind(trace.SpanKindClient),
 		observability.WithAttributes(
@@ -231,6 +239,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		WHERE keeper_id = ?`,
 		keeperHealth.ConsensusAddress, true, keeperHealth.PeerID, keeperHealth.Version, keeperHealth.Timestamp, keeperID).Exec()
 	updateActiveSpan.End()
+	metrics.RecordDBOperationDuration(updateActiveCtx, "update", time.Since(updateActiveStart))
 	if err != nil {
 		updateActiveSpan.SetStatus(codes.Error, err.Error())
 		dm.logger.Error(updateActiveCtx, "Failed to update keeper status",
@@ -299,6 +308,15 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keep
 					observability.String("keeper", keeperName),
 					observability.Int64("keeper_id", keeperID),
 				)
+			} else {
+				// Record successful telegram notification
+				// We need to get keeper address from keeperName or keeperID
+				var keeperAddress string
+				if err := dm.db.Session().Query(`
+					SELECT keeper_address FROM triggerx.keeper_data WHERE keeper_id = ?`,
+					keeperID).Scan(&keeperAddress); err == nil {
+					metrics.RecordTelegramNotification(ctx, keeperAddress)
+				}
 			}
 		} else {
 			dm.logger.Warn(ctx, "No Telegram chat ID found",

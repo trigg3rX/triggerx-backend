@@ -3,18 +3,18 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // MetricsHandler handles metrics endpoint requests
 type MetricsHandler struct {
-	logger    logging.Logger
+	logger    observability.Logger
 	collector *metrics.Collector
 }
 
 // NewMetricsHandler creates a new metrics handler
-func NewMetricsHandler(logger logging.Logger) *MetricsHandler {
-	collector := metrics.NewCollector()
+func NewMetricsHandler(logger observability.Logger, metricsInstance observability.Metrics) *MetricsHandler {
+	collector := metrics.NewCollector(metricsInstance)
 	collector.Start()
 
 	return &MetricsHandler{

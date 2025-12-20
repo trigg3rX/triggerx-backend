@@ -11,14 +11,13 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	// "github.com/gin-gonic/gin"
 
 	dbserver "github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -29,21 +28,26 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
-	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.DatabaseProcess,
-		IsDevelopment: config.IsDevMode(),
+	// Initialize observability (logger, tracer, metrics)
+	obsCfg := observability.NewConfig(
+		observability.ServerService,
+		config.GetVersion(),
+		config.GetOTELExporterEndpoint(),
+		config.IsDevMode(),
+	)
+
+	// Create resource for observability
+	res, err := observability.NewResource(obsCfg)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create observability resource: %v", err))
 	}
 
-	logger, err := logging.NewZapLogger(logConfig)
+	// Initialize logger
+	logger, loggerShutdown, err := observability.NewLogger(obsCfg, res)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
-
-	logger.Info("Starting database server...",
-		"mode", config.IsDevMode(),
-		"port", config.GetDBServerRPCPort(),
-		"host", config.GetDatabaseHostAddress(),
-	)
+	ctx := context.Background()
 
 	dbConfig := &database.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
@@ -57,13 +61,13 @@ func main() {
 
 	conn, err := database.NewConnection(dbConfig, logger)
 	if err != nil || conn == nil {
-		logger.Fatalf("Failed to initialize main database connection: %v", err)
+		logger.Fatal(ctx, "Failed to initialize main database connection", observability.Error(err))
 	}
 	defer conn.Close()
 
 	mainSession := conn.Session()
 	if mainSession == nil {
-		logger.Fatalf("Database session cannot be nil")
+		logger.Fatal(ctx, "Database session cannot be nil")
 	}
 
 	var wg sync.WaitGroup
@@ -72,19 +76,19 @@ func main() {
 
 	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
-		logger.Errorf("Failed to create Docker manager: %v", err)
+		logger.Error(ctx, "Failed to create Docker manager", observability.Error(err))
 	} else {
 		// Initialize Docker manager with language-specific pools
 		if err := dockerExecutor.Initialize(context.Background()); err != nil {
-			logger.Errorf("Failed to initialize Docker manager: %v", err)
+			logger.Error(ctx, "Failed to initialize Docker manager", observability.Error(err))
 		} else {
-			logger.Infof("Docker manager initialized successfully")
+			logger.Info(ctx, "Docker manager initialized successfully")
 		}
 	}
 
-	dbServer := dbserver.NewServer(conn, logger)
+	dbServer := dbserver.NewServer(ctx, conn, logger)
 
-	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerExecutor)
+	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
@@ -94,47 +98,56 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Info("Starting HTTP server...")
+		logger.Info(ctx, "Starting HTTP server...")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
 
 	close(ready)
-	logger.Infof("Database Server initialized, starting on port %s...", config.GetDBServerRPCPort())
+	logger.Info(ctx, "Database Server initialized, starting on port %s...", observability.String("port", config.GetDBServerRPCPort()))
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case err := <-serverErrors:
-		logger.Error("Server error received", "error", err)
+		logger.Error(ctx, "Server error received", observability.Error(err))
 	case sig := <-shutdown:
-		logger.Info("Received shutdown signal", "signal", sig.String())
+		logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 	}
 
-	performGracefulShutdown(srv, &wg, logger, dockerExecutor)
+	performGracefulShutdown(ctx, srv, &wg, logger, loggerShutdown, dockerExecutor)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerExecutor dockerexecutor.DockerExecutorAPI) {
-	logger.Info("Initiating graceful shutdown...")
+func performGracefulShutdown(ctx context.Context, srv *http.Server, wg *sync.WaitGroup, logger observability.Logger, loggerShutdown func(context.Context) error, dockerExecutor dockerexecutor.DockerExecutorAPI) {
+	logger.Info(ctx, "Initiating graceful shutdown...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", "error", err)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error(ctx, "HTTP server shutdown error", observability.Error(err))
 		if err := srv.Close(); err != nil {
-			logger.Error("Forced HTTP server close error", "error", err)
+			logger.Error(ctx, "Forced HTTP server close error", observability.Error(err))
 		}
 	}
 
 	if dockerExecutor != nil {
 		if err := dockerExecutor.Close(ctx); err != nil {
-			logger.Error("Failed to close Docker manager", "error", err)
+			logger.Error(ctx, "Failed to close Docker manager", observability.Error(err))
 		}
 	}
 
 	wg.Wait()
-	logger.Info("Shutdown complete")
+
+	if loggerShutdown != nil {
+		if err := loggerShutdown(ctx); err != nil {
+			logger.Error(ctx, "Error shutting down logger", observability.Error(err))
+		} else {
+			logger.Info(ctx, "Logger closed successfully")
+		}
+	}
+
+	logger.Info(ctx, "Shutdown complete")
 }

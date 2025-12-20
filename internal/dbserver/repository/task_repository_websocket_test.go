@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"math/big"
 	"testing"
 	"time"
@@ -8,19 +9,19 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func TestTaskRepositoryWebSocketEvents(t *testing.T) {
 	// Create a mock logger
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	// Create a new hub
 	hub := websocket.NewHub(logger)
 
 	// Start the hub in a goroutine
-	go hub.Run()
-	defer hub.Shutdown()
+	go hub.Run(context.Background())
+	defer hub.Shutdown(context.Background())
 
 	// Create event publisher
 	publisher := events.NewPublisher(hub, logger)
@@ -39,7 +40,7 @@ func TestTaskRepositoryWebSocketEvents(t *testing.T) {
 		}
 
 		// The function will fail at database level, but we can verify the event emission logic
-		_, err := repo.CreateTaskDataInDB(task)
+		_, err := repo.CreateTaskDataInDB(context.Background(), task)
 		if err == nil {
 			t.Error("Expected error due to nil database, but got nil")
 		}
@@ -60,7 +61,7 @@ func TestTaskRepositoryWebSocketEvents(t *testing.T) {
 		}
 
 		// The function will fail at database level, but we can verify the event emission logic
-		err := repo.UpdateTaskExecutionDataInDB(task)
+		err := repo.UpdateTaskExecutionDataInDB(context.Background(), task)
 		if err == nil {
 			t.Error("Expected error due to nil database, but got nil")
 		}
@@ -79,7 +80,7 @@ func TestTaskRepositoryWebSocketEvents(t *testing.T) {
 		}
 
 		// The function will fail at database level, but we can verify the event emission logic
-		err := repo.UpdateTaskAttestationDataInDB(task)
+		err := repo.UpdateTaskAttestationDataInDB(context.Background(), task)
 		if err == nil {
 			t.Error("Expected error due to nil database, but got nil")
 		}
@@ -88,7 +89,7 @@ func TestTaskRepositoryWebSocketEvents(t *testing.T) {
 	// Test task fee update event
 	t.Run("UpdateTaskFee emits TASK_FEE_UPDATED event", func(t *testing.T) {
 		// The function will fail at database level, but we can verify the event emission logic
-		err := repo.UpdateTaskFee(789, 2.5)
+		err := repo.UpdateTaskFee(context.Background(), 789, 2.5)
 		if err == nil {
 			t.Error("Expected error due to nil database, but got nil")
 		}
@@ -97,7 +98,7 @@ func TestTaskRepositoryWebSocketEvents(t *testing.T) {
 	// Test task status update event
 	t.Run("UpdateTaskNumberAndStatus emits TASK_STATUS_CHANGED event", func(t *testing.T) {
 		// The function will fail at database level, but we can verify the event emission logic
-		err := repo.UpdateTaskNumberAndStatus(789, 1, "completed", "0xstatus_tx_hash")
+		err := repo.UpdateTaskNumberAndStatus(context.Background(), 789, 1, "completed", "0xstatus_tx_hash")
 		if err == nil {
 			t.Error("Expected error due to nil database, but got nil")
 		}
@@ -115,7 +116,7 @@ func TestTaskRepositoryWithoutPublisher(t *testing.T) {
 		IsImua:           false,
 	}
 
-	_, err := repo.CreateTaskDataInDB(task)
+	_, err := repo.CreateTaskDataInDB(context.Background(), task)
 	if err == nil {
 		t.Error("Expected error due to nil database, but got nil")
 	}

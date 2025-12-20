@@ -6,15 +6,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type SchedulerHandler struct {
-	logger    logging.Logger
+	logger    observability.Logger
 	scheduler *scheduler.TimeBasedScheduler
 }
 
-func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.TimeBasedScheduler) *SchedulerHandler {
+func NewSchedulerHandler(logger observability.Logger, scheduler *scheduler.TimeBasedScheduler) *SchedulerHandler {
 	return &SchedulerHandler{
 		logger:    logger,
 		scheduler: scheduler,
@@ -33,7 +33,7 @@ func getTraceID(c *gin.Context) string {
 // GetStats returns current scheduler statistics
 func (h *SchedulerHandler) GetStats(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info("[GetStats] trace_id=" + traceID + " - Getting scheduler statistics")
+	h.logger.Info(c.Request.Context(), "[GetStats] trace_id=" + traceID + " - Getting scheduler statistics")
 	stats := h.scheduler.GetStats()
 
 	response := gin.H{

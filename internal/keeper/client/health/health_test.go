@@ -7,16 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
-	logger, err := logging.NewZapLogger(logging.LoggerConfig{
-		ProcessName:   "test",
-		IsDevelopment: true,
-	})
-	require.NoError(t, err)
-
+	logger := observability.NewNoOpLogger()
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
 		PrivateKey:       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -33,11 +28,7 @@ func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
 }
 
 func TestNewClient_EmptyTimeout_SetsDefaultTimeout(t *testing.T) {
-	logger, err := logging.NewZapLogger(logging.LoggerConfig{
-		ProcessName:   "test",
-		IsDevelopment: true,
-	})
-	require.NoError(t, err)
+	logger := observability.NewNoOpLogger()
 
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
@@ -56,11 +47,7 @@ func TestNewClient_EmptyTimeout_SetsDefaultTimeout(t *testing.T) {
 }
 
 func TestNewClient_InvalidPrivateKey_ReturnsError(t *testing.T) {
-	logger, err := logging.NewZapLogger(logging.LoggerConfig{
-		ProcessName:   "test",
-		IsDevelopment: true,
-	})
-	require.NoError(t, err)
+	logger := observability.NewNoOpLogger()
 
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",
@@ -80,11 +67,7 @@ func TestClient_CheckIn_WithMockServer(t *testing.T) {
 	// This test would require a mock HTTP server to test the actual CheckIn functionality
 	// For now, we'll just test that the client can be created and closed properly
 
-	logger, err := logging.NewZapLogger(logging.LoggerConfig{
-		ProcessName:   "test",
-		IsDevelopment: true,
-	})
-	require.NoError(t, err)
+	logger := observability.NewNoOpLogger()
 
 	cfg := Config{
 		HealthServiceURL: "http://localhost:8080",

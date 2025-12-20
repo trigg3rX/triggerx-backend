@@ -18,7 +18,7 @@ package handlers
 // 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 // 	execution "github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 // 	validation "github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 // 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 // )
 
@@ -67,9 +67,9 @@ package handlers
 // 	m.Called(template, args)
 // }
 
-// func (m *MockLogger) With(keysAndValues ...interface{}) logging.Logger {
+// func (m *MockLogger) With(keysAndValues ...interface{}) observability.logger {
 // 	args := m.Called(keysAndValues)
-// 	return args.Get(0).(logging.Logger)
+// 	return args.Get(0).(observability.logger)
 // }
 
 // // MockTaskExecutor is a mock implementation of the TaskExecutorInterface

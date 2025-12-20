@@ -6,13 +6,14 @@ import (
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // SendTaskToPerformer sends a task to the specified performer through the aggregator
 func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *types.BroadcastDataForPerformer) (bool, error) {
-	c.logger.Debug("Sending task to performer",
-		"TaskID", taskData.TaskID,
-		"PerformerAddress", taskData.PerformerAddress)
+	c.logger.Debug(ctx, "Sending task to performer",
+		observability.Int("TaskID", int(taskData.TaskID)),
+		observability.String("PerformerAddress", taskData.PerformerAddress))
 
 	// Prepare parameters using consistent structure
 	params := CallParams{
@@ -23,12 +24,12 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 	var result interface{}
 	err := c.executeWithRetry(ctx, "sendCustomMessage", &result, params)
 	if err != nil {
-		c.logger.Error("Failed to send custom task", "error", err)
+		c.logger.Error(ctx, "Failed to send custom task", observability.Error(err))
 		return false, fmt.Errorf("failed to send custom task: %w", err)
 	}
 
-	c.logger.Info("Task sent successfully",
-		"TaskID", taskData.TaskID,
-		"result", result)
+	c.logger.Info(ctx, "Task sent successfully",
+		observability.Int("TaskID", int(taskData.TaskID)),
+		observability.Any("result", result))
 	return true, nil
 }

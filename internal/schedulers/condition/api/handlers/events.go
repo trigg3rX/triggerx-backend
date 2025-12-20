@@ -9,16 +9,16 @@ import (
 	eventmonitorTypes "github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	pkgTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // HandleEventNotification handles event notifications from Event Monitor Service
-func HandleEventNotification(logger logging.Logger, scheduler *scheduler.ConditionBasedScheduler) gin.HandlerFunc {
+func HandleEventNotification(logger observability.Logger, scheduler *scheduler.ConditionBasedScheduler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var notification eventmonitorTypes.EventNotification
 		if err := c.ShouldBindJSON(&notification); err != nil {
-			logger.Warn("Invalid event notification request", "error", err)
+			logger.Warn(c.Request.Context(), "Invalid event notification request", observability.Error(err))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -26,19 +26,19 @@ func HandleEventNotification(logger logging.Logger, scheduler *scheduler.Conditi
 			return
 		}
 
-		logger.Info("Received event notification from Event Monitor Service",
-			"request_id", notification.RequestID,
-			"chain_id", notification.ChainID,
-			"contract_address", notification.ContractAddr,
-			"event_signature", notification.EventSig,
-			"tx_hash", notification.TxHash,
-			"block_number", notification.BlockNumber)
+		logger.Info(c.Request.Context(), "Received event notification from Event Monitor Service",
+			observability.String("request_id", notification.RequestID),
+			observability.String("chain_id", notification.ChainID),
+			observability.String("contract_address", notification.ContractAddr),
+			observability.String("event_signature", notification.EventSig),
+			observability.String("tx_hash", notification.TxHash),
+			observability.Uint64("block_number", notification.BlockNumber))
 
 		// Convert request ID to BigInt
 		jobIDBigInt := new(big.Int)
 		jobIDBigInt, ok := jobIDBigInt.SetString(notification.RequestID, 10)
 		if !ok {
-			logger.Error("Invalid job ID in notification", "request_id", notification.RequestID)
+			logger.Error(c.Request.Context(), "Invalid job ID in notification", observability.String("request_id", notification.RequestID))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   "invalid job ID",
@@ -50,9 +50,9 @@ func HandleEventNotification(logger logging.Logger, scheduler *scheduler.Conditi
 		// Check if job has expired
 		jobData, err := scheduler.GetJobData(jobIDBigInt)
 		if err != nil {
-			logger.Warn("Job data not found, may have been cleaned up",
-				"job_id", jobID,
-				"request_id", notification.RequestID)
+			logger.Warn(c.Request.Context(), "Job data not found, may have been cleaned up",
+				observability.String("job_id", jobID.String()),
+				observability.String("request_id", notification.RequestID))
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "Job not found, ignoring notification",
@@ -63,15 +63,15 @@ func HandleEventNotification(logger logging.Logger, scheduler *scheduler.Conditi
 		// Check if job has expired
 		now := time.Now()
 		if jobData.EventWorkerData.ExpirationTime.Before(now) {
-			logger.Info("Job has expired, unregistering from Event Monitor Service",
-				"job_id", jobID,
-				"expiration_time", jobData.EventWorkerData.ExpirationTime)
+			logger.Info(c.Request.Context(), "Job has expired, unregistering from Event Monitor Service",
+				observability.String("job_id", jobID.String()),
+				observability.Time("expiration_time", jobData.EventWorkerData.ExpirationTime))
 
 			// Unregister from Event Monitor Service
-			if err := scheduler.UnregisterEventJob(jobIDBigInt); err != nil {
-				logger.Error("Failed to unregister expired job from Event Monitor Service",
-					"job_id", jobID,
-					"error", err)
+			if err := scheduler.UnregisterEventJob(c.Request.Context(), jobIDBigInt); err != nil {
+				logger.Error(c.Request.Context(), "Failed to unregister expired job from Event Monitor Service",
+					observability.String("job_id", jobID.String()),
+					observability.Error(err))
 			}
 
 			c.JSON(http.StatusOK, gin.H{
@@ -89,11 +89,11 @@ func HandleEventNotification(logger logging.Logger, scheduler *scheduler.Conditi
 		}
 
 		// Process the trigger notification (same as current processEvent logic)
-		if err := scheduler.HandleTriggerNotification(triggerNotification); err != nil {
-			logger.Error("Failed to process event notification",
-				"job_id", jobID,
-				"tx_hash", notification.TxHash,
-				"error", err)
+		if err := scheduler.HandleTriggerNotification(c.Request.Context(), triggerNotification); err != nil {
+			logger.Error(c.Request.Context(), "Failed to process event notification",
+				observability.String("job_id", jobID.String()),
+				observability.String("tx_hash", notification.TxHash),
+				observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -103,14 +103,14 @@ func HandleEventNotification(logger logging.Logger, scheduler *scheduler.Conditi
 
 		// For non-recurring jobs, unregister from Event Monitor Service after processing
 		if !jobData.EventWorkerData.Recurring {
-			logger.Info("Non-recurring job triggered, unregistering from Event Monitor Service",
-				"job_id", jobID)
+			logger.Info(c.Request.Context(), "Non-recurring job triggered, unregistering from Event Monitor Service",
+				observability.String("job_id", jobID.String()))
 
 			// Unregister from Event Monitor Service
-			if err := scheduler.UnregisterEventJob(jobIDBigInt); err != nil {
-				logger.Error("Failed to unregister non-recurring job from Event Monitor Service",
-					"job_id", jobID,
-					"error", err)
+			if err := scheduler.UnregisterEventJob(c.Request.Context(), jobIDBigInt); err != nil {
+				logger.Error(c.Request.Context(), "Failed to unregister non-recurring job from Event Monitor Service",
+					observability.String("job_id", jobID.String()),
+					observability.Error(err))
 				// Don't fail the request, just log the error
 			}
 		}

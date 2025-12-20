@@ -1,13 +1,14 @@
 package execution
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type Alert struct {
@@ -28,7 +29,7 @@ type HealthStatus struct {
 type executionMonitor struct {
 	pipeline         *executionPipeline
 	config           config.ConfigProviderInterface
-	logger           logging.Logger
+	logger           observability.Logger
 	mutex            sync.RWMutex
 	alerts           []Alert
 	metrics          *types.PerformanceMetrics
@@ -36,7 +37,7 @@ type executionMonitor struct {
 	stopMonitoring   chan struct{}
 }
 
-func newExecutionMonitor(pipeline *executionPipeline, cfg config.ConfigProviderInterface, logger logging.Logger) *executionMonitor {
+func newExecutionMonitor(ctx context.Context, pipeline *executionPipeline, cfg config.ConfigProviderInterface, logger observability.Logger) *executionMonitor {
 	monitor := &executionMonitor{
 		pipeline: pipeline,
 		config:   cfg,
@@ -57,12 +58,12 @@ func newExecutionMonitor(pipeline *executionPipeline, cfg config.ConfigProviderI
 	}
 
 	// Start monitoring routine
-	monitor.startMonitoring()
+	monitor.startMonitoring(ctx)
 
 	return monitor
 }
 
-func (em *executionMonitor) startMonitoring() {
+func (em *executionMonitor) startMonitoring(ctx context.Context) {
 	// Get monitoring configuration
 	monitoringConfig := em.config.GetMonitoringConfig()
 	interval := monitoringConfig.HealthCheckInterval
@@ -72,7 +73,7 @@ func (em *executionMonitor) startMonitoring() {
 		for {
 			select {
 			case <-em.monitoringTicker.C:
-				em.performHealthCheck()
+				em.performHealthCheck(ctx)
 			case <-em.stopMonitoring:
 				em.monitoringTicker.Stop()
 				return
@@ -81,7 +82,7 @@ func (em *executionMonitor) startMonitoring() {
 	}()
 }
 
-func (em *executionMonitor) performHealthCheck() {
+func (em *executionMonitor) performHealthCheck(ctx context.Context) {
 	// em.logger.Debugf("Performing health check")
 
 	// Get monitoring configuration
@@ -95,7 +96,7 @@ func (em *executionMonitor) performHealthCheck() {
 	for _, exec := range activeExecutions {
 		duration := time.Since(exec.StartedAt)
 		if duration > maxExecutionTime {
-			em.createAlert("execution_timeout", fmt.Sprintf("Execution %s has exceeded max time: %v", exec.TraceID, duration), "warning")
+			em.createAlert(ctx, "execution_timeout", fmt.Sprintf("Execution %s has exceeded max time: %v", exec.TraceID, duration), "warning")
 		}
 	}
 
@@ -107,21 +108,21 @@ func (em *executionMonitor) performHealthCheck() {
 	if stats.TotalExecutions > 0 {
 		successRate := float64(stats.SuccessfulExecutions) / float64(stats.TotalExecutions)
 		if successRate < minSuccessRate {
-			em.createAlert("low_success_rate", fmt.Sprintf("Success rate is low: %.2f%%", successRate*100), "error")
+			em.createAlert(ctx, "low_success_rate", fmt.Sprintf("Success rate is low: %.2f%%", successRate*100), "error")
 		}
 	}
 
 	// Check average execution time
 	maxAverageTime := monitoringConfig.MaxAverageExecutionTime
 	if stats.AverageExecutionTime > maxAverageTime {
-		em.createAlert("high_execution_time", fmt.Sprintf("Average execution time is high: %v", stats.AverageExecutionTime), "warning")
+		em.createAlert(ctx, "high_execution_time", fmt.Sprintf("Average execution time is high: %v", stats.AverageExecutionTime), "warning")
 	}
 
 	// Update metrics
 	em.updateMetrics(stats)
 }
 
-func (em *executionMonitor) createAlert(alertType, message, severity string) {
+func (em *executionMonitor) createAlert(ctx context.Context, alertType, message, severity string) {
 	alert := Alert{
 		Type:      alertType,
 		Message:   message,
@@ -140,7 +141,7 @@ func (em *executionMonitor) createAlert(alertType, message, severity string) {
 	}
 	em.mutex.Unlock()
 
-	em.logger.Warnf("Alert: %s - %s", alertType, message)
+	em.logger.Warn(ctx, "Alert", observability.String("alertType", alertType), observability.String("message", message))
 }
 
 func (em *executionMonitor) updateMetrics(stats *types.PerformanceMetrics) {
@@ -241,29 +242,29 @@ func (em *executionMonitor) getAlerts(severity string, limit int) []Alert {
 	return filteredAlerts
 }
 
-func (em *executionMonitor) clearAlerts() {
+func (em *executionMonitor) clearAlerts(ctx context.Context) {
 	em.mutex.Lock()
 	defer em.mutex.Unlock()
 
 	em.alerts = make([]Alert, 0)
-	em.logger.Info("All alerts cleared")
+	em.logger.Info(ctx, "All alerts cleared")
 }
 
 func (em *executionMonitor) getActiveExecutions() []*types.ExecutionContext {
 	return em.pipeline.getActiveExecutions()
 }
 
-func (em *executionMonitor) cancelExecution(executionID string) error {
-	return em.pipeline.cancelExecution(executionID)
+func (em *executionMonitor) cancelExecution(ctx context.Context, executionID string) error {
+	return em.pipeline.cancelExecution(ctx, executionID)
 }
 
-func (em *executionMonitor) close() error {
-	em.logger.Info("Closing execution monitor")
+func (em *executionMonitor) close(ctx context.Context) error {
+	em.logger.Info(ctx, "Closing execution monitor")
 
 	if em.monitoringTicker != nil {
 		close(em.stopMonitoring)
 	}
 
-	em.logger.Info("Execution monitor closed")
+	em.logger.Info(ctx, "Execution monitor closed")
 	return nil
 }

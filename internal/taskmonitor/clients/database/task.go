@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"strings"
@@ -8,15 +9,16 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database/queries"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database
-func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData) error {
+func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data types.TaskSubmissionData) error {
 	// dm.logger.Infof("Updating task %d with task number %d and acceptance status %t", data.TaskID, data.TaskNumber, data.IsAccepted)
 
-	performerId, err := dm.GetKeeperIds([]string{data.PerformerAddress})
+	performerId, err := dm.GetKeeperIds(ctx, []string{data.PerformerAddress})
 	if err != nil {
-		dm.logger.Errorf("Failed to get performer ID: %v", err)
+		dm.logger.Error(ctx, "Failed to get performer ID", observability.Error(err))
 		return err
 	}
 	attesterIds := data.AttesterIds
@@ -39,82 +41,82 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(data types.TaskSubmissionData
 		data.ProofOfTask,
 		convertedArgsStrings,
 		data.TaskID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating task execution details for task ID %d: %v", data.TaskID, err)
+		dm.logger.Error(ctx, "Error updating task execution details for task ID %d", observability.Int64("task_id", data.TaskID), observability.Error(err))
 		return err
 	}
 
-	dm.logger.Infof("Successfully updated task %d with submission details", data.TaskID)
+	dm.logger.Info(ctx, "Successfully updated task %d with submission details", observability.Int64("task_id", data.TaskID))
 	return nil
 }
 
-func (dm *DatabaseClient) UpdateTaskFailed(taskID int64) error {
+func (dm *DatabaseClient) UpdateTaskFailed(ctx context.Context, taskID int64) error {
 	// First, check if the task already has a status (i.e., is already failed or completed)
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 	if iter.Scan(&existingStatus) && existingStatus != "" {
-		dm.logger.Infof("Task %d already has a status '%s', not updating to failed.", taskID, existingStatus)
+		dm.logger.Info(ctx, "Task %d already has a status '%s', not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 	// Proceed with marking as failed only if status is absent or empty
 	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
+		dm.logger.Error(ctx, "Error updating task failed for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Infof("Successfully updated task %d as failed", taskID)
+	dm.logger.Info(ctx, "Successfully updated task %d as failed", observability.Int64("task_id", taskID))
 	return nil
 }
 
 // UpdateTaskError updates a task with error information
-func (dm *DatabaseClient) UpdateTaskError(taskID int64, errorMsg string) error {
+func (dm *DatabaseClient) UpdateTaskError(ctx context.Context, taskID int64, errorMsg string) error {
 	// First, check if the task already has a status (i.e., is already failed or completed)
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 	if iter.Scan(&existingStatus) && existingStatus != "" {
-		dm.logger.Infof("Task %d already has a status '%s', not updating to failed.", taskID, existingStatus)
+		dm.logger.Info(ctx, "Task %d already has a status '%s', not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 	// Proceed with marking as failed only if status is absent or empty
 	if err := dm.db.NewQuery(queries.UpdateTaskError, errorMsg, taskID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating task error for task ID %d: %v", taskID, err)
+		dm.logger.Error(ctx, "Error updating task error for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Infof("Successfully updated task %d with error: %s", taskID, errorMsg)
+	dm.logger.Info(ctx, "Successfully updated task %d with error: %s", observability.Int64("task_id", taskID), observability.String("error_msg", errorMsg))
 	return nil
 }
 
 // UpdateTaskAggregatorFailed updates task when it failed (execution or aggregator submission)
 // executionTxHash is the transaction hash from on-chain execution (may be empty if tx was never sent)
 // proofCID contains all execution data if available
-func (dm *DatabaseClient) UpdateTaskAggregatorFailed(taskID int64, errorMsg, executionTxHash, proofCID string) error {
+func (dm *DatabaseClient) UpdateTaskAggregatorFailed(ctx context.Context, taskID int64, errorMsg, executionTxHash, proofCID string) error {
 	// Check if task already has a final status
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
-		dm.logger.Infof("Task %d already has final status '%s', not updating to failed.", taskID, existingStatus)
+		dm.logger.Info(ctx, "Task %d already has final status '%s', not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorFailed,
 		errorMsg, executionTxHash, proofCID, taskID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating task failed for task ID %d: %v", taskID, err)
+		dm.logger.Error(ctx, "Error updating task failed for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Infof("Successfully updated task %d as failed: %s (tx_hash: %s)", taskID, errorMsg, executionTxHash)
+	dm.logger.Info(ctx, "Successfully updated task %d as failed: %s (tx_hash: %s)", observability.Int64("task_id", taskID), observability.String("error_msg", errorMsg), observability.String("execution_tx_hash", executionTxHash))
 	return nil
 }
 
@@ -122,36 +124,36 @@ func (dm *DatabaseClient) UpdateTaskAggregatorFailed(taskID int64, errorMsg, exe
 // The task is now pending on-chain confirmation
 // executionTxHash is the transaction hash from on-chain execution
 // proofCID contains all execution data
-func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(taskID int64, executionTxHash, proofCID string) error {
+func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(ctx context.Context, taskID int64, executionTxHash, proofCID string) error {
 	// Check if task already has a final status
 	var existingStatus string
 	iter := dm.db.NewQuery(queries.GetTaskStatusByID, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
-		dm.logger.Infof("Task %d already has final status '%s', not updating to pending_confirmation.", taskID, existingStatus)
+		dm.logger.Info(ctx, "Task %d already has final status '%s', not updating to pending_confirmation.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorSubmitted,
 		executionTxHash, proofCID, taskID).Exec(); err != nil {
-		dm.logger.Errorf("Error updating task submitted for task ID %d: %v", taskID, err)
+		dm.logger.Error(ctx, "Error updating task submitted for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Infof("Successfully updated task %d as pending_confirmation (tx_hash: %s)", taskID, executionTxHash)
+	dm.logger.Info(ctx, "Successfully updated task %d as pending_confirmation (tx_hash: %s)", observability.Int64("task_id", taskID), observability.String("execution_tx_hash", executionTxHash))
 	return nil
 }
 
 // GetUserEmailByJobID returns the user's email_id for a given job_id
-func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
+func (dm *DatabaseClient) GetUserEmailByJobID(ctx context.Context, jobID *big.Int) (string, error) {
 	var userID int64
 	iter := dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
@@ -163,7 +165,7 @@ func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
 	iter = dm.db.NewQuery(queries.GetUserEmailByUserID, userID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
@@ -175,23 +177,23 @@ func (dm *DatabaseClient) GetUserEmailByJobID(jobID *big.Int) (string, error) {
 }
 
 // GetUserEmailByTaskID returns the user's email_id for a given task_id
-func (dm *DatabaseClient) GetUserEmailByTaskID(taskID int64) (string, error) {
+func (dm *DatabaseClient) GetUserEmailByTaskID(ctx context.Context, taskID int64) (string, error) {
 	var predicted float64
 	var jobID *big.Int
 	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 	if !iter.Scan(&predicted, &jobID) {
 		return "", fmt.Errorf("job not found for task ID %d", taskID)
 	}
-	return dm.GetUserEmailByJobID(jobID)
+	return dm.GetUserEmailByJobID(ctx, jobID)
 }
 
 // UpdatePointsInDatabase updates points for all involved parties in a task
-func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmissionData) error {
+func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data types.TaskSubmissionData) error {
 	var jobID *big.Int
 	var userID int64
 	var userTasks int64
@@ -207,12 +209,12 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	iter := dm.db.NewQuery(queries.GetTaskCostAndJobId, data.TaskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
 	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
-		dm.logger.Errorf("Failed to get task fee and job ID for task ID %d: no results found", data.TaskID)
+		dm.logger.Error(ctx, "Failed to get task fee and job ID for task ID %d: no results found", observability.Int64("task_id", data.TaskID))
 		return fmt.Errorf("task not found for task ID %d", data.TaskID)
 	}
 
@@ -227,12 +229,12 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 		iter := dm.db.NewQuery(queries.GetAttesterPointsAndNoOfTasks, operator_id).Iter()
 		defer func() {
 			if cerr := iter.Close(); cerr != nil {
-				dm.logger.Errorf("Error closing iterator: %v", cerr)
+				dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 			}
 		}()
 
 		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
-			dm.logger.Error(fmt.Sprintf("Failed to get keeper points for operator_id %d: no results found", operator_id))
+			dm.logger.Error(ctx, "Failed to get keeper points for operator_id %d: no results found", observability.Int64("operator_id", operator_id))
 			return fmt.Errorf("keeper not found for operator_id %d", operator_id)
 		}
 		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
@@ -242,27 +244,27 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 		if err := dm.db.NewQuery(queries.UpdateAttesterPointsAndNoOfTasks,
 			keeperPoints, noAttestedTasks, keeperId).Exec(); err != nil {
-			dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
+			dm.logger.Error(ctx, "Failed to update keeper points", observability.Error(err))
 			return err
 		}
 	}
 
 	// Update the Performer Points
-	performerId, err := dm.GetKeeperIds([]string{data.PerformerAddress})
+	performerId, err := dm.GetKeeperIds(ctx, []string{data.PerformerAddress})
 	if err != nil {
-		dm.logger.Errorf("Failed to get performer ID: %v", err)
+		dm.logger.Error(ctx, "Failed to get performer ID", observability.Error(err))
 		return err
 	}
 	// Use RetryableIter since the query needs parameters
 	iter = dm.db.NewQuery(queries.GetPerformerPointsAndNoOfTasks, performerId[0]).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
 	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
-		dm.logger.Error(fmt.Sprintf("Failed to get keeper points for performer_id %d: no results found", performerId[0]))
+		dm.logger.Error(ctx, "Failed to get keeper points for performer_id %d: no results found", observability.Int64("performer_id", performerId[0]))
 		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
 	}
 	if data.IsAccepted {
@@ -274,7 +276,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	if err := dm.db.NewQuery(queries.UpdatePerformerPointsAndNoOfTasks,
 		keeperPoints, noExecutedTasks, performerId[0]).Exec(); err != nil {
-		dm.logger.Error(fmt.Sprintf("Failed to update keeper points: %v", err))
+		dm.logger.Error(ctx, "Failed to update keeper points", observability.Error(err))
 		return err
 	}
 
@@ -282,25 +284,25 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	iter = dm.db.NewQuery(queries.GetUserIdByJobId, jobID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
 	if !iter.Scan(&userID) {
-		dm.logger.Errorf("Failed to get user ID for job ID %d: no results found", jobID)
-		return fmt.Errorf("user not found for job ID %d", jobID)
+		dm.logger.Error(ctx, "Failed to get user ID for job ID %d: no results found", observability.Int64("job_id", jobID.Int64()))
+		return fmt.Errorf("user not found for job ID %d", jobID.Int64())
 	}
 
 	var userPoints float64
 	iter = dm.db.NewQuery(queries.GetUserPoints, userID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
 	if !iter.Scan(&userPoints, &userTasks) {
-		dm.logger.Errorf("Failed to get user points for user ID %d: no results found", userID)
+		dm.logger.Error(ctx, "Failed to get user points for user ID %d: no results found", observability.Int64("user_id", userID))
 		return fmt.Errorf("user not found for user ID %d", userID)
 	}
 
@@ -310,7 +312,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 
 	if err := dm.db.NewQuery(queries.UpdateUserPoints,
 		userPoints, userTasks, lastUpdatedAt, userID).Exec(); err != nil {
-		dm.logger.Errorf("Failed to update user points for user ID %d: %v", userID, err)
+		dm.logger.Error(ctx, "Failed to update user points for user ID %d", observability.Int64("user_id", userID), observability.Error(err))
 		return err
 	}
 
@@ -318,28 +320,28 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(data types.TaskSubmission
 	iter = dm.db.NewQuery(queries.GetJobCostActual, jobID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
 	if !iter.Scan(&jobCostActual) {
-		dm.logger.Errorf("Failed to get job cost actual for job ID %d: no results found", jobID)
+		dm.logger.Error(ctx, "Failed to get job cost actual for job ID %d: no results found", observability.Int64("job_id", jobID.Int64()))
 		return fmt.Errorf("job not found for job ID %d", jobID)
 	}
 
 	jobCostActual = jobCostActual + data.TaskOpxCost
 
 	if err := dm.db.NewQuery(queries.UpdateJobCostActual, jobCostActual, jobID).Exec(); err != nil {
-		dm.logger.Errorf("Failed to update job cost actual for job ID %d: %v", jobID, err)
+		dm.logger.Error(ctx, "Failed to update job cost actual for job ID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return err
 	}
 
-	dm.logger.Infof("Successfully updated points for user ID %d: added %.2f points", userID, data.TaskOpxCost)
+	dm.logger.Info(ctx, "Successfully updated points for user ID %d: added %.2f points", observability.Int64("user_id", userID), observability.Float64("task_opx_cost", data.TaskOpxCost))
 	return nil
 }
 
 // GetKeeperIds gets keeper IDs from keeper addresses
-func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error) {
+func (dm *DatabaseClient) GetKeeperIds(ctx context.Context, keeperAddresses []string) ([]int64, error) {
 	var keeperIds []int64
 	for _, keeperAddress := range keeperAddresses {
 		var keeperID int64
@@ -349,15 +351,15 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 		iter := dm.db.NewQuery(queries.GetKeeperIDByAddress, keeperAddress).Iter()
 		defer func() {
 			if cerr := iter.Close(); cerr != nil {
-				dm.logger.Errorf("Error closing iterator: %v", cerr)
+				dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 			}
 		}()
 
 		if iter.Scan(&keeperID) {
-			dm.logger.Infof("Keeper ID for address %s: %d", keeperAddress, keeperID)
+			dm.logger.Info(ctx, "Keeper ID for address %s: %d", observability.String("keeper_address", keeperAddress), observability.Int64("keeper_id", keeperID))
 			keeperIds = append(keeperIds, keeperID)
 		} else {
-			dm.logger.Errorf("Failed to get keeper ID for address %s: no results found", keeperAddress)
+			dm.logger.Error(ctx, "Failed to get keeper ID for address %s: no results found", observability.String("keeper_address", keeperAddress))
 			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
 		}
 	}
@@ -366,35 +368,35 @@ func (dm *DatabaseClient) GetKeeperIds(keeperAddresses []string) ([]int64, error
 
 // UpdateScriptStorage updates script storage for a custom job (TaskDefinitionID = 7)
 // This is called after task execution to persist storage updates from the custom script
-func (dm *DatabaseClient) UpdateScriptStorage(jobID *big.Int, storageUpdates map[string]string) error {
+func (dm *DatabaseClient) UpdateScriptStorage(ctx context.Context, jobID *big.Int, storageUpdates map[string]string) error {
 	if len(storageUpdates) == 0 {
-		dm.logger.Debugf("No storage updates for job %s", jobID.String())
+		dm.logger.Debug(ctx, "No storage updates for job %s", observability.String("job_id", jobID.String()))
 		return nil
 	}
 
-	dm.logger.Infof("Updating %d storage keys for job %s", len(storageUpdates), jobID.String())
+	dm.logger.Info(ctx, "Updating %d storage keys for job %s", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
 
 	// Upsert each storage key-value pair
 	for key, value := range storageUpdates {
 		if err := dm.db.NewQuery(queries.UpsertScriptStorageQuery,
 			jobID, key, value, time.Now().UTC()).Exec(); err != nil {
-			dm.logger.Errorf("Failed to update storage key '%s' for job %s: %v", key, jobID.String(), err)
+			dm.logger.Error(ctx, "Failed to update storage key '%s' for job %s: %v", observability.String("key", key), observability.String("job_id", jobID.String()), observability.Error(err))
 			return fmt.Errorf("failed to update storage: %w", err)
 		}
-		dm.logger.Debugf("Updated storage: job=%s, key=%s", jobID.String(), key)
+		dm.logger.Debug(ctx, "Updated storage: job=%s, key=%s", observability.String("job_id", jobID.String()), observability.String("key", key))
 	}
 
-	dm.logger.Infof("Successfully updated %d storage keys for job %s", len(storageUpdates), jobID.String())
+	dm.logger.Info(ctx, "Successfully updated %d storage keys for job %s", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
 	return nil
 }
 
 // GetJobIDByTaskID retrieves the job ID for a given task ID
-func (dm *DatabaseClient) GetJobIDByTaskID(taskID int64) (*big.Int, error) {
+func (dm *DatabaseClient) GetJobIDByTaskID(ctx context.Context, taskID int64) (*big.Int, error) {
 	var jobID *big.Int
 	iter := dm.db.NewQuery(queries.GetJobIDByTaskIDQuery, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 
@@ -406,12 +408,12 @@ func (dm *DatabaseClient) GetJobIDByTaskID(taskID int64) (*big.Int, error) {
 }
 
 // GetTaskDefinitionIDByTaskID retrieves the task definition ID for a given task ID
-func (dm *DatabaseClient) GetTaskDefinitionIDByTaskID(taskID int64) (int, error) {
+func (dm *DatabaseClient) GetTaskDefinitionIDByTaskID(ctx context.Context, taskID int64) (int, error) {
 	var taskDefinitionID int
 	iter := dm.db.NewQuery(queries.GetTaskDefinitionIDQuery, taskID).Iter()
 	defer func() {
 		if cerr := iter.Close(); cerr != nil {
-			dm.logger.Errorf("Error closing iterator: %v", cerr)
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
 		}
 	}()
 

@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -8,16 +9,16 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type codeValidator struct {
 	config config.ValidationConfig
-	logger logging.Logger
+	logger observability.Logger
 	fs     fs.FileSystemAPI
 }
 
-func newCodeValidator(cfg config.ValidationConfig, logger logging.Logger, fs fs.FileSystemAPI) *codeValidator {
+func newCodeValidator(cfg config.ValidationConfig, logger observability.Logger, fs fs.FileSystemAPI) *codeValidator {
 	return &codeValidator{
 		config: cfg,
 		logger: logger,
@@ -26,7 +27,7 @@ func newCodeValidator(cfg config.ValidationConfig, logger logging.Logger, fs fs.
 }
 
 // validateFile validates a file by checking its size, extension
-func (v *codeValidator) validateFile(filePath string) (*types.ValidationResult, error) {
+func (v *codeValidator) validateFile(ctx context.Context, filePath string) (*types.ValidationResult, error) {
 	result := &types.ValidationResult{
 		IsValid:    true,
 		Errors:     make([]string, 0),
@@ -45,7 +46,7 @@ func (v *codeValidator) validateFile(filePath string) (*types.ValidationResult, 
 	}
 
 	// Calculate and validate complexity
-	complexity := v.calculateComplexity(filePath)
+	complexity := v.calculateComplexity(ctx, filePath)
 	result.Complexity = complexity
 
 	if complexity > v.config.MaxComplexity {
@@ -110,10 +111,10 @@ func (v *codeValidator) validateFileExtension(filePath string, result *types.Val
 	return nil
 }
 
-func (v *codeValidator) calculateComplexity(filePath string) float64 {
+func (v *codeValidator) calculateComplexity(ctx context.Context, filePath string) float64 {
 	content, err := v.fs.ReadFile(filePath)
 	if err != nil {
-		v.logger.Warnf("Failed to read file for complexity calculation: %v", err)
+		v.logger.Warn(ctx, "Failed to read file for complexity calculation", observability.Error(err))
 		return 0.0
 	}
 

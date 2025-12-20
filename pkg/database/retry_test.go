@@ -8,7 +8,7 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -16,7 +16,7 @@ import (
 func TestNewQuery(t *testing.T) {
 	// Setup
 	mockSession := &MockSession{}
-	mockLogger := &logging.MockLogger{}
+	mockLogger := &observability.MockLogger{}
 
 	conn := &Connection{
 		session: mockSession,
@@ -41,15 +41,12 @@ func TestNewQuery(t *testing.T) {
 // TestQueryx_Exec_WithCustomRetryConfig tests execution with custom retry configuration
 func TestQueryx_Exec_WithCustomRetryConfig(t *testing.T) {
 	// Setup
-	mockLogger := &logging.MockLogger{}
-
 	customConfig := &retry.RetryConfig{
 		MaxRetries:      2,
 		InitialDelay:    10 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
 		BackoffFactor:   1.5,
 		JitterFactor:    0.1,
-		LogRetryAttempt: false,
 		ShouldRetry:     func(err error, attempt int) bool {
 			return gocqlShouldRetry(err)
 		},
@@ -67,7 +64,7 @@ func TestQueryx_Exec_WithCustomRetryConfig(t *testing.T) {
 		return mockQuery.Exec()
 	}
 
-	err := retry.RetryFunc(context.Background(), operation, customConfig, mockLogger)
+	err := retry.RetryFunc(context.Background(), operation, customConfig)
 
 	// Assert - should fail after max retries
 	assert.Error(t, err)
@@ -76,9 +73,6 @@ func TestQueryx_Exec_WithCustomRetryConfig(t *testing.T) {
 
 // TestQueryx_Exec_MaxRetriesExceeded tests when max retries are exceeded
 func TestQueryx_Exec_MaxRetriesExceeded(t *testing.T) {
-	// Setup
-	mockLogger := &logging.MockLogger{}
-
 	// Use a very low retry count
 	customConfig := &retry.RetryConfig{
 		MaxRetries:      1,
@@ -86,7 +80,6 @@ func TestQueryx_Exec_MaxRetriesExceeded(t *testing.T) {
 		MaxDelay:        10 * time.Millisecond,
 		BackoffFactor:   1.0,
 		JitterFactor:    0.0,
-		LogRetryAttempt: false,
 		ShouldRetry:     func(err error, attempt int) bool {
 			return gocqlShouldRetry(err)
 		},
@@ -104,7 +97,7 @@ func TestQueryx_Exec_MaxRetriesExceeded(t *testing.T) {
 		return mockQuery.Exec()
 	}
 
-	err := retry.RetryFunc(context.Background(), operation, customConfig, mockLogger)
+	err := retry.RetryFunc(context.Background(), operation, customConfig)
 
 	// Assert - should fail after max retries
 	assert.Error(t, err)
@@ -114,7 +107,7 @@ func TestQueryx_Exec_MaxRetriesExceeded(t *testing.T) {
 // TestQueryx_NonIdempotentWarning tests warning for non-idempotent queries
 func TestQueryx_NonIdempotentWarning(t *testing.T) {
 	// Setup
-	mockLogger := &logging.MockLogger{}
+	mockLogger := &observability.MockLogger{}
 
 	queryx := &Queryx{
 		query:  nil, // We don't need a real query for this test
@@ -127,7 +120,7 @@ func TestQueryx_NonIdempotentWarning(t *testing.T) {
 	// Since we can't actually execute with a nil query, we'll test the warning logic
 	// by checking that the warning would be logged for non-idempotent queries
 	if !queryx.isIdem {
-		mockLogger.Warnf("Executing a non-idempotent query with retry logic. Ensure this is intended.")
+		mockLogger.Warn(context.Background(), "Executing a non-idempotent query with retry logic. Ensure this is intended.")
 	}
 
 	// Assert
@@ -138,7 +131,6 @@ func TestQueryx_NonIdempotentWarning(t *testing.T) {
 func TestQueryx_RetryLogic(t *testing.T) {
 	t.Run("Success on first try", func(t *testing.T) {
 		mockQuery := &MockQuery{execErr: nil, maxCalls: 0}
-		mockLogger := &logging.MockLogger{}
 
 		// Test the retry logic directly with our mock
 		operation := func() error {
@@ -150,7 +142,7 @@ func TestQueryx_RetryLogic(t *testing.T) {
 			return gocqlShouldRetry(err)
 		}
 
-		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
+		err := retry.RetryFunc(context.Background(), operation, cfg)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 1, mockQuery.callCount, "Exec should be called once")
@@ -158,10 +150,6 @@ func TestQueryx_RetryLogic(t *testing.T) {
 
 	t.Run("Fails once then succeeds", func(t *testing.T) {
 		mockQuery := &MockQuery{execErr: &gocql.RequestErrWriteTimeout{}, maxCalls: 1}
-		mockLogger := &logging.MockLogger{}
-
-		// Set up the mock logger to expect retry warning messages
-		mockLogger.On("Warnf", mock.AnythingOfType("string"), mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 		operation := func() error {
 			return mockQuery.Exec()
@@ -172,16 +160,14 @@ func TestQueryx_RetryLogic(t *testing.T) {
 			return gocqlShouldRetry(err)
 		}
 
-		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
+		err := retry.RetryFunc(context.Background(), operation, cfg)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 2, mockQuery.callCount, "Exec should be called twice")
-		mockLogger.AssertExpectations(t)
 	})
 
 	t.Run("Fails on non-retryable error", func(t *testing.T) {
 		mockQuery := &MockQuery{execErr: gocql.ErrNotFound, maxCalls: 5}
-		mockLogger := &logging.MockLogger{}
 
 		operation := func() error {
 			return mockQuery.Exec()
@@ -192,7 +178,7 @@ func TestQueryx_RetryLogic(t *testing.T) {
 			return gocqlShouldRetry(err)
 		}
 
-		err := retry.RetryFunc(context.Background(), operation, cfg, mockLogger)
+		err := retry.RetryFunc(context.Background(), operation, cfg)
 
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, gocql.ErrNotFound)

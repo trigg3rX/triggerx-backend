@@ -7,18 +7,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	taskID := c.Param("id")
-	h.logger.Infof("[UpdateTaskExecutionData] Updating task execution data for task with ID: %s", taskID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskExecutionData] Updating task execution data for task with ID: %s", observability.String("task_id", taskID))
 
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[UpdateTaskExecutionData] trace_id=%s - Updating task execution data", traceID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskExecutionData] trace_id=%s - Updating task execution data", observability.String("trace_id", traceID))
 
 	var taskData types.UpdateTaskExecutionDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
-		h.logger.Errorf("[UpdateTaskExecutionData] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskExecutionData] Error decoding request body: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -28,7 +29,7 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 
 	// Validate required fields
 	if taskData.TaskID == 0 || taskData.ExecutionTimestamp.IsZero() || taskData.ExecutionTxHash == "" {
-		h.logger.Errorf("[UpdateTaskExecutionData] Missing required fields")
+		h.logger.Error(c.Request.Context(), "[UpdateTaskExecutionData] Missing required fields")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Missing required fields",
 			"code":  "MISSING_REQUIRED_FIELDS",
@@ -37,9 +38,9 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("update", "task_data")
-	if err := h.taskRepository.UpdateTaskExecutionDataInDB(&taskData); err != nil {
+	if err := h.taskRepository.UpdateTaskExecutionDataInDB(c.Request.Context(), &taskData); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[UpdateTaskExecutionData] Error updating task execution data: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskExecutionData] Error updating task execution data: %v", observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found or update failed",
 			"code":  "TASK_UPDATE_ERROR",
@@ -48,19 +49,19 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Infof("[UpdateTaskExecutionData] Successfully updated task execution data for task with ID: %s", taskID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskExecutionData] Successfully updated task execution data for task with ID: %s", observability.String("task_id", taskID))
 	c.JSON(http.StatusOK, gin.H{"message": "Task execution data updated successfully"})
 }
 
 func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[UpdateTaskAttestationData] trace_id=%s - Updating task attestation data", traceID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskAttestationData] trace_id=%s - Updating task attestation data", observability.String("trace_id", traceID))
 	taskID := c.Param("id")
-	h.logger.Infof("[UpdateTaskAttestationData] Updating task attestation data for task with ID: %s", taskID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskAttestationData] Updating task attestation data for task with ID: %s", observability.String("task_id", taskID))
 
 	var taskData types.UpdateTaskAttestationDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
-		h.logger.Errorf("[UpdateTaskAttestationData] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskAttestationData] Error decoding request body: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -70,7 +71,7 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 
 	// Validate required fields
 	if taskData.TaskID == 0 || taskData.TaskNumber == 0 || len(taskData.TaskAttesterIDs) == 0 || len(taskData.TpSignature) == 0 || len(taskData.TaSignature) == 0 || taskData.TaskSubmissionTxHash == "" {
-		h.logger.Errorf("[UpdateTaskAttestationData] Missing required fields")
+		h.logger.Error(c.Request.Context(), "[UpdateTaskAttestationData] Missing required fields")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Missing required fields",
 			"code":  "MISSING_REQUIRED_FIELDS",
@@ -79,9 +80,9 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("update", "task_data")
-	if err := h.taskRepository.UpdateTaskAttestationDataInDB(&taskData); err != nil {
+	if err := h.taskRepository.UpdateTaskAttestationDataInDB(c.Request.Context(), &taskData); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[UpdateTaskAttestationData] Error updating task attestation data: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskAttestationData] Error updating task attestation data: %v", observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found or update failed",
 			"code":  "TASK_UPDATE_ERROR",
@@ -90,21 +91,21 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Infof("[UpdateTaskAttestationData] Successfully updated task attestation data for task with ID: %s", taskID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskAttestationData] Successfully updated task attestation data for task with ID: %s", observability.String("task_id", taskID))
 	c.JSON(http.StatusOK, gin.H{"message": "Task attestation data updated successfully"})
 }
 
 func (h *Handler) UpdateTaskFee(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[UpdateTaskFee] trace_id=%s - Updating task fee", traceID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskFee] trace_id=%s - Updating task fee", observability.String("trace_id", traceID))
 	taskID := c.Param("id")
-	h.logger.Infof("[UpdateTaskFee] Updating task fee for task with ID: %s", taskID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskFee] Updating task fee for task with ID: %s", observability.String("task_id", taskID))
 
 	var taskFee struct {
 		Fee float64 `json:"fee"`
 	}
 	if err := c.ShouldBindJSON(&taskFee); err != nil {
-		h.logger.Errorf("[UpdateTaskFee] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskFee] Error decoding request body: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -114,7 +115,7 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
 	if err != nil {
-		h.logger.Errorf("[UpdateTaskFee] Error parsing task ID: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskFee] Error parsing task ID: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid task ID format",
 			"code":  "INVALID_TASK_ID",
@@ -123,9 +124,9 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("update", "task_data")
-	if err := h.taskRepository.UpdateTaskFee(taskIDInt, taskFee.Fee); err != nil {
+	if err := h.taskRepository.UpdateTaskFee(c.Request.Context(), taskIDInt, taskFee.Fee); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[UpdateTaskFee] Error updating task fee: %v", err)
+		h.logger.Error(c.Request.Context(), "[UpdateTaskFee] Error updating task fee: %v", observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found or update failed",
 			"code":  "TASK_UPDATE_ERROR",
@@ -134,6 +135,6 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Infof("[UpdateTaskFee] Successfully updated task fee for task with ID: %s", taskID)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskFee] Successfully updated task fee for task with ID: %s", observability.String("task_id", taskID))
 	c.JSON(http.StatusOK, taskFee)
 }

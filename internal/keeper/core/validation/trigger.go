@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/utils"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -23,8 +24,8 @@ const (
 	ConditionLessEqual    = "less_equal"
 )
 
-func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, traceID string) (bool, error) {
-	e.logger.Info("Validating trigger data", "task_id", triggerData.TaskID, "trace_id", traceID)
+func (e *TaskValidator) ValidateTrigger(ctx context.Context, triggerData *types.TaskTriggerData, traceID string) (bool, error) {
+	e.logger.Info(ctx, "Validating trigger data", observability.Int64("task_id", triggerData.TaskID), observability.String("trace_id", traceID))
 
 	switch triggerData.TaskDefinitionID {
 	case 1, 2:
@@ -38,7 +39,7 @@ func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, trac
 			return isValid, err
 		}
 	case 5, 6:
-		isValid, err := e.IsValidConditionBasedTrigger(triggerData)
+		isValid, err := e.IsValidConditionBasedTrigger(ctx, triggerData)
 		if !isValid {
 			return isValid, err
 		}
@@ -128,13 +129,13 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 	return true, nil
 }
 
-func (v *TaskValidator) IsValidConditionBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
+func (v *TaskValidator) IsValidConditionBasedTrigger(ctx context.Context, triggerData *types.TaskTriggerData) (bool, error) {
 	// check if expiration time is before trigger timestamp
 	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
 	}
 	// v.logger.Infof("trigger data: %+v", triggerData)
-	v.logger.Infof("value: %v | upper limit: %v | lower limit: %v", triggerData.ConditionSatisfiedValue, triggerData.ConditionUpperLimit, triggerData.ConditionLowerLimit)
+	v.logger.Info(ctx, "value: %v | upper limit: %v | lower limit: %v", observability.Int("value", triggerData.ConditionSatisfiedValue), observability.Int("upper limit", triggerData.ConditionUpperLimit), observability.Int("lower limit", triggerData.ConditionLowerLimit))
 
 	// check if the condition was satisfied by the value
 	if triggerData.ConditionType == ConditionEquals {

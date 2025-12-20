@@ -16,7 +16,7 @@ func TestFetchDataFromUrl_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	data, err := FetchDataFromUrl(server.URL, nil)
+	data, err := FetchDataFromUrl(server.URL)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -35,7 +35,7 @@ func TestFetchDataFromUrl_Non200(t *testing.T) {
 	}))
 	defer server.Close()
 
-	data, err := FetchDataFromUrl(server.URL, nil)
+	data, err := FetchDataFromUrl(server.URL)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -45,14 +45,14 @@ func TestFetchDataFromUrl_Non200(t *testing.T) {
 }
 
 func TestFetchDataFromUrl_InvalidURL(t *testing.T) {
-	_, err := FetchDataFromUrl(":badurl:", nil)
+	_, err := FetchDataFromUrl(":badurl:")
 	if err == nil {
 		t.Error("expected error for invalid URL, got nil")
 	}
 }
 
 func TestFetchDataFromUrl_EmptyURL(t *testing.T) {
-	_, err := FetchDataFromUrl("", nil)
+	_, err := FetchDataFromUrl("")
 	if err == nil {
 		t.Error("expected error for empty URL, got nil")
 	}

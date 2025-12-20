@@ -10,22 +10,22 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Client handles communication with the Event Monitor Service
 type Client struct {
 	baseURL    string
 	httpClient *httppkg.HTTPClient
-	logger     logging.Logger
+	logger     observability.Logger
 }
 
 // NewClient creates a new Event Monitor Service client
-func NewClient(baseURL string, logger logging.Logger) (*Client, error) {
+func NewClient(baseURL string, logger observability.Logger) (*Client, error) {
 	httpConfig := httppkg.DefaultHTTPRetryConfig()
 	httpConfig.Timeout = 10 * time.Second
 
-	httpClient, err := httppkg.NewHTTPClient(httpConfig, logger)
+	httpClient, err := httppkg.NewHTTPClient(httpConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
@@ -38,7 +38,7 @@ func NewClient(baseURL string, logger logging.Logger) (*Client, error) {
 }
 
 // Register registers a monitoring request with the Event Monitor Service
-func (c *Client) Register(req *types.MonitoringRequest) error {
+func (c *Client) Register(ctx context.Context, req *types.MonitoringRequest) error {
 	url := fmt.Sprintf("%s/api/v1/monitor/register", c.baseURL)
 
 	body, err := json.Marshal(req)
@@ -53,13 +53,13 @@ func (c *Client) Register(req *types.MonitoringRequest) error {
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.DoWithRetry(context.Background(), httpReq)
+	resp, err := c.httpClient.DoWithRetry(ctx, httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer func () {
+	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.logger.Errorf("Error closing response body: %v", err)
+			c.logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 
@@ -82,16 +82,16 @@ func (c *Client) Register(req *types.MonitoringRequest) error {
 		return fmt.Errorf("registration failed: %s", registerResp.Message)
 	}
 
-	c.logger.Info("Registered monitoring request with Event Monitor Service",
-		"request_id", req.RequestID,
-		"chain_id", req.ChainID,
-		"contract_address", req.ContractAddr)
+	c.logger.Info(ctx, "Registered monitoring request with Event Monitor Service",
+		observability.String("request_id", req.RequestID),
+		observability.String("chain_id", req.ChainID),
+		observability.String("contract_address", req.ContractAddr))
 
 	return nil
 }
 
 // Unregister unregisters a monitoring request from the Event Monitor Service
-func (c *Client) Unregister(requestID string) error {
+func (c *Client) Unregister(ctx context.Context, requestID string) error {
 	url := fmt.Sprintf("%s/api/v1/monitor/unregister", c.baseURL)
 
 	reqBody := types.UnregisterRequest{
@@ -110,13 +110,13 @@ func (c *Client) Unregister(requestID string) error {
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.DoWithRetry(context.Background(), httpReq)
+	resp, err := c.httpClient.DoWithRetry(ctx, httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer func () {
+	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.logger.Errorf("Error closing response body: %v", err)
+			c.logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 
@@ -139,8 +139,8 @@ func (c *Client) Unregister(requestID string) error {
 		return fmt.Errorf("unregistration failed: %s", unregisterResp.Message)
 	}
 
-	c.logger.Info("Unregistered monitoring request from Event Monitor Service",
-		"request_id", requestID)
+	c.logger.Info(ctx, "Unregistered monitoring request from Event Monitor Service",
+		observability.String("request_id", requestID))
 
 	return nil
 }

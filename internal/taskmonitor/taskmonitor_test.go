@@ -1,17 +1,18 @@
 package taskmonitor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func TestNewTaskManager(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
-	tm, err := NewTaskManager(logger)
+	tm, err := NewTaskManager(context.Background(), logger)
 	require.NoError(t, err)
 	assert.NotNil(t, tm)
 
@@ -26,9 +27,9 @@ func TestNewTaskManager(t *testing.T) {
 }
 
 func TestTaskManager_Initialize(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
-	tm, err := NewTaskManager(logger)
+	tm, err := NewTaskManager(context.Background(), logger)
 	require.NoError(t, err)
 	defer func() {
 		if cerr := tm.Close(); cerr != nil {
@@ -46,9 +47,9 @@ func TestTaskManager_Initialize(t *testing.T) {
 }
 
 func TestTaskManager_HealthCheck(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
-	tm, err := NewTaskManager(logger)
+	tm, err := NewTaskManager(context.Background(), logger)
 	require.NoError(t, err)
 	defer func() {
 		if cerr := tm.Close(); cerr != nil {

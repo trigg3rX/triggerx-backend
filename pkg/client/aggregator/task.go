@@ -12,22 +12,23 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // SendTaskToValidators sends a task result to the validators
 func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult *types.BroadcastDataForValidators) (bool, error) {
-	c.logger.Debug("Sending task result to aggregator",
-		"taskDefinitionId", taskResult.TaskDefinitionID,
-		"proofOfTask", taskResult.ProofOfTask)
+	c.logger.Debug(ctx, "Sending task result to aggregator",
+		observability.Int("taskDefinitionId", taskResult.TaskDefinitionID),
+		observability.String("proofOfTask", taskResult.ProofOfTask))
 
 	privateKey, err := crypto.HexToECDSA(c.config.SenderPrivateKey)
 	if err != nil {
-		c.logger.Error("Failed to convert private key to ECDSA", "error", err)
+		c.logger.Error(ctx, "Failed to convert private key to ECDSA", observability.Error(err))
 		return false, fmt.Errorf("failed to convert private key to ECDSA: %w", err)
 	}
 	publicKey, ok := privateKey.Public().(*ecdsa.PublicKey)
 	if !ok {
-		c.logger.Error("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+		c.logger.Error(ctx, "cannot assert type: publicKey is not of type *ecdsa.PublicKey")
 	}
 	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
 
@@ -46,20 +47,20 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		big.NewInt(int64(taskResult.TaskDefinitionID)),
 	)
 	if err != nil {
-		c.logger.Error("Failed to encode task data", "error", err)
+		c.logger.Error(ctx, "Failed to encode task data", observability.Error(err))
 		return false, fmt.Errorf("failed to encode task data: %w", err)
 	}
 	messageHash := crypto.Keccak256(dataPacked)
 
 	sig, err := crypto.Sign(messageHash, privateKey)
 	if err != nil {
-		c.logger.Error("Failed to sign task data", "error", err)
+		c.logger.Error(ctx, "Failed to sign task data", observability.Error(err))
 		return false, fmt.Errorf("failed to sign task data: %w", err)
 	}
 	sig[64] += 27
 	serializedSignature := hexutil.Encode(sig)
 
-	c.logger.Debug("Task data signed successfully", "signature", sig)
+	c.logger.Debug(ctx, "Task data signed successfully", observability.String("signature", hex.EncodeToString(sig)))
 
 	// Prepare parameters using consistent structure
 	params := CallParams{
@@ -75,14 +76,14 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	var response interface{}
 	err = c.executeWithRetry(ctx, "sendTask", &response, params)
 	if err != nil {
-		c.logger.Error("Failed to send task result", "error", err)
+		c.logger.Error(ctx, "Failed to send task result", observability.Error(err))
 		return false, fmt.Errorf("failed to send task result: %w", err)
 	}
 
-	c.logger.Info("Successfully sent task result to aggregator",
-		"taskDefinitionId", taskResult.TaskDefinitionID,
-		"proofOfTask", taskResult.ProofOfTask,
-		"response", response)
+	c.logger.Info(ctx, "Successfully sent task result to aggregator",
+		observability.Int("taskDefinitionId", taskResult.TaskDefinitionID),
+		observability.String("proofOfTask", taskResult.ProofOfTask),
+		observability.Any("response", response))
 
 	return true, nil
 }

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -116,7 +116,7 @@ type WebSocketClient struct {
 	url            string
 	conn           *websocket.Conn
 	config         *WebSocketRetryConfig
-	logger         logging.Logger
+	logger         observability.Logger
 	mu             sync.RWMutex
 	isConnected    bool
 	ctx            context.Context
@@ -132,7 +132,7 @@ type WebSocketClient struct {
 }
 
 // NewWebSocketClient creates a new WebSocket client with retry and reconnection capabilities
-func NewWebSocketClient(url string, config *WebSocketRetryConfig, logger logging.Logger) (*WebSocketClient, error) {
+func NewWebSocketClient(url string, config *WebSocketRetryConfig, logger observability.Logger) (*WebSocketClient, error) {
 	if config == nil {
 		config = DefaultWebSocketRetryConfig()
 	}
@@ -210,7 +210,7 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 		return conn, nil
 	}
 
-	conn, err := retry.Retry(ctx, operation, c.config.RetryConfig, c.logger)
+	conn, err := retry.Retry(ctx, operation, c.config.RetryConfig)
 	if err != nil {
 		return fmt.Errorf("failed to establish WebSocket connection after retries: %w", err)
 	}
@@ -220,7 +220,7 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 	if c.conn != nil {
 		err := c.conn.Close()
 		if err != nil {
-			c.logger.Errorf("Error closing WebSocket connection: %v", err)
+			c.logger.Error(ctx, "Error closing WebSocket connection", observability.Error(err))
 		}
 	}
 	c.conn = conn
@@ -249,7 +249,7 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(c.config.WriteDeadline))
 	})
 
-	c.logger.Infof("Successfully connected to WebSocket: %s", c.url)
+	c.logger.Info(ctx, "Successfully connected to WebSocket", observability.String("url", c.url))
 
 	// Start background goroutines
 	c.wg.Add(2)
@@ -280,7 +280,6 @@ func (c *WebSocketClient) pingLoop() {
 			}
 
 			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(c.config.WriteDeadline)); err != nil {
-				c.logger.Warnf("Failed to send ping: %v", err)
 				c.handleDisconnection()
 				return
 			}
@@ -310,11 +309,7 @@ func (c *WebSocketClient) readLoop() {
 
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				c.logger.Errorf("WebSocket connection closed unexpectedly: %v", err)
-			} else {
-				c.logger.Debugf("WebSocket read error: %v", err)
-			}
+			c.logger.Error(c.ctx, "WebSocket connection closed unexpectedly", observability.Error(err))
 			c.handleDisconnection()
 			return
 		}
@@ -331,7 +326,7 @@ func (c *WebSocketClient) readLoop() {
 			case <-c.ctx.Done():
 				return
 			default:
-				c.logger.Warnf("Message channel full, dropping message")
+				c.logger.Error(c.ctx, "Message channel full, dropping message")
 			}
 		}
 	}
@@ -348,13 +343,12 @@ func (c *WebSocketClient) handleDisconnection() {
 	if c.conn != nil {
 		err := c.conn.Close()
 		if err != nil {
-			c.logger.Errorf("Error closing WebSocket connection: %v", err)
+			c.logger.Error(c.ctx, "Error closing WebSocket connection", observability.Error(err))
 		}
 		c.conn = nil
 	}
 	c.mu.Unlock()
 
-	c.logger.Warnf("WebSocket disconnected, attempting to reconnect...")
 	c.wg.Add(1)
 	go c.reconnectLoop()
 }
@@ -376,7 +370,7 @@ func (c *WebSocketClient) reconnectLoop() {
 
 		// Check max retries
 		if cfg.MaxRetries > 0 && attempt >= cfg.MaxRetries {
-			c.logger.Errorf("Max reconnection attempts (%d) reached for %s", cfg.MaxRetries, c.url)
+			c.logger.Error(c.ctx, "Max reconnection attempts reached", observability.Int("max_retries", cfg.MaxRetries), observability.String("url", c.url))
 			select {
 			case c.errorChan <- fmt.Errorf("max reconnection attempts reached"):
 			default:
@@ -388,9 +382,6 @@ func (c *WebSocketClient) reconnectLoop() {
 		c.mu.Lock()
 		c.reconnectCount = attempt
 		c.mu.Unlock()
-
-		c.logger.Warnf("Reconnecting to %s in %v (attempt %d/%s)",
-			c.url, delay, attempt, formatMaxRetries(cfg.MaxRetries))
 
 		select {
 		case <-c.ctx.Done():
@@ -404,13 +395,12 @@ func (c *WebSocketClient) reconnectLoop() {
 		cancel()
 
 		if err != nil {
-			c.logger.Errorf("Reconnection attempt %d failed: %v", attempt, err)
+			c.logger.Error(c.ctx, "Reconnection attempt failed", observability.Int("attempt", attempt), observability.Error(err))
 			// Calculate next delay with exponential backoff
 			delay = calculateReconnectDelay(delay, cfg)
 			continue
 		}
 
-		c.logger.Infof("Reconnection successful after %d attempts", attempt)
 		// Reset reconnect count after successful reconnection
 		c.mu.Lock()
 		c.reconnectCount = 0
@@ -437,14 +427,6 @@ func calculateReconnectDelay(currentDelay time.Duration, cfg *ReconnectConfig) t
 	}
 
 	return delay
-}
-
-// formatMaxRetries formats max retries for logging
-func formatMaxRetries(maxRetries int) string {
-	if maxRetries == 0 {
-		return "∞"
-	}
-	return fmt.Sprintf("%d", maxRetries)
 }
 
 // ReadMessage reads a message from the WebSocket connection

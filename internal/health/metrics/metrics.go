@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -12,6 +13,11 @@ import (
 var (
 	startTime = time.Now()
 	ctx       = context.Background()
+
+	// Request tracking for RPS calculation
+	requestCounts     = make(map[string]int64) // endpoint -> count
+	requestCountsLock sync.Mutex
+	lastRPSUpdate     = time.Now()
 
 	// Metrics instances
 	uptimeSeconds                        observability.Gauge
@@ -67,6 +73,40 @@ func StartMetricsCollection() {
 			}
 		}
 	}()
+
+	// Calculate and update requests per second every 10 seconds
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			calculateAndUpdateRPS(ctx)
+		}
+	}()
+}
+
+// calculateAndUpdateRPS calculates requests per second from request counts
+func calculateAndUpdateRPS(ctx context.Context) {
+	requestCountsLock.Lock()
+	defer requestCountsLock.Unlock()
+
+	now := time.Now()
+	timeWindow := now.Sub(lastRPSUpdate).Seconds()
+	if timeWindow <= 0 {
+		timeWindow = 1.0 // Avoid division by zero
+	}
+
+	// Calculate RPS for each endpoint and update metric
+	for endpoint, count := range requestCounts {
+		rps := float64(count) / timeWindow
+		RecordRequestsPerSecond(ctx, endpoint, rps)
+	}
+
+	// Reset counts for next window
+	for k := range requestCounts {
+		requestCounts[k] = 0
+	}
+	lastRPSUpdate = now
 }
 
 // InitializeMetrics initializes all metrics using the observability metrics instance
@@ -181,4 +221,78 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		[]string{"type"},
 		observability.WithDescription("Network connections (type=incoming/outgoing)"),
 	)
+}
+
+// RecordHTTPRequest records HTTP request metrics
+func RecordHTTPRequest(ctx context.Context, method, endpoint, statusCode string, duration time.Duration) {
+	if httpRequestsTotal != nil {
+		httpRequestsTotal.WithLabelValues(method, endpoint, statusCode).Inc(ctx)
+	}
+	if httpRequestDuration != nil {
+		httpRequestDuration.WithLabelValues(method, endpoint).Record(ctx, duration.Seconds())
+	}
+
+	// Track request count for RPS calculation
+	requestCountsLock.Lock()
+	requestCounts[endpoint]++
+	requestCountsLock.Unlock()
+}
+
+// RecordRequestsPerSecond records requests per second for an endpoint
+func RecordRequestsPerSecond(ctx context.Context, endpoint string, rps float64) {
+	if requestsPerSecond != nil {
+		requestsPerSecond.WithLabelValues(endpoint).Set(ctx, rps)
+	}
+}
+
+// RecordKeeperCheckIn records a keeper check-in by version
+func RecordKeeperCheckIn(ctx context.Context, version string) {
+	if checkinsByVersionTotal != nil {
+		checkinsByVersionTotal.WithLabelValues(version).Inc(ctx)
+	}
+}
+
+// UpdateKeeperCounts updates the total and active keeper counts
+func UpdateKeeperCounts(ctx context.Context, total, active int) {
+	if keepersTotal != nil {
+		keepersTotal.Set(ctx, float64(total))
+	}
+	if keepersActiveTotal != nil {
+		keepersActiveTotal.Set(ctx, float64(active))
+	}
+}
+
+// UpdateKeeperUptime updates the uptime for a specific keeper
+func UpdateKeeperUptime(ctx context.Context, keeperAddress string, uptimeSeconds float64) {
+	if keeperUptimeSeconds != nil {
+		keeperUptimeSeconds.WithLabelValues(keeperAddress).Set(ctx, uptimeSeconds)
+	}
+}
+
+// RecordMostActiveKeeperUptime records the uptime for the most active keeper
+func RecordMostActiveKeeperUptime(ctx context.Context, keeperAddress string, uptimeSeconds float64) {
+	if mostActiveKeeperSeconds != nil {
+		mostActiveKeeperSeconds.WithLabelValues(keeperAddress).Add(ctx, uptimeSeconds)
+	}
+}
+
+// RecordDBOperationDuration records the duration of a database operation
+func RecordDBOperationDuration(ctx context.Context, operation string, duration time.Duration) {
+	if dbHostOperationDuration != nil {
+		dbHostOperationDuration.WithLabelValues(operation).Record(ctx, duration.Seconds())
+	}
+}
+
+// RecordTelegramNotification records a telegram notification sent for a keeper
+func RecordTelegramNotification(ctx context.Context, keeperAddress string) {
+	if telegramKeeperNotificationsSentTotal != nil {
+		telegramKeeperNotificationsSentTotal.WithLabelValues(keeperAddress).Inc(ctx)
+	}
+}
+
+// RecordNetworkConnection records a network connection event
+func RecordNetworkConnection(ctx context.Context, connType string) {
+	if networkConnectionsTotal != nil {
+		networkConnectionsTotal.WithLabelValues(connType).Inc(ctx)
+	}
 }

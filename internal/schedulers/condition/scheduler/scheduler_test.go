@@ -9,12 +9,12 @@ package scheduler
 
 // 	// "github.com/trigg3rX/triggerx-backend/internal/cache"
 // 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 // 	schedulerTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 // )
 
 // func init() {
-// 	_ = logging.InitServiceLogger(logging.LoggerConfig{
+// 	_ = logging.InitServiceLogger(observability.loggerConfig{
 // 		LogDir:          logging.BaseDataDir,
 // 		ProcessName:     "test",
 // 		Environment:     logging.Development,
@@ -66,7 +66,7 @@ package scheduler
 // func (m *mockLogger) Warnf(template string, args ...interface{})  {}
 // func (m *mockLogger) Errorf(template string, args ...interface{}) {}
 // func (m *mockLogger) Fatalf(template string, args ...interface{}) {}
-// func (m *mockLogger) With(tags ...any) logging.Logger             { return m }
+// func (m *mockLogger) With(tags ...any) observability.logger             { return m }
 
 // --- Helper to create a scheduler ---
 // func newTestScheduler(cacheInst cache.Cache, dbClient *client.DBServerClient) *ConditionBasedScheduler {

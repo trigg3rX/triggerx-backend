@@ -2,6 +2,7 @@ package execution
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -14,9 +15,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {
+func (e *TaskExecutor) getContractMethodAndABI(ctx context.Context, methodName string, targetData *types.TaskTargetData) (*abi.ABI, *abi.Method, error) {
 	if targetData.ABI == "" {
 		return nil, nil, fmt.Errorf("contract ABI not provided in job data")
 	}
@@ -25,36 +27,36 @@ func (e *TaskExecutor) getContractMethodAndABI(methodName string, targetData *ty
 
 	parsed, err := abi.JSON(bytes.NewReader(abiData))
 	if err != nil {
-		e.logger.Warnf("Error parsing ABI: %v", err)
+		e.logger.Warn(ctx, "Error parsing ABI: %v", observability.Error(err))
 		return nil, nil, err
 	}
 
-	e.logger.Debugf("Using ABI from database for contract %s", targetData.TargetContractAddress)
+	e.logger.Debug(ctx, "Using ABI from database for contract %s", observability.String("contract_address", targetData.TargetContractAddress))
 
 	method, ok := parsed.Methods[methodName]
 	if !ok {
-		e.logger.Warnf("Method %s not found in contract ABI", methodName)
+		e.logger.Warn(ctx, "Method %s not found in contract ABI", observability.String("method_name", methodName))
 		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
 	}
 
-	e.logger.Debugf("Found method: %+v", method)
+	e.logger.Debug(ctx, "Found method: %+v", observability.String("method", method.Name))
 	return &parsed, &method, nil
 }
 
-func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
+func (e *TaskExecutor) processArguments(ctx context.Context, args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
 	convertedArgs := make([]interface{}, 0)
 
-	e.logger.Debugf("Processing arguments: %+v for method inputs: %+v", args, methodInputs)
+	e.logger.Debug(ctx, "Processing arguments: %+v for method inputs: %+v", observability.Any("args", args), observability.Any("method_inputs", methodInputs))
 
 	// Handle nil or empty args
 	if args == nil {
-		e.logger.Warnf("Received nil arguments")
+		e.logger.Warn(ctx, "Received nil arguments")
 		return nil, fmt.Errorf("nil arguments provided")
 	}
 
 	// Check if we have any inputs at all
 	if len(methodInputs) == 0 {
-		e.logger.Debugf("Method has no inputs, returning empty args")
+		e.logger.Debug(ctx, "Method has no inputs, returning empty args")
 		return convertedArgs, nil
 	}
 
@@ -211,11 +213,11 @@ func (e *TaskExecutor) processArguments(args interface{}, methodInputs []abi.Arg
 	return convertedArgs, nil
 }
 
-func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
+func (e *TaskExecutor) parseDynamicArgs(ctx context.Context, output string) []interface{} {
 	// First try to parse as JSON
 	var argData []interface{}
 	if err := json.Unmarshal([]byte(output), &argData); err == nil && len(argData) > 0 {
-		e.logger.Debugf("Successfully parsed dynamic arguments as JSON: %v", argData)
+		e.logger.Debug(ctx, "Successfully parsed dynamic arguments as JSON: %v", observability.Any("arg_data", argData))
 		return argData
 	}
 
@@ -231,13 +233,13 @@ func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
 			if len(match) >= 2 {
 				// Try to parse as float first
 				if val, err := strconv.ParseFloat(match[1], 64); err == nil {
-					e.logger.Debugf("Found numeric response value: %v", val)
+					e.logger.Debug(ctx, "Found numeric response value: %v", observability.Float64("val", val))
 					argData = append(argData, val)
 					continue
 				}
 
 				// If not a number, use as string
-				e.logger.Debugf("Found string response value: %s", match[1])
+				e.logger.Debug(ctx, "Found string response value: %s", observability.String("value", match[1]))
 				argData = append(argData, match[1])
 			}
 		}
@@ -257,7 +259,7 @@ func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
 			if val, err := strconv.ParseFloat(match, 64); err == nil {
 				// Only consider "significant" numbers (not small ones that might be timestamps)
 				if val > 100 {
-					e.logger.Debugf("Found significant numeric value: %v", val)
+					e.logger.Debug(ctx, "Found significant numeric value: %v", observability.Float64("val", val))
 					argData = append(argData, val)
 				}
 			}
@@ -270,11 +272,11 @@ func (e *TaskExecutor) parseDynamicArgs(output string) []interface{} {
 
 	// As a fallback, check for "Condition satisfied: true" pattern
 	if strings.Contains(output, "Condition satisfied: true") {
-		e.logger.Debugf("Found condition satisfied pattern, using true as argument")
+		e.logger.Debug(ctx, "Found condition satisfied pattern, using true as argument")
 		return []interface{}{true}
 	}
 
-	e.logger.Warnf("Failed to extract any arguments from output: %s", output)
+	e.logger.Warn(ctx, "Failed to extract any arguments from output: %s", observability.String("output", output))
 	return []interface{}{"0"} // Return a default value as fallback
 }
 

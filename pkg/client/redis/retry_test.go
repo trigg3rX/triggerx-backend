@@ -162,7 +162,7 @@ func TestIsRetryableError(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actual := testClient.isRetryableError(tc.err)
+			actual := testClient.isRetryableError(context.Background(), tc.err)
 			assert.Equal(t, tc.expected, actual)
 		})
 	}

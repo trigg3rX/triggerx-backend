@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64) (*TaskStreamData, error) {
@@ -20,9 +21,9 @@ func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64)
 	// This is more efficient for lookup operations
 	streams, err := tsm.client.Client().XRange(ctx, stream, "-", "+").Result()
 	if err != nil {
-		tsm.logger.Error("Failed to read task stream data",
-			"task_id", taskID,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to read task stream data",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
 		return nil, fmt.Errorf("failed to read task stream data: %w", err)
 	}
 
@@ -41,9 +42,9 @@ func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64)
 
 		var task TaskStreamData
 		if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
-			tsm.logger.Error("Failed to unmarshal task data",
-				"message_id", message.ID,
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to unmarshal task data",
+				observability.String("message_id", message.ID),
+				observability.Error(err))
 			continue
 		}
 
@@ -55,14 +56,12 @@ func (tsm *TaskStreamManager) GetTaskDataFromStream(stream string, taskID int64)
 	return nil, fmt.Errorf("task not found: %d", taskID)
 }
 
-func (tsm *TaskStreamManager) ReadTasksFromStream(stream, consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
-	if err := tsm.RegisterConsumerGroup(stream, consumerGroup); err != nil {
+func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, consumerGroup, consumerName string, count int64) ([]TaskStreamData, error) {
+	if err := tsm.RegisterConsumerGroup(ctx, stream, consumerGroup); err != nil {
 		return nil, fmt.Errorf("failed to register consumer group: %w", err)
 	}
 
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetRequestTimeout())
-	defer cancel()
 
 	streams, err := tsm.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    consumerGroup,
@@ -77,17 +76,17 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(stream, consumerGroup, consume
 	if err != nil {
 		if err == redis.Nil {
 			metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "empty").Inc()
-			tsm.logger.Debug("No tasks available in stream",
-				"stream", stream,
-				"consumer_group", consumerGroup,
-				"duration", duration)
+			tsm.logger.Debug(ctx, "No tasks available in stream",
+				observability.String("stream", stream),
+				observability.String("consumer_group", consumerGroup),
+				observability.Duration("duration", duration))
 			return []TaskStreamData{}, nil
 		}
-		tsm.logger.Error("Failed to read from stream",
-			"stream", stream,
-			"consumer_group", consumerGroup,
-			"duration", duration,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to read from stream",
+			observability.String("stream", stream),
+			observability.String("consumer_group", consumerGroup),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return nil, fmt.Errorf("failed to read from stream: %w", err)
 	}
 
@@ -105,33 +104,33 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(stream, consumerGroup, consume
 		for _, message := range stream.Messages {
 			taskJSON, exists := message.Values["task"].(string)
 			if !exists {
-				tsm.logger.Warn("Message missing task data",
-					"stream", stream.Stream,
-					"message_id", message.ID)
+				tsm.logger.Warn(ctx, "Message missing task data",
+					observability.String("stream", stream.Stream),
+					observability.String("message_id", message.ID))
 				continue
 			}
 
 			var task TaskStreamData
 			if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
-				tsm.logger.Error("Failed to unmarshal task data",
-					"stream", stream.Stream,
-					"message_id", message.ID,
-					"error", err)
+				tsm.logger.Error(ctx, "Failed to unmarshal task data",
+					observability.String("stream", stream.Stream),
+					observability.String("message_id", message.ID),
+					observability.Error(err))
 				continue
 			}
 
 			tasks = append(tasks, task)
-			tsm.logger.Debug("Task read from stream",
-				"task_id", task.SendTaskDataToKeeper.TaskID[0],
-				"stream", stream.Stream,
-				"message_id", message.ID)
+			tsm.logger.Debug(ctx, "Task read from stream",
+				observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+				observability.String("stream", stream.Stream),
+				observability.String("message_id", message.ID))
 		}
 	}
 
-	tsm.logger.Info("Tasks read from stream successfully",
-		"stream", stream,
-		"task_count", len(tasks),
-		"duration", duration)
+	tsm.logger.Info(ctx, "Tasks read from stream successfully",
+		observability.String("stream", stream),
+		observability.Int("task_count", len(tasks)),
+		observability.Duration("duration", duration))
 
 	return tasks, nil
 }

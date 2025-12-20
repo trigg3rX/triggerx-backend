@@ -12,7 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func TestNewDownloader_ValidConfig_ReturnsDownloader(t *testing.T) {
@@ -32,10 +32,10 @@ func TestNewDownloader_ValidConfig_ReturnsDownloader(t *testing.T) {
 		TimeoutSeconds:    30,
 	}
 	httpClient := &httppkg.MockHTTPClient{}
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	// Act
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logger, fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, logger, &fs.OSFileSystem{})
 
 	// Assert
 	require.NoError(t, err)
@@ -62,11 +62,11 @@ func TestNewDownloader_InvalidCacheConfig_ReturnsError(t *testing.T) {
 		TimeoutSeconds:    30,
 	}
 	httpClient := &httppkg.MockHTTPClient{}
-	logger := logging.NewNoOpLogger()
-	mockFS := &fs.FailingMockFS{}
+	logger := observability.NewNoOpLogger()
+	mockFS := &fs.OSFileSystem{}
 
 	// Act
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logger, mockFS)
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, logger, mockFS)
 
 	// Assert
 	assert.Error(t, err)
@@ -91,9 +91,9 @@ func TestDownloader_DownloadFile_ValidURL_DownloadsSuccessfully(t *testing.T) {
 		TimeoutSeconds:    30,
 	}
 	httpClient := &httppkg.MockHTTPClient{}
-	mockFS := fs.NewMockFileSystem()
+	mockFS := &fs.OSFileSystem{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), mockFS)
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), mockFS)
 	require.NoError(t, err)
 
 	// Mock HTTP response
@@ -152,7 +152,7 @@ func TestDownloader_DownloadFile_HTTPError_ReturnsError(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Mock HTTP error
@@ -190,7 +190,7 @@ func TestDownloader_DownloadFile_HTTPStatusError_ReturnsError(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Mock HTTP 404 response
@@ -232,7 +232,7 @@ func TestDownloader_DownloadFile_ValidationFails_ReturnsResultWithErrors(t *test
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Mock HTTP response with large content
@@ -278,7 +278,7 @@ func TestDownloader_DownloadFile_BlockedPattern_ReturnsResultWithErrors(t *testi
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Mock HTTP response with blocked pattern
@@ -330,7 +330,7 @@ func TestDownloader_DownloadFile_CacheHit_ReturnsCachedFile(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Pre-populate cache
@@ -387,7 +387,7 @@ func TestDownloader_DownloadContent_ValidResponse_ReturnsContent(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	expectedContent := "Hello, World!"
@@ -425,7 +425,7 @@ func TestDownloader_DownloadContent_HTTPError_ReturnsError(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	httpClient.On("Get", "https://example.com/error.txt").Return(nil, assert.AnError)
@@ -459,7 +459,7 @@ func TestDownloader_DownloadContent_NonOKStatus_ReturnsError(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	mockResponse := &http.Response{
@@ -497,7 +497,7 @@ func TestDownloader_DownloadContent_ReadBodyError_ReturnsError(t *testing.T) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Create a response with a body that will fail to read
@@ -535,7 +535,7 @@ func TestDownloader_Close_ValidDownloader_ClosesSuccessfully(t *testing.T) {
 		TimeoutSeconds:    30,
 	}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, &httppkg.MockHTTPClient{}, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, &httppkg.MockHTTPClient{}, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(t, err)
 
 	// Act
@@ -551,7 +551,7 @@ func TestDownloader_Close_NilCache_ClosesSuccessfully(t *testing.T) {
 		client:    &httppkg.MockHTTPClient{},
 		cache:     nil,
 		validator: &codeValidator{},
-		logger:    logging.NewNoOpLogger(),
+		logger:    observability.NewNoOpLogger(),
 	}
 
 	// Act
@@ -580,7 +580,7 @@ func BenchmarkDownloader_DownloadFile_ValidURL(b *testing.B) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(b, err)
 
 	content := `package main
@@ -625,7 +625,7 @@ func BenchmarkDownloader_DownloadContent_SmallFile(b *testing.B) {
 	}
 	httpClient := &httppkg.MockHTTPClient{}
 
-	downloader, err := newDownloader(cacheCfg, validationCfg, httpClient, logging.NewNoOpLogger(), fs.NewMockFileSystem())
+	downloader, err := newDownloader(context.Background(), cacheCfg, validationCfg, httpClient, observability.NewNoOpLogger(), &fs.OSFileSystem{})
 	require.NoError(b, err)
 
 	content := "Hello, World!"

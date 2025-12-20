@@ -9,8 +9,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
 	devMode bool
+	otelExporterEndpoint string
 
 	// Scheduler RPC Port
 	conditionSchedulerRPCPort string
@@ -49,6 +54,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                   env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
 		conditionSchedulerRPCPort: env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
 		dbServerURL:               env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
 		aggregatorRPCURL:          env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
@@ -85,6 +91,14 @@ func validateConfig() error {
 // IsDevMode returns whether the service is running in development mode
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 // GetSchedulerRPCPort returns the scheduler RPC port

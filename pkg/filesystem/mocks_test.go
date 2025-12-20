@@ -9,10 +9,6 @@ import (
 func TestNewMockFileSystem(t *testing.T) {
 	mockFS := NewMockFileSystem()
 
-	if mockFS == nil {
-		t.Fatal("NewMockFileSystem should return a non-nil instance")
-	}
-
 	if mockFS.files == nil {
 		t.Error("NewMockFileSystem should initialize files map")
 	}

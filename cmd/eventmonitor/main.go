@@ -12,7 +12,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -23,28 +23,38 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
-	// Initialize logger
-	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.ProcessName("eventmonitor"),
-		IsDevelopment: config.IsDevMode(),
+	// Initialize observability (logger, tracer, metrics)
+	obsCfg := observability.NewConfig(
+		observability.EventMonitorService,
+		config.GetVersion(),
+		config.GetOTELExporterEndpoint(),
+		config.IsDevMode(),
+	)
+
+	// Create resource for observability
+	res, err := observability.NewResource(obsCfg)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create observability resource: %v", err))
 	}
 
-	logger, err := logging.NewZapLogger(logConfig)
+	// Initialize logger
+	logger, loggerShutdown, err := observability.NewLogger(obsCfg, res)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	logger.Info("Starting Event Monitor Service...")
+	ctx := context.Background()
+	logger.Info(ctx, "Starting Event Monitor Service...")
 
 	// Initialize service
-	svc, err := service.NewService(logger)
+	svc, err := service.NewService(ctx, logger)
 	if err != nil {
-		logger.Fatal("Failed to initialize service", "error", err)
+		logger.Fatal(ctx, "Failed to initialize service", observability.Error(err))
 	}
 
 	// Start service
 	if err := svc.Start(); err != nil {
-		logger.Fatal("Failed to start service", "error", err)
+		logger.Fatal(ctx, "Failed to start service", observability.Error(err))
 	}
 
 	// Setup HTTP server
@@ -58,25 +68,23 @@ func main() {
 
 	// Start HTTP server
 	go func() {
-		logger.Info("Starting HTTP server", "port", config.GetPort())
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			logger.Error("HTTP server error", "error", err)
+		logger.Info(ctx, "Starting HTTP server", observability.String("port", config.GetPort()))
+		if err := srv.Start(ctx); err != nil && err != http.ErrServerClosed {
+			logger.Error(ctx, "HTTP server error", observability.Error(err))
 		}
 	}()
 
 	// Log service status
-	serviceStatus := map[string]interface{}{
-		"port":                config.GetPort(),
-		"host":                config.GetHost(),
-		"poll_interval":       config.GetPollInterval(),
-		"max_block_range":     config.GetMaxBlockRange(),
-		"lookback_blocks":     config.GetLookbackBlocks(),
-		"webhook_timeout":     config.GetWebhookTimeout(),
-		"webhook_max_retries": config.GetWebhookMaxRetries(),
-		"version":             "0.1.0-mvp",
-	}
-
-	logger.Info("Event Monitor Service ready", "status", serviceStatus)
+	logger.Info(ctx, "Event Monitor Service ready",
+		observability.String("port", config.GetPort()),
+		observability.String("host", config.GetHost()),
+		observability.String("poll_interval", config.GetPollInterval().String()),
+		observability.Int64("max_block_range", int64(config.GetMaxBlockRange())),
+		observability.Int64("lookback_blocks", int64(config.GetLookbackBlocks())),
+		observability.String("webhook_timeout", config.GetWebhookTimeout().String()),
+		observability.Int("webhook_max_retries", config.GetWebhookMaxRetries()),
+		observability.String("version", config.GetVersion()),
+	)
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -84,32 +92,41 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(srv, svc, logger)
+	performGracefulShutdown(ctx, srv, svc, logger, loggerShutdown)
 }
 
 func performGracefulShutdown(
+	ctx context.Context,
 	srv *api.Server,
 	svc *service.Service,
-	logger logging.Logger,
+	logger observability.Logger,
+	loggerShutdown func(context.Context) error,
 ) {
 	shutdownStart := time.Now()
-	logger.Info("Initiating graceful shutdown...")
+	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	// Stop service
 	svc.Stop()
 
 	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer shutdownCancel()
 
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {
-		logger.Error("Server forced to shutdown", "error", err)
+		logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
+	}
+
+	// Shutdown logger
+	if loggerShutdown != nil {
+		if err := loggerShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+		}
 	}
 
 	shutdownDuration := time.Since(shutdownStart)
 
-	logger.Info("Event Monitor Service shutdown complete",
-		"duration", shutdownDuration)
+	logger.Info(shutdownCtx, "Event Monitor Service shutdown complete",
+		observability.Duration("duration", shutdownDuration))
 	os.Exit(0)
 }

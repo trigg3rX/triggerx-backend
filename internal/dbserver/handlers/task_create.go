@@ -6,14 +6,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[CreateTaskData] trace_id=%s - Creating task", traceID)
+	h.logger.Info(c.Request.Context(), "[CreateTaskData] trace_id=%s - Creating task", observability.String("trace_id", traceID))
 	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
-		h.logger.Errorf("[CreateTaskData] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error decoding request body: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -22,10 +23,10 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	}
 
 	trackDBOp := metrics.TrackDBOperation("create", "task_data")
-	taskID, err := h.taskRepository.CreateTaskDataInDB(&taskData)
+	taskID, err := h.taskRepository.CreateTaskDataInDB(c.Request.Context(), &taskData)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateTaskData] Error creating task: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error creating task: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create task",
 			"code":  "TASK_CREATION_ERROR",
@@ -37,7 +38,7 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	err = h.taskRepository.AddTaskIDToJob(taskData.JobID, taskID)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateTaskData] Error adding task ID to job: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error adding task ID to job: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to add task ID to job",
 			"code":  "TASK_ID_ADDITION_ERROR",
@@ -45,6 +46,6 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[CreateTaskData] Successfully created task with ID: %d", taskID)
+	h.logger.Info(c.Request.Context(), "[CreateTaskData] Successfully created task with ID: %d", observability.Int64("task_id", taskID))
 	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
 }

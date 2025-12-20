@@ -12,31 +12,32 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // notifyConditionScheduler sends a notification to the condition scheduler
-func (h *Handler) notifyConditionScheduler(jobID *big.Int, scheduleConditionJobData commonTypes.ScheduleConditionJobData) (bool, error) {
-	success, err := h.sendDataToScheduler("/api/v1/job/schedule", scheduleConditionJobData)
+func (h *Handler) notifyConditionScheduler(ctx context.Context, jobID *big.Int, scheduleConditionJobData commonTypes.ScheduleConditionJobData) (bool, error) {
+	success, err := h.sendDataToScheduler(ctx, "/api/v1/job/schedule", scheduleConditionJobData)
 	if err != nil {
-		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", jobID, err)
+		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return false, err
 	}
 	if !success {
-		h.logger.Errorf("[NotifyConditionScheduler] Failed to notify condition scheduler for job %d", jobID)
+		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job %d", observability.Int64("job_id", jobID.Int64()))
 		return false, fmt.Errorf("failed to notify condition scheduler for job %d", jobID)
 	}
 	return true, nil
 }
 
 // SendPauseToEventScheduler sends a DELETE request to the event scheduler
-func (h *Handler) notifyPauseToConditionScheduler(jobID *big.Int) (bool, error) {
-	success, err := h.sendDataToScheduler("/api/v1/job/pause", commonTypes.ScheduleConditionJobData{JobID: commonTypes.NewBigInt(jobID)})
+func (h *Handler) notifyPauseToConditionScheduler(ctx context.Context, jobID *big.Int) (bool, error) {
+	success, err := h.sendDataToScheduler(ctx, "/api/v1/job/pause", commonTypes.ScheduleConditionJobData{JobID: commonTypes.NewBigInt(jobID)})
 	if err != nil {
-		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", jobID, err)
+		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return false, err
 	}
 	if !success {
-		h.logger.Errorf("[NotifyEventScheduler] Failed to notify event scheduler for job %d", jobID)
+		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job %d", observability.Int64("job_id", jobID.Int64()))
 		return false, fmt.Errorf("failed to notify event scheduler for job %d", jobID)
 	}
 
@@ -44,7 +45,7 @@ func (h *Handler) notifyPauseToConditionScheduler(jobID *big.Int) (bool, error) 
 }
 
 // sendDataToScheduler is a generic function to send data to any scheduler
-func (h *Handler) sendDataToScheduler(route string, data commonTypes.ScheduleConditionJobData) (bool, error) {
+func (h *Handler) sendDataToScheduler(ctx context.Context, route string, data commonTypes.ScheduleConditionJobData) (bool, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return false, fmt.Errorf("error marshaling data: %v", err)
@@ -52,7 +53,7 @@ func (h *Handler) sendDataToScheduler(route string, data commonTypes.ScheduleCon
 
 	apiURL := fmt.Sprintf("%s%s", config.GetConditionSchedulerRPCUrl(), route)
 
-	client, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), h.logger)
+	client, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig())
 	if err != nil {
 		return false, fmt.Errorf("error creating HTTP client: %v", err)
 	}
@@ -70,7 +71,7 @@ func (h *Handler) sendDataToScheduler(route string, data commonTypes.ScheduleCon
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			h.logger.Errorf("Error closing response body: %v", err)
+			h.logger.Error(ctx, "Error closing response body: %v", observability.Error(err))
 		}
 	}()
 
@@ -79,6 +80,6 @@ func (h *Handler) sendDataToScheduler(route string, data commonTypes.ScheduleCon
 		return false, fmt.Errorf("condition scheduler service error (status=%d): %s", resp.StatusCode, string(body))
 	}
 
-	h.logger.Infof("Successfully sent data to condition scheduler")
+	h.logger.Info(ctx, "Successfully sent data to condition scheduler")
 	return true, nil
 }

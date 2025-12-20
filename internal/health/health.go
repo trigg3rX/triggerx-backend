@@ -41,15 +41,18 @@ func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		method := c.Request.Method
+		ctx := c.Request.Context()
 
 		c.Next()
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
+		statusCode := fmt.Sprintf("%d", status)
 
 		// Record HTTP metrics
+		metrics.RecordHTTPRequest(ctx, method, path, statusCode, duration)
 
-		middlewareLogger.Debug(c.Request.Context(), "HTTP Request",
+		middlewareLogger.Debug(ctx, "HTTP Request",
 			observability.String("method", method),
 			observability.String("path", path),
 			observability.Int("status", status),
@@ -111,6 +114,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// )
 
 	// Record check-in by version metric
+	metrics.RecordKeeperCheckIn(ctx, keeperHealth.Version)
 
 	// Verify signature for all versions
 	ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
@@ -254,6 +258,7 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 	activeKeepers := h.stateManager.GetAllActiveKeepers(ctx)
 
 	// Update keeper metrics
+	metrics.UpdateKeeperCounts(ctx, total, active)
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":      total,
@@ -268,6 +273,28 @@ func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
 	detailedInfo := h.stateManager.GetDetailedKeeperInfo(ctx)
 
 	// Update keeper metrics
+	metrics.UpdateKeeperCounts(ctx, total, active)
+
+	// Update keeper uptime metrics for each keeper
+	now := time.Now().UTC()
+	var maxUptime float64
+	var mostActiveKeeper string
+	for _, keeper := range detailedInfo {
+		if keeper.IsActive && !keeper.LastCheckedIn.IsZero() {
+			// Calculate uptime from last check-in (for active keepers)
+			uptime := now.Sub(keeper.LastCheckedIn).Seconds()
+			metrics.UpdateKeeperUptime(ctx, keeper.KeeperAddress, uptime)
+			if uptime > maxUptime {
+				maxUptime = uptime
+				mostActiveKeeper = keeper.KeeperAddress
+			}
+		}
+	}
+
+	// Record the most active keeper uptime
+	if mostActiveKeeper != "" {
+		metrics.RecordMostActiveKeeperUptime(ctx, mostActiveKeeper, maxUptime)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":  total,

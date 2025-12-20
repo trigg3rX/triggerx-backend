@@ -9,17 +9,18 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // MarkTaskCompleted marks a task as completed
 func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int64) error {
-	tsm.logger.Info("Marking task as completed",
-		"task_id", taskID)
+	tsm.logger.Info(ctx, "Marking task as completed",
+		observability.Int64("task_id", taskID))
 
 	// Find and move task from processing to completed using efficient lookup
 	task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
 	if err != nil {
-		tsm.logger.Error("failed to find task in processing", "error", err)
+		tsm.logger.Error(ctx, "failed to find task in processing", observability.Error(err))
 		// return err
 	}
 
@@ -28,7 +29,7 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	// Add to completed stream
 	err = tsm.addTaskToStream(ctx, StreamTaskCompleted, task)
 	if err != nil {
-		tsm.logger.Error("failed to add to completed stream", "error", err)
+		tsm.logger.Error(ctx, "failed to add to completed stream", observability.Error(err))
 		// return err
 	}
 
@@ -36,30 +37,30 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	if messageID != "" {
 		err = tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
 		if err != nil {
-			tsm.logger.Error("failed to acknowledge task",
-				"task_id", taskID,
-				"message_id", messageID,
-				"error", err)
+			tsm.logger.Error(ctx, "failed to acknowledge task",
+				observability.Int64("task_id", taskID),
+				observability.String("message_id", messageID),
+				observability.Error(err))
 		} else {
 			// Remove the task from the index since it's been processed
 			err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
 			if err != nil {
-				tsm.logger.Warn("failed to remove task from index",
-					"task_id", taskID,
-					"error", err)
+				tsm.logger.Warn(ctx, "failed to remove task from index",
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
 			}
 
 			// Remove the task from timeout tracking since it's been completed
 			err = tsm.expirationManager.RemoveTaskTimeout(ctx, taskID)
 			if err != nil {
-				tsm.logger.Warn("failed to remove task from timeout tracking",
-					"task_id", taskID,
-					"error", err)
+				tsm.logger.Warn(ctx, "failed to remove task from timeout tracking",
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
 			}
 		}
 	}
 
-	tsm.logger.Info("Task marked as completed successfully", "task_id", taskID)
+	tsm.logger.Info(ctx, "Task marked as completed successfully", observability.Int64("task_id", taskID))
 	metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
 
 	return nil
@@ -67,25 +68,25 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 
 // MarkTaskFailed marks a task as failed with an error message
 func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, errorMsg string) error {
-	tsm.logger.Info("Marking task as failed",
-		"task_id", taskID,
-		"error", errorMsg)
+	tsm.logger.Info(ctx, "Marking task as failed",
+		observability.Int64("task_id", taskID),
+		observability.String("error", errorMsg))
 
 	// Find task in dispatched stream
 	task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
 	if err != nil {
-		tsm.logger.Warn("Failed to find task in dispatched stream, may already be processed",
-			"task_id", taskID,
-			"error", err)
+		tsm.logger.Warn(ctx, "Failed to find task in dispatched stream, may already be processed",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
 		// Don't return error - task may have already been processed
 		return nil
 	}
 
 	// Move to failed stream
 	if err := tsm.moveTaskToFailed(ctx, *task, errorMsg); err != nil {
-		tsm.logger.Error("Failed to move task to failed stream",
-			"task_id", taskID,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to move task to failed stream",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
 		return err
 	}
 
@@ -93,30 +94,30 @@ func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, 
 	if messageID != "" {
 		err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "task-processors", messageID)
 		if err != nil {
-			tsm.logger.Error("Failed to acknowledge failed task",
-				"task_id", taskID,
-				"message_id", messageID,
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to acknowledge failed task",
+				observability.Int64("task_id", taskID),
+				observability.String("message_id", messageID),
+				observability.Error(err))
 		} else {
 			// Remove the task from the index since it's been processed
 			err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
 			if err != nil {
-				tsm.logger.Warn("failed to remove failed task from index",
-					"task_id", taskID,
-					"error", err)
+				tsm.logger.Warn(ctx, "failed to remove failed task from index",
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
 			}
 
 			// Remove the task from timeout tracking since it's been failed
 			err = tsm.expirationManager.RemoveTaskTimeout(ctx, taskID)
 			if err != nil {
-				tsm.logger.Warn("failed to remove failed task from timeout tracking",
-					"task_id", taskID,
-					"error", err)
+				tsm.logger.Warn(ctx, "failed to remove failed task from timeout tracking",
+					observability.Int64("task_id", taskID),
+					observability.Error(err))
 			}
 		}
 	}
 
-	tsm.logger.Info("Task marked as failed successfully", "task_id", taskID)
+	tsm.logger.Info(ctx, "Task marked as failed successfully", observability.Int64("task_id", taskID))
 	metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
 
 	return nil
@@ -150,9 +151,9 @@ func (tsm *TaskStreamManager) findTaskInDispatched(taskID int64) (*TaskStreamDat
 
 		var task TaskStreamData
 		if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
-			tsm.logger.Error("Failed to unmarshal task data",
-				"message_id", message.ID,
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to unmarshal task data",
+				observability.String("message_id", message.ID),
+				observability.Error(err))
 			continue
 		}
 
@@ -171,10 +172,10 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 
 	taskJSON, err := json.Marshal(task)
 	if err != nil {
-		tsm.logger.Error("Failed to marshal task data",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"stream", stream,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to marshal task data",
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.String("stream", stream),
+			observability.Error(err))
 		return fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
@@ -191,11 +192,11 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
-		tsm.logger.Error("Failed to add task to stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"stream", stream,
-			"duration", duration,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to add task to stream",
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.String("stream", stream),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to add task to stream: %w", err)
 	}
 
@@ -217,22 +218,23 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 	// Track expiration for this stream entry
 	err = tsm.expirationManager.AddMessageExpiration(ctx, stream, res, entryTTL)
 	if err != nil {
-		tsm.logger.Warn("Failed to add stream entry expiration, but task was added to stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"stream", stream,
-			"message_id", res,
-			"error", err)
+		tsm.logger.Warn(ctx, "Failed to add stream entry expiration, but task was added to stream",
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.String("stream", stream),
+			observability.String("message_id", res),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		// Don't fail the entire operation if expiration tracking fails
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
-	tsm.logger.Debug("Task added to stream successfully",
-		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"stream", stream,
-		"stream_id", res,
-		"duration", duration,
-		"task_json_size", len(taskJSON),
-		"entry_ttl", entryTTL)
+	tsm.logger.Debug(ctx, "Task added to stream successfully",
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.String("stream", stream),
+		observability.String("message_id", res),
+		observability.Duration("duration", duration),
+		observability.Int("task_json_size", len(taskJSON)),
+		observability.Duration("entry_ttl", entryTTL))
 
 	return nil
 }

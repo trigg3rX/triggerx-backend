@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -77,7 +77,7 @@ func TestSendTaskToPerformerWithMock(t *testing.T) {
 
 // TestSendTaskToPerformerWithHTTP validates the logic using real HTTP servers (integration tests)
 func TestSendTaskToPerformerWithHTTP(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	_, privateKeyHex := generateTestPrivateKey(t)
 
 	taskData := &types.BroadcastDataForPerformer{
@@ -188,7 +188,7 @@ func TestSendTaskToPerformerWithHTTP(t *testing.T) {
 // TestSendTaskToPerformer validates the logic for sending a custom message.
 // This is the original test function, now using the real client for HTTP testing
 func TestSendTaskToPerformer(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	_, privateKeyHex := generateTestPrivateKey(t)
 
 	taskData := &types.BroadcastDataForPerformer{

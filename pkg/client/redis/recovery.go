@@ -6,6 +6,7 @@ import (
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // connectionRecoveryLoop monitors connection health and attempts recovery
@@ -29,7 +30,7 @@ func (c *Client) checkAndRecoverConnection(ctx context.Context) {
 
 	// Quick health check
 	if err := c.Ping(ctx); err != nil {
-		c.logger.Warnf("Redis connection unhealthy, starting recovery: %v", err)
+		c.logger.Warn(ctx, "Redis connection unhealthy, starting recovery", observability.String("error", fmt.Sprintf("%v", err)))
 		c.mu.Lock()
 		c.isRecovering = true
 		c.mu.Unlock()
@@ -59,14 +60,13 @@ func (c *Client) performConnectionRecovery() {
 
 	for attempt := 0; attempt < config.MaxRetries; attempt++ {
 		if attempt > 0 {
-			c.logger.Infof("Redis connection recovery attempt %d/%d after %v",
-				attempt+1, config.MaxRetries, backoff)
+			c.logger.Info(ctx, "Redis connection recovery attempt %d/%d after %v", observability.Int("attempt", attempt+1), observability.Int("max_retries", config.MaxRetries), observability.Duration("backoff", backoff))
 			time.Sleep(backoff)
 		}
 
 		// Try to recreate connection
-		if err := c.recreateConnection(); err != nil {
-			c.logger.Errorf("Redis connection recovery attempt %d failed: %v", attempt+1, err)
+		if err := c.recreateConnection(ctx); err != nil {
+			c.logger.Error(ctx, "Redis connection recovery attempt %d failed: %v", observability.Int("attempt", attempt+1), observability.String("error", fmt.Sprintf("%v", err)))
 
 			// Exponential backoff with jitter
 			backoff = time.Duration(float64(backoff) * config.BackoffFactor)
@@ -78,11 +78,11 @@ func (c *Client) performConnectionRecovery() {
 
 		// Test the new connection
 		if err := c.CheckConnection(ctx); err != nil {
-			c.logger.Errorf("Redis connection recovery test failed: %v", err)
+			c.logger.Error(ctx, "Redis connection recovery test failed", observability.String("error", fmt.Sprintf("%v", err)))
 			continue
 		}
 
-		c.logger.Infof("Redis connection recovery successful after %d attempts", attempt+1)
+		c.logger.Info(ctx, "Redis connection recovery successful after %d attempts", observability.Int("attempt", attempt+1))
 		c.mu.Lock()
 		c.lastHealthCheck = time.Now()
 		c.mu.Unlock()
@@ -93,7 +93,7 @@ func (c *Client) performConnectionRecovery() {
 		return
 	}
 
-	c.logger.Errorf("Redis connection recovery failed after %d attempts", config.MaxRetries)
+	c.logger.Error(ctx, "Redis connection recovery failed after %d attempts", observability.Int("max_retries", config.MaxRetries))
 
 	// Track failed recovery
 	duration := time.Since(start)
@@ -101,7 +101,7 @@ func (c *Client) performConnectionRecovery() {
 }
 
 // recreateConnection recreates the Redis connection
-func (c *Client) recreateConnection() error {
+func (c *Client) recreateConnection(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -109,7 +109,7 @@ func (c *Client) recreateConnection() error {
 	if c.redisClient != nil {
 		err := c.redisClient.Close()
 		if err != nil {
-			c.logger.Errorf("Failed to close Redis client: %v", err)
+			c.logger.Error(ctx, "Failed to close Redis client", observability.String("error", fmt.Sprintf("%v", err)))
 		}
 	}
 

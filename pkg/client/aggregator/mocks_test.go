@@ -8,13 +8,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // TestNewMockAggregatorClient ensures the basic constructor works as expected.
 func TestNewMockAggregatorClient(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	cfg := NewMockAggregatorClientConfig()
 
 	client, err := NewMockAggregatorClient(logger, cfg)
@@ -125,7 +125,7 @@ func TestNewFailingAggregatorClient(t *testing.T) {
 
 // TestMockAggregatorClientFactory validates the mock factory for creating clients.
 func TestMockAggregatorClientFactory(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	cfg := AggregatorClientConfig{} // Use an empty config as the value doesn't matter here.
 
 	t.Run("Success: Factory returns a mock client", func(t *testing.T) {
@@ -176,7 +176,7 @@ func TestNewMockAggregatorClientConfig(t *testing.T) {
 
 // TestHTTPMockHelpers validates the constructors intended for HTTP integration tests.
 func TestHTTPMockHelpers(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	cfg := NewMockAggregatorClientConfig()
 
 	t.Run("NewMockAggregatorClientWithHTTP", func(t *testing.T) {

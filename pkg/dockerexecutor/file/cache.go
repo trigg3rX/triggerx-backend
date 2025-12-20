@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Events for cache hits, misses, evictions
@@ -36,7 +37,7 @@ type fileCache struct {
 	fileCache     map[string]*cachedFile
 	mutex         sync.RWMutex
 	config        config.FileCacheConfig
-	logger        logging.Logger
+	logger        observability.Logger
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
 	stats         *types.CacheStats
@@ -44,7 +45,7 @@ type fileCache struct {
 	fs            fs.FileSystemAPI
 }
 
-func newFileCache(cfg config.FileCacheConfig, logger logging.Logger, fs fs.FileSystemAPI) (*fileCache, error) {
+func newFileCache(ctx context.Context, cfg config.FileCacheConfig, logger observability.Logger, fs fs.FileSystemAPI) (*fileCache, error) {
 	// Use configured cache directory or fallback to persistent location
 	cacheDir := cfg.CacheDir
 	if cacheDir == "" {
@@ -77,19 +78,19 @@ func newFileCache(cfg config.FileCacheConfig, logger logging.Logger, fs fs.FileS
 
 	// cache.startCleanupRoutine()
 
-	if err := cache.loadExistingFiles(); err != nil {
-		logger.Warnf("Failed to load existing cached files: %v", err)
+	if err := cache.loadExistingFiles(ctx); err != nil {
+		logger.Warn(ctx, "Failed to load existing cached files", observability.Error(err))
 	}
 
 	return cache, nil
 }
 
 // GetOrDownload checks if the file is in the cache by key (CID or URL). If not, it calls downloadFunc to get the content and stores it.
-func (c *fileCache) getOrDownloadFile(key string, fileLanguage string, downloadFunc func() ([]byte, error)) (string, error) {
+func (c *fileCache) getOrDownloadFile(ctx context.Context, key string, fileLanguage string, downloadFunc func() ([]byte, error)) (string, error) {
 	c.mutex.RLock()
 	if cachedFile, exists := c.fileCache[key]; exists {
 		c.mutex.RUnlock()
-		return c.accessCachedFile(cachedFile)
+		return c.accessCachedFile(ctx, cachedFile)
 	}
 	c.mutex.RUnlock()
 
@@ -103,10 +104,10 @@ func (c *fileCache) getOrDownloadFile(key string, fileLanguage string, downloadF
 	if err != nil {
 		return "", fmt.Errorf("download failed: %w", err)
 	}
-	return c.storeFile(key, fileLanguage, content)
+	return c.storeFile(ctx, key, fileLanguage, content)
 }
 
-func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
+func (c *fileCache) accessCachedFile(ctx context.Context, cachedFile *cachedFile) (string, error) {
 	// Check if file still exists on disk
 	if _, err := c.fs.Stat(cachedFile.Path); os.IsNotExist(err) {
 		// File was deleted, remove from cache
@@ -118,7 +119,7 @@ func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
 
 		// Save updated metadata
 		if saveErr := c.saveMetadata(); saveErr != nil {
-			c.logger.Warnf("Failed to save cache metadata after removal: %v", saveErr)
+			c.logger.Warn(ctx, "Failed to save cache metadata after removal", observability.Error(saveErr))
 		}
 
 		return "", fmt.Errorf("cached file not found on disk: %s", cachedFile.Path)
@@ -134,15 +135,15 @@ func (c *fileCache) accessCachedFile(cachedFile *cachedFile) (string, error) {
 
 	// Save metadata to persist access time
 	if err := c.saveMetadata(); err != nil {
-		c.logger.Warnf("Failed to save cache metadata after access: %v", err)
+		c.logger.Warn(ctx, "Failed to save cache metadata after access", observability.Error(err))
 	}
 
 	return cachedFile.Path, nil
 }
 
 // storeFile now uses the key (CID or URL) as the filename (with .go extension)
-func (c *fileCache) storeFile(key string, fileLanguage string, content []byte) (string, error) {
-	if err := c.ensureSpace(int64(len(content))); err != nil {
+func (c *fileCache) storeFile(ctx context.Context, key string, fileLanguage string, content []byte) (string, error) {
+	if err := c.ensureSpace(ctx, int64(len(content))); err != nil {
 		return "", fmt.Errorf("failed to ensure cache space: %w", err)
 	}
 
@@ -175,10 +176,10 @@ func (c *fileCache) storeFile(key string, fileLanguage string, content []byte) (
 
 	// Save metadata to persist cache information
 	if err := c.saveMetadata(); err != nil {
-		c.logger.Warnf("Failed to save cache metadata: %v", err)
+		c.logger.Warn(ctx, "Failed to save cache metadata", observability.Error(err))
 	}
 
-	c.logger.Infof("Stored file in cache (size: %d bytes)", fileInfo.Size())
+	c.logger.Info(ctx, "Stored file in cache (size: %d bytes)", observability.Int64("size", fileInfo.Size()))
 	return filePath, nil
 }
 
@@ -197,7 +198,7 @@ func getFileExtension(fileLanguage string) string {
 	}
 }
 
-func (c *fileCache) ensureSpace(requiredSize int64) error {
+func (c *fileCache) ensureSpace(ctx context.Context, requiredSize int64) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -238,7 +239,7 @@ func (c *fileCache) ensureSpace(requiredSize int64) error {
 
 		// Remove file from disk
 		if err := c.fs.Remove(entry.file.Path); err != nil {
-			c.logger.Warnf("Failed to remove cached file: %v", err)
+			c.logger.Warn(ctx, "Failed to remove cached file", observability.Error(err))
 			continue
 		}
 
@@ -249,25 +250,25 @@ func (c *fileCache) ensureSpace(requiredSize int64) error {
 		c.stats.ItemCount--
 		c.stats.Size -= entry.file.Size
 
-		c.logger.Debugf("Evicted cached file: %s (size: %d bytes)", entry.hash, entry.file.Size)
+		c.logger.Debug(ctx, "Evicted cached file: %s (size: %d bytes)", observability.String("hash", entry.hash), observability.Int64("size", entry.file.Size))
 	}
 
-	c.logger.Infof("Evicted %d bytes (%d files) from cache", evictedSize, c.stats.EvictionCount)
+	c.logger.Info(ctx, "Evicted %d bytes (%d files) from cache", observability.Int64("evictedSize", evictedSize), observability.Int("evictionCount", int(c.stats.EvictionCount)))
 
 	// Save updated metadata after eviction
 	if err := c.saveMetadata(); err != nil {
-		c.logger.Warnf("Failed to save cache metadata after eviction: %v", err)
+		c.logger.Warn(ctx, "Failed to save cache metadata after eviction", observability.Error(err))
 	}
 
 	return nil
 }
 
-func (c *fileCache) loadExistingFiles() error {
+func (c *fileCache) loadExistingFiles(ctx context.Context) error {
 	// Load metadata file if it exists
 	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
 	if _, err := c.fs.Stat(metadataPath); err == nil {
 		if err := c.loadMetadata(metadataPath); err != nil {
-			c.logger.Warnf("Failed to load cache metadata: %v", err)
+			c.logger.Warn(ctx, "Failed to load cache metadata", observability.Error(err))
 		}
 	}
 
@@ -293,7 +294,7 @@ func (c *fileCache) loadExistingFiles() error {
 
 		fileInfo, err := c.fs.Stat(filePath)
 		if err != nil {
-			c.logger.Warnf("Failed to stat cached file %s: %v", filePath, err)
+			c.logger.Warn(ctx, "Failed to stat cached file %s: %v", observability.String("filePath", filePath), observability.Error(err))
 			continue
 		}
 
@@ -310,7 +311,7 @@ func (c *fileCache) loadExistingFiles() error {
 		c.stats.Size += fileInfo.Size()
 	}
 
-	c.logger.Infof("Loaded %d existing cached files", len(c.fileCache))
+	c.logger.Info(ctx, "Loaded %d existing cached files", observability.Int("length", len(c.fileCache)))
 	return nil
 }
 

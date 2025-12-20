@@ -12,22 +12,22 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type TaskStreamManager struct {
-	redisClient    redisClient.RedisClientInterface
-	dbClient       *database.DatabaseClient
-	notifier       notify.Notifier
-	logger         logging.Logger
-	consumerGroups map[string]bool
-	mu             sync.RWMutex
-	startTime      time.Time
-	taskIndex      *TaskIndexManager
+	redisClient       redisClient.RedisClientInterface
+	dbClient          *database.DatabaseClient
+	notifier          notify.Notifier
+	logger            observability.Logger
+	consumerGroups    map[string]bool
+	mu                sync.RWMutex
+	startTime         time.Time
+	taskIndex         *TaskIndexManager
 	expirationManager *ExpirationManager
 }
 
-func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger logging.Logger) (*TaskStreamManager, error) {
+func NewTaskStreamManager(ctx context.Context, redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger observability.Logger) (*TaskStreamManager, error) {
 	tsm := &TaskStreamManager{
 		redisClient:    redisClient,
 		dbClient:       dbClient,
@@ -43,13 +43,13 @@ func NewTaskStreamManager(redisClient redisClient.RedisClientInterface, dbClient
 	// Initialize the unified expiration manager (handles both task timeouts and stream entry expirations)
 	tsm.expirationManager = NewExpirationManager(tsm)
 
-	logger.Info("TaskStreamManager initialized successfully")
+	logger.Info(ctx, "TaskStreamManager initialized successfully", observability.String("component", "task_stream_manager"))
 	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
 	return tsm, nil
 }
 
-func (tsm *TaskStreamManager) Initialize() error {
-	tsm.logger.Info("Initializing task streams...")
+func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
+	tsm.logger.Info(ctx, "Initializing task streams...", observability.String("component", "task_stream_manager"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), config.GetInitializationTimeout())
 	defer cancel()
@@ -63,56 +63,56 @@ func (tsm *TaskStreamManager) Initialize() error {
 	}
 
 	for stream, ttl := range streamConfigs {
-		tsm.logger.Debug("Creating stream", "stream", stream, "ttl", ttl)
+		tsm.logger.Debug(ctx, "Creating stream", observability.String("stream", stream), observability.Duration("ttl", ttl))
 		if err := tsm.redisClient.CreateStreamIfNotExists(ctx, stream, ttl); err != nil {
-			tsm.logger.Error("Failed to initialize stream",
-				"stream", stream,
-				"error", err,
-				"ttl", ttl)
+			tsm.logger.Error(ctx, "Failed to initialize stream",
+				observability.String("stream", stream),
+				observability.Error(err),
+				observability.Duration("ttl", ttl))
 			return fmt.Errorf("failed to initialize stream %s: %w", stream, err)
 		}
-		tsm.logger.Info("Stream initialized successfully", "stream", stream, "ttl", ttl)
+		tsm.logger.Info(ctx, "Stream initialized successfully", observability.String("stream", stream), observability.Duration("ttl", ttl))
 	}
 
 	// Register consumer groups for task processing
-	if err := tsm.RegisterConsumerGroup(StreamTaskDispatched, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task completion
-	if err := tsm.RegisterConsumerGroup(StreamTaskCompleted, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskCompleted, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task failure
-	if err := tsm.RegisterConsumerGroup(StreamTaskFailed, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskFailed, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task retry
-	if err := tsm.RegisterConsumerGroup(StreamTaskRetry, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskRetry, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for timeout checking
-	if err := tsm.RegisterConsumerGroup(StreamTaskDispatched, "timeout-checker"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "timeout-checker"); err != nil {
 		return fmt.Errorf("failed to register timeout-checker group: %w", err)
 	}
 
 	// Register consumer groups for task finding
-	if err := tsm.RegisterConsumerGroup(StreamTaskDispatched, "task-finder"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-finder"); err != nil {
 		return fmt.Errorf("failed to register task-finder group: %w", err)
 	}
 
 	// go tsm.StartStreamHealthMonitor(ctx)
 
-	tsm.logger.Info("All task streams initialized successfully")
+	tsm.logger.Info(ctx, "All task streams initialized successfully", observability.String("component", "task_stream_manager"))
 
 	return nil
 }
 
 // RegisterConsumerGroup registers a consumer group for a stream
-func (tsm *TaskStreamManager) RegisterConsumerGroup(stream string, group string) error {
+func (tsm *TaskStreamManager) RegisterConsumerGroup(ctx context.Context, stream string, group string) error {
 	tsm.mu.Lock()
 	defer tsm.mu.Unlock()
 
@@ -122,29 +122,29 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(stream string, group string)
 		return nil
 	}
 
-	tsm.logger.Info("Registering consumer group", "stream", stream, "group", group)
+	tsm.logger.Info(ctx, "Registering consumer group", observability.String("stream", stream), observability.String("group", group))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := tsm.redisClient.CreateConsumerGroup(ctx, stream, group); err != nil {
-		tsm.logger.Error("Failed to create consumer group",
-			"stream", stream,
-			"group", group,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to create consumer group",
+			observability.String("stream", stream),
+			observability.String("group", group),
+			observability.Error(err))
 		return fmt.Errorf("failed to create consumer group for %s: %w", stream, err)
 	}
 
 	tsm.consumerGroups[key] = true
-	tsm.logger.Info("Consumer group created successfully", "stream", stream, "group", group)
+	tsm.logger.Info(ctx, "Consumer group created successfully", observability.String("stream", stream), observability.String("group", group))
 	return nil
 }
 
 // GetStreamInfo returns information about task streams
-func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
+func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]interface{} {
 	// tsm.logger.Debug("Getting stream information")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	streamLengths := make(map[string]int64)
@@ -153,9 +153,9 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 	for _, stream := range streams {
 		length, err := tsm.redisClient.XLen(ctx, stream)
 		if err != nil {
-			tsm.logger.Warn("Failed to get stream length",
-				"stream", stream,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to get stream length",
+				observability.String("stream", stream),
+				observability.Error(err))
 			length = -1
 		}
 		streamLengths[stream] = length
@@ -205,8 +205,8 @@ func (tsm *TaskStreamManager) GetExpirationManager() *ExpirationManager {
 }
 
 // GetPendingEntriesInfo returns information about pending entries in consumer groups
-func (tsm *TaskStreamManager) GetPendingEntriesInfo() map[string]interface{} {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (tsm *TaskStreamManager) GetPendingEntriesInfo(ctx context.Context) map[string]interface{} {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	pendingInfo := make(map[string]interface{})
@@ -215,9 +215,9 @@ func (tsm *TaskStreamManager) GetPendingEntriesInfo() map[string]interface{} {
 	for _, group := range consumerGroups {
 		pending, err := tsm.redisClient.XPending(ctx, StreamTaskDispatched, group)
 		if err != nil {
-			tsm.logger.Warn("Failed to get pending entries info",
-				"consumer_group", group,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to get pending entries info",
+				observability.String("consumer_group", group),
+				observability.Error(err))
 			pendingInfo[group] = map[string]interface{}{
 				"error": err.Error(),
 			}
@@ -233,11 +233,11 @@ func (tsm *TaskStreamManager) GetPendingEntriesInfo() map[string]interface{} {
 
 		// Log warning if there are too many pending entries
 		if pending.Count > 100 {
-			tsm.logger.Warn("High number of pending entries detected",
-				"consumer_group", group,
-				"pending_count", pending.Count,
-				"min_id", pending.Lower,
-				"max_id", pending.Higher)
+			tsm.logger.Warn(ctx, "High number of pending entries detected",
+				observability.String("consumer_group", group),
+				observability.Int64("pending_count", pending.Count),
+				observability.String("min_id", pending.Lower),
+				observability.String("max_id", pending.Higher))
 		}
 	}
 
@@ -259,9 +259,9 @@ func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
 			Count:  100, // Limit to 100 entries per cleanup
 		})
 		if err != nil {
-			tsm.logger.Warn("Failed to get pending entries for cleanup",
-				"consumer_group", group,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to get pending entries for cleanup",
+				observability.String("consumer_group", group),
+				observability.Error(err))
 			continue
 		}
 
@@ -271,32 +271,32 @@ func (tsm *TaskStreamManager) CleanupPendingEntries(ctx context.Context) error {
 			if entry.Idle > time.Hour {
 				err := tsm.redisClient.XAck(ctx, StreamTaskDispatched, group, entry.ID)
 				if err != nil {
-					tsm.logger.Error("Failed to acknowledge old pending entry",
-						"consumer_group", group,
-						"message_id", entry.ID,
-						"idle_time", entry.Idle,
-						"error", err)
+					tsm.logger.Error(ctx, "Failed to acknowledge old pending entry",
+						observability.String("consumer_group", group),
+						observability.String("message_id", entry.ID),
+						observability.Duration("idle_time", entry.Idle),
+						observability.Error(err))
 				} else {
 					cleaned++
-					tsm.logger.Debug("Cleaned up old pending entry",
-						"consumer_group", group,
-						"message_id", entry.ID,
-						"idle_time", entry.Idle)
+					tsm.logger.Debug(ctx, "Cleaned up old pending entry",
+						observability.String("consumer_group", group),
+						observability.String("message_id", entry.ID),
+						observability.Duration("idle_time", entry.Idle))
 				}
 			}
 		}
 
 		if cleaned > 0 {
-			tsm.logger.Info("Cleaned up pending entries",
-				"consumer_group", group,
-				"cleaned_count", cleaned)
+			tsm.logger.Info(ctx, "Cleaned up pending entries",
+				observability.String("consumer_group", group),
+				observability.Int("cleaned_count", cleaned))
 			totalCleaned += cleaned
 		}
 	}
 
 	if totalCleaned > 0 {
-		tsm.logger.Info("Pending entries cleanup completed",
-			"total_cleaned", totalCleaned)
+		tsm.logger.Info(ctx, "Pending entries cleanup completed",
+			observability.Int("total_cleaned", totalCleaned))
 	}
 
 	return nil
@@ -317,25 +317,25 @@ func (tsm *TaskStreamManager) AddTaskToStream(ctx context.Context, stream string
 	return tsm.addTaskToStream(ctx, stream, task)
 }
 
-func (tsm *TaskStreamManager) Close() error {
-	tsm.logger.Info("Closing TaskStreamManager")
+func (tsm *TaskStreamManager) Close(ctx context.Context) error {
+	tsm.logger.Info(ctx, "Closing TaskStreamManager")
 
 	err := tsm.redisClient.Close()
 	if err != nil {
-		tsm.logger.Error("Failed to close Redis client", "error", err)
+		tsm.logger.Error(ctx, "Failed to close Redis client", observability.Error(err))
 		return err
 	}
 
-	tsm.logger.Info("TaskStreamManager closed successfully")
+	tsm.logger.Info(ctx, "TaskStreamManager closed successfully")
 	return nil
 }
 
 // startStreamHealthMonitor monitors the health of Redis streams
 func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
-	tsm.logger.Info("Starting stream health monitor")
+	tsm.logger.Info(ctx, "Starting stream health monitor")
 
-	ticker := time.NewTicker(30 * time.Second)       // Check health every 30 seconds
-	cleanupTicker := time.NewTicker(5 * time.Minute) // Cleanup every 5 minutes
+	ticker := time.NewTicker(30 * time.Second)          // Check health every 30 seconds
+	cleanupTicker := time.NewTicker(5 * time.Minute)    // Cleanup every 5 minutes
 	trimTicker := time.NewTicker(10 * time.Minute)      // Trim streams every 10 minutes
 	expirationTicker := time.NewTicker(1 * time.Minute) // Check for expired entries every minute
 	defer ticker.Stop()
@@ -346,32 +346,32 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			tsm.logger.Info("Stream health monitor shutting down")
+			tsm.logger.Info(ctx, "Stream health monitor shutting down")
 			return
 		case <-ticker.C:
 			// Get stream information
-			taskInfo := tsm.GetStreamInfo()
+			taskInfo := tsm.GetStreamInfo(ctx)
 
 			// Log warnings for high stream lengths
 			if taskLengths, ok := taskInfo["stream_lengths"].(map[string]int64); ok {
 				for stream, length := range taskLengths {
 					if length > 50 { // Warn if more than 50 tasks in any stream
-						tsm.logger.Warn("High task stream length detected",
-							"stream", stream,
-							"length", length)
+						tsm.logger.Warn(ctx, "High task stream length detected",
+							observability.String("stream", stream),
+							observability.Int64("length", length))
 					}
 				}
 			}
 
 			// Check pending entries
-			pendingInfo := tsm.GetPendingEntriesInfo()
+			pendingInfo := tsm.GetPendingEntriesInfo(ctx)
 			for group, info := range pendingInfo {
 				if infoMap, ok := info.(map[string]interface{}); ok {
 					if count, exists := infoMap["count"]; exists {
 						if countInt, ok := count.(int64); ok && countInt > 50 {
-							tsm.logger.Warn("High number of pending entries detected",
-								"consumer_group", group,
-								"pending_count", countInt)
+							tsm.logger.Warn(ctx, "High number of pending entries detected",
+								observability.String("consumer_group", group),
+								observability.Int64("pending_count", countInt))
 						}
 					}
 				}
@@ -379,17 +379,17 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 		case <-cleanupTicker.C:
 			// Periodic cleanup of old pending entries
 			if err := tsm.CleanupPendingEntries(ctx); err != nil {
-				tsm.logger.Error("Failed to cleanup pending entries", "error", err)
+				tsm.logger.Error(ctx, "Failed to cleanup pending entries", observability.Error(err))
 			}
 		case <-trimTicker.C:
 			// Periodic trimming of streams to remove old messages
 			if err := tsm.TrimStreams(ctx); err != nil {
-				tsm.logger.Error("Failed to trim streams", "error", err)
+				tsm.logger.Error(ctx, "Failed to trim streams", observability.Error(err))
 			}
 		case <-expirationTicker.C:
 			// Periodic cleanup of expired stream entries
 			if err := tsm.CleanupExpiredStreamEntries(ctx); err != nil {
-				tsm.logger.Error("Failed to cleanup expired stream entries", "error", err)
+				tsm.logger.Error(ctx, "Failed to cleanup expired stream entries", observability.Error(err))
 			}
 		}
 	}
@@ -397,7 +397,7 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 
 // TrimStreams periodically trims old messages from streams to prevent unbounded growth
 func (tsm *TaskStreamManager) TrimStreams(ctx context.Context) error {
-	tsm.logger.Debug("Starting periodic stream trimming")
+	tsm.logger.Debug(ctx, "Starting periodic stream trimming")
 
 	// Define streams and their max lengths
 	streamConfigs := map[string]int64{
@@ -411,25 +411,25 @@ func (tsm *TaskStreamManager) TrimStreams(ctx context.Context) error {
 	for stream, maxLen := range streamConfigs {
 		trimmed, err := tsm.redisClient.XTrim(ctx, stream, maxLen, true) // Use approximate trimming for better performance
 		if err != nil {
-			tsm.logger.Warn("Failed to trim stream",
-				"stream", stream,
-				"max_len", maxLen,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to trim stream",
+				observability.String("stream", stream),
+				observability.Int64("max_len", maxLen),
+				observability.Error(err))
 			continue
 		}
 
 		if trimmed > 0 {
 			totalTrimmed += trimmed
-			tsm.logger.Info("Trimmed old messages from stream",
-				"stream", stream,
-				"messages_trimmed", trimmed,
-				"max_len", maxLen)
+			tsm.logger.Info(ctx, "Trimmed old messages from stream",
+				observability.String("stream", stream),
+				observability.Int64("messages_trimmed", trimmed),
+				observability.Int64("max_len", maxLen))
 		}
 	}
 
 	if totalTrimmed > 0 {
-		tsm.logger.Info("Periodic stream trimming completed",
-			"total_messages_trimmed", totalTrimmed)
+		tsm.logger.Info(ctx, "Periodic stream trimming completed",
+			observability.Int64("total_messages_trimmed", totalTrimmed))
 	}
 
 	return nil
@@ -437,12 +437,12 @@ func (tsm *TaskStreamManager) TrimStreams(ctx context.Context) error {
 
 // CleanupExpiredStreamEntries periodically removes expired entries from all streams
 func (tsm *TaskStreamManager) CleanupExpiredStreamEntries(ctx context.Context) error {
-	tsm.logger.Debug("Starting periodic cleanup of expired stream entries")
+	tsm.logger.Debug(ctx, "Starting periodic cleanup of expired stream entries")
 
 	// Get expired entries for all streams
 	expiredEntries, err := tsm.expirationManager.GetExpiredMessagesForAllStreams(ctx)
 	if err != nil {
-		tsm.logger.Error("Failed to get expired stream entries", "error", err)
+		tsm.logger.Error(ctx, "Failed to get expired stream entries", observability.Error(err))
 		return err
 	}
 
@@ -452,41 +452,41 @@ func (tsm *TaskStreamManager) CleanupExpiredStreamEntries(ctx context.Context) e
 			continue
 		}
 
-		tsm.logger.Info("Found expired entries for cleanup",
-			"stream", stream,
-			"expired_count", len(messageIDs))
+		tsm.logger.Info(ctx, "Found expired entries for cleanup",
+			observability.String("stream", stream),
+			observability.Int("expired_count", len(messageIDs)))
 
 		// Delete expired messages from streams
 		for _, messageID := range messageIDs {
 			deleted, err := tsm.redisClient.XDel(ctx, stream, messageID)
 			if err != nil {
-				tsm.logger.Warn("Failed to delete expired message from stream",
-					"stream", stream,
-					"message_id", messageID,
-					"error", err)
+				tsm.logger.Warn(ctx, "Failed to delete expired message from stream",
+					observability.String("stream", stream),
+					observability.String("message_id", messageID),
+					observability.Error(err))
 				continue
 			}
 			if deleted > 0 {
 				totalDeleted++
-				tsm.logger.Debug("Deleted expired stream entry",
-					"stream", stream,
-					"message_id", messageID)
+				tsm.logger.Debug(ctx, "Deleted expired stream entry",
+					observability.String("stream", stream),
+					observability.String("message_id", messageID))
 			}
 		}
 
 		// Remove from expiration tracking
 		err = tsm.expirationManager.RemoveMultipleMessageExpirations(ctx, stream, messageIDs)
 		if err != nil {
-			tsm.logger.Warn("Failed to remove expired entries from expiration tracking",
-				"stream", stream,
-				"count", len(messageIDs),
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to remove expired entries from expiration tracking",
+				observability.String("stream", stream),
+				observability.Int("count", len(messageIDs)),
+				observability.Error(err))
 		}
 	}
 
 	if totalDeleted > 0 {
-		tsm.logger.Info("Periodic cleanup of expired stream entries completed",
-			"total_deleted", totalDeleted)
+		tsm.logger.Info(ctx, "Periodic cleanup of expired stream entries completed",
+			observability.Int("total_deleted", totalDeleted))
 	}
 
 	return nil

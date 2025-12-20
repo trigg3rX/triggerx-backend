@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 const (
@@ -54,27 +55,27 @@ func (em *ExpirationManager) AddTaskTimeout(ctx context.Context, taskID int64, t
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_add", "failure").Inc()
-		em.tsm.logger.Error("Failed to add task timeout",
-			"task_id", taskID,
-			"timeout_timestamp", timeoutTimestamp,
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to add task timeout",
+			observability.Int64("task_id", taskID),
+			observability.Float64("timeout_timestamp", timeoutTimestamp),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to add task timeout: %w", err)
 	}
 
 	// Set TTL on the sorted set to ensure it expires
 	err = em.tsm.redisClient.SetTTL(ctx, DispatchedTimeoutsKey, ExpirationTrackingTTL)
 	if err != nil {
-		em.tsm.logger.Warn("Failed to set TTL on timeout tracking",
-			"task_id", taskID,
-			"error", err)
+		em.tsm.logger.Warn(ctx, "Failed to set TTL on timeout tracking",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_add", "success").Inc()
-	em.tsm.logger.Debug("Task timeout added successfully",
-		"task_id", taskID,
-		"timeout_timestamp", timeoutTimestamp,
-		"duration", duration)
+	em.tsm.logger.Debug(ctx, "Task timeout added successfully",
+		observability.Int64("task_id", taskID),
+		observability.Float64("timeout_timestamp", timeoutTimestamp),
+		observability.Duration("duration", duration))
 
 	return nil
 }
@@ -91,10 +92,10 @@ func (em *ExpirationManager) GetExpiredTasks(ctx context.Context) ([]int64, erro
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_query", "failure").Inc()
-		em.tsm.logger.Error("Failed to get expired tasks",
-			"current_timestamp", currentTimestamp,
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to get expired tasks",
+			observability.Int64("current_timestamp", currentTimestamp),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return nil, fmt.Errorf("failed to get expired tasks: %w", err)
 	}
 
@@ -103,9 +104,9 @@ func (em *ExpirationManager) GetExpiredTasks(ctx context.Context) ([]int64, erro
 	for _, taskIDStr := range expiredTaskIDs {
 		taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
 		if err != nil {
-			em.tsm.logger.Error("Failed to parse task ID from timeout tracking",
-				"task_id_str", taskIDStr,
-				"error", err)
+			em.tsm.logger.Error(ctx, "Failed to parse task ID from timeout tracking",
+				observability.String("task_id_str", taskIDStr),
+				observability.Error(err))
 			continue
 		}
 		taskIDs = append(taskIDs, taskID)
@@ -127,22 +128,22 @@ func (em *ExpirationManager) RemoveTaskTimeout(ctx context.Context, taskID int64
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove", "failure").Inc()
-		em.tsm.logger.Error("Failed to remove task timeout",
-			"task_id", taskID,
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to remove task timeout",
+			observability.Int64("task_id", taskID),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to remove task timeout: %w", err)
 	}
 
 	if removed == 0 {
-		em.tsm.logger.Debug("Task timeout entry not found for removal",
-			"task_id", taskID,
-			"duration", duration)
+		em.tsm.logger.Debug(ctx, "Task timeout entry not found for removal",
+			observability.Int64("task_id", taskID),
+			observability.Duration("duration", duration))
 	} else {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove", "success").Inc()
-		em.tsm.logger.Debug("Task timeout removed successfully",
-			"task_id", taskID,
-			"duration", duration)
+		em.tsm.logger.Debug(ctx, "Task timeout removed successfully",
+			observability.Int64("task_id", taskID),
+			observability.Duration("duration", duration))
 	}
 
 	return nil
@@ -173,17 +174,17 @@ func (em *ExpirationManager) RemoveMultipleTaskTimeouts(ctx context.Context, tas
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove_multiple", "failure").Inc()
-		em.tsm.logger.Error("Failed to remove multiple task timeouts",
-			"task_count", len(taskIDs),
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to remove multiple task timeouts",
+			observability.Int("task_count", len(taskIDs)),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to remove multiple task timeouts: %w", err)
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues("timeout_remove_multiple", "success").Inc()
-	em.tsm.logger.Debug("Multiple task timeouts removed successfully",
-		"task_count", len(taskIDs),
-		"duration", duration)
+	em.tsm.logger.Debug(ctx, "Multiple task timeouts removed successfully",
+		observability.Int("task_count", len(taskIDs)),
+		observability.Duration("duration", duration))
 
 	return nil
 }
@@ -206,31 +207,31 @@ func (em *ExpirationManager) AddMessageExpiration(ctx context.Context, stream st
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_add", "failure").Inc()
-		em.tsm.logger.Error("Failed to add stream entry expiration",
-			"stream", stream,
-			"message_id", messageID,
-			"expiration_timestamp", expirationTimestamp,
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to add stream entry expiration",
+			observability.String("stream", stream),
+			observability.String("message_id", messageID),
+			observability.Float64("expiration_timestamp", expirationTimestamp),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to add stream entry expiration: %w", err)
 	}
 
 	// Set TTL on the sorted set to ensure it expires
 	err = em.tsm.redisClient.SetTTL(ctx, expirationKey, ExpirationTrackingTTL)
 	if err != nil {
-		em.tsm.logger.Warn("Failed to set TTL on expiration tracking",
-			"stream", stream,
-			"message_id", messageID,
-			"error", err)
+		em.tsm.logger.Warn(ctx, "Failed to set TTL on expiration tracking",
+			observability.String("stream", stream),
+			observability.String("message_id", messageID),
+			observability.Error(err))
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_add", "success").Inc()
-	em.tsm.logger.Debug("Stream entry expiration added successfully",
-		"stream", stream,
-		"message_id", messageID,
-		"expiration_timestamp", expirationTimestamp,
-		"ttl", ttl,
-		"duration", duration)
+	em.tsm.logger.Debug(ctx, "Stream entry expiration added successfully",
+		observability.String("stream", stream),
+		observability.String("message_id", messageID),
+		observability.Float64("expiration_timestamp", expirationTimestamp),
+		observability.Duration("duration", duration),
+		observability.Duration("ttl", ttl))
 
 	return nil
 }
@@ -249,25 +250,25 @@ func (em *ExpirationManager) RemoveMessageExpiration(ctx context.Context, stream
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_remove", "failure").Inc()
-		em.tsm.logger.Error("Failed to remove stream entry expiration",
-			"stream", stream,
-			"message_id", messageID,
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to remove stream entry expiration",
+			observability.String("stream", stream),
+			observability.String("message_id", messageID),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to remove stream entry expiration: %w", err)
 	}
 
 	if removed == 0 {
-		em.tsm.logger.Debug("Stream entry expiration not found for removal",
-			"stream", stream,
-			"message_id", messageID,
-			"duration", duration)
+		em.tsm.logger.Debug(ctx, "Stream entry expiration not found for removal",
+			observability.String("stream", stream),
+			observability.String("message_id", messageID),
+			observability.Duration("duration", duration))
 	} else {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_remove", "success").Inc()
-		em.tsm.logger.Debug("Stream entry expiration removed successfully",
-			"stream", stream,
-			"message_id", messageID,
-			"duration", duration)
+		em.tsm.logger.Debug(ctx, "Stream entry expiration removed successfully",
+			observability.String("stream", stream),
+			observability.String("message_id", messageID),
+			observability.Duration("duration", duration))
 	}
 
 	return nil
@@ -287,11 +288,11 @@ func (em *ExpirationManager) GetExpiredMessages(ctx context.Context, stream stri
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_query", "failure").Inc()
-		em.tsm.logger.Error("Failed to get expired stream entries",
-			"stream", stream,
-			"current_timestamp", currentTimestamp,
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to get expired stream entries",
+			observability.String("stream", stream),
+			observability.Int64("current_timestamp", currentTimestamp),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return nil, fmt.Errorf("failed to get expired stream entries: %w", err)
 	}
 
@@ -322,9 +323,9 @@ func (em *ExpirationManager) GetExpiredMessagesForAllStreams(ctx context.Context
 	for _, stream := range streams {
 		messageIDs, err := em.GetExpiredMessages(ctx, stream)
 		if err != nil {
-			em.tsm.logger.Warn("Failed to get expired entries for stream",
-				"stream", stream,
-				"error", err)
+			em.tsm.logger.Warn(ctx, "Failed to get expired entries for stream",
+				observability.String("stream", stream),
+				observability.Error(err))
 			continue
 		}
 		if len(messageIDs) > 0 {
@@ -362,19 +363,19 @@ func (em *ExpirationManager) RemoveMultipleMessageExpirations(ctx context.Contex
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_remove_multiple", "failure").Inc()
-		em.tsm.logger.Error("Failed to remove multiple stream entry expirations",
-			"stream", stream,
-			"count", len(messageIDs),
-			"duration", duration,
-			"error", err)
+		em.tsm.logger.Error(ctx, "Failed to remove multiple stream entry expirations",
+			observability.String("stream", stream),
+			observability.Int("count", len(messageIDs)),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to remove multiple stream entry expirations: %w", err)
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues("expiration_remove_multiple", "success").Inc()
-	em.tsm.logger.Debug("Multiple stream entry expirations removed successfully",
-		"stream", stream,
-		"count", len(messageIDs),
-		"duration", duration)
+	em.tsm.logger.Debug(ctx, "Multiple stream entry expirations removed successfully",
+		observability.String("stream", stream),
+		observability.Int("count", len(messageIDs)),
+		observability.Duration("duration", duration))
 
 	return nil
 }

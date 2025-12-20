@@ -10,7 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -186,7 +186,7 @@ func TestWebSocketError_Error_ReturnsFormattedMessage(t *testing.T) {
 
 // TestNewWebSocketClient_ValidConfig_ReturnsClient tests client creation with valid config
 func TestNewWebSocketClient_ValidConfig_ReturnsClient(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewMockLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -200,7 +200,7 @@ func TestNewWebSocketClient_ValidConfig_ReturnsClient(t *testing.T) {
 
 // TestNewWebSocketClient_NilConfig_UsesDefaultConfig tests client creation with nil config
 func TestNewWebSocketClient_NilConfig_UsesDefaultConfig(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", nil, logger)
 
@@ -212,7 +212,7 @@ func TestNewWebSocketClient_NilConfig_UsesDefaultConfig(t *testing.T) {
 
 // TestNewWebSocketClient_InvalidConfig_ReturnsError tests client creation with invalid config
 func TestNewWebSocketClient_InvalidConfig_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := &WebSocketRetryConfig{
 		RetryConfig:       retry.DefaultRetryConfig(),
 		ReconnectConfig:   DefaultReconnectConfig(),
@@ -249,7 +249,7 @@ func TestWebSocketClient_Connect_SuccessfulConnection_ReturnsNoError(t *testing.
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:] // Convert http to ws
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -285,7 +285,7 @@ func TestWebSocketClient_Connect_AlreadyConnected_ReturnsNoError(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -327,7 +327,7 @@ func TestWebSocketClient_WriteTextMessage_SuccessfulWrite_ReturnsNoError(t *test
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -350,7 +350,7 @@ func TestWebSocketClient_WriteTextMessage_SuccessfulWrite_ReturnsNoError(t *test
 
 // TestWebSocketClient_WriteTextMessage_NotConnected_ReturnsError tests writing when not connected
 func TestWebSocketClient_WriteTextMessage_NotConnected_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -383,7 +383,7 @@ func TestWebSocketClient_ReadMessage_SuccessfulRead_ReturnsMessage(t *testing.T)
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -410,7 +410,7 @@ func TestWebSocketClient_ReadMessage_SuccessfulRead_ReturnsMessage(t *testing.T)
 
 // TestWebSocketClient_IsConnected_ReturnsConnectionStatus tests connection status
 func TestWebSocketClient_IsConnected_ReturnsConnectionStatus(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -423,7 +423,7 @@ func TestWebSocketClient_IsConnected_ReturnsConnectionStatus(t *testing.T) {
 
 // TestWebSocketClient_GetReconnectCount_ReturnsCount tests reconnect count
 func TestWebSocketClient_GetReconnectCount_ReturnsCount(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -437,7 +437,7 @@ func TestWebSocketClient_GetReconnectCount_ReturnsCount(t *testing.T) {
 
 // TestWebSocketClient_GetLastMessageTime_ReturnsTime tests last message time
 func TestWebSocketClient_GetLastMessageTime_ReturnsTime(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -451,7 +451,7 @@ func TestWebSocketClient_GetLastMessageTime_ReturnsTime(t *testing.T) {
 
 // TestWebSocketClient_MessageChannel_ReturnsChannel tests message channel
 func TestWebSocketClient_MessageChannel_ReturnsChannel(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -465,7 +465,7 @@ func TestWebSocketClient_MessageChannel_ReturnsChannel(t *testing.T) {
 
 // TestWebSocketClient_ErrorChannel_ReturnsChannel tests error channel
 func TestWebSocketClient_ErrorChannel_ReturnsChannel(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -493,7 +493,7 @@ func TestWebSocketClient_Close_GracefullyClosesConnection(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -515,7 +515,7 @@ func TestWebSocketClient_Close_GracefullyClosesConnection(t *testing.T) {
 
 // TestWebSocketClient_Close_AlreadyClosed_ReturnsNoError tests closing already closed connection
 func TestWebSocketClient_Close_AlreadyClosed_ReturnsNoError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 
 	client, err := NewWebSocketClient("ws://localhost:8080", config, logger)
@@ -547,7 +547,7 @@ func TestWebSocketClient_SetHeaders_SetsHeaders(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -592,7 +592,7 @@ func TestWebSocketClient_ContextCancelled_ClosesConnection(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -664,13 +664,6 @@ func TestCalculateReconnectDelay_WithJitter_AddsJitter(t *testing.T) {
 	assert.LessOrEqual(t, delay, time.Duration(float64(cfg.BaseDelay)*2.0*1.25))
 }
 
-// TestFormatMaxRetries_FormatsCorrectly tests max retries formatting
-func TestFormatMaxRetries_FormatsCorrectly(t *testing.T) {
-	assert.Equal(t, "∞", formatMaxRetries(0))
-	assert.Equal(t, "5", formatMaxRetries(5))
-	assert.Equal(t, "10", formatMaxRetries(10))
-}
-
 // TestWebSocketClient_WriteBinaryMessage_SuccessfulWrite_ReturnsNoError tests writing binary message
 func TestWebSocketClient_WriteBinaryMessage_SuccessfulWrite_ReturnsNoError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -691,7 +684,7 @@ func TestWebSocketClient_WriteBinaryMessage_SuccessfulWrite_ReturnsNoError(t *te
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond
@@ -728,7 +721,7 @@ func TestWebSocketClient_GetConn_ReturnsConnection(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultWebSocketRetryConfig()
 	config.RetryConfig.MaxRetries = 1
 	config.RetryConfig.InitialDelay = 10 * time.Millisecond

@@ -11,10 +11,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // ProcessTaskEvent processes task-related events
-func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
+func (h *TaskEventHandler) ProcessTaskEvent(ctx context.Context, event *ChainEvent) {
 	if eventData, ok := event.Data.(*ContractEventData); ok {
 		// Debug: Log all parsed data keys to see what's available
 		// h.logger.Debug("Parsed event data keys", "keys", getMapKeys(eventData.ParsedData))
@@ -23,9 +24,9 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 		// }
 
 		// Parse the event data to TaskSubmissionData
-		taskData, err := h.parseTaskSubmissionData(eventData.ParsedData, event.TxHash)
+		taskData, err := h.parseTaskSubmissionData(ctx, eventData.ParsedData, event.TxHash)
 		if err != nil {
-			h.logger.Errorf("Failed to parse TaskSubmitted event data: %v", err)
+			h.logger.Error(ctx, "Failed to parse TaskSubmitted event data: %v", observability.Error(err))
 			return
 		}
 		if event.EventName == "TaskRejected" {
@@ -36,18 +37,18 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 
 		switch taskData.TaskDefinitionID {
 		case 10001, 10002:
-			h.logger.Debugf("Skipping task processing - Task # %d is Internal Task", taskData.TaskNumber)
+			h.logger.Debug(ctx, "Skipping task processing - Task # %d is Internal Task", observability.Int64("task_number", taskData.TaskNumber))
 			return
 		case 1, 2, 3, 4, 5, 6, 7: // Added 7 for custom script jobs
 			dataBytes, err := hex.DecodeString(taskData.Data) // Remove "0x" prefix before decoding
 			if err != nil {
-				h.logger.Error("Failed to hex-decode data", "error", err)
+				h.logger.Error(ctx, "Failed to hex-decode data", observability.Error(err))
 				return
 			}
 			ipfsHash := string(dataBytes)
 			ipfsData, err := h.ipfsClient.Fetch(context.Background(), ipfsHash)
 			if err != nil {
-				h.logger.Errorf("Failed to fetch IPFS data: %v", err)
+				h.logger.Error(ctx, "Failed to fetch IPFS data: %v", observability.Error(err))
 				return
 			}
 
@@ -64,48 +65,48 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 			// h.logger.Infof("Task data: %+v", taskData)
 
 			// First, move the task from dispatched to completed based on onchain result
-			h.logger.Info("Task submitted onchain, moving to completed stream",
-				"task_id", taskData.TaskID,
-				"task_number", taskData.TaskNumber,
-				"tx_hash", event.TxHash,
-				"is_accepted", taskData.IsAccepted)
+			h.logger.Info(ctx, "Task submitted onchain, moving to completed stream",
+				observability.Int64("task_id", taskData.TaskID),
+				observability.Int64("task_number", taskData.TaskNumber),
+				observability.String("tx_hash", event.TxHash),
+				observability.Bool("is_accepted", taskData.IsAccepted))
 
 			// Move task from dispatched to completed stream
-			if err := h.moveTaskToCompleted(taskData.TaskID); err != nil {
-				h.logger.Errorf("Failed to move task to completed stream: %v", err)
+			if err := h.moveTaskToCompleted(ctx, taskData.TaskID); err != nil {
+				h.logger.Error(ctx, "Failed to move task to completed stream: %v", observability.Error(err))
 			}
 
 			// Update task submission data in database
-			if err := h.db.UpdateTaskSubmissionData(*taskData); err != nil {
-				h.logger.Errorf("Failed to update task submission data in database: %v", err)
+			if err := h.db.UpdateTaskSubmissionData(ctx, *taskData); err != nil {
+				h.logger.Error(ctx, "Failed to update task submission data in database: %v", observability.Error(err))
 			}
 
 			// For custom script jobs (TaskDefinitionID = 7), update storage
 			if taskData.TaskDefinitionID == 7 && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
-				jobID, err := h.db.GetJobIDByTaskID(taskData.TaskID)
+				jobID, err := h.db.GetJobIDByTaskID(ctx, taskData.TaskID)
 				if err != nil {
-					h.logger.Errorf("Failed to get job ID for task %d: %v", taskData.TaskID, err)
+					h.logger.Error(ctx, "Failed to get job ID for task %d: %v", observability.Int64("task_id", taskData.TaskID), observability.Error(err))
 				} else {
-					if err := h.db.UpdateScriptStorage(jobID, ipfsData.ActionData.StorageUpdates); err != nil {
-						h.logger.Errorf("Failed to update script storage for job %s: %v", jobID.String(), err)
+					if err := h.db.UpdateScriptStorage(ctx, jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+						h.logger.Error(ctx, "Failed to update script storage for job %s: %v", observability.String("job_id", jobID.String()), observability.Error(err))
 					} else {
-						h.logger.Infof("Successfully updated %d storage keys for job %s", len(ipfsData.ActionData.StorageUpdates), jobID.String())
+						h.logger.Info(ctx, "Successfully updated %d storage keys for job %s", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID.String()))
 					}
 				}
 			}
 
 			// Update keeper points in database
-			if err := h.db.UpdateKeeperPointsInDatabase(*taskData); err != nil {
-				h.logger.Errorf("Failed to update keeper points in database: %v", err)
+			if err := h.db.UpdateKeeperPointsInDatabase(ctx, *taskData); err != nil {
+				h.logger.Error(ctx, "Failed to update keeper points in database: %v", observability.Error(err))
 				return
 			}
 
 			// Notify user about task completion/rejection
 			if h.notifier != nil {
 				// Fetch user email by task id -> job id mapping
-				email, err := h.db.GetUserEmailByTaskID(taskData.TaskID)
+				email, err := h.db.GetUserEmailByTaskID(ctx, taskData.TaskID)
 				if err != nil {
-					h.logger.Warnf("Could not fetch user email for task %d: %v", taskData.TaskID, err)
+					h.logger.Warn(ctx, "Could not fetch user email for task %d: %v", observability.Int64("task_id", taskData.TaskID), observability.Error(err))
 				} else if email != "" {
 					payload := notify.TaskStatusPayload{
 						TaskID:          taskData.TaskID,
@@ -121,7 +122,7 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 						payload.Status = "failed"
 					}
 					if err := h.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
-						h.logger.Warnf("Failed to notify user %s for task %d: %v", email, taskData.TaskID, err)
+						h.logger.Warn(ctx, "Failed to notify user %s for task %d: %v", observability.String("email", email), observability.Int64("task_id", taskData.TaskID), observability.Error(err))
 					}
 				}
 			}
@@ -132,13 +133,13 @@ func (h *TaskEventHandler) ProcessTaskEvent(event *ChainEvent) {
 }
 
 // moveTaskToCompleted moves a task from dispatched to completed stream
-func (h *TaskEventHandler) moveTaskToCompleted(taskID int64) error {
-	h.logger.Info("Moving task to completed stream", "task_id", taskID)
+func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64) error {
+	h.logger.Info(ctx, "Moving task to completed stream", observability.Int64("task_id", taskID))
 
 	// Find the task in the dispatched stream
 	task, err := h.taskStreamManager.FindTaskInDispatched(taskID)
 	if err != nil {
-		h.logger.Error("Failed to find task in dispatched stream", "task_id", taskID, "error", err)
+		h.logger.Error(ctx, "Failed to find task in dispatched stream", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
 
@@ -146,21 +147,21 @@ func (h *TaskEventHandler) moveTaskToCompleted(taskID int64) error {
 	task.CompletedAt = &[]time.Time{time.Now()}[0]
 
 	// Add to completed stream
-	err = h.taskStreamManager.AddTaskToStream(context.Background(), tasks.StreamTaskCompleted, task)
+	err = h.taskStreamManager.AddTaskToStream(ctx, tasks.StreamTaskCompleted, task)
 	if err != nil {
-		h.logger.Error("Failed to add task to completed stream", "task_id", taskID, "error", err)
+		h.logger.Error(ctx, "Failed to add task to completed stream", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
 
 	// Remove from dispatched stream (acknowledge)
 	// Note: In a real implementation, we'd need to track the dispatched message ID
-	h.logger.Info("Task moved to completed stream successfully", "task_id", taskID)
+	h.logger.Info(ctx, "Task moved to completed stream successfully", observability.Int64("task_id", taskID))	
 
 	return nil
 }
 
 // parseTaskSubmissionData parses the event data into TaskSubmissionData
-func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interface{}, txHash string) (*types.TaskSubmissionData, error) {
+func (h *TaskEventHandler) parseTaskSubmissionData(ctx context.Context, parsedData map[string]interface{}, txHash string) (*types.TaskSubmissionData, error) {
 	// Extract taskDefinitionId - it's indexed, so it comes as a string (hex-encoded)
 	taskDefinitionIdStr, ok := parsedData["taskDefinitionId"].(string)
 	if !ok {
@@ -234,10 +235,10 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 
 		// Try alternative field names that might be used
 		if altInterface, altOk := parsedData["attesterIds"]; altOk {
-			h.logger.Info("Found attesterIds with alternative spelling")
+			h.logger.Info(ctx, "Found attesterIds with alternative spelling")
 			attestersIdsInterface = altInterface
 		} else if altInterface, altOk := parsedData["attesters"]; altOk {
-			h.logger.Info("Found attesters field")
+			h.logger.Info(ctx, "Found attesters field")
 			attestersIdsInterface = altInterface
 		} else {
 			// Don't return error, just log and continue with empty slice
@@ -261,7 +262,7 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 			if n, err := strconv.ParseInt(av, 10, 64); err == nil {
 				attestersIds = append(attestersIds, n)
 			} else {
-				h.logger.Warn("Failed to parse attester ID as string", "value", av, "error", err)
+				h.logger.Warn(ctx, "Failed to parse attester ID as string", observability.String("value", av), observability.Error(err))
 			}
 		}
 	case []interface{}:
@@ -276,12 +277,12 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 				if n, err := strconv.ParseInt(vv, 10, 64); err == nil {
 					attestersIds = append(attestersIds, n)
 				} else {
-					h.logger.Warn("Failed to parse attester ID as string", "index", i, "value", vv, "error", err)
+					h.logger.Warn(ctx, "Failed to parse attester ID as string", observability.Int("index", i), observability.String("value", vv), observability.Error(err))
 				}
 			case *big.Int:
 				attestersIds = append(attestersIds, vv.Int64())
 			default:
-				h.logger.Warn("Unknown attester ID type", "index", i, "type", fmt.Sprintf("%T", vv), "value", vv)
+				h.logger.Warn(ctx, "Unknown attester ID type", observability.Int("index", i), observability.String("type", fmt.Sprintf("%T", vv)), observability.Any("value", vv))
 			}
 		}
 	case []*big.Int:
@@ -306,12 +307,12 @@ func (h *TaskEventHandler) parseTaskSubmissionData(parsedData map[string]interfa
 					if n, err := strconv.ParseInt(itemVal, 10, 64); err == nil {
 						attestersIds = append(attestersIds, n)
 					} else {
-						h.logger.Warn("Failed to parse attester ID from string", "index", i, "value", itemVal, "error", err)
+						h.logger.Warn(ctx, "Failed to parse attester ID from string", observability.Int("index", i), observability.String("value", itemVal), observability.Error(err))
 					}
 				case float64:
 					attestersIds = append(attestersIds, int64(itemVal))
 				default:
-					h.logger.Warn("Unknown attester ID type in slice", "index", i, "type", fmt.Sprintf("%T", itemVal), "value", itemVal)
+					h.logger.Warn(ctx, "Unknown attester ID type in slice", observability.Int("index", i), observability.String("type", fmt.Sprintf("%T", itemVal)), observability.Any("value", itemVal))
 				}
 			}
 		}

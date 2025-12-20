@@ -12,13 +12,14 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, task TaskStreamData) (bool, error) {
 	// Prepare payload identical to previous implementation
 	jsonData, err := json.Marshal(task.SendTaskDataToKeeper)
 	if err != nil {
-		tsm.logger.Error("Failed to marshal scheduler task data", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		tsm.logger.Error(ctx, "Failed to marshal scheduler task data", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
 		return false, fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
@@ -53,7 +54,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	}
 	requestBodyJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		tsm.logger.Error("Failed to marshal request body for performer", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		tsm.logger.Error(ctx, "Failed to marshal request body for performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
 		return false, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
@@ -65,10 +66,10 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 		performerURL = config.GetTestPerformerAPIUrl() + "/p2p/message"
 	}
 
-	tsm.logger.Info("Sending task directly to performer",
-		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"performer_url", performerURL,
-		"is_mainnet", task.IsMainnet)
+	tsm.logger.Info(ctx, "Sending task directly to performer",
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.String("performer_url", performerURL),
+		observability.Bool("is_mainnet", task.IsMainnet))
 
 	// Create HTTP request with timeout
 	httpCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -76,7 +77,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 
 	req, err := http.NewRequestWithContext(httpCtx, http.MethodPost, performerURL, bytes.NewBuffer(requestBodyJSON))
 	if err != nil {
-		tsm.logger.Error("Failed to create HTTP request for performer", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		tsm.logger.Error(ctx, "Failed to create HTTP request for performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
 		return false, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -85,23 +86,27 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		tsm.logger.Error("Failed to send task to performer", "task_id", task.SendTaskDataToKeeper.TaskID[0], "error", err)
+		tsm.logger.Error(ctx, "Failed to send task to performer", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Error(err))
 		return false, fmt.Errorf("failed to send task to performer: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Println("Failed to close response body:", err)
+		}
+	}()
 
 	// Accept both 200 OK (legacy) and 202 Accepted (async acknowledgement)
 	// 202 means the performer accepted the task and will process it asynchronously
 	// Task completion will be reported to TaskMonitor, not back to this caller
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		tsm.logger.Error("Performer returned error status", "task_id", task.SendTaskDataToKeeper.TaskID[0], "status", resp.StatusCode)
+		tsm.logger.Error(ctx, "Performer returned error status", observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]), observability.Int("status", resp.StatusCode))
 		return false, fmt.Errorf("performer returned status %d", resp.StatusCode)
 	}
 
-	tsm.logger.Info("Task accepted by performer",
-		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"performer_url", performerURL,
-		"status_code", resp.StatusCode)
+	tsm.logger.Info(ctx, "Task accepted by performer",
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.String("performer_url", performerURL),
+		observability.Int("status_code", resp.StatusCode))
 
 	success, err := tsm.addTaskToStream(ctx, StreamTaskDispatched, &task)
 	if err != nil {
@@ -121,10 +126,10 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 
 	taskJSON, err := json.Marshal(task)
 	if err != nil {
-		tsm.logger.Error("Failed to marshal task data",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"stream", stream,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to marshal task data",
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.String("stream", stream),
+			observability.Error(err))
 		return false, fmt.Errorf("failed to marshal task data: %w", err)
 	}
 
@@ -141,11 +146,11 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 
 	if err != nil {
 		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
-		tsm.logger.Error("Failed to add task to stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"stream", stream,
-			"duration", duration,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to add task to stream",
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.String("stream", stream),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return false, fmt.Errorf("failed to add task to stream: %w", err)
 	}
 
@@ -154,19 +159,19 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		taskID := task.SendTaskDataToKeeper.TaskID[0]
 		err = tsm.storeTaskIndex(ctx, taskID, res)
 		if err != nil {
-			tsm.logger.Warn("Failed to store task index, but task was added to stream",
-				"task_id", taskID,
-				"message_id", res,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to store task index, but task was added to stream",
+				observability.Int64("task_id", taskID),
+				observability.String("message_id", res),
+				observability.Error(err))
 			// Don't fail the entire operation if index storage fails
 		}
 
 		// Add task to timeout tracking
 		err = tsm.addTaskToTimeoutTracking(ctx, taskID)
 		if err != nil {
-			tsm.logger.Warn("Failed to add task to timeout tracking, but task was added to stream",
-				"task_id", taskID,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to add task to timeout tracking, but task was added to stream",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
 			// Don't fail the entire operation if timeout tracking fails
 		}
 	}
@@ -195,11 +200,11 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		Member: member,
 	})
 	if err != nil {
-		tsm.logger.Warn("Failed to add stream entry expiration, but task was added to stream",
-			"task_id", task.SendTaskDataToKeeper.TaskID[0],
-			"stream", stream,
-			"message_id", res,
-			"error", err)
+		tsm.logger.Warn(ctx, "Failed to add stream entry expiration, but task was added to stream",
+			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+			observability.String("stream", stream),
+			observability.String("message_id", res),
+			observability.Error(err))
 		// Don't fail the entire operation if expiration tracking fails
 	} else {
 		// Set TTL on the sorted set (should be longer than max entry TTL)
@@ -207,13 +212,13 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 	}
 
 	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
-	tsm.logger.Debug("Task added to stream successfully",
-		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"stream", stream,
-		"stream_id", res,
-		"duration", duration,
-		"task_json_size", len(taskJSON),
-		"entry_ttl", entryTTL)
+	tsm.logger.Debug(ctx, "Task added to stream successfully",
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.String("stream", stream),
+		observability.String("stream_id", res),
+		observability.Duration("duration", duration),
+		observability.Int("task_json_size", len(taskJSON)),
+		observability.Duration("entry_ttl", entryTTL))
 
 	return true, nil
 }

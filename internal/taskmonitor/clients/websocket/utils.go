@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -10,10 +11,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // processLogEntry processes a single log entry and routes it to the appropriate handler
-func (sm *SubscriptionManager) processLogEntry(log types.Log, eventChan chan<- *ChainEvent) error {
+func (sm *SubscriptionManager) processLogEntry(ctx context.Context, log types.Log, eventChan chan<- *ChainEvent) error {
 	if len(log.Topics) == 0 {
 		return fmt.Errorf("log entry has no topics")
 	}
@@ -32,7 +34,7 @@ func (sm *SubscriptionManager) processLogEntry(log types.Log, eventChan chan<- *
 	sm.mu.RUnlock()
 
 	if matchedSub == nil {
-		sm.logger.Debugf("No subscription found for event %s from %s", eventSig.Hex(), log.Address.Hex())
+		sm.logger.Debug(ctx, "No subscription found for event %s from %s", observability.String("event_signature", eventSig.Hex()), observability.String("contract_address", log.Address.Hex()))
 		return nil
 	}
 
@@ -49,7 +51,7 @@ func (sm *SubscriptionManager) processLogEntry(log types.Log, eventChan chan<- *
 		BlockNumber:  log.BlockNumber,
 		TxHash:       log.TxHash.Hex(),
 		LogIndex:     log.Index,
-		Data:         sm.parseEventData(matchedSub, log),
+		Data:         sm.parseEventData(ctx, matchedSub, log),
 		RawLog:       log,
 		ProcessedAt:  time.Now(),
 	}
@@ -57,21 +59,24 @@ func (sm *SubscriptionManager) processLogEntry(log types.Log, eventChan chan<- *
 	// Send to event channel (non-blocking)
 	select {
 	case eventChan <- chainEvent:
-		sm.logger.Debugf("Processed %s event from %s at block %d",
-			matchedSub.EventName, log.Address.Hex(), log.BlockNumber)
+		sm.logger.Debug(ctx, "Processed %s event from %s at block %d",
+			observability.String("event_name", matchedSub.EventName),
+			observability.String("contract_address", log.Address.Hex()),
+			observability.Int64("block_number", int64(log.BlockNumber)))
 	default:
-		sm.logger.Warnf("Event channel full, dropping event %s from %s",
-			matchedSub.EventName, log.Address.Hex())
+		sm.logger.Warn(ctx, "Event channel full, dropping event %s from %s",
+			observability.String("event_name", matchedSub.EventName),
+			observability.String("contract_address", log.Address.Hex()))
 	}
 
 	return nil
 }
 
 // parseEventData parses event data based on the contract type and event
-func (sm *SubscriptionManager) parseEventData(sub *EventSubscription, log types.Log) interface{} {
+func (sm *SubscriptionManager) parseEventData(ctx context.Context, sub *EventSubscription, log types.Log) interface{} {
 	// Check if we have a contract type for proper parsing
 	if sub.ContractType != "" {
-		return sm.parseContractEventData(sub, log)
+		return sm.parseContractEventData(ctx, sub, log)
 	}
 
 	// Fallback to basic parsing for legacy subscriptions
@@ -92,16 +97,16 @@ func (sm *SubscriptionManager) parseEventData(sub *EventSubscription, log types.
 }
 
 // parseContractEventData parses contract event data using the proper ABI
-func (sm *SubscriptionManager) parseContractEventData(sub *EventSubscription, log types.Log) interface{} {
+func (sm *SubscriptionManager) parseContractEventData(ctx context.Context, sub *EventSubscription, log types.Log) interface{} {
 	contractABI, exists := sm.contractABIs[sub.ContractType]
 	if !exists {
-		sm.logger.Errorf("Contract ABI not found for type %s", sub.ContractType)
+		sm.logger.Error(ctx, "Contract ABI not found for type %s", observability.String("contract_type", string(sub.ContractType)))
 		return sm.parseBasicEventData(sub, log)
 	}
 
 	event, exists := contractABI.Events[sub.EventName]
 	if !exists {
-		sm.logger.Errorf("Event %s not found in contract %s ABI", sub.EventName, sub.ContractType)
+		sm.logger.Error(ctx, "Event %s not found in contract %s ABI", observability.String("event_name", sub.EventName), observability.String("contract_type", string(sub.ContractType)))
 		return sm.parseBasicEventData(sub, log)
 	}
 
@@ -131,7 +136,7 @@ func (sm *SubscriptionManager) parseContractEventData(sub *EventSubscription, lo
 		if len(nonIndexedInputs) > 0 {
 			values, err := contractABI.Unpack(sub.EventName, log.Data)
 			if err != nil {
-				sm.logger.Errorf("Failed to unpack event data for %s: %v", sub.EventName, err)
+				sm.logger.Error(ctx, "Failed to unpack event data for %s: %v", observability.String("event_name", sub.EventName), observability.Error(err))
 			} else {
 				for i, input := range nonIndexedInputs {
 					if i < len(values) {
@@ -241,11 +246,11 @@ func (sm *SubscriptionManager) updateSubscriptionStats(subID string) {
 }
 
 // generateSubscriptionID generates a unique subscription ID
-func (sm *SubscriptionManager) generateSubscriptionID() string {
+func (sm *SubscriptionManager) generateSubscriptionID(ctx context.Context) string {
 	bytes := make([]byte, 16)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		sm.logger.Errorf("Failed to generate subscription ID: %v", err)
+		sm.logger.Error(ctx, "Failed to generate subscription ID: %v", observability.Error(err))
 		return ""
 	}
 	return fmt.Sprintf("%s_%s", sm.chainID, hex.EncodeToString(bytes))

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
 )
 
 // StartRPCServer creates and starts the Task Dispatcher gRPC server using the generic approach.
 // It registers the task dispatcher handler with the generic RPC server.
-func StartRPCServer(ctx context.Context, logger logging.Logger, dispatcher TaskDispatcherInterface, addr string, portStr string) (*rpcserver.Server, error) {
+func StartRPCServer(ctx context.Context, logger observability.Logger, dispatcher TaskDispatcherInterface, addr string, portStr string) (*rpcserver.Server, error) {
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid port %q: %w", portStr, err)

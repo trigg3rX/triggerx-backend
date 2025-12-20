@@ -4,14 +4,13 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
 	startTime = time.Now()
 
 	// UptimeSeconds tracks the service uptime in seconds
-	UptimeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+	UptimeSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "uptime_seconds",
@@ -19,7 +18,7 @@ var (
 	})
 
 	// Total task processing requests on keeper API server
-	TasksReceivedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	TasksReceivedTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "tasks_received_total",
@@ -27,7 +26,7 @@ var (
 	})
 
 	// Totla task completed successfully, type: executed, validated
-	TasksCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	TasksCompletedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "tasks_completed_total",
@@ -35,7 +34,7 @@ var (
 	}, []string{"type"})
 
 	// Time taken for task completion, type: executed, validated
-	TaskDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	TaskDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "task_duration_seconds",
@@ -44,7 +43,7 @@ var (
 	}, []string{"type"})
 
 	// Total tasks validated by type/id: 1-6
-	TasksByDefinitionIDTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	TasksByDefinitionIDTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "tasks_by_definition_id_total",
@@ -52,19 +51,19 @@ var (
 	}, []string{"id"})
 
 	// Transaction metrics
-	TransactionsSentTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	TransactionsSentTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "transactions_sent_total",
 		Help:      "Total transactions done for task executions",
 	}, []string{"chain_id", "status"})
-	GasUsedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	GasUsedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "gas_used_total",
 		Help:      "Total gas used in transactions",
 	}, []string{"chain_id"})
-	TransactionFeesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	TransactionFeesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "transaction_fees_total",
@@ -72,13 +71,13 @@ var (
 	}, []string{"chain_id"})
 
 	// IPFS metrics
-	IPFSDownloadSizeBytes = promauto.NewCounter(prometheus.CounterOpts{
+	IPFSDownloadSizeBytes = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "ipfs_download_size_bytes",
 		Help:      "Total IPFS content downloaded",
 	})
-	IPFSUploadSizeBytes = promauto.NewCounter(prometheus.CounterOpts{
+	IPFSUploadSizeBytes = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "ipfs_upload_size_bytes",
@@ -86,7 +85,7 @@ var (
 	})
 
 	// Health metrics
-	SuccessfulHealthCheckinsTotal = promauto.NewCounter(prometheus.CounterOpts{
+	SuccessfulHealthCheckinsTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "successful_health_checkins_total",
@@ -94,28 +93,28 @@ var (
 	})
 
 	// System metrics
-	MemoryUsageBytes = promauto.NewGauge(prometheus.GaugeOpts{
+	MemoryUsageBytes = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "memory_usage_bytes",
 		Help:      "Memory consumption",
 	})
 
-	CPUUsagePercent = promauto.NewGauge(prometheus.GaugeOpts{
+	CPUUsagePercent = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "cpu_usage_percent",
 		Help:      "CPU utilization",
 	})
 
-	GoroutinesActive = promauto.NewGauge(prometheus.GaugeOpts{
+	GoroutinesActive = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "goroutines_active",
 		Help:      "Active Go routines",
 	})
 
-	GCDurationSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+	GCDurationSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "gc_duration_seconds",
@@ -123,14 +122,14 @@ var (
 	})
 
 	// Docker metrics
-	DockerContainersCreatedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	DockerContainersCreatedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "docker_containers_created_total",
 		Help:      "Docker container creation count",
 	}, []string{"language"})
 
-	DockerContainerDurationSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	DockerContainerDurationSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "docker_container_duration_seconds",
@@ -138,7 +137,7 @@ var (
 	}, []string{"language"})
 
 	// Aggregate metrics
-	TaskSuccessRate = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	TaskSuccessRate = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "task_success_rate",
@@ -146,7 +145,7 @@ var (
 	}, []string{"type"})
 
 	// Average task completion time in seconds, type: executed, validated
-	// AverageTaskCompletionTimeSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	// AverageTaskCompletionTimeSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 	// 	Namespace: "triggerx",
 	// 	Subsystem: "keeper",
 	// 	Name:      "average_task_completion_time_seconds",
@@ -154,7 +153,7 @@ var (
 	// }, []string{"type"})
 
 	// Tasks per minute, type: executed, validated
-	TasksPerDay = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	TasksPerDay = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "tasks_per_day",
@@ -162,13 +161,47 @@ var (
 	}, []string{"type"})
 
 	// Total service restarts
-	RestartsTotal = promauto.NewCounter(prometheus.CounterOpts{
+	RestartsTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "triggerx",
 		Subsystem: "keeper",
 		Name:      "restarts_total",
 		Help:      "Service restart count",
 	})
 )
+
+// RegisterMetrics registers all Prometheus metrics with the given registry
+func RegisterMetrics(registry *prometheus.Registry) error {
+	metrics := []prometheus.Collector{
+		UptimeSeconds,
+		TasksReceivedTotal,
+		TasksCompletedTotal,
+		TaskDurationSeconds,
+		TasksByDefinitionIDTotal,
+		TransactionsSentTotal,
+		GasUsedTotal,
+		TransactionFeesTotal,
+		IPFSDownloadSizeBytes,
+		IPFSUploadSizeBytes,
+		SuccessfulHealthCheckinsTotal,
+		MemoryUsageBytes,
+		CPUUsagePercent,
+		GoroutinesActive,
+		GCDurationSeconds,
+		DockerContainersCreatedTotal,
+		DockerContainerDurationSeconds,
+		TaskSuccessRate,
+		TasksPerDay,
+		RestartsTotal,
+	}
+
+	for _, metric := range metrics {
+		if err := registry.Register(metric); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // StartMetricsCollection starts collecting metrics
 func StartMetricsCollection() {

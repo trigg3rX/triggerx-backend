@@ -25,7 +25,6 @@ func getReceiptRetryConfig() *retry.RetryConfig {
 		MaxDelay:        6 * time.Second,        // Cap at 6 seconds
 		BackoffFactor:   1.4,                    // Moderate backoff
 		JitterFactor:    0.3,                    // High jitter to avoid conflicts
-		LogRetryAttempt: true,
 		ShouldRetry:     shouldRetryReceiptError,
 	}
 }
@@ -86,7 +85,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 		return client.TransactionReceipt(context.Background(), txHash)
 	}
 
-	receipt, err := retry.Retry(context.Background(), receiptOperation, retryConfig, v.logger)
+	receipt, err := retry.Retry(context.Background(), receiptOperation, retryConfig)
 	if err != nil || receipt == nil {
 		// If receipt fetch failed, try to get transaction status with retry logic
 		txOperation := func() (bool, error) {
@@ -94,7 +93,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 			return isPending, err
 		}
 
-		isPending, err := retry.Retry(context.Background(), txOperation, retryConfig, v.logger)
+		isPending, err := retry.Retry(context.Background(), txOperation, retryConfig)
 		if err != nil {
 			return false, fmt.Errorf("failed to get transaction after retries: %v", err)
 		}

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -92,7 +91,7 @@ func TestQueryxExec(t *testing.T) {
 			return ok
 		}
 
-		err := retry.RetryFunc(context.Background(), operation, cfg, logging.NewNoOpLogger())
+		err := retry.RetryFunc(context.Background(), operation, cfg)
 
 		require.NoError(t, err)
 		assert.Equal(t, 1, mockQuery.callCount, "Exec should be called once")
@@ -114,7 +113,7 @@ func TestQueryxExec(t *testing.T) {
 			return ok
 		}
 
-		err := retry.RetryFunc(context.Background(), operation, cfg, logging.NewNoOpLogger())
+		err := retry.RetryFunc(context.Background(), operation, cfg)
 
 		require.NoError(t, err)
 		assert.Equal(t, 2, mockQuery.callCount, "Exec should be called twice")
@@ -136,7 +135,7 @@ func TestQueryxExec(t *testing.T) {
 			return ok
 		}
 
-		err := retry.RetryFunc(context.Background(), operation, cfg, logging.NewNoOpLogger())
+		err := retry.RetryFunc(context.Background(), operation, cfg)
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, gocql.ErrNotFound)
@@ -170,7 +169,7 @@ func TestQueryxScan(t *testing.T) {
 
 		_, err := retry.Retry(context.Background(), func() (struct{}, error) {
 			return struct{}{}, operation()
-		}, cfg, logging.NewNoOpLogger())
+		}, cfg)
 
 		require.NoError(t, err)
 		assert.Equal(t, 1, mockQuery.callCount)
@@ -203,7 +202,7 @@ func TestQueryxScan(t *testing.T) {
 
 		_, err := retry.Retry(context.Background(), func() (struct{}, error) {
 			return struct{}{}, operation()
-		}, cfg, logging.NewNoOpLogger())
+		}, cfg)
 
 		require.NoError(t, err)
 		assert.Equal(t, 3, mockQuery.callCount, "Scan should be called three times")

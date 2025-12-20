@@ -18,7 +18,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
 	httpclientpkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -99,7 +99,7 @@ func TraceMiddleware() gin.HandlerFunc {
 type Server struct {
 	router             *gin.Engine
 	db                 *database.Connection
-	logger             logging.Logger
+	logger             observability.Logger
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
 	validator          *middleware.Validator
@@ -112,7 +112,7 @@ type Server struct {
 	wsConnectionManager *websocket.WebSocketConnectionManager
 }
 
-func NewServer(db *database.Connection, logger logging.Logger) *Server {
+func NewServer(ctx context.Context, db *database.Connection, logger observability.Logger) *Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -120,7 +120,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	// Initialize OpenTelemetry tracer
 	_, err := InitTracer()
 	if err != nil {
-		logger.Errorf("Failed to initialize OpenTelemetry tracer: %v", err)
+		logger.Error(context.Background(), "Failed to initialize OpenTelemetry tracer: %v", observability.Error(err))
 	}
 
 	router := gin.New()
@@ -182,10 +182,10 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	var redisClient *redis.Client
 	client, err := redis.NewClient(logger)
 	if err != nil {
-		logger.Errorf("Failed to initialize Redis client: %v", err)
+		logger.Error(ctx, "Failed to initialize Redis client: %v", observability.Error(err))
 	} else {
 		redisClient = client
-		logger.Infof("Redis client initialized successfully")
+		logger.Info(ctx, "Redis client initialized successfully")
 	}
 
 	// Initialize rate limiter
@@ -194,12 +194,12 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 		var err error
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
 		if err != nil {
-			logger.Errorf("Failed to initialize rate limiter: %v", err)
+			logger.Error(ctx, "Failed to initialize rate limiter: %v", observability.Error(err))
 		} else {
-			logger.Info("Rate limiter initialized successfully")
+			logger.Info(ctx, "Rate limiter initialized successfully")
 		}
 	} else {
-		logger.Warn("Rate limiter disabled - Redis client not available")
+		logger.Warn(ctx, "Rate limiter disabled - Redis client not available")
 	}
 
 	s := &Server{
@@ -208,7 +208,7 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 		logger:      logger,
 		rateLimiter: rateLimiter,
 		redisClient: redisClient,
-		validator:   middleware.NewValidator(logger),
+		validator:   middleware.NewValidator(ctx, logger),
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),
@@ -236,12 +236,12 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 	)
 
 	// Start WebSocket hub
-	go s.hub.Run()
-	logger.Info("WebSocket hub started successfully")
+	go s.hub.Run(ctx)
+	logger.Info(ctx, "WebSocket hub started successfully")
 
 	// Apply retry middleware only to API routes
 	apiGroup := router.Group("/api")
-	apiGroup.Use(middleware.RetryMiddleware(retryConfig, logger))
+	apiGroup.Use(middleware.RetryMiddleware(ctx, retryConfig, logger))
 
 	// Initialize repositories
 	eventJobRepo := repository.NewEventJobRepository(db)
@@ -250,20 +250,20 @@ func NewServer(db *database.Connection, logger logging.Logger) *Server {
 
 	// Initialize and start job status checker
 	s.jobStatusChecker = handlers.NewJobStatusChecker(eventJobRepo, conditionJobRepo, timeJobRepo, logger)
-	go s.jobStatusChecker.StartStatusCheckLoop()
-	logger.Info("Job status checker started successfully")
+	go s.jobStatusChecker.StartStatusCheckLoop(ctx)
+	logger.Info(ctx, "Job status checker started successfully")
 
 	return s
 }
 
-func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecutor.DockerExecutorAPI) {
+func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerExecutor dockerexecutor.DockerExecutorAPI) {
 	// Create event publisher
 	publisher := events.NewPublisher(s.hub, s.logger)
 
 	// Initialize robust HTTP client
-	httpClient, err := httpclientpkg.NewHTTPClient(httpclientpkg.DefaultHTTPRetryConfig(), s.logger)
+	httpClient, err := httpclientpkg.NewHTTPClient(httpclientpkg.DefaultHTTPRetryConfig())
 	if err != nil {
-		s.logger.Errorf("Failed to create HTTP client: %v", err)
+		s.logger.Error(ctx, "Failed to create HTTP client: %v", observability.Error(err))
 		panic(err)
 	}
 
@@ -354,13 +354,13 @@ func (s *Server) RegisterRoutes(router *gin.Engine, dockerExecutor dockerexecuto
 	protected.GET("/jobs/safe-address/:safe_address", handler.GetJobsBySafeAddress)
 }
 
-func (s *Server) Start(port string) error {
-	s.logger.Infof("Starting server on port %s", port)
+func (s *Server) Start(ctx context.Context, port string) error {
+	s.logger.Info(ctx, "Starting server on port %s", observability.String("port", port))
 
 	if s.redisClient != nil {
 		defer func() {
 			if err := s.redisClient.Close(); err != nil {
-				s.logger.Errorf("Failed to close Redis client: %v", err)
+				s.logger.Error(ctx, "Failed to close Redis client: %v", observability.Error(err))
 			}
 		}()
 	}
@@ -368,7 +368,7 @@ func (s *Server) Start(port string) error {
 	// Graceful shutdown for WebSocket hub
 	defer func() {
 		if s.hub != nil {
-			s.hub.Shutdown()
+			s.hub.Shutdown(ctx)
 		}
 	}()
 

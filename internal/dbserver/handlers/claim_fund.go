@@ -16,6 +16,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type ClaimFundRequest struct {
@@ -31,7 +32,7 @@ type ClaimFundResponse struct {
 
 func (h *Handler) ClaimFund(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[ClaimFund] trace_id=%s - Claim fund request received", traceID)
+	h.logger.Info(c.Request.Context(), "[ClaimFund] trace_id=%s - Claim fund request received", observability.String("trace_id", traceID))
 	var req ClaimFundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -46,7 +47,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	// Track database operation for checking wallet balance
 	trackDBOp := metrics.TrackDBOperation("read", "wallet_balance")
 
-	h.logger.Infof("[ClaimFund] trace_id=%s - Network: %s", traceID, req.Network)
+	h.logger.Info(c.Request.Context(), "[ClaimFund] trace_id=%s - Network: %s", observability.String("trace_id", traceID), observability.String("network", req.Network))
 
 	var rpcURL string
 	switch req.Network {
@@ -63,7 +64,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
-		h.logger.Errorf("Failed to connect to network: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to connect to network: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to network"})
 		return
 	}
@@ -71,14 +72,14 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	address := common.HexToAddress(req.WalletAddress)
 	balance, err := client.BalanceAt(context.Background(), address, nil)
 	if err != nil {
-		h.logger.Errorf("Failed to get balance: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to get balance: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get balance"})
 		return
 	}
 
 	thresholdWei, ok := new(big.Int).SetString(config.GetFaucetFundAmount(), 10)
 	if !ok {
-		h.logger.Error("Failed to parse threshold amount")
+		h.logger.Error(c.Request.Context(), "Failed to parse threshold amount")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -93,7 +94,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 
 	privateKey, err := crypto.HexToECDSA(config.GetFaucetPrivateKey())
 	if err != nil {
-		h.logger.Errorf("Failed to parse private key: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to parse private key: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -101,7 +102,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		h.logger.Error("Failed to cast public key to ECDSA")
+		h.logger.Error(c.Request.Context(), "Failed to cast public key to ECDSA")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -109,7 +110,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
-		h.logger.Errorf("Failed to get nonce: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to get nonce: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get nonce"})
 		return
 	}
@@ -118,21 +119,21 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	callMsg := ethereum.CallMsg{From: fromAddress, To: &address, Value: thresholdWei}
 	gasLimit, err := client.EstimateGas(context.Background(), callMsg)
 	if err != nil {
-		h.logger.Errorf("Failed to estimate gas, falling back to 21000: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to estimate gas, falling back to 21000: %v", observability.Error(err))
 		gasLimit = 21000
 	}
 
 	// Use EIP-1559 dynamic fees
 	maxPriorityFeePerGas, err := client.SuggestGasTipCap(context.Background())
 	if err != nil {
-		h.logger.Errorf("Failed to get gas tip cap: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to get gas tip cap: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gas tip cap"})
 		return
 	}
 
 	header, err := client.HeaderByNumber(context.Background(), nil)
 	if err != nil {
-		h.logger.Errorf("Failed to get latest header: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to get latest header: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get latest header"})
 		return
 	}
@@ -144,7 +145,7 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 
 	chainID, err := client.NetworkID(context.Background())
 	if err != nil {
-		h.logger.Errorf("Failed to get chain ID: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to get chain ID: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get chain ID"})
 		return
 	}
@@ -162,19 +163,19 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 
 	signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(chainID), privateKey)
 	if err != nil {
-		h.logger.Errorf("Failed to sign transaction: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to sign transaction: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sign transaction"})
 		return
 	}
 
 	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
-		h.logger.Errorf("Failed to send transaction: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to send transaction: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send transaction"})
 		return
 	}
 
-	h.logger.Infof("[ClaimFund] trace_id=%s - Fund sent successfully", traceID)
+	h.logger.Info(c.Request.Context(), "[ClaimFund] trace_id=%s - Fund sent successfully", observability.String("trace_id", traceID))
 	c.JSON(http.StatusOK, ClaimFundResponse{
 		Success:         true,
 		Message:         "Funds sent successfully",

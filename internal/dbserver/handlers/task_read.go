@@ -10,14 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (h *Handler) GetTaskDataByID(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTaskDataByID] trace_id=%s - Retrieving task data", traceID)
+	h.logger.Info(c.Request.Context(), "[GetTaskDataByID] trace_id=%s - Retrieving task data", observability.String("trace_id", traceID))
 	taskID := c.Param("id")
 	if taskID == "" {
-		h.logger.Error("[GetTaskDataByID] No task ID provided")
+		h.logger.Error(c.Request.Context(), "[GetTaskDataByID] No task ID provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No task ID provided",
 			"code":  "MISSING_TASK_ID",
@@ -27,7 +28,7 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 
 	taskIDInt, err := strconv.ParseInt(taskID, 10, 64)
 	if err != nil {
-		h.logger.Errorf("[GetTaskDataByID] Invalid task ID format: %v", err)
+		h.logger.Error(c.Request.Context(), "[GetTaskDataByID] Invalid task ID format: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid task ID format",
 			"code":  "INVALID_TASK_ID",
@@ -35,13 +36,13 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTaskDataByID] Retrieving task data for task ID: %d", taskIDInt)
+	h.logger.Info(c.Request.Context(), "[GetTaskDataByID] Retrieving task data for task ID: %d", observability.Int64("task_id", taskIDInt))
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
 	taskData, err := h.taskRepository.GetTaskDataByID(taskIDInt)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTaskDataByID] Error retrieving task data for taskID %d: %v", taskIDInt, err)
+		h.logger.Error(c.Request.Context(), "[GetTaskDataByID] Error retrieving task data for taskID %d: %v", observability.Int64("task_id", taskIDInt), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Task not found",
 			"code":  "TASK_NOT_FOUND",
@@ -49,16 +50,16 @@ func (h *Handler) GetTaskDataByID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTaskDataByID] Successfully retrieved task data for task ID: %d", taskIDInt)
+	h.logger.Info(c.Request.Context(), "[GetTaskDataByID] Successfully retrieved task data for task ID: %d", observability.Int64("task_id", taskIDInt))
 	c.JSON(http.StatusOK, taskData)
 }
 
 func (h *Handler) GetTasksByJobID(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTasksByJobID] trace_id=%s - Retrieving tasks for job", traceID)
+	h.logger.Info(c.Request.Context(), "[GetTasksByJobID] trace_id=%s - Retrieving tasks for job", observability.String("trace_id", traceID))
 	jobIDStr := c.Param("job_id")
 	if jobIDStr == "" {
-		h.logger.Error("[GetTasksByJobID] No job ID provided")
+		h.logger.Error(c.Request.Context(), "[GetTasksByJobID] No job ID provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No job ID provided",
 			"code":  "MISSING_JOB_ID",
@@ -68,15 +69,16 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 
 	jobID := new(big.Int)
 	if _, ok := jobID.SetString(jobIDStr, 10); !ok {
+		h.logger.Error(c.Request.Context(), "[GetTasksByJobID] Invalid job_id format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
 		return
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Retrieving tasks for job ID: %s | %s", jobIDStr, jobID.String())
+	h.logger.Info(c.Request.Context(), "[GetTasksByJobID] Retrieving tasks for job ID: %s | %s", observability.String("job_id", jobIDStr), observability.String("job_id_big_int", jobID.String()))
 
 	tasks, err := h.fetchTasksForJob(jobID)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", jobID.String(), err)
+		h.logger.Error(c.Request.Context(), "[GetTasksByJobID] Error retrieving tasks for jobID %s: %v", observability.String("job_id", jobID.String()), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for this job",
 			"code":  "TASKS_NOT_FOUND",
@@ -84,17 +86,17 @@ func (h *Handler) GetTasksByJobID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", len(tasks), jobID.String())
+	h.logger.Info(c.Request.Context(), "[GetTasksByJobID] Successfully retrieved %d tasks for job ID: %s", observability.Int("tasks_count", len(tasks)), observability.String("job_id", jobID.String()))
 	c.JSON(http.StatusOK, tasks)
 }
 
 func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTasksByUserAddress] trace_id=%s - Retrieving tasks for user address", traceID)
+	h.logger.Info(c.Request.Context(), "[GetTasksByUserAddress] trace_id=%s - Retrieving tasks for user address", observability.String("trace_id", traceID))
 
 	userAddress := strings.ToLower(c.Param("user_address"))
 	if userAddress == "" {
-		h.logger.Error("[GetTasksByUserAddress] No user address provided")
+		h.logger.Error(c.Request.Context(), "[GetTasksByUserAddress] No user address provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No user address provided",
 			"code":  "MISSING_USER_ADDRESS",
@@ -106,7 +108,7 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 	_, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByUserAddress] Error retrieving jobs for user %s: %v", userAddress, err)
+		h.logger.Error(c.Request.Context(), "[GetTasksByUserAddress] Error retrieving jobs for user %s: %v", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "User not found",
 			"code":  "USER_NOT_FOUND",
@@ -115,7 +117,7 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 	}
 
 	if len(jobIDs) == 0 {
-		h.logger.Infof("[GetTasksByUserAddress] No jobs found for user %s", userAddress)
+		h.logger.Info(c.Request.Context(), "[GetTasksByUserAddress] No jobs found for user %s", observability.String("user_address", userAddress))
 		c.JSON(http.StatusOK, gin.H{
 			"user_address": userAddress,
 			"task_groups":  []types.TasksByJobGroupResponse{},
@@ -125,7 +127,7 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 
 	taskGroups, err := h.getTasksGroupedByJob(jobIDs)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByUserAddress] Error retrieving tasks for user %s: %v", userAddress, err)
+		h.logger.Error(c.Request.Context(), "[GetTasksByUserAddress] Error retrieving tasks for user %s: %v", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for the requested user",
 			"code":  "TASKS_NOT_FOUND",
@@ -133,7 +135,7 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTasksByUserAddress] Successfully retrieved tasks for %d jobs owned by %s", len(taskGroups), userAddress)
+	h.logger.Info(c.Request.Context(), "[GetTasksByUserAddress] Successfully retrieved tasks for %d jobs owned by %s", observability.Int("task_groups_count", len(taskGroups)), observability.String("user_address", userAddress))
 	c.JSON(http.StatusOK, gin.H{
 		"user_address": userAddress,
 		"task_groups":  taskGroups,
@@ -142,11 +144,11 @@ func (h *Handler) GetTasksByUserAddress(c *gin.Context) {
 
 func (h *Handler) GetTasksByApiKey(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTasksByApiKey] trace_id=%s - Retrieving tasks for API key owner", traceID)
+	h.logger.Info(c.Request.Context(), "[GetTasksByApiKey] trace_id=%s - Retrieving tasks for API key owner", observability.String("trace_id", traceID))
 
 	requestedAPIKey := strings.TrimSpace(c.Param("api_key"))
 	if requestedAPIKey == "" {
-		h.logger.Error("[GetTasksByApiKey] Missing api_key query param")
+		h.logger.Error(c.Request.Context(), "[GetTasksByApiKey] Missing api_key query param")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "api_key query param is required",
 			"code":  "MISSING_API_KEY",
@@ -154,13 +156,13 @@ func (h *Handler) GetTasksByApiKey(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTasksByApiKey] Using api_key parameter for lookup")
+	h.logger.Info(c.Request.Context(), "[GetTasksByApiKey] Using api_key parameter for lookup")
 
 	trackDBOp := metrics.TrackDBOperation("read", "apikeys")
 	apiKeyData, err := h.apiKeysRepository.GetApiKeyDataByKey(requestedAPIKey)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTasksByApiKey] Invalid API key: %v", err)
+		h.logger.Error(c.Request.Context(), "[GetTasksByApiKey] Invalid API key: %v", observability.Error(err))
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "Invalid API key",
 			"code":  "INVALID_API_KEY",
@@ -169,7 +171,7 @@ func (h *Handler) GetTasksByApiKey(c *gin.Context) {
 	}
 
 	if apiKeyData.Owner == "" {
-		h.logger.Error("[GetTasksByApiKey] No owner associated with API key")
+		h.logger.Error(c.Request.Context(), "[GetTasksByApiKey] No owner associated with API key")
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No owner associated with API key",
 			"code":  "OWNER_NOT_FOUND",
@@ -183,11 +185,11 @@ func (h *Handler) GetTasksByApiKey(c *gin.Context) {
 
 func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTasksBySafeAddress] trace_id=%s - Retrieving tasks for safe address", traceID)
+	h.logger.Info(c.Request.Context(), "[GetTasksBySafeAddress] trace_id=%s - Retrieving tasks for safe address", observability.String("trace_id", traceID))
 
 	safeAddress := strings.ToLower(c.Param("safe_address"))
 	if safeAddress == "" {
-		h.logger.Error("[GetTasksBySafeAddress] No safe address provided")
+		h.logger.Error(c.Request.Context(), "[GetTasksBySafeAddress] No safe address provided")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "No safe address provided",
 			"code":  "MISSING_SAFE_ADDRESS",
@@ -199,7 +201,7 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 	jobs, err := h.jobRepository.GetJobsBySafeAddress(safeAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTasksBySafeAddress] Error retrieving jobs for safe address %s: %v", safeAddress, err)
+		h.logger.Error(c.Request.Context(), "[GetTasksBySafeAddress] Error retrieving jobs for safe address %s: %v", observability.String("safe_address", safeAddress), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Safe address not found",
 			"code":  "SAFE_ADDRESS_NOT_FOUND",
@@ -208,7 +210,7 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 	}
 
 	if len(jobs) == 0 {
-		h.logger.Infof("[GetTasksBySafeAddress] No jobs found for safe address %s", safeAddress)
+		h.logger.Info(c.Request.Context(), "[GetTasksBySafeAddress] No jobs found for safe address %s", observability.String("safe_address", safeAddress))
 		c.JSON(http.StatusOK, gin.H{
 			"safe_address": safeAddress,
 			"task_groups":  []types.TasksByJobGroupResponse{},
@@ -225,7 +227,7 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 	}
 
 	if len(jobIDs) == 0 {
-		h.logger.Infof("[GetTasksBySafeAddress] No valid job IDs found for safe address %s", safeAddress)
+		h.logger.Info(c.Request.Context(), "[GetTasksBySafeAddress] No valid job IDs found for safe address %s", observability.String("safe_address", safeAddress))
 		c.JSON(http.StatusOK, gin.H{
 			"safe_address": safeAddress,
 			"task_groups":  []types.TasksByJobGroupResponse{},
@@ -235,7 +237,7 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 
 	taskGroups, err := h.getTasksGroupedByJob(jobIDs)
 	if err != nil {
-		h.logger.Errorf("[GetTasksBySafeAddress] Error retrieving tasks for safe address %s: %v", safeAddress, err)
+		h.logger.Error(c.Request.Context(), "[GetTasksBySafeAddress] Error retrieving tasks for safe address %s: %v", observability.String("safe_address", safeAddress), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "No tasks found for the requested safe address",
 			"code":  "TASKS_NOT_FOUND",
@@ -243,7 +245,7 @@ func (h *Handler) GetTasksBySafeAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetTasksBySafeAddress] Successfully retrieved tasks for %d jobs linked to %s", len(taskGroups), safeAddress)
+	h.logger.Info(c.Request.Context(), "[GetTasksBySafeAddress] Successfully retrieved tasks for %d jobs linked to %s", observability.Int("task_groups_count", len(taskGroups)), observability.String("safe_address", safeAddress))
 	c.JSON(http.StatusOK, gin.H{
 		"safe_address": safeAddress,
 		"task_groups":  taskGroups,
@@ -355,13 +357,13 @@ func convertTasksData(tasksData []types.GetTasksByJobID) []types.TasksByJobIDRes
 
 func (h *Handler) GetRecentTasks(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetRecentTasks] trace_id=%s - Retrieving recent tasks", traceID)
+	h.logger.Info(c.Request.Context(), "[GetRecentTasks] trace_id=%s - Retrieving recent tasks", observability.String("trace_id", traceID))
 
 	// Parse limit from query parameter, default to 200
 	limitStr := c.DefaultQuery("limit", "200")
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
-		h.logger.Errorf("[GetRecentTasks] Invalid limit parameter: %s", limitStr)
+		h.logger.Error(c.Request.Context(), "[GetRecentTasks] Invalid limit parameter: %s", observability.String("limit_str", limitStr))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid limit parameter",
 			"code":  "INVALID_LIMIT",
@@ -374,13 +376,13 @@ func (h *Handler) GetRecentTasks(c *gin.Context) {
 		limit = 200
 	}
 
-	h.logger.Infof("[GetRecentTasks] Fetching recent tasks with limit: %d", limit)
+	h.logger.Info(c.Request.Context(), "[GetRecentTasks] Fetching recent tasks with limit: %d", observability.Int("limit", limit))
 
 	trackDBOp := metrics.TrackDBOperation("read", "task_data")
 	tasks, err := h.taskRepository.GetRecentTasks(limit)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetRecentTasks] Error retrieving recent tasks: %v", err)
+		h.logger.Error(c.Request.Context(), "[GetRecentTasks] Error retrieving recent tasks: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve recent tasks",
 			"code":  "TASKS_FETCH_ERROR",
@@ -388,7 +390,7 @@ func (h *Handler) GetRecentTasks(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetRecentTasks] Successfully retrieved %d recent tasks", len(tasks))
+	h.logger.Info(c.Request.Context(), "[GetRecentTasks] Successfully retrieved %d recent tasks", observability.Int("tasks_count", len(tasks)))
 	c.JSON(http.StatusOK, gin.H{
 		"tasks": tasks,
 		"count": len(tasks),

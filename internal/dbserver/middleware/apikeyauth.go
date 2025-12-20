@@ -1,22 +1,23 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type ApiKeyAuth struct {
 	db          *database.Connection
-	logger      logging.Logger
+	logger      observability.Logger
 	rateLimiter *RateLimiter
 }
 
-func NewApiKeyAuth(db *database.Connection, rateLimiter *RateLimiter, logger logging.Logger) *ApiKeyAuth {
+func NewApiKeyAuth(db *database.Connection, rateLimiter *RateLimiter, logger observability.Logger) *ApiKeyAuth {
 	return &ApiKeyAuth{
 		db:          db,
 		logger:      logger,
@@ -33,9 +34,9 @@ func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		apiKey, err := a.getApiKey(apiKeyHeader)
+		apiKey, err := a.getApiKey(c.Request.Context(), apiKeyHeader)
 		if err != nil {
-			a.logger.Errorf("Error retrieving API key: %v", err)
+			a.logger.Error(c.Request.Context(), "Error retrieving API key: %v", observability.Error(err))
 			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid or inactive API key"})
 			c.Abort()
 			return
@@ -51,7 +52,7 @@ func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
 
 		if a.rateLimiter != nil {
 			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
-				a.logger.Warnf("Rate limit applied: %v", err)
+				a.logger.Warn(c.Request.Context(), "Rate limit applied: %v", observability.Error(err))
 				c.JSON(http.StatusTooManyRequests, gin.H{
 					"error":   "Rate limit exceeded",
 					"message": "You have exceeded the rate limit",
@@ -76,9 +77,9 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		apiKey, err := a.getApiKey(apiKeyHeader)
+		apiKey, err := a.getApiKey(c.Request.Context(), apiKeyHeader)
 		if err != nil {
-			a.logger.Errorf("Error retrieving API key: %v", err)
+			a.logger.Error(c.Request.Context(), "Error retrieving API key: %v", observability.Error(err))
 			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid or inactive API key"})
 			c.Abort()
 			return
@@ -93,7 +94,7 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 		// Check if the API key belongs to a keeper
 		isKeeper, err := a.isKeeperApiKey(apiKey.Key)
 		if err != nil {
-			a.logger.Errorf("Error checking keeper status: %v", err)
+			a.logger.Error(c.Request.Context(), "Error checking keeper status: %v", observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			c.Abort()
 			return
@@ -109,7 +110,7 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 
 		if a.rateLimiter != nil {
 			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
-				a.logger.Warnf("Rate limit applied: %v", err)
+				a.logger.Warn(c.Request.Context(), "Rate limit applied: %v", observability.Error(err))
 				c.JSON(http.StatusTooManyRequests, gin.H{
 					"error":   "Rate limit exceeded",
 					"message": "You have exceeded the rate limit",
@@ -124,7 +125,7 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 	}
 }
 
-func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
+func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, error) {
 	query := `SELECT key, owner, is_active, rate_limit, last_used, created_at 
 			  FROM triggerx.apikeys WHERE key = ? AND is_active = ? ALLOW FILTERING`
 
@@ -140,7 +141,7 @@ func (a *ApiKeyAuth) getApiKey(key string) (*types.ApiKey, error) {
 	)
 
 	if err != nil {
-		a.logger.Errorf("Failed to retrieve API key for key %s: %v", key, err)
+		a.logger.Error(ctx, "Failed to retrieve API key for key %s: %v", observability.String("key", key), observability.Error(err))
 		return nil, err
 	}
 
@@ -151,7 +152,7 @@ func (a *ApiKeyAuth) updateLastUsed(key string) {
 	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ?`
 
 	if err := a.db.Session().Query(query, time.Now().UTC(), key).Exec(); err != nil {
-		a.logger.Errorf("Failed to update last used timestamp: %v", err)
+		a.logger.Error(context.Background(), "Failed to update last used timestamp: %v", observability.Error(err))
 	}
 }
 
@@ -170,8 +171,8 @@ func (a *ApiKeyAuth) isKeeperApiKey(key string) (bool, error) {
 // Public wrapper methods for WebSocket authentication
 
 // GetApiKey validates and retrieves API key data (public wrapper for getApiKey)
-func (a *ApiKeyAuth) GetApiKey(key string) (*types.ApiKey, error) {
-	return a.getApiKey(key)
+func (a *ApiKeyAuth) GetApiKey(ctx context.Context, key string) (*types.ApiKey, error) {
+	return a.getApiKey(ctx, key)
 }
 
 // UpdateLastUsed updates the last used timestamp for an API key (public wrapper for updateLastUsed)

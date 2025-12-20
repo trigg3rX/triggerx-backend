@@ -19,7 +19,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 
 	// Contract bindings
 	contractAttestationCenter "github.com/trigg3rX/triggerx-contracts/bindings/contracts/AttestationCenter"
@@ -65,7 +65,7 @@ type ChainEvent struct {
 
 // ContractEventListener handles listening to contract events across multiple chains
 type ContractEventListener struct {
-	logger            logging.Logger
+	logger            observability.Logger
 	config            *ListenerConfig
 	ctx               context.Context
 	cancel            context.CancelFunc
@@ -107,19 +107,19 @@ type ReconnectConfig struct {
 
 // EventProcessor handles individual event processing
 type EventProcessor struct {
-	logger          logging.Logger
+	logger          observability.Logger
 	operatorHandler *OperatorEventHandler
 	taskHandler     *TaskEventHandler
 }
 
 // OperatorEventHandler handles operator-related events
 type OperatorEventHandler struct {
-	logger logging.Logger
+	logger observability.Logger
 }
 
 // TaskEventHandler handles task-related events
 type TaskEventHandler struct {
-	logger            logging.Logger
+	logger            observability.Logger
 	db                *database.DatabaseClient
 	ipfsClient        ipfs.IPFSClient
 	taskStreamManager *tasks.TaskStreamManager
@@ -127,7 +127,7 @@ type TaskEventHandler struct {
 }
 
 // NewContractEventListener creates a new contract event listener
-func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbClient *database.DatabaseClient, ipfsClient ipfs.IPFSClient, taskStreamManager *tasks.TaskStreamManager) *ContractEventListener {
+func NewContractEventListener(logger observability.Logger, config *ListenerConfig, dbClient *database.DatabaseClient, ipfsClient ipfs.IPFSClient, taskStreamManager *tasks.TaskStreamManager) *ContractEventListener {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ContractEventListener{
@@ -143,7 +143,7 @@ func NewContractEventListener(logger logging.Logger, config *ListenerConfig, dbC
 }
 
 // Start begins listening for contract events
-func (l *ContractEventListener) Start() error {
+func (l *ContractEventListener) Start(ctx context.Context) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -152,21 +152,21 @@ func (l *ContractEventListener) Start() error {
 	}
 
 	// Set up chain polling workers
-	if err := l.setupChainConnections(); err != nil {
+	if err := l.setupChainConnections(ctx); err != nil {
 		return fmt.Errorf("failed to setup chain connections: %w", err)
 	}
 
 	// Start event processing workers
-	l.startEventProcessors()
+	l.startEventProcessors(ctx)
 
 	l.isRunning = true
-	l.logger.Info("Contract event listener (polling) started successfully")
+	l.logger.Info(ctx, "Contract event listener (polling) started successfully")
 
 	return nil
 }
 
 // Stop gracefully stops the event listener
-func (l *ContractEventListener) Stop() error {
+func (l *ContractEventListener) Stop(ctx context.Context) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -174,7 +174,7 @@ func (l *ContractEventListener) Stop() error {
 		return fmt.Errorf("event listener is not running")
 	}
 
-	l.logger.Info("Stopping contract event listener")
+	l.logger.Info(ctx, "Stopping contract event listener")
 
 	// Cancel context to stop all goroutines
 	l.cancel()
@@ -184,13 +184,13 @@ func (l *ContractEventListener) Stop() error {
 	l.processingWg.Wait()
 
 	l.isRunning = false
-	l.logger.Info("Contract event listener stopped")
+	l.logger.Info(ctx, "Contract event listener stopped")
 
 	return nil
 }
 
 // setupChainConnections sets up blockchain connections and subscriptions
-func (l *ContractEventListener) setupChainConnections() error {
+func (l *ContractEventListener) setupChainConnections(ctx context.Context) error {
 	for _, chainConfig := range l.config.Chains {
 		if !chainConfig.Enabled {
 			continue
@@ -202,7 +202,7 @@ func (l *ContractEventListener) setupChainConnections() error {
 		go func() {
 			defer l.wg.Done()
 			if err := l.startChainPoller(cc); err != nil {
-				l.logger.Errorf("Chain poller error for %s: %v", cc.Name, err)
+				l.logger.Error(ctx, "Chain poller error for %s: %v", observability.String("chain_name", cc.Name), observability.Error(err))
 			}
 		}()
 	}
@@ -211,7 +211,7 @@ func (l *ContractEventListener) setupChainConnections() error {
 }
 
 // startEventProcessors starts worker goroutines for event processing
-func (l *ContractEventListener) startEventProcessors() {
+func (l *ContractEventListener) startEventProcessors(ctx context.Context) {
 	processor := &EventProcessor{
 		logger:          l.logger,
 		operatorHandler: &OperatorEventHandler{logger: l.logger},
@@ -221,15 +221,15 @@ func (l *ContractEventListener) startEventProcessors() {
 	// Start multiple processing workers
 	for i := 0; i < l.config.ProcessingWorkers; i++ {
 		l.processingWg.Add(1)
-		go l.eventProcessorWorker(processor, i)
+		go l.eventProcessorWorker(ctx, processor, i)
 	}
 }
 
 // eventProcessorWorker processes events from the event channel
-func (l *ContractEventListener) eventProcessorWorker(processor *EventProcessor, workerID int) {
+func (l *ContractEventListener) eventProcessorWorker(ctx context.Context, processor *EventProcessor, workerID int) {
 	defer l.processingWg.Done()
 
-	l.logger.Debugf("Event processor worker %d started", workerID)
+	l.logger.Debug(ctx, "Event processor worker %d started", observability.Int("worker_id", workerID))
 
 	for {
 		select {
@@ -245,11 +245,14 @@ func (l *ContractEventListener) eventProcessorWorker(processor *EventProcessor, 
 func (l *ContractEventListener) processEvent(processor *EventProcessor, event *ChainEvent) {
 	switch event.ContractType {
 	case ContractTypeAttestationCenter:
-		l.logger.Debugf("Processing %s event from AttestationCenter contract on chain %s", event.EventName, event.ChainID)
-		processor.taskHandler.ProcessTaskEvent(event)
+		l.logger.Debug(l.ctx, "Processing %s event from AttestationCenter contract on chain %s", observability.String("event_name", event.EventName), observability.String("chain_id", event.ChainID))
+		processor.taskHandler.ProcessTaskEvent(l.ctx, event)
 	default:
-		l.logger.Warnf("Unknown contract type: %s for event %s from contract %s on chain %s",
-			event.ContractType, event.EventName, event.ContractAddr, event.ChainID)
+		l.logger.Warn(l.ctx, "Unknown contract type: %s for event %s from contract %s on chain %s",
+			observability.String("contract_type", string(event.ContractType)),
+			observability.String("event_name", event.EventName),
+			observability.String("contract_address", event.ContractAddr),
+			observability.String("chain_id", event.ChainID))
 	}
 }
 
@@ -311,7 +314,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 		for _, evName := range []string{"TaskSubmitted", "TaskRejected"} {
 			ev, exists := attABI.Events[evName]
 			if !exists {
-				l.logger.Errorf("Event %s not in AttestationCenter ABI", evName)
+				l.logger.Error(l.ctx, "Event %s not in AttestationCenter ABI", observability.String("event_name", evName))
 				continue
 			}
 			fq := ethereum.FilterQuery{
@@ -329,10 +332,10 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 	}
 
 	if len(subs) == 0 {
-		l.logger.Warnf("[%s] No subscriptions configured for polling (chainID=%s)", chainConfig.Name, chainConfig.ChainID)
+		l.logger.Warn(l.ctx, "No subscriptions configured for polling (chainID=%s)", observability.String("chain_name", chainConfig.Name), observability.String("chain_id", chainConfig.ChainID))
 	} else {
 		for _, s := range subs {
-			l.logger.Infof("[%s] Polling subscription added: %s.%s at %s", chainConfig.Name, s.ContractType, s.EventName, s.ContractAddr.Hex())
+			l.logger.Info(l.ctx, "Polling subscription added: %s.%s at %s", observability.String("contract_type", string(s.ContractType)), observability.String("event_name", s.EventName), observability.String("contract_address", s.ContractAddr.Hex()))
 		}
 	}
 
@@ -345,7 +348,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 	if err != nil {
 		return fmt.Errorf("failed to parse block number: %w", err)
 	}
-	l.logger.Infof("[%s] Starting poller at block %d", chainConfig.Name, lastBlock)
+	l.logger.Info(l.ctx, "Starting poller at block %d", observability.Int64("block_number", int64(lastBlock)))
 
 	// poll every 1 minute
 	ticker := time.NewTicker(1 * time.Minute)
@@ -358,16 +361,16 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 		case <-ticker.C:
 			blockNumberHex, err := client.EthBlockNumber(l.ctx)
 			if err != nil {
-				l.logger.Errorf("[%s] Failed to get current block number: %v", chainConfig.Name, err)
+				l.logger.Error(l.ctx, "Failed to get current block number: %v", observability.Error(err))
 				continue
 			}
 			currentBlock, err := hexToUint64(blockNumberHex)
 			if err != nil {
-				l.logger.Errorf("[%s] Failed to parse block number: %v", chainConfig.Name, err)
+				l.logger.Error(l.ctx, "Failed to parse block number: %v", observability.Error(err))
 				continue
 			}
 			if currentBlock <= lastBlock {
-				l.logger.Debugf("[%s] No new blocks to process (last=%d, current=%d)", chainConfig.Name, lastBlock, currentBlock)
+				l.logger.Debug(l.ctx, "No new blocks to process (last=%d, current=%d)", observability.Int64("last_block", int64(lastBlock)), observability.Int64("current_block", int64(currentBlock)))
 				continue
 			}
 			// l.logger.Infof("[%s] Polling block range [%d, %d] (span=%d)", chainConfig.Name, lastBlock+1, currentBlock, currentBlock-(lastBlock+1)+1)
@@ -410,7 +413,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 						if l.ctx.Err() != nil {
 							return nil
 						}
-						l.logger.Errorf("[%s] EthGetLogs failed for %s.%s range [%#x, %#x]: %v", chainConfig.Name, sub.ContractType, sub.EventName, cur, chunkEnd, err)
+						l.logger.Error(l.ctx, "EthGetLogs failed for %s.%s range [%#x, %#x]: %v", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.String("from", fmt.Sprintf("%#x", cur)), observability.String("to", fmt.Sprintf("%#x", chunkEnd)), observability.Error(err))
 						// proceed to next chunk to avoid blocking entire range
 						cur = chunkEnd + 1
 						continue
@@ -429,11 +432,11 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 						}
 						lg, err := convertNodeLogToTypesLog(nodeLog)
 						if err != nil {
-							l.logger.Errorf("[%s] Failed to convert log: %v", chainConfig.Name, err)
+							l.logger.Error(l.ctx, "Failed to convert log: %v", observability.Error(err))
 							continue
 						}
 						if err := l.emitChainEventFromLog(chainConfig, sub, lg); err != nil {
-							l.logger.Errorf("[%s] Failed to emit event for %s.%s: %v", chainConfig.Name, sub.ContractType, sub.EventName, err)
+							l.logger.Error(l.ctx, "Failed to emit event for %s.%s: %v", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.Error(err))
 						}
 					}
 
@@ -442,7 +445,7 @@ func (l *ContractEventListener) startChainPoller(chainConfig ChainConfig) error 
 			}
 
 			lastBlock = currentBlock
-			// l.logger.Debugf("[%s] Updated last processed block to %d", chainConfig.Name, lastBlock)
+			// l.logger.Debug(l.ctx, "Updated last processed block to %d", observability.Int64("block_number", int64(lastBlock)))
 		}
 	}
 }
@@ -476,13 +479,13 @@ func (l *ContractEventListener) emitChainEventFromLog(chainConfig ChainConfig, s
 		ProcessedAt:  time.Now(),
 	}
 
-	l.logger.Debugf("[%s] Emitting event %s.%s block=%d tx=%s idx=%d", chainConfig.Name, sub.ContractType, sub.EventName, lg.BlockNumber, lg.TxHash.Hex(), lg.Index)
+	l.logger.Debug(l.ctx, "Emitting event %s.%s block=%d tx=%s idx=%d", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.Int64("block_number", int64(lg.BlockNumber)), observability.String("tx_hash", lg.TxHash.Hex()), observability.Int("log_index", int(lg.Index)))
 
 	select {
 	case l.eventChan <- evt:
 		return nil
 	default:
-		l.logger.Warnf("[%s] Event channel full, dropping event %s.%s at block %d", chainConfig.Name, sub.ContractType, sub.EventName, lg.BlockNumber)
+		l.logger.Warn(l.ctx, "Event channel full, dropping event %s.%s at block %d", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.Int64("block_number", int64(lg.BlockNumber)))
 		return fmt.Errorf("event channel full")
 	}
 }

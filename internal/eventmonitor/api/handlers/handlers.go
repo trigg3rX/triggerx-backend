@@ -8,11 +8,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // HandleHealth handles health check requests
-func HandleHealth(logger logging.Logger, rm *registry.RegistryManager) gin.HandlerFunc {
+func HandleHealth(logger observability.Logger, rm *registry.RegistryManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		response := types.HealthResponse{
 			Status:          "healthy",
@@ -26,11 +26,11 @@ func HandleHealth(logger logging.Logger, rm *registry.RegistryManager) gin.Handl
 }
 
 // HandleRegister handles register monitoring request
-func HandleRegister(logger logging.Logger, svc *service.Service) gin.HandlerFunc {
+func HandleRegister(logger observability.Logger, svc *service.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req types.MonitoringRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			logger.Warn("Invalid register request", "error", err)
+			logger.Warn(c.Request.Context(), "Invalid register request", observability.Error(err))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -40,7 +40,7 @@ func HandleRegister(logger logging.Logger, svc *service.Service) gin.HandlerFunc
 
 		// Validate expiration time
 		if req.ExpiresAt.Before(time.Now()) {
-			logger.Warn("Invalid expiration time", "expires_at", req.ExpiresAt)
+			logger.Warn(c.Request.Context(), "Invalid expiration time", observability.Time("expires_at", req.ExpiresAt))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   "expires_at must be in the future",
@@ -50,7 +50,7 @@ func HandleRegister(logger logging.Logger, svc *service.Service) gin.HandlerFunc
 
 		// Register the request (service handles worker creation)
 		if err := svc.Register(&req); err != nil {
-			logger.Error("Failed to register monitoring request", "error", err, "request_id", req.RequestID)
+			logger.Error(c.Request.Context(), "Failed to register monitoring request", observability.Error(err), observability.String("request_id", req.RequestID))
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -65,17 +65,17 @@ func HandleRegister(logger logging.Logger, svc *service.Service) gin.HandlerFunc
 			Message:   "Monitoring request registered successfully",
 		}
 
-		logger.Info("Monitoring request registered", "request_id", req.RequestID)
+		logger.Info(c.Request.Context(), "Monitoring request registered", observability.String("request_id", req.RequestID))
 		c.JSON(http.StatusOK, response)
 	}
 }
 
 // HandleUnregister handles unregister monitoring request
-func HandleUnregister(logger logging.Logger, svc *service.Service) gin.HandlerFunc {
+func HandleUnregister(logger observability.Logger, svc *service.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req types.UnregisterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			logger.Warn("Invalid unregister request", "error", err)
+			logger.Warn(c.Request.Context(), "Invalid unregister request", observability.Error(err))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -85,7 +85,7 @@ func HandleUnregister(logger logging.Logger, svc *service.Service) gin.HandlerFu
 
 		// Unregister the request (service handles worker cleanup)
 		if err := svc.Unregister(req.RequestID); err != nil {
-			logger.Warn("Failed to unregister monitoring request", "error", err, "request_id", req.RequestID)
+			logger.Warn(c.Request.Context(), "Failed to unregister monitoring request", observability.Error(err), observability.String("request_id", req.RequestID))
 			c.JSON(http.StatusNotFound, gin.H{
 				"success": false,
 				"error":   err.Error(),
@@ -100,13 +100,13 @@ func HandleUnregister(logger logging.Logger, svc *service.Service) gin.HandlerFu
 			Message:   "Monitoring request unregistered successfully",
 		}
 
-		logger.Info("Monitoring request unregistered", "request_id", req.RequestID)
+		logger.Info(c.Request.Context(), "Monitoring request unregistered", observability.String("request_id", req.RequestID))
 		c.JSON(http.StatusOK, response)
 	}
 }
 
 // HandleStatus handles status check request
-func HandleStatus(logger logging.Logger, rm *registry.RegistryManager) gin.HandlerFunc {
+func HandleStatus(logger observability.Logger, rm *registry.RegistryManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID := c.Param("request_id")
 		if requestID == "" {

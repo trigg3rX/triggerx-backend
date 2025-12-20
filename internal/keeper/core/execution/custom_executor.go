@@ -15,6 +15,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // ExecuteCustomScript handles custom script execution (TaskDefinitionID = 7)
@@ -29,7 +30,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	targetData *types.TaskTargetData,
 	triggerData *types.TaskTriggerData,
 ) (*types.CustomScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
-	e.logger.Infof("[CustomScript] Starting execution for job %s", targetData.JobID.String())
+	e.logger.Info(ctx, "[CustomScript] Starting execution for job %s", observability.String("job_id", targetData.JobID.String()))
 
 	// Execute script in Docker (Phase 1: no env var injection)
 	scriptURL := targetData.DynamicArgumentsScriptUrl
@@ -38,7 +39,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		scriptLanguage = string(dockertypes.LanguageTS) // Default
 	}
 
-	e.logger.Infof("[CustomScript] Executing %s script from: %s", scriptLanguage, scriptURL)
+	e.logger.Info(ctx, "[CustomScript] Executing %s script from: %s", observability.String("script_language", scriptLanguage), observability.String("script_url", scriptURL))
 
 	// Use standard Execute method (env var injection deferred to Phase 2)
 	metadata := map[string]string{
@@ -78,8 +79,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		return nil, nil, nil, fmt.Errorf("invalid script output: %w", err)
 	}
 
-	e.logger.Infof("[CustomScript] Script output: shouldExecute=%v, targetContract=%s",
-		scriptOutput.ShouldExecute, scriptOutput.TargetContract)
+	e.logger.Info(ctx, "[CustomScript] Script output: shouldExecute=%v, targetContract=%s", observability.Bool("should_execute", scriptOutput.ShouldExecute), observability.String("target_contract", scriptOutput.TargetContract))
 
 	// Extract storage updates from JSON output
 	storageUpdates := scriptOutput.StorageUpdates
@@ -87,12 +87,12 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		storageUpdates = make(map[string]string)
 	}
 	if len(storageUpdates) > 0 {
-		e.logger.Infof("[CustomScript] Found %d storage updates", len(storageUpdates))
+		e.logger.Info(ctx, "[CustomScript] Found %d storage updates", observability.Int("storage_updates", len(storageUpdates)))
 	}
 
 	// Log the calculated fees from Docker execution
 	if result.Stats.CurrentTotalCost != nil {
-		e.logger.Infof("[CustomScript] Fee from Docker execution: %s wei", result.Stats.CurrentTotalCost.String())
+		e.logger.Info(ctx, "[CustomScript] Fee from Docker execution: %s wei", observability.String("fee", result.Stats.CurrentTotalCost.String()))
 	}
 
 	return &scriptOutput, storageUpdates, result, nil

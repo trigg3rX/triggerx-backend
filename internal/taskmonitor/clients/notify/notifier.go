@@ -13,7 +13,7 @@ import (
 	"net/smtp"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type Notifier interface {
@@ -21,7 +21,7 @@ type Notifier interface {
 }
 
 type WebhookNotifier struct {
-	logger logging.Logger
+	logger observability.Logger
 	url    string
 	token  string
 	client *http.Client
@@ -40,9 +40,9 @@ type TaskStatusPayload struct {
 	Email           string    `json:"email"`
 }
 
-func NewWebhookNotifier(logger logging.Logger) *WebhookNotifier {
+func NewWebhookNotifier(logger observability.Logger) *WebhookNotifier {
 	return &WebhookNotifier{
-		logger: logger.With("component", "notifier"),
+		logger: logger.With(observability.String("component", "notifier")),
 		url:    config.GetNotifyWebhookURL(),
 		token:  config.GetNotifyWebhookToken(),
 		client: &http.Client{Timeout: 10 * time.Second},
@@ -51,19 +51,19 @@ func NewWebhookNotifier(logger logging.Logger) *WebhookNotifier {
 
 func (n *WebhookNotifier) NotifyTaskStatus(ctx context.Context, email string, payload TaskStatusPayload) error {
 	if n.url == "" {
-		n.logger.Warn("Notification webhook URL is not configured; skipping notification")
+		n.logger.Warn(ctx, "Notification webhook URL is not configured; skipping notification")
 		return nil
 	}
 	payload.Email = email
-	n.logger.Infof("Sending webhook notification", "email", email, "task_id", payload.TaskID, "status", payload.Status)
+	n.logger.Info(ctx, "Sending webhook notification", observability.String("email", email), observability.Int64("task_id", payload.TaskID), observability.String("status", payload.Status))
 	body, err := json.Marshal(payload)
 	if err != nil {
-		n.logger.Errorf("Failed to marshal webhook payload: %v", err)
+		n.logger.Error(ctx, "Failed to marshal webhook payload: %v", observability.Error(err))
 		return fmt.Errorf("failed to marshal notification payload: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.url, bytes.NewReader(body))
 	if err != nil {
-		n.logger.Errorf("Failed to build webhook request: %v", err)
+		n.logger.Error(ctx, "Failed to build webhook request: %v", observability.Error(err))
 		return fmt.Errorf("failed to build webhook request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -72,35 +72,35 @@ func (n *WebhookNotifier) NotifyTaskStatus(ctx context.Context, email string, pa
 	}
 	resp, err := n.client.Do(req)
 	if err != nil {
-		n.logger.Errorf("Webhook request failed: %v", err)
+		n.logger.Error(ctx, "Webhook request failed: %v", observability.Error(err))
 		return fmt.Errorf("webhook request failed: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			n.logger.Errorf("Failed to close response body: %v", closeErr)
+			n.logger.Error(ctx, "Failed to close response body: %v", observability.Error(closeErr))
 		}
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		n.logger.Errorf("Webhook returned non-2xx status: %d", resp.StatusCode)
+		n.logger.Error(ctx, "Webhook returned non-2xx status: %d", observability.Int("status_code", resp.StatusCode))
 		return fmt.Errorf("webhook returned non-2xx status: %d", resp.StatusCode)
 	}
-	n.logger.Infof("Webhook notification sent", "email", email, "task_id", payload.TaskID, "status", payload.Status)
+	n.logger.Info(ctx, "Webhook notification sent", observability.String("email", email), observability.Int64("task_id", payload.TaskID), observability.String("status", payload.Status))
 	return nil
 }
 
 // SMTP notifier sends an email directly via SMTP
 type SMTPNotifier struct {
-	logger logging.Logger
+	logger observability.Logger
 }
 
-func NewSMTPNotifier(logger logging.Logger) *SMTPNotifier {
-	return &SMTPNotifier{logger: logger.With("component", "smtp_notifier")}
+func NewSMTPNotifier(logger observability.Logger) *SMTPNotifier {
+	return &SMTPNotifier{logger: logger.With(observability.String("component", "smtp_notifier"))}
 }
 
 func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, payload TaskStatusPayload) error {
 	host := config.GetSMTPHost()
 	if host == "" {
-		n.logger.Warn("SMTP not configured; skipping email notification")
+		n.logger.Warn(ctx, "SMTP not configured; skipping email notification")
 		return nil
 	}
 	port := config.GetSMTPPort()
@@ -130,7 +130,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 	msg.WriteString(body)
 
 	addr := fmt.Sprintf("%s:%d", host, port)
-	n.logger.Infof("Attempting SMTP send", "host", host, "port", port, "to", email, "task_id", payload.TaskID, "status", payload.Status)
+	n.logger.Info(ctx, "Attempting SMTP send", observability.String("host", host), observability.Int("port", port), observability.String("to", email), observability.Int64("task_id", payload.TaskID), observability.String("status", payload.Status))
 
 	// Case 1: STARTTLS (587)
 	if useStartTLS {
@@ -145,7 +145,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		}
 		defer func() {
 			if quitErr := c.Quit(); quitErr != nil {
-				n.logger.Errorf("Failed to quit SMTP client: %v", quitErr)
+				n.logger.Error(ctx, "Failed to quit SMTP client: %v", observability.Error(quitErr))
 			}
 		}()
 
@@ -176,7 +176,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		if err := w.Close(); err != nil {
 			return fmt.Errorf("smtp close writer failed: %w", err)
 		}
-		n.logger.Infof("SMTP email sent (STARTTLS)", "to", email)
+		n.logger.Info(ctx, "SMTP email sent (STARTTLS)", observability.String("to", email))
 		return nil
 	}
 
@@ -189,7 +189,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		}
 		defer func() {
 			if closeErr := conn.Close(); closeErr != nil {
-				n.logger.Errorf("Failed to close connection: %v", closeErr)
+				n.logger.Error(ctx, "Failed to close connection: %v", observability.Error(closeErr))
 			}
 		}()
 		c, err := smtp.NewClient(conn, host)
@@ -198,7 +198,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		}
 		defer func() {
 			if quitErr := c.Quit(); quitErr != nil {
-				n.logger.Errorf("Failed to quit SMTP client: %v", quitErr)
+				n.logger.Error(ctx, "Failed to quit SMTP client: %v", observability.Error(quitErr))
 			}
 		}()
 
@@ -223,7 +223,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		if err := w.Close(); err != nil {
 			return fmt.Errorf("smtps close writer failed: %w", err)
 		}
-		n.logger.Infof("SMTP email sent (SMTPS)", "to", email)
+		n.logger.Info(ctx, "SMTP email sent (SMTPS)", observability.String("to", email))
 		return nil
 	}
 
@@ -232,18 +232,18 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 	if err := smtp.SendMail(addr, auth, from, []string{email}, msg.Bytes()); err != nil {
 		return fmt.Errorf("smtp send mail failed: %w", err)
 	}
-	n.logger.Infof("SMTP email sent (plain)", "to", email)
+	n.logger.Info(ctx, "SMTP email sent (plain)", observability.String("to", email))
 	return nil
 }
 
 // Composite notifier calls multiple notifiers
 type CompositeNotifier struct {
 	notifiers []Notifier
-	logger    logging.Logger
+	logger    observability.Logger
 }
 
-func NewCompositeNotifier(logger logging.Logger, notifiers ...Notifier) *CompositeNotifier {
-	return &CompositeNotifier{notifiers: notifiers, logger: logger.With("component", "composite_notifier")}
+func NewCompositeNotifier(logger observability.Logger, notifiers ...Notifier) *CompositeNotifier {
+	return &CompositeNotifier{notifiers: notifiers, logger: logger.With(observability.String("component", "composite_notifier"))}
 }
 
 func (c *CompositeNotifier) NotifyTaskStatus(ctx context.Context, email string, payload TaskStatusPayload) error {
@@ -253,14 +253,14 @@ func (c *CompositeNotifier) NotifyTaskStatus(ctx context.Context, email string, 
 			continue
 		}
 		if err := n.NotifyTaskStatus(ctx, email, payload); err != nil {
-			c.logger.Errorf("Notifier failed: %v", err)
+			c.logger.Error(ctx, "Notifier failed: %v", observability.Error(err))
 			if firstErr == nil {
 				firstErr = err
 			}
 		}
 	}
 	if firstErr == nil {
-		c.logger.Infof("All notifiers processed", "email", email, "task_id", payload.TaskID, "status", payload.Status)
+		c.logger.Info(ctx, "All notifiers processed", observability.String("email", email), observability.Int64("task_id", payload.TaskID), observability.String("status", payload.Status))
 	}
 	return firstErr
 }

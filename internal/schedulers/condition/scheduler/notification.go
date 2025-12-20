@@ -10,20 +10,21 @@ import (
 	dbserverTypes "github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // HandleTriggerNotification processes trigger notifications and submits individual tasks to Redis API
 // This is called by workers and the Event Monitor Service webhook handler
-func (s *ConditionBasedScheduler) HandleTriggerNotification(notification *worker.TriggerNotification) error {
+func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context, notification *worker.TriggerNotification) error {
 	startTime := time.Now()
 
-	s.logger.Info("Processing trigger notification - submitting task to task dispatcher",
-		"job_id", notification.JobID,
-		"trigger_value", notification.TriggerValue,
-		"trigger_tx_hash", notification.TriggerTxHash,
-		"triggered_at", notification.TriggeredAt,
+	s.logger.Info(ctx, "Processing trigger notification - submitting task to task dispatcher",
+		observability.String("job_id", notification.JobID.String()),
+		observability.Float64("trigger_value", notification.TriggerValue),
+		observability.String("trigger_tx_hash", notification.TriggerTxHash),
+		observability.Time("triggered_at", notification.TriggeredAt),
 	)
 
 	// Acquire notification mutex to prevent cleanup during processing
@@ -36,7 +37,7 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(notification *worker
 	s.workersMutex.RUnlock()
 
 	if !exists || jobData == nil {
-		s.logger.Error("Job data not found", "job_id", notification.JobID)
+		s.logger.Error(ctx, "Job data not found", observability.String("job_id", notification.JobID.String()))
 		return fmt.Errorf("job data not found for job %d", notification.JobID)
 	}
 
@@ -46,19 +47,19 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(notification *worker
 	}
 
 	// Create Task in Database
-	taskID, err := s.dbClient.CreateTask(context.Background(), createTaskRequest)
+	taskID, err := s.dbClient.CreateTask(ctx, createTaskRequest)
 	if err != nil {
-		s.logger.Error("Failed to create task in database", "job_id", notification.JobID, "error", err)
+		s.logger.Error(ctx, "Failed to create task in database", observability.String("job_id", notification.JobID.String()), observability.Error(err))
 		return fmt.Errorf("failed to create task in database: %w", err)
 	}
 	jobData.TaskTargetData.TaskID = taskID
 
 	// Create individual task and submit to task dispatcher
-	success, err := s.submitTriggeredTaskToTaskDispatcher(jobData, notification)
+	success, err := s.submitTriggeredTaskToTaskDispatcher(ctx, jobData, notification)
 	if err != nil {
-		s.logger.Error("Failed to submit triggered task to task dispatcher",
-			"job_id", notification.JobID,
-			"error", err,
+		s.logger.Error(ctx, "Failed to submit triggered task to task dispatcher",
+			observability.String("job_id", notification.JobID.String()),
+			observability.Error(err),
 		)
 		metrics.TrackCriticalError("task_dispatcher_submission_failed")
 		return err
@@ -66,15 +67,15 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(notification *worker
 
 	duration := time.Since(startTime)
 	if success {
-		s.logger.Info("Successfully submitted triggered task to task dispatcher",
-			"job_id", notification.JobID,
-			"duration", duration,
+		s.logger.Info(ctx, "Successfully submitted triggered task to task dispatcher",
+			observability.String("job_id", notification.JobID.String()),
+			observability.Duration("duration", duration),
 		)
 		metrics.TrackActionExecution(fmt.Sprintf("%d", notification.JobID), duration)
 	} else {
-		s.logger.Error("Failed to submit triggered task to task dispatcher",
-			"job_id", notification.JobID,
-			"duration", duration,
+		s.logger.Error(ctx, "Failed to submit triggered task to task dispatcher",
+			observability.String("job_id", notification.JobID.String()),
+			observability.Duration("duration", duration),
 		)
 		metrics.TrackCriticalError("task_dispatcher_submission_failed")
 	}
@@ -83,11 +84,12 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(notification *worker
 }
 
 // submitTriggeredTaskToTaskManager creates and submits a single task to TaskManager when triggers occur
-func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
-	s.logger.Info("Creating triggered task for task dispatcher submission",
-		"job_id", jobData.JobID,
-		"task_definition_id", jobData.TaskDefinitionID,
-		"trigger_value", notification.TriggerValue)
+func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(ctx context.Context, jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) (bool, error) {
+	s.logger.Info(ctx, "Creating triggered task for task dispatcher submission",
+		observability.String("job_id", jobData.JobID.String()),
+		observability.Int("task_definition_id", jobData.TaskDefinitionID),
+		observability.Float64("trigger_value", notification.TriggerValue),
+	)
 
 	// Create single task data (not batch like time scheduler)
 	targetData := types.TaskTargetData{
@@ -105,7 +107,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(jobData *t
 	}
 
 	// Create trigger data based on job type
-	triggerData := s.createTriggerDataFromNotification(jobData, notification)
+	triggerData := s.createTriggerDataFromNotification(ctx, jobData, notification)
 
 	// Create single task data for keeper
 	sendTaskData := types.SendTaskDataToKeeper{
@@ -127,7 +129,7 @@ func (s *ConditionBasedScheduler) submitTriggeredTaskToTaskDispatcher(jobData *t
 }
 
 // createTriggerDataFromNotification creates appropriate trigger data based on job type
-func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) types.TaskTriggerData {
+func (s *ConditionBasedScheduler) createTriggerDataFromNotification(ctx context.Context, jobData *types.ScheduleConditionJobData, notification *worker.TriggerNotification) types.TaskTriggerData {
 	baseTriggerData := types.TaskTriggerData{
 		TaskID:                  jobData.TaskTargetData.TaskID,
 		TaskDefinitionID:        jobData.TaskDefinitionID,
@@ -143,7 +145,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 		baseTriggerData.ConditionSourceUrl = jobData.ConditionWorkerData.ValueSourceUrl
 		baseTriggerData.ConditionUpperLimit = int(jobData.ConditionWorkerData.UpperLimit)
 		baseTriggerData.ConditionLowerLimit = int(jobData.ConditionWorkerData.LowerLimit)
-		s.logger.Info("Condition job expiration time", "expiration_time", jobData.ConditionWorkerData.ExpirationTime)
+		s.logger.Info(ctx, "Condition job expiration time", observability.Time("expiration_time", jobData.ConditionWorkerData.ExpirationTime))
 
 	case 3, 4: // Event-based
 		baseTriggerData.ExpirationTime = jobData.EventWorkerData.ExpirationTime
@@ -151,7 +153,7 @@ func (s *ConditionBasedScheduler) createTriggerDataFromNotification(jobData *typ
 		baseTriggerData.EventChainId = jobData.EventWorkerData.TriggerChainID
 		baseTriggerData.EventTriggerContractAddress = jobData.EventWorkerData.TriggerContractAddress
 		baseTriggerData.EventTriggerName = jobData.EventWorkerData.TriggerEvent
-		s.logger.Info("Event job expiration time", "expiration_time", jobData.EventWorkerData.ExpirationTime)
+		s.logger.Info(ctx, "Event job expiration time", observability.Time("expiration_time", jobData.EventWorkerData.ExpirationTime))
 	}
 
 	return baseTriggerData
@@ -168,7 +170,6 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 		MaxDelay:        10 * time.Second,
 		BackoffFactor:   2.0,
 		JitterFactor:    0.2,
-		LogRetryAttempt: true,
 		ShouldRetry: func(err error, attempt int) bool {
 			// Retry on network errors, timeouts, and temporary failures
 			// Don't retry on permanent errors like invalid requests
@@ -202,20 +203,22 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 	}
 
 	// Execute with retry logic
-	success, err := retry.Retry(ctx, operation, retryConfig, s.logger)
+	success, err := retry.Retry(ctx, operation, retryConfig)
 	if err != nil {
 		duration := time.Since(startTime)
-		s.logger.Error("Failed to submit task to task dispatcher after retries",
-			"task_id", taskID,
-			"error", err,
-			"duration", duration)
+		s.logger.Error(ctx, "Failed to submit task to task dispatcher after retries",
+			observability.String("task_id", taskID.String()),
+			observability.Error(err),
+			observability.Duration("duration", duration),
+		)
 		return false, err
 	}
 
 	duration := time.Since(startTime)
-	s.logger.Info("Successfully submitted task to task dispatcher",
-		"task_id", taskID,
-		"duration", duration)
+	s.logger.Info(ctx, "Successfully submitted task to task dispatcher",
+		observability.String("task_id", taskID.String()),
+		observability.Duration("duration", duration),
+	)
 
 	return success, nil
 }

@@ -1,19 +1,21 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (v *TaskValidator) ValidateManagerSignature(task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
-	logger := v.logger.With("traceID", traceID)
+func (v *TaskValidator) ValidateManagerSignature(ctx context.Context, task *types.SendTaskDataToKeeper, traceID string) (bool, error) {
+	logger := v.logger.With(observability.String("traceID", traceID))
 
 	// check if the manager signature is valid
 	if task.ManagerSignature == "" {
-		logger.Error("Manager signature data is missing")
+		logger.Error(ctx, "Manager signature data is missing")
 		return false, fmt.Errorf("manager signature data is missing")
 	}
 
@@ -33,34 +35,34 @@ func (v *TaskValidator) ValidateManagerSignature(task *types.SendTaskDataToKeepe
 		config.GetManagerSigningAddress(),
 	)
 	if err != nil {
-		logger.Error("Failed to verify manager signature", "error", err)
+		logger.Error(ctx, "Failed to verify manager signature", observability.Error(err))
 		return false, fmt.Errorf("failed to verify manager signature: %w", err)
 	}
 
 	if !isValid {
-		logger.Error("Manager signature verification failed")
+		logger.Error(ctx, "Manager signature verification failed")
 		return false, fmt.Errorf("manager signature verification failed")
 	}
 
-	logger.Info("Manager signature verification successful")
+	logger.Info(ctx, "Manager signature verification successful")
 	return true, nil
 }
 
-func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, traceID string) (bool, error) {
-	logger := v.logger.With("traceID", traceID)
+func (v *TaskValidator) ValidatePerformerSignature(ctx context.Context, ipfsData types.IPFSData, traceID string) (bool, error) {
+	logger := v.logger.With(observability.String("traceID", traceID))
 
 	if ipfsData.PerformerSignature == nil {
-		logger.Error("Performer signature data is missing")
+		logger.Error(ctx, "Performer signature data is missing")
 		return false, fmt.Errorf("performer signature data is missing")
 	}
 
 	if ipfsData.PerformerSignature.PerformerSignature == "" {
-		logger.Error("Performer signature is empty")
+		logger.Error(ctx, "Performer signature is empty")
 		return false, fmt.Errorf("performer signature is empty")
 	}
 
 	if ipfsData.PerformerSignature.PerformerSigningAddress == "" {
-		logger.Error("Performer signing address is empty")
+		logger.Error(ctx, "Performer signing address is empty")
 		return false, fmt.Errorf("performer signing address is empty")
 	}
 
@@ -89,15 +91,15 @@ func (v *TaskValidator) ValidatePerformerSignature(ipfsData types.IPFSData, trac
 		ipfsData.PerformerSignature.PerformerSigningAddress,
 	)
 	if err != nil {
-		logger.Error("Failed to verify performer signature", "error", err)
+		logger.Error(ctx, "Failed to verify performer signature", observability.Error(err))
 		return false, fmt.Errorf("failed to verify performer signature: %w", err)
 	}
 
 	if !isValid {
-		logger.Error("Performer signature verification failed")
+		logger.Error(ctx, "Performer signature verification failed")
 		return false, fmt.Errorf("performer signature verification failed")
 	}
 
-	logger.Info("Performer signature verification successful")
+	logger.Info(ctx, "Performer signature verification successful")
 	return true, nil
 }

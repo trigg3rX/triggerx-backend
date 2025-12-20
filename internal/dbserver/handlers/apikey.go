@@ -10,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // MaskApiKey masks the API key except for the first 4 and last 4 characters
@@ -22,22 +23,22 @@ func MaskApiKey(key string) string {
 
 func (h *Handler) CreateApiKey(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[CreateApiKey] trace_id=%s - Creating API key", traceID)
+	h.logger.Info(c.Request.Context(), "[CreateApiKey] trace_id=%s - Creating API key", observability.String("trace_id", traceID))
 	var req types.CreateApiKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Errorf("[CreateApiKey] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateApiKey] Error decoding request body: %v", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	if req.Owner == "" {
-		h.logger.Warnf("[CreateApiKey] Validation failed: Owner is required")
+		h.logger.Warn(c.Request.Context(), "[CreateApiKey] Validation failed: Owner is required")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Owner is required"})
 		return
 	}
 
 	if req.RateLimit <= 0 {
-		h.logger.Infof("[CreateApiKey] RateLimit not provided or invalid for owner %s, defaulting to 60", req.Owner)
+		h.logger.Info(c.Request.Context(), "[CreateApiKey] RateLimit not provided or invalid for owner %s, defaulting to 60", observability.String("owner", req.Owner))
 		req.RateLimit = 60
 	}
 
@@ -55,19 +56,19 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 	trackDBOp := metrics.TrackDBOperation("create", "apikey_data")
 	if err := h.apiKeysRepository.CreateApiKey(&apiKey); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("[CreateApiKey] Failed to insert API key: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateApiKey] Failed to insert API key: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create API key"})
 		return
 	}
 	trackDBOp(nil)
 
-	h.logger.Infof("[CreateApiKey] Successfully created new API key for owner %s (Key: %s)", req.Owner, apiKey.Key)
+	h.logger.Info(c.Request.Context(), "[CreateApiKey] Successfully created new API key for owner %s (Key: %s)", observability.String("owner", req.Owner), observability.String("key", apiKey.Key))
 	c.JSON(http.StatusCreated, apiKey)
 }
 
 func (h *Handler) UpdateApiKey(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[UpdateApiKey] trace_id=%s - Updating API key", traceID)
+	h.logger.Info(c.Request.Context(), "[UpdateApiKey] trace_id=%s - Updating API key", observability.String("trace_id", traceID))
 	keyID := c.Param("key")
 
 	var req types.UpdateApiKeyRequest
@@ -81,7 +82,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 	apiKey, err := h.apiKeysRepository.GetApiKeyDataByKey(keyID)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("API key not found: %v", err)
+		h.logger.Error(c.Request.Context(), "API key not found: %v", observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "API key not found"})
 		return
 	}
@@ -97,7 +98,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 	trackDBOp = metrics.TrackDBOperation("update", "apikey_data")
 	if err := h.apiKeysRepository.UpdateApiKey(&req); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("Failed to update API key: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to update API key: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update API key"})
 		return
 	}
@@ -108,7 +109,7 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 
 func (h *Handler) DeleteApiKey(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[DeleteApiKey] trace_id=%s - Deleting API key", traceID)
+	h.logger.Info(c.Request.Context(), "[DeleteApiKey] trace_id=%s - Deleting API key", observability.String("trace_id", traceID))
 	keyID := c.Param("key")
 
 	// If the keyID is masked, resolve the real key
@@ -140,31 +141,31 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 	trackDBOp := metrics.TrackDBOperation("update", "apikey_data")
 	if err := h.apiKeysRepository.DeleteApiKey(keyID); err != nil {
 		trackDBOp(err)
-		h.logger.Errorf("Failed to delete API key: %v", err)
+		h.logger.Error(c.Request.Context(), "Failed to delete API key: %v", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return
 	}
 	trackDBOp(nil)
 
-	h.logger.Infof("[DeleteApiKey] Successfully deleted API key: %s", keyID)
+	h.logger.Info(c.Request.Context(), "[DeleteApiKey] Successfully deleted API key: %s", observability.String("key_id", keyID))
 	c.Status(http.StatusNoContent)
 }
 
 // GetApiKeysByOwner returns all API keys for a given owner
 func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetApiKeysByOwner] trace_id=%s - Getting API keys by owner", traceID)
+	h.logger.Info(c.Request.Context(), "[GetApiKeysByOwner] trace_id=%s - Getting API keys by owner", observability.String("trace_id", traceID))
 	owner := c.Param("owner")
 	if owner == "" {
-		h.logger.Warnf("[GetApiKeysByOwner] Owner is required")
+		h.logger.Warn(c.Request.Context(), "[GetApiKeysByOwner] Owner is required")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Owner is required"})
 		return
 	}
 
-	h.logger.Infof("[GetApiKeysByOwner] Fetching API keys for owner: %s", owner)
+	h.logger.Info(c.Request.Context(), "[GetApiKeysByOwner] Fetching API keys for owner: %s", observability.String("owner", owner))
 	apiKeys, err := h.apiKeysRepository.GetApiKeyDataByOwner(owner)
 	if err != nil {
-		h.logger.Warnf("[GetApiKeysByOwner] No API keys found for owner %s: %v", owner, err)
+		h.logger.Warn(c.Request.Context(), "[GetApiKeysByOwner] No API keys found for owner %s: %v", observability.String("owner", owner), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "No API keys found for this owner"})
 		return
 	}
