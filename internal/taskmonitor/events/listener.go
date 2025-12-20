@@ -66,6 +66,7 @@ type ChainEvent struct {
 // ContractEventListener handles listening to contract events across multiple chains
 type ContractEventListener struct {
 	logger            observability.Logger
+	tracer            observability.Tracer
 	config            *ListenerConfig
 	ctx               context.Context
 	cancel            context.CancelFunc
@@ -120,18 +121,21 @@ type OperatorEventHandler struct {
 // TaskEventHandler handles task-related events
 type TaskEventHandler struct {
 	logger            observability.Logger
+	tracer            observability.Tracer
 	db                *database.DatabaseClient
 	ipfsClient        ipfs.IPFSClient
 	taskStreamManager *tasks.TaskStreamManager
 	notifier          notify.Notifier
+	traceRegistry     *sync.Map // taskID -> traceID for correlation between execution and validation
 }
 
 // NewContractEventListener creates a new contract event listener
-func NewContractEventListener(logger observability.Logger, config *ListenerConfig, dbClient *database.DatabaseClient, ipfsClient ipfs.IPFSClient, taskStreamManager *tasks.TaskStreamManager) *ContractEventListener {
+func NewContractEventListener(logger observability.Logger, tracer observability.Tracer, config *ListenerConfig, dbClient *database.DatabaseClient, ipfsClient ipfs.IPFSClient, taskStreamManager *tasks.TaskStreamManager) *ContractEventListener {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ContractEventListener{
 		logger:            logger,
+		tracer:            tracer,
 		config:            config,
 		ctx:               ctx,
 		cancel:            cancel,
@@ -215,7 +219,7 @@ func (l *ContractEventListener) startEventProcessors(ctx context.Context) {
 	processor := &EventProcessor{
 		logger:          l.logger,
 		operatorHandler: &OperatorEventHandler{logger: l.logger},
-		taskHandler:     &TaskEventHandler{logger: l.logger, db: l.dbClient, ipfsClient: l.ipfsClient, taskStreamManager: l.taskStreamManager, notifier: notify.NewCompositeNotifier(l.logger, notify.NewWebhookNotifier(l.logger), notify.NewSMTPNotifier(l.logger))},
+		taskHandler:     &TaskEventHandler{logger: l.logger, tracer: l.tracer, db: l.dbClient, ipfsClient: l.ipfsClient, taskStreamManager: l.taskStreamManager, notifier: notify.NewCompositeNotifier(l.logger, notify.NewWebhookNotifier(l.logger), notify.NewSMTPNotifier(l.logger)), traceRegistry: &sync.Map{}},
 	}
 
 	// Start multiple processing workers

@@ -908,12 +908,12 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 
 ### Phase 4: TaskMonitor Implementation
 
-- [ ] Add trace context extraction/correlation in `ProcessTaskEvent`
-- [ ] Add span creation for execution data processing
-- [ ] Add span creation for validation data processing
-- [ ] Add span attributes for monitor metadata
-- [ ] Add span events for data processing and database updates
-- [ ] Implement trace correlation between execution and validation spans
+- [x] Add trace context extraction/correlation in `ProcessTaskEvent`
+- [x] Add span creation for execution data processing
+- [x] Add span creation for validation data processing
+- [x] Add span attributes for monitor metadata
+- [x] Add span events for data processing and database updates
+- [x] Implement trace correlation between execution and validation spans
 
 ## Error Handling
 

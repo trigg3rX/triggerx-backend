@@ -41,11 +41,17 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	// Initialize tracer
+	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
+	}
+
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Task Monitor service ...")
 
 	// Initialize TaskManager (handles Redis, Database, IPFS, Event Listener, and Task Stream Manager)
-	taskManager, err := taskmonitor.NewTaskManager(ctx, logger)
+	taskManager, err := taskmonitor.NewTaskManager(ctx, logger, tracer)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create TaskManager", observability.Error(err))
 	}
@@ -82,10 +88,10 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, taskManager, rpcServer, logger, loggerShutdown)
+	performGracefulShutdown(ctx, taskManager, rpcServer, logger, loggerShutdown, tracerShutdown)
 }
 
-func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskManager, rpcServer *rpcserver.Server, logger observability.Logger, loggerShutdown func(context.Context) error) {
+func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskManager, rpcServer *rpcserver.Server, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -108,10 +114,21 @@ func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskM
 		logger.Info(shutdownCtx, "TaskManager closed successfully")
 	}
 
+	// Shutdown tracer
+	if tracerShutdown != nil {
+		if err := tracerShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		} else {
+			logger.Info(shutdownCtx, "Tracer stopped successfully")
+		}
+	}
+
 	// Shutdown logger
 	if loggerShutdown != nil {
 		if err := loggerShutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+		} else {
+			logger.Info(shutdownCtx, "Logger stopped successfully")
 		}
 	}
 

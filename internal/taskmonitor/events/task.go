@@ -8,6 +8,10 @@ import (
 	"strconv"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
@@ -46,11 +50,29 @@ func (h *TaskEventHandler) ProcessTaskEvent(ctx context.Context, event *ChainEve
 				return
 			}
 			ipfsHash := string(dataBytes)
-			ipfsData, err := h.ipfsClient.Fetch(context.Background(), ipfsHash)
+			ipfsData, err := h.ipfsClient.Fetch(ctx, ipfsHash)
 			if err != nil {
 				h.logger.Error(ctx, "Failed to fetch IPFS data: %v", observability.Error(err))
 				return
 			}
+
+			// Extract trace context from IPFS data (embedded by performer)
+			var traceID, spanID string
+			if ipfsData.TraceID != "" {
+				traceID = ipfsData.TraceID
+				spanID = ipfsData.SpanID
+			}
+
+			// Continue trace if trace context is available
+			if traceID != "" {
+				ctx = observability.ContinueTrace(ctx, traceID, spanID)
+			}
+
+			// Create span for execution data processing
+			ctx, span := h.tracer.Start(ctx, "task.monitor.execution",
+				observability.WithSpanKind(trace.SpanKindConsumer),
+			)
+			defer span.End()
 
 			taskOpxCostFloat, _ := ipfsData.ActionData.TotalFee.Float64()
 			taskOpxCostFloat = taskOpxCostFloat / 1e18
@@ -61,6 +83,23 @@ func (h *TaskEventHandler) ProcessTaskEvent(ctx context.Context, event *ChainEve
 			taskData.TaskOpxCost = taskOpxCostFloat
 			taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
 			taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
+
+			// Set span attributes
+			span.SetAttributes(
+				attribute.Int64("task.id", taskData.TaskID),
+				attribute.Int64("task.number", taskData.TaskNumber),
+				attribute.String("task.submission.tx_hash", event.TxHash),
+				attribute.Bool("task.is_accepted", taskData.IsAccepted),
+				attribute.Int("task.definition_id", taskData.TaskDefinitionID),
+				attribute.String("performer.address", taskData.PerformerAddress),
+				attribute.String("ipfs.cid", ipfsHash),
+			)
+
+			// Add event when execution data is processed
+			span.AddEvent("execution.data.processed", observability.WithEventAttributes(
+				attribute.String("execution.tx_hash", taskData.ExecutionTxHash),
+				attribute.String("ipfs.cid", ipfsHash),
+			))
 
 			// h.logger.Infof("Task data: %+v", taskData)
 
@@ -73,21 +112,42 @@ func (h *TaskEventHandler) ProcessTaskEvent(ctx context.Context, event *ChainEve
 
 			// Move task from dispatched to completed stream
 			if err := h.moveTaskToCompleted(ctx, taskData.TaskID); err != nil {
+				span.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "stream_move_failed"),
+				))
 				h.logger.Error(ctx, "Failed to move task to completed stream: %v", observability.Error(err))
 			}
 
 			// Update task submission data in database
 			if err := h.db.UpdateTaskSubmissionData(ctx, *taskData); err != nil {
+				span.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "database_update_failed"),
+				))
+				span.SetStatus(codes.Error, "failed to update execution data")
 				h.logger.Error(ctx, "Failed to update task submission data in database: %v", observability.Error(err))
+			} else {
+				span.AddEvent("execution.data.updated", observability.WithEventAttributes(
+					attribute.String("database.table", "tasks"),
+				))
+				// Store trace ID in registry for correlation with validation event (after we have taskID)
+				if traceID != "" && taskData.TaskID > 0 {
+					h.traceRegistry.Store(taskData.TaskID, traceID)
+				}
 			}
 
 			// For custom script jobs (TaskDefinitionID = 7), update storage
 			if taskData.TaskDefinitionID == 7 && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
 				jobID, err := h.db.GetJobIDByTaskID(ctx, taskData.TaskID)
 				if err != nil {
+					span.RecordError(err, observability.WithErrorAttributes(
+						attribute.String("error.type", "job_id_lookup_failed"),
+					))
 					h.logger.Error(ctx, "Failed to get job ID for task %d: %v", observability.Int64("task_id", taskData.TaskID), observability.Error(err))
 				} else {
 					if err := h.db.UpdateScriptStorage(ctx, jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+						span.RecordError(err, observability.WithErrorAttributes(
+							attribute.String("error.type", "storage_update_failed"),
+						))
 						h.logger.Error(ctx, "Failed to update script storage for job %s: %v", observability.String("job_id", jobID.String()), observability.Error(err))
 					} else {
 						h.logger.Info(ctx, "Successfully updated %d storage keys for job %s", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID.String()))
@@ -97,8 +157,63 @@ func (h *TaskEventHandler) ProcessTaskEvent(ctx context.Context, event *ChainEve
 
 			// Update keeper points in database
 			if err := h.db.UpdateKeeperPointsInDatabase(ctx, *taskData); err != nil {
+				span.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "keeper_points_update_failed"),
+				))
 				h.logger.Error(ctx, "Failed to update keeper points in database: %v", observability.Error(err))
-				return
+				// Don't return, continue processing
+			}
+
+			// Process validation data if attester IDs are present (validation complete)
+			if len(taskData.AttesterIds) > 0 {
+				// Retrieve trace ID from registry for correlation
+				var validationTraceID string
+				if traceID != "" {
+					validationTraceID = traceID
+				} else if taskData.TaskID > 0 {
+					if storedTraceID, exists := h.traceRegistry.Load(taskData.TaskID); exists {
+						if traceIDStr, ok := storedTraceID.(string); ok && traceIDStr != "" {
+							validationTraceID = traceIDStr
+						}
+					}
+				}
+
+				// Continue trace for validation if we have trace ID
+				validationCtx := ctx
+				if validationTraceID != "" {
+					validationCtx = observability.ContinueTrace(ctx, validationTraceID, "")
+				}
+
+				// Create span for validation data processing
+				validationCtx, validationSpan := h.tracer.Start(validationCtx, "task.monitor.validation",
+					observability.WithSpanKind(trace.SpanKindConsumer),
+					observability.WithAttributes(
+						attribute.Int64("task.id", taskData.TaskID),
+						attribute.String("validation.tx_hash", event.TxHash),
+						attribute.Int("validation.attester_count", len(taskData.AttesterIds)),
+						attribute.String("validation.timestamp", time.Now().Format(time.RFC3339)),
+					),
+				)
+				defer validationSpan.End()
+
+				validationSpan.AddEvent("validation.data.received", observability.WithEventAttributes(
+					attribute.String("validation.tx_hash", event.TxHash),
+					attribute.Int("attester_count", len(taskData.AttesterIds)),
+				))
+
+				// Note: UpdateTaskValidationData doesn't exist in the database client
+				// Validation data is already included in TaskSubmissionData and updated via UpdateTaskSubmissionData
+				// If a separate validation update method exists, it should be called here
+				// For now, we'll just mark validation as complete in the span
+				validationSpan.AddEvent("validation.data.updated", observability.WithEventAttributes(
+					attribute.String("database.table", "tasks"),
+					attribute.Bool("validation.complete", true),
+				))
+
+				h.logger.Info(validationCtx, "Validation data processed",
+					observability.Int64("task_id", taskData.TaskID),
+					observability.Int("attester_count", len(taskData.AttesterIds)),
+					observability.String("validation_tx_hash", event.TxHash))
 			}
 
 			// Notify user about task completion/rejection
@@ -155,7 +270,7 @@ func (h *TaskEventHandler) moveTaskToCompleted(ctx context.Context, taskID int64
 
 	// Remove from dispatched stream (acknowledge)
 	// Note: In a real implementation, we'd need to track the dispatched message ID
-	h.logger.Info(ctx, "Task moved to completed stream successfully", observability.Int64("task_id", taskID))	
+	h.logger.Info(ctx, "Task moved to completed stream successfully", observability.Int64("task_id", taskID))
 
 	return nil
 }

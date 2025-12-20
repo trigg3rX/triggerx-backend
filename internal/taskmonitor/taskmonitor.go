@@ -28,6 +28,7 @@ const (
 // TaskManager orchestrates all Redis-based task management components
 type TaskManager struct {
 	logger              observability.Logger
+	tracer              observability.Tracer
 	redisClient         *redisClient.Client
 	taskStreamManager   *tasks.TaskStreamManager
 	eventListener       *events.ContractEventListener
@@ -44,7 +45,7 @@ type TaskManager struct {
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(ctx context.Context, logger observability.Logger) (*TaskManager, error) {
+func NewTaskManager(ctx context.Context, logger observability.Logger, tracer observability.Tracer) (*TaskManager, error) {
 	logger.Info(ctx, "Initializing TaskManager...")
 
 	// Create context for managing background workers
@@ -104,11 +105,12 @@ func NewTaskManager(ctx context.Context, logger observability.Logger) (*TaskMana
 	}
 
 	// Initialize event listener
-	eventListener := events.NewContractEventListener(logger, events.GetMainnetConfig(), databaseClient, ipfsClient, taskStreamManager)
-	testEventListener := events.NewContractEventListener(logger, events.GetTestnetConfig(), databaseClient, ipfsClient, taskStreamManager)
+	eventListener := events.NewContractEventListener(logger, tracer, events.GetMainnetConfig(), databaseClient, ipfsClient, taskStreamManager)
+	testEventListener := events.NewContractEventListener(logger, tracer, events.GetTestnetConfig(), databaseClient, ipfsClient, taskStreamManager)
 
 	tm := &TaskManager{
 		logger:              logger,
+		tracer:              tracer,
 		redisClient:         client,
 		taskStreamManager:   taskStreamManager,
 		eventListener:       eventListener,
