@@ -52,6 +52,12 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	// Initialize tracer
+	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
+	}
+
 	ctx := context.Background()
 	logger.Info(ctx, "Starting keeper node ...",
 		observability.String("keeper_address", config.GetKeeperAddress()),
@@ -142,7 +148,7 @@ func main() {
 
 	// Initialize task executor and validator
 	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger, ipfsClient)
-	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, aggregatorClient, taskMonitorClient, logger)
+	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, aggregatorClient, taskMonitorClient, logger, tracer)
 
 	// Initialize API server
 	serverCfg := api.Config{
@@ -194,7 +200,7 @@ func main() {
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger, loggerShutdown, metricsShutdown)
+	performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger, loggerShutdown, metricsShutdown, tracerShutdown)
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
@@ -213,7 +219,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 				if errors.Is(err, health.ErrKeeperNotVerified) {
 					logger.Error(ctx, "Keeper is not verified. Shutting down...", observability.Error(err))
 					// Note: shutdown functions are not available in this scope, but that's okay for emergency shutdown
-					performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger, nil, nil)
+					performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger, nil, nil, nil)
 					return
 				}
 				logger.Error(ctx, "Failed health check-in", observability.Any("error", response.Data))
@@ -225,7 +231,7 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, taskMonitorClient *taskmonitor.Client, logger observability.Logger, loggerShutdown func(context.Context) error, metricsShutdown func(context.Context) error) {
+func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, taskMonitorClient *taskmonitor.Client, logger observability.Logger, loggerShutdown func(context.Context) error, metricsShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -246,31 +252,40 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
 			}
 		}
 
+		// Shutdown tracer
+		if tracerShutdown != nil {
+			if err := tracerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+			} else {
+				logger.Info(shutdownCtx, "[2/6] Process: Tracer Closed")
+			}
+		}
+
 		// Shutdown logger
 		if loggerShutdown != nil {
 			if err := loggerShutdown(shutdownCtx); err != nil {
 				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
 			} else {
-				logger.Info(shutdownCtx, "[2/6] Process: Logger Closed")
+				logger.Info(shutdownCtx, "[3/6] Process: Logger Closed")
 			}
 		}
 
 		// Close health client
 		healthClient.Close()
-		logger.Info(shutdownCtx, "[3/6] Process: Health client Closed")
+		logger.Info(shutdownCtx, "[4/6] Process: Health client Closed")
 
 		// Close code executor
 		if err := dockerManager.Close(ctx); err != nil {
 			logger.Error(shutdownCtx, "Error closing code executor", observability.Error(err))
 		}
-		logger.Info(shutdownCtx, "[4/6] Process: Code executor Closed")
+		logger.Info(shutdownCtx, "[5/6] Process: Code executor Closed")
 
 		// Close taskmonitor client
 		if taskMonitorClient != nil {
 			if err := taskMonitorClient.Close(ctx); err != nil {
 				logger.Error(shutdownCtx, "Error closing taskmonitor client", observability.Error(err))
 			} else {
-				logger.Info(shutdownCtx, "[5/6] Process: TaskMonitor client Closed")
+				logger.Info(shutdownCtx, "[6/6] Process: TaskMonitor client Closed")
 			}
 		}
 
@@ -278,7 +293,7 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
 		if err := server.Stop(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
 		}
-		logger.Info(shutdownCtx, "[6/6] Process: API server Stopped")
+		logger.Info(shutdownCtx, "[7/6] Process: API server Stopped")
 	}()
 
 	// Wait for shutdown to complete or timeout

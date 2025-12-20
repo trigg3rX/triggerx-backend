@@ -897,14 +897,14 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 
 ### Phase 3: Performer Implementation
 
-- [ ] Add trace context extraction from incoming request
-- [ ] Add child span creation in `ExecuteTask`
-- [ ] Add span attributes for execution metadata
-- [ ] Add span events for trigger validation, action execution, IPFS upload
-- [ ] Extract trace context before sending to aggregator
-- [ ] Embed trace context (TraceID, SpanID) in data sent to aggregator
-- [ ] Update `BroadcastDataForValidators` or IPFS data structure to include trace context fields
-- [ ] Create span `task.aggregate` before calling aggregator
+- [x] Add trace context extraction from incoming request
+- [x] Add child span creation in `ExecuteTask`
+- [x] Add span attributes for execution metadata
+- [x] Add span events for trigger validation, action execution, IPFS upload
+- [x] Extract trace context before sending to aggregator
+- [x] Embed trace context (TraceID, SpanID) in data sent to aggregator
+- [x] Update `BroadcastDataForValidators` or IPFS data structure to include trace context fields
+- [x] Create span `task.aggregate` before calling aggregator
 
 ### Phase 4: TaskMonitor Implementation
 

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -18,8 +20,13 @@ import (
 // Returns 202 Accepted immediately after validation, then executes task in background.
 // Task completion status is reported to TaskMonitor (not back to caller).
 func (h *TaskHandler) ExecuteTask(c *gin.Context) {
+	// Extract trace context from HTTP headers
+	ctx := c.Request.Context()
+	propagator := otel.GetTextMapPropagator()
+	ctx = propagator.Extract(ctx, propagation.HeaderCarrier(c.Request.Header))
+
 	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "Received task execution request", observability.String("trace_id", traceID))
+	h.logger.Info(ctx, "Received task execution request", observability.String("trace_id", traceID))
 
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -69,7 +76,7 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 
 	// Log task info
 	taskIDs := requestData.TaskID
-	h.logger.Info(c.Request.Context(), "Task accepted for async execution", observability.Any("task_ids", taskIDs), observability.String("trace_id", traceID))		
+	h.logger.Info(c.Request.Context(), "Task accepted for async execution", observability.Any("task_ids", taskIDs), observability.String("trace_id", traceID))
 	for _, task := range requestData.TargetData {
 		h.logger.Info(c.Request.Context(), "Task ID: %d | Target Chain ID: %s", observability.Int64("task_id", task.TaskID), observability.String("target_chain_id", task.TargetChainID))
 	}
@@ -86,20 +93,20 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 	// Execute task asynchronously in a goroutine
 	// Make a copy of requestData to avoid race conditions
 	taskData := requestData
-	go h.executeTaskAsync(taskData, traceID)
+	go h.executeTaskAsync(ctx, taskData, traceID)
 }
 
 // executeTaskAsync executes the task in background and reports status to TaskMonitor
-func (h *TaskHandler) executeTaskAsync(requestData types.SendTaskDataToKeeper, traceID string) {
-	h.logger.Info(context.Background(), "Starting async task execution", observability.Any("task_ids", requestData.TaskID), observability.String("trace_id", traceID))
+func (h *TaskHandler) executeTaskAsync(ctx context.Context, requestData types.SendTaskDataToKeeper, traceID string) {
+	h.logger.Info(ctx, "Starting async task execution", observability.Any("task_ids", requestData.TaskID), observability.String("trace_id", traceID))
 
-	success, err := h.executor.ExecuteTask(context.Background(), &requestData, traceID)
+	success, err := h.executor.ExecuteTask(ctx, &requestData, traceID)
 	if err != nil {
-		h.logger.Error(context.Background(), "Async task execution failed", observability.Any("task_ids", requestData.TaskID), observability.Error(err), observability.String("trace_id", traceID))
+		h.logger.Error(ctx, "Async task execution failed", observability.Any("task_ids", requestData.TaskID), observability.Error(err), observability.String("trace_id", traceID))
 		// Note: TaskMonitor reporting is already handled inside ExecuteTask
 		return
 	}
 
-	h.logger.Info(context.Background(), "Async task execution completed", observability.Any("task_ids", requestData.TaskID), observability.Bool("success", success), observability.String("trace_id", traceID))
+	h.logger.Info(ctx, "Async task execution completed", observability.Any("task_ids", requestData.TaskID), observability.Bool("success", success), observability.String("trace_id", traceID))
 	// Note: TaskMonitor reporting is already handled inside ExecuteTask
 }
