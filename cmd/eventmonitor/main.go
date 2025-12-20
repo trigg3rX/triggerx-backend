@@ -43,11 +43,17 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	// Initialize tracer
+	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
+	}
+
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Event Monitor Service...")
 
 	// Initialize service
-	svc, err := service.NewService(ctx, logger)
+	svc, err := service.NewService(ctx, logger, tracer)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize service", observability.Error(err))
 	}
@@ -92,7 +98,7 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(ctx, srv, svc, logger, loggerShutdown)
+	performGracefulShutdown(ctx, srv, svc, logger, loggerShutdown, tracerShutdown)
 }
 
 func performGracefulShutdown(
@@ -101,6 +107,7 @@ func performGracefulShutdown(
 	svc *service.Service,
 	logger observability.Logger,
 	loggerShutdown func(context.Context) error,
+	tracerShutdown func(context.Context) error,
 ) {
 	shutdownStart := time.Now()
 	logger.Info(ctx, "Initiating graceful shutdown...")
@@ -115,6 +122,13 @@ func performGracefulShutdown(
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {
 		logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
+	}
+
+	// Shutdown tracer
+	if tracerShutdown != nil {
+		if err := tracerShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		}
 	}
 
 	// Shutdown logger

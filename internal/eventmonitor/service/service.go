@@ -23,6 +23,7 @@ type Service struct {
 	workers         map[string]*worker.Worker         // registry key -> Worker
 	webhookClient   *webhook.Client
 	logger          observability.Logger
+	tracer          observability.Tracer
 	mu              sync.RWMutex
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -30,7 +31,7 @@ type Service struct {
 }
 
 // NewService creates a new event monitor service
-func NewService(ctx context.Context, logger observability.Logger) (*Service, error) {
+func NewService(ctx context.Context, logger observability.Logger, tracer observability.Tracer) (*Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	rm := registry.NewRegistryManager(ctx, logger)
@@ -87,6 +88,7 @@ func NewService(ctx context.Context, logger observability.Logger) (*Service, err
 		workers:         make(map[string]*worker.Worker),
 		webhookClient:   wc,
 		logger:          logger,
+		tracer:          tracer,
 		ctx:             ctx,
 		cancel:          cancel,
 	}, nil
@@ -207,7 +209,7 @@ func (s *Service) startWorker(key string) error {
 	}
 
 	// Create worker
-	w := worker.NewWorker(entry, nodeClient, s.webhookClient, s.logger)
+	w := worker.NewWorker(entry, nodeClient, s.webhookClient, s.logger, s.tracer)
 
 	s.mu.Lock()
 	s.workers[key] = w
@@ -252,7 +254,7 @@ func (s *Service) syncWorkers() {
 			// Check if node client exists
 			if _, exists := s.nodeClients[entry.ChainID]; exists {
 				// Start worker
-				w := worker.NewWorker(entry, s.nodeClients[entry.ChainID], s.webhookClient, s.logger)
+				w := worker.NewWorker(entry, s.nodeClients[entry.ChainID], s.webhookClient, s.logger, s.tracer)
 				s.workers[key] = w
 				s.wg.Add(1)
 				go func(workerKey string, worker *worker.Worker) {

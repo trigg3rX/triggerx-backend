@@ -13,8 +13,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ScheduleJob creates and starts a new condition worker for monitoring
@@ -185,6 +185,7 @@ func (s *ConditionBasedScheduler) createConditionWorker(conditionWorkerData *typ
 	worker := &worker.ConditionWorker{
 		ConditionWorkerData: conditionWorkerData,
 		Logger:              s.logger,
+		Tracer:              s.tracer,
 		HttpClient:          httpClient,
 		Ctx:                 ctx,
 		Cancel:              cancel,

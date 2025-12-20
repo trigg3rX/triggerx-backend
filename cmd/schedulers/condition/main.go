@@ -48,6 +48,12 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	// Initialize tracer
+	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
+	}
+
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Condition-based Scheduler with Redis integration...")
 
@@ -68,7 +74,7 @@ func main() {
 
 	// Initialize condition-based scheduler with Redis integration
 	managerID := fmt.Sprintf("condition-scheduler-%d", time.Now().Unix())
-	conditionScheduler, err := scheduler.NewConditionBasedScheduler(managerID, logger, dbClient)
+	conditionScheduler, err := scheduler.NewConditionBasedScheduler(managerID, logger, tracer, dbClient)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize condition-based scheduler", observability.Error(err))
 	}
@@ -117,10 +123,10 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(ctx, cancel, srv, conditionScheduler, dbClient, logger, loggerShutdown)
+	performGracefulShutdown(ctx, cancel, srv, conditionScheduler, dbClient, logger, loggerShutdown, tracerShutdown)
 }
 
-func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv *api.Server, conditionScheduler *scheduler.ConditionBasedScheduler, dbClient *dbserver.DBServerClient, logger observability.Logger, loggerShutdown func(context.Context) error) {
+func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv *api.Server, conditionScheduler *scheduler.ConditionBasedScheduler, dbClient *dbserver.DBServerClient, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
 	shutdownStart := time.Now()
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
@@ -140,6 +146,13 @@ func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv
 	// Shutdown server gracefully
 	if err := srv.Stop(shutdownCtx); err != nil {
 		logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
+	}
+
+	// Shutdown tracer
+	if tracerShutdown != nil {
+		if err := tracerShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		}
 	}
 
 	// Shutdown logger

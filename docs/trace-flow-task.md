@@ -845,30 +845,47 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 
 ### Phase 1: Time Scheduler Implementation
 
-- [ ] Add trace creation in `pollAndScheduleTasks` BEFORE polling DB (`internal/schedulers/time/scheduler/schedule.go`)
-- [ ] Create root span `task.poll` for polling cycle
-- [ ] Create child spans for task batches (if needed)
-- [ ] Ensure trace context is passed to TaskDispatcher gRPC call
-- [ ] Add span attributes for poll metadata
-- [ ] Add span events for poll lifecycle
+- [x] Add trace creation in `pollAndScheduleTasks` BEFORE polling DB (`internal/schedulers/time/scheduler/schedule.go`)
+- [x] Create root span `task.poll` for polling cycle
+- [x] Create child spans for task batches (if needed)
+- [x] Ensure trace context is passed to TaskDispatcher gRPC call
+- [x] Add span attributes for poll metadata
+- [x] Add span events for poll lifecycle
+- [x] Add tracer field to `TimeBasedScheduler` struct and pass it during initialization
+- [x] Update `cmd/schedulers/time/main.go` to initialize tracer and pass it to scheduler
 
-### Phase 1b: Condition/Event Worker Implementation
+### Phase 1b: Condition Worker Implementation
 
-- [ ] Add trace creation in condition worker when condition is satisfied (`internal/schedulers/condition/scheduler/worker/monitor_condition.go`)
-- [ ] Add trace creation in event worker when event is detected (`internal/schedulers/condition/scheduler/worker/monitor_event.go`)
-- [ ] Create root span `task.trigger.condition` or `task.trigger.event`
-- [ ] Ensure trace context is passed through `TriggerCallback` (via ctx parameter)
-- [ ] Add span attributes for trigger metadata
-- [ ] Add span events for trigger detection and notification
+- [x] Add trace creation in condition worker when condition is satisfied (`internal/schedulers/condition/scheduler/worker/monitor_condition.go`)
+- [x] Create root span `task.trigger.condition`
+- [x] Ensure trace context is passed through `TriggerCallback` (via ctx parameter)
+- [x] Add span attributes for trigger metadata
+- [x] Add span events for trigger detection and notification
+- [x] Add tracer field to `ConditionWorker` struct and pass it during creation
+
+**Note**: Event worker in condition scheduler (`monitor_event.go`) is not being used. Event-based tasks are handled by the EventMonitor service (see Phase 1d).
 
 ### Phase 1c: Condition Scheduler Implementation
 
-- [ ] Add trace continuation in `HandleTriggerNotification` (`internal/schedulers/condition/scheduler/notification.go`)
-- [ ] Extract trace context from incoming context (already passed from worker)
-- [ ] Create child span `task.schedule.condition`
-- [ ] Ensure trace context is passed to TaskDispatcher gRPC call
-- [ ] Add span attributes for schedule metadata
-- [ ] Add span events for notification handling
+- [x] Add trace continuation in `HandleTriggerNotification` (`internal/schedulers/condition/scheduler/notification.go`)
+- [x] Extract trace context from incoming context (already passed from worker)
+- [x] Create child span `task.schedule.condition`
+- [x] Ensure trace context is passed to TaskDispatcher gRPC call
+- [x] Add span attributes for schedule metadata
+- [x] Add span events for notification handling
+- [x] Add tracer field to `ConditionBasedScheduler` struct and pass it during initialization
+- [x] Update `cmd/schedulers/condition/main.go` to initialize tracer and pass it to scheduler
+
+### Phase 1d: EventMonitor Service Implementation
+
+- [x] Add trace creation in eventmonitor worker when event is detected (`internal/eventmonitor/worker/worker.go`)
+- [x] Create root span `task.trigger.event` BEFORE sending notification
+- [x] Add span attributes for event metadata (job.id, event.tx_hash, event.block_number, event.chain_id, event.signature)
+- [x] Add span events for event detection and notification
+- [x] Inject trace context into HTTP headers in webhook client (`internal/eventmonitor/webhook/client.go`)
+- [x] Extract trace context from HTTP headers in condition scheduler handler (`internal/schedulers/condition/api/handlers/events.go`)
+- [x] Add tracer field to `Service` and `Worker` structs and pass it during initialization
+- [x] Update `cmd/eventmonitor/main.go` to initialize tracer and pass it to service
 
 ### Phase 2: TaskDispatcher Implementation
 

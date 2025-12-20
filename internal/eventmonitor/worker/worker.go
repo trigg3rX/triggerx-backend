@@ -9,6 +9,10 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
@@ -22,6 +26,7 @@ type Worker struct {
 	nodeClient    *nodeclient.NodeClient
 	webhookClient *webhook.Client
 	logger        observability.Logger
+	tracer        observability.Tracer
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -32,6 +37,7 @@ func NewWorker(
 	nodeClient *nodeclient.NodeClient,
 	webhookClient *webhook.Client,
 	logger observability.Logger,
+	tracer observability.Tracer,
 ) *Worker {
 	ctx, cancel := context.WithCancel(entry.WorkerCtx)
 	return &Worker{
@@ -39,6 +45,7 @@ func NewWorker(
 		nodeClient:    nodeClient,
 		webhookClient: webhookClient,
 		logger:        logger,
+		tracer:        tracer,
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -206,6 +213,24 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			continue
 		}
 
+		// Create trace BEFORE sending notification
+		ctx, triggerSpan := w.tracer.Start(w.ctx, "task.trigger.event",
+			observability.WithSpanKind(trace.SpanKindProducer),
+			observability.WithAttributes(
+				attribute.String("job.id", subscriber.RequestID),
+				attribute.String("event.tx_hash", log.TransactionHash),
+				attribute.Int64("event.block_number", int64(blockNumber)),
+				attribute.String("event.chain_id", w.entry.ChainID),
+				attribute.String("event.signature", w.entry.EventSig.Hex()),
+			),
+		)
+		defer triggerSpan.End()
+
+		triggerSpan.AddEvent("event.detected", observability.WithEventAttributes(
+			attribute.String("tx_hash", log.TransactionHash),
+			attribute.Int64("block", int64(blockNumber)),
+		))
+
 		notification := &types.EventNotification{
 			RequestID:    subscriber.RequestID,
 			ChainID:      w.entry.ChainID,
@@ -219,15 +244,21 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			Timestamp:    time.Now(),
 		}
 
-		// Send webhook (non-blocking)
-		go func(sub *types.Subscriber, notif *types.EventNotification) {
-			if err := w.webhookClient.Send(w.ctx, sub.WebhookURL, notif); err != nil {
-				w.logger.Error(w.ctx, "Failed to send webhook",
+		// Send webhook with trace context (non-blocking)
+		go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
+			if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
+				triggerSpan.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "webhook_delivery_failed"),
+				))
+				triggerSpan.SetStatus(codes.Error, "failed to send webhook")
+				w.logger.Error(traceCtx, "Failed to send webhook",
 					observability.String("request_id", sub.RequestID),
 					observability.String("webhook_url", sub.WebhookURL),
 					observability.Error(err))
+			} else {
+				triggerSpan.AddEvent("notification.sent")
 			}
-		}(subscriber, notification)
+		}(subscriber, notification, ctx)
 	}
 
 	return nil

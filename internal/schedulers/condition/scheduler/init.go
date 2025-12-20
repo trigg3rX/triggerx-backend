@@ -24,6 +24,7 @@ type ConditionBasedScheduler struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	logger               observability.Logger
+	tracer               observability.Tracer
 	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker  // jobID -> condition worker
 	eventWorkers         map[*types.BigInt]*worker.EventWorker      // jobID -> event worker
 	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
@@ -41,7 +42,7 @@ type ConditionBasedScheduler struct {
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(managerID string, logger observability.Logger, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -68,6 +69,7 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, d
 		ctx:                  ctx,
 		cancel:               cancel,
 		logger:               logger,
+		tracer:               tracer,
 		conditionWorkers:     make(map[*types.BigInt]*worker.ConditionWorker),
 		eventWorkers:         make(map[*types.BigInt]*worker.EventWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),

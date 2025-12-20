@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	dbserverTypes "github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
@@ -19,6 +22,30 @@ import (
 // This is called by workers and the Event Monitor Service webhook handler
 func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context, notification *worker.TriggerNotification) error {
 	startTime := time.Now()
+
+	// Continue trace from worker (ctx already contains trace context)
+	ctx, scheduleSpan := s.tracer.Start(ctx, "task.schedule.condition",
+		observability.WithSpanKind(trace.SpanKindConsumer),
+		observability.WithAttributes(
+			attribute.String("job.id", notification.JobID.String()),
+			attribute.String("trigger.type", "condition_or_event"),
+		),
+	)
+	defer scheduleSpan.End()
+
+	// Add trigger-specific attributes
+	if notification.TriggerValue != 0 {
+		scheduleSpan.SetAttributes(
+			attribute.Float64("trigger.value", notification.TriggerValue),
+		)
+	}
+	if notification.TriggerTxHash != "" {
+		scheduleSpan.SetAttributes(
+			attribute.String("trigger.tx_hash", notification.TriggerTxHash),
+		)
+	}
+
+	scheduleSpan.AddEvent("notification.received")
 
 	s.logger.Info(ctx, "Processing trigger notification - submitting task to task dispatcher",
 		observability.String("job_id", notification.JobID.String()),
@@ -165,11 +192,11 @@ func (s *ConditionBasedScheduler) submitTaskToTaskManager(request types.Schedule
 
 	// Create retry configuration for task dispatcher calls
 	retryConfig := &retry.RetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    1 * time.Second,
-		MaxDelay:        10 * time.Second,
-		BackoffFactor:   2.0,
-		JitterFactor:    0.2,
+		MaxRetries:    3,
+		InitialDelay:  1 * time.Second,
+		MaxDelay:      10 * time.Second,
+		BackoffFactor: 2.0,
+		JitterFactor:  0.2,
 		ShouldRetry: func(err error, attempt int) bool {
 			// Retry on network errors, timeouts, and temporary failures
 			// Don't retry on permanent errors like invalid requests

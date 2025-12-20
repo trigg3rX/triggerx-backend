@@ -6,20 +6,49 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
 func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
+	// Create root span for polling cycle BEFORE polling DB
+	ctx, pollSpan := s.tracer.Start(ctx, "task.poll",
+		observability.WithSpanKind(trace.SpanKindProducer),
+		observability.WithAttributes(
+			attribute.Int("scheduler.id", s.schedulerID),
+			attribute.String("scheduler.type", "time"),
+			attribute.String("poll.look_ahead", s.pollingLookAhead.String()),
+		),
+	)
+	defer pollSpan.End()
+
+	pollSpan.AddEvent("poll.started")
+
+	// NOW poll the DB server
 	tasks, err := s.dbClient.GetTimeBasedTasks(ctx)
 	if err != nil {
+		pollSpan.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "db_connection_error"),
+		))
+		pollSpan.SetStatus(codes.Error, "failed to fetch tasks")
 		s.logger.Error(ctx, "Failed to fetch time-based tasks", observability.Error(err))
 		metrics.TrackDBConnectionError()
 		return
 	}
+
+	pollSpan.SetAttributes(
+		attribute.Int("poll.tasks_found", len(tasks)),
+	)
+	pollSpan.AddEvent("poll.completed", observability.WithEventAttributes(
+		attribute.Int("task_count", len(tasks)),
+	))
 
 	if len(tasks) == 0 {
 		return
@@ -167,11 +196,11 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, re
 
 	// Create retry configuration for task dispatcher calls
 	retryConfig := &retry.RetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    1 * time.Second,
-		MaxDelay:        10 * time.Second,
-		BackoffFactor:   2.0,
-		JitterFactor:    0.2,
+		MaxRetries:    3,
+		InitialDelay:  1 * time.Second,
+		MaxDelay:      10 * time.Second,
+		BackoffFactor: 2.0,
+		JitterFactor:  0.2,
 		ShouldRetry: func(err error, attempt int) bool {
 			// Retry on network errors, timeouts, and temporary failures
 			// Don't retry on permanent errors like invalid requests

@@ -16,6 +16,7 @@ type TimeBasedScheduler struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
 	logger               observability.Logger
+	tracer               observability.Tracer
 	activeTasks          map[int64]*types.ScheduleTimeTaskData
 	dbClient             *dbserver.DBServerClient
 	taskDispatcherClient *client.Client // RPC client for task dispatcher
@@ -30,7 +31,7 @@ type TimeBasedScheduler struct {
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
-func NewTimeBasedScheduler(managerID string, logger observability.Logger, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
+func NewTimeBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -47,6 +48,7 @@ func NewTimeBasedScheduler(managerID string, logger observability.Logger, dbClie
 		ctx:                  ctx,
 		cancel:               cancel,
 		logger:               logger,
+		tracer:               tracer,
 		activeTasks:          make(map[int64]*types.ScheduleTimeTaskData),
 		dbClient:             dbClient,
 		taskDispatcherClient: taskDispatcherClient,

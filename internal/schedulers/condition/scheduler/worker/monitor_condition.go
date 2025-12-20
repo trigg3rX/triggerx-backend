@@ -13,6 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
@@ -77,6 +81,23 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 			observability.Int64("consecutive_checks", w.ConditionMet),
 		)
 
+		// Create trace BEFORE sending notification
+		ctx, triggerSpan := w.Tracer.Start(ctx, "task.trigger.condition",
+			observability.WithSpanKind(trace.SpanKindProducer),
+			observability.WithAttributes(
+				attribute.String("job.id", w.ConditionWorkerData.JobID.String()),
+				attribute.String("condition.type", w.ConditionWorkerData.ConditionType),
+				attribute.Float64("trigger.value", currentValue),
+				attribute.Float64("condition.upper_limit", w.ConditionWorkerData.UpperLimit),
+				attribute.Float64("condition.lower_limit", w.ConditionWorkerData.LowerLimit),
+			),
+		)
+		defer triggerSpan.End()
+
+		triggerSpan.AddEvent("condition.satisfied", observability.WithEventAttributes(
+			attribute.Float64("current_value", currentValue),
+		))
+
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
 			notification := &TriggerNotification{
@@ -85,13 +106,19 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 				TriggeredAt:  time.Now(),
 			}
 
+			// Callback receives ctx with trace context
 			if err := w.TriggerCallback(ctx, notification); err != nil {
+				triggerSpan.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "notification_failed"),
+				))
+				triggerSpan.SetStatus(codes.Error, "failed to notify scheduler")
 				w.Logger.Error(ctx, "Failed to notify scheduler about trigger",
 					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
 					observability.Error(err),
 				)
 				metrics.TrackCriticalError("trigger_notification_failed")
 			} else {
+				triggerSpan.AddEvent("notification.sent")
 				w.Logger.Info(ctx, "Successfully notified scheduler about trigger",
 					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
 					observability.Float64("trigger_value", currentValue),

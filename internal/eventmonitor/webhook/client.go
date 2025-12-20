@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -53,12 +56,16 @@ func (c *Client) Send(ctx context.Context, webhookURL string, notification *type
 		}
 
 		// Create request
-		req, err := http.NewRequest("POST", webhookURL, bytes.NewBuffer(body))
+		req, err := http.NewRequestWithContext(ctx, "POST", webhookURL, bytes.NewBuffer(body))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
 		req.Header.Set("Content-Type", "application/json")
+
+		// Inject trace context into HTTP headers
+		propagator := otel.GetTextMapPropagator()
+		propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 		// Send request
 		resp, err := c.httpClient.Do(req)

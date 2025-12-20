@@ -17,6 +17,7 @@ import (
 type ConditionWorker struct {
 	ConditionWorkerData *types.ConditionWorkerData
 	Logger              observability.Logger
+	Tracer              observability.Tracer
 	HttpClient          *httppkg.HTTPClient
 	Ctx                 context.Context
 	Cancel              context.CancelFunc
