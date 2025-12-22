@@ -10,6 +10,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcserver "github.com/trigg3rX/triggerx-backend/pkg/rpc/server"
@@ -47,6 +48,15 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
 	}
 
+	// Initialize metrics
+	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize metrics: %v", err))
+	}
+
+	// Initialize application metrics
+	metrics.InitializeMetrics(obsMetrics)
+
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Task Monitor service ...")
 
@@ -62,6 +72,11 @@ func main() {
 		logger.Fatal(ctx, "Failed to initialize TaskManager components", observability.Error(err))
 	}
 	logger.Info(ctx, "[2/6] TaskManager components initialized successfully")
+
+	// Start metrics collector
+	collector := metrics.NewCollector(obsMetrics)
+	collector.Start()
+	logger.Info(ctx, "Metrics collector started")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,10 +103,18 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, taskManager, rpcServer, logger, loggerShutdown, tracerShutdown)
+	performGracefulShutdown(ctx, taskManager, rpcServer, logger, loggerShutdown, tracerShutdown, metricsShutdown)
 }
 
-func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskManager, rpcServer *rpcserver.Server, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
+func performGracefulShutdown(
+	ctx context.Context,
+	taskManager *taskmonitor.TaskManager,
+	rpcServer *rpcserver.Server,
+	logger observability.Logger,
+	loggerShutdown func(context.Context) error,
+	tracerShutdown func(context.Context) error,
+	metricsShutdown func(context.Context) error,
+) {
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -120,6 +143,15 @@ func performGracefulShutdown(ctx context.Context, taskManager *taskmonitor.TaskM
 			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
 		} else {
 			logger.Info(shutdownCtx, "Tracer stopped successfully")
+		}
+	}
+
+	// Shutdown metrics
+	if metricsShutdown != nil {
+		if err := metricsShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+		} else {
+			logger.Info(shutdownCtx, "Metrics stopped successfully")
 		}
 	}
 

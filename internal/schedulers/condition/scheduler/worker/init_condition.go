@@ -65,7 +65,7 @@ func (w *ConditionWorker) Start(ctx context.Context) {
 				observability.Float64("last_value", w.LastValue),
 				observability.Int64("condition_met_count", w.ConditionMet),
 			)
-			metrics.JobsCompleted.WithLabelValues("success").Inc()
+			metrics.TrackJobCompleted("success")
 			return
 		case <-ticker.C:
 			if time.Now().After(w.ConditionWorkerData.ExpirationTime) {
@@ -81,7 +81,7 @@ func (w *ConditionWorker) Start(ctx context.Context) {
 				w.Logger.Error(ctx, "Error checking condition",
 					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
 					observability.Error(err))
-				metrics.JobsCompleted.WithLabelValues("failed").Inc()
+				metrics.TrackJobCompleted("failed")
 			}
 		}
 	}

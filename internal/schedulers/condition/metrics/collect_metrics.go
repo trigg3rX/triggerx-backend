@@ -47,22 +47,32 @@ func collectSystemMetrics() {
 	runtime.ReadMemStats(&memStats)
 
 	// Update memory usage (current allocated bytes)
-	MemoryUsageBytes.Set(float64(memStats.Alloc))
+	if memoryUsageBytes != nil {
+		memoryUsageBytes.Set(ctx, float64(memStats.Alloc))
+	}
 
 	// Update CPU usage (using system memory as a proxy)
 	cpuPercent, err := cpu.Percent(0, false)
 	if err == nil && len(cpuPercent) > 0 {
-		CPUUsagePercent.Set(cpuPercent[0])
+		if cpuUsagePercent != nil {
+			cpuUsagePercent.Set(ctx, cpuPercent[0])
+		}
 	} else {
 		// Fallback to 0.0 if CPU monitoring fails
-		CPUUsagePercent.Set(0.0)
+		if cpuUsagePercent != nil {
+			cpuUsagePercent.Set(ctx, 0.0)
+		}
 	}
 
 	// Update active goroutines count
-	GoroutinesActive.Set(float64(runtime.NumGoroutine()))
+	if goroutinesActive != nil {
+		goroutinesActive.Set(ctx, float64(runtime.NumGoroutine()))
+	}
 
 	// Update garbage collection duration (total pause time in seconds)
-	GCDurationSeconds.Set(float64(memStats.PauseTotalNs) / 1e9)
+	if gcDurationSeconds != nil {
+		gcDurationSeconds.Set(ctx, float64(memStats.PauseTotalNs)/1e9)
+	}
 }
 
 // Collects configuration-based metrics
@@ -74,7 +84,9 @@ func collectConfigurationMetrics() {
 	lastConfigUpdate = now
 
 	// Set duplicate condition window from configuration
-	DuplicateConditionWindowSeconds.Set(getDuplicateConditionWindowSeconds())
+	if duplicateConditionWindowSeconds != nil {
+		duplicateConditionWindowSeconds.Set(ctx, getDuplicateConditionWindowSeconds())
+	}
 }
 
 // Collects performance-related metrics
@@ -89,7 +101,9 @@ func collectPerformanceMetrics() {
 		conditionsSnapshot := make(map[string]int64)
 		for chainID, count := range conditionsLastMinute {
 			conditionsSnapshot[chainID] = count
-			EventsPerMinute.WithLabelValues(chainID).Set(float64(count))
+			if eventsPerMinute != nil {
+				eventsPerMinute.WithLabelValues(chainID).Set(ctx, float64(count))
+			}
 		}
 
 		// Reset for next minute in a separate goroutine to avoid blocking
@@ -112,7 +126,9 @@ func collectPerformanceMetrics() {
 			sum += duration
 		}
 		avgTime := sum / float64(len(conditionCheckTimes))
-		AverageConditionCheckTimeSeconds.Set(avgTime)
+		if averageConditionCheckTimeSeconds != nil {
+			averageConditionCheckTimeSeconds.Set(ctx, avgTime)
+		}
 	}
 }
 
@@ -125,12 +141,16 @@ func collectWorkerMetrics() {
 	now := time.Now()
 	for jobID, startTime := range workerStartTimes {
 		uptime := now.Sub(startTime).Seconds()
-		WorkerUptimeSeconds.WithLabelValues(jobID).Set(uptime)
+		if workerUptimeSeconds != nil {
+			workerUptimeSeconds.WithLabelValues(jobID).Set(ctx, uptime)
+		}
 	}
 
 	// Update worker memory usage
 	for jobID, memUsage := range workerMemoryUsage {
-		WorkerMemoryUsageBytes.WithLabelValues(jobID).Set(float64(memUsage))
+		if workerMemoryUsageBytes != nil {
+			workerMemoryUsageBytes.WithLabelValues(jobID).Set(ctx, float64(memUsage))
+		}
 	}
 }
 
@@ -141,9 +161,13 @@ func resetDailyMetrics() {
 
 	// Reset daily counters
 	for chainID := range conditionsLastMinute {
-		EventsPerMinute.WithLabelValues(chainID).Set(0)
+		if eventsPerMinute != nil {
+			eventsPerMinute.WithLabelValues(chainID).Set(ctx, 0)
+		}
 	}
-	AverageConditionCheckTimeSeconds.Set(0)
+	if averageConditionCheckTimeSeconds != nil {
+		averageConditionCheckTimeSeconds.Set(ctx, 0)
+	}
 
 	// Reset tracking variables
 	conditionCheckTimes = nil
@@ -167,46 +191,62 @@ func getDuplicateConditionWindowSeconds() float64 {
 
 // TrackHTTPRequest tracks HTTP request metrics
 func TrackHTTPRequest(method, endpoint, statusCode string) {
-	HTTPRequestsTotal.WithLabelValues(method, endpoint, statusCode).Inc()
+	if httpRequestsTotal != nil {
+		httpRequestsTotal.WithLabelValues(method, endpoint, statusCode).Inc(ctx)
+	}
 }
 
 // TrackHTTPClientConnectionError tracks HTTP client connection errors
 func TrackHTTPClientConnectionError() {
-	HTTPClientConnectionErrorsTotal.Inc()
+	if httpClientConnectionErrorsTotal != nil {
+		httpClientConnectionErrorsTotal.Inc(ctx)
+	}
 }
 
 // Database tracking functions
 
 // TrackDBRequest tracks database request metrics
 func TrackDBRequest(method, endpoint, status string) {
-	DBRequestsTotal.WithLabelValues(method, endpoint, status).Inc()
+	if dbRequestsTotal != nil {
+		dbRequestsTotal.WithLabelValues(method, endpoint, status).Inc(ctx)
+	}
 }
 
 // TrackDBConnectionError tracks database connection errors
 func TrackDBConnectionError() {
-	DBConnectionErrorsTotal.Inc()
+	if dbConnectionErrorsTotal != nil {
+		dbConnectionErrorsTotal.Inc(ctx)
+	}
 }
 
 // TrackDBRetry tracks database retry attempts
 func TrackDBRetry(endpoint string) {
-	DBRetriesTotal.WithLabelValues(endpoint).Inc()
+	if dbRetriesTotal != nil {
+		dbRetriesTotal.WithLabelValues(endpoint).Inc(ctx)
+	}
 }
 
 // Job and Worker tracking functions
 
 // TrackJobScheduled tracks when a job is scheduled
 func TrackJobScheduled() {
-	JobsScheduled.Inc()
+	if jobsScheduled != nil {
+		jobsScheduled.Inc(ctx)
+	}
 }
 
 // TrackJobCompleted tracks when a job completes
 func TrackJobCompleted(status string) {
-	JobsCompleted.WithLabelValues(status).Inc()
+	if jobsCompleted != nil {
+		jobsCompleted.WithLabelValues(status).Inc(ctx)
+	}
 }
 
 // UpdateActiveWorkers updates the count of active workers
 func UpdateActiveWorkers(count int) {
-	ActiveWorkers.Set(float64(count))
+	if activeWorkers != nil {
+		activeWorkers.Set(ctx, float64(count))
+	}
 }
 
 // TrackWorkerStart tracks when a worker starts
@@ -236,7 +276,9 @@ func TrackWorkerMemoryUsage(jobID string, memoryBytes int64) {
 
 // TrackConditionEvaluation tracks condition evaluation metrics
 func TrackConditionEvaluation(duration time.Duration) {
-	ConditionEvaluationDuration.Observe(duration.Seconds())
+	if conditionEvaluationDuration != nil {
+		conditionEvaluationDuration.Record(ctx, duration.Seconds())
+	}
 
 	conditionStatsLock.Lock()
 	defer conditionStatsLock.Unlock()
@@ -245,34 +287,46 @@ func TrackConditionEvaluation(duration time.Duration) {
 
 // TrackConditionByType tracks conditions by their type
 func TrackConditionByType(conditionType string) {
-	ConditionsByTypeTotal.WithLabelValues(conditionType).Inc()
+	if conditionsByTypeTotal != nil {
+		conditionsByTypeTotal.WithLabelValues(conditionType).Inc(ctx)
+	}
 }
 
 // TrackConditionBySource tracks conditions by their source type
 func TrackConditionBySource(sourceType string) {
-	ConditionsBySourceTotal.WithLabelValues(sourceType).Inc()
+	if conditionsBySourceTotal != nil {
+		conditionsBySourceTotal.WithLabelValues(sourceType).Inc(ctx)
+	}
 }
 
 // TrackAPIResponse tracks API response status
 func TrackAPIResponse(sourceURL, statusCode string) {
-	APIResponseStatusTotal.WithLabelValues(sourceURL, statusCode).Inc()
+	if apiResponseStatusTotal != nil {
+		apiResponseStatusTotal.WithLabelValues(sourceURL, statusCode).Inc(ctx)
+	}
 }
 
 // TrackValueParsingError tracks value parsing errors
 func TrackValueParsingError(sourceType string) {
-	ValueParsingErrorsTotal.WithLabelValues(sourceType).Inc()
+	if valueParsingErrorsTotal != nil {
+		valueParsingErrorsTotal.WithLabelValues(sourceType).Inc(ctx)
+	}
 }
 
 // TrackInvalidValue tracks invalid values received
 func TrackInvalidValue(source string) {
-	InvalidValuesTotal.WithLabelValues(source).Inc()
+	if invalidValuesTotal != nil {
+		invalidValuesTotal.WithLabelValues(source).Inc(ctx)
+	}
 }
 
 // Action execution tracking functions
 
 // TrackActionExecution tracks action execution with duration
 func TrackActionExecution(jobID string, duration time.Duration) {
-	ActionExecutionDuration.WithLabelValues(jobID).Observe(duration.Seconds())
+	if actionExecutionDuration != nil {
+		actionExecutionDuration.WithLabelValues(jobID).Record(ctx, duration.Seconds())
+	}
 
 	conditionStatsLock.Lock()
 	defer conditionStatsLock.Unlock()
@@ -286,12 +340,16 @@ func TrackActionExecution(jobID string, duration time.Duration) {
 
 // TrackTimeout tracks operation timeouts
 func TrackTimeout(operation string) {
-	TimeoutsTotal.WithLabelValues(operation).Inc()
+	if timeoutsTotal != nil {
+		timeoutsTotal.WithLabelValues(operation).Inc(ctx)
+	}
 }
 
 // TrackCriticalError tracks critical system errors
 func TrackCriticalError(errorType string) {
-	CriticalErrorsTotal.WithLabelValues(errorType).Inc()
+	if criticalErrorsTotal != nil {
+		criticalErrorsTotal.WithLabelValues(errorType).Inc(ctx)
+	}
 }
 
 // Condition processing tracking functions
@@ -423,22 +481,30 @@ func init() {
 
 // TrackChainConnection tracks blockchain connection attempts
 func TrackChainConnection(chainID, status string) {
-	ChainConnectionsTotal.WithLabelValues(chainID, status).Inc()
+	if chainConnectionsTotal != nil {
+		chainConnectionsTotal.WithLabelValues(chainID, status).Inc(ctx)
+	}
 }
 
 // TrackRPCRequest tracks RPC requests to blockchain nodes
 func TrackRPCRequest(chainID, method, status string) {
-	RPCRequestsTotal.WithLabelValues(chainID, method, status).Inc()
+	if rpcRequestsTotal != nil {
+		rpcRequestsTotal.WithLabelValues(chainID, method, status).Inc(ctx)
+	}
 }
 
 // TrackConnectionFailure tracks blockchain connection failures
 func TrackConnectionFailure(chainID string) {
-	ConnectionFailuresTotal.WithLabelValues(chainID).Inc()
+	if connectionFailuresTotal != nil {
+		connectionFailuresTotal.WithLabelValues(chainID).Inc(ctx)
+	}
 }
 
 // TrackWorkerError tracks worker errors
 func TrackWorkerError(jobID, errorType string) {
-	WorkerErrorsTotal.WithLabelValues(jobID, errorType).Inc()
+	if workerErrorsTotal != nil {
+		workerErrorsTotal.WithLabelValues(jobID, errorType).Inc(ctx)
+	}
 }
 
 // Event tracking functions
@@ -505,7 +571,38 @@ func TrackEventWithDuration(chainID string, duration time.Duration, success bool
 			sum += processingTime
 		}
 		avgTime := sum / float64(len(eventProcessingTimes))
-		AverageEventProcessingTimeSeconds.Set(avgTime)
+		if averageEventProcessingTimeSeconds != nil {
+			averageEventProcessingTimeSeconds.Set(ctx, avgTime)
+		}
 	}
 	eventStatsLock.RUnlock()
+}
+
+// StartMetricsCollection starts collecting metrics
+func StartMetricsCollection() {
+	// Update uptime every 15 seconds
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if uptimeSeconds != nil {
+				uptimeSeconds.Set(ctx, time.Since(startTime).Seconds())
+			}
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+			collectWorkerMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
+		}
+	}()
 }

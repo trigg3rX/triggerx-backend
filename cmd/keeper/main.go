@@ -72,6 +72,9 @@ func main() {
 	}
 	logger.Info(ctx, "[1/7] Dependency: Observability Metrics Initialised")
 
+	// Initialize application metrics
+	metrics.InitializeMetrics(obsMetrics)
+
 	// Create metrics collector with observability Metrics
 	collector := metrics.NewCollector(obsMetrics)
 	logger.Info(ctx, "[2/7] Dependency: Metrics collector Initialised")

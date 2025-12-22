@@ -45,7 +45,7 @@ func TimeoutMiddleware(timeout time.Duration) gin.HandlerFunc {
 			}
 
 			// Record timeout
-			metrics.RequestTimeoutsTotal.WithLabelValues(endpoint).Inc()
+			metrics.RequestTimeoutsTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 
 			// Abort the request
 			c.AbortWithStatusJSON(http.StatusGatewayTimeout, gin.H{

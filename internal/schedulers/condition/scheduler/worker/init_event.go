@@ -99,7 +99,7 @@ func (w *EventWorker) Start(ctx context.Context) {
 				observability.Duration("runtime", duration),
 				observability.Uint64("final_block", w.LastBlock),
 			)
-			metrics.JobsCompleted.WithLabelValues("success").Inc()
+			metrics.TrackJobCompleted("success")
 			return
 		case <-ticker.C:
 			// Check if job has expired
@@ -116,7 +116,7 @@ func (w *EventWorker) Start(ctx context.Context) {
 				w.Logger.Error(ctx, "Error checking for events",
 					observability.String("job_id", w.EventWorkerData.JobID.String()),
 					observability.Error(err))
-				metrics.JobsCompleted.WithLabelValues("failed").Inc()
+				metrics.TrackJobCompleted("failed")
 			}
 		}
 	}

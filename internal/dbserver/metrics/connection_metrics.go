@@ -14,7 +14,7 @@ func TrackDBConnections() {
 		for range ticker.C {
 			// For now, we'll just track if the connection is alive
 			// This can be enhanced later with actual connection counting
-			ActiveConnections.Set(1.0)
+			ActiveConnections.Set(ctx, 1.0)
 		}
 	}()
 }

@@ -51,7 +51,9 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, c
 
 	if err != nil {
 		if err == redis.Nil {
-			metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "empty").Inc()
+			if metrics.TasksReadFromStreamTotal != nil {
+				metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "empty").Inc(ctx)
+			}
 			// tsm.logger.Debug("No tasks available in stream",
 			// 	"stream", stream,
 			// 	"consumer_group", consumerGroup,
@@ -66,7 +68,9 @@ func (tsm *TaskStreamManager) ReadTasksFromStream(ctx context.Context, stream, c
 		return nil, nil, fmt.Errorf("failed to read from stream: %w", err)
 	}
 
-	metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "success").Inc()
+	if metrics.TasksReadFromStreamTotal != nil {
+		metrics.TasksReadFromStreamTotal.WithLabelValues(stream, "success").Inc(ctx)
+	}
 
 	// Pre-allocate slice for better performance
 	var tasks []TaskStreamData

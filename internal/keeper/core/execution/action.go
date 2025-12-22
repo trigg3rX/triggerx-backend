@@ -208,14 +208,16 @@ skipArgumentProcessing:
 		ethcommon.HexToAddress(executionContractAddress),
 		executionInput,
 		chainID,
-		privateKey, 
+		privateKey,
 	)
 	if err != nil {
 		// CRITICAL: Release the nonce when submission fails after all retries
 		// This prevents nonce gaps that would cause subsequent transactions to get stuck
 		nonceManager.ReleaseNonce(context.Background(), nonce, privateKey)
 		e.logger.Warn(ctx, "Released nonce %d after failed submission for task %d", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
-		metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "failed").Inc()
+		if metrics.TransactionsSentTotal != nil {
+			metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "failed").Inc(ctx)
+		}
 		return types.PerformerActionData{}, false, fmt.Errorf("failed to submit transaction: %v", err)
 	}
 
@@ -238,9 +240,15 @@ skipArgumentProcessing:
 		ConvertedArguments: convertedArgs,
 		StorageUpdates:     storageUpdates, // Include storage updates for custom scripts
 	}
-	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
-	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
-	metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
+	if metrics.TransactionsSentTotal != nil {
+		metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc(ctx)
+	}
+	if metrics.GasUsedTotal != nil {
+		metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(ctx, float64(receipt.GasUsed))
+	}
+	if metrics.TransactionFeesTotal != nil {
+		metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(ctx, float64(receipt.GasUsed))
+	}
 
 	e.logger.Info(ctx, "Task ID %d executed successfully. Transaction: %s", observability.Int64("task_id", targetData.TaskID), observability.String("transaction_hash", finalTxHash))
 

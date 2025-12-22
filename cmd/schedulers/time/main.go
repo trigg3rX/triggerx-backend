@@ -11,6 +11,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -51,6 +52,16 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
 	}
 
+	// Initialize metrics
+	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize metrics: %v", err))
+	}
+
+	// Initialize application metrics
+	metrics.InitializeMetrics(obsMetrics)
+	metrics.StartMetricsCollection()
+
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Time-based Scheduler with Redis integration...")
 
@@ -63,7 +74,7 @@ func main() {
 
 	// Initialize time-based scheduler with Redis integration via HTTP API
 	managerID := fmt.Sprintf("time-scheduler-%d", time.Now().Unix())
-	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, tracer, dbClient)
+	timeScheduler, err := scheduler.NewTimeBasedScheduler(managerID, logger, tracer, obsMetrics, dbClient)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize time-based scheduler", observability.Error(err))
 	}
@@ -74,6 +85,7 @@ func main() {
 		Port: config.GetSchedulerRPCPort(),
 	}, api.Dependencies{
 		Logger:    logger,
+		Metrics:   obsMetrics,
 		Scheduler: timeScheduler,
 	})
 
@@ -114,10 +126,20 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(ctx, cancel, srv, timeScheduler, dbClient, logger, loggerShutdown, tracerShutdown)
+	performGracefulShutdown(ctx, cancel, srv, timeScheduler, dbClient, logger, loggerShutdown, tracerShutdown, metricsShutdown)
 }
 
-func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv *api.Server, timeScheduler *scheduler.TimeBasedScheduler, dbClient *dbserver.DBServerClient, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
+func performGracefulShutdown(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	srv *api.Server,
+	timeScheduler *scheduler.TimeBasedScheduler,
+	dbClient *dbserver.DBServerClient,
+	logger observability.Logger,
+	loggerShutdown func(context.Context) error,
+	tracerShutdown func(context.Context) error,
+	metricsShutdown func(context.Context) error,
+) {
 	shutdownStart := time.Now()
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
@@ -143,6 +165,13 @@ func performGracefulShutdown(ctx context.Context, cancel context.CancelFunc, srv
 	if tracerShutdown != nil {
 		if err := tracerShutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		}
+	}
+
+	// Shutdown metrics
+	if metricsShutdown != nil {
+		if err := metricsShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
 		}
 	}
 

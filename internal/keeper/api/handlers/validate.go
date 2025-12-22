@@ -42,7 +42,9 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 
 	// Track task by definition ID for validation
 	taskDefID := strconv.Itoa(int(taskRequest.TaskDefinitionID))
-	metrics.TasksByDefinitionIDTotal.WithLabelValues(taskDefID).Inc()
+	if metrics.TasksByDefinitionIDTotal != nil {
+		metrics.TasksByDefinitionIDTotal.WithLabelValues(taskDefID).Add(c.Request.Context(), 1)
+	}
 
 	// Validate job based on task definition ID
 	isValid := false

@@ -14,6 +14,7 @@ import (
 
 	dbserver "github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
@@ -48,6 +49,20 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 	ctx := context.Background()
+
+	// Initialize observability Metrics
+	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to initialize metrics", observability.Error(err))
+	}
+
+	// Initialize application metrics
+	metrics.InitializeMetrics(obsMetrics)
+
+	// Start metrics collector
+	collector := metrics.NewCollector(obsMetrics)
+	collector.Start()
+	logger.Info(ctx, "Metrics collector started")
 
 	dbConfig := &database.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
@@ -86,7 +101,7 @@ func main() {
 		}
 	}
 
-	dbServer := dbserver.NewServer(ctx, conn, logger)
+	dbServer := dbserver.NewServer(ctx, conn, logger, obsMetrics)
 
 	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
 
@@ -117,10 +132,18 @@ func main() {
 		logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 	}
 
-	performGracefulShutdown(ctx, srv, &wg, logger, loggerShutdown, dockerExecutor)
+	performGracefulShutdown(ctx, srv, &wg, logger, loggerShutdown, metricsShutdown, dockerExecutor)
 }
 
-func performGracefulShutdown(ctx context.Context, srv *http.Server, wg *sync.WaitGroup, logger observability.Logger, loggerShutdown func(context.Context) error, dockerExecutor dockerexecutor.DockerExecutorAPI) {
+func performGracefulShutdown(
+	ctx context.Context,
+	srv *http.Server,
+	wg *sync.WaitGroup,
+	logger observability.Logger,
+	loggerShutdown func(context.Context) error,
+	metricsShutdown func(context.Context) error,
+	dockerExecutor dockerexecutor.DockerExecutorAPI,
+) {
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
@@ -140,6 +163,14 @@ func performGracefulShutdown(ctx context.Context, srv *http.Server, wg *sync.Wai
 	}
 
 	wg.Wait()
+
+	if metricsShutdown != nil {
+		if err := metricsShutdown(ctx); err != nil {
+			logger.Error(ctx, "Error shutting down metrics", observability.Error(err))
+		} else {
+			logger.Info(ctx, "Metrics stopped successfully")
+		}
+	}
 
 	if loggerShutdown != nil {
 		if err := loggerShutdown(ctx); err != nil {

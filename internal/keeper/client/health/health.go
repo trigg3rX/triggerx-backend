@@ -120,7 +120,9 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		}, fmt.Errorf("health check failed: %w", err)
 	}
 
-	metrics.SuccessfulHealthCheckinsTotal.Inc()
+	if metrics.SuccessfulHealthCheckinsTotal != nil {
+		metrics.SuccessfulHealthCheckinsTotal.Inc(ctx)
+	}
 
 	// c.logger.Debug("Successfully completed health check-in",
 	// 	"status", response.Status,

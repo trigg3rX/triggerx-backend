@@ -57,8 +57,15 @@ func main() {
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Task Dispatcher service ...")
 
+	// Initialize metrics
+	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize metrics: %v", err))
+	}
+
 	// Initialize metrics collector
-	collector := metrics.NewCollector()
+	metrics.InitializeMetrics(obsMetrics)
+	collector := metrics.NewCollector(obsMetrics)
 	logger.Info(ctx, "[1/5] Metrics collector Initialised")
 	collector.Start()
 
@@ -157,11 +164,11 @@ func main() {
 	<-shutdown
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, srv, dispatcher, logger, loggerShutdown, tracerShutdown)
+	performGracefulShutdown(ctx, srv, dispatcher, logger, loggerShutdown, tracerShutdown, metricsShutdown)
 }
 
 // performGracefulShutdown handles graceful shutdown of the service
-func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
+func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error, metricsShutdown func(context.Context) error) {
 	logger.Info(ctx, "Initiating graceful shutdown...")
 
 	// Create shutdown context with timeout
@@ -187,6 +194,13 @@ func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, disp
 	if tracerShutdown != nil {
 		if err := tracerShutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		}
+	}
+
+	// Shutdown metrics
+	if metricsShutdown != nil {
+		if err := metricsShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
 		}
 	}
 

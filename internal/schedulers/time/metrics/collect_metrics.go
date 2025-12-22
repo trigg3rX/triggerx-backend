@@ -2,11 +2,54 @@ package metrics
 
 import (
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 )
+
+var (
+	// Internal tracking variables for performance calculations
+	taskStatsLock       sync.RWMutex
+	taskCompletionTimes []float64
+	successfulTasks     int64
+	totalTasks          int64
+	tasksLastMinute     int64
+	lastMinuteReset     time.Time
+)
+
+func init() {
+	lastMinuteReset = time.Now()
+}
+
+// Starts collecting metrics
+func StartMetricsCollection() {
+	// Update uptime every 15 seconds
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if uptimeSeconds != nil {
+				uptimeSeconds.Set(ctx, time.Since(startTime).Seconds())
+			}
+			collectSystemMetrics()
+			collectConfigurationMetrics()
+			collectPerformanceMetrics()
+		}
+	}()
+
+	// Reset daily metrics every day at midnight
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			resetDailyMetrics()
+		}
+	}()
+}
 
 // Collects system resource metrics
 func collectSystemMetrics() {
@@ -14,31 +57,45 @@ func collectSystemMetrics() {
 	runtime.ReadMemStats(&memStats)
 
 	// Update memory usage (current allocated bytes)
-	MemoryUsageBytes.Set(float64(memStats.Alloc))
+	if memoryUsageBytes != nil {
+		memoryUsageBytes.Set(ctx, float64(memStats.Alloc))
+	}
 
 	// Update CPU usage (using system memory as a proxy)
 	cpuPercent, err := cpu.Percent(0, false)
 	if err == nil && len(cpuPercent) > 0 {
-		CPUUsagePercent.Set(cpuPercent[0])
+		if cpuUsagePercent != nil {
+			cpuUsagePercent.Set(ctx, cpuPercent[0])
+		}
 	} else {
 		// Fallback to 0.0 if CPU monitoring fails
-		CPUUsagePercent.Set(0.0)
+		if cpuUsagePercent != nil {
+			cpuUsagePercent.Set(ctx, 0.0)
+		}
 	}
 
 	// Update active goroutines count
-	GoroutinesActive.Set(float64(runtime.NumGoroutine()))
+	if goroutinesActive != nil {
+		goroutinesActive.Set(ctx, float64(runtime.NumGoroutine()))
+	}
 
 	// Update garbage collection duration (total pause time in seconds)
-	GCDurationSeconds.Set(float64(memStats.PauseTotalNs) / 1e9)
+	if gcDurationSeconds != nil {
+		gcDurationSeconds.Set(ctx, float64(memStats.PauseTotalNs)/1e9)
+	}
 }
 
 // Collects configuration-based metrics
 func collectConfigurationMetrics() {
 	// Set job batch size from configuration
-	TaskBatchSize.Set(float64(getTaskBatchSize()))
+	if taskBatchSize != nil {
+		taskBatchSize.Set(ctx, float64(getTaskBatchSize()))
+	}
 
 	// Set duplicate task window from configuration
-	DuplicateTaskWindowSeconds.Set(getDuplicateTaskWindowSeconds())
+	if duplicateTaskWindowSeconds != nil {
+		duplicateTaskWindowSeconds.Set(ctx, getDuplicateTaskWindowSeconds())
+	}
 }
 
 // Collects performance-related metrics
@@ -48,7 +105,9 @@ func collectPerformanceMetrics() {
 
 	// Update tasks per minute
 	if time.Since(lastMinuteReset) >= time.Minute {
-		TasksPerMinute.Set(float64(tasksLastMinute))
+		if tasksPerMinute != nil {
+			tasksPerMinute.Set(ctx, float64(tasksLastMinute))
+		}
 		// Reset for next minute in a separate goroutine to avoid blocking
 		go func() {
 			taskStatsLock.Lock()
@@ -61,7 +120,9 @@ func collectPerformanceMetrics() {
 	// Calculate success rate
 	if totalTasks > 0 {
 		successRate := (float64(successfulTasks) / float64(totalTasks)) * 100
-		TaskSuccessRatePercent.Set(successRate)
+		if taskSuccessRatePercent != nil {
+			taskSuccessRatePercent.Set(ctx, successRate)
+		}
 	}
 
 	// Calculate average task completion time
@@ -71,7 +132,9 @@ func collectPerformanceMetrics() {
 			sum += duration
 		}
 		avgTime := sum / float64(len(taskCompletionTimes))
-		AverageTaskCompletionTimeSeconds.Set(avgTime)
+		if averageTaskCompletionTimeSeconds != nil {
+			averageTaskCompletionTimeSeconds.Set(ctx, avgTime)
+		}
 	}
 }
 
@@ -81,9 +144,15 @@ func resetDailyMetrics() {
 	defer taskStatsLock.Unlock()
 
 	// Reset daily counters
-	TasksPerMinute.Set(0)
-	TaskSuccessRatePercent.Set(0)
-	AverageTaskCompletionTimeSeconds.Set(0)
+	if tasksPerMinute != nil {
+		tasksPerMinute.Set(ctx, 0)
+	}
+	if taskSuccessRatePercent != nil {
+		taskSuccessRatePercent.Set(ctx, 0)
+	}
+	if averageTaskCompletionTimeSeconds != nil {
+		averageTaskCompletionTimeSeconds.Set(ctx, 0)
+	}
 
 	// Reset tracking variables
 	taskCompletionTimes = nil
@@ -106,52 +175,86 @@ func getDuplicateTaskWindowSeconds() float64 {
 
 // TrackHTTPRequest tracks HTTP request metrics
 func TrackHTTPRequest(method, endpoint, statusCode string) {
-	HTTPRequestsTotal.WithLabelValues(method, endpoint, statusCode).Inc()
+	if httpRequestsTotal != nil {
+		httpRequestsTotal.WithLabelValues(method, endpoint, statusCode).Inc(ctx)
+	}
 }
 
 // TrackDBRequest tracks database request metrics
 func TrackDBRequest(method, endpoint, status string) {
-	DBRequestsTotal.WithLabelValues(method, endpoint, status).Inc()
+	if dbRequestsTotal != nil {
+		dbRequestsTotal.WithLabelValues(method, endpoint, status).Inc(ctx)
+	}
 }
 
 // TrackDBConnectionError tracks database connection errors
 func TrackDBConnectionError() {
-	DBConnectionErrorsTotal.Inc()
+	if dbConnectionErrorsTotal != nil {
+		dbConnectionErrorsTotal.Inc(ctx)
+	}
 }
 
 // TrackDBRetry tracks database retry attempts
 func TrackDBRetry(endpoint string) {
-	DBRetriesTotal.WithLabelValues(endpoint).Inc()
+	if dbRetriesTotal != nil {
+		dbRetriesTotal.WithLabelValues(endpoint).Inc(ctx)
+	}
 }
 
 // TrackTaskBroadcast tracks task broadcasts to performers
 func TrackTaskBroadcast(status string) {
-	TaskBroadcastsTotal.WithLabelValues(status).Inc()
+	if taskBroadcastsTotal != nil {
+		taskBroadcastsTotal.WithLabelValues(status).Inc(ctx)
+	}
 }
 
 // TrackTaskByScheduleType tracks tasks by their schedule type
 func TrackTaskByScheduleType(scheduleType string) {
-	TasksByScheduleTypeTotal.WithLabelValues(scheduleType).Inc()
+	if tasksByScheduleTypeTotal != nil {
+		tasksByScheduleTypeTotal.WithLabelValues(scheduleType).Inc(ctx)
+	}
 }
 
 // TrackTaskExpired tracks expired tasks
 func TrackTaskExpired() {
-	TasksExpiredTotal.Inc()
+	if tasksExpiredTotal != nil {
+		tasksExpiredTotal.Inc(ctx)
+	}
 }
 
 // UpdateTasksPerMinute updates the tasks per minute metric
 func UpdateTasksPerMinute(count float64) {
-	TasksPerMinute.Set(count)
+	if tasksPerMinute != nil {
+		tasksPerMinute.Set(ctx, count)
+	}
 }
 
 // UpdateAverageTaskCompletionTime updates the average task completion time
 func UpdateAverageTaskCompletionTime(seconds float64) {
-	AverageTaskCompletionTimeSeconds.Set(seconds)
+	if averageTaskCompletionTimeSeconds != nil {
+		averageTaskCompletionTimeSeconds.Set(ctx, seconds)
+	}
 }
 
 // UpdateTaskSuccessRate updates the task success rate percentage
 func UpdateTaskSuccessRate(percentage float64) {
-	TaskSuccessRatePercent.Set(percentage)
+	if taskSuccessRatePercent != nil {
+		taskSuccessRatePercent.Set(ctx, percentage)
+	}
+}
+
+// UpdateTasksScheduled updates the number of tasks scheduled
+func UpdateTasksScheduled(count float64) {
+	if tasksScheduled != nil {
+		tasksScheduled.Set(ctx, count)
+	}
+}
+
+// UpdateTaskBatchSize updates the task batch size metric
+func UpdateTaskBatchSize(size float64) {
+	if taskBatchSize != nil {
+		taskBatchSize.Set(ctx, size)
+	}
 }
 
 // TrackTaskExecution tracks task execution with timing (use this when a task starts executing)
@@ -175,7 +278,9 @@ func TrackTaskExecution(duration float64, success bool) {
 	}
 
 	// Observe execution time in histogram
-	TaskExecutionTime.Observe(duration)
+	if taskExecutionTime != nil {
+		taskExecutionTime.Record(ctx, duration)
+	}
 }
 
 // TrackTaskCompletion tracks when a task completes (wrapper for scheduler)
@@ -185,7 +290,9 @@ func TrackTaskCompletion(success bool, duration time.Duration) {
 		status = "success"
 	}
 
-	TasksCompleted.WithLabelValues(status).Inc()
+	if tasksCompleted != nil {
+		tasksCompleted.WithLabelValues(status).Inc(ctx)
+	}
 	TrackTaskExecution(duration.Seconds(), success)
 }
 

@@ -61,7 +61,9 @@ func (tsm *TaskStreamManager) MarkTaskCompleted(ctx context.Context, taskID int6
 	}
 
 	tsm.logger.Info(ctx, "Task marked as completed successfully", observability.Int64("task_id", taskID))
-	metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("completed", "success").Inc(ctx)
+	}
 
 	return nil
 }
@@ -118,7 +120,9 @@ func (tsm *TaskStreamManager) MarkTaskFailed(ctx context.Context, taskID int64, 
 	}
 
 	tsm.logger.Info(ctx, "Task marked as failed successfully", observability.Int64("task_id", taskID))
-	metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc(ctx)
+	}
 
 	return nil
 }
@@ -191,7 +195,9 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 	duration := time.Since(start)
 
 	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
+		if metrics.TasksAddedToStreamTotal != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc(ctx)
+		}
 		tsm.logger.Error(ctx, "Failed to add task to stream",
 			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
 			observability.String("stream", stream),
@@ -227,7 +233,9 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		// Don't fail the entire operation if expiration tracking fails
 	}
 
-	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc(ctx)
+	}
 	tsm.logger.Debug(ctx, "Task added to stream successfully",
 		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
 		observability.String("stream", stream),

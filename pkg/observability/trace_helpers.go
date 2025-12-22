@@ -114,3 +114,38 @@ func FormatTraceContext(ctx context.Context) string {
 
 	return fmt.Sprintf("trace_id=%s,span_id=%s", traceID, spanID)
 }
+
+// ContinueTrace continues an existing trace by creating a new span context from trace ID and span ID
+// This is used when trace context is embedded in data (e.g., IPFS data) and needs to be continued
+func ContinueTrace(ctx context.Context, traceID, spanID string) context.Context {
+	if traceID == "" {
+		return ctx
+	}
+
+	// Parse trace ID
+	traceIDBytes, err := trace.TraceIDFromHex(traceID)
+	if err != nil {
+		// If parsing fails, return original context
+		return ctx
+	}
+
+	// Parse span ID (if provided)
+	var spanIDBytes trace.SpanID
+	if spanID != "" {
+		spanIDBytes, err = trace.SpanIDFromHex(spanID)
+		if err != nil {
+			// If parsing fails, use zero span ID
+			spanIDBytes = trace.SpanID{}
+		}
+	}
+
+	// Create span context from trace ID and span ID
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceIDBytes,
+		SpanID:     spanIDBytes,
+		TraceFlags: trace.FlagsSampled, // Mark as sampled
+	})
+
+	// Return context with the span context
+	return trace.ContextWithSpanContext(ctx, spanContext)
+}

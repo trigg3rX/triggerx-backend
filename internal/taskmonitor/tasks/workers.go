@@ -235,7 +235,9 @@ func (tsm *TaskStreamManager) moveTaskToFailed(ctx context.Context, task TaskStr
 		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
 		observability.Int("retry_count", task.RetryCount),
 		observability.String("error", errorMsg))
-	metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc(ctx)
+	}
 
 	return nil
 }

@@ -31,7 +31,7 @@ type TimeBasedScheduler struct {
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
-func NewTimeBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
+func NewTimeBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -52,7 +52,7 @@ func NewTimeBasedScheduler(managerID string, logger observability.Logger, tracer
 		activeTasks:          make(map[int64]*types.ScheduleTimeTaskData),
 		dbClient:             dbClient,
 		taskDispatcherClient: taskDispatcherClient,
-		metrics:              metrics.NewCollector(),
+		metrics:              metrics.NewCollector(obsMetrics),
 		schedulerID:          config.GetSchedulerID(),
 		pollingInterval:      config.GetPollingInterval(),
 		pollingLookAhead:     config.GetPollingLookAhead(),

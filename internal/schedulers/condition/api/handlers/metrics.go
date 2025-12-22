@@ -11,16 +11,21 @@ type MetricsHandler struct {
 	collector *metrics.Collector
 }
 
-func NewMetricsHandler(logger observability.Logger) *MetricsHandler {
+func NewMetricsHandler(logger observability.Logger, collector *metrics.Collector) *MetricsHandler {
 	return &MetricsHandler{
 		logger:    logger,
-		collector: metrics.NewCollector(),
+		collector: collector,
 	}
 }
 
 // Metrics serves Prometheus metrics
 func (h *MetricsHandler) Metrics(c *gin.Context) {
-	traceID := getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[Metrics] trace_id=" + traceID + " - Serving metrics")
+	// Simple trace ID extraction if getTraceID is not available in this package
+	traceID := c.GetHeader("X-Trace-ID")
+	if traceID == "" {
+		traceID = "unknown"
+	}
+
+	h.logger.Info(c.Request.Context(), "[Metrics] Serving metrics", observability.String("trace_id", traceID))
 	h.collector.Handler().ServeHTTP(c.Writer, c.Request)
 }

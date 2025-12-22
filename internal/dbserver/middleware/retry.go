@@ -93,7 +93,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 
 		_, err := retry.Retry(context.Background(), func() (interface{}, error) {
 			attempts++
-			metrics.RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprintf("%d", attempts)).Inc()
+			metrics.RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprintf("%d", attempts)).Inc(c.Request.Context())
 
 			// Reset the response writer for this attempt
 			w.body.Reset()
@@ -137,7 +137,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 			if !retryable {
 				finalStatus = w.statusCode
 				finalBody = w.body.Bytes()
-				metrics.RetrySuccessesTotal.WithLabelValues(endpoint).Inc()
+				metrics.RetrySuccessesTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 				return nil, nil
 			}
 
@@ -159,7 +159,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 
 		if err != nil {
 			logger.Error(ctx, "Error retrying request: %v", observability.Error(err))
-			metrics.RetryFailuresTotal.WithLabelValues(endpoint).Inc()
+			metrics.RetryFailuresTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 			if finalStatus == 0 {
 				finalStatus = http.StatusInternalServerError
 				finalBody = []byte("Internal server error during retry operation")

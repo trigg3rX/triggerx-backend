@@ -39,7 +39,9 @@ func NewTaskStreamManager(ctx context.Context, client redisClient.RedisClientInt
 	}
 
 	logger.Info(ctx, "TaskStreamManager initialized successfully")
-	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
+	if metrics.ServiceStatus != nil {
+		metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(ctx, 1)
+	}
 	return tsm, nil
 }
 
@@ -107,7 +109,7 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(ctx context.Context, stream 
 		return nil
 	}
 
-	tsm.logger.Info(ctx, "Registering consumer group", observability.String("stream", stream), observability.String("group", group))	
+	tsm.logger.Info(ctx, "Registering consumer group", observability.String("stream", stream), observability.String("group", group))
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -148,13 +150,21 @@ func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]inte
 		// Update stream length metrics
 		switch stream {
 		case StreamTaskDispatched:
-			metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(ctx, float64(length))
+			}
 		case StreamTaskRetry:
-			metrics.TaskStreamLengths.WithLabelValues("retry").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("retry").Set(ctx, float64(length))
+			}
 		case StreamTaskCompleted:
-			metrics.TaskStreamLengths.WithLabelValues("completed").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("completed").Set(ctx, float64(length))
+			}
 		case StreamTaskFailed:
-			metrics.TaskStreamLengths.WithLabelValues("failed").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("failed").Set(ctx, float64(length))
+			}
 		}
 	}
 

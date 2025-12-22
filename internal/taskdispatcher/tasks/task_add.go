@@ -152,7 +152,9 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 	duration := time.Since(start)
 
 	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc()
+		if metrics.TasksAddedToStreamTotal != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "failure").Inc(ctx)
+		}
 		tsm.logger.Error(ctx, "Failed to add task to stream",
 			observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
 			observability.String("stream", stream),
@@ -218,7 +220,9 @@ func (tsm *TaskStreamManager) addTaskToStream(ctx context.Context, stream string
 		_ = tsm.client.SetTTL(ctx, expirationKey, 48*time.Hour)
 	}
 
-	metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues(stream, "success").Inc(ctx)
+	}
 	tsm.logger.Debug(ctx, "Task added to stream successfully",
 		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
 		observability.String("stream", stream),

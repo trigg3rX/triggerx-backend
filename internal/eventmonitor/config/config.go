@@ -47,7 +47,7 @@ func Init() error {
 
 	cfg = Config{
 		devMode:           env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		Port:              env.GetEnvString("EVENT_MONITOR_PORT", "9009"),
 		Host:              env.GetEnvString("EVENT_MONITOR_HOST", "0.0.0.0"),
 		AlchemyAPIKey:     env.GetEnvString("ALCHEMY_API_KEY", ""),

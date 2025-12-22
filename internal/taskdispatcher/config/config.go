@@ -71,7 +71,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:               env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		taskDispatcherRPCPort: env.GetEnvInt("TASK_DISPATCHER_RPC_PORT", 9003),
 		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
 		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),

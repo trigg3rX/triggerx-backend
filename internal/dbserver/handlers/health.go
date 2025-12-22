@@ -29,10 +29,10 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 		dbError = err.Error()
 		h.logger.Error(c.Request.Context(), "[HealthCheck] Database health check failed: %v", observability.Error(err))
 		trackDBOp(err)
-		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc()
+		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc(c.Request.Context())
 	} else {
 		trackDBOp(nil)
-		metrics.HealthChecksTotal.WithLabelValues("healthy").Inc()
+		metrics.HealthChecksTotal.WithLabelValues("healthy").Inc(c.Request.Context())
 	}
 
 	// Prepare response

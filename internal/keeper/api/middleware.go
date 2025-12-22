@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"runtime"
 	"time"
 
@@ -33,12 +34,22 @@ func MetricsMiddleware() gin.HandlerFunc {
 		c.Next()
 
 		// Update system metrics
+		// Note: We use background context as this is system-level info, not request-scoped
+		ctx := context.Background()
 		var memStats runtime.MemStats
 		runtime.ReadMemStats(&memStats)
-		metrics.MemoryUsageBytes.Set(float64(memStats.Alloc))
-		metrics.CPUUsagePercent.Set(float64(memStats.Sys))
-		metrics.GoroutinesActive.Set(float64(runtime.NumGoroutine()))
-		metrics.GCDurationSeconds.Set(float64(memStats.PauseTotalNs) / 1e9)
+		if metrics.MemoryUsageBytes != nil {
+			metrics.MemoryUsageBytes.Set(ctx, float64(memStats.Alloc))
+		}
+		if metrics.CPUUsagePercent != nil {
+			metrics.CPUUsagePercent.Set(ctx, float64(memStats.Sys))
+		}
+		if metrics.GoroutinesActive != nil {
+			metrics.GoroutinesActive.Set(ctx, float64(runtime.NumGoroutine()))
+		}
+		if metrics.GCDurationSeconds != nil {
+			metrics.GCDurationSeconds.Set(ctx, float64(memStats.PauseTotalNs)/1e9)
+		}
 	}
 }
 
@@ -108,10 +119,13 @@ func TaskMetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
+		ctx := c.Request.Context()
 
 		// Track incoming tasks
 		if path == "/p2p/message" && c.Request.Method == "POST" {
-			metrics.TasksReceivedTotal.Inc()
+			if metrics.TasksReceivedTotal != nil {
+				metrics.TasksReceivedTotal.Inc(ctx)
+			}
 		}
 
 		c.Next()
@@ -124,15 +138,27 @@ func TaskMetricsMiddleware() gin.HandlerFunc {
 			switch path {
 			case "/p2p/message":
 				// Task execution endpoint
-				metrics.TasksPerDay.WithLabelValues("executed").Inc()
-				metrics.TasksCompletedTotal.WithLabelValues("executed").Inc()
-				metrics.TaskDurationSeconds.WithLabelValues("executed").Observe(duration.Seconds())
+				if metrics.TasksPerDay != nil {
+					metrics.TasksPerDay.WithLabelValues("executed").Inc(ctx)
+				}
+				if metrics.TasksCompletedTotal != nil {
+					metrics.TasksCompletedTotal.WithLabelValues("executed").Inc(ctx)
+				}
+				if metrics.TaskDurationSeconds != nil {
+					metrics.TaskDurationSeconds.WithLabelValues("executed").Record(ctx, duration.Seconds())
+				}
 				// metrics.AverageTaskCompletionTimeSeconds.WithLabelValues("executed").Set(duration.Seconds())
 			case "/task/validate":
 				// Task validation endpoint
-				metrics.TasksPerDay.WithLabelValues("validated").Inc()
-				metrics.TasksCompletedTotal.WithLabelValues("validated").Inc()
-				metrics.TaskDurationSeconds.WithLabelValues("validated").Observe(duration.Seconds())
+				if metrics.TasksPerDay != nil {
+					metrics.TasksPerDay.WithLabelValues("validated").Inc(ctx)
+				}
+				if metrics.TasksCompletedTotal != nil {
+					metrics.TasksCompletedTotal.WithLabelValues("validated").Inc(ctx)
+				}
+				if metrics.TaskDurationSeconds != nil {
+					metrics.TaskDurationSeconds.WithLabelValues("validated").Record(ctx, duration.Seconds())
+				}
 				// metrics.AverageTaskCompletionTimeSeconds.WithLabelValues("validated").Set(duration.Seconds())
 			}
 		}
@@ -142,7 +168,9 @@ func TaskMetricsMiddleware() gin.HandlerFunc {
 // RestartTrackingMiddleware tracks service restarts
 func RestartTrackingMiddleware() gin.HandlerFunc {
 	// This should be called once during service startup
-	metrics.RestartsTotal.Inc()
+	if metrics.RestartsTotal != nil {
+		metrics.RestartsTotal.Inc(context.Background())
+	}
 
 	return func(c *gin.Context) {
 		c.Next()

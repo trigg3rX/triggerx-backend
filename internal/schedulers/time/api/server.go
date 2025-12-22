@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	gootel "go.opentelemetry.io/otel"
@@ -33,6 +34,7 @@ type Config struct {
 // Dependencies holds the server dependencies
 type Dependencies struct {
 	Logger    observability.Logger
+	Metrics   observability.Metrics
 	Scheduler *scheduler.TimeBasedScheduler
 }
 
@@ -94,7 +96,11 @@ func (s *Server) setupMiddleware(deps Dependencies) {
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
 	statusHandler := handlers.NewStatusHandler(deps.Logger)
-	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
+
+	// Create collector for metrics handler
+	collector := metrics.NewCollector(deps.Metrics)
+	metricsHandler := handlers.NewMetricsHandler(deps.Logger, collector)
+
 	schedulerHandler := handlers.NewSchedulerHandler(deps.Logger, deps.Scheduler)
 
 	// Health and monitoring endpoints

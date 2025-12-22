@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
@@ -106,13 +105,14 @@ type Server struct {
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
 	jobStatusChecker   *handlers.JobStatusChecker
+	obsMetrics         observability.Metrics
 
 	// WebSocket components
 	hub                 *websocket.Hub
 	wsConnectionManager *websocket.WebSocketConnectionManager
 }
 
-func NewServer(ctx context.Context, db *database.Connection, logger observability.Logger) *Server {
+func NewServer(ctx context.Context, db *database.Connection, logger observability.Logger, obsMetrics observability.Metrics) *Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -128,11 +128,6 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 
 	// Add tracing middleware before all others
 	router.Use(TraceMiddleware())
-
-	// Start metrics collection
-	metrics.StartMetricsCollection()
-	metrics.StartSystemMetricsCollection()
-	metrics.TrackDBConnections()
 
 	// Apply middleware in the correct order
 	router.Use(middleware.RecoveryMiddleware(logger))           // First, to catch panics
@@ -209,6 +204,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 		rateLimiter: rateLimiter,
 		redisClient: redisClient,
 		validator:   middleware.NewValidator(ctx, logger),
+		obsMetrics:  obsMetrics,
 		notificationConfig: handlers.NotificationConfig{
 			EmailFrom:     config.GetEmailUser(),
 			EmailPassword: config.GetEmailPassword(),
@@ -271,7 +267,7 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient)
 
 	// Register metrics endpoint at root level without middleware
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	router.GET("/metrics", gin.WrapH(metrics.NewCollector(s.obsMetrics).Handler()))
 
 	api := router.Group("/api")
 	// Code validation endpoint (raw source)

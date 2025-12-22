@@ -43,7 +43,9 @@ func (tim *TaskIndexManager) StoreTaskIndex(ctx context.Context, taskID int64, m
 	duration := time.Since(start)
 
 	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("index_store", "failure").Inc()
+		if metrics.TasksAddedToStreamTotal != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues("index_store", "failure").Inc(ctx)
+		}
 		tim.tsm.logger.Error(ctx, "Failed to store task index",
 			observability.Int64("task_id", taskID),
 			observability.String("message_id", messageID),
@@ -61,7 +63,9 @@ func (tim *TaskIndexManager) StoreTaskIndex(ctx context.Context, taskID int64, m
 		// Don't return error as the main operation succeeded
 	}
 
-	metrics.TasksAddedToStreamTotal.WithLabelValues("index_store", "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("index_store", "success").Inc(ctx)
+	}
 	tim.tsm.logger.Debug(ctx, "Task index stored successfully",
 		observability.Int64("task_id", taskID),
 		observability.String("message_id", messageID),
@@ -82,7 +86,9 @@ func (tim *TaskIndexManager) GetTaskMessageID(ctx context.Context, taskID int64)
 	duration := time.Since(start)
 
 	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("index_lookup", "failure").Inc()
+		if metrics.TasksAddedToStreamTotal != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues("index_lookup", "failure").Inc(ctx)
+		}
 		tim.tsm.logger.Error(ctx, "Failed to get task message ID",
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration),
@@ -97,7 +103,9 @@ func (tim *TaskIndexManager) GetTaskMessageID(ctx context.Context, taskID int64)
 		return "", false, nil
 	}
 
-	metrics.TasksAddedToStreamTotal.WithLabelValues("index_lookup", "success").Inc()
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("index_lookup", "success").Inc(ctx)
+	}
 	tim.tsm.logger.Debug(ctx, "Task message ID retrieved successfully",
 		observability.Int64("task_id", taskID),
 		observability.String("message_id", messageID),
@@ -118,7 +126,9 @@ func (tim *TaskIndexManager) RemoveTaskIndex(ctx context.Context, taskID int64) 
 	duration := time.Since(start)
 
 	if err != nil {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("index_remove", "failure").Inc()
+		if metrics.TasksAddedToStreamTotal != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues("index_remove", "failure").Inc(ctx)
+		}
 		tim.tsm.logger.Error(ctx, "Failed to remove task index",
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration),
@@ -131,7 +141,9 @@ func (tim *TaskIndexManager) RemoveTaskIndex(ctx context.Context, taskID int64) 
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration))
 	} else {
-		metrics.TasksAddedToStreamTotal.WithLabelValues("index_remove", "success").Inc()
+		if metrics.TasksAddedToStreamTotal != nil {
+			metrics.TasksAddedToStreamTotal.WithLabelValues("index_remove", "success").Inc(ctx)
+		}
 		tim.tsm.logger.Debug(ctx, "Task index removed successfully",
 			observability.Int64("task_id", taskID),
 			observability.Duration("duration", duration))

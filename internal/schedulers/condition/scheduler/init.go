@@ -42,7 +42,7 @@ type ConditionBasedScheduler struct {
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -77,7 +77,7 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		dbClient:             dbClient,
 		taskDispatcherClient: taskDispatcherClient,
 		eventMonitorClient:   eventMonitorClient,
-		metrics:              metrics.NewCollector(),
+		metrics:              metrics.NewCollector(obsMetrics),
 		maxWorkers:           config.GetMaxWorkers(),
 		schedulerID:          config.GetSchedulerID(),
 		webhookURL:           webhookURL,

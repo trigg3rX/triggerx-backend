@@ -55,8 +55,8 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 	}
 
 	s.logger.Info(ctx, "Found %d tasks to process", observability.Int("task_count", len(tasks)))
-	metrics.TasksScheduled.Set(float64(len(tasks)))
-	metrics.TaskBatchSize.Set(float64(s.taskBatchSize))
+	metrics.UpdateTasksScheduled(float64(len(tasks)))
+	metrics.UpdateTaskBatchSize(float64(s.taskBatchSize))
 
 	// Separate tasks based on is_imua flag
 	var imuaTasks []types.ScheduleTimeTaskData

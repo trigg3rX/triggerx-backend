@@ -17,8 +17,8 @@ import (
 
 // otelMetrics wraps OpenTelemetry metrics implementation
 type otelMetrics struct {
-	meterProvider *sdkmetric.MeterProvider
-	meter         otelmetric.Meter
+	meterProvider      *sdkmetric.MeterProvider
+	meter              otelmetric.Meter
 	prometheusExporter *otelprometheus.Exporter
 	prometheusRegistry *prometheus.Registry
 	prometheusHandler  http.Handler
@@ -27,33 +27,15 @@ type otelMetrics struct {
 // NewMetrics creates a new metrics instance with the provided configuration and resource
 // Each service can call this to create their own metrics instance and define custom metrics
 func NewMetrics(cfg Config, res *resource.Resource) (Metrics, func(context.Context) error, error) {
-	// Create OTLP HTTP metric exporter
-	otlpExporter, err := otlpmetrichttp.New(
-		context.Background(),
-		otlpmetrichttp.WithEndpoint(cfg.OTELExporterEndpoint),
-		otlpmetrichttp.WithInsecure(), // TODO: make this configurable
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
-	}
-
-	// Create OTLP reader
-	otlpReader := sdkmetric.NewPeriodicReader(
-		otlpExporter,
-		sdkmetric.WithInterval(cfg.BatchTimeout),
-		sdkmetric.WithTimeout(cfg.ExportTimeout),
-	)
-
-	// Create Prometheus exporter if enabled
+	var reader sdkmetric.Reader
 	var prometheusExporter *otelprometheus.Exporter
 	var prometheusRegistry *prometheus.Registry
 	var prometheusHandler http.Handler
-	var reader sdkmetric.Reader
 
 	if cfg.EnablePrometheusExport {
 		// Create a Prometheus registry and register the exporter
 		prometheusRegistry = prometheus.NewRegistry()
-
+		var err error
 		prometheusExporter, err = otelprometheus.New(
 			otelprometheus.WithRegisterer(prometheusRegistry),
 		)
@@ -68,12 +50,24 @@ func NewMetrics(cfg Config, res *resource.Resource) (Metrics, func(context.Conte
 		})
 
 		// Use Prometheus exporter as the reader (it implements sdkmetric.Reader)
-		// This will expose metrics for Prometheus scraping
-		// Note: When Prometheus export is enabled, OTLP export is disabled
-		// To support both, you would need a custom reader that forwards to both exporters
 		reader = prometheusExporter
 	} else {
-		reader = otlpReader
+		// Create OTLP HTTP metric exporter
+		otlpExporter, err := otlpmetrichttp.New(
+			context.Background(),
+			otlpmetrichttp.WithEndpoint(cfg.OTELExporterEndpoint),
+			otlpmetrichttp.WithInsecure(), // TODO: make this configurable
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+		}
+
+		// Create OTLP reader
+		reader = sdkmetric.NewPeriodicReader(
+			otlpExporter,
+			sdkmetric.WithInterval(cfg.BatchTimeout),
+			sdkmetric.WithTimeout(cfg.ExportTimeout),
+		)
 	}
 
 	// Create meter provider with the selected reader
@@ -95,8 +89,8 @@ func NewMetrics(cfg Config, res *resource.Resource) (Metrics, func(context.Conte
 	}
 
 	return &otelMetrics{
-		meterProvider: meterProvider,
-		meter:         meter,
+		meterProvider:      meterProvider,
+		meter:              meter,
 		prometheusExporter: prometheusExporter,
 		prometheusRegistry: prometheusRegistry,
 		prometheusHandler:  prometheusHandler,

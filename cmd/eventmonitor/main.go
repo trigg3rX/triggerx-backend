@@ -11,6 +11,7 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
@@ -48,6 +49,16 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
 	}
+
+	// Initialize metrics
+	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize metrics: %v", err))
+	}
+
+	// Initialize application metrics
+	metrics.InitializeMetrics(obsMetrics)
+	metrics.StartMetricsCollection()
 
 	ctx := context.Background()
 	logger.Info(ctx, "Starting Event Monitor Service...")
@@ -98,7 +109,7 @@ func main() {
 
 	<-shutdown
 
-	performGracefulShutdown(ctx, srv, svc, logger, loggerShutdown, tracerShutdown)
+	performGracefulShutdown(ctx, srv, svc, logger, loggerShutdown, tracerShutdown, metricsShutdown)
 }
 
 func performGracefulShutdown(
@@ -108,6 +119,7 @@ func performGracefulShutdown(
 	logger observability.Logger,
 	loggerShutdown func(context.Context) error,
 	tracerShutdown func(context.Context) error,
+	metricsShutdown func(context.Context) error,
 ) {
 	shutdownStart := time.Now()
 	logger.Info(ctx, "Initiating graceful shutdown...")
@@ -128,6 +140,13 @@ func performGracefulShutdown(
 	if tracerShutdown != nil {
 		if err := tracerShutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		}
+	}
+
+	// Shutdown metrics
+	if metricsShutdown != nil {
+		if err := metricsShutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
 		}
 	}
 

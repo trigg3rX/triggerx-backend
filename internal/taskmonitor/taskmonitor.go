@@ -57,7 +57,9 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 	if err != nil {
 		cancel() // Clean up context on error
 		logger.Error(ctx, "Failed to create Redis client for TaskManager", observability.Error(err))
-		metrics.ServiceStatus.WithLabelValues("task_manager").Set(0)
+		if metrics.ServiceStatus != nil {
+			metrics.ServiceStatus.WithLabelValues("task_manager").Set(ctx, 0)
+		}
 		return nil, fmt.Errorf("failed to create redis client: %w", err)
 	}
 
@@ -125,7 +127,9 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 	logger.Info(ctx, "TaskManager initialized successfully",
 		observability.Duration("metrics_update_interval", config.GetMetricsUpdateInterval()))
 
-	metrics.ServiceStatus.WithLabelValues("task_manager").Set(1)
+	if metrics.ServiceStatus != nil {
+		metrics.ServiceStatus.WithLabelValues("task_manager").Set(ctx, 1)
+	}
 	return tm, nil
 }
 
@@ -272,15 +276,25 @@ func (tm *TaskManager) updateMetrics() {
 		for stream, length := range lengths {
 			switch stream {
 			case "tasks:ready":
-				metrics.TaskStreamLengths.WithLabelValues("ready").Set(float64(length))
+				if metrics.TaskStreamLengths != nil {
+					metrics.TaskStreamLengths.WithLabelValues("ready").Set(tm.ctx, float64(length))
+				}
 			case "tasks:processing":
-				metrics.TaskStreamLengths.WithLabelValues("processing").Set(float64(length))
+				if metrics.TaskStreamLengths != nil {
+					metrics.TaskStreamLengths.WithLabelValues("processing").Set(tm.ctx, float64(length))
+				}
 			case "tasks:completed":
-				metrics.TaskStreamLengths.WithLabelValues("completed").Set(float64(length))
+				if metrics.TaskStreamLengths != nil {
+					metrics.TaskStreamLengths.WithLabelValues("completed").Set(tm.ctx, float64(length))
+				}
 			case "tasks:failed":
-				metrics.TaskStreamLengths.WithLabelValues("failed").Set(float64(length))
+				if metrics.TaskStreamLengths != nil {
+					metrics.TaskStreamLengths.WithLabelValues("failed").Set(tm.ctx, float64(length))
+				}
 			case "tasks:retry":
-				metrics.TaskStreamLengths.WithLabelValues("retry").Set(float64(length))
+				if metrics.TaskStreamLengths != nil {
+					metrics.TaskStreamLengths.WithLabelValues("retry").Set(tm.ctx, float64(length))
+				}
 			}
 		}
 	}
@@ -288,7 +302,9 @@ func (tm *TaskManager) updateMetrics() {
 	// Update connection status
 	connectionStatus := tm.redisClient.GetConnectionStatus()
 	if connectionStatus != nil && !connectionStatus.IsRecovering {
-		metrics.RedisConnectionHealth.WithLabelValues("main").Set(1)
+		if metrics.RedisConnectionHealth != nil {
+			metrics.RedisConnectionHealth.WithLabelValues("main").Set(tm.ctx, 1)
+		}
 	}
 }
 
@@ -389,7 +405,9 @@ func (tm *TaskManager) Close() error {
 		}
 	}
 
-	metrics.ServiceStatus.WithLabelValues("task_manager").Set(0)
+	if metrics.ServiceStatus != nil {
+		metrics.ServiceStatus.WithLabelValues("task_manager").Set(tm.ctx, 0)
+	}
 
 	if len(errors) > 0 {
 		tm.logger.Warn(tm.ctx, "Some non-critical errors occurred during shutdown", observability.Int("error_count", len(errors)))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api/handlers"
@@ -82,17 +81,8 @@ func (s *Server) setupMiddleware() {
 	// Recovery middleware
 	s.router.Use(gin.Recovery())
 
-	// Logging middleware
-	s.router.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		return fmt.Sprintf("[%s] %s %s %d %s %s\n",
-			param.TimeStamp.Format(time.RFC3339),
-			param.Method,
-			param.Path,
-			param.StatusCode,
-			param.Latency,
-			param.ErrorMessage,
-		)
-	}))
+	// Logging and Metrics middleware
+	s.router.Use(LoggerMiddleware(s.logger))
 }
 
 // setupRoutes sets up the routes for the server

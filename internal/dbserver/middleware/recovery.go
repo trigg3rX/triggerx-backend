@@ -21,7 +21,7 @@ func RecoveryMiddleware(logger observability.Logger) gin.HandlerFunc {
 				}
 
 				// Record panic recovery
-				metrics.PanicRecoveriesTotal.WithLabelValues(endpoint).Inc()
+				metrics.PanicRecoveriesTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 
 				// Log the panic
 				logger.Error(c.Request.Context(), "Panic recovered: %v\nStack trace: %s", observability.Error(err.(error)), observability.String("stack", string(debug.Stack())))

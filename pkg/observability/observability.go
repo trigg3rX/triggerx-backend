@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"go.opentelemetry.io/otel/sdk/resource"
 )
@@ -15,6 +16,8 @@ type Observability struct {
 	tracer   Tracer
 	metrics  Metrics
 	shutdown func(context.Context) error
+	mu       sync.Mutex
+	closed   bool
 }
 
 // Logger returns the logger instance
@@ -48,6 +51,14 @@ func (o *Observability) Resource() *resource.Resource {
 
 // Shutdown gracefully shuts down all observability components
 func (o *Observability) Shutdown(ctx context.Context) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.closed {
+		return nil
+	}
+	o.closed = true
+
 	if o.shutdown != nil {
 		return o.shutdown(ctx)
 	}

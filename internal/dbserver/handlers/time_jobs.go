@@ -48,7 +48,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 				taskData := h.convertCustomJobToScheduleTimeTaskData(c.Request.Context(), &customJob)
 				tasks = append(tasks, taskData)
 			}
-			h.logger.Info(c.Request.Context(), "[getCustomBasedTasks] Retrieved %d custom jobs", observability.Int("custom_jobs_count", len(customJobs)))
+			// h.logger.Info(c.Request.Context(), "[getCustomBasedTasks] Retrieved %d custom jobs", observability.Int("custom_jobs_count", len(customJobs)))
 		}
 	}
 
