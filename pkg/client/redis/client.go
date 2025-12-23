@@ -60,7 +60,7 @@ func NewRedisClient(ctx context.Context, logger observability.Logger, config Red
 		go redisClient.connectionRecoveryLoop()
 	}
 
-	logger.Info(ctx, "Successfully connected to Redis", observability.String("url", config.UpstashConfig.URL))
+	logger.Info(ctx, "Successfully connected to Redis")
 	return redisClient, nil
 }
 
@@ -99,7 +99,7 @@ func (c *Client) CheckConnection(ctx context.Context) error {
 	return c.executeWithRetry(ctx, func() error {
 		_, err := c.redisClient.Ping(ctx).Result()
 		if err != nil {
-			c.logger.Error(ctx, "Redis connection failed", observability.String("error", fmt.Sprintf("%v", err)))
+			c.logger.Error(ctx, "Redis connection failed", observability.Error(err))
 			return fmt.Errorf("redis connection failed: %w", err)
 		}
 		return nil

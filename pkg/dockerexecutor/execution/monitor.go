@@ -247,7 +247,7 @@ func (em *executionMonitor) clearAlerts(ctx context.Context) {
 	defer em.mutex.Unlock()
 
 	em.alerts = make([]Alert, 0)
-	em.logger.Info(ctx, "All alerts cleared")
+	em.logger.Debug(ctx, "All alerts cleared")
 }
 
 func (em *executionMonitor) getActiveExecutions() []*types.ExecutionContext {
@@ -259,12 +259,12 @@ func (em *executionMonitor) cancelExecution(ctx context.Context, executionID str
 }
 
 func (em *executionMonitor) close(ctx context.Context) error {
-	em.logger.Info(ctx, "Closing execution monitor")
+	em.logger.Debug(ctx, "Closing execution monitor")
 
 	if em.monitoringTicker != nil {
 		close(em.stopMonitoring)
 	}
 
-	em.logger.Info(ctx, "Execution monitor closed")
+	em.logger.Debug(ctx, "Execution monitor closed")
 	return nil
 }

@@ -54,7 +54,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 		return
 	}
 
-	s.logger.Info(ctx, "Found %d tasks to process", observability.Int("task_count", len(tasks)))
+	s.logger.Debug(ctx, "Found tasks to process", observability.Int("task_count", len(tasks)))
 	metrics.UpdateTasksScheduled(float64(len(tasks)))
 	metrics.UpdateTaskBatchSize(float64(s.taskBatchSize))
 
@@ -72,7 +72,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 
 	// Process non-imua tasks in batches
 	if len(nonImuaTasks) > 0 {
-		s.logger.Info(ctx, "Processing %d non-imua tasks in batches", observability.Int("task_count", len(nonImuaTasks)))
+		s.logger.Debug(ctx, "Processing non-imua tasks in batches", observability.Int("task_count", len(nonImuaTasks)))
 		for i := 0; i < len(nonImuaTasks); i += s.taskBatchSize {
 			end := i + s.taskBatchSize
 			if end > len(nonImuaTasks) {
@@ -86,7 +86,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 
 	// Process imua tasks in separate batches
 	if len(imuaTasks) > 0 {
-		s.logger.Info(ctx, "Processing %d imua tasks in separate batches", observability.Int("task_count", len(imuaTasks)))
+		s.logger.Debug(ctx, "Processing imua tasks in separate batches", observability.Int("task_count", len(imuaTasks)))
 		for i := 0; i < len(imuaTasks); i += s.taskBatchSize {
 			end := i + s.taskBatchSize
 			if end > len(imuaTasks) {
@@ -101,7 +101,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 
 // processBatch processes a batch of tasks by submitting to task dispatcher
 func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.ScheduleTimeTaskData) {
-	s.logger.Info(ctx, "Processing batch of %d time-based tasks", observability.Int("task_count", len(tasks)))
+	s.logger.Debug(ctx, "Processing batch of time-based tasks", observability.Int("task_count", len(tasks)))
 
 	var targetDataList []types.TaskTargetData
 	var triggerDataList []types.TaskTriggerData
@@ -110,7 +110,7 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 	for _, task := range tasks {
 		// Check if ExpirationTime of the job has passed or not
 		if task.ExpirationTime.Before(time.Now()) {
-			s.logger.Info(ctx, "Task ID %d has expired, skipping execution", observability.Int64("task_id", task.TaskID))
+			s.logger.Info(ctx, "Task has expired, skipping execution", observability.Int64("task_id", task.TaskID))
 			metrics.TrackTaskExpired()
 			continue
 		}
@@ -181,11 +181,11 @@ func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.Sch
 	success := s.submitBatchToTaskDispatcher(ctx, request, taskIDs, len(validTaskIDs))
 
 	if success {
-		s.logger.Info(ctx, "Batch processing completed successfully: %d tasks submitted", observability.Int("task_count", len(validTaskIDs)))
+		s.logger.Info(ctx, "Batch processing completed successfully", observability.Int("task_count", len(validTaskIDs)))
 		metrics.TrackTaskCompletion(true, time.Since(time.Now()))
 		metrics.TrackTaskBroadcast("task_dispatcher_submitted")
 	} else {
-		s.logger.Error(ctx, "Batch processing failed: %d tasks", observability.Int("task_count", len(validTaskIDs)))
+		s.logger.Error(ctx, "Batch processing failed", observability.Int("task_count", len(validTaskIDs)))
 		metrics.TrackTaskBroadcast("failed")
 	}
 }
@@ -246,7 +246,7 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, re
 	}
 
 	duration := time.Since(startTime)
-	s.logger.Info(ctx, "Successfully submitted batch to task dispatcher",
+	s.logger.Debug(ctx, "Successfully submitted batch to task dispatcher",
 		observability.String("task_ids", taskIDs),
 		observability.Int("task_count", taskCount),
 		observability.Duration("duration", duration))

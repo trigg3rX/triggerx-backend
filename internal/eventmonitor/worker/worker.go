@@ -53,7 +53,7 @@ func NewWorker(
 
 // Start starts the worker polling loop
 func (w *Worker) Start() {
-	w.logger.Info(w.ctx, "Starting event worker",
+	w.logger.Debug(w.ctx, "Starting event worker",
 		observability.String("key", w.entry.Key),
 		observability.String("chain_id", w.entry.ChainID))
 
@@ -72,7 +72,7 @@ func (w *Worker) Start() {
 			} else {
 				w.entry.LastBlock = 0
 			}
-			w.logger.Info(w.ctx, "Initialized last block",
+			w.logger.Debug(w.ctx, "Initialized last block",
 				observability.String("key", w.entry.Key),
 				observability.Uint64("last_block", w.entry.LastBlock),
 				observability.Uint64("current_block", currentBlock))
@@ -85,7 +85,7 @@ func (w *Worker) Start() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			w.logger.Info(w.ctx, "Worker context cancelled, stopping", observability.String("key", w.entry.Key))
+			w.logger.Debug(w.ctx, "Worker context cancelled, stopping", observability.String("key", w.entry.Key))
 			return
 		case <-ticker.C:
 			if err := w.pollEvents(); err != nil {

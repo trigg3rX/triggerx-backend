@@ -68,7 +68,7 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 			WorkerCancel: cancel,
 		}
 		rm.registry[key] = entry
-		rm.logger.Info(rm.ctx, "Created new registry entry", observability.String("key", key), observability.String("chain_id", req.ChainID))
+		rm.logger.Debug(rm.ctx, "Created new registry entry", observability.String("key", key), observability.String("chain_id", req.ChainID))
 	}
 
 	// Add subscriber
@@ -82,7 +82,7 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 	}
 	entry.Mu.Unlock()
 
-	rm.logger.Info(rm.ctx, "Registered monitoring request",
+	rm.logger.Debug(rm.ctx, "Registered monitoring request",
 		observability.String("request_id", req.RequestID),
 		observability.String("key", key),
 		observability.Int("subscribers", len(entry.Subscribers)))
@@ -120,7 +120,7 @@ func (rm *RegistryManager) Unregister(requestID string) error {
 	subscriberCount := len(foundEntry.Subscribers)
 	foundEntry.Mu.Unlock()
 
-	rm.logger.Info(rm.ctx, "Unregistered monitoring request",
+	rm.logger.Debug(rm.ctx, "Unregistered monitoring request",
 		observability.String("request_id", requestID),
 		observability.String("key", foundKey),
 		observability.Int("remaining_subscribers", subscriberCount))
@@ -129,7 +129,7 @@ func (rm *RegistryManager) Unregister(requestID string) error {
 	if subscriberCount == 0 {
 		foundEntry.WorkerCancel()
 		delete(rm.registry, foundKey)
-		rm.logger.Info(rm.ctx, "Removed registry entry (no subscribers)", observability.String("key", foundKey))
+		rm.logger.Debug(rm.ctx, "Removed registry entry (no subscribers)", observability.String("key", foundKey))
 	}
 
 	return nil

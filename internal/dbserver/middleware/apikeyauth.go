@@ -36,7 +36,7 @@ func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
 
 		apiKey, err := a.getApiKey(c.Request.Context(), apiKeyHeader)
 		if err != nil {
-			a.logger.Error(c.Request.Context(), "Error retrieving API key: %v", observability.Error(err))
+			a.logger.Error(c.Request.Context(), "Error retrieving API key", observability.Error(err))
 			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid or inactive API key"})
 			c.Abort()
 			return
@@ -52,7 +52,7 @@ func (a *ApiKeyAuth) GinMiddleware() gin.HandlerFunc {
 
 		if a.rateLimiter != nil {
 			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
-				a.logger.Warn(c.Request.Context(), "Rate limit applied: %v", observability.Error(err))
+				a.logger.Warn(c.Request.Context(), "Rate limit applied", observability.Error(err))
 				c.JSON(http.StatusTooManyRequests, gin.H{
 					"error":   "Rate limit exceeded",
 					"message": "You have exceeded the rate limit",
@@ -79,7 +79,7 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 
 		apiKey, err := a.getApiKey(c.Request.Context(), apiKeyHeader)
 		if err != nil {
-			a.logger.Error(c.Request.Context(), "Error retrieving API key: %v", observability.Error(err))
+			a.logger.Error(c.Request.Context(), "Error retrieving API key", observability.Error(err))
 			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid or inactive API key"})
 			c.Abort()
 			return
@@ -94,7 +94,7 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 		// Check if the API key belongs to a keeper
 		isKeeper, err := a.isKeeperApiKey(apiKey.Key)
 		if err != nil {
-			a.logger.Error(c.Request.Context(), "Error checking keeper status: %v", observability.Error(err))
+			a.logger.Error(c.Request.Context(), "Error checking keeper status", observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			c.Abort()
 			return
@@ -110,7 +110,7 @@ func (a *ApiKeyAuth) KeeperMiddleware() gin.HandlerFunc {
 
 		if a.rateLimiter != nil {
 			if err := a.rateLimiter.ApplyGinRateLimit(c, apiKey); err != nil {
-				a.logger.Warn(c.Request.Context(), "Rate limit applied: %v", observability.Error(err))
+				a.logger.Warn(c.Request.Context(), "Rate limit applied", observability.Error(err))
 				c.JSON(http.StatusTooManyRequests, gin.H{
 					"error":   "Rate limit exceeded",
 					"message": "You have exceeded the rate limit",
@@ -141,7 +141,7 @@ func (a *ApiKeyAuth) getApiKey(ctx context.Context, key string) (*types.ApiKey, 
 	)
 
 	if err != nil {
-		a.logger.Error(ctx, "Failed to retrieve API key for key %s: %v", observability.String("key", key), observability.Error(err))
+		a.logger.Error(ctx, "Failed to retrieve API key for key", observability.String("key", key), observability.Error(err))
 		return nil, err
 	}
 
@@ -152,7 +152,7 @@ func (a *ApiKeyAuth) updateLastUsed(key string) {
 	query := `UPDATE triggerx.apikeys SET last_used = ? WHERE key = ?`
 
 	if err := a.db.Session().Query(query, time.Now().UTC(), key).Exec(); err != nil {
-		a.logger.Error(context.Background(), "Failed to update last used timestamp: %v", observability.Error(err))
+		a.logger.Error(context.Background(), "Failed to update last used timestamp", observability.Error(err))
 	}
 }
 

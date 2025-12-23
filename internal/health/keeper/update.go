@@ -78,10 +78,10 @@ func (sm *StateManager) updateKeeperStatusInDatabase(ctx context.Context, keeper
 	}
 
 	span.SetStatus(codes.Ok, "")
-	sm.logger.Debug(ctx, "Updated keeper status in database",
-		observability.String("keeper", keeperHealth.KeeperAddress),
-		observability.Bool("active", isActive),
-		observability.String("version", keeperHealth.Version),
-	)
+	// sm.logger.Debug(ctx, "Updated keeper status in database",
+	// 	observability.String("keeper", keeperHealth.KeeperAddress),
+	// 	observability.Bool("active", isActive),
+	// 	observability.String("version", keeperHealth.Version),
+	// )
 	return nil
 }

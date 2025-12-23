@@ -55,19 +55,15 @@ func main() {
 	}
 
 	ctx := context.Background()
-	logger.Info(ctx, "Starting Task Dispatcher service ...")
 
 	// Initialize metrics
 	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize metrics: %v", err))
 	}
-
-	// Initialize metrics collector
+	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
-	collector := metrics.NewCollector(obsMetrics)
-	logger.Info(ctx, "[1/5] Metrics collector Initialised")
-	collector.Start()
+	logger.Info(ctx, "[1/7] Dependency: Observability Module Initialised")
 
 	// Create Redis client and verify connection
 	redisConfig := config.GetRedisClientConfig()
@@ -78,7 +74,7 @@ func main() {
 	if err := redisClient.Ping(ctx); err != nil {
 		logger.Fatal(ctx, "Redis is not reachable", observability.Error(err))
 	}
-	logger.Info(ctx, "[2/5] Redis client Initialised")
+	logger.Info(ctx, "[2/7] Dependency: Redis Client Initialised")
 
 	// Set up monitoring hooks for metrics integration
 	monitoringHooks := metrics.CreateRedisMonitoringHooks()
@@ -93,7 +89,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create aggregator client", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/5] Aggregator client Initialised")
+	logger.Info(ctx, "[3/7] Dependency: Aggregator Client Initialised")
 
 	testAggCfg := aggregator.AggregatorClientConfig{
 		AggregatorRPCUrl: config.GetTestAggregatorRPCUrl(),
@@ -104,17 +100,17 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create aggregator client", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/5] Test Aggregator client Initialised")
+	logger.Info(ctx, "[4/7] Dependency: Test Aggregator Client Initialised")
 
 	healthClient := taskdispatcher.NewHealthClient(logger, config.GetHealthRPCUrl())
-	logger.Info(ctx, "[4/5] Health client Initialised")
+	logger.Info(ctx, "[5/7] Dependency: Health Client Initialised")
 
 	// Initialize task stream manager for orchestration
 	taskStreamMgr, err := tasks.NewTaskStreamManager(ctx, redisClient, aggClient, testAggClient, logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskStreamManager", observability.Error(err))
 	}
-	logger.Info(ctx, "[5/5] Task stream manager Initialised")
+	logger.Info(ctx, "[6/7] Dependency: Task Stream Manager Initialised")
 
 	// TaskDispatcher is the main orchestrator. It needs all the other components.
 	dispatcher, err := taskdispatcher.NewTaskDispatcher(
@@ -128,7 +124,12 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskDispatcher", observability.Error(err))
 	}
-	logger.Info(ctx, "Task Dispatcher Initialised")
+	logger.Info(ctx, "[7/7] Dependency: Task Dispatcher Initialised")
+
+	// Initialize metrics collector
+	collector := metrics.NewCollector(obsMetrics)
+	collector.Start()
+	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 
 	// 5. Initialize the delivery mechanism (RPC Server) using the generic approach
 	serverConfig := rpcserver.Config{
@@ -149,19 +150,24 @@ func main() {
 	srv.RegisterHandler("TaskDispatcher", handler)
 
 	// 6. Start everything
+	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := srv.Start(ctx); err != nil {
-		logger.Fatal(ctx, "Failed to start RPC server", observability.Error(err))
-	}
+	go func() {
+		if err := srv.Start(ctx); err != nil {
+			logger.Fatal(ctx, "Failed to start RPC server", observability.Error(err))
+		}
+	}()
+	logger.Info(ctx, "[2/2] Process: RPC Server Started")
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Block until signal is received
-	<-shutdown
+	sig := <-shutdown
+	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	// Perform graceful shutdown
 	performGracefulShutdown(ctx, srv, dispatcher, logger, loggerShutdown, tracerShutdown, metricsShutdown)
@@ -169,56 +175,53 @@ func main() {
 
 // performGracefulShutdown handles graceful shutdown of the service
 func performGracefulShutdown(ctx context.Context, server *rpcserver.Server, dispatcher *taskdispatcher.TaskDispatcher, logger observability.Logger, loggerShutdown func(context.Context) error, tracerShutdown func(context.Context) error, metricsShutdown func(context.Context) error) {
-	logger.Info(ctx, "Initiating graceful shutdown...")
-
 	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	// Shutdown server gracefully
-	logger.Info(shutdownCtx, "Shutting down RPC server...")
-	if err := server.Stop(shutdownCtx); err != nil {
-		logger.Error(shutdownCtx, "RPC server forced to shutdown", observability.Error(err))
-	} else {
-		logger.Info(shutdownCtx, "RPC server stopped successfully")
-	}
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 
-	// Close the Dispatcher
-	if err := dispatcher.Close(shutdownCtx); err != nil {
-		logger.Error(shutdownCtx, "Failed to close dispatcher", observability.Error(err))
-	} else {
-		logger.Info(shutdownCtx, "Dispatcher closed successfully")
-	}
-
-	// Shutdown tracer
-	if tracerShutdown != nil {
-		if err := tracerShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		if tracerShutdown != nil {
+			if err := tracerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown metrics
-	if metricsShutdown != nil {
-		if err := metricsShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+		if metricsShutdown != nil {
+			if err := metricsShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown logger
-	if loggerShutdown != nil {
-		if err := loggerShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+		// Close the Dispatcher
+		if err := dispatcher.Close(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Failed to close dispatcher", observability.Error(err))
 		}
-	}
 
-	logger.Info(shutdownCtx, "Task Dispatcher service shutdown complete")
+		// Shutdown server gracefully
+		if err := server.Stop(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "RPC server forced to shutdown", observability.Error(err))
+		}
 
-	// Ensure we exit cleanly
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown logger (optional here, often last)
+		if loggerShutdown != nil {
+			if err := loggerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+			}
+		}
+	}()
+
+	// Wait for shutdown to complete or timeout
 	select {
+	case <-done:
+		// Shutdown completed successfully
 	case <-shutdownCtx.Done():
-		logger.Error(shutdownCtx, "Shutdown timeout exceeded")
-		os.Exit(1)
-	default:
-		os.Exit(0)
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
 	}
+	os.Exit(0)
 }

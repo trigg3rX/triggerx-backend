@@ -45,7 +45,7 @@ func (c *Client) CheckConnection() error {
 
 	_, err := c.client.Ping(ctx).Result()
 	if err != nil {
-		c.logger.Error(ctx, "Failed to connect to Redis: %v", observability.Error(err))
+		c.logger.Error(ctx, "Failed to connect to Redis", observability.Error(err))
 		return fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 

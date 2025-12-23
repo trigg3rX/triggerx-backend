@@ -56,27 +56,21 @@ func main() {
 
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
-
+	
 	ctx := context.Background()
-	logger.Info(ctx, "Starting Task Monitor service ...")
+	logger.Info(ctx, "[1/3] Dependency: Observability Module Initialised")
 
 	// Initialize TaskManager (handles Redis, Database, IPFS, Event Listener, and Task Stream Manager)
 	taskManager, err := taskmonitor.NewTaskManager(ctx, logger, tracer)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to create TaskManager", observability.Error(err))
 	}
-	logger.Info(ctx, "[1/6] TaskManager created successfully")
 
 	// Initialize all components
 	if err := taskManager.Initialize(); err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskManager components", observability.Error(err))
 	}
-	logger.Info(ctx, "[2/6] TaskManager components initialized successfully")
-
-	// Start metrics collector
-	collector := metrics.NewCollector(obsMetrics)
-	collector.Start()
-	logger.Info(ctx, "Metrics collector started")
+	logger.Info(ctx, "[2/3] Dependency: TaskManager Initialised")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,20 +81,24 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to start gRPC server", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/6] gRPC server started successfully", observability.String("port", config.GetTaskMonitorRPCPort()))
+	logger.Info(ctx, "[3/3] Dependency: RPC Server Initialised")
+
+	// Start metrics collector
+	collector := metrics.NewCollector(obsMetrics)
+	collector.Start()
+	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
+	logger.Info(ctx, "[2/2] Process: RPC Server Started")
 
 	// Store RPC server in TaskManager for graceful shutdown
 	taskManager.SetRPCServer(rpcServer)
 
-	// Log service status
-	logger.Info(ctx, "Task Monitor service is running")
-
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Block until signal is received
-	<-shutdown
+	sig := <-shutdown
+	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	// Perform graceful shutdown
 	performGracefulShutdown(ctx, taskManager, rpcServer, logger, loggerShutdown, tracerShutdown, metricsShutdown)
@@ -115,54 +113,55 @@ func performGracefulShutdown(
 	tracerShutdown func(context.Context) error,
 	metricsShutdown func(context.Context) error,
 ) {
-	logger.Info(ctx, "Initiating graceful shutdown...")
-
 	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// Shutdown gRPC server gracefully
-	logger.Info(shutdownCtx, "Shutting down gRPC server...")
-	if err := rpcServer.Stop(shutdownCtx); err != nil {
-		logger.Error(shutdownCtx, "RPC server forced to shutdown", observability.Error(err))
-	} else {
-		logger.Info(shutdownCtx, "RPC server stopped successfully")
-	}
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 
-	// Close TaskManager (handles all components)
-	logger.Info(shutdownCtx, "Closing TaskManager...")
-	if err := taskManager.Close(); err != nil {
-		logger.Warn(shutdownCtx, "Non-critical errors during TaskManager shutdown", observability.Error(err))
-	} else {
-		logger.Info(shutdownCtx, "TaskManager closed successfully")
-	}
-
-	// Shutdown tracer
-	if tracerShutdown != nil {
-		if err := tracerShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
-		} else {
-			logger.Info(shutdownCtx, "Tracer stopped successfully")
+		// Shutdown tracer
+		if tracerShutdown != nil {
+			if err := tracerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown metrics
-	if metricsShutdown != nil {
-		if err := metricsShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
-		} else {
-			logger.Info(shutdownCtx, "Metrics stopped successfully")
+		// Shutdown metrics
+		if metricsShutdown != nil {
+			if err := metricsShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown logger
-	if loggerShutdown != nil {
-		if err := loggerShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
-		} else {
-			logger.Info(shutdownCtx, "Logger stopped successfully")
+		// Shutdown gRPC server gracefully
+		if err := rpcServer.Stop(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "RPC server forced to shutdown", observability.Error(err))
 		}
-	}
 
-	logger.Info(shutdownCtx, "Task Monitor service shutdown complete")
+		// Close TaskManager (handles all components)
+		if err := taskManager.Close(); err != nil {
+			logger.Warn(shutdownCtx, "Error during TaskManager shutdown", observability.Error(err))
+		}
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown logger
+		if loggerShutdown != nil {
+			if err := loggerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+			}
+		}
+	}()
+
+	// Wait for shutdown to complete or timeout
+	select {
+	case <-done:
+		// Shutdown completed successfully
+	case <-shutdownCtx.Done():
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
+	}
+	os.Exit(0)
 }

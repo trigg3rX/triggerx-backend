@@ -19,11 +19,11 @@ import (
 func (h *Handler) notifyConditionScheduler(ctx context.Context, jobID *big.Int, scheduleConditionJobData commonTypes.ScheduleConditionJobData) (bool, error) {
 	success, err := h.sendDataToScheduler(ctx, "/api/v1/job/schedule", scheduleConditionJobData)
 	if err != nil {
-		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job %d: %v", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return false, err
 	}
 	if !success {
-		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job %d", observability.Int64("job_id", jobID.Int64()))
+		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job", observability.Int64("job_id", jobID.Int64()))
 		return false, fmt.Errorf("failed to notify condition scheduler for job %d", jobID)
 	}
 	return true, nil
@@ -33,11 +33,11 @@ func (h *Handler) notifyConditionScheduler(ctx context.Context, jobID *big.Int, 
 func (h *Handler) notifyPauseToConditionScheduler(ctx context.Context, jobID *big.Int) (bool, error) {
 	success, err := h.sendDataToScheduler(ctx, "/api/v1/job/pause", commonTypes.ScheduleConditionJobData{JobID: commonTypes.NewBigInt(jobID)})
 	if err != nil {
-		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job %d: %v", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return false, err
 	}
 	if !success {
-		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job %d", observability.Int64("job_id", jobID.Int64()))
+		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job", observability.Int64("job_id", jobID.Int64()))
 		return false, fmt.Errorf("failed to notify event scheduler for job %d", jobID)
 	}
 
@@ -71,7 +71,7 @@ func (h *Handler) sendDataToScheduler(ctx context.Context, route string, data co
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			h.logger.Error(ctx, "Error closing response body: %v", observability.Error(err))
+			h.logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 

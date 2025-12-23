@@ -84,6 +84,6 @@ func (v *TaskValidator) validateProofHash(ctx context.Context, ipfsData types.IP
 			expectedProofHashStr, ipfsData.ProofData.ProofOfTask)
 	}
 
-	v.logger.Info(ctx, "Proof validation passed", observability.String("trace_id", traceID), observability.Int64("task_id", ipfsData.TaskData.TaskID[0]))
+	// v.logger.Info(ctx, "Proof validation passed", observability.String("trace_id", traceID), observability.Int64("task_id", ipfsData.TaskData.TaskID[0]))
 	return true, nil
 }

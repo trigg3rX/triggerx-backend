@@ -34,7 +34,7 @@ func (sm *SubscriptionManager) processLogEntry(ctx context.Context, log types.Lo
 	sm.mu.RUnlock()
 
 	if matchedSub == nil {
-		sm.logger.Debug(ctx, "No subscription found for event %s from %s", observability.String("event_signature", eventSig.Hex()), observability.String("contract_address", log.Address.Hex()))
+		sm.logger.Debug(ctx, "No subscription found for event", observability.String("event_signature", eventSig.Hex()), observability.String("contract_address", log.Address.Hex()))
 		return nil
 	}
 
@@ -59,12 +59,12 @@ func (sm *SubscriptionManager) processLogEntry(ctx context.Context, log types.Lo
 	// Send to event channel (non-blocking)
 	select {
 	case eventChan <- chainEvent:
-		sm.logger.Debug(ctx, "Processed %s event from %s at block %d",
+		sm.logger.Debug(ctx, "Processed event",
 			observability.String("event_name", matchedSub.EventName),
 			observability.String("contract_address", log.Address.Hex()),
 			observability.Int64("block_number", int64(log.BlockNumber)))
 	default:
-		sm.logger.Warn(ctx, "Event channel full, dropping event %s from %s",
+		sm.logger.Warn(ctx, "Event channel full, dropping event",
 			observability.String("event_name", matchedSub.EventName),
 			observability.String("contract_address", log.Address.Hex()))
 	}
@@ -100,13 +100,13 @@ func (sm *SubscriptionManager) parseEventData(ctx context.Context, sub *EventSub
 func (sm *SubscriptionManager) parseContractEventData(ctx context.Context, sub *EventSubscription, log types.Log) interface{} {
 	contractABI, exists := sm.contractABIs[sub.ContractType]
 	if !exists {
-		sm.logger.Error(ctx, "Contract ABI not found for type %s", observability.String("contract_type", string(sub.ContractType)))
+		sm.logger.Error(ctx, "Contract ABI not found for type", observability.String("contract_type", string(sub.ContractType)))
 		return sm.parseBasicEventData(sub, log)
 	}
 
 	event, exists := contractABI.Events[sub.EventName]
 	if !exists {
-		sm.logger.Error(ctx, "Event %s not found in contract %s ABI", observability.String("event_name", sub.EventName), observability.String("contract_type", string(sub.ContractType)))
+		sm.logger.Error(ctx, "Event not found in contract ABI", observability.String("event_name", sub.EventName), observability.String("contract_type", string(sub.ContractType)))
 		return sm.parseBasicEventData(sub, log)
 	}
 
@@ -136,7 +136,7 @@ func (sm *SubscriptionManager) parseContractEventData(ctx context.Context, sub *
 		if len(nonIndexedInputs) > 0 {
 			values, err := contractABI.Unpack(sub.EventName, log.Data)
 			if err != nil {
-				sm.logger.Error(ctx, "Failed to unpack event data for %s: %v", observability.String("event_name", sub.EventName), observability.Error(err))
+				sm.logger.Error(ctx, "Failed to unpack event data", observability.String("event_name", sub.EventName), observability.Error(err))
 			} else {
 				for i, input := range nonIndexedInputs {
 					if i < len(values) {
@@ -250,7 +250,7 @@ func (sm *SubscriptionManager) generateSubscriptionID(ctx context.Context) strin
 	bytes := make([]byte, 16)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		sm.logger.Error(ctx, "Failed to generate subscription ID: %v", observability.Error(err))
+		sm.logger.Error(ctx, "Failed to generate subscription ID", observability.Error(err))
 		return ""
 	}
 	return fmt.Sprintf("%s_%s", sm.chainID, hex.EncodeToString(bytes))

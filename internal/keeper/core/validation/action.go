@@ -72,7 +72,7 @@ func shouldRetryReceiptError(err error, attempt int) bool {
 }
 
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
-	// v.logger.Infof("txHash: %s", actionData.ActionTxHash)
+	// v.logger.Debug(ctx, "txHash", observability.String("txHash", actionData.ActionTxHash))
 	// time.Sleep(10 * time.Second)
 	// Fetch the tx details from the action data
 	txHash := common.HexToHash(actionData.ActionTxHash)

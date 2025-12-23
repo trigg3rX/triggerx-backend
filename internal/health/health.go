@@ -159,14 +159,14 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(ctx, "CheckIn Successful",
+	h.logger.Debug(ctx, "CheckIn Successful",
 		observability.String("keeper", keeperHealth.KeeperAddress),
 		observability.String("version", keeperHealth.Version),
 	)
 
 	// Handle different versions according to requirements
 	switch keeperHealth.Version {
-	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6":
+	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "0.3.0", "0.1.0":
 		// Latest version - return msgData with no warning
 		var message string
 		if keeperHealth.IsImua {

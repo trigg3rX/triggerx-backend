@@ -31,7 +31,7 @@ var (
 	dbRequestsTotal                   *observability.CounterVec
 	dbConnectionErrorsTotal           observability.Counter
 	dbRetriesTotal                    *observability.CounterVec
-	actionExecutionsTotal             *observability.CounterVec
+	// actionExecutionsTotal             *observability.CounterVec
 	actionExecutionDuration           *observability.HistogramVec
 	workerUptimeSeconds               *observability.GaugeVec
 	workerErrorsTotal                 *observability.CounterVec
@@ -39,7 +39,7 @@ var (
 	httpRequestsTotal                 *observability.CounterVec
 	httpClientConnectionErrorsTotal   observability.Counter
 	duplicateConditionWindowSeconds   observability.Gauge
-	duplicateEventWindowSeconds       observability.Gauge
+	// duplicateEventWindowSeconds       observability.Gauge
 	averageConditionCheckTimeSeconds  observability.Gauge
 	connectionFailuresTotal           *observability.CounterVec
 	averageEventProcessingTimeSeconds observability.Gauge

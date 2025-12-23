@@ -12,7 +12,7 @@ import (
 // HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[HealthCheck] trace_id=%s - Health check requested", observability.String("trace_id", traceID))
+	h.logger.Info(c.Request.Context(), "[HealthCheck] Health check requested", observability.String("trace_id", traceID))
 	startTime := time.Now()
 
 	// Check database connection by executing a simple query
@@ -27,7 +27,7 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	if err := h.scanNowQuery(&timestamp); err != nil {
 		dbStatus = "unhealthy"
 		dbError = err.Error()
-		h.logger.Error(c.Request.Context(), "[HealthCheck] Database health check failed: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[HealthCheck] Database health check failed", observability.Error(err))
 		trackDBOp(err)
 		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc(c.Request.Context())
 	} else {
@@ -60,7 +60,7 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 
 	// Log health check
 	duration := time.Since(startTime)
-	h.logger.Info(c.Request.Context(), "[HealthCheck] Health check completed: status=%s, db_status=%s, duration=%v", observability.Any("status", response["status"]), observability.String("db_status", dbStatus), observability.Duration("duration", duration))
+	h.logger.Info(c.Request.Context(), "[HealthCheck] Health check completed", observability.Any("status", response["status"]), observability.String("db_status", dbStatus), observability.Duration("duration", duration))
 
 	c.JSON(httpStatus, response)
 }

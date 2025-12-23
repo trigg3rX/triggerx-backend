@@ -79,7 +79,7 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 			continue
 		}
 		nodeClients[chainID] = client
-		logger.Info(ctx, "Initialized node client", observability.String("chain_id", chainID))
+		// logger.Info(ctx, "Initialized node client", observability.String("chain_id", chainID))
 	}
 
 	return &Service{
@@ -125,7 +125,7 @@ func (s *Service) Stop() {
 	// Close node clients
 	for chainID, client := range s.nodeClients {
 		client.Close()
-		s.logger.Info(s.ctx, "Closed node client", observability.String("chain_id", chainID))
+		s.logger.Debug(s.ctx, "Closed node client", observability.String("chain_id", chainID))
 	}
 
 	s.logger.Info(s.ctx, "Event monitor service stopped")
@@ -182,7 +182,7 @@ func (s *Service) Unregister(requestID string) error {
 		if w, exists := s.workers[key]; exists {
 			w.Stop()
 			delete(s.workers, key)
-			s.logger.Info(s.ctx, "Stopped worker", observability.String("key", key))
+			s.logger.Debug(s.ctx, "Stopped worker due to no subscribers", observability.String("key", key))
 		}
 		s.mu.Unlock()
 	}
@@ -222,7 +222,7 @@ func (s *Service) startWorker(key string) error {
 		w.Start()
 	}()
 
-	s.logger.Info(s.ctx, "Started worker", observability.String("key", key), observability.String("chain_id", entry.ChainID))
+	s.logger.Debug(s.ctx, "Started worker", observability.String("key", key), observability.String("chain_id", entry.ChainID))
 	return nil
 }
 
@@ -261,7 +261,7 @@ func (s *Service) syncWorkers() {
 					defer s.wg.Done()
 					worker.Start()
 				}(key, w)
-				s.logger.Info(s.ctx, "Started worker (sync)", observability.String("key", key))
+				s.logger.Debug(s.ctx, "Started worker (sync)", observability.String("key", key))
 			}
 		}
 	}
@@ -271,7 +271,7 @@ func (s *Service) syncWorkers() {
 		if _, exists := entries[key]; !exists {
 			w.Stop()
 			delete(s.workers, key)
-			s.logger.Info(s.ctx, "Stopped worker (sync)", observability.String("key", key))
+			s.logger.Debug(s.ctx, "Stopped worker (sync)", observability.String("key", key))
 		}
 	}
 }

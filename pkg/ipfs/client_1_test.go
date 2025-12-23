@@ -494,9 +494,8 @@ func TestClose_Success(t *testing.T) {
 
 	mockHTTP.On("Close").Return()
 
-	err := client.Close()
+	client.Close()
 
-	assert.NoError(t, err)
 	mockHTTP.AssertExpectations(t)
 }
 

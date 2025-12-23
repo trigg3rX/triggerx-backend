@@ -51,13 +51,14 @@ func main() {
 	}()
 
 	// Extract individual components
-	obsLogger := obs.Logger()
+	logger := obs.Logger()
 	obsTracer := obs.Tracer()
 	obsMetrics := obs.Metrics()
 
 	// Use observability logger for initial startup log
 	ctx := context.Background()
-	obsLogger.Info(ctx, "Starting health service...")
+	logger.Info(ctx, "Starting health service...")
+	logger.Info(ctx, "[1/6] Dependency: Observability Module Initialised")
 
 	// Initialize server components
 	var wg sync.WaitGroup
@@ -73,47 +74,50 @@ func main() {
 		ConnectWait:  time.Second * 10,
 		ProtoVersion: 4,
 	}
-	dbConn, err := database.NewConnection(dbConfig, obsLogger)
+	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
-		obsLogger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))
+		logger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))
 	}
+	logger.Info(ctx, "[2/6] Dependency: Database Connection Initialised")
 
 	// Initialize Telegram bot
-	telegramBot, err := telegram.NewBot(config.GetBotToken(), obsLogger, dbConn)
+	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, dbConn)
 	if err != nil {
-		obsLogger.Warn(ctx, "Failed to initialize Telegram bot", observability.Error(err))
+		logger.Warn(ctx, "Failed to initialize Telegram bot", observability.Error(err))
 	}
+	logger.Info(ctx, "[3/6] Dependency: Telegram Bot Initialised")
 
 	// Initialize database manager
-	client.InitDatabaseManager(ctx, obsLogger, obsTracer, dbConn, telegramBot)
-	obsLogger.Info(ctx, "Database manager initialized")
+	client.InitDatabaseManager(ctx, logger, obsTracer, dbConn, telegramBot)
+	logger.Info(ctx, "[4/6] Dependency: Database Manager Initialised")
 
 	// Initialize state manager
-	stateManager := keeper.InitializeStateManager(ctx, obsLogger, obsTracer)
-	obsLogger.Info(ctx, "Keeper state manager initialized")
-
-	// Initialize metrics using observability metrics
-	metrics.InitializeMetrics(obsMetrics)
-	obsLogger.Info(ctx, "Metrics initialized")
+	stateManager := keeper.InitializeStateManager(ctx, logger, obsTracer)
+	logger.Info(ctx, "[5/6] Dependency: Keeper State Manager Initialised")
 
 	// Load verified keepers from database
 	if err := stateManager.LoadVerifiedKeepers(ctx); err != nil {
-		obsLogger.Debug(ctx, "Failed to load verified keepers from database", observability.Error(err))
+		logger.Debug(ctx, "Failed to load verified keepers from database", observability.Error(err))
 		// Continue anyway, as we can still operate with an empty state
 	}
 
 	// Setup HTTP server with tracing
-	srv := setupHTTPServer(obsLogger, obsTracer)
+	srv := setupHTTPServer(logger, obsTracer)
+	logger.Info(ctx, "[6/6] Dependency: API Server Initialised")
+
+	// Initialize metrics using observability metrics
+	metrics.InitializeMetrics(obsMetrics)
+	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 
 	// Start HTTP server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		obsLogger.Info(ctx, "Starting HTTP server...")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
+	logger.Info(ctx, "[1/1] Process: HTTP Server Started")
 
 	// TODO: When adding gRPC server, use the tracing interceptor:
 	// import "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
@@ -121,24 +125,20 @@ func main() {
 	//     grpc.UnaryInterceptor(tracing.TraceInterceptor(obsTracer, "health")),
 	// )
 
-	obsLogger.Info(ctx, "Health service is ready",
-		observability.String("port", config.GetHealthRPCPort()),
-	)
-
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case err := <-serverErrors:
-		obsLogger.Error(ctx, "Server error received", observability.Error(err))
+		logger.Error(ctx, "Error during HTTP server shutdown", observability.Error(err))
 	case sig := <-shutdown:
-		obsLogger.Info(ctx, "Received shutdown signal",
+		logger.Info(ctx, "Received shutdown signal",
 			observability.String("signal", sig.String()),
 		)
 	}
 
-	performGracefulShutdown(ctx, srv, &wg, obs, obsLogger, stateManager)
+	performGracefulShutdown(ctx, srv, &wg, obs, logger, stateManager)
 }
 
 func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *http.Server {
@@ -170,33 +170,47 @@ func performGracefulShutdown(
 	logger observability.Logger,
 	stateManager *keeper.StateManager,
 ) {
-	logger.Info(ctx, "Initiating graceful shutdown...")
-
+	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	// Update all keepers to inactive in database
-	if stateManager != nil {
-		if err := stateManager.DumpState(ctx); err != nil {
-			logger.Error(shutdownCtx, "Failed to dump keeper state", observability.Error(err))
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		// Update all keepers to inactive in database
+		if stateManager != nil {
+			if err := stateManager.DumpState(ctx); err != nil {
+				logger.Error(shutdownCtx, "Failed to dump keeper state", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown HTTP server
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
-		if err := srv.Close(); err != nil {
-			logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+		// Shutdown HTTP server
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
+			if err := srv.Close(); err != nil {
+				logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+			}
 		}
+
+		// Wait for all goroutines to finish
+		wg.Wait()
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown observability (logger, tracer, metrics)
+		if err := obs.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Observability shutdown error", observability.Error(err))
+		}
+	}()
+
+	// Wait for shutdown to complete or timeout
+	select {
+	case <-done:
+		// Shutdown completed successfully
+	case <-shutdownCtx.Done():
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
 	}
-
-	// Wait for all goroutines to finish
-	wg.Wait()
-
-	// Shutdown observability (logger, tracer, metrics)
-	if err := obs.Shutdown(shutdownCtx); err != nil {
-		logger.Error(shutdownCtx, "Observability shutdown error", observability.Error(err))
-	}
-
-	logger.Info(shutdownCtx, "Shutdown complete")
+	os.Exit(0)
 }

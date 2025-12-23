@@ -60,17 +60,16 @@ func main() {
 
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
-	metrics.StartMetricsCollection()
-
+	
 	ctx := context.Background()
-	logger.Info(ctx, "Starting Time-based Scheduler with Redis integration...")
+	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
 
 	// Initialize database client
 	dbClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerURL())
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize database client", observability.Error(err))
 	}
-	logger.Info(ctx, "Database client initialized successfully")
+	logger.Info(ctx, "[2/4] Dependency: Database Client Initialised")
 
 	// Initialize time-based scheduler with Redis integration via HTTP API
 	managerID := fmt.Sprintf("time-scheduler-%d", time.Now().Unix())
@@ -78,7 +77,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize time-based scheduler", observability.Error(err))
 	}
-	logger.Info(ctx, "Time-based scheduler initialized successfully")
+	logger.Info(ctx, "[3/4] Dependency: Time Scheduler Initialised")
 
 	// Setup HTTP server with scheduler integration
 	srv := api.NewServer(api.Config{
@@ -88,43 +87,34 @@ func main() {
 		Metrics:   obsMetrics,
 		Scheduler: timeScheduler,
 	})
+	logger.Info(ctx, "[4/4] Dependency: API Server Initialised")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	metrics.StartMetricsCollection()
+	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
+
 	// Start scheduler in background
 	go func() {
-		logger.Info(ctx, "Starting time-based task polling and Redis submission...")
 		timeScheduler.Start(ctx)
 	}()
+	logger.Info(ctx, "[2/3] Process: Scheduler Background Job Started")
 
 	// Start HTTP server
 	go func() {
-		logger.Info(ctx, "Starting HTTP server for scheduler management API...", observability.String("port", config.GetSchedulerRPCPort()))
 		if err := srv.Start(ctx); err != nil && err != http.ErrServerClosed {
 			logger.Error(ctx, "HTTP server error", observability.Error(err))
 		}
 	}()
-
-	// Log comprehensive service status
-	logger.Info(ctx, "Time-based scheduler service ready",
-		observability.String("manager_id", managerID),
-		observability.String("api_port", config.GetSchedulerRPCPort()),
-		observability.String("poll_interval", config.GetPollingInterval().String()),
-		observability.String("look_ahead", config.GetPollingLookAhead().String()),
-		observability.Int("batch_size", config.GetTaskBatchSize()),
-		observability.String("task_cache_ttl", config.GetTaskCacheTTL().String()),
-		observability.String("duplicate_task_window", config.GetDuplicateTaskWindow().String()),
-		observability.String("redis_integration", "enabled"),
-		observability.String("orchestration_mode", "redis_streams"),
-		observability.String("performer_assignment", "automatic_via_redis"),
-	)
+	logger.Info(ctx, "[3/3] Process: HTTP Server Started")
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	<-shutdown
+	sig := <-shutdown
+	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	performGracefulShutdown(ctx, cancel, srv, timeScheduler, dbClient, logger, loggerShutdown, tracerShutdown, metricsShutdown)
 }
@@ -140,52 +130,59 @@ func performGracefulShutdown(
 	tracerShutdown func(context.Context) error,
 	metricsShutdown func(context.Context) error,
 ) {
-	shutdownStart := time.Now()
-	logger.Info(ctx, "Initiating graceful shutdown...")
-
-	// Cancel context to stop scheduler
-	cancel()
-
 	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer shutdownCancel()
 
-	// Stop scheduler gracefully
-	timeScheduler.Stop(ctx)
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 
-	// Close database client
-	dbClient.Close()
+		// Cancel context to stop scheduler
+		cancel()
 
-	// Shutdown server gracefully
-	if err := srv.Stop(shutdownCtx); err != nil {
-		logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
-	}
+		// Stop scheduler gracefully
+		timeScheduler.Stop(ctx)
 
-	// Shutdown tracer
-	if tracerShutdown != nil {
-		if err := tracerShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+		// Close database client
+		dbClient.Close()
+
+		// Shutdown tracer
+		if tracerShutdown != nil {
+			if err := tracerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown metrics
-	if metricsShutdown != nil {
-		if err := metricsShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+		// Shutdown metrics
+		if metricsShutdown != nil {
+			if err := metricsShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+			}
 		}
-	}
 
-	// Shutdown logger
-	if loggerShutdown != nil {
-		if err := loggerShutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+		// Shutdown server gracefully
+		if err := srv.Stop(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
 		}
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown logger
+		if loggerShutdown != nil {
+			if err := loggerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+			}
+		}
+	}()
+
+	// Wait for shutdown to complete or timeout
+	select {
+	case <-done:
+		// Shutdown completed successfully
+	case <-shutdownCtx.Done():
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
 	}
-
-	shutdownDuration := time.Since(shutdownStart)
-
-	logger.Info(shutdownCtx, "Time-based scheduler shutdown complete",
-		observability.Duration("duration", shutdownDuration),
-		observability.String("redis_integration", "disconnected"))
 	os.Exit(0)
 }

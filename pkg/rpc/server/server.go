@@ -104,7 +104,7 @@ func (s *Server) Start(ctx context.Context) error {
 	for serviceName, handler := range s.handlers {
 		genericService := NewGenericService(serviceName, handler, s.logger)
 		rpcproto.RegisterGenericServiceServer(s.grpcServer, genericService)
-		s.logger.Info(ctx, "Registered gRPC handler", observability.String("service", serviceName))
+		s.logger.Debug(ctx, "Registered gRPC handler", observability.String("service", serviceName))
 	}
 
 	// Enable reflection for debugging
@@ -160,8 +160,6 @@ func (s *Server) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	s.logger.Info(ctx, "Stopping gRPC server")
-
 	// Deregister from service registry (with retry)
 	if s.registry != nil {
 		retryCfg := retry.DefaultRetryConfig()
@@ -186,7 +184,7 @@ func (s *Server) Stop(ctx context.Context) error {
 	}
 
 	s.isRunning = false
-	s.logger.Info(ctx, "gRPC server stopped")
+	s.logger.Debug(ctx, "gRPC server stopped")
 	return nil
 }
 

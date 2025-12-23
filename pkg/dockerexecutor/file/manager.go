@@ -45,7 +45,7 @@ func NewFileManager(ctx context.Context, cfg config.ConfigProviderInterface, htt
 
 func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLanguage string) (*types.ExecutionContext, error) {
 	startTime := time.Now()
-	fm.logger.Debug(ctx, "Processing file: %s", observability.String("file_url", fileURL))
+	fm.logger.Debug(ctx, "Processing file", observability.String("fileURL", fileURL))
 
 	// Download and validate file
 	result, err := fm.downloader.downloadFile(ctx, fileURL, fileURL, fileLanguage)
@@ -56,7 +56,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLa
 
 	// Check validation results
 	if !result.Validation.IsValid {
-		fm.logger.Warn(ctx, "File validation failed: %v", observability.Any("validation_errors", result.Validation.Errors))
+		fm.logger.Warn(ctx, "File validation failed", observability.Any("validationErrors", result.Validation.Errors))
 		fm.updateStats(false, time.Since(startTime))
 		return &types.ExecutionContext{
 			FileURL:   fileURL,
@@ -85,7 +85,7 @@ func (fm *FileManager) GetOrDownload(ctx context.Context, fileURL string, fileLa
 	// Update statistics
 	fm.updateStats(true, time.Since(startTime))
 
-	fm.logger.Debug(ctx, "File processed successfully (cached: %v, size: %d bytes)", observability.Bool("is_cached", result.IsCached), observability.Int64("size", result.Size))
+	fm.logger.Debug(ctx, "File processed successfully", observability.Bool("isCached", result.IsCached), observability.Int64("size", result.Size))
 
 	return execCtx, nil
 }

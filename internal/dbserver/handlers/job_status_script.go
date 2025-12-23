@@ -53,7 +53,7 @@ func (c *JobStatusChecker) checkJobStatuses(ctx context.Context) {
 	currentTime := time.Now()
 
 	//log the current time and checking for jobs
-	// c.logger.Info(fmt.Sprintf("Checking for jobs at %s", currentTime.Format(time.RFC3339)))
+	// c.logger.Info(ctx, "Checking for jobs at", observability.Time("current_time", currentTime))
 
 	// Check event jobs
 	wg.Add(1)
@@ -92,10 +92,10 @@ func (c *JobStatusChecker) checkEventJobs(ctx context.Context, currentTime time.
 	for _, job := range eventJobs {
 		if job.ExpirationTime.Before(currentTime) {
 			if err := c.eventJobRepo.UpdateEventJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(ctx, "Failed to update event job status for job ID %s", observability.String("job_id", job.JobID.String()), observability.Error(err))
+				c.logger.Error(ctx, "Failed to update event job status for job ID", observability.String("job_id", job.JobID.String()), observability.Error(err))
 				continue
 			}
-			c.logger.Info(ctx, "Event job %s marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
+			c.logger.Info(ctx, "Event job marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
 		}
 	}
 }
@@ -111,10 +111,10 @@ func (c *JobStatusChecker) checkConditionJobs(ctx context.Context, currentTime t
 	for _, job := range conditionJobs {
 		if job.ExpirationTime.Before(currentTime) {
 			if err := c.conditionJobRepo.UpdateConditionJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(ctx, "Failed to update condition job status for job ID %s", observability.String("job_id", job.JobID.String()), observability.Error(err))
+				c.logger.Error(ctx, "Failed to update condition job status for job ID", observability.String("job_id", job.JobID.String()), observability.Error(err))
 				continue
 			}
-			c.logger.Info(ctx, "Condition job %s marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
+			c.logger.Info(ctx, "Condition job marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
 		}
 	}
 }
@@ -130,10 +130,10 @@ func (c *JobStatusChecker) checkTimeJobs(ctx context.Context, currentTime time.T
 	for _, job := range timeJobs {
 		if job.ExpirationTime.Before(currentTime) {
 			if err := c.timeJobRepo.UpdateTimeJobStatus(job.JobID.Int, false); err != nil {
-				c.logger.Error(ctx, "Failed to update time job status for job ID %s", observability.String("job_id", job.JobID.String()), observability.Error(err))
+				c.logger.Error(ctx, "Failed to update time job status for job ID", observability.String("job_id", job.JobID.String()), observability.Error(err))
 				continue
 			}
-			c.logger.Info(ctx, "Time job %s marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
+			c.logger.Info(ctx, "Time job marked as inactive due to expiration", observability.String("job_id", job.JobID.String()))
 		}
 	}
 }

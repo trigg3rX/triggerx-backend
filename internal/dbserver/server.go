@@ -120,7 +120,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 	// Initialize OpenTelemetry tracer
 	_, err := InitTracer()
 	if err != nil {
-		logger.Error(context.Background(), "Failed to initialize OpenTelemetry tracer: %v", observability.Error(err))
+		logger.Error(context.Background(), "Failed to initialize OpenTelemetry tracer", observability.Error(err))
 	}
 
 	router := gin.New()
@@ -177,7 +177,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 	var redisClient *redis.Client
 	client, err := redis.NewClient(logger)
 	if err != nil {
-		logger.Error(ctx, "Failed to initialize Redis client: %v", observability.Error(err))
+		logger.Error(ctx, "Failed to initialize Redis client", observability.Error(err))
 	} else {
 		redisClient = client
 		logger.Info(ctx, "Redis client initialized successfully")
@@ -189,7 +189,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 		var err error
 		rateLimiter, err = middleware.NewRateLimiterWithClient(redisClient, logger)
 		if err != nil {
-			logger.Error(ctx, "Failed to initialize rate limiter: %v", observability.Error(err))
+			logger.Error(ctx, "Failed to initialize rate limiter", observability.Error(err))
 		} else {
 			logger.Info(ctx, "Rate limiter initialized successfully")
 		}
@@ -259,7 +259,7 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	// Initialize robust HTTP client
 	httpClient, err := httpclientpkg.NewHTTPClient(httpclientpkg.DefaultHTTPRetryConfig())
 	if err != nil {
-		s.logger.Error(ctx, "Failed to create HTTP client: %v", observability.Error(err))
+		s.logger.Error(ctx, "Failed to create HTTP client", observability.Error(err))
 		panic(err)
 	}
 
@@ -351,12 +351,12 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 }
 
 func (s *Server) Start(ctx context.Context, port string) error {
-	s.logger.Info(ctx, "Starting server on port %s", observability.String("port", port))
+	s.logger.Info(ctx, "Starting server on port", observability.String("port", port))
 
 	if s.redisClient != nil {
 		defer func() {
 			if err := s.redisClient.Close(); err != nil {
-				s.logger.Error(ctx, "Failed to close Redis client: %v", observability.Error(err))
+				s.logger.Error(ctx, "Failed to close Redis client", observability.Error(err))
 			}
 		}()
 	}

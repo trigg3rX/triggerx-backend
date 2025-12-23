@@ -109,7 +109,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		IsImua:           config.IsImua(),
 	}
 
-	// c.logger.Infof("Payload: %+v", payload)
+	// c.logger.Info(ctx, "Payload", observability.Any("payload", payload))
 
 	// Send health check request
 	response, err := c.sendHealthCheck(ctx, payload)

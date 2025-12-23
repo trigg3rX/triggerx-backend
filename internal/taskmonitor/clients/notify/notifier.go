@@ -58,12 +58,12 @@ func (n *WebhookNotifier) NotifyTaskStatus(ctx context.Context, email string, pa
 	n.logger.Info(ctx, "Sending webhook notification", observability.String("email", email), observability.Int64("task_id", payload.TaskID), observability.String("status", payload.Status))
 	body, err := json.Marshal(payload)
 	if err != nil {
-		n.logger.Error(ctx, "Failed to marshal webhook payload: %v", observability.Error(err))
+		n.logger.Error(ctx, "Failed to marshal webhook payload", observability.Error(err))
 		return fmt.Errorf("failed to marshal notification payload: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.url, bytes.NewReader(body))
 	if err != nil {
-		n.logger.Error(ctx, "Failed to build webhook request: %v", observability.Error(err))
+		n.logger.Error(ctx, "Failed to build webhook request", observability.Error(err))
 		return fmt.Errorf("failed to build webhook request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -72,16 +72,16 @@ func (n *WebhookNotifier) NotifyTaskStatus(ctx context.Context, email string, pa
 	}
 	resp, err := n.client.Do(req)
 	if err != nil {
-		n.logger.Error(ctx, "Webhook request failed: %v", observability.Error(err))
+		n.logger.Error(ctx, "Webhook request failed", observability.Error(err))
 		return fmt.Errorf("webhook request failed: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			n.logger.Error(ctx, "Failed to close response body: %v", observability.Error(closeErr))
+			n.logger.Error(ctx, "Failed to close response body", observability.Error(closeErr))
 		}
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		n.logger.Error(ctx, "Webhook returned non-2xx status: %d", observability.Int("status_code", resp.StatusCode))
+		n.logger.Error(ctx, "Webhook returned non-2xx status", observability.Int("status_code", resp.StatusCode))
 		return fmt.Errorf("webhook returned non-2xx status: %d", resp.StatusCode)
 	}
 	n.logger.Info(ctx, "Webhook notification sent", observability.String("email", email), observability.Int64("task_id", payload.TaskID), observability.String("status", payload.Status))
@@ -145,7 +145,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		}
 		defer func() {
 			if quitErr := c.Quit(); quitErr != nil {
-				n.logger.Error(ctx, "Failed to quit SMTP client: %v", observability.Error(quitErr))
+				n.logger.Error(ctx, "Failed to quit SMTP client", observability.Error(quitErr))
 			}
 		}()
 
@@ -189,7 +189,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		}
 		defer func() {
 			if closeErr := conn.Close(); closeErr != nil {
-				n.logger.Error(ctx, "Failed to close connection: %v", observability.Error(closeErr))
+				n.logger.Error(ctx, "Failed to close connection", observability.Error(closeErr))
 			}
 		}()
 		c, err := smtp.NewClient(conn, host)
@@ -198,7 +198,7 @@ func (n *SMTPNotifier) NotifyTaskStatus(ctx context.Context, email string, paylo
 		}
 		defer func() {
 			if quitErr := c.Quit(); quitErr != nil {
-				n.logger.Error(ctx, "Failed to quit SMTP client: %v", observability.Error(quitErr))
+				n.logger.Error(ctx, "Failed to quit SMTP client", observability.Error(quitErr))
 			}
 		}()
 
@@ -253,7 +253,7 @@ func (c *CompositeNotifier) NotifyTaskStatus(ctx context.Context, email string, 
 			continue
 		}
 		if err := n.NotifyTaskStatus(ctx, email, payload); err != nil {
-			c.logger.Error(ctx, "Notifier failed: %v", observability.Error(err))
+			c.logger.Error(ctx, "Notifier failed", observability.Error(err))
 			if firstErr == nil {
 				firstErr = err
 			}

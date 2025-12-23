@@ -24,7 +24,7 @@ func RecoveryMiddleware(logger observability.Logger) gin.HandlerFunc {
 				metrics.PanicRecoveriesTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 
 				// Log the panic
-				logger.Error(c.Request.Context(), "Panic recovered: %v\nStack trace: %s", observability.Error(err.(error)), observability.String("stack", string(debug.Stack())))
+				logger.Error(c.Request.Context(), "Panic recovered", observability.Error(err.(error)), observability.String("stack", string(debug.Stack())))
 
 				// Return 500 Internal Server Error
 				c.JSON(http.StatusInternalServerError, gin.H{

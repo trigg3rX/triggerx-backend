@@ -41,23 +41,23 @@ func (h *InitialDataHandler) handleJobRoomSubscription(ctx context.Context, room
 	// Extract job ID from room name (e.g., "job:123" -> "123")
 	jobIDStr := strings.TrimPrefix(room, "job:")
 	if jobIDStr == "" {
-		h.logger.Error(ctx, "Invalid job room format: %s", observability.String("room", room))
+		h.logger.Error(ctx, "Invalid job room format", observability.String("room", room))
 		return nil
 	}
 
 	// Convert job ID string to big.Int
 	jobID, ok := new(big.Int).SetString(jobIDStr, 10)
 	if !ok {
-		h.logger.Error(ctx, "Invalid job ID format: %s", observability.String("job_id", jobIDStr))
+		h.logger.Error(ctx, "Invalid job ID format", observability.String("job_id", jobIDStr))
 		return nil
 	}
 
-	h.logger.Info(ctx, "Fetching initial tasks for job ID: %s", observability.String("job_id", jobIDStr))
+	h.logger.Info(ctx, "Fetching initial tasks for job ID", observability.String("job_id", jobIDStr))
 
 	// Fetch all tasks for this job
 	tasks, err := h.taskRepository.GetTasksByJobID(jobID)
 	if err != nil {
-		h.logger.Error(ctx, "Error fetching tasks for job %s: %v", observability.String("job_id", jobIDStr), observability.Error(err))
+		h.logger.Error(ctx, "Error fetching tasks for job", observability.String("job_id", jobIDStr), observability.Error(err))
 		return err
 	}
 
@@ -84,7 +84,7 @@ func (h *InitialDataHandler) handleJobRoomSubscription(ctx context.Context, room
 	var createdChainID string
 	createdChainID, err = h.taskRepository.GetCreatedChainIDByJobID(jobID)
 	if err != nil {
-		h.logger.Error(ctx, "Error retrieving created_chain_id for jobID %s: %v", observability.String("job_id", jobID.String()), observability.Error(err))
+		h.logger.Error(ctx, "Error retrieving created_chain_id for jobID", observability.String("job_id", jobID.String()), observability.Error(err))
 		return err
 	}
 
@@ -104,15 +104,15 @@ func (h *InitialDataHandler) handleJobRoomSubscription(ctx context.Context, room
 		defer func() {
 			if r := recover(); r != nil {
 				// Channel is closed, client disconnected
-				h.logger.Warn(ctx, "Client %s disconnected while sending initial snapshot for job %s: %v", observability.String("client_id", client.ID), observability.String("job_id", jobIDStr), observability.Error(r.(error)))
+				h.logger.Warn(ctx, "Client disconnected while sending initial snapshot for job", observability.String("client_id", client.ID), observability.String("job_id", jobIDStr), observability.Error(r.(error)))
 			}
 		}()
 
 		select {
 		case client.Send <- snapshotMessage:
-			h.logger.Info(ctx, "Sent initial snapshot with %d tasks for job %s to client %s", observability.Int("tasks_count", len(snapshotTasks)), observability.String("job_id", jobIDStr), observability.String("client_id", client.ID))
+			h.logger.Info(ctx, "Sent initial snapshot with tasks for job to client", observability.Int("tasks_count", len(snapshotTasks)), observability.String("job_id", jobIDStr), observability.String("client_id", client.ID))
 		default:
-			h.logger.Error(ctx, "Failed to send initial snapshot to client %s - channel full", observability.String("client_id", client.ID))
+			h.logger.Error(ctx, "Failed to send initial snapshot to client - channel full", observability.String("client_id", client.ID))
 		}
 	}()
 

@@ -52,32 +52,29 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
+	ctx := context.Background()
+	logger.Info(ctx, "Starting keeper node ...",
+		observability.String("version", config.GetVersion()),
+		observability.String("keeper_address", config.GetKeeperAddress()),
+		observability.String("consensus_address", config.GetConsensusAddress()),
+	)
+
 	// Initialize tracer
 	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
 	}
 
-	ctx := context.Background()
-	logger.Info(ctx, "Starting keeper node ...",
-		observability.String("keeper_address", config.GetKeeperAddress()),
-		observability.String("consensus_address", config.GetConsensusAddress()),
-		observability.String("version", config.GetVersion()),
-	)
-
 	// Initialize observability Metrics
 	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize observability metrics", observability.Error(err))
 	}
-	logger.Info(ctx, "[1/7] Dependency: Observability Metrics Initialised")
-
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
-
 	// Create metrics collector with observability Metrics
 	collector := metrics.NewCollector(obsMetrics)
-	logger.Info(ctx, "[2/7] Dependency: Metrics collector Initialised")
+	logger.Info(ctx, "[1/7] Dependency: Observability Module Initialised")
 
 	// Initialize health client first
 	healthCfg := health.Config{
@@ -92,10 +89,8 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize health client", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/7] Dependency: Health client Initialised")
 
 	// Perform initial health check-in to get configuration
-	logger.Info(ctx, "Performing initial health check-in to get configuration...")
 	response, err := healthClient.CheckIn(ctx)
 	if err != nil {
 		if errors.Is(err, health.ErrKeeperNotVerified) {
@@ -103,7 +98,7 @@ func main() {
 		}
 		logger.Fatal(ctx, "Failed initial health check-in", observability.Any("error", response.Data))
 	}
-	logger.Info(ctx, "Initial health check-in successful, configuration received")
+	logger.Info(ctx, "[2/7] Dependency: Health Client Initialised")
 
 	// Initialize clients: ECDSA
 	aggregatorCfg := aggregator.AggregatorClientConfig{
@@ -115,7 +110,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize aggregator client", observability.Error(err))
 	}
-	logger.Info(ctx, "[4/7] Dependency: Aggregator client Initialised")
+	logger.Info(ctx, "[3/7] Dependency: Aggregator Client Initialised")
 
 	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
@@ -126,31 +121,25 @@ func main() {
 	if err := dockerManager.Initialize(ctx); err != nil {
 		logger.Fatal(ctx, "Failed to initialize Docker manager", observability.Error(err))
 	}
-	logger.Info(ctx, "[5/7] Dependency: Code executor Initialised")
+	logger.Info(ctx, "[4/7] Dependency: Code Executor Initialised")
 
 	ipfsCfg := ipfs.NewConfig(config.GetIpfsHost(), config.GetPinataJWT())
 	ipfsClient, err := ipfs.NewClient(ipfsCfg)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize IPFS client", observability.Error(err))
 	}
-	logger.Info(ctx, "[6/7] Dependency: IPFS client Initialised")
+	logger.Info(ctx, "[5/7] Dependency: IPFS Client Initialised")
 
 	// Initialize taskmonitor client (optional - may not be configured)
 	var taskMonitorClient *taskmonitor.Client
-	if config.GetTaskMonitorRPCUrl() != "" {
-		taskMonitorClient, err = taskmonitor.NewClient(logger)
-		if err != nil {
-			logger.Warn(ctx, "Failed to initialize taskmonitor client, error reporting will be disabled",
-				observability.Error(err))
-		} else {
-			logger.Info(ctx, "[6/7] Dependency: TaskMonitor client Initialised")
-		}
-	} else {
-		logger.Info(ctx, "[6/7] Dependency: TaskMonitor client skipped (not configured)")
+	taskMonitorClient, err = taskmonitor.NewClient(logger)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to initialize TaskMonitor client", observability.Error(err))
 	}
+	logger.Info(ctx, "[6/7] Dependency: TaskMonitor Client Initialised")
 
 	// Initialize task executor and validator
-	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger, ipfsClient)
+	validator := validation.NewTaskValidator(config.GetAlchemyAPIKey(), config.GetEtherscanAPIKey(), dockerManager, aggregatorClient, logger, tracer, ipfsClient)
 	executor := execution.NewTaskExecutor(config.GetAlchemyAPIKey(), validator, aggregatorClient, taskMonitorClient, logger, tracer)
 
 	// Initialize API server
@@ -175,10 +164,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Start metrics collector in a goroutine
+	go func() {
+		collector.Start()
+	}()
+	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
+
 	// Start health check routine
-	go startHealthCheckRoutine(ctx, healthClient, dockerManager, taskMonitorClient, logger, server)
-	logger.Debug(ctx, "Note: Only first health-check will be logged, subsequent health-checks will not be logged.")
-	logger.Info(ctx, "[1/3] Process: Health check routine Started")
+	go startHealthCheckRoutine(ctx, logger, loggerShutdown, tracerShutdown, metricsShutdown,
+		healthClient, aggregatorClient, dockerManager, ipfsClient, taskMonitorClient, server)
+	logger.Info(ctx, "[2/3] Process: Health Check Routine Started")
 
 	// Start server in a goroutine
 	go func() {
@@ -186,13 +181,8 @@ func main() {
 			logger.Fatal(ctx, "Failed to start server", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[2/3] Process: API server Started")
-
-	// Start metrics collector in a goroutine
-	go func() {
-		collector.Start()
-	}()
-	logger.Info(ctx, "[3/3] Process: Metrics collector Started")
+	logger.Info(ctx, "[3/3] Process: API Server Started")
+	logger.Info(ctx, "Keeper node initialized and ready to serve requests")
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)
@@ -203,16 +193,29 @@ func main() {
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger, loggerShutdown, metricsShutdown, tracerShutdown)
+	performGracefulShutdown(ctx, logger, loggerShutdown, tracerShutdown, metricsShutdown,
+		healthClient, aggregatorClient, dockerManager, ipfsClient, taskMonitorClient, server)
 }
 
 // startHealthCheckRoutine starts a goroutine that sends periodic health check-ins
-func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, taskMonitorClient *taskmonitor.Client, logger observability.Logger, server *api.Server) {
+func startHealthCheckRoutine(
+	ctx context.Context,
+	logger observability.Logger,
+	loggerShutdown func(context.Context) error,
+	tracerShutdown func(context.Context) error,
+	metricsShutdown func(context.Context) error,
+	healthClient *health.Client,
+	aggregatorClient *aggregator.AggregatorClient,
+	dockerManager dockerexecutor.DockerExecutorAPI,
+	ipfsClient ipfs.IPFSClient,
+	taskMonitorClient *taskmonitor.Client,
+	server *api.Server,
+) {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	// Skip initial check-in since we already did it during startup
-	logger.Debug(ctx, "Starting periodic health check routine")
+	// logger.Debug(ctx, "Starting periodic health check routine")
 
 	for {
 		select {
@@ -222,21 +225,31 @@ func startHealthCheckRoutine(ctx context.Context, healthClient *health.Client, d
 				if errors.Is(err, health.ErrKeeperNotVerified) {
 					logger.Error(ctx, "Keeper is not verified. Shutting down...", observability.Error(err))
 					// Note: shutdown functions are not available in this scope, but that's okay for emergency shutdown
-					performGracefulShutdown(ctx, healthClient, dockerManager, server, taskMonitorClient, logger, nil, nil, nil)
+					performGracefulShutdown(ctx, logger, loggerShutdown, tracerShutdown, metricsShutdown,
+						healthClient, aggregatorClient, dockerManager, ipfsClient, taskMonitorClient, server)
 					return
 				}
 				logger.Error(ctx, "Failed health check-in", observability.Any("error", response.Data))
 			}
 		case <-ctx.Done():
-			logger.Info(ctx, "Stopping health check routine")
 			return
 		}
 	}
 }
 
-func performGracefulShutdown(ctx context.Context, healthClient *health.Client, dockerManager dockerexecutor.DockerExecutorAPI, server *api.Server, taskMonitorClient *taskmonitor.Client, logger observability.Logger, loggerShutdown func(context.Context) error, metricsShutdown func(context.Context) error, tracerShutdown func(context.Context) error) {
-	logger.Info(ctx, "Initiating graceful shutdown...")
-
+func performGracefulShutdown(
+	ctx context.Context,
+	logger observability.Logger,
+	loggerShutdown func(context.Context) error,
+	tracerShutdown func(context.Context) error,
+	metricsShutdown func(context.Context) error,
+	healthClient *health.Client,
+	aggregatorClient *aggregator.AggregatorClient,
+	dockerManager dockerexecutor.DockerExecutorAPI,
+	ipfsClient ipfs.IPFSClient,
+	taskMonitorClient *taskmonitor.Client,
+	server *api.Server,
+) {
 	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
@@ -246,67 +259,58 @@ func performGracefulShutdown(ctx context.Context, healthClient *health.Client, d
 	go func() {
 		defer close(done)
 
-		// Shutdown metrics
-		if metricsShutdown != nil {
-			if err := metricsShutdown(shutdownCtx); err != nil {
-				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
-			} else {
-				logger.Info(shutdownCtx, "[1/6] Process: Metrics Closed")
-			}
-		}
-
 		// Shutdown tracer
 		if tracerShutdown != nil {
 			if err := tracerShutdown(shutdownCtx); err != nil {
 				logger.Error(shutdownCtx, "Error shutting down tracer", observability.Error(err))
-			} else {
-				logger.Info(shutdownCtx, "[2/6] Process: Tracer Closed")
 			}
 		}
 
-		// Shutdown logger
-		if loggerShutdown != nil {
-			if err := loggerShutdown(shutdownCtx); err != nil {
-				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
-			} else {
-				logger.Info(shutdownCtx, "[3/6] Process: Logger Closed")
+		// Shutdown metrics
+		if metricsShutdown != nil {
+			if err := metricsShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
 			}
 		}
 
 		// Close health client
 		healthClient.Close()
-		logger.Info(shutdownCtx, "[4/6] Process: Health client Closed")
+
+		// Close aggregator client
+		aggregatorClient.Close()
 
 		// Close code executor
-		if err := dockerManager.Close(ctx); err != nil {
+		if err := dockerManager.Close(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Error closing code executor", observability.Error(err))
 		}
-		logger.Info(shutdownCtx, "[5/6] Process: Code executor Closed")
 
-		// Close taskmonitor client
-		if taskMonitorClient != nil {
-			if err := taskMonitorClient.Close(ctx); err != nil {
-				logger.Error(shutdownCtx, "Error closing taskmonitor client", observability.Error(err))
-			} else {
-				logger.Info(shutdownCtx, "[6/6] Process: TaskMonitor client Closed")
-			}
+		ipfsClient.Close()
+
+		if err := taskMonitorClient.Close(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error closing taskmonitor client", observability.Error(err))
 		}
 
 		// Shutdown server gracefully
 		if err := server.Stop(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
 		}
-		logger.Info(shutdownCtx, "[7/6] Process: API server Stopped")
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown logger
+		if loggerShutdown != nil {
+			if err := loggerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+			}
+		}
 	}()
 
 	// Wait for shutdown to complete or timeout
 	select {
 	case <-done:
-		logger.Info(ctx, "Graceful shutdown completed successfully")
+		// Shutdown completed successfully
 	case <-shutdownCtx.Done():
 		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
 	}
-
-	logger.Info(ctx, "Shutdown complete")
 	os.Exit(0)
 }

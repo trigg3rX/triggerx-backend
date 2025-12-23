@@ -58,11 +58,11 @@ func (sm *StateManager) IsKeeperActive(ctx context.Context, keeperAddress string
 	state, exists := sm.keepers[keeperAddress]
 	isActive := exists && state.IsActive
 
-	sm.logger.Debug(ctx, "Checked keeper active status",
-		observability.String("keeper", keeperAddress),
-		observability.Bool("exists", exists),
-		observability.Bool("is_active", isActive),
-	)
+	// sm.logger.Debug(ctx, "Checked keeper active status",
+	// 	observability.String("keeper", keeperAddress),
+	// 	observability.Bool("exists", exists),
+	// 	observability.Bool("is_active", isActive),
+	// )
 
 	return isActive
 }
@@ -79,9 +79,9 @@ func (sm *StateManager) GetAllActiveKeepers(ctx context.Context) []string {
 		}
 	}
 
-	sm.logger.Debug(ctx, "Retrieved active keepers list",
-		observability.Int("total_active", len(activeKeepers)),
-	)
+	// sm.logger.Debug(ctx, "Retrieved active keepers list",
+	// 	observability.Int("total_active", len(activeKeepers)),
+	// )
 
 	return activeKeepers
 }
@@ -98,10 +98,10 @@ func (sm *StateManager) GetKeeperCount(ctx context.Context) (total int, active i
 		}
 	}
 
-	sm.logger.Debug(ctx, "Retrieved keeper counts",
-		observability.Int("total", total),
-		observability.Int("active", active),
-	)
+	// sm.logger.Debug(ctx, "Retrieved keeper counts",
+	// 	observability.Int("total", total),
+	// 	observability.Int("active", active),
+	// )
 
 	return total, active
 }
@@ -128,9 +128,9 @@ func (sm *StateManager) GetDetailedKeeperInfo(ctx context.Context) []types.Keepe
 		keeperInfoList = append(keeperInfoList, info)
 	}
 
-	sm.logger.Debug(ctx, "Retrieved detailed keeper information",
-		observability.Int("total_keepers", len(keeperInfoList)),
-	)
+	// sm.logger.Debug(ctx, "Retrieved detailed keeper information",
+	// 	observability.Int("total_keepers", len(keeperInfoList)),
+	// )
 
 	return keeperInfoList
 }

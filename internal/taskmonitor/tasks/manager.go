@@ -73,7 +73,7 @@ func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
 				observability.Duration("ttl", ttl))
 			return fmt.Errorf("failed to initialize stream %s: %w", stream, err)
 		}
-		tsm.logger.Info(ctx, "Stream initialized successfully", observability.String("stream", stream), observability.Duration("ttl", ttl))
+		tsm.logger.Debug(ctx, "Stream initialized successfully", observability.String("stream", stream), observability.Duration("ttl", ttl))
 	}
 
 	// Register consumer groups for task processing
@@ -124,7 +124,7 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(ctx context.Context, stream 
 		return nil
 	}
 
-	tsm.logger.Info(ctx, "Registering consumer group", observability.String("stream", stream), observability.String("group", group))
+	tsm.logger.Debug(ctx, "Registering consumer group", observability.String("stream", stream), observability.String("group", group))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -138,7 +138,7 @@ func (tsm *TaskStreamManager) RegisterConsumerGroup(ctx context.Context, stream 
 	}
 
 	tsm.consumerGroups[key] = true
-	tsm.logger.Info(ctx, "Consumer group created successfully", observability.String("stream", stream), observability.String("group", group))
+	tsm.logger.Debug(ctx, "Consumer group created successfully", observability.String("stream", stream), observability.String("group", group))
 	return nil
 }
 

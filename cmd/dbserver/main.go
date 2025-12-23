@@ -55,14 +55,9 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize metrics", observability.Error(err))
 	}
-
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
-
-	// Start metrics collector
-	collector := metrics.NewCollector(obsMetrics)
-	collector.Start()
-	logger.Info(ctx, "Metrics collector started")
+	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
 
 	dbConfig := &database.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
@@ -84,6 +79,7 @@ func main() {
 	if mainSession == nil {
 		logger.Fatal(ctx, "Database session cannot be nil")
 	}
+	logger.Info(ctx, "[2/4] Dependency: Database Connection Initialised")
 
 	var wg sync.WaitGroup
 	serverErrors := make(chan error, 1)
@@ -97,13 +93,19 @@ func main() {
 		if err := dockerExecutor.Initialize(context.Background()); err != nil {
 			logger.Error(ctx, "Failed to initialize Docker manager", observability.Error(err))
 		} else {
-			logger.Info(ctx, "Docker manager initialized successfully")
+			logger.Info(ctx, "[3/4] Dependency: Docker Executor Initialised")
 		}
 	}
 
 	dbServer := dbserver.NewServer(ctx, conn, logger, obsMetrics)
 
 	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
+	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
+
+	// Start metrics collector
+	collector := metrics.NewCollector(obsMetrics)
+	collector.Start()
+	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
@@ -113,17 +115,16 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Info(ctx, "Starting HTTP server...")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
+	logger.Info(ctx, "[2/2] Process: HTTP Server Started")
 
 	close(ready)
-	logger.Info(ctx, "Database Server initialized, starting on port %s...", observability.String("port", config.GetDBServerRPCPort()))
 
 	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
 	case err := <-serverErrors:
@@ -144,41 +145,51 @@ func performGracefulShutdown(
 	metricsShutdown func(context.Context) error,
 	dockerExecutor dockerexecutor.DockerExecutorAPI,
 ) {
-	logger.Info(ctx, "Initiating graceful shutdown...")
-
+	// Create shutdown context with timeout
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error(ctx, "HTTP server shutdown error", observability.Error(err))
-		if err := srv.Close(); err != nil {
-			logger.Error(ctx, "Forced HTTP server close error", observability.Error(err))
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		if metricsShutdown != nil {
+			if err := metricsShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
+			}
 		}
-	}
 
-	if dockerExecutor != nil {
-		if err := dockerExecutor.Close(ctx); err != nil {
-			logger.Error(ctx, "Failed to close Docker manager", observability.Error(err))
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
+			if err := srv.Close(); err != nil {
+				logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+			}
 		}
-	}
 
-	wg.Wait()
-
-	if metricsShutdown != nil {
-		if err := metricsShutdown(ctx); err != nil {
-			logger.Error(ctx, "Error shutting down metrics", observability.Error(err))
-		} else {
-			logger.Info(ctx, "Metrics stopped successfully")
+		if dockerExecutor != nil {
+			if err := dockerExecutor.Close(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Failed to close Docker manager", observability.Error(err))
+			}
 		}
-	}
 
-	if loggerShutdown != nil {
-		if err := loggerShutdown(ctx); err != nil {
-			logger.Error(ctx, "Error shutting down logger", observability.Error(err))
-		} else {
-			logger.Info(ctx, "Logger closed successfully")
+		wg.Wait()
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		if loggerShutdown != nil {
+			if err := loggerShutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
+			}
 		}
-	}
+	}()
 
-	logger.Info(ctx, "Shutdown complete")
+	// Wait for shutdown to complete or timeout
+	select {
+	case <-done:
+		// Shutdown completed successfully
+	case <-shutdownCtx.Done():
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
+	}
+	os.Exit(0)
 }

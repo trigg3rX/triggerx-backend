@@ -149,7 +149,7 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 	// Handle batch requests by creating individual task stream data for each task
 	if taskCount > 1 {
 		// This is a batch request (likely from time scheduler)
-		d.logger.Info(ctx, "Processing batch request", observability.Int("task_count", taskCount))
+		d.logger.Debug(ctx, "Processing batch request", observability.Int("task_count", taskCount))
 		span.SetAttributes(attribute.Bool("batch.request", true))
 
 		var batchErrors []error

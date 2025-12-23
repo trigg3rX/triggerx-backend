@@ -61,7 +61,6 @@ func (d *downloader) downloadFile(ctx context.Context, key string, url string, f
 	if err != nil {
 		return nil, fmt.Errorf("failed to read downloaded file: %w", err)
 	}
-	d.logger.Info(ctx, "File downloaded and stored in cache: %s", observability.String("key", key))
 
 	// Validate content (either fresh or from cache)
 	validation, err := d.validator.validateFile(ctx, filePath)
@@ -70,7 +69,7 @@ func (d *downloader) downloadFile(ctx context.Context, key string, url string, f
 	}
 
 	if !validation.IsValid {
-		d.logger.Warn(ctx, "File validation failed: %v", observability.Any("validation_errors", validation.Errors))
+		d.logger.Warn(ctx, "File validation failed", observability.Any("validationErrors", validation.Errors))
 		return &downloadResult{
 			Content:    content,
 			Validation: validation,
@@ -112,7 +111,7 @@ func (d *downloader) downloadContent(ctx context.Context, url string) ([]byte, e
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	d.logger.Debug(ctx, "Downloaded %d bytes", observability.Int("size", len(content)))
+	d.logger.Debug(ctx, "File downloaded", observability.Int("size", len(content)))
 	return content, nil
 }
 

@@ -10,20 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/parser"
-	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/parser"
+	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 func (h *Handler) CreateJobData(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[CreateJobData] trace_id=%s - Creating job data", observability.String("trace_id", traceID))
 	var tempJobs []types.CreateJobData
 	if err := c.ShouldBindJSON(&tempJobs); err != nil {
-		h.logger.Error(c.Request.Context(), "[CreateJobData] Error decoding request body: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[CreateJobData] Error decoding request body", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -50,12 +48,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	trackDBOp(err)
 
 	if err != nil && err != gocql.ErrNotFound {
-		h.logger.Error(c.Request.Context(), "[CreateJobData] Error getting user ID for address %s: %v", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[CreateJobData] Error getting user ID for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[CreateJobData] existingUserID: %d", observability.Int64("existing_user_id", existingUserID))
+	h.logger.Debug(c.Request.Context(), "[CreateJobData] existingUserID", observability.Int64("existing_user_id", existingUserID))
 
 	if err == gocql.ErrNotFound {
 		var newUser types.CreateUserDataRequest
@@ -70,12 +68,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		trackDBOp(err)
 
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating new user for address %s: %v", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating new user for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
-		h.logger.Info(c.Request.Context(), "[CreateJobData] Created new user with userID %d | Address: %s", observability.Int64("user_id", existingUser.UserID), observability.String("user_address", existingUser.UserAddress))
+		h.logger.Info(c.Request.Context(), "[CreateJobData] Created new user with userID", observability.Int64("user_id", existingUser.UserID), observability.String("user_address", existingUser.UserAddress))
 	}
 
 	createdJobs := types.CreateJobResponse{
@@ -103,7 +101,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid job_id format"})
 			return
 		}
- 
+
 		jobData := &commonTypes.JobData{
 			JobID:             commonTypes.FromBigInt(jobID),
 			JobTitle:          tempJobs[i].JobTitle,
@@ -140,7 +138,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}()
 
 			if resp.StatusCode != http.StatusOK {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Unexpected status code: %d", observability.Int("status_code", resp.StatusCode))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] Unexpected status code", observability.Int("status_code", resp.StatusCode))
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Unexpected status code: " + strconv.Itoa(resp.StatusCode)})
 				return
 			}
@@ -176,8 +174,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				// if len(outputPreview) > 200 {
 				// 	outputPreview = outputPreview[:200] + "..."
 				// }
-				// h.logger.Infof("[CreateJobData] IPFS code validation failed | user=%s jobID=%s taskDefID=%d isSafe=%t selectedSafe=%s executable=%t safeMatch=%t error=%q outputPreview=%q",
-				// 	tempJobs[i].UserAddress, tempJobs[i].JobID, tempJobs[i].TaskDefinitionID, valReq.IsSafe, valReq.SelectedSafe, valResp.Executable, valResp.SafeMatch, valResp.Error, outputPreview)
+				// h.logger.Info(c.Request.Context(), "[CreateJobData] IPFS code validation failed", observability.String("user_address", tempJobs[i].UserAddress), observability.String("job_id", tempJobs[i].JobID), observability.Int("task_definition_id", tempJobs[i].TaskDefinitionID), observability.Bool("is_safe", valReq.IsSafe), observability.String("selected_safe", valReq.SelectedSafe), observability.Bool("executable", valResp.Executable), observability.Bool("safe_match", valResp.SafeMatch), observability.String("error", valResp.Error), observability.String("output_preview", outputPreview))
 				// Return 200 with structured validation failure so clients can display message without treating as transport error
 				c.JSON(http.StatusOK, gin.H{
 					"status":                "validation_failed",
@@ -193,7 +190,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		// Handle safe address if IsSafe is true
 		if tempJobs[i].IsSafe {
 			if tempJobs[i].SafeAddress == "" {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] IsSafe is true but SafeAddress is empty for job %s", observability.String("job_id", tempJobs[i].JobID))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] IsSafe is true but SafeAddress is empty for job", observability.String("job_id", tempJobs[i].JobID))
 				c.JSON(http.StatusBadRequest, gin.H{"error": "SafeAddress is required when IsSafe is true"})
 				return
 			}
@@ -210,7 +207,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				if err := h.safeAddressRepository.CreateSafeAddress(strings.ToLower(tempJobs[i].UserAddress), safeAddr, tempJobs[i].SafeName); err != nil {
 					h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating safe address", observability.Error(err))
 				} else {
-					h.logger.Info(c.Request.Context(), "[CreateJobData] Created safe address %s for user %s", observability.String("safe_address", safeAddr), observability.String("user_address", tempJobs[i].UserAddress))
+					h.logger.Info(c.Request.Context(), "[CreateJobData] Created safe address for user", observability.String("safe_address", safeAddr), observability.String("user_address", tempJobs[i].UserAddress))
 				}
 			}
 
@@ -224,7 +221,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		trackDBOp(err)
 
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating job", observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating job", observability.String("job_id", jobID.String()), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
@@ -269,12 +266,12 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			trackDBOp = metrics.TrackDBOperation("create", "time_jobs")
 			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
 				trackDBOp(err)
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting time job data for jobID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting time job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
-			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created time-based job %d with interval %d seconds", observability.Int64("job_id", jobID.Int64()), observability.Int64("interval", timeJobData.TimeInterval))
+			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created time-based job with interval", observability.Int64("job_id", jobID.Int64()), observability.Int64("interval", timeJobData.TimeInterval))
 
 		case 3, 4:
 			// Event-based job
@@ -300,7 +297,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 
 			if err := h.eventJobRepository.CreateEventJob(&eventJobData); err != nil {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting event job data for jobID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting event job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
@@ -329,7 +326,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				EventFilterValue:       tempJobs[i].EventFilterValue,
 			}
 			filterEnabled := eventJobData.EventFilterParaName != "" && eventJobData.EventFilterValue != ""
-			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created event-based job %d for event %s on contract %s (filter_enabled=%t)", observability.Int64("job_id", jobID.Int64()), observability.String("trigger_event", eventJobData.TriggerEvent), observability.String("trigger_contract_address", eventJobData.TriggerContractAddress), observability.Bool("filter_enabled", filterEnabled))
+			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created event-based job for event on contract (filter_enabled)", observability.Int64("job_id", jobID.Int64()), observability.String("trigger_event", eventJobData.TriggerEvent), observability.String("trigger_contract_address", eventJobData.TriggerContractAddress), observability.Bool("filter_enabled", filterEnabled))
 
 		case 5, 6:
 			// Condition-based job
@@ -356,7 +353,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			}
 
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting condition job data for jobID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting condition job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
@@ -385,7 +382,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				ValueSourceUrl:   tempJobs[i].ValueSourceUrl,
 				SelectedKeyRoute: tempJobs[i].SelectedKeyRoute,
 			}
-			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created condition-based job %d with condition type %s (limits: %f-%f)", observability.Int64("job_id", jobID.Int64()), observability.String("condition_type", conditionJobData.ConditionType), observability.Float64("lower_limit", conditionJobData.LowerLimit), observability.Float64("upper_limit", conditionJobData.UpperLimit))
+			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created condition-based job with condition type (limits)", observability.Int64("job_id", jobID.Int64()), observability.String("condition_type", conditionJobData.ConditionType), observability.Float64("lower_limit", conditionJobData.LowerLimit), observability.Float64("upper_limit", conditionJobData.UpperLimit))
 
 		case 7:
 			// Custom script job (TaskDefinitionID = 7)
@@ -415,15 +412,15 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			trackDBOp = metrics.TrackDBOperation("create", "custom_jobs")
 			if err := h.customJobRepository.CreateCustomJob(&customJobData); err != nil {
 				trackDBOp(err)
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting custom job data for jobID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting custom job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
-			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created custom script job %d with interval %d seconds, language %s", observability.Int64("job_id", jobID.Int64()), observability.Int64("interval", customJobData.TimeInterval), observability.String("language", customJobData.ScriptLanguage))
+			h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created custom script job with interval, language", observability.Int64("job_id", jobID.Int64()), observability.Int64("interval", customJobData.TimeInterval), observability.String("language", customJobData.ScriptLanguage))
 
 		default:
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Invalid task definition ID %d for job %d", observability.Int("task_definition_id", tempJobs[i].TaskDefinitionID), observability.Int("job_index", i))
+			h.logger.Error(c.Request.Context(), "[CreateJobData] Invalid task definition ID for job", observability.Int("task_definition_id", tempJobs[i].TaskDefinitionID), observability.Int("job_index", i))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task definition ID"})
 			return
 		}
@@ -431,9 +428,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
 			success, err := h.notifyConditionScheduler(c.Request.Context(), jobID, scheduleConditionJobData)
 			if !success {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error notifying condition scheduler for jobID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[CreateJobData] Error notifying condition scheduler for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 			} else {
-				h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully notified condition scheduler for jobID %d", observability.Int64("job_id", jobID.Int64()))
+				h.logger.Debug(c.Request.Context(), "[CreateJobData] Successfully notified condition scheduler for jobID", observability.Int64("job_id", jobID.Int64()))
 			}
 		}
 
@@ -447,7 +444,7 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		trackDBOp = metrics.TrackDBOperation("update", "users")
 		if err := h.userRepository.UpdateUserTasksAndPoints(existingUser.UserID, 0, newPoints); err != nil {
 			trackDBOp(err)
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Error updating user points for userID %d: %v", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[CreateJobData] Error updating user points for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
@@ -468,17 +465,17 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	trackDBOp = metrics.TrackDBOperation("update", "users")
 	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, bigIntJobIDs); err != nil {
 		trackDBOp(err)
-		h.logger.Error(c.Request.Context(), "[CreateJobData] Error updating user job IDs for userID %d: %v", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[CreateJobData] Error updating user job IDs for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	trackDBOp(nil)
-	h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully updated user %d with %d total jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("total_jobs", len(allJobIDs)))
+	h.logger.Debug(c.Request.Context(), "[CreateJobData] Successfully updated user with total jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("total_jobs", len(allJobIDs)))
 
 	// Track total operation duration
 	trackDBOp = metrics.TrackDBOperation("create", "jobs")
 	trackDBOp(nil)
 
 	c.JSON(http.StatusOK, createdJobs)
-	h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully completed job creation for user %d with %d new jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("new_jobs", len(tempJobs)))
+	h.logger.Debug(c.Request.Context(), "[CreateJobData] Successfully completed job creation for user with new jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("new_jobs", len(tempJobs)))
 }

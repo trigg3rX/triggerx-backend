@@ -10,12 +10,9 @@ import (
 )
 
 func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetKeeperLeaderboard] trace_id=%s - Fetching keeper leaderboard data", observability.String("trace_id", traceID))
-
 	// Get the domain from the request
 	host := c.Request.Host
-	h.logger.Info(c.Request.Context(), "[GetKeeperLeaderboard] Request from domain: %s", observability.String("host", host))
+	h.logger.Info(c.Request.Context(), "[GetKeeperLeaderboard] Request from domain", observability.String("host", host))
 
 	var keeperLeaderboard []types.KeeperLeaderboardEntry
 	var err error
@@ -40,7 +37,7 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 	}
 
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetKeeperLeaderboard] Error fetching keeper leaderboard data: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[GetKeeperLeaderboard] Error fetching keeper leaderboard data", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to fetch keeper leaderboard",
 			"code":  "LEADERBOARD_FETCH_ERROR",
@@ -48,21 +45,19 @@ func (h *Handler) GetKeeperLeaderboard(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetKeeperLeaderboard] Successfully retrieved keeper leaderboard data for %d keepers", observability.Int("keepers_count", len(keeperLeaderboard)))
+	h.logger.Info(c.Request.Context(), "[GetKeeperLeaderboard] Successfully retrieved keeper leaderboard data for keepers", observability.Int("keepers_count", len(keeperLeaderboard)))
 
 	c.JSON(http.StatusOK, keeperLeaderboard)
 }
 
 func (h *Handler) GetUserLeaderboard(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetUserLeaderboard] trace_id=%s - Fetching user leaderboard data", observability.String("trace_id", traceID))
 	h.logger.Info(c.Request.Context(), "[GetUserLeaderboard] Fetching user leaderboard data")
 
 	trackDBOp := metrics.TrackDBOperation("read", "user_leaderboard")
 	userLeaderboard, err := h.userRepository.GetUserLeaderboard()
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetUserLeaderboard] Error fetching user leaderboard data: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[GetUserLeaderboard] Error fetching user leaderboard data", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to fetch user leaderboard",
 			"code":  "LEADERBOARD_FETCH_ERROR",
@@ -70,13 +65,11 @@ func (h *Handler) GetUserLeaderboard(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetUserLeaderboard] Successfully retrieved user leaderboard data for %d users", observability.Int("users_count", len(userLeaderboard)))
+	h.logger.Info(c.Request.Context(), "[GetUserLeaderboard] Successfully retrieved user leaderboard data for users", observability.Int("users_count", len(userLeaderboard)))
 	c.JSON(http.StatusOK, userLeaderboard)
 }
 
 func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetKeeperByIdentifier] trace_id=%s - Fetching keeper data by identifier", observability.String("trace_id", traceID))
 	h.logger.Info(c.Request.Context(), "[GetKeeperByIdentifier] Fetching keeper data by identifier")
 
 	keeperAddress := c.Query("keeper_address")
@@ -94,7 +87,7 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 	keeperEntry, err := h.keeperRepository.GetKeeperLeaderboardByIdentifierInDB(keeperAddress, keeperName)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetKeeperByIdentifier] Error fetching keeper data: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[GetKeeperByIdentifier] Error fetching keeper data", observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Keeper not found",
 			"code":  "KEEPER_NOT_FOUND",
@@ -102,13 +95,11 @@ func (h *Handler) GetKeeperByIdentifier(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetKeeperByIdentifier] Successfully retrieved keeper data for %s", observability.String("keeper_address", keeperEntry.KeeperAddress))
+	h.logger.Info(c.Request.Context(), "[GetKeeperByIdentifier] Successfully retrieved keeper data for keeper address", observability.String("keeper_address", keeperEntry.KeeperAddress))
 	c.JSON(http.StatusOK, keeperEntry)
 }
 
 func (h *Handler) GetUserLeaderboardByAddress(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetUserLeaderboardByAddress] trace_id=%s - Fetching user data by address", observability.String("trace_id", traceID))
 	h.logger.Info(c.Request.Context(), "[GetUserLeaderboardByAddress] Fetching user data by address")
 
 	userAddress := c.Query("user_address")
@@ -124,7 +115,7 @@ func (h *Handler) GetUserLeaderboardByAddress(c *gin.Context) {
 	userEntry, err := h.userRepository.GetUserLeaderboardByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetUserLeaderboardByAddress] Error fetching user data: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[GetUserLeaderboardByAddress] Error fetching user data", observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "User not found",
 			"code":  "USER_NOT_FOUND",
@@ -132,6 +123,6 @@ func (h *Handler) GetUserLeaderboardByAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetUserLeaderboardByAddress] Successfully retrieved user data for %s", observability.String("user_address", userAddress))
+	h.logger.Info(c.Request.Context(), "[GetUserLeaderboardByAddress] Successfully retrieved user data for user address", observability.String("user_address", userAddress))
 	c.JSON(http.StatusOK, userEntry)
 }

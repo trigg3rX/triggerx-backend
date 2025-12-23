@@ -65,7 +65,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 		s.jobDataStore[jobData.JobID.String()] = jobData
 		go websocketWorker.Start(ctx)
 		duration := time.Since(startTime)
-		s.logger.Info(ctx, "WebSocket job monitoring started",
+		s.logger.Debug(ctx, "WebSocket job monitoring started",
 			observability.String("job_id", jobData.JobID.String()),
 			observability.String("condition_type", jobData.ConditionWorkerData.ConditionType),
 			observability.String("value_source", jobData.ConditionWorkerData.ValueSourceUrl),
@@ -107,7 +107,7 @@ func (s *ConditionBasedScheduler) scheduleConditionJob(ctx context.Context, jobD
 	metrics.TrackConditionByType(jobData.ConditionWorkerData.ConditionType)
 	metrics.TrackConditionBySource(jobData.ConditionWorkerData.ValueSourceType)
 
-	s.logger.Info(ctx, "Condition job monitoring started",
+	s.logger.Debug(ctx, "Condition job monitoring started",
 		observability.String("job_id", jobData.JobID.String()),
 		observability.String("condition_type", jobData.ConditionWorkerData.ConditionType),
 		observability.String("value_source", jobData.ConditionWorkerData.ValueSourceUrl),
@@ -267,7 +267,7 @@ func (s *ConditionBasedScheduler) UnregisterEventJob(ctx context.Context, jobID 
 		if err := s.eventMonitorClient.Unregister(ctx, jobID.String()); err != nil {
 			return fmt.Errorf("failed to unregister from Event Monitor Service: %w", err)
 		}
-		s.logger.Info(ctx, "Unregistered event job from Event Monitor Service", observability.String("job_id", jobID.String()))
+		s.logger.Debug(ctx, "Unregistered event job from Event Monitor Service", observability.String("job_id", jobID.String()))
 	}
 
 	// Remove from event workers map using the original JobID pointer

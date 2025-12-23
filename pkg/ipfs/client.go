@@ -29,7 +29,7 @@ type IPFSClient interface {
 	ListFiles(ctx context.Context) ([]PinataFile, error)
 
 	// Close closes the client and cleans up resources
-	Close() error
+	Close()
 }
 
 // Pinata v3 API structures
@@ -313,8 +313,6 @@ func (c *ipfsClient) ListFiles(ctx context.Context) ([]PinataFile, error) {
 }
 
 // Close closes the client and cleans up resources
-func (c *ipfsClient) Close() error {
-	// Close the HTTP client if needed
+func (c *ipfsClient) Close() {
 	c.httpClient.Close()
-	return nil
 }

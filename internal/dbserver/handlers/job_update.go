@@ -12,9 +12,6 @@ import (
 )
 
 func (h *Handler) DeleteJobData(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[DeleteJobData] trace_id=%s - Deleting job data", observability.String("trace_id", traceID))
-
 	jobID := c.Param("id")
 	if jobID == "" {
 		h.logger.Error(c.Request.Context(), "[DeleteJobData] No job ID provided")
@@ -28,7 +25,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	jobIDBig := new(big.Int)
 	_, ok := jobIDBig.SetString(jobID, 10)
 	if !ok {
-		h.logger.Error(c.Request.Context(), "[DeleteJobData] Invalid job ID format: %v", observability.String("job_id", jobID))
+		h.logger.Error(c.Request.Context(), "[DeleteJobData] Invalid job ID format", observability.String("job_id", jobID))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid job ID format",
 			"code":  "INVALID_JOB_ID",
@@ -41,7 +38,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	taskDefinitionID, err := h.jobRepository.GetTaskDefinitionIDByJobID(jobIDBig)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[DeleteJobData] Error getting job data for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[DeleteJobData] Error getting job data for jobID", observability.String("job_id", jobID), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found",
 			"code":  "JOB_NOT_FOUND",
@@ -54,7 +51,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	err = h.jobRepository.UpdateJobStatus(jobIDBig, "deleted")
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating job status for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating job status for jobID", observability.String("job_id", jobID), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job status: " + err.Error()})
 		return
 	}
@@ -65,7 +62,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		err = h.timeJobRepository.UpdateTimeJobStatus(jobIDBig, false)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating time job status for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating time job status for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating time job status: " + err.Error()})
 			return
 		}
@@ -74,14 +71,14 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		err = h.eventJobRepository.UpdateEventJobStatus(jobIDBig, false)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating event job status for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating event job status for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating event job status: " + err.Error()})
 			return
 		}
 
 		_, err = h.notifyPauseToConditionScheduler(c.Request.Context(), jobIDBig)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error sending pause to event scheduler for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error sending pause to event scheduler for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to event scheduler: " + err.Error()})
 			return
 		}
@@ -90,14 +87,14 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 		err = h.conditionJobRepository.UpdateConditionJobStatus(jobIDBig, false)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating condition job status for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error updating condition job status for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating condition job status: " + err.Error()})
 			return
 		}
 
 		_, err = h.notifyPauseToConditionScheduler(c.Request.Context(), jobIDBig)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error sending pause to condition scheduler for jobID %s: %v", observability.String("job_id", jobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[DeleteJobData] Error sending pause to condition scheduler for jobID", observability.String("job_id", jobID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error sending pause to condition scheduler: " + err.Error()})
 			return
 		}
@@ -107,12 +104,9 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 }
 
 func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[UpdateJobData] trace_id=%s - Updating job data from user", observability.String("trace_id", traceID))
-
 	var updateData types.UpdateJobDataFromUserRequest
 	if err := c.ShouldBindJSON(&updateData); err != nil {
-		h.logger.Error(c.Request.Context(), "[UpdateJobData] Error decoding request body: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[UpdateJobData] Error decoding request body", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -130,7 +124,7 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 	err := h.jobRepository.UpdateJobFromUserInDB(jobID, &updateData)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating job data for jobID %d: %v", observability.String("job_id", updateData.JobID), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating job data for jobID", observability.String("job_id", updateData.JobID), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "Job not found or update failed",
 			"code":  "JOB_UPDATE_ERROR",
@@ -144,13 +138,13 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		// For time-based jobs, update time_interval and next_execution_timestamp
 		err = h.timeJobRepository.UpdateTimeJobInterval(jobID, updateData.TimeInterval)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating time_interval for jobID %d: %v", observability.String("job_id", updateData.JobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating time_interval for jobID", observability.String("job_id", updateData.JobID), observability.Error(err))
 		}
 		updatedAt := job.UpdatedAt
 		nextExecution := updatedAt.Add(time.Duration(updateData.TimeInterval) * time.Second)
 		err = h.timeJobRepository.UpdateTimeJobNextExecutionTimestamp(jobID, nextExecution)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating next_execution_timestamp for jobID %d: %v", observability.String("job_id", updateData.JobID), observability.Error(err))
+			h.logger.Error(c.Request.Context(), "[UpdateJobData] Error updating next_execution_timestamp for jobID", observability.String("job_id", updateData.JobID), observability.Error(err))
 			// Not returning error to client, just logging
 		}
 	}
@@ -163,9 +157,6 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 }
 
 func (h *Handler) UpdateJobStatus(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[UpdateJobStatus] trace_id=%s - Updating job status", observability.String("trace_id", traceID))
-
 	jobID := c.Param("job_id")
 	status := c.Param("status")
 
@@ -188,7 +179,7 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 	jobIDBig := new(big.Int)
 	_, ok := jobIDBig.SetString(jobID, 10)
 	if !ok {
-		h.logger.Error(c.Request.Context(), "[UpdateJobStatus] Error converting job ID to *big.Int: %v", observability.String("job_id", jobID))
+		h.logger.Error(c.Request.Context(), "[UpdateJobStatus] Error converting job ID to *big.Int", observability.String("job_id", jobID))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid job ID format",
 			"code":  "INVALID_JOB_ID",
@@ -200,7 +191,7 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 	trackDBOp := metrics.TrackDBOperation("update", "job_data")
 	if err := h.jobRepository.UpdateJobStatus(jobIDBig, status); err != nil {
 		trackDBOp(err)
-		h.logger.Error(c.Request.Context(), "[UpdateJobStatus] Error updating job status: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[UpdateJobStatus] Error updating job status", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -215,12 +206,9 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 }
 
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[UpdateJobLastExecutedAt] trace_id=%s - Updating job last executed at", observability.String("trace_id", traceID))
-
 	var updateData types.UpdateJobLastExecutedAtRequest
 	if err := c.ShouldBindJSON(&updateData); err != nil {
-		h.logger.Error(c.Request.Context(), "[UpdateJobLastExecutedAt] Error decoding request body: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[UpdateJobLastExecutedAt] Error decoding request body", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -229,7 +217,7 @@ func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 	trackDBOp := metrics.TrackDBOperation("update", "job_data")
 	if err := h.jobRepository.UpdateJobLastExecutedAt(updateData.JobID, updateData.TaskIDs, updateData.JobCostActual, updateData.LastExecutedAt); err != nil {
 		trackDBOp(err)
-		h.logger.Error(c.Request.Context(), "[UpdateJobLastExecutedAt] Error updating job data for jobID %d: %v", observability.String("job_id", updateData.JobID.String()), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[UpdateJobLastExecutedAt] Error updating job data for jobID", observability.String("job_id", updateData.JobID.String()), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating job data: " + err.Error()})
 		return
 	}

@@ -14,8 +14,6 @@ import (
 
 // UpdateTaskSubmissionData updates task number, success status and execution details in database
 func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data types.TaskSubmissionData) error {
-	// dm.logger.Infof("Updating task %d with task number %d and acceptance status %t", data.TaskID, data.TaskNumber, data.IsAccepted)
-
 	performerId, err := dm.GetKeeperIds(ctx, []string{data.PerformerAddress})
 	if err != nil {
 		dm.logger.Error(ctx, "Failed to get performer ID", observability.Error(err))
@@ -41,11 +39,11 @@ func (dm *DatabaseClient) UpdateTaskSubmissionData(ctx context.Context, data typ
 		data.ProofOfTask,
 		convertedArgsStrings,
 		data.TaskID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Error updating task execution details for task ID %d", observability.Int64("task_id", data.TaskID), observability.Error(err))
+		dm.logger.Error(ctx, "Error updating task execution details for task ID", observability.Int64("task_id", data.TaskID), observability.Error(err))
 		return err
 	}
 
-	dm.logger.Info(ctx, "Successfully updated task %d with submission details", observability.Int64("task_id", data.TaskID))
+	dm.logger.Info(ctx, "Successfully updated task with submission details", observability.Int64("task_id", data.TaskID))
 	return nil
 }
 
@@ -59,15 +57,15 @@ func (dm *DatabaseClient) UpdateTaskFailed(ctx context.Context, taskID int64) er
 		}
 	}()
 	if iter.Scan(&existingStatus) && existingStatus != "" {
-		dm.logger.Info(ctx, "Task %d already has a status '%s', not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
+		dm.logger.Info(ctx, "Task already has a status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 	// Proceed with marking as failed only if status is absent or empty
 	if err := dm.db.NewQuery(queries.UpdateTaskFailed, taskID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Error updating task failed for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
+		dm.logger.Error(ctx, "Error updating task failed for task ID", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Info(ctx, "Successfully updated task %d as failed", observability.Int64("task_id", taskID))
+	dm.logger.Info(ctx, "Successfully updated task as failed", observability.Int64("task_id", taskID))
 	return nil
 }
 
@@ -82,15 +80,15 @@ func (dm *DatabaseClient) UpdateTaskError(ctx context.Context, taskID int64, err
 		}
 	}()
 	if iter.Scan(&existingStatus) && existingStatus != "" {
-		dm.logger.Info(ctx, "Task %d already has a status '%s', not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
+		dm.logger.Info(ctx, "Task already has a status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 	// Proceed with marking as failed only if status is absent or empty
 	if err := dm.db.NewQuery(queries.UpdateTaskError, errorMsg, taskID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Error updating task error for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
+		dm.logger.Error(ctx, "Error updating task error for task ID", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Info(ctx, "Successfully updated task %d with error: %s", observability.Int64("task_id", taskID), observability.String("error_msg", errorMsg))
+	dm.logger.Info(ctx, "Successfully updated task with error", observability.Int64("task_id", taskID), observability.String("error_msg", errorMsg))
 	return nil
 }
 
@@ -107,16 +105,16 @@ func (dm *DatabaseClient) UpdateTaskAggregatorFailed(ctx context.Context, taskID
 		}
 	}()
 	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
-		dm.logger.Info(ctx, "Task %d already has final status '%s', not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
+		dm.logger.Info(ctx, "Task already has final status, not updating to failed.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorFailed,
 		errorMsg, executionTxHash, proofCID, taskID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Error updating task failed for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
+		dm.logger.Error(ctx, "Error updating task failed for task ID", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Info(ctx, "Successfully updated task %d as failed: %s (tx_hash: %s)", observability.Int64("task_id", taskID), observability.String("error_msg", errorMsg), observability.String("execution_tx_hash", executionTxHash))
+	dm.logger.Info(ctx, "Successfully updated task as failed", observability.Int64("task_id", taskID), observability.String("error_msg", errorMsg), observability.String("execution_tx_hash", executionTxHash))
 	return nil
 }
 
@@ -134,16 +132,16 @@ func (dm *DatabaseClient) UpdateTaskAggregatorSubmitted(ctx context.Context, tas
 		}
 	}()
 	if iter.Scan(&existingStatus) && (existingStatus == "completed" || existingStatus == "failed") {
-		dm.logger.Info(ctx, "Task %d already has final status '%s', not updating to pending_confirmation.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
+		dm.logger.Info(ctx, "Task already has final status, not updating to pending_confirmation.", observability.Int64("task_id", taskID), observability.String("status", existingStatus))
 		return nil
 	}
 
 	if err := dm.db.NewQuery(queries.UpdateTaskAggregatorSubmitted,
 		executionTxHash, proofCID, taskID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Error updating task submitted for task ID %d", observability.Int64("task_id", taskID), observability.Error(err))
+		dm.logger.Error(ctx, "Error updating task submitted for task ID", observability.Int64("task_id", taskID), observability.Error(err))
 		return err
 	}
-	dm.logger.Info(ctx, "Successfully updated task %d as pending_confirmation (tx_hash: %s)", observability.Int64("task_id", taskID), observability.String("execution_tx_hash", executionTxHash))
+	dm.logger.Info(ctx, "Successfully updated task as pending_confirmation", observability.Int64("task_id", taskID), observability.String("execution_tx_hash", executionTxHash))
 	return nil
 }
 
@@ -214,11 +212,11 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}()
 
 	if !iter.Scan(&taskPredictedOpxCost, &jobID) {
-		dm.logger.Error(ctx, "Failed to get task fee and job ID for task ID %d: no results found", observability.Int64("task_id", data.TaskID))
+		dm.logger.Error(ctx, "Failed to get task fee and job ID for task ID", observability.Int64("task_id", data.TaskID))
 		return fmt.Errorf("task not found for task ID %d", data.TaskID)
 	}
 
-	// dm.logger.Debugf("Details: taskID: %d, taskPredictedOpxCost: %f, taskOpxCost: %f, jobID: %d", data.TaskID, taskPredictedOpxCost, data.TaskOpxCost, jobID)
+	// dm.logger.Debug("Details", observability.Int64("task_id", data.TaskID), observability.Float64("task_predicted_opx_cost", taskPredictedOpxCost), observability.Float64("task_opx_cost", data.TaskOpxCost), observability.Int64("job_id", jobID.Int64()))
 
 	// TODO:
 	// Alert if taskOpxCost is greater than taskPredictedOpxCost by a threshold
@@ -234,13 +232,13 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 		}()
 
 		if !iter.Scan(&keeperId, &keeperPoints, &rewardsBooster, &noAttestedTasks) {
-			dm.logger.Error(ctx, "Failed to get keeper points for operator_id %d: no results found", observability.Int64("operator_id", operator_id))
+			dm.logger.Error(ctx, "Failed to get keeper points for operator_id", observability.Int64("operator_id", operator_id))
 			return fmt.Errorf("keeper not found for operator_id %d", operator_id)
 		}
 		keeperPoints = keeperPoints + float64(rewardsBooster)*data.TaskOpxCost
 		noAttestedTasks = noAttestedTasks + 1
 
-		// dm.logger.Infof("Keeper points: %f, Rewards booster: %f, No attested tasks: %d", keeperPoints, rewardsBooster, noAttestedTasks)
+		// dm.logger.Info("Keeper points", observability.Float64("keeper_points", keeperPoints), observability.Float64("rewards_booster", rewardsBooster), observability.Int64("no_attested_tasks", noAttestedTasks))
 
 		if err := dm.db.NewQuery(queries.UpdateAttesterPointsAndNoOfTasks,
 			keeperPoints, noAttestedTasks, keeperId).Exec(); err != nil {
@@ -264,7 +262,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}()
 
 	if !iter.Scan(&keeperPoints, &rewardsBooster, &noExecutedTasks) {
-		dm.logger.Error(ctx, "Failed to get keeper points for performer_id %d: no results found", observability.Int64("performer_id", performerId[0]))
+		dm.logger.Error(ctx, "Failed to get keeper points for performer_id", observability.Int64("performer_id", performerId[0]))
 		return fmt.Errorf("keeper not found for performer_id %d", performerId[0])
 	}
 	if data.IsAccepted {
@@ -289,7 +287,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}()
 
 	if !iter.Scan(&userID) {
-		dm.logger.Error(ctx, "Failed to get user ID for job ID %d: no results found", observability.Int64("job_id", jobID.Int64()))
+		dm.logger.Error(ctx, "Failed to get user ID for job ID", observability.Int64("job_id", jobID.Int64()))
 		return fmt.Errorf("user not found for job ID %d", jobID.Int64())
 	}
 
@@ -302,7 +300,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}()
 
 	if !iter.Scan(&userPoints, &userTasks) {
-		dm.logger.Error(ctx, "Failed to get user points for user ID %d: no results found", observability.Int64("user_id", userID))
+		dm.logger.Error(ctx, "Failed to get user points for user ID", observability.Int64("user_id", userID))
 		return fmt.Errorf("user not found for user ID %d", userID)
 	}
 
@@ -312,7 +310,7 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 
 	if err := dm.db.NewQuery(queries.UpdateUserPoints,
 		userPoints, userTasks, lastUpdatedAt, userID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Failed to update user points for user ID %d", observability.Int64("user_id", userID), observability.Error(err))
+		dm.logger.Error(ctx, "Failed to update user points for user ID", observability.Int64("user_id", userID), observability.Error(err))
 		return err
 	}
 
@@ -325,18 +323,18 @@ func (dm *DatabaseClient) UpdateKeeperPointsInDatabase(ctx context.Context, data
 	}()
 
 	if !iter.Scan(&jobCostActual) {
-		dm.logger.Error(ctx, "Failed to get job cost actual for job ID %d: no results found", observability.Int64("job_id", jobID.Int64()))
+		dm.logger.Error(ctx, "Failed to get job cost actual for job ID", observability.Int64("job_id", jobID.Int64()))
 		return fmt.Errorf("job not found for job ID %d", jobID)
 	}
 
 	jobCostActual = jobCostActual + data.TaskOpxCost
 
 	if err := dm.db.NewQuery(queries.UpdateJobCostActual, jobCostActual, jobID).Exec(); err != nil {
-		dm.logger.Error(ctx, "Failed to update job cost actual for job ID %d", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+		dm.logger.Error(ctx, "Failed to update job cost actual for job ID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return err
 	}
 
-	dm.logger.Info(ctx, "Successfully updated points for user ID %d: added %.2f points", observability.Int64("user_id", userID), observability.Float64("task_opx_cost", data.TaskOpxCost))
+	dm.logger.Info(ctx, "Successfully updated points for user ID", observability.Int64("user_id", userID), observability.Float64("task_opx_cost", data.TaskOpxCost))
 	return nil
 }
 
@@ -356,10 +354,10 @@ func (dm *DatabaseClient) GetKeeperIds(ctx context.Context, keeperAddresses []st
 		}()
 
 		if iter.Scan(&keeperID) {
-			dm.logger.Info(ctx, "Keeper ID for address %s: %d", observability.String("keeper_address", keeperAddress), observability.Int64("keeper_id", keeperID))
+			dm.logger.Info(ctx, "Keeper ID for address", observability.String("keeper_address", keeperAddress), observability.Int64("keeper_id", keeperID))
 			keeperIds = append(keeperIds, keeperID)
 		} else {
-			dm.logger.Error(ctx, "Failed to get keeper ID for address %s: no results found", observability.String("keeper_address", keeperAddress))
+			dm.logger.Error(ctx, "Failed to get keeper ID for address", observability.String("keeper_address", keeperAddress))
 			return nil, fmt.Errorf("keeper not found for address %s", keeperAddress)
 		}
 	}
@@ -370,23 +368,23 @@ func (dm *DatabaseClient) GetKeeperIds(ctx context.Context, keeperAddresses []st
 // This is called after task execution to persist storage updates from the custom script
 func (dm *DatabaseClient) UpdateScriptStorage(ctx context.Context, jobID *big.Int, storageUpdates map[string]string) error {
 	if len(storageUpdates) == 0 {
-		dm.logger.Debug(ctx, "No storage updates for job %s", observability.String("job_id", jobID.String()))
+		dm.logger.Debug(ctx, "No storage updates for job", observability.String("job_id", jobID.String()))
 		return nil
 	}
 
-	dm.logger.Info(ctx, "Updating %d storage keys for job %s", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
+	dm.logger.Info(ctx, "Updating storage keys for job", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
 
 	// Upsert each storage key-value pair
 	for key, value := range storageUpdates {
 		if err := dm.db.NewQuery(queries.UpsertScriptStorageQuery,
 			jobID, key, value, time.Now().UTC()).Exec(); err != nil {
-			dm.logger.Error(ctx, "Failed to update storage key '%s' for job %s: %v", observability.String("key", key), observability.String("job_id", jobID.String()), observability.Error(err))
+			dm.logger.Error(ctx, "Failed to update storage key for job", observability.String("key", key), observability.String("job_id", jobID.String()), observability.Error(err))
 			return fmt.Errorf("failed to update storage: %w", err)
 		}
-		dm.logger.Debug(ctx, "Updated storage: job=%s, key=%s", observability.String("job_id", jobID.String()), observability.String("key", key))
+		dm.logger.Debug(ctx, "Updated storage", observability.String("job_id", jobID.String()), observability.String("key", key))
 	}
 
-	dm.logger.Info(ctx, "Successfully updated %d storage keys for job %s", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
+	dm.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_count", len(storageUpdates)), observability.String("job_id", jobID.String()))
 	return nil
 }
 

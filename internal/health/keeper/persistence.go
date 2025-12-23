@@ -20,7 +20,7 @@ func (sm *StateManager) LoadVerifiedKeepers(ctx context.Context) error {
 	)
 	defer span.End()
 
-	sm.logger.Info(ctx, "Loading verified keepers from database...")
+	sm.logger.Debug(ctx, "Loading verified keepers from database...")
 
 	// Get only verified keepers from database
 	keepers, err := sm.db.GetVerifiedKeepers(ctx)
@@ -95,7 +95,7 @@ func (sm *StateManager) DumpState(ctx context.Context) error {
 
 	span.SetAttributes(attribute.Int("keepers.dumped", activeCount))
 	span.SetStatus(codes.Ok, "")
-	sm.logger.Info(ctx, "Successfully dumped keeper state")
+	// sm.logger.Info(ctx, "Successfully dumped keeper state")
 	return nil
 }
 
@@ -110,12 +110,12 @@ func (sm *StateManager) retryWithBackoff(ctx context.Context, operation func() e
 
 		// Calculate backoff duration (exponential backoff with jitter)
 		backoff := time.Duration(i) * time.Second
-		sm.logger.Warn(ctx, "Database operation failed, retrying...",
-			observability.Error(err),
-			observability.Int("attempt", i+1),
-			observability.Int("max_retries", maxRetries),
-			observability.Duration("backoff", backoff),
-		)
+		// sm.logger.Warn(ctx, "Database operation failed, retrying...",
+		// 	observability.Error(err),
+		// 	observability.Int("attempt", i+1),
+		// 	observability.Int("max_retries", maxRetries),
+		// 	observability.Duration("backoff", backoff),
+		// )
 
 		time.Sleep(backoff)
 	}

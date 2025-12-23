@@ -87,7 +87,7 @@ func (b *Bot) Start(ctx context.Context) {
 }
 
 func (b *Bot) updateKeeperChatID(ctx context.Context, keeperAddress string, chatID int64) error {
-	b.logger.Info(ctx, "Finding keeper ID for keeper", observability.String("keeper", keeperAddress))
+	b.logger.Debug(ctx, "Finding keeper ID for keeper", observability.String("keeper", keeperAddress))
 
 	var keeperID string
 	if err := b.db.Session().Query(`
@@ -97,7 +97,7 @@ func (b *Bot) updateKeeperChatID(ctx context.Context, keeperAddress string, chat
 		return err
 	}
 
-	b.logger.Info(ctx, "Updating chat ID for keeper ID", observability.String("keeper_id", keeperID))
+	b.logger.Debug(ctx, "Updating chat ID for keeper ID", observability.String("keeper_id", keeperID))
 
 	chatIDStr := strconv.FormatInt(chatID, 10)
 
@@ -110,7 +110,7 @@ func (b *Bot) updateKeeperChatID(ctx context.Context, keeperAddress string, chat
 		return err
 	}
 
-	b.logger.Info(ctx, "Successfully updated chat ID for keeper", observability.String("keeper", keeperAddress))
+	b.logger.Debug(ctx, "Successfully updated chat ID for keeper", observability.String("keeper", keeperAddress))
 	return nil
 }
 

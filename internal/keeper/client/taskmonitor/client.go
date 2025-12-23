@@ -110,7 +110,7 @@ func (c *Client) ReportTaskStatus(ctx context.Context, taskID int64, executionSu
 		return fmt.Errorf("taskmonitor reported failure: %s", response.Message)
 	}
 
-	c.logger.Info(ctx, "Task status reported successfully to taskmonitor",
+	c.logger.Debug(ctx, "Task status reported successfully to taskmonitor",
 		observability.Int64("task_id", taskID),
 		observability.Bool("execution_successful", executionSuccessful),
 		observability.Bool("aggregator_submitted", aggregatorSubmitted),

@@ -27,36 +27,36 @@ func (e *TaskExecutor) getContractMethodAndABI(ctx context.Context, methodName s
 
 	parsed, err := abi.JSON(bytes.NewReader(abiData))
 	if err != nil {
-		e.logger.Warn(ctx, "Error parsing ABI: %v", observability.Error(err))
+		e.logger.Warn(ctx, "Error parsing ABI", observability.Error(err))
 		return nil, nil, err
 	}
 
-	e.logger.Debug(ctx, "Using ABI from database for contract %s", observability.String("contract_address", targetData.TargetContractAddress))
+	// e.logger.Debug(ctx, "Using ABI from database", observability.String("contract_address", targetData.TargetContractAddress))
 
 	method, ok := parsed.Methods[methodName]
 	if !ok {
-		e.logger.Warn(ctx, "Method %s not found in contract ABI", observability.String("method_name", methodName))
+		e.logger.Warn(ctx, "Method not found in contract ABI", observability.String("method_name", methodName))
 		return nil, nil, fmt.Errorf("method %s not found in contract ABI", methodName)
 	}
 
-	e.logger.Debug(ctx, "Found method: %+v", observability.String("method", method.Name))
+	// e.logger.Debug(ctx, "Found method", observability.String("method_name", method.Name))
 	return &parsed, &method, nil
 }
 
-func (e *TaskExecutor) processArguments(ctx context.Context, args interface{}, methodInputs []abi.Argument, contractABI *abi.ABI) ([]interface{}, error) {
+func (e *TaskExecutor) processArguments(ctx context.Context, args interface{}, methodInputs []abi.Argument) ([]interface{}, error) {
 	convertedArgs := make([]interface{}, 0)
 
-	e.logger.Debug(ctx, "Processing arguments: %+v for method inputs: %+v", observability.Any("args", args), observability.Any("method_inputs", methodInputs))
+	// e.logger.Debug(ctx, "Processing arguments for method inputs", observability.Any("args", args), observability.Any("method_inputs", methodInputs))
 
 	// Handle nil or empty args
 	if args == nil {
-		e.logger.Warn(ctx, "Received nil arguments")
+		// e.logger.Warn(ctx, "Received nil arguments", observability.Any("args", args))
 		return nil, fmt.Errorf("nil arguments provided")
 	}
 
 	// Check if we have any inputs at all
 	if len(methodInputs) == 0 {
-		e.logger.Debug(ctx, "Method has no inputs, returning empty args")
+		// e.logger.Debug(ctx, "Method has no inputs, returning empty args")
 		return convertedArgs, nil
 	}
 
@@ -210,6 +210,7 @@ func (e *TaskExecutor) processArguments(ctx context.Context, args interface{}, m
 		return nil, fmt.Errorf("unsupported argument format: %T", args)
 	}
 
+	e.logger.Debug(ctx, "Successfully converted arguments", observability.Any("converted_args", convertedArgs))
 	return convertedArgs, nil
 }
 
@@ -217,7 +218,7 @@ func (e *TaskExecutor) parseDynamicArgs(ctx context.Context, output string) []in
 	// First try to parse as JSON
 	var argData []interface{}
 	if err := json.Unmarshal([]byte(output), &argData); err == nil && len(argData) > 0 {
-		e.logger.Debug(ctx, "Successfully parsed dynamic arguments as JSON: %v", observability.Any("arg_data", argData))
+		e.logger.Debug(ctx, "Successfully parsed dynamic arguments as JSON", observability.Any("arg_data", argData))
 		return argData
 	}
 
@@ -233,13 +234,13 @@ func (e *TaskExecutor) parseDynamicArgs(ctx context.Context, output string) []in
 			if len(match) >= 2 {
 				// Try to parse as float first
 				if val, err := strconv.ParseFloat(match[1], 64); err == nil {
-					e.logger.Debug(ctx, "Found numeric response value: %v", observability.Float64("val", val))
+					// e.logger.Debug(ctx, "Found numeric response value", observability.Float64("val", val))
 					argData = append(argData, val)
 					continue
 				}
 
 				// If not a number, use as string
-				e.logger.Debug(ctx, "Found string response value: %s", observability.String("value", match[1]))
+				// e.logger.Debug(ctx, "Found string response value", observability.String("value", match[1]))
 				argData = append(argData, match[1])
 			}
 		}
@@ -259,7 +260,7 @@ func (e *TaskExecutor) parseDynamicArgs(ctx context.Context, output string) []in
 			if val, err := strconv.ParseFloat(match, 64); err == nil {
 				// Only consider "significant" numbers (not small ones that might be timestamps)
 				if val > 100 {
-					e.logger.Debug(ctx, "Found significant numeric value: %v", observability.Float64("val", val))
+					// e.logger.Debug(ctx, "Found significant numeric value", observability.Float64("val", val))
 					argData = append(argData, val)
 				}
 			}
@@ -272,11 +273,11 @@ func (e *TaskExecutor) parseDynamicArgs(ctx context.Context, output string) []in
 
 	// As a fallback, check for "Condition satisfied: true" pattern
 	if strings.Contains(output, "Condition satisfied: true") {
-		e.logger.Debug(ctx, "Found condition satisfied pattern, using true as argument")
+		// e.logger.Debug(ctx, "Found condition satisfied pattern, using true as argument")
 		return []interface{}{true}
 	}
 
-	e.logger.Warn(ctx, "Failed to extract any arguments from output: %s", observability.String("output", output))
+	// e.logger.Warn(ctx, "Failed to extract any arguments from output", observability.String("output", output))
 	return []interface{}{"0"} // Return a default value as fallback
 }
 
@@ -293,7 +294,7 @@ func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {
 // func (e *TaskExecutor) decodeContractOutput(contractABI *abi.ABI, method *abi.Method, output []byte) (interface{}, error) {
 // 	// Handle different output scenarios
 // 	if len(method.Outputs) == 0 {
-// 		e.logger.Infof("Method %s has no outputs to decode", method.Name)
+// 		e.logger.Info(ctx, "Method has no outputs to decode", observability.String("method_name", method.Name))
 // 		return nil, nil
 // 	}
 
@@ -304,11 +305,11 @@ func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {
 
 // 		err := contractABI.UnpackIntoInterface(result.Addr().Interface(), method.Name, output)
 // 		if err != nil {
-// 			e.logger.Warnf("Error unpacking single output: %v", err)
+// 			e.logger.Warn(ctx, "Error unpacking single output", observability.Error(err))
 // 			return nil, err
 // 		}
 
-// 		e.logger.Infof("Decoded single output: %v", result.Interface())
+// 		e.logger.Info(ctx, "Decoded single output", observability.Any("result", result.Interface()))
 // 		return result.Interface(), nil
 // 	}
 
@@ -316,11 +317,11 @@ func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {
 // 	results := make([]interface{}, len(method.Outputs))
 // 	err := contractABI.UnpackIntoInterface(&results, method.Name, output)
 // 	if err != nil {
-// 		e.logger.Warnf("Error unpacking multiple outputs: %v", err)
+// 		e.logger.Warn(ctx, "Error unpacking multiple outputs", observability.Error(err))
 // 		return nil, err
 // 	}
 
-// 	e.logger.Infof("Decoded multiple outputs: %+v", results)
+// 	e.logger.Info(ctx, "Decoded multiple outputs", observability.Any("results", results))
 // 	return results, nil
 // }
 
@@ -336,7 +337,7 @@ func (e *TaskExecutor) parseStaticArgs(args []string) []interface{} {
 
 // 	resp, err := http.Get(blockscoutUrl)
 // 	if err != nil || resp.StatusCode != http.StatusOK {
-// 		logger.Warnf("Failed to fetch ABI from Blockscout: %v", err)
+// 		logger.Warn(ctx, "Failed to fetch ABI from Blockscout", observability.Error(err))
 // 		// Fall back to another source or handle accordingly
 // 	}
 

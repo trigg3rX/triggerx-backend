@@ -48,7 +48,6 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 				taskData := h.convertCustomJobToScheduleTimeTaskData(c.Request.Context(), &customJob)
 				tasks = append(tasks, taskData)
 			}
-			// h.logger.Info(c.Request.Context(), "[getCustomBasedTasks] Retrieved %d custom jobs", observability.Int("custom_jobs_count", len(customJobs)))
 		}
 	}
 
@@ -82,10 +81,6 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 
 		tasks[i].TaskID = taskID
 	}
-
-	if len(tasks) != 0 {
-		h.logger.Info(c.Request.Context(), "[GetTimeBasedJobs] Successfully retrieved %d time based jobs", observability.Int("time_based_jobs_count", len(tasks)))
-	}
 	c.JSON(http.StatusOK, tasks)
 }
 
@@ -94,7 +89,7 @@ func (h *Handler) convertCustomJobToScheduleTimeTaskData(ctx context.Context, cu
 	// Fetch storage for this custom job
 	storage, err := h.scriptStorageRepository.GetStorageByJobID(customJob.JobID.ToBigInt())
 	if err != nil {
-		h.logger.Warn(ctx, "[GetTimeBasedTasks] Failed to get storage for job %s: %v", observability.String("job_id", customJob.JobID.String()), observability.Error(err))
+		h.logger.Warn(ctx, "[GetTimeBasedTasks] Failed to get storage for job", observability.String("job_id", customJob.JobID.String()), observability.Error(err))
 		storage = make(map[string]string) // Continue with empty storage
 	}
 

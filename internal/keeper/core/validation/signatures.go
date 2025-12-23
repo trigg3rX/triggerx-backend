@@ -44,7 +44,7 @@ func (v *TaskValidator) ValidateManagerSignature(ctx context.Context, task *type
 		return false, fmt.Errorf("manager signature verification failed")
 	}
 
-	logger.Info(ctx, "Manager signature verification successful")
+	// logger.Info(ctx, "Manager signature verification successful")
 	return true, nil
 }
 
@@ -100,6 +100,6 @@ func (v *TaskValidator) ValidatePerformerSignature(ctx context.Context, ipfsData
 		return false, fmt.Errorf("performer signature verification failed")
 	}
 
-	logger.Info(ctx, "Performer signature verification successful")
+	// logger.Info(ctx, "Performer signature verification successful")
 	return true, nil
 }

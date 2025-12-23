@@ -72,7 +72,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 		conditionContext["status"] = "satisfied"
 		conditionContext["consecutive_checks"] = w.ConditionMet
 
-		w.Logger.Info(ctx, "Condition satisfied",
+		w.Logger.Debug(ctx, "Condition satisfied",
 			observability.String("job_id", w.ConditionWorkerData.JobID.String()),
 			observability.Float64("current_value", currentValue),
 			observability.String("condition_type", w.ConditionWorkerData.ConditionType),
@@ -119,7 +119,7 @@ func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 				metrics.TrackCriticalError("trigger_notification_failed")
 			} else {
 				triggerSpan.AddEvent("notification.sent")
-				w.Logger.Info(ctx, "Successfully notified scheduler about trigger",
+				w.Logger.Debug(ctx, "Successfully notified scheduler about trigger",
 					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
 					observability.Float64("trigger_value", currentValue),
 				)

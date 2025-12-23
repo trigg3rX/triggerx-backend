@@ -92,7 +92,7 @@ func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 		duration := time.Since(startTime)
 		statusCode := c.Writer.Status()
 
-		logger.Info(c.Request.Context(), "Request processed",
+		logger.Debug(c.Request.Context(), "Request processed",
 			observability.String("trace_id", traceID.(string)),
 			observability.Int("status", statusCode),
 			observability.String("method", c.Request.Method),

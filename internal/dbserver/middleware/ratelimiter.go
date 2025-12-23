@@ -63,7 +63,7 @@ func (rl *RateLimiter) ApplyGinRateLimit(c *gin.Context, apiKey *types.ApiKey) e
 	ctx := context.Background()
 	result, err := rl.redis.EvalScript(ctx, rateLimitScript, []string{key}, []interface{}{limit, window})
 	if err != nil {
-		rl.logger.Error(ctx, "Failed to evaluate rate limit script: %v", observability.Error(err))
+		rl.logger.Error(ctx, "Failed to evaluate rate limit script", observability.Error(err))
 		return err
 	}
 
@@ -97,7 +97,7 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 	result, err := rl.redis.Eval(ctx, rateLimitScript, []string{rateLimitKey},
 		apiKey.RateLimit, windowSeconds)
 	if err != nil {
-		rl.logger.Error(ctx, "Rate limiting error: %v", observability.Error(err))
+		rl.logger.Error(ctx, "Rate limiting error", observability.Error(err))
 
 		if true {
 			return nil, nil
@@ -111,7 +111,7 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 
 	results, ok := result.([]interface{})
 	if !ok || len(results) != 3 {
-		rl.logger.Error(ctx, "Invalid result from Redis: %v", observability.Any("result", result))
+		rl.logger.Error(ctx, "Invalid result from Redis", observability.Any("result", result))
 		return nil, fmt.Errorf("invalid response from rate limiter")
 	}
 
@@ -120,14 +120,14 @@ func (rl *RateLimiter) ApplyRateLimit(r *http.Request, apiKey *types.ApiKey) (*h
 	ttl := int(results[2].(int64))
 	reset := currentTimestamp + int64(ttl)
 
-	rl.logger.Info(ctx, "Rate Limit Debug: API Key: %s, Owner: %s, Rate Limit: %d, Current Count: %d, Remaining: %d, TTL: %d", observability.String("api_key", apiKey.Key), observability.String("owner", apiKey.Owner), observability.Int("rate_limit", apiKey.RateLimit), observability.Int("current_count", count), observability.Int("remaining", remaining), observability.Int("ttl", ttl))
+	rl.logger.Info(ctx, "Rate Limit Debug", observability.String("api_key", apiKey.Key), observability.String("owner", apiKey.Owner), observability.Int("rate_limit", apiKey.RateLimit), observability.Int("current_count", count), observability.Int("remaining", remaining), observability.Int("ttl", ttl))
 
 	r.Header.Set("X-RateLimit-Limit", strconv.Itoa(apiKey.RateLimit))
 	r.Header.Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 	r.Header.Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
 
 	if count > apiKey.RateLimit {
-		rl.logger.Warn(ctx, "Rate limit exceeded: API Key: %s, Owner: %s, Count: %d, Limit: %d", observability.String("api_key", apiKey.Key), observability.String("owner", apiKey.Owner), observability.Int("count", count), observability.Int("limit", apiKey.RateLimit))
+		rl.logger.Warn(ctx, "Rate limit exceeded", observability.String("api_key", apiKey.Key), observability.String("owner", apiKey.Owner), observability.Int("count", count), observability.Int("limit", apiKey.RateLimit))
 
 		resp := &http.Response{
 			StatusCode: http.StatusTooManyRequests,
@@ -177,7 +177,7 @@ func (rl *RateLimiter) CheckRateLimitForKey(apiKey *types.ApiKey) error {
 	ctx := context.Background()
 	result, err := rl.redis.EvalScript(ctx, rateLimitScript, []string{key}, []interface{}{limit, window})
 	if err != nil {
-		rl.logger.Error(ctx, "Failed to evaluate rate limit script: %v", observability.Error(err))
+		rl.logger.Error(ctx, "Failed to evaluate rate limit script", observability.Error(err))
 		return err
 	}
 

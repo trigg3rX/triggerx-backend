@@ -106,7 +106,6 @@ func (c *NodeClient) ConnectWebSocket(ctx context.Context) error {
 	// Start message handler
 	go c.handleWebSocketMessages(ctx)
 
-	c.config.Logger.Info(ctx, "WebSocket connected to %s", observability.String("wsURL", wsURL))
 	return nil
 }
 
@@ -218,7 +217,7 @@ func (c *NodeClient) handleResponse(ctx context.Context, requestID int, message 
 	c.mu.RUnlock()
 
 	if !exists {
-		c.config.Logger.Warn(ctx, "Received response for unknown request ID: %d", observability.Int("requestID", requestID))
+		c.config.Logger.Warn(ctx, "Received response for unknown request ID", observability.Int("requestID", requestID))
 		return
 	}
 
@@ -233,7 +232,7 @@ func (c *NodeClient) handleResponse(ctx context.Context, requestID int, message 
 	select {
 	case responseChan <- &rpcResp:
 	default:
-		c.config.Logger.Warn(ctx, "Response channel full for request ID: %d", observability.Int("requestID", requestID))
+		c.config.Logger.Warn(ctx, "Response channel full", observability.Int("requestID", requestID))
 	}
 
 	// Clean up
@@ -279,7 +278,7 @@ func (c *NodeClient) handleSubscriptionNotification(ctx context.Context, msg map
 			select {
 			case ch <- notification:
 			default:
-				c.config.Logger.Warn(ctx, "Subscription channel full for %s", observability.String("subID", subID))
+				c.config.Logger.Warn(ctx, "Subscription channel full", observability.String("subID", subID))
 			}
 		}
 	}
@@ -381,8 +380,6 @@ func (c *NodeClient) EthSubscribe(ctx context.Context, subscriptionType string, 
 	}
 	c.wsSubManager.AddSubscription(subscriptionID, notifChan)
 
-	c.config.Logger.Info(ctx, "Subscribed to %s with ID: %s", observability.String("subscriptionType", subscriptionType), observability.String("subscriptionID", subscriptionID))
-
 	return subscriptionID, notifChan, nil
 }
 
@@ -467,6 +464,5 @@ func (c *NodeClient) EthUnsubscribe(ctx context.Context, subscriptionID string) 
 		c.wsSubManager.RemoveSubscription(subscriptionID)
 	}
 
-	c.config.Logger.Info(ctx, "Unsubscribed from subscription: %s", observability.String("subscriptionID", subscriptionID))
 	return nil
 }

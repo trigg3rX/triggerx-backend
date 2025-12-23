@@ -48,7 +48,7 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 		cacheKey := h.generateCacheKey(ipfsUrl, req)
 		cachedResult, err := h.redisClient.Get(ctx, cacheKey)
 		if err == nil && cachedResult != "" {
-			h.logger.Info(ctx, "[ValidateCodeInternal] Cache hit for IPFS URL: %s", observability.String("ipfs_url", ipfsUrl))
+			h.logger.Info(ctx, "[ValidateCodeInternal] Cache hit for IPFS URL", observability.String("ipfs_url", ipfsUrl))
 			var cachedResp ValidateCodeResponse
 			if err := json.Unmarshal([]byte(cachedResult), &cachedResp); err == nil {
 				// Return the cached response directly
@@ -57,7 +57,7 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 			// If unmarshal fails, continue with validation
 			h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to unmarshal cached result, proceeding with validation")
 		} else if err != nil {
-			h.logger.Warn(ctx, "[ValidateCodeInternal] Error checking cache: %v", observability.Error(err))
+			h.logger.Warn(ctx, "[ValidateCodeInternal] Error checking cache", observability.Error(err))
 		}
 	}
 
@@ -67,7 +67,7 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 		safeMatch := !req.IsSafe
 		resp := ValidateCodeResponse{Executable: false, Output: "", Error: err.Error(), SafeMatch: safeMatch}
 		// Log validation result (failure)
-		h.logger.Info(ctx, "[ValidateCodeInternal] Validation result | lang=%s target=%s isSafe=%t selectedSafe=%s executable=%t safeMatch=%t error=%s",
+		h.logger.Info(ctx, "[ValidateCodeInternal] Validation result",
 			observability.String("language", req.Language),
 			observability.String("target_function", req.TargetFunction),
 			observability.Bool("is_safe", req.IsSafe),
@@ -83,9 +83,9 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 			if err == nil {
 				// Cache for 24 hours
 				if err := h.redisClient.Set(ctx, cacheKey, string(respJSON), 24*time.Hour); err != nil {
-					h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to cache validation result: %v", observability.Error(err))
+					h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to cache validation result", observability.Error(err))
 				} else {
-					h.logger.Info(ctx, "[ValidateCodeInternal] Cached validation result for IPFS URL: %s", observability.String("ipfs_url", ipfsUrl))
+					h.logger.Info(ctx, "[ValidateCodeInternal] Cached validation result for IPFS URL", observability.String("ipfs_url", ipfsUrl))
 				}
 			}
 		}
@@ -133,7 +133,7 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 
 	// Emit explicit warning when safe address does not match to aid debugging/observability
 	if req.IsSafe && !safeMatch {
-		h.logger.Warn(ctx, "[ValidateCodeInternal] Safe address mismatch | lang=%s target=%s expected=%s got=%s",
+		h.logger.Warn(ctx, "[ValidateCodeInternal] Safe address mismatch",
 			observability.String("language", req.Language),
 			observability.String("target_function", req.TargetFunction),
 			observability.String("selected_safe", req.SelectedSafe),
@@ -157,9 +157,9 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 		if err == nil {
 			// Cache for 24 hours
 			if err := h.redisClient.Set(ctx, cacheKey, string(respJSON), 24*time.Hour); err != nil {
-				h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to cache validation result: %v", observability.Error(err))
+				h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to cache validation result", observability.Error(err))
 			} else {
-				h.logger.Info(ctx, "[ValidateCodeInternal] Cached validation result for IPFS URL: %s", observability.String("ipfs_url", ipfsUrl))
+				h.logger.Info(ctx, "[ValidateCodeInternal] Cached validation result for IPFS URL", observability.String("ipfs_url", ipfsUrl))
 			}
 		}
 	}
@@ -178,7 +178,7 @@ func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
 	resp, _ := h.ValidateCodeInternal(c.Request.Context(), req, "", config.GetAlchemyAPIKey())
 	// Log the HTTP request + response coupling with trace if available
 	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[ValidateCodeExecutable] trace=%s lang=%s target=%s isSafe=%t selectedSafe=%s -> executable=%t safeMatch=%t error=%q",
+	h.logger.Info(c.Request.Context(), "[ValidateCodeExecutable] trace",
 		observability.String("trace_id", traceID),
 		observability.String("language", req.Language),
 		observability.String("target_function", req.TargetFunction),

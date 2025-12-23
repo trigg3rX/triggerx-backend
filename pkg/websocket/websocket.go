@@ -249,7 +249,7 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(c.config.WriteDeadline))
 	})
 
-	c.logger.Info(ctx, "Successfully connected to WebSocket", observability.String("url", c.url))
+	c.logger.Debug(ctx, "Successfully connected to WebSocket", observability.String("url", c.url))
 
 	// Start background goroutines
 	c.wg.Add(2)

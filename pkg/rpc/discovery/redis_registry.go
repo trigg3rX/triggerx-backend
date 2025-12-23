@@ -97,7 +97,7 @@ func NewRedisRegistry(ctx context.Context, logger observability.Logger, config R
 	// Start the background refresh goroutine
 	go registry.refreshLoop()
 
-	logger.Info(ctx, "Redis registry initialized with prefix: %s", observability.String("prefix", config.KeyPrefix))
+	logger.Debug(ctx, "Redis registry initialized with prefix", observability.String("prefix", config.KeyPrefix))
 	return registry, nil
 }
 
@@ -120,7 +120,7 @@ func (r *RedisRegistry) Register(ctx context.Context, info rpc.ServiceInfo) erro
 		return fmt.Errorf("failed to register service in Redis: %w", err)
 	}
 
-	r.logger.Info(ctx, "Registered service: %s at %s:%d", observability.String("name", info.Name), observability.String("address", info.Address), observability.Int("port", info.Port))
+	r.logger.Debug(ctx, "Registered service", observability.String("name", info.Name), observability.String("address", info.Address), observability.Int("port", info.Port))
 
 	// Notify watchers
 	r.notifyWatchers(ctx, info.Name, info)
@@ -137,7 +137,7 @@ func (r *RedisRegistry) Deregister(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to deregister service from Redis: %w", err)
 	}
 
-	r.logger.Info(ctx, "Deregistered service: %s", observability.String("name", name))
+	r.logger.Debug(ctx, "Deregistered service", observability.String("name", name))
 
 	// Notify watchers with empty service info to indicate deregistration
 	r.notifyWatchers(ctx, name, rpc.ServiceInfo{Name: name})
@@ -186,7 +186,7 @@ func (r *RedisRegistry) ListServices(ctx context.Context) ([]rpc.ServiceInfo, er
 		for _, key := range keys {
 			value, exists, err := r.client.GetWithExists(ctx, key)
 			if err != nil {
-				r.logger.Warn(ctx, "Failed to get value for key %s: %v", observability.String("key", key), observability.String("error", fmt.Sprintf("%v", err)))
+				r.logger.Warn(ctx, "Failed to get value for key", observability.String("key", key), observability.Error(err))
 				continue
 			}
 
@@ -197,7 +197,7 @@ func (r *RedisRegistry) ListServices(ctx context.Context) ([]rpc.ServiceInfo, er
 			var info rpc.ServiceInfo
 			err = json.Unmarshal([]byte(value), &info)
 			if err != nil {
-				r.logger.Warn(ctx, "Failed to unmarshal service info for key %s: %v", observability.String("key", key), observability.String("error", fmt.Sprintf("%v", err)))
+				r.logger.Warn(ctx, "Failed to unmarshal service info for key", observability.String("key", key), observability.Error(err))
 				continue
 			}
 
@@ -230,11 +230,11 @@ func (r *RedisRegistry) Watch(ctx context.Context, name string) (<-chan rpc.Serv
 		select {
 		case ch <- *info:
 		default:
-			r.logger.Warn(ctx, "Failed to send initial state to watcher for service: %s", observability.String("name", name))
+			r.logger.Warn(ctx, "Failed to send initial state to watcher for service", observability.String("name", name))
 		}
 	}
 
-	r.logger.Info(ctx, "Started watching service: %s", observability.String("name", name))
+	r.logger.Debug(ctx, "Started watching service", observability.String("name", name))
 	return ch, nil
 }
 
@@ -303,7 +303,7 @@ func (r *RedisRegistry) notifyWatchers(ctx context.Context, serviceName string, 
 		select {
 		case ch <- info:
 		default:
-			r.logger.Warn(ctx, "Failed to notify watcher for service: %s", observability.String("service_name", serviceName))
+			r.logger.Warn(ctx, "Failed to notify watcher for service", observability.String("service_name", serviceName))
 		}
 	}
 }
@@ -330,7 +330,7 @@ func (r *RedisRegistry) refreshServices() {
 
 	services, err := r.ListServices(ctx)
 	if err != nil {
-		r.logger.Error(ctx, "Failed to list services for refresh: %v", observability.String("error", fmt.Sprintf("%v", err)))
+		r.logger.Error(ctx, "Failed to list services for refresh", observability.Error(err))
 		return
 	}
 
@@ -339,7 +339,7 @@ func (r *RedisRegistry) refreshServices() {
 		if service.Health.Status == "healthy" {
 			err := r.Register(ctx, service)
 			if err != nil {
-				r.logger.Warn(ctx, "Failed to refresh service %s: %v", observability.String("name", service.Name), observability.String("error", fmt.Sprintf("%v", err)))
+				r.logger.Warn(ctx, "Failed to refresh service", observability.String("name", service.Name), observability.Error(err))
 			}
 		}
 	}

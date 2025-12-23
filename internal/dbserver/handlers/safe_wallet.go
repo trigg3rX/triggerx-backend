@@ -20,7 +20,7 @@ func (h *Handler) GetSafeAddressesByUser(c *gin.Context) {
 
 	safeAddresses, err := h.safeAddressRepository.GetSafeAddressesByUser(userAddress)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "Error fetching safe addresses for user %s: %v", observability.String("user_address", userAddress), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "Error fetching safe addresses for user", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch safe addresses"})
 		return
 	}
@@ -31,7 +31,7 @@ func (h *Handler) GetSafeAddressesByUser(c *gin.Context) {
 // GetJobsBySafeAddress handles GET /jobs/safe-address/:safe_address
 func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobsBySafeAddress] trace_id=%s - Retrieving jobs by safe address", observability.String("trace_id", traceID))
+	h.logger.Info(c.Request.Context(), "[GetJobsBySafeAddress] Retrieving jobs by safe address", observability.String("trace_id", traceID))
 
 	safeAddress := strings.ToLower(c.Param("safe_address"))
 	if safeAddress == "" {
@@ -43,14 +43,14 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetJobsBySafeAddress] Retrieving jobs for safe address: %s", observability.String("safe_address", safeAddress))
+	h.logger.Info(c.Request.Context(), "[GetJobsBySafeAddress] Retrieving jobs for safe address", observability.String("safe_address", safeAddress))
 
 	// Get jobs by safe address
 	trackDBOp := metrics.TrackDBOperation("read", "job_data")
 	jobDataList, err := h.jobRepository.GetJobsBySafeAddress(safeAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting jobs for safe address %s: %v", observability.String("safe_address", safeAddress), observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting jobs for safe address", observability.String("safe_address", safeAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve jobs",
 			"code":  "JOB_RETRIEVAL_ERROR",
@@ -80,7 +80,7 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobData.JobID.ToBigInt())
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting time job data for jobID %s: %v", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting time job data for jobID", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
@@ -92,7 +92,7 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobData.JobID.ToBigInt())
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting event job data for jobID %s: %v", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting event job data for jobID", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
@@ -104,14 +104,14 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobData.JobID.ToBigInt())
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting condition job data for jobID %s: %v", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
+				h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Error getting condition job data for jobID", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
 			jobResponse.ConditionJobData = &conditionJobData
 
 		default:
-			h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Unknown task definition ID %d for jobID %s", observability.Int64("task_definition_id", int64(jobData.TaskDefinitionID)), observability.String("job_id", jobData.JobID.String()))
+			h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Unknown task definition ID for jobID", observability.Int64("task_definition_id", int64(jobData.TaskDefinitionID)), observability.String("job_id", jobData.JobID.String()))
 			hasErrors = true
 			continue
 		}

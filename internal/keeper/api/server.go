@@ -75,7 +75,6 @@ func NewServer(cfg Config, deps *Dependencies) *Server {
 
 // Start starts the server
 func (s *Server) Start() error {
-	s.logger.Info(context.Background(), "Starting API server", observability.String("addr", s.httpServer.Addr))
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
@@ -84,7 +83,7 @@ func (s *Server) Start() error {
 
 // Stop gracefully stops the server
 func (s *Server) Stop(ctx context.Context) error {
-	s.logger.Info(ctx, "Stopping API server")
+	// s.logger.Info(ctx, "Stopping API server")
 	return s.httpServer.Shutdown(ctx)
 }
 

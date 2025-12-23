@@ -83,7 +83,7 @@ func (c *Client) Send(ctx context.Context, webhookURL string, notification *type
 		// Check response status
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				c.logger.Error(ctx, "Error closing response body: %v", observability.Error(err))
+				c.logger.Error(ctx, "Error closing response body", observability.Error(err))
 			}
 		}()
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {

@@ -86,7 +86,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 	}
 	m.mutex.Unlock()
 
-	m.logger.Info(ctx, "Initializing language-specific container pools")
+	m.logger.Debug(ctx, "Initializing language-specific container pools")
 
 	// Use goroutines and WaitGroup for parallel initialization
 	var wg sync.WaitGroup
@@ -124,7 +124,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 			m.pools[language] = pool
 			m.mutex.Unlock()
 
-			m.logger.Info(ctx, "Initialized pool for language", observability.String("language", string(language)))
+			m.logger.Debug(ctx, "Initialized pool for language", observability.String("language", string(language)))
 		}(lang, poolConfig)
 	}
 
@@ -138,7 +138,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 	}
 
 	m.initialized = true
-	m.logger.Info(ctx, "Language-specific container pools initialized with %d pools", observability.Int("success_count", successCount))
+	m.logger.Debug(ctx, "Language-specific container pools initialized", observability.Int("success_count", successCount), observability.Int("total_languages", len(languages)))
 	return nil
 }
 
@@ -269,7 +269,7 @@ func (m *containerManager) MarkContainerAsFailed(ctx context.Context, containerI
 
 // ExecuteInContainerWithLanguage executes code in a container using language-specific setup
 func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
-	m.logger.Info(ctx, "Executing file in container with language", observability.String("file_path", filePath), observability.String("container_id", containerID), observability.String("language", string(language)))
+	m.logger.Debug(ctx, "Executing file in container with language", observability.String("file_path", filePath), observability.String("container_id", containerID), observability.String("language", string(language)))
 
 	// Verify container is running before execution
 	inspect, err := m.dockerClient.ContainerInspect(ctx, containerID)
@@ -294,8 +294,6 @@ func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID s
 }
 
 func (m *containerManager) PullImage(ctx context.Context, imageName string) error {
-	// m.logger.Infof("Pulling Docker image: %s", imageName)
-
 	// Check if image already exists locally
 	images, err := m.dockerClient.ImageList(ctx, image.ListOptions{})
 	if err != nil {
@@ -343,13 +341,13 @@ func (m *containerManager) PullImage(ctx context.Context, imageName string) erro
 		}
 	}
 
-	m.logger.Info(ctx, "Successfully pulled image", observability.String("image_name", imageName))
+	m.logger.Debug(ctx, "Successfully pulled image", observability.String("image_name", imageName))
 	return nil
 }
 
 func (m *containerManager) CleanupContainer(ctx context.Context, containerID string) error {
 	if !m.config.GetManagerConfig().AutoCleanup {
-		m.logger.Info(ctx, "auto cleanup is disabled, skipping container cleanup")
+		m.logger.Debug(ctx, "auto cleanup is disabled, skipping container cleanup")
 		return nil
 	}
 
@@ -360,7 +358,7 @@ func (m *containerManager) CleanupContainer(ctx context.Context, containerID str
 // Since Docker doesn't provide a direct API to kill exec processes,
 // we rely on context cancellation and container signaling
 func (m *containerManager) KillExecProcess(ctx context.Context, execID string) error {
-	m.logger.Info(ctx, "Attempting to terminate exec process", observability.String("exec_id", execID))
+	m.logger.Debug(ctx, "Attempting to terminate exec process", observability.String("exec_id", execID))
 
 	// First, check if the exec process is still running
 	inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execID)
@@ -370,14 +368,14 @@ func (m *containerManager) KillExecProcess(ctx context.Context, execID string) e
 	}
 
 	if !inspectResp.Running {
-		m.logger.Info(ctx, "Exec process is already terminated", observability.String("exec_id", execID))
+		m.logger.Debug(ctx, "Exec process is already terminated", observability.String("exec_id", execID))
 		return nil
 	}
 
 	// Since Docker doesn't provide a direct API to kill exec processes,
 	// we can try to signal the container to terminate the process
 	// This is a best-effort approach
-	m.logger.Info(ctx, "Exec process is still running. Attempting to signal container", observability.String("exec_id", execID), observability.String("container_id", inspectResp.ContainerID))
+	m.logger.Debug(ctx, "Exec process is still running. Attempting to signal container", observability.String("exec_id", execID), observability.String("container_id", inspectResp.ContainerID))
 
 	// Try to send a signal to the container (this might help terminate the exec process)
 	// Note: This is not guaranteed to work for all exec processes
@@ -389,7 +387,7 @@ func (m *containerManager) KillExecProcess(ctx context.Context, execID string) e
 		// Instead, we rely on context cancellation and let the Docker daemon handle cleanup
 	}
 
-	m.logger.Info(ctx, "Exec process termination initiated. The process will terminate when the context is cancelled "+
+	m.logger.Debug(ctx, "Exec process termination initiated. The process will terminate when the context is cancelled "+
 		"or when the Docker daemon handles the cleanup.", observability.String("exec_id", execID))
 
 	return nil
@@ -794,6 +792,6 @@ func (m *containerManager) Close(ctx context.Context) error {
 		}
 	}
 
-	m.logger.Info(ctx, "Docker manager closed")
+	m.logger.Debug(ctx, "Docker manager closed")
 	return nil
 }

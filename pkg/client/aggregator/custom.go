@@ -28,7 +28,7 @@ func (c *AggregatorClient) SendTaskToPerformer(ctx context.Context, taskData *ty
 		return false, fmt.Errorf("failed to send custom task: %w", err)
 	}
 
-	c.logger.Info(ctx, "Task sent successfully",
+	c.logger.Debug(ctx, "Task sent successfully",
 		observability.Int("TaskID", int(taskData.TaskID)),
 		observability.Any("result", result))
 	return true, nil

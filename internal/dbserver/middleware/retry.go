@@ -71,7 +71,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 			var err error
 			bodyBytes, err = io.ReadAll(c.Request.Body)
 			if err != nil {
-				logger.Error(ctx, "Failed to read request body: %v", observability.Error(err))
+				logger.Error(ctx, "Failed to read request body", observability.Error(err))
 				c.AbortWithStatus(http.StatusInternalServerError)
 				return
 			}
@@ -142,7 +142,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 			}
 
 			if config.LogRetryAttempt {
-				logger.Warn(ctx, "Retry attempt %d for %s %s with status code %d", observability.Int("attempts", attempts), observability.String("method", c.Request.Method), observability.String("path", c.Request.URL.Path), observability.Int("status", statusCode))
+				logger.Warn(ctx, "Retry attempt", observability.Int("attempts", attempts), observability.String("method", c.Request.Method), observability.String("path", c.Request.URL.Path), observability.Int("status", statusCode))
 			}
 
 			lastErr = fmt.Errorf("received retryable status code: %d", statusCode)
@@ -158,7 +158,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 		})
 
 		if err != nil {
-			logger.Error(ctx, "Error retrying request: %v", observability.Error(err))
+			logger.Error(ctx, "Error retrying request", observability.Error(err))
 			metrics.RetryFailuresTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 			if finalStatus == 0 {
 				finalStatus = http.StatusInternalServerError
@@ -169,7 +169,7 @@ func RetryMiddleware(ctx context.Context, config *RetryConfig, logger observabil
 		// Write the final response only once
 		origWriter.WriteHeader(finalStatus)
 		if _, err := origWriter.Write(finalBody); err != nil {
-			logger.Error(ctx, "Error writing final response: %v", observability.Error(err))
+			logger.Error(ctx, "Error writing final response", observability.Error(err))
 		}
 
 		// Abort the context to prevent further handlers from writing

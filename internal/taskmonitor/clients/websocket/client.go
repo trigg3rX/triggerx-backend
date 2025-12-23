@@ -132,7 +132,7 @@ func (c *Client) AddChain(ctx context.Context, config ChainConfig) error {
 	if len(config.Contracts) > 0 {
 		for _, contractConfig := range config.Contracts {
 			if err := chainConn.subscribeToContractEvents(ctx, contractConfig); err != nil {
-				c.logger.Warn(ctx, "Failed to subscribe to contract %s: %v", observability.String("contract_address", contractConfig.Address), observability.Error(err))
+				c.logger.Warn(ctx, "Failed to subscribe to contract", observability.String("contract_address", contractConfig.Address), observability.Error(err))
 			}
 		}
 	}
@@ -159,7 +159,7 @@ func (c *Client) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	for chainID, chainConn := range c.chains {
 		if err := chainConn.close(ctx); err != nil {
-			c.logger.Error(ctx, "Error closing connection for chain %s: %v", observability.String("chain_id", chainID), observability.Error(err))
+			c.logger.Error(ctx, "Error closing connection for chain", observability.String("chain_id", chainID), observability.Error(err))
 		}
 	}
 	c.mu.Unlock()
@@ -226,11 +226,11 @@ type ChainStatus struct {
 func (c *Client) startChainConnection(ctx context.Context, chainID string, chainConn *ChainConnection) {
 	defer c.wg.Done()
 
-	c.logger.Info(ctx, "Starting connection for chain %s", observability.String("chain_id", chainID))
+	c.logger.Info(ctx, "Starting connection for chain", observability.String("chain_id", chainID))
 
 	// Connect to WebSocket via nodeclient
 	if err := chainConn.connect(c.ctx); err != nil {
-		c.logger.Error(ctx, "Failed to connect to chain %s: %v", observability.String("chain_id", chainID), observability.Error(err))
+		c.logger.Error(ctx, "Failed to connect to chain", observability.String("chain_id", chainID), observability.Error(err))
 		return
 	}
 
@@ -243,10 +243,10 @@ func (c *Client) startChainConnection(ctx context.Context, chainID string, chain
 
 // processEvents waits for context cancellation (subscriptions are handled individually)
 func (cc *ChainConnection) processEvents(ctx context.Context) {
-	cc.logger.Info(ctx, "Starting event processing for chain %s", observability.String("chain_name", cc.chainName))
+	cc.logger.Info(ctx, "Starting event processing for chain", observability.String("chain_name", cc.chainName))
 	<-ctx.Done()
 	cc.wg.Wait()
-	cc.logger.Info(ctx, "Stopping event processing for chain %s", observability.String("chain_name", cc.chainName))
+	cc.logger.Info(ctx, "Stopping event processing for chain", observability.String("chain_name", cc.chainName))
 }
 
 // processSubscriptionNotifications processes notifications for a specific subscription
@@ -267,12 +267,12 @@ func (cc *ChainConnection) processSubscriptionNotifications(ctx context.Context,
 			return
 		case notif, ok := <-notifChan:
 			if !ok {
-				cc.logger.Info(ctx, "Notification channel closed for subscription %s", observability.String("subscription_id", subID))
+				cc.logger.Info(ctx, "Notification channel closed for subscription", observability.String("subscription_id", subID))
 				return
 			}
 			// Process the notification
 			if err := cc.processNotification(ctx, sub, notif); err != nil {
-				cc.logger.Error(ctx, "Failed to process notification for subscription %s: %v", observability.String("subscription_id", subID), observability.Error(err))
+				cc.logger.Error(ctx, "Failed to process notification for subscription", observability.String("subscription_id", subID), observability.Error(err))
 			}
 		}
 	}
@@ -292,7 +292,7 @@ func (cc *ChainConnection) processNotification(ctx context.Context, sub *EventSu
 
 // connect establishes WebSocket connection for the chain via nodeclient
 func (cc *ChainConnection) connect(ctx context.Context) error {
-	cc.logger.Info(ctx, "Connecting to chain %s WebSocket at %s", observability.String("chain_name", cc.chainName), observability.String("websocket_url", cc.websocketURL))
+	cc.logger.Info(ctx, "Connecting to chain WebSocket", observability.String("chain_name", cc.chainName), observability.String("websocket_url", cc.websocketURL))
 
 	if cc.websocketURL == "" {
 		return fmt.Errorf("WebSocket URL not configured for chain %s", cc.chainName)
@@ -303,11 +303,11 @@ func (cc *ChainConnection) connect(ctx context.Context) error {
 		return fmt.Errorf("failed to connect WebSocket: %w", err)
 	}
 
-	cc.logger.Info(ctx, "Successfully connected to chain %s WebSocket", observability.String("chain_name", cc.chainName))
+	cc.logger.Info(ctx, "Successfully connected to chain WebSocket", observability.String("chain_name", cc.chainName))
 
 	// Subscribe to all active subscriptions using nodeclient
 	if err := cc.subscribeAll(ctx); err != nil {
-		cc.logger.Error(ctx, "Failed to subscribe for chain %s: %v", observability.String("chain_name", cc.chainName), observability.Error(err))
+		cc.logger.Error(ctx, "Failed to subscribe for chain", observability.String("chain_name", cc.chainName), observability.Error(err))
 		// Don't fail the connection for subscription errors
 	}
 
@@ -327,7 +327,7 @@ func (cc *ChainConnection) subscribeAll(ctx context.Context) error {
 
 	for _, sub := range activeSubs {
 		if err := cc.subscribeToEvent(ctx, sub); err != nil {
-			cc.logger.Error(ctx, "Failed to subscribe to %s.%s: %v", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.Error(err))
+			cc.logger.Error(ctx, "Failed to subscribe to", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.Error(err))
 			continue
 		}
 	}
@@ -360,7 +360,7 @@ func (cc *ChainConnection) subscribeToEvent(ctx context.Context, sub *EventSubsc
 	cc.wg.Add(1)
 	go cc.processSubscriptionNotifications(ctx, sub.ID, notifChan)
 
-	cc.logger.Info(ctx, "Subscribed to %s.%s with nodeclient subscription ID: %s", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.String("node_subscription_id", nodeSubID))
+	cc.logger.Info(ctx, "Subscribed to", observability.String("contract_type", string(sub.ContractType)), observability.String("event_name", sub.EventName), observability.String("node_subscription_id", nodeSubID))
 	return nil
 }
 
@@ -381,7 +381,7 @@ func (cc *ChainConnection) subscribeToContractWithType(ctx context.Context, cont
 		// Add subscription using the subscription manager
 		sub, err := cc.subManager.AddContractSubscription(ctx, contractAddr, contractType, eventName)
 		if err != nil {
-			cc.logger.Error(ctx, "Failed to add contract subscription for %s.%s: %v", observability.String("contract_type", string(contractType)), observability.String("event_name", eventName), observability.Error(err))
+			cc.logger.Error(ctx, "Failed to add contract subscription for", observability.String("contract_type", string(contractType)), observability.String("event_name", eventName), observability.Error(err))
 			continue
 		}
 
@@ -404,7 +404,7 @@ func (cc *ChainConnection) subscribeToContractWithType(ctx context.Context, cont
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := cc.subscribeToEvent(ctx, sub); err != nil {
-				cc.logger.Error(ctx, "Failed to subscribe via nodeclient for %s.%s: %v", observability.String("contract_type", string(contractType)), observability.String("event_name", eventName), observability.Error(err))
+				cc.logger.Error(ctx, "Failed to subscribe via nodeclient for", observability.String("contract_type", string(contractType)), observability.String("event_name", eventName), observability.Error(err))
 			}
 		}
 	}
@@ -494,7 +494,7 @@ func (cc *ChainConnection) close(ctx context.Context) error {
 		if cc.nodeClient != nil {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			if err := cc.nodeClient.EthUnsubscribe(ctx, nodeSub.NodeSubID); err != nil {
-				cc.logger.Error(ctx, "Failed to unsubscribe %s: %v", observability.String("subscription_id", subID), observability.Error(err))
+				cc.logger.Error(ctx, "Failed to unsubscribe", observability.String("subscription_id", subID), observability.Error(err))
 			}
 			cancel()
 		}
@@ -546,7 +546,7 @@ func (c *Client) TriggerReconnect(ctx context.Context, chainID string) error {
 		return fmt.Errorf("chain %s not found", chainID)
 	}
 
-	chainConn.logger.Info(ctx, "Manual reconnection triggered for chain %s", observability.String("chain_id", chainID))
+	chainConn.logger.Info(ctx, "Manual reconnection triggered for chain", observability.String("chain_id", chainID))
 
 	// Disconnect and reconnect WebSocket via nodeclient
 	if chainConn.nodeClient != nil {

@@ -77,7 +77,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 
 		// If script says don't execute, return early
 		if !customScriptOutput.ShouldExecute {
-			e.logger.Info(ctx, "[CustomScript] Script returned shouldExecute=false, skipping execution")
+			e.logger.Debug(ctx, "[CustomScript] Script returned shouldExecute=false, skipping execution")
 			return types.PerformerActionData{
 				TaskID:         targetData.TaskID,
 				Status:         true,
@@ -90,12 +90,12 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		// Calldata is already built by the script
 		callData = ethcommon.FromHex(customScriptOutput.Calldata)
 
-		e.logger.Info(ctx, "[CustomScript] Script returned: target=%s, calldata=%s", observability.String("target", customScriptOutput.TargetContract), observability.String("calldata", customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)]))
+		e.logger.Debug(ctx, "[CustomScript] Script returned", observability.String("target", customScriptOutput.TargetContract), observability.String("calldata", customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)]))
 
 		// Use the fee calculated by Docker executor (pipeline.go calculateFees)
 		// This reuses the same logic and avoids duplication
 		result = dockerResult
-		e.logger.Info(ctx, "[CustomScript] Using fee from Docker execution: totalCost=%s wei, currentCost=%s wei", observability.String("total_cost", result.Stats.TotalCost.String()), observability.String("current_cost", result.Stats.CurrentTotalCost.String()))
+		e.logger.Debug(ctx, "[CustomScript] Using fee from Docker execution", observability.String("total_cost", result.Stats.TotalCost.String()), observability.String("current_cost", result.Stats.CurrentTotalCost.String()))
 
 		// Skip normal argument processing for custom scripts
 		goto skipArgumentProcessing
@@ -120,7 +120,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 			metadata["on_chain_args"] = string(argDataJSON)
 		}
 
-		// e.logger.Infof("Metadata: %+v", metadata)
+		// e.logger.Info(ctx, "Metadata", observability.Any("metadata", metadata))
 
 		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1, config.GetAlchemyAPIKey(), metadata)
 		if execErr != nil {
@@ -133,7 +133,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 
 		if targetData.TaskDefinitionID == 2 || targetData.TaskDefinitionID == 4 || targetData.TaskDefinitionID == 6 {
 			argData = e.parseDynamicArgs(ctx, result.Output)
-			e.logger.Debug(ctx, "Parsed dynamic arguments: %+v", observability.Any("arg_data", argData))
+			e.logger.Debug(ctx, "Parsed dynamic arguments", observability.Any("arg_data", argData))
 		} else {
 			argData = e.parseStaticArgs(targetData.Arguments)
 		}
@@ -142,7 +142,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 	}
 
 	// Handle args as potentially structured data
-	convertedArgs, err = e.processArguments(ctx, argData, method.Inputs, contractABI)
+	convertedArgs, err = e.processArguments(ctx, argData, method.Inputs)
 	if err != nil {
 		return types.PerformerActionData{}, false, fmt.Errorf("error processing (dynamic) arguments: %v", err)
 	}
@@ -154,7 +154,7 @@ func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.Task
 		return types.PerformerActionData{}, false, fmt.Errorf("error packing arguments to function call: %v", err)
 	}
 
-skipArgumentProcessing:
+	skipArgumentProcessing:
 	// Create transaction data for execution contract
 	privateKey, err := crypto.HexToECDSA(config.GetPrivateKeyController())
 	if err != nil {
@@ -199,7 +199,7 @@ skipArgumentProcessing:
 	if err != nil {
 		return types.PerformerActionData{}, false, fmt.Errorf("failed to get nonce: %w", err)
 	}
-	e.logger.Debug(ctx, "Allocated nonce %d for task %d just before transaction submission", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
+	e.logger.Debug(ctx, "Allocated nonce", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
 
 	// Submit transaction with smart retry
 	receipt, finalTxHash, err := nonceManager.SubmitTransaction(
@@ -214,7 +214,7 @@ skipArgumentProcessing:
 		// CRITICAL: Release the nonce when submission fails after all retries
 		// This prevents nonce gaps that would cause subsequent transactions to get stuck
 		nonceManager.ReleaseNonce(context.Background(), nonce, privateKey)
-		e.logger.Warn(ctx, "Released nonce %d after failed submission for task %d", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
+		e.logger.Warn(ctx, "Released nonce after failed submission", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
 		if metrics.TransactionsSentTotal != nil {
 			metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "failed").Inc(ctx)
 		}
@@ -250,7 +250,7 @@ skipArgumentProcessing:
 		metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(ctx, float64(receipt.GasUsed))
 	}
 
-	e.logger.Info(ctx, "Task ID %d executed successfully. Transaction: %s", observability.Int64("task_id", targetData.TaskID), observability.String("transaction_hash", finalTxHash))
+	e.logger.Debug(ctx, "Task executed successfully", observability.Int64("task_id", targetData.TaskID), observability.String("transaction_hash", finalTxHash))
 
 	return executionResult, true, nil // true = transaction was submitted
 }

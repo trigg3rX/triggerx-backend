@@ -10,11 +10,9 @@ import (
 )
 
 func (h *Handler) CreateTaskData(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[CreateTaskData] trace_id=%s - Creating task", observability.String("trace_id", traceID))
 	var taskData types.CreateTaskDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
-		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error decoding request body: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error decoding request body", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -26,7 +24,7 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	taskID, err := h.taskRepository.CreateTaskDataInDB(c.Request.Context(), &taskData)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error creating task: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error creating task", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create task",
 			"code":  "TASK_CREATION_ERROR",
@@ -38,7 +36,7 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 	err = h.taskRepository.AddTaskIDToJob(taskData.JobID, taskID)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error adding task ID to job: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[CreateTaskData] Error adding task ID to job", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to add task ID to job",
 			"code":  "TASK_ID_ADDITION_ERROR",
@@ -46,6 +44,6 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[CreateTaskData] Successfully created task with ID: %d", observability.Int64("task_id", taskID))
+	h.logger.Info(c.Request.Context(), "[CreateTaskData] Successfully created task with ID", observability.Int64("task_id", taskID))
 	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+
 	// "os"
 	"sort"
 	"strings"
@@ -280,7 +281,7 @@ func (ge *GasEstimator) fetchHistoricalGasPrices(ctx context.Context, chainID st
 		// We request [0, 100] percentiles to get min and max
 		feeHistory, err := client.FeeHistory(ctx, blockCount, toBlock, []float64{0, 100})
 		if err != nil {
-			ge.logger.Warn(ctx, "Failed to fetch fee history for blocks %d-%d: %v, using current gas price", observability.Int64("fromBlockNum", int64(fromBlockNum)), observability.Int64("fromBlock", int64(fromBlock)), observability.Error(err))
+			ge.logger.Warn(ctx, "Failed to fetch fee history for blocks", observability.Int64("fromBlockNum", int64(fromBlockNum)), observability.Int64("fromBlock", int64(fromBlock)), observability.Error(err))
 			// Fallback to current gas price if historical fetch fails
 			currentGasPrice, err := client.SuggestGasPrice(ctx)
 			if err != nil {
@@ -329,7 +330,7 @@ func (ge *GasEstimator) fetchHistoricalGasPrices(ctx context.Context, chainID st
 	}
 
 	if len(allMaxGasPrices) == 0 {
-		ge.logger.Warn(ctx, "No historical gas prices found for chain %s, using current gas price", observability.String("chainID", chainID))
+		ge.logger.Warn(ctx, "No historical gas prices found for chain", observability.String("chainID", chainID))
 		currentGasPrice, err := client.SuggestGasPrice(ctx)
 		if err != nil {
 			return big.NewInt(1000000000), nil // Default 1 gwei
@@ -339,7 +340,7 @@ func (ge *GasEstimator) fetchHistoricalGasPrices(ctx context.Context, chainID st
 
 	// Calculate 75th percentile of max gas prices
 	percentile75GasPrice := calculatePercentile(allMaxGasPrices, percentile75)
-	ge.logger.Info(ctx, "Calculated 75th percentile gas price for chain %s: %s (from %d samples)", observability.String("chainID", chainID), observability.String("percentile75GasPrice", percentile75GasPrice.String()), observability.Int("len(allMaxGasPrices)", len(allMaxGasPrices)))
+	ge.logger.Debug(ctx, "Calculated 75th percentile gas price for chain", observability.String("chainID", chainID), observability.String("price", percentile75GasPrice.String()), observability.Int("count", len(allMaxGasPrices)))
 
 	return percentile75GasPrice, nil
 }
@@ -358,17 +359,17 @@ func (ge *GasEstimator) getOrUpdateCachedGasPrice(ctx context.Context, chainID s
 		cache.mu.RUnlock()
 
 		if time.Since(cachedTime) < cacheValidityDuration {
-			ge.logger.Debug(ctx, "Using cached gas price for chain %s: %s (age: %v)", observability.String("chainID", chainID), observability.String("cachedPrice", cachedPrice.String()), observability.Duration("timeSinceCachedTime", time.Since(cachedTime)))
+			ge.logger.Debug(ctx, "Using cached gas price for chain", observability.String("chainID", chainID), observability.String("price", cachedPrice.String()), observability.Duration("age", time.Since(cachedTime)))
 			return new(big.Int).Set(cachedPrice), nil
 		}
 	}
 
 	// Cache expired or doesn't exist, fetch new historical data
-	ge.logger.Info(ctx, "Cache expired or missing for chain %s, fetching historical gas prices...", observability.String("chainID", chainID))
+	ge.logger.Debug(ctx, "Cache expired or missing for chain", observability.String("chainID", chainID))
 	gasPrice, err := ge.fetchHistoricalGasPrices(ctx, chainID, alchemyAPIKey)
 	if err != nil {
 		// If historical fetch fails, try to use current gas price
-		ge.logger.Warn(ctx, "Failed to fetch historical gas prices for chain %s: %v, using current gas price", observability.String("chainID", chainID), observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to fetch historical gas prices for chain", observability.String("chainID", chainID), observability.Error(err))
 		client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 		if err != nil {
 			return big.NewInt(1000000000), nil // Default fallback
@@ -392,7 +393,7 @@ func (ge *GasEstimator) getOrUpdateCachedGasPrice(ctx context.Context, chainID s
 	cache.mu.Unlock()
 	ge.cacheMu.Unlock()
 
-	ge.logger.Info(ctx, "Updated gas price cache for chain %s: %s", observability.String("chainID", chainID), observability.String("gasPrice", gasPrice.String()))
+	ge.logger.Debug(ctx, "Updated gas price cache for chain", observability.String("chainID", chainID), observability.String("price", gasPrice.String()))
 	return new(big.Int).Set(gasPrice), nil
 }
 
@@ -454,7 +455,7 @@ func (ge *GasEstimator) EstimateGasForFunction(
 	// Estimate gas
 	gasLimit, err := client.EstimateGas(ctx, msg)
 	if err != nil {
-		ge.logger.Warn(ctx, "Gas estimation failed, using default value: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Gas estimation failed, using default value", observability.Error(err))
 		// Use a default gas limit if estimation fails
 		gasLimit = 1000000 // Default fallback
 	}
@@ -462,11 +463,11 @@ func (ge *GasEstimator) EstimateGasForFunction(
 	// Get cached historical gas price (75th percentile of last 7 days)
 	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID, alchemyAPIKey)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get cached gas price, using current gas price: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get cached gas price, using current gas price", observability.Error(err))
 		// Fallback to current gas price if cache fails
 		gasPrice, err = client.SuggestGasPrice(ctx)
 		if err != nil {
-			ge.logger.Warn(ctx, "Failed to get gas price, using default: %v", observability.Error(err))
+			ge.logger.Warn(ctx, "Failed to get gas price, using default", observability.Error(err))
 			// Use a default gas price if suggestion fails (e.g., 1 gwei)
 			gasPrice = big.NewInt(1000000000)
 		}
@@ -475,12 +476,12 @@ func (ge *GasEstimator) EstimateGasForFunction(
 	//Get current gas price
 	currentGasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get current gas price, using default: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get current gas price, using default", observability.Error(err))
 		// Use a default gas price if suggestion fails (e.g., 1 gwei)
 		currentGasPrice = big.NewInt(1000000000)
 	}
 
-	ge.logger.Debug(ctx, "Gas estimation for %s.%s: gasLimit=%d, gasPrice=%s (75th percentile from last 7 days)", observability.String("contractAddress", contractAddress), observability.String("functionName", functionName), observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()))
+	ge.logger.Debug(ctx, "Gas estimation", observability.String("contractAddress", contractAddress), observability.String("functionName", functionName), observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("chainID", chainID))
 
 	return gasLimit, gasPrice, currentGasPrice, nil
 }
@@ -490,7 +491,7 @@ func (ge *GasEstimator) GetGasPrice(ctx context.Context, chainID string, alchemy
 	// Get cached historical gas price (75th percentile of last 7 days)
 	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID, alchemyAPIKey)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get cached gas price, using current gas price: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get cached gas price, using current gas price", observability.Error(err))
 		// Fallback to current gas price if cache fails
 		client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 		if err != nil {
@@ -498,7 +499,7 @@ func (ge *GasEstimator) GetGasPrice(ctx context.Context, chainID string, alchemy
 		}
 		gasPrice, err = client.SuggestGasPrice(ctx)
 		if err != nil {
-			ge.logger.Warn(ctx, "Failed to get gas price, using default: %v", observability.Error(err))
+			ge.logger.Warn(ctx, "Failed to get gas price, using default", observability.Error(err))
 			// Use a default gas price if suggestion fails (e.g., 1 gwei)
 			gasPrice = big.NewInt(1000000000)
 		}
@@ -511,13 +512,13 @@ func (ge *GasEstimator) GetGasPrice(ctx context.Context, chainID string, alchemy
 func (ge *GasEstimator) GetCurrentGasPrice(ctx context.Context, chainID string, alchemyAPIKey string) (*big.Int, error) {
 	client, err := ge.getOrCreateClient(ctx, chainID, alchemyAPIKey)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get client for current gas price: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get client for current gas price", observability.Error(err))
 		return big.NewInt(1000000000), err // 1 gwei default fallback
 	}
 
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get current gas price: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get current gas price", observability.Error(err))
 		return big.NewInt(1000000000), err // 1 gwei default fallback
 	}
 
@@ -564,7 +565,7 @@ func (ge *GasEstimator) EstimateGasWithCalldata(
 	// Estimate gas
 	gasLimit, err := client.EstimateGas(ctx, msg)
 	if err != nil {
-		ge.logger.Warn(ctx, "Gas estimation with calldata failed, using default value: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Gas estimation with calldata failed, using default value", observability.Error(err))
 		// Use a default gas limit if estimation fails
 		gasLimit = 1000000 // Default fallback
 	}
@@ -572,11 +573,11 @@ func (ge *GasEstimator) EstimateGasWithCalldata(
 	// Get cached historical gas price (75th percentile of last 7 days)
 	gasPrice, err := ge.getOrUpdateCachedGasPrice(ctx, chainID, alchemyAPIKey)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get cached gas price, using current gas price: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get cached gas price, using current gas price", observability.Error(err))
 		// Fallback to current gas price if cache fails
 		gasPrice, err = client.SuggestGasPrice(ctx)
 		if err != nil {
-			ge.logger.Warn(ctx, "Failed to get gas price, using default: %v", observability.Error(err))
+			ge.logger.Warn(ctx, "Failed to get gas price, using default", observability.Error(err))
 			// Use a default gas price if suggestion fails (e.g., 1 gwei)
 			gasPrice = big.NewInt(1000000000)
 		}
@@ -585,12 +586,12 @@ func (ge *GasEstimator) EstimateGasWithCalldata(
 	// Get current gas price
 	currentGasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
-		ge.logger.Warn(ctx, "Failed to get current gas price, using default: %v", observability.Error(err))
+		ge.logger.Warn(ctx, "Failed to get current gas price, using default", observability.Error(err))
 		// Use a default gas price if suggestion fails (e.g., 1 gwei)
 		currentGasPrice = big.NewInt(1000000000)
 	}
 
-	ge.logger.Debug(ctx, "Gas estimation with calldata for %s: gasLimit=%d, gasPrice=%s (75th percentile from last 7 days)", observability.String("contractAddress", contractAddress), observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()))
+	ge.logger.Debug(ctx, "Gas estimation with calldata", observability.String("contractAddress", contractAddress), observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("chainID", chainID))
 
 	return gasLimit, gasPrice, currentGasPrice, nil
 }
@@ -599,7 +600,7 @@ func (ge *GasEstimator) EstimateGasWithCalldata(
 func (ge *GasEstimator) Close(ctx context.Context) {
 	for chainID, client := range ge.clients {
 		client.Close()
-		ge.logger.Debug(ctx, "Closed eth client for chain %s", observability.String("chainID", chainID))
+		ge.logger.Debug(ctx, "Closed eth client", observability.String("chainID", chainID))
 	}
 	ge.clients = make(map[string]*ethclient.Client)
 

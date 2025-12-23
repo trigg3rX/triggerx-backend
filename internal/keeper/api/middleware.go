@@ -63,8 +63,8 @@ func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 		}
 
 		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
+		// path := c.Request.URL.Path
+		// raw := c.Request.URL.RawQuery
 		traceID, _ := c.Get(TraceIDKey)
 
 		// Process request
@@ -73,15 +73,15 @@ func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 		duration := time.Since(start)
 		statusCode := c.Writer.Status()
 
-		logger.Info(c.Request.Context(), "Request processed",
+		logger.Debug(c.Request.Context(), "Request processed",
 			observability.Any("trace_id", traceID),
 			observability.Int("status", statusCode),
-			observability.String("method", c.Request.Method),
-			observability.String("path", path),
-			observability.String("query", raw),
-			observability.String("ip", c.ClientIP()),
+			// observability.String("method", c.Request.Method),
+			// observability.String("path", path),
+			// observability.String("query", raw),
+			// observability.String("ip", c.ClientIP()),
 			observability.Duration("latency", duration),
-			observability.String("user-agent", c.Request.UserAgent()),
+			// observability.String("user-agent", c.Request.UserAgent()),
 		)
 	}
 }

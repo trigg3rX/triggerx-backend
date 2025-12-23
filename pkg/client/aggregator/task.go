@@ -11,8 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // SendTaskToValidators sends a task result to the validators
@@ -28,7 +28,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	}
 	publicKey, ok := privateKey.Public().(*ecdsa.PublicKey)
 	if !ok {
-		c.logger.Error(ctx, "cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+		c.logger.Error(ctx, "Cannot assert type: publicKey is not of type *ecdsa.PublicKey")
 	}
 	performerAddress := crypto.PubkeyToAddress(*publicKey).Hex()
 
@@ -60,7 +60,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	sig[64] += 27
 	serializedSignature := hexutil.Encode(sig)
 
-	c.logger.Debug(ctx, "Task data signed successfully", observability.String("signature", hex.EncodeToString(sig)))
+	// c.logger.Debug(ctx, "Task data signed successfully")
 
 	// Prepare parameters using consistent structure
 	params := CallParams{
@@ -80,7 +80,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		return false, fmt.Errorf("failed to send task result: %w", err)
 	}
 
-	c.logger.Info(ctx, "Successfully sent task result to aggregator",
+	c.logger.Debug(ctx, "Successfully sent task result to aggregator",
 		observability.Int("taskDefinitionId", taskResult.TaskDefinitionID),
 		observability.String("proofOfTask", taskResult.ProofOfTask),
 		observability.Any("response", response))

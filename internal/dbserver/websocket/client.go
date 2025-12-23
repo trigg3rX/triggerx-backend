@@ -85,7 +85,7 @@ func (c *Client) ReadPump(ctx context.Context) {
 	defer func() {
 		c.Hub.unregister <- c
 		if err := c.Conn.Close(); err != nil {
-			c.logger.Warn(ctx, "Error closing WebSocket for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+			c.logger.Warn(ctx, "Error closing WebSocket for client", observability.String("client_id", c.ID), observability.Error(err))
 		}
 		if c.OnClose != nil {
 			c.OnClose()
@@ -95,11 +95,11 @@ func (c *Client) ReadPump(ctx context.Context) {
 	// Set read limits and timeouts
 	c.Conn.SetReadLimit(512)
 	if err := c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
-		c.logger.Warn(ctx, "Failed to set read deadline for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+		c.logger.Warn(ctx, "Failed to set read deadline for client", observability.String("client_id", c.ID), observability.Error(err))
 	}
 	c.Conn.SetPongHandler(func(string) error {
 		if err := c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
-			c.logger.Warn(ctx, "Failed to refresh read deadline on pong for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+			c.logger.Warn(ctx, "Failed to refresh read deadline on pong for client", observability.String("client_id", c.ID), observability.Error(err))
 		}
 		c.mu.Lock()
 		c.LastPing = time.Now()
@@ -120,14 +120,14 @@ func (c *Client) ReadPump(ctx context.Context) {
 					// Downgrade logging for normal/benign closes
 					switch ce.Code {
 					case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived:
-						c.logger.Info(ctx, "WebSocket closed for client %s: code=%d (%s), text=%s", observability.String("client_id", c.ID), observability.Int("code", ce.Code), observability.String("name", name), observability.String("text", ce.Text))
+						// c.logger.Info(ctx, "WebSocket closed", observability.String("client_id", c.ID), observability.Int("code", ce.Code), observability.String("name", name), observability.String("text", ce.Text))
 					default:
-						c.logger.Error(ctx, "WebSocket closed unexpectedly for client %s: code=%d (%s), text=%s", observability.String("client_id", c.ID), observability.Int("code", ce.Code), observability.String("name", name), observability.String("text", ce.Text))
+						c.logger.Error(ctx, "WebSocket closed unexpectedly", observability.String("client_id", c.ID), observability.Int("code", ce.Code), observability.String("name", name), observability.String("text", ce.Text))
 					}
 				} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					c.logger.Error(ctx, "WebSocket error for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+					c.logger.Error(ctx, "WebSocket error", observability.String("client_id", c.ID), observability.Error(err))
 				} else {
-					c.logger.Info(ctx, "WebSocket read ended for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+					c.logger.Info(ctx, "WebSocket read ended", observability.String("client_id", c.ID), observability.Error(err))
 				}
 				return
 			}
@@ -143,7 +143,7 @@ func (c *Client) WritePump(ctx context.Context) {
 	defer func() {
 		ticker.Stop()
 		if err := c.Conn.Close(); err != nil {
-			c.logger.Warn(ctx, "Error closing WebSocket for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+			c.logger.Warn(ctx, "Error closing WebSocket", observability.String("client_id", c.ID), observability.Error(err))
 		}
 	}()
 
@@ -151,23 +151,23 @@ func (c *Client) WritePump(ctx context.Context) {
 		select {
 		case message, ok := <-c.Send:
 			if err := c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-				c.logger.Warn(ctx, "Failed to set write deadline for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+				c.logger.Warn(ctx, "Failed to set write deadline", observability.String("client_id", c.ID), observability.Error(err))
 			}
 			if !ok {
 				if err := c.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					c.logger.Warn(ctx, "Failed to write close message for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+					c.logger.Warn(ctx, "Failed to write close message", observability.String("client_id", c.ID), observability.Error(err))
 				}
 				return
 			}
 
 			if err := c.Conn.WriteJSON(message); err != nil {
-				c.logger.Error(ctx, "Error writing message to client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+				c.logger.Error(ctx, "Error writing message", observability.String("client_id", c.ID), observability.Error(err))
 				return
 			}
 
 		case <-ticker.C:
 			if err := c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
-				c.logger.Warn(ctx, "Failed to set write deadline (ping) for client %s: %v", observability.String("client_id", c.ID), observability.Error(err))
+				c.logger.Warn(ctx, "Failed to set write deadline (ping)", observability.String("client_id", c.ID), observability.Error(err))
 			}
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
@@ -223,7 +223,7 @@ func (c *Client) handleSubscribe(ctx context.Context, msg *Message) {
 	}
 
 	c.sendMessage(ctx, NewSuccessMessage("Subscribed to room", map[string]string{"room": room}))
-	c.logger.Info(ctx, "Client %s subscribed to room %s", observability.String("client_id", c.ID), observability.String("room", room))
+	c.logger.Info(ctx, "Client subscribed to room", observability.String("client_id", c.ID), observability.String("room", room))
 }
 
 // handleUnsubscribe processes unsubscription requests
@@ -250,7 +250,7 @@ func (c *Client) handleUnsubscribe(ctx context.Context, msg *Message) {
 	}
 
 	c.sendMessage(ctx, NewSuccessMessage("Unsubscribed from room", map[string]string{"room": room}))
-	c.logger.Info(ctx, "Client %s unsubscribed from room %s", observability.String("client_id", c.ID), observability.String("room", room))
+	c.logger.Info(ctx, "Client unsubscribed from room", observability.String("client_id", c.ID), observability.String("room", room))
 }
 
 // handlePing processes ping messages
@@ -285,7 +285,7 @@ func (c *Client) sendMessage(ctx context.Context, msg *Message) {
 	case c.Send <- msg:
 	default:
 		// Channel is full, close connection
-		c.logger.Warn(ctx, "Client %s send channel is full, closing connection", observability.String("client_id", c.ID))
+		c.logger.Warn(ctx, "Client send channel is full, closing connection", observability.String("client_id", c.ID))
 		c.Close()
 	}
 }

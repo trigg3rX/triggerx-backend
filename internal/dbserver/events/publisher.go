@@ -40,7 +40,7 @@ func (p *Publisher) PublishTaskCreated(ctx context.Context, taskID int64, jobID 
 	}
 
 	p.hub.BroadcastTaskCreated(ctx, taskEventData)
-	p.logger.Info(ctx, "Published task created event for task %d", observability.Int64("task_id", taskID))
+	p.logger.Debug(ctx, "Published task created event for task", observability.Int64("task_id", taskID))
 }
 
 // PublishTaskUpdated publishes a task updated event
@@ -56,7 +56,7 @@ func (p *Publisher) PublishTaskUpdated(ctx context.Context, taskID int64, jobID 
 	}
 
 	p.hub.BroadcastTaskUpdated(ctx, taskEventData)
-	p.logger.Info(ctx, "Published task updated event for task %d", observability.Int64("task_id", taskID))
+	p.logger.Debug(ctx, "Published task updated event for task", observability.Int64("task_id", taskID))
 }
 
 // PublishTaskStatusChanged publishes a task status changed event
@@ -72,7 +72,7 @@ func (p *Publisher) PublishTaskStatusChanged(ctx context.Context, taskID int64, 
 	}
 
 	p.hub.BroadcastTaskStatusChanged(ctx, taskEventData)
-	p.logger.Info(ctx, "Published task status changed event for task %d: %s -> %s", observability.Int64("task_id", taskID), observability.String("old_status", oldStatus), observability.String("new_status", newStatus))
+	p.logger.Debug(ctx, "Published task status changed event for task", observability.Int64("task_id", taskID), observability.String("old_status", oldStatus), observability.String("new_status", newStatus))
 }
 
 // PublishTaskFeeUpdated publishes a task fee updated event
@@ -88,7 +88,7 @@ func (p *Publisher) PublishTaskFeeUpdated(ctx context.Context, taskID int64, job
 	}
 
 	p.hub.BroadcastTaskFeeUpdated(ctx, taskEventData)
-	p.logger.Info(ctx, "Published task fee updated event for task %d: %.2f -> %.2f", observability.Int64("task_id", taskID), observability.Float64("old_fee", oldFee), observability.Float64("new_fee", newFee))
+	p.logger.Debug(ctx, "Published task fee updated event for task", observability.Int64("task_id", taskID), observability.Float64("old_fee", oldFee), observability.Float64("new_fee", newFee))
 }
 
 // Shutdown gracefully shuts down the publisher

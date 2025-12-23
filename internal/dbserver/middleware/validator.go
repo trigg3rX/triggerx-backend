@@ -26,15 +26,15 @@ func NewValidator(ctx context.Context, logger observability.Logger) *Validator {
 	// Register custom validations
 	err := v.RegisterValidation("ethereum_address", validateEthereumAddress)
 	if err != nil {
-		logger.Error(ctx, "Error registering validation: %v", observability.Error(err))
+		logger.Error(ctx, "Error registering validation", observability.Error(err))
 	}
 	err = v.RegisterValidation("ipfs_url", validateIPFSURL)
 	if err != nil {
-		logger.Error(ctx, "Error registering validation: %v", observability.Error(err))
+		logger.Error(ctx, "Error registering validation", observability.Error(err))
 	}
 	err = v.RegisterValidation("chain_id", validateChainID)
 	if err != nil {
-		logger.Error(ctx, "Error registering validation: %v", observability.Error(err))
+		logger.Error(ctx, "Error registering validation", observability.Error(err))
 	}
 
 	return &Validator{
@@ -48,7 +48,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		// Read the request body first
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			v.logger.Error(c.Request.Context(), "Error reading request body: %v", observability.Error(err))
+			v.logger.Error(c.Request.Context(), "Error reading request body", observability.Error(err))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Invalid request body",
 				"details": err.Error(),
@@ -58,7 +58,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		}
 
 		// Log the raw request body
-		// v.logger.Infof("Raw request body: %s", string(body))
+		// v.logger.Info(c.Request.Context(), "Raw request body", observability.String("body", string(body)))
 
 		// Create a new reader with the body and restore it
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
@@ -110,7 +110,7 @@ func (v *Validator) GinMiddleware() gin.HandlerFunc {
 		}
 
 		if validationError != nil {
-			v.logger.Error(c.Request.Context(), "Validation error: %v", observability.Error(validationError))
+			v.logger.Error(c.Request.Context(), "Validation error", observability.Error(validationError))
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Validation failed",
 				"details": validationError.Error(),

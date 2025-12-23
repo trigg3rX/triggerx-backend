@@ -179,7 +179,7 @@ func (c *fileCache) storeFile(ctx context.Context, key string, fileLanguage stri
 		c.logger.Warn(ctx, "Failed to save cache metadata", observability.Error(err))
 	}
 
-	c.logger.Info(ctx, "Stored file in cache (size: %d bytes)", observability.Int64("size", fileInfo.Size()))
+	c.logger.Debug(ctx, "Stored file in cache", observability.Int64("size", fileInfo.Size()))
 	return filePath, nil
 }
 
@@ -249,11 +249,9 @@ func (c *fileCache) ensureSpace(ctx context.Context, requiredSize int64) error {
 		c.stats.EvictionCount++
 		c.stats.ItemCount--
 		c.stats.Size -= entry.file.Size
-
-		c.logger.Debug(ctx, "Evicted cached file: %s (size: %d bytes)", observability.String("hash", entry.hash), observability.Int64("size", entry.file.Size))
 	}
 
-	c.logger.Info(ctx, "Evicted %d bytes (%d files) from cache", observability.Int64("evictedSize", evictedSize), observability.Int("evictionCount", int(c.stats.EvictionCount)))
+	c.logger.Debug(ctx, "Evicted from cache", observability.Int64("size", evictedSize), observability.Int("count", int(c.stats.EvictionCount)))
 
 	// Save updated metadata after eviction
 	if err := c.saveMetadata(); err != nil {
@@ -294,7 +292,7 @@ func (c *fileCache) loadExistingFiles(ctx context.Context) error {
 
 		fileInfo, err := c.fs.Stat(filePath)
 		if err != nil {
-			c.logger.Warn(ctx, "Failed to stat cached file %s: %v", observability.String("filePath", filePath), observability.Error(err))
+			c.logger.Warn(ctx, "Failed to stat cached file", observability.String("filePath", filePath), observability.Error(err))
 			continue
 		}
 
@@ -311,7 +309,7 @@ func (c *fileCache) loadExistingFiles(ctx context.Context) error {
 		c.stats.Size += fileInfo.Size()
 	}
 
-	c.logger.Info(ctx, "Loaded %d existing cached files", observability.Int("length", len(c.fileCache)))
+	c.logger.Debug(ctx, "Loaded existing cached files", observability.Int("count", len(c.fileCache)))
 	return nil
 }
 

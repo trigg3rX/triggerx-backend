@@ -38,7 +38,7 @@ func NewWebSocketUpgrader(logger observability.Logger) *WebSocketUpgrader {
 func (wsu *WebSocketUpgrader) UpgradeConnection(c *gin.Context) (*websocket.Conn, error) {
 	conn, err := wsu.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		wsu.logger.Error(c.Request.Context(), "Failed to upgrade WebSocket connection: %v", observability.Error(err))
+		wsu.logger.Error(c.Request.Context(), "Failed to upgrade WebSocket connection", observability.Error(err))
 		return nil, err
 	}
 	return conn, nil
@@ -78,7 +78,7 @@ func (wam *WebSocketAuthMiddleware) AuthenticateWebSocket(c *gin.Context) (strin
 	// Use existing ApiKeyAuth logic to validate the API key
 	apiKeyData, err := wam.apiKeyAuth.GetApiKey(c.Request.Context(), apiKey)
 	if err != nil {
-		wam.logger.Error(c.Request.Context(), "Invalid API key for WebSocket connection: %v", observability.Error(err))
+		wam.logger.Error(c.Request.Context(), "Invalid API key for WebSocket connection", observability.Error(err))
 		return "", "", &WebSocketAuthError{
 			Code:    "INVALID_API_KEY",
 			Message: "Invalid or inactive API key",
@@ -86,7 +86,7 @@ func (wam *WebSocketAuthMiddleware) AuthenticateWebSocket(c *gin.Context) (strin
 	}
 
 	if !apiKeyData.IsActive {
-		wam.logger.Warn(c.Request.Context(), "Inactive API key used for WebSocket connection: %s", observability.String("api_key", apiKey))
+		wam.logger.Warn(c.Request.Context(), "Inactive API key used for WebSocket connection", observability.String("api_key", apiKey))
 		return "", "", &WebSocketAuthError{
 			Code:    "INACTIVE_API_KEY",
 			Message: "API key is inactive",
@@ -147,14 +147,14 @@ func NewWebSocketRateLimiter(rateLimiter *middleware.RateLimiter, maxConns int, 
 func (wrl *WebSocketRateLimiter) CheckRateLimit(ctx context.Context, clientIP string, apiKey *types.ApiKey) bool {
 	// Check connection limit per IP (simple in-memory tracking)
 	if wrl.connections[clientIP] >= wrl.maxConns {
-		wrl.logger.Warn(ctx, "Connection limit exceeded for IP: %s", observability.String("client_ip", clientIP))
+		wrl.logger.Warn(ctx, "Connection limit exceeded for IP", observability.String("client_ip", clientIP))
 		return false
 	}
 
 	// If we have a rate limiter and API key, use the Redis-backed rate limiting
 	if wrl.rateLimiter != nil && apiKey != nil {
 		if err := wrl.rateLimiter.CheckRateLimitForKey(apiKey); err != nil {
-			wrl.logger.Warn(ctx, "Rate limit exceeded for API key: %s", observability.String("api_key", apiKey.Key))
+			wrl.logger.Warn(ctx, "Rate limit exceeded for API key", observability.String("api_key", apiKey.Key))
 			return false
 		}
 	}
@@ -237,7 +237,7 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 	select {
 	case <-c.Request.Context().Done():
 		wcm.rateLimit.ReleaseConnection(clientIP)
-		wcm.logger.Warn(c.Request.Context(), "Request context cancelled before WebSocket upgrade for client %s", observability.String("client_ip", clientIP))
+		wcm.logger.Warn(c.Request.Context(), "Request context cancelled before WebSocket upgrade for client", observability.String("client_ip", clientIP))
 		return
 	default:
 		// Context is still valid, proceed with upgrade
@@ -249,7 +249,7 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 		wcm.rateLimit.ReleaseConnection(clientIP)
 		// Don't try to send JSON response after failed upgrade attempt
 		// as the connection may already be hijacked or closed
-		wcm.logger.Error(c.Request.Context(), "Failed to upgrade WebSocket connection for client %s: %v", observability.String("client_ip", clientIP), observability.Error(err))
+		wcm.logger.Error(c.Request.Context(), "Failed to upgrade WebSocket connection for client", observability.String("client_ip", clientIP), observability.Error(err))
 		return
 	}
 
@@ -270,7 +270,7 @@ func (wcm *WebSocketConnectionManager) HandleWebSocketConnection(c *gin.Context)
 	go client.WritePump(c.Request.Context())
 	go client.ReadPump(c.Request.Context())
 
-	wcm.logger.Info(c.Request.Context(), "WebSocket client %s connected from IP %s with API key %s", observability.String("client_id", clientID), observability.String("client_ip", clientIP), observability.String("api_key", apiKey))
+	wcm.logger.Info(c.Request.Context(), "WebSocket client connected", observability.String("client_ip", clientIP))
 }
 
 // GetHubStats returns hub statistics

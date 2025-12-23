@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
@@ -55,12 +54,12 @@ func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDe
 				// Dynamic argument scripts (2, 4, 6) use Go
 				result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 				if err != nil {
-					h.logger.Error(ctx, "Error executing code: %v", observability.Error(err))
+					h.logger.Error(ctx, "Error executing code", observability.Error(err))
 					return
 				}
 
 				if !result.Success {
-					h.logger.Error(ctx, "Code execution failed: %v", observability.Error(fmt.Errorf("code execution failed: %v", result.Error)))
+					h.logger.Error(ctx, "Code execution failed", observability.Error(fmt.Errorf("code execution failed: %v", result.Error)))
 					return
 				}
 
@@ -84,11 +83,11 @@ func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDe
 		}
 		result, err := h.dockerExecutor.Execute(ctx, "", string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 		if err != nil {
-			h.logger.Error(ctx, "Error executing code: %v", observability.Error(err))
+			h.logger.Error(ctx, "Error executing code", observability.Error(err))
 			return big.NewInt(0), big.NewInt(0), err
 		}
 		if !result.Success {
-			h.logger.Error(ctx, "Code execution failed: %v", observability.Error(fmt.Errorf("code execution failed: %v", result.Error)))
+			h.logger.Error(ctx, "Code execution failed", observability.Error(fmt.Errorf("code execution failed: %v", result.Error)))
 			return big.NewInt(0), big.NewInt(0), fmt.Errorf("code execution failed")
 		}
 		totalFee.Set(result.Stats.TotalCost)
@@ -101,7 +100,7 @@ func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDe
 
 func (h *Handler) GetTaskFees(c *gin.Context) {
 	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetTaskFees] trace_id=%s - Getting task fees", observability.String("trace_id", traceID))
+	h.logger.Info(c.Request.Context(), "[GetTaskFees] Getting task fees", observability.String("trace_id", traceID))
 
 	// Get query parameters
 	ipfsURLs := c.Query("ipfs_url")
@@ -113,30 +112,21 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 
 	args := c.Query("args")
 
-	// Determine the fromAddress based on chain ID
-	mainnetFromAddress := os.Getenv("TASK_EXECUTION_ADDRESS")
-	testnetFromAddress := os.Getenv("TEST_TASK_EXECUTION_ADDRESS")
-
 	// Default to testnet address unless targetChainID is 42161 or 8453 (mainnet/arbitrum)
-	fromAddress := testnetFromAddress
+	fromAddress := config.GetTestTaskExecutionAddress()
 	if targetChainID == "42161" || targetChainID == "8453" {
-		fromAddress = mainnetFromAddress
-	}
-	if fromAddress == "" {
-		h.logger.Error(c.Request.Context(), "[GetTaskFees] TASK_EXECUTION_ADDRESS environment variable not set")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "from_address not configured"})
-		return
+		fromAddress = config.GetTaskExecutionAddress()
 	}
 
 	// Parse task definition ID
 	taskDefinitionID := 0
 	if parsed, err := fmt.Sscanf(taskDefID, "%d", &taskDefinitionID); err != nil || parsed != 1 {
-		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Invalid task_definition_id: %s, using 0", observability.String("task_definition_id", taskDefID))
+		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Validation failed: Invalid task_definition_id", observability.String("task_definition_id", taskDefID))
 	}
 
 	totalFee, currentTotalFee, err := h.CalculateTaskFees(c.Request.Context(), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetTaskFees] Error calculating fees: %v", observability.Error(err))
+		h.logger.Error(c.Request.Context(), "[GetTaskFees] Error calculating fees", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

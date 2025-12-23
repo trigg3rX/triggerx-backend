@@ -107,7 +107,7 @@ func (sm *SubscriptionManager) initializeContractABIs(ctx context.Context) {
 	if attestationCenterABI, err := contractAttestationCenter.ContractAttestationCenterMetaData.GetAbi(); err == nil {
 		sm.contractABIs[ContractTypeAttestationCenter] = *attestationCenterABI
 	} else {
-		sm.logger.Error(ctx, "Failed to initialize AttestationCenter ABI: %v", observability.Error(err))
+		sm.logger.Error(ctx, "Failed to initialize AttestationCenter ABI", observability.Error(err))
 	}
 }
 

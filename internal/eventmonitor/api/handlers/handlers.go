@@ -65,7 +65,7 @@ func HandleRegister(logger observability.Logger, svc *service.Service) gin.Handl
 			Message:   "Monitoring request registered successfully",
 		}
 
-		logger.Info(c.Request.Context(), "Monitoring request registered", observability.String("request_id", req.RequestID))
+		logger.Debug(c.Request.Context(), "Monitoring request registered", observability.String("request_id", req.RequestID))
 		c.JSON(http.StatusOK, response)
 	}
 }
@@ -100,7 +100,7 @@ func HandleUnregister(logger observability.Logger, svc *service.Service) gin.Han
 			Message:   "Monitoring request unregistered successfully",
 		}
 
-		logger.Info(c.Request.Context(), "Monitoring request unregistered", observability.String("request_id", req.RequestID))
+		logger.Debug(c.Request.Context(), "Monitoring request unregistered", observability.String("request_id", req.RequestID))
 		c.JSON(http.StatusOK, response)
 	}
 }

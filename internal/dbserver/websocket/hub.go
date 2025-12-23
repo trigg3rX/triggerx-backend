@@ -108,10 +108,10 @@ func (h *Hub) Run(ctx context.Context) {
 			h.unsubscribeFromRoom(ctx, subscription)
 
 		case broadcastMsg := <-h.broadcast:
-			h.broadcastToRooms(ctx, broadcastMsg)
+			h.broadcastToRooms(broadcastMsg)
 
 		case <-h.ctx.Done():
-			h.logger.Info(ctx, "WebSocket hub shutting down")
+			// h.logger.Info(ctx, "WebSocket hub shutting down")
 			return
 		}
 	}
@@ -123,7 +123,7 @@ func (h *Hub) registerClient(ctx context.Context, client *Client) {
 	defer h.mu.Unlock()
 
 	h.clients[client] = true
-	h.logger.Info(ctx, "Client %s registered. Total clients: %d", observability.String("client_id", client.ID), observability.Int("total_clients", len(h.clients)))
+	// h.logger.Info(ctx, "Client registered", observability.String("client_id", client.ID), observability.Int("total_clients", len(h.clients)))
 }
 
 // unregisterClient unregisters a client
@@ -145,7 +145,7 @@ func (h *Hub) unregisterClient(ctx context.Context, client *Client) {
 			}
 		}
 
-		h.logger.Info(ctx, "Client %s unregistered. Total clients: %d", observability.String("client_id", client.ID), observability.Int("total_clients", len(h.clients)))
+		// h.logger.Info(ctx, "Client unregistered", observability.String("client_id", client.ID), observability.Int("total_clients", len(h.clients)))
 	}
 }
 
@@ -162,13 +162,13 @@ func (h *Hub) subscribeToRoom(ctx context.Context, subscription *Subscription) {
 	}
 
 	h.rooms[room][client] = true
-	h.logger.Info(ctx, "Client %s subscribed to room %s", observability.String("client_id", client.ID), observability.String("room", room))
+	// h.logger.Info(ctx, "Client subscribed to room", observability.String("client_id", client.ID), observability.String("room", room))
 
 	// Call initial data callback if set
 	if h.initialDataCallback != nil {
 		go func() {
 			if err := h.initialDataCallback(ctx, room, client); err != nil {
-				h.logger.Error(ctx, "Error fetching initial data for room %s: %v", observability.String("room", room), observability.Error(err))
+				h.logger.Error(ctx, "Error fetching initial data for room", observability.String("room", room), observability.Error(err))
 			}
 		}()
 	}
@@ -187,12 +187,12 @@ func (h *Hub) unsubscribeFromRoom(ctx context.Context, subscription *Subscriptio
 		if len(clients) == 0 {
 			delete(h.rooms, room)
 		}
-		h.logger.Info(ctx, "Client %s unsubscribed from room %s", observability.String("client_id", client.ID), observability.String("room", room))
+		// h.logger.Info(ctx, "Client unsubscribed from room", observability.String("client_id", client.ID), observability.String("room", room))
 	}
 }
 
 // broadcastToRooms broadcasts a message to specific rooms
-func (h *Hub) broadcastToRooms(ctx context.Context, broadcastMsg *BroadcastMessage) {
+func (h *Hub) broadcastToRooms(broadcastMsg *BroadcastMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -266,7 +266,7 @@ func (h *Hub) broadcastTaskEvent(ctx context.Context, taskEvent *TaskEventData) 
 		Rooms:   rooms,
 	}
 
-	h.logger.Info(ctx, "Broadcasted task event %s for task %d to %d rooms", observability.String("message_type", string(messageType)), observability.Int64("task_id", taskEvent.TaskID), observability.Int("total_rooms", len(rooms)))
+	h.logger.Info(ctx, "Broadcasted task event", observability.String("message_type", string(messageType)), observability.Int64("task_id", taskEvent.TaskID), observability.Int("total_rooms", len(rooms)))
 }
 
 // BroadcastTaskCreated broadcasts a task created event

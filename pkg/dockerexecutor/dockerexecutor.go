@@ -100,7 +100,7 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 		return fmt.Errorf("docker manager already initialized")
 	}
 
-	de.logger.Info(ctx, "Initializing Docker manager")
+	de.logger.Debug(ctx, "Initializing Docker manager")
 
 	// Initialize language-specific container pools
 	supportedLanguages := de.config.GetSupportedLanguages()
@@ -110,7 +110,7 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 
 	de.initialized = true
 
-	de.logger.Info(ctx, "Docker manager initialized successfully with %d language pools", observability.Int("language_pools", len(supportedLanguages)), observability.Any("supported_languages", supportedLanguages))
+	de.logger.Debug(ctx, "Docker manager initialized successfully", observability.Int("language_pools", len(supportedLanguages)), observability.Any("supported_languages", supportedLanguages))
 	return nil
 }
 
@@ -146,7 +146,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
 	// Note: TaskDefinitionID 7 (Custom Script) also needs code execution as it runs IPFS scripts
 	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 && taskDefID != 7 {
-		de.logger.Info(ctx, "Skipping code execution for static task. Only calculating fees for task_definition_id=%d", observability.Int("task_definition_id", taskDefID))
+		de.logger.Debug(ctx, "Skipping code execution for static task", observability.Int("task_definition_id", taskDefID))
 		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, alchemyAPIKey, metadataMap)
 		if err != nil {
 			de.logger.Error(ctx, "Fee calculation (static) failed", observability.Error(err))
@@ -156,7 +156,7 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	}
 
 	// Dynamic tasks (2,4,6,7): perform full execution as before
-	de.logger.Info(ctx, "Executing code for dynamic task task_definition_id=%d (should run code)", observability.Int("task_definition_id", taskDefID))
+	de.logger.Debug(ctx, "Executing code for dynamic task", observability.Int("taskDefinitionID", taskDefID))
 	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadataMap)
 	if err != nil {
 		de.logger.Error(ctx, "Execution failed", observability.Error(err))
@@ -179,13 +179,13 @@ func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, langua
 	}
 	de.mutex.RUnlock()
 
-	de.logger.Info(ctx, "Executing raw source for language: %s", observability.String("language", language))
+	de.logger.Debug(ctx, "Executing raw source", observability.String("language", language))
 	result, err := de.executor.ExecuteSource(ctx, code, language, alchemyAPIKey, metadata...)
 	if err != nil {
 		de.logger.Error(ctx, "Execution (raw) failed", observability.Error(err))
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
-	de.logger.Info(ctx, "Execution (raw) completed successfully")
+	de.logger.Debug(ctx, "Execution (raw) completed successfully")
 	return result, nil
 }
 
@@ -364,7 +364,7 @@ func (de *DockerExecutor) Close(ctx context.Context) error {
 		return nil
 	}
 
-	de.logger.Info(ctx, "Closing Docker manager")
+	de.logger.Debug(ctx, "Closing Docker manager")
 
 	if de.executor != nil {
 		if err := de.executor.Close(ctx); err != nil {
@@ -373,6 +373,6 @@ func (de *DockerExecutor) Close(ctx context.Context) error {
 	}
 
 	de.closed = true
-	de.logger.Info(ctx, "Docker manager closed")
+	de.logger.Debug(ctx, "Docker manager closed")
 	return nil
 }

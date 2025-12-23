@@ -175,10 +175,7 @@ func (c *NodeClient) call(ctx context.Context, method string, params []interface
 
 	// Check if request ID matches (basic validation)
 	if rpcResp.ID != req.ID {
-		c.config.Logger.Warn(ctx, "Request ID mismatch",
-			observability.Int("expected", req.ID),
-			observability.Int("received", rpcResp.ID),
-		)
+		c.config.Logger.Warn(ctx, "Request ID mismatch", observability.Int("expected", req.ID), observability.Int("received", rpcResp.ID))
 	}
 
 	return rpcResp.Result, nil

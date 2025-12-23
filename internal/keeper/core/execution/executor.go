@@ -116,7 +116,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 		e.logger.Error(ctx, "Manager signature validation failed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
 		return false, err
 	}
-	e.logger.Info(ctx, "Scheduler signature validation passed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+	e.logger.Info(ctx, "[1/7] Scheduler signature validation passed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
 
 	var (
 		resultCh = make(chan struct {
@@ -159,7 +159,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			taskSpan.AddEvent("trigger.validated", observability.WithEventAttributes(
 				attribute.Bool("trigger.valid", isTriggerTrue),
 			))
-			e.logger.Info(taskCtx, "Trigger validation passed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+			e.logger.Info(taskCtx, "[2/7] Trigger validation passed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
 
 			// create a client for validating event based and performing action
 			rpcURL := utils.GetChainRpcUrl(task.TargetData[idx].TargetChainID)
@@ -177,7 +177,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				return
 			}
 			defer client.Close()
-			e.logger.Debug(taskCtx, "Connected to chain: %s", observability.String("rpc_url", rpcURL))
+			// e.logger.Debug(taskCtx, "Connected to chain", observability.String("rpc_url", rpcURL))
 
 			//simulate the transaction before doing any action
 
@@ -209,12 +209,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				attribute.String("execution.tx_hash", actionData.ActionTxHash),
 				attribute.Bool("execution.success", transactionSubmitted),
 			))
-
-			// If execution was skipped (e.g., custom script returned shouldExecute=false)
-			if !transactionSubmitted {
-				e.logger.Info(taskCtx, "Execution skipped (no transaction submitted)", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
-			}
-			e.logger.Info(taskCtx, "Action execution completed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+			e.logger.Info(taskCtx, "[3/7] Action execution completed", observability.Int64("task_id", task.TaskID[0]), observability.Bool("transaction_submitted", transactionSubmitted), observability.String("trace_id", traceID))
 
 			ipfsData := types.IPFSData{
 				TaskData: &types.SendTaskDataToKeeper{
@@ -239,7 +234,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 			if err != nil {
 				e.logger.Error(taskCtx, "Failed to generate TLS proof, falling back to mock", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
 			} else {
-				e.logger.Info(taskCtx, "TLS proof generated successfully", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+				e.logger.Info(taskCtx, "[4/7]TLS proof generated successfully", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
 			}
 
 			ipfsData.ProofData = &proofData
@@ -276,7 +271,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				PerformerSignature:      performerSignature,
 				PerformerSigningAddress: config.GetConsensusAddress(),
 			}
-			e.logger.Info(taskCtx, "IPFS data signed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+			e.logger.Info(taskCtx, "[5/7] IPFS data signed", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
 
 			// Extract trace context and embed in IPFS data before marshaling
 			traceContext := observability.GetTraceContext(taskCtx)
@@ -315,7 +310,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 				}{false, err}
 				return
 			}
-			e.logger.Info(taskCtx, "IPFS data uploaded", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+			e.logger.Info(taskCtx, "[6/7] IPFS data uploaded", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
 
 			// Add event for IPFS upload
 			taskSpan.AddEvent("ipfs.uploaded", observability.WithEventAttributes(
@@ -370,7 +365,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 			// Both execution and aggregator submission succeeded
 			aggSpan.SetStatus(codes.Ok, "task sent to aggregator successfully")
-			e.logger.Info(taskCtx, "Task result sent to aggregator", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
+			e.logger.Info(taskCtx, "[7/7] Task result sent to aggregator", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID))
 			e.reportTaskStatus(taskCtx, task.TargetData[idx].TaskID, transactionSubmitted, true, actionData.ActionTxHash, cid, "")
 
 			resultCh <- struct {
@@ -425,19 +420,13 @@ func (e *TaskExecutor) getNonceManager(chainID string) (*NonceManager, error) {
 // reportTaskStatus reports task execution status to taskmonitor (best-effort, doesn't block)
 // This should be called after the aggregator submission attempt (regardless of success or failure)
 func (e *TaskExecutor) reportTaskStatus(ctx context.Context, taskID int64, executionSuccessful, aggregatorSubmitted bool, executionTxHash, proofCID, errorMsg string) {
-	if e.taskMonitorClient == nil {
-		e.logger.Debug(ctx, "TaskMonitor client not available, skipping status report",
-			observability.Int64("task_id", taskID))
-		return
-	}
-
 	// Report status asynchronously to avoid blocking
 	go func() {
 		reportCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		if err := e.taskMonitorClient.ReportTaskStatus(reportCtx, taskID, executionSuccessful, aggregatorSubmitted, executionTxHash, proofCID, errorMsg); err != nil {
-			e.logger.Warn(ctx, "Failed to report task status to taskmonitor",
+			e.logger.Debug(ctx, "Failed to report task status to taskmonitor",
 				observability.Int64("task_id", taskID),
 				observability.Bool("execution_successful", executionSuccessful),
 				observability.Bool("aggregator_submitted", aggregatorSubmitted),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -26,7 +27,6 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 	ctx = propagator.Extract(ctx, propagation.HeaderCarrier(c.Request.Header))
 
 	traceID := h.getTraceID(c)
-	h.logger.Info(ctx, "Received task execution request", observability.String("trace_id", traceID))
 
 	if c.Request.Method != http.MethodPost {
 		c.JSON(http.StatusMethodNotAllowed, gin.H{
@@ -67,18 +67,15 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 
 	// Check if this performer should handle the task
 	if !strings.EqualFold(config.GetKeeperAddress(), requestData.PerformerData.KeeperAddress) {
-		h.logger.Info(c.Request.Context(), "I am not the performer", observability.String("keeper_address", requestData.PerformerData.KeeperAddress))
 		c.JSON(http.StatusOK, gin.H{"message": "I am not the performer"})
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "I am the performer", observability.String("keeper_address", requestData.PerformerData.KeeperAddress))
-
 	// Log task info
 	taskIDs := requestData.TaskID
-	h.logger.Info(c.Request.Context(), "Task accepted for async execution", observability.Any("task_ids", taskIDs), observability.String("trace_id", traceID))
+	h.logger.Info(ctx, "Task execution started", observability.Any("task_ids", taskIDs), observability.String("trace_id", traceID))
 	for _, task := range requestData.TargetData {
-		h.logger.Info(c.Request.Context(), "Task ID: %d | Target Chain ID: %s", observability.Int64("task_id", task.TaskID), observability.String("target_chain_id", task.TargetChainID))
+		h.logger.Debug(ctx, fmt.Sprintf("Task ID: %d | Target Chain ID: %s", task.TaskID, task.TargetChainID))
 	}
 
 	// Return 202 Accepted immediately - task will be processed asynchronously
@@ -98,15 +95,12 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 
 // executeTaskAsync executes the task in background and reports status to TaskMonitor
 func (h *TaskHandler) executeTaskAsync(ctx context.Context, requestData types.SendTaskDataToKeeper, traceID string) {
-	h.logger.Info(ctx, "Starting async task execution", observability.Any("task_ids", requestData.TaskID), observability.String("trace_id", traceID))
-
 	success, err := h.executor.ExecuteTask(ctx, &requestData, traceID)
 	if err != nil {
-		h.logger.Error(ctx, "Async task execution failed", observability.Any("task_ids", requestData.TaskID), observability.Error(err), observability.String("trace_id", traceID))
+		h.logger.Error(ctx, "Task execution failed", observability.Any("task_ids", requestData.TaskID), observability.Error(err), observability.String("trace_id", traceID))
 		// Note: TaskMonitor reporting is already handled inside ExecuteTask
 		return
 	}
 
-	h.logger.Info(ctx, "Async task execution completed", observability.Any("task_ids", requestData.TaskID), observability.Bool("success", success), observability.String("trace_id", traceID))
-	// Note: TaskMonitor reporting is already handled inside ExecuteTask
+	h.logger.Info(ctx, "Task execution completed", observability.Any("task_ids", requestData.TaskID), observability.Bool("success", success), observability.String("trace_id", traceID))
 }

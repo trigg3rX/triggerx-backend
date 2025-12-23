@@ -84,10 +84,10 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 	)
 	defer span.End()
 
-	dm.logger.Debug(ctx, "Updating keeper status in database",
-		observability.String("keeper", keeperHealth.KeeperAddress),
-		observability.Bool("active", isActive),
-	)
+	// dm.logger.Debug(ctx, "Updating keeper status in database",
+	// 	observability.String("keeper", keeperHealth.KeeperAddress),
+	// 	observability.Bool("active", isActive),
+	// )
 
 	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
@@ -141,10 +141,10 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		keeperHealth.PeerID = "no-peer-id"
 	}
 
-	dm.logger.Info(ctx, "Keeper ID",
-		observability.Int64("keeper_id", keeperID),
-		observability.Bool("online", isActive),
-	)
+	// dm.logger.Info(ctx, "Keeper ID",
+	// 	observability.Int64("keeper_id", keeperID),
+	// 	observability.Bool("online", isActive),
+	// )
 
 	// --- UPTIME LOGIC ---
 	// If previously online, add to uptime (regardless of new isActive)
@@ -256,19 +256,19 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 		go dm.checkAndNotifyOfflineKeeper(ctx, keeperID)
 	}
 
-	dm.logger.Info(ctx, "Successfully updated keeper status",
-		observability.Int64("keeper_id", keeperID),
-		observability.Bool("active", isActive),
-	)
+	// dm.logger.Info(ctx, "Successfully updated keeper status",
+	// 	observability.Int64("keeper_id", keeperID),
+	// 	observability.Bool("active", isActive),
+	// )
 	return nil
 }
 
 func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keeperID int64) {
 	time.Sleep(10 * time.Minute)
 
-	dm.logger.Debug(ctx, "Checking current status for offline keeper",
-		observability.Int64("keeper_id", keeperID),
-	)
+	// dm.logger.Debug(ctx, "Checking current status for offline keeper",
+	// 	observability.Int64("keeper_id", keeperID),
+	// )
 
 	var online bool
 	err := dm.db.Session().Query(`
@@ -347,12 +347,12 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keep
 			)
 		}
 
-		dm.logger.Info(ctx, "Completed notification process for offline keeper",
+		dm.logger.Debug(ctx, "Completed notification process for offline keeper",
 			observability.String("keeper", keeperName),
 			observability.Int64("keeper_id", keeperID),
 		)
 	} else {
-		dm.logger.Info(ctx, "Keeper is back online",
+		dm.logger.Debug(ctx, "Keeper is back online",
 			observability.Int64("keeper_id", keeperID),
 		)
 	}
@@ -367,18 +367,18 @@ func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keep
 
 // 	jsonData, err := json.Marshal(payload)
 // 	if err != nil {
-// 		dm.logger.Errorf("[Notification] Failed to marshal Telegram payload: %v", err)
+// 		dm.logger.Errorf("[Notification] Failed to marshal Telegram payload", err)
 // 		return err
 // 	}
 
 // 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 // 	if err != nil {
-// 		dm.logger.Errorf("[Notification] Failed to send Telegram message: %v", err)
+// 		dm.logger.Errorf("[Notification] Failed to send Telegram message", err)
 // 		return err
 // 	}
 // 	defer resp.Body.Close()
 
-// 	dm.logger.Infof("[Notification] Telegram message sent successfully to chat ID: %d (Status: %d)", chatID, resp.StatusCode)
+// 	dm.logger.Infof("[Notification] Telegram message sent successfully to chat ID", chatID, resp.StatusCode)
 // 	return nil
 // }
 
@@ -391,14 +391,14 @@ func (dm *DatabaseManager) sendEmailNotification(ctx context.Context, to, subjec
 
 	d := gomail.NewDialer("smtp.zeptomail.in", 587, config.GetEmailUser(), config.GetEmailPassword())
 	if err := d.DialAndSend(m); err != nil {
-		dm.logger.Error(ctx, "Failed to send email to %s",
+		dm.logger.Error(ctx, "Failed to send email to",
 			observability.String("to", to),
 			observability.Error(err),
 		)
 		return err
 	}
 
-	dm.logger.Info(ctx, "Email sent successfully to",
+	dm.logger.Debug(ctx, "Email sent successfully to",
 		observability.String("to", to),
 	)
 	return nil

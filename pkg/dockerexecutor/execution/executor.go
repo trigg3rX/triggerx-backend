@@ -73,7 +73,7 @@ func NewCodeExecutor(ctx context.Context, cfg config.ConfigProviderInterface, ht
 }
 
 func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
-	e.logger.Info(ctx, "Executing code from URL", observability.String("fileURL", fileURL), observability.Int("noOfAttesters", noOfAttesters))
+	e.logger.Debug(ctx, "Executing code from URL", observability.String("fileURL", fileURL), observability.Int("noOfAttesters", noOfAttesters))
 
 	// Extract metadata if provided
 	var metadataMap map[string]string
@@ -88,13 +88,13 @@ func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage
 		return nil, err
 	}
 
-	e.logger.Info(ctx, "Execution completed successfully")
+	e.logger.Debug(ctx, "Execution completed successfully")
 	return result, nil
 }
 
 // ExecuteSource executes raw source code by writing it to a temp file internally
 func (e *codeExecutor) ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
-	e.logger.Info(ctx, "Executing raw source for language", observability.String("language", language))
+	e.logger.Debug(ctx, "Executing raw source for language", observability.String("language", language))
 
 	// Extract metadata if provided
 	var metadataMap map[string]string
@@ -107,7 +107,7 @@ func (e *codeExecutor) ExecuteSource(ctx context.Context, code string, language 
 		e.logger.Error(ctx, "Execution (raw) failed", observability.Error(err))
 		return nil, err
 	}
-	e.logger.Info(ctx, "Execution (raw) completed successfully")
+	e.logger.Debug(ctx, "Execution (raw) completed successfully")
 	return result, nil
 }
 
@@ -155,7 +155,7 @@ func (e *codeExecutor) ClearAlerts(ctx context.Context) {
 }
 
 func (e *codeExecutor) Close(ctx context.Context) error {
-	e.logger.Info(ctx, "Closing code executor")
+	e.logger.Debug(ctx, "Closing code executor")
 
 	// Close pipeline first to ensure all active executions complete
 	if e.pipeline != nil {
@@ -183,6 +183,6 @@ func (e *codeExecutor) Close(ctx context.Context) error {
 		}
 	}
 
-	e.logger.Info(ctx, "Code executor closed")
+	e.logger.Debug(ctx, "Code executor closed")
 	return nil
 }

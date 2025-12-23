@@ -135,7 +135,7 @@ func (c *Client) isRetryableError(ctx context.Context, err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		if netErr.Timeout() {
-			c.logger.Debug(ctx, "Redis error is a retryable network timeout: %v", observability.String("error", fmt.Sprintf("%v", err)))
+			c.logger.Debug(ctx, "Redis error is a retryable network timeout", observability.Error(err))
 			return true // It's a timeout, so we should retry.
 		}
 	}
@@ -146,7 +146,7 @@ func (c *Client) isRetryableError(ctx context.Context, err error) bool {
 		var sysErr syscall.Errno
 		if errors.As(opErr.Err, &sysErr) {
 			if sysErr == syscall.ECONNREFUSED || sysErr == syscall.ECONNRESET {
-				c.logger.Debug(ctx, "Redis error is a retryable syscall error (%s): %v", observability.String("error", fmt.Sprintf("%v", err)))
+				c.logger.Debug(ctx, "Redis error is a retryable syscall error", observability.Error(err))
 				return true
 			}
 		}
@@ -154,11 +154,11 @@ func (c *Client) isRetryableError(ctx context.Context, err error) bool {
 
 	// Case 5: EOF often indicates a connection was closed by the other side, which is retryable.
 	if errors.Is(err, io.EOF) {
-		c.logger.Debug(ctx, "Redis error is a retryable EOF: %v", observability.String("error", fmt.Sprintf("%v", err)))
+		c.logger.Debug(ctx, "Redis error is a retryable EOF", observability.Error(err))
 		return true
 	}
 
 	// Default to non-retryable for unknown errors.
-	c.logger.Debug(ctx, "Redis error is considered non-retryable by default: %v (type: %T)", observability.String("error", fmt.Sprintf("%v", err)), observability.String("type", fmt.Sprintf("%T", err)))
+	c.logger.Debug(ctx, "Redis error is considered non-retryable", observability.Error(err), observability.String("type", fmt.Sprintf("%T", err)))
 	return false
 }

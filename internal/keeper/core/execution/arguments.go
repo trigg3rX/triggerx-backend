@@ -27,7 +27,7 @@ func (ac *ArgumentConverter) convertToType(value interface{}, targetType abi.Typ
 	case abi.AddressTy:
 		return ac.convertToAddress(value)
 	case abi.BytesTy:
-		return ac.convertToBytes(value, targetType)
+		return ac.convertToBytes(value)
 	case abi.FixedBytesTy:
 		return ac.convertToFixedBytes(value, targetType)
 	case abi.ArrayTy, abi.SliceTy:
@@ -417,7 +417,7 @@ func (ac *ArgumentConverter) convertToAddress(value interface{}) (ethcommon.Addr
 	}
 }
 
-func (ac *ArgumentConverter) convertToBytes(value interface{}, targetType abi.Type) ([]byte, error) {
+func (ac *ArgumentConverter) convertToBytes(value interface{}) ([]byte, error) {
 	// Convert to dynamic bytes
 	switch v := value.(type) {
 	case string:
