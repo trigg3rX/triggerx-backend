@@ -17,6 +17,11 @@ data/cache/*
 data/logs/*/*.log*
 data/logs/*/*.json
 !data/logs/*/.gitkeep
+data/loki/
+data/mimir/
+data/tempo/
+data/grafana/
+data/scylla/
 
 # Signing keys
 *.key
@@ -28,3 +33,10 @@ peerstore/
 reference/
 
 .log
+
+u_block_poll/
+v_data/
+w_keeper_setup/
+x_frontend/
+y_contracts/
+z_sdk/

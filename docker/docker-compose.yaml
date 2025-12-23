@@ -31,10 +31,11 @@ services:
   loki:
     profiles: [lgtm]
     image: grafana/loki:latest
+    user: "1000:1000"
     command: -config.file=/etc/loki.yaml
     volumes:
       - ./../config/loki.yaml:/etc/loki.yaml
-      - loki-data:/loki
+      - ./../data/loki:/loki
     ports:
       - "3100:3100"
     networks:
@@ -43,10 +44,11 @@ services:
   tempo:
     profiles: [lgtm]
     image: grafana/tempo:latest
+    user: "1000:1000"
     command: -config.file=/etc/tempo.yaml
     volumes:
       - ./../config/tempo.yaml:/etc/tempo.yaml
-      - tempo-data:/var/tempo
+      - ./../data/tempo:/var/tempo
     ports:
       - "3200:3200"
     networks:
@@ -55,10 +57,11 @@ services:
   mimir:
     profiles: [lgtm]
     image: grafana/mimir:latest
+    user: "1000:1000"
     command: -config.file=/etc/mimir.yaml -target=all
     volumes:
       - ./../config/mimir.yaml:/etc/mimir.yaml
-      - mimir-data:/mimir
+      - ./../data/mimir:/mimir
     ports:
       - "9090:9090"
     networks:
@@ -67,10 +70,11 @@ services:
   grafana:
     profiles: [lgtm]
     image: grafana/grafana:latest
+    user: "1000:1000"
     ports:
       - "3000:3000"
     volumes:
-      - grafana-data:/var/lib/grafana
+      - ./../data/grafana:/var/lib/grafana
       - ./../config/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
     depends_on:
       - loki
@@ -85,6 +89,9 @@ services:
     container_name: triggerx-redis
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - ./../data/redis:/data
 
 networks:
   triggerx-network:
@@ -94,7 +101,3 @@ networks:
 
 volumes:
   scylla_data:
-  loki-data:
-  tempo-data:
-  mimir-data:
-  grafana-data:

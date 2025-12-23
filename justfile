@@ -47,36 +47,36 @@ start-othentic:
     ./scripts/services/start-othentic.sh
 
 # Start the Database Server
-start-db-server:
-    ./scripts/services/start-dbserver.sh
+start-db-server args="":
+    ./scripts/services/start-dbserver.sh {{args}}
 
 # Start the Health Check
-start-health:
-    ./scripts/services/start-health.sh
+start-health args="":
+    ./scripts/services/start-health.sh {{args}}
 
 # Start the Task Dispatcher
-start-taskdispatcher:
-    ./scripts/services/start-taskdispatcher.sh
+start-taskdispatcher args="":
+    ./scripts/services/start-taskdispatcher.sh {{args}}
 
 # Start the Task Monitor
-start-taskmonitor:
-    ./scripts/services/start-taskmonitor.sh
+start-taskmonitor args="":
+    ./scripts/services/start-taskmonitor.sh {{args}}
 
 # Start the Time Scheduler
-start-time-scheduler:
-    ./scripts/services/start-time-scheduler.sh
+start-time-scheduler args="":
+    ./scripts/services/start-time-scheduler.sh {{args}}
 
 # Start the Condition Scheduler
-start-condition-scheduler:
-    ./scripts/services/start-condition-scheduler.sh
+start-condition-scheduler args="":
+    ./scripts/services/start-condition-scheduler.sh {{args}}
 
 # Start the Event Monitor
-start-eventmonitor:
-    ./scripts/services/start-eventmonitor.sh
+start-eventmonitor args="":
+    ./scripts/services/start-eventmonitor.sh {{args}}
 
 # Start the Keeper
-start-keeper:
-    ./scripts/services/start-keeper.sh
+start-keeper args="":
+    ./scripts/services/start-keeper.sh {{args}}
 
 # Start the Imua Keeper
 start-imua-keeper:
