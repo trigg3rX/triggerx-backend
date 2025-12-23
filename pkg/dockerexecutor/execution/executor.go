@@ -92,6 +92,27 @@ func (e *codeExecutor) Execute(ctx context.Context, fileURL string, fileLanguage
 	return result, nil
 }
 
+// ExecuteWithEnv executes code with environment variables injected into the container
+func (e *codeExecutor) ExecuteWithEnv(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, env map[string]string, metadata ...map[string]string) (*types.ExecutionResult, error) {
+	e.logger.Infof("Executing code from URL: %s with %d attestations and %d env vars", fileURL, noOfAttesters, len(env))
+
+	// Extract metadata if provided
+	var metadataMap map[string]string
+	if len(metadata) > 0 {
+		metadataMap = metadata[0]
+	}
+
+	// Execute through pipeline with environment variables
+	result, err := e.pipeline.executeWithEnv(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, env, metadataMap)
+	if err != nil {
+		e.logger.Errorf("Execution with env failed: %v", err)
+		return nil, err
+	}
+
+	e.logger.Infof("Execution with env completed successfully")
+	return result, nil
+}
+
 // ExecuteSource executes raw source code by writing it to a temp file internally
 func (e *codeExecutor) ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error) {
 	e.logger.Infof("Executing raw source for language: %s", language)

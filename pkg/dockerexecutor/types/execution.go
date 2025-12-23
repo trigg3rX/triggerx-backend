@@ -52,6 +52,7 @@ type ExecutionContext struct {
     StartedAt     time.Time         `json:"started_at"`
     CompletedAt   time.Time         `json:"completed_at,omitempty"`
     Metadata      map[string]string `json:"metadata,omitempty"`
+    Env           map[string]string `json:"env,omitempty"` // Environment variables to inject into script execution
     State         ExecutionState    `json:"state"`
 }
 

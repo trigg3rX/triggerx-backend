@@ -23,7 +23,7 @@ import (
 type ContainerManager interface {
 	GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error)
 	ReturnContainer(container *types.PooledContainer) error
-	ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error)
+	ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language, env ...map[string]string) (*types.ExecutionResult, string, error)
 	MarkContainerAsFailed(containerID string, language types.Language, err error)
 	KillExecProcess(ctx context.Context, execID string) error
 	GetPoolStats() map[types.Language]*types.PoolStats
@@ -143,6 +143,78 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 	duration := time.Since(startTime)
 
 	ep.logger.Infof("Execution %s completed successfully in %v", executionID, duration)
+	return result, nil
+}
+
+// executeWithEnv executes code with environment variables injected into the container
+func (ep *executionPipeline) executeWithEnv(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, env map[string]string, metadata map[string]string) (*types.ExecutionResult, error) {
+	startTime := time.Now()
+	executionID := generateExecutionID()
+
+	ep.logger.Infof("Starting execution %s for file: %s with %d env vars", executionID, fileURL, len(env))
+
+	// Check if pipeline is shutting down
+	select {
+	case <-ep.shutdownChan:
+		return nil, fmt.Errorf("execution pipeline is shutting down")
+	default:
+	}
+
+	// Create a cancellable context for this execution
+	execCtx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc() // Ensure cleanup
+
+	// Initialize metadata if nil
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+
+	// Create execution context with environment variables
+	executionContext := &types.ExecutionContext{
+		FileURL:       fileURL,
+		FileLanguage:  fileLanguage,
+		NoOfAttesters: noOfAttesters,
+		TraceID:       executionID,
+		StartedAt:     startTime,
+		Metadata:      metadata,
+		Env:           env, // Environment variables for script execution
+		State: types.ExecutionState{
+			CancelFunc: cancelFunc,
+		},
+	}
+
+	// Track execution with WaitGroup for graceful shutdown
+	ep.activeExecutionsWG.Add(1)
+	defer ep.activeExecutionsWG.Done()
+
+	// Track execution
+	ep.mutex.Lock()
+	ep.activeExecutions[executionID] = executionContext
+	ep.mutex.Unlock()
+
+	defer func() {
+		// Remove from active executions
+		ep.mutex.Lock()
+		delete(ep.activeExecutions, executionID)
+		ep.mutex.Unlock()
+
+		// Update statistics
+		duration := time.Since(startTime)
+		ep.updateStats(true, duration, 0.0)
+	}()
+
+	// Execute pipeline stages
+	result, err := ep.executeStages(execCtx, executionContext, alchemyAPIKey)
+	if err != nil {
+		executionContext.CompletedAt = time.Now()
+		ep.updateStats(false, time.Since(startTime), 0.0)
+		return nil, fmt.Errorf("execution failed: %w", err)
+	}
+
+	executionContext.CompletedAt = time.Now()
+	duration := time.Since(startTime)
+
+	ep.logger.Infof("Execution %s with env completed successfully in %v", executionID, duration)
 	return result, nil
 }
 
@@ -307,9 +379,16 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 		}
 	}()
 
-	// Stage 3: Execute Code
+	// Stage 3: Execute Code (pass environment variables if present)
 	ep.logger.Debugf("Stage 3: Executing code in container %s", container.ID)
-	result, execID, err := ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language)
+	var result *types.ExecutionResult
+	var execID string
+	if execCtx.Env != nil && len(execCtx.Env) > 0 {
+		ep.logger.Debugf("Passing %d environment variables to container execution", len(execCtx.Env))
+		result, execID, err = ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language, execCtx.Env)
+	} else {
+		result, execID, err = ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language)
+	}
 	if err != nil {
 		// Mark container as failed if execution fails
 		ep.logger.Warnf("Execution failed in container %s, marking as failed: %v", container.ID, err)

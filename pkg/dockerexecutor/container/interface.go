@@ -34,7 +34,7 @@ type ContainerManagerAPI interface {
 	GetHealthCheckStats() map[types.Language]map[string]int
 	GetSupportedLanguages() []types.Language
 	IsLanguageSupported(language types.Language) bool
-	ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error)
+	ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language, env ...map[string]string) (*types.ExecutionResult, string, error)
 	PullImage(ctx context.Context, imageName string) error
 	CleanupContainer(ctx context.Context, containerID string) error
 	KillExecProcess(ctx context.Context, execID string) error

@@ -268,8 +268,15 @@ func (m *containerManager) MarkContainerAsFailed(containerID string, language ty
 }
 
 // ExecuteInContainerWithLanguage executes code in a container using language-specific setup
-func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
+func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language, env ...map[string]string) (*types.ExecutionResult, string, error) {
 	m.logger.Infof("Executing file %s in container %s with language %s", filePath, containerID, language)
+
+	// Extract env map if provided
+	var envMap map[string]string
+	if len(env) > 0 {
+		envMap = env[0]
+		m.logger.Debugf("Executing with %d environment variables", len(envMap))
+	}
 
 	// Verify container is running before execution
 	inspect, err := m.dockerClient.ContainerInspect(ctx, containerID)
@@ -284,7 +291,7 @@ func (m *containerManager) ExecuteInContainer(ctx context.Context, containerID s
 
 	// Execute the code with combined file copy and execution
 	m.logger.Debugf("Starting combined file copy and code execution in container %s", containerID)
-	result, execID, err := m.executeCodeWithFileCopy(ctx, containerID, filePath, language)
+	result, execID, err := m.executeCodeWithFileCopy(ctx, containerID, filePath, language, envMap)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to execute code: %w", err)
 	}
@@ -395,7 +402,7 @@ func (m *containerManager) KillExecProcess(ctx context.Context, execID string) e
 	return nil
 }
 
-func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
+func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containerID string, filePath string, language types.Language, env map[string]string) (*types.ExecutionResult, string, error) {
 	result := m.getExecutionResult()
 	outputBuffer := m.getBytesBuffer()
 	defer m.returnBytesBuffer(outputBuffer)
@@ -416,7 +423,7 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 
 	// Step 2: Execute the actual code with precise timing
 	executionStartTime := time.Now()
-	execID, err := m.runExecutionScript(ctx, containerID, language, outputBuffer)
+	execID, err := m.runExecutionScript(ctx, containerID, language, outputBuffer, env)
 	executionEndTime := time.Now()
 	codeExecutionTime := executionEndTime.Sub(executionStartTime)
 
@@ -516,14 +523,24 @@ func (m *containerManager) runSetupScript(ctx context.Context, containerID strin
 }
 
 // runExecutionScript runs the actual code execution with precise timing
-func (m *containerManager) runExecutionScript(ctx context.Context, containerID string, language types.Language, outputBuffer *bytes.Buffer) (string, error) {
+func (m *containerManager) runExecutionScript(ctx context.Context, containerID string, language types.Language, outputBuffer *bytes.Buffer, env map[string]string) (string, error) {
 	m.logger.Debugf("Running execution script for container %s", containerID)
+
+	// Build environment variables slice for Docker exec
+	var envSlice []string
+	if env != nil {
+		for k, v := range env {
+			envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
+		}
+		m.logger.Debugf("Injecting %d environment variables into container execution", len(envSlice))
+	}
 
 	executionScript := scripts.GetExecutionScript(language)
 	execConfig := container.ExecOptions{
 		Cmd:          []string{"sh", "-c", executionScript},
 		AttachStdout: true,
 		AttachStderr: true,
+		Env:          envSlice, // Inject environment variables
 	}
 
 	execResp, err := m.dockerClient.ContainerExecCreate(ctx, containerID, execConfig)

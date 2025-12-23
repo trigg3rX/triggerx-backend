@@ -7,8 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	// "time"
+	"time"
 
 	// "github.com/ethereum/go-ethereum/crypto"
 	// "github.com/google/uuid"
@@ -40,7 +39,11 @@ func (e *TaskExecutor) ExecuteCustomScript(
 
 	e.logger.Infof("[CustomScript] Executing %s script from: %s", scriptLanguage, scriptURL)
 
-	// Use standard Execute method (env var injection deferred to Phase 2)
+	// Prepare environment variables for script execution (Phase 2)
+	envVars := prepareCustomScriptEnv(targetData, triggerData)
+	e.logger.Infof("[CustomScript] Prepared %d environment variables for injection", len(envVars))
+
+	// Prepare metadata for fee calculation
 	metadata := map[string]string{
 		"task_definition_id":      fmt.Sprintf("%d", targetData.TaskDefinitionID),
 		"target_chain_id":         targetData.TargetChainID,
@@ -50,12 +53,14 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		"from_address":            config.GetTaskExecutionAddress(),
 	}
 
-	result, err := e.validator.GetDockerExecutor().Execute(
+	// Execute with environment variable injection
+	result, err := e.validator.GetDockerExecutor().ExecuteWithEnv(
 		ctx,
 		scriptURL,
 		scriptLanguage,
 		1, // noOfAttesters
 		config.GetAlchemyAPIKey(),
+		envVars,
 		metadata,
 	)
 	if err != nil {
@@ -100,8 +105,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 
 // prepareCustomScriptEnv prepares environment variables for script execution
 // Phase 2: Environment variable injection for storage and context
-// Currently unused in Phase 1
-/* func prepareCustomScriptEnv(
+func prepareCustomScriptEnv(
 	targetData *types.TaskTargetData,
 	triggerData *types.TaskTriggerData,
 ) map[string]string {
@@ -111,7 +115,6 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	env["TRIGGERX_TIMESTAMP"] = fmt.Sprintf("%d", time.Now().Unix())
 	env["TRIGGERX_JOB_ID"] = targetData.JobID.String()
 	env["TRIGGERX_TASK_ID"] = fmt.Sprintf("%d", targetData.TaskID)
-	env["TRIGGERX_EXECUTION_ID"] = generateExecutionID(targetData.JobID, time.Now())
 
 	// Inject storage from task data
 	if targetData.ScriptStorage != nil {
@@ -121,7 +124,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	}
 
 	return env
-} */
+}
 
 // validateCustomScriptOutput validates the script output format
 func validateCustomScriptOutput(output *types.CustomScriptOutput) error {

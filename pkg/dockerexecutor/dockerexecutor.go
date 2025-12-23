@@ -16,6 +16,7 @@ import (
 // CodeExecutor defines what the DockerManager needs from a code executor
 type CodeExecutor interface {
 	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
+	ExecuteWithEnv(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, env map[string]string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetStats() *types.PerformanceMetrics
@@ -160,6 +161,34 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadataMap)
 	if err != nil {
 		de.logger.Errorf("Execution failed: %v", err)
+		return nil, fmt.Errorf("execution failed: %w", err)
+	}
+	return result, nil
+}
+
+// ExecuteWithEnv runs code from the specified URL with environment variables injected
+// This is used for custom scripts that need access to storage and execution context
+func (de *DockerExecutor) ExecuteWithEnv(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, env map[string]string, metadata ...map[string]string) (*types.ExecutionResult, error) {
+	de.mutex.RLock()
+	if !de.initialized {
+		de.mutex.RUnlock()
+		return nil, fmt.Errorf("docker manager not initialized")
+	}
+	if de.closed {
+		de.mutex.RUnlock()
+		return nil, fmt.Errorf("docker manager is closed")
+	}
+	de.mutex.RUnlock()
+
+	var metadataMap map[string]string
+	if len(metadata) > 0 {
+		metadataMap = metadata[0]
+	}
+
+	de.logger.Infof("Executing code with %d environment variables", len(env))
+	result, err := de.executor.ExecuteWithEnv(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, env, metadataMap)
+	if err != nil {
+		de.logger.Errorf("Execution with env failed: %v", err)
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 	return result, nil

@@ -55,6 +55,10 @@ func (f *FakeDockerExecutor) ExecuteSource(ctx context.Context, code string, lan
 	}
 	return newExecResult(0, true, nil), nil
 }
+func (f *FakeDockerExecutor) ExecuteWithEnv(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int, alchemyAPIKey string, env map[string]string, metadata ...map[string]string) (*dextypes.ExecutionResult, error) {
+	// Delegate to Execute for test purposes
+	return f.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadata...)
+}
 func (f *FakeDockerExecutor) GetHealthStatus() *dexexec.HealthStatus { return &dexexec.HealthStatus{} }
 func (f *FakeDockerExecutor) GetExecutionFeeConfig() dexconfig.ExecutionFeeConfig {
 	return dexconfig.ExecutionFeeConfig{}

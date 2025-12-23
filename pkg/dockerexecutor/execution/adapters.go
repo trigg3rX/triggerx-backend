@@ -31,8 +31,8 @@ func (a *ContainerManagerAdapter) ReturnContainer(container *types.PooledContain
 }
 
 // ExecuteInContainer implements execution.ContainerManager.ExecuteInContainer
-func (a *ContainerManagerAdapter) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error) {
-	return a.manager.ExecuteInContainer(ctx, containerID, filePath, language)
+func (a *ContainerManagerAdapter) ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language, env ...map[string]string) (*types.ExecutionResult, string, error) {
+	return a.manager.ExecuteInContainer(ctx, containerID, filePath, language, env...)
 }
 
 // MarkContainerAsFailed implements execution.ContainerManager.MarkContainerAsFailed
