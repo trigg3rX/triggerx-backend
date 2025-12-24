@@ -28,6 +28,7 @@ type ConditionBasedScheduler struct {
 	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker  // jobID -> condition worker
 	eventWorkers         map[*types.BigInt]*worker.EventWorker      // jobID -> event worker
 	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
+	lastTriggerTime      map[string]time.Time                       // jobID -> last trigger timestamp for cooldown
 	workersMutex         sync.RWMutex
 	notificationMutex    sync.Mutex                        // Protect job data during notification processing
 	chainClients         map[string]*nodeclient.NodeClient // chainID -> client
@@ -38,7 +39,8 @@ type ConditionBasedScheduler struct {
 	metrics              *metrics.Collector
 	maxWorkers           int
 	schedulerID          int
-	webhookURL           string // Webhook URL for receiving event notifications
+	webhookURL           string        // Webhook URL for receiving event notifications
+	cooldownPeriod       time.Duration // Cooldown period between task creations for recurring jobs
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
@@ -73,6 +75,7 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		conditionWorkers:     make(map[*types.BigInt]*worker.ConditionWorker),
 		eventWorkers:         make(map[*types.BigInt]*worker.EventWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
+		lastTriggerTime:      make(map[string]time.Time),
 		chainClients:         make(map[string]*nodeclient.NodeClient),
 		dbClient:             dbClient,
 		taskDispatcherClient: taskDispatcherClient,
@@ -81,6 +84,7 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		maxWorkers:           config.GetMaxWorkers(),
 		schedulerID:          config.GetSchedulerID(),
 		webhookURL:           webhookURL,
+		cooldownPeriod:       30 * time.Second, // Default 30 seconds cooldown between task creations
 	}
 
 	// Initialize chain clients for event workers

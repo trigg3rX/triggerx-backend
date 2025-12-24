@@ -225,10 +225,13 @@ func (s *ConditionBasedScheduler) cleanupJobData(ctx context.Context, jobID *big
 	s.workersMutex.Lock()
 	defer s.workersMutex.Unlock()
 
+	jobIDStr := jobID.String()
 	// Remove job data from store
-	delete(s.jobDataStore, jobID.String())
+	delete(s.jobDataStore, jobIDStr)
+	// Clean up last trigger time tracking
+	delete(s.lastTriggerTime, jobIDStr)
 
-	s.logger.Debug(ctx, "Cleaned up job data from store", observability.String("job_id", jobID.String()))
+	s.logger.Debug(ctx, "Cleaned up job data from store", observability.String("job_id", jobIDStr))
 	return nil
 }
 
@@ -362,9 +365,20 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 
 	// Try condition workers first
 	if conditionWorker, exists := s.conditionWorkers[originalJobID]; exists {
-		conditionWorker.Stop(ctx)
+		// Handle websocket workers (stored as nil) - they stop via context cancellation
+		// For regular condition workers, call Stop explicitly
+		if conditionWorker != nil {
+			conditionWorker.Stop(ctx)
+		} else {
+			// For websocket workers, we need to cancel their context
+			// Since websocket workers use context derived from s.ctx, we can't cancel individually
+			// The worker will stop when it checks ctx.Done() in its loop
+			// We rely on the job data cleanup to prevent new triggers
+			s.logger.Debug(ctx, "WebSocket worker will stop via context check", observability.String("job_id", jobIDStr))
+		}
 		delete(s.conditionWorkers, originalJobID)
-		delete(s.jobDataStore, jobIDStr) // Clean up job data
+		delete(s.jobDataStore, jobIDStr)    // Clean up job data
+		delete(s.lastTriggerTime, jobIDStr) // Clean up last trigger time tracking
 	} else if eventWorker, exists := s.eventWorkers[originalJobID]; exists {
 		// If event worker exists, unregister from Event Monitor Service
 		if s.eventMonitorClient != nil {
@@ -382,7 +396,8 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 		}
 
 		delete(s.eventWorkers, originalJobID)
-		delete(s.jobDataStore, jobIDStr) // Clean up job data
+		delete(s.jobDataStore, jobIDStr)    // Clean up job data
+		delete(s.lastTriggerTime, jobIDStr) // Clean up last trigger time tracking
 	} else {
 		metrics.TrackCriticalError("job_not_found")
 		return fmt.Errorf("job %d is not scheduled", jobID)
