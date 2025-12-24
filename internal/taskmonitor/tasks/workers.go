@@ -63,10 +63,15 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 			continue
 		}
 
-		tsm.logger.Warn(ctx, "Task timeout detected",
+		// Log task timeout with dispatched_at if available
+		logFields := []observability.Field{
 			observability.Int64("task_id", taskID),
-			observability.Time("dispatched_at", *task.DispatchedAt),
-			observability.Time("created_at", task.CreatedAt))
+			observability.Time("created_at", task.CreatedAt),
+		}
+		if task.DispatchedAt != nil {
+			logFields = append(logFields, observability.Time("dispatched_at", *task.DispatchedAt))
+		}
+		tsm.logger.Warn(ctx, "Task timeout detected", logFields...)
 
 		// Move to failed stream
 		if err := tsm.moveTaskToFailed(ctx, *task, "dispatched timeout"); err != nil {

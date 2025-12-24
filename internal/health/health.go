@@ -117,12 +117,12 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	metrics.RecordKeeperCheckIn(ctx, keeperHealth.Version)
 
 	// Verify signature for all versions
-	ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+	ok, _ := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 	if !ok {
-		h.logger.Error(ctx, "Invalid keeper signature",
-			observability.String("keeper", keeperHealth.KeeperAddress),
-			observability.Error(err),
-		)
+		// h.logger.Error(ctx, "Invalid keeper signature",
+		// 	observability.String("keeper", keeperHealth.KeeperAddress),
+		// 	observability.Error(err),
+		// )
 		c.JSON(http.StatusPreconditionFailed, gin.H{
 			"error": "Invalid signature",
 		})
@@ -166,7 +166,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 
 	// Handle different versions according to requirements
 	switch keeperHealth.Version {
-	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "0.3.0", "0.1.0":
+	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "0.3.0", "1.1.0":
 		// Latest version - return msgData with no warning
 		var message string
 		if keeperHealth.IsImua {

@@ -28,6 +28,6 @@ func (h *MetricsHandler) Metrics(c *gin.Context) {
 		traceID = "unknown"
 	}
 
-	h.logger.Info(c.Request.Context(), "[Metrics] Serving metrics", observability.String("trace_id", traceID))
+	// h.logger.Info(c.Request.Context(), "[Metrics] Serving metrics", observability.String("trace_id", traceID))
 	h.collector.Handler().ServeHTTP(c.Writer, c.Request)
 }

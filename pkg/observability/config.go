@@ -87,6 +87,22 @@ func generateInstanceID() string {
 	return fmt.Sprintf("%s-%d", hostname, pid)
 }
 
+// GenerateKeeperInstanceID generates a unique instance ID for keeper services
+// that includes the keeper address for better uniqueness and identification
+func GenerateKeeperInstanceID(keeperAddress string) string {
+	baseID := generateInstanceID()
+	// Use last 8 characters of keeper address (without 0x prefix) for brevity
+	addrSuffix := keeperAddress
+	if len(keeperAddress) > 2 && keeperAddress[:2] == "0x" {
+		addrSuffix = keeperAddress[2:]
+	}
+	// Take last 8 characters for a shorter, readable ID
+	if len(addrSuffix) > 8 {
+		addrSuffix = addrSuffix[len(addrSuffix)-8:]
+	}
+	return fmt.Sprintf("%s-%s", baseID, addrSuffix)
+}
+
 func getBaseDataDir() string {
 	if dataDir := os.Getenv("TRIGGERX_DATA_DIR"); dataDir != "" {
 		return dataDir
@@ -197,6 +213,13 @@ func WithSamplingRates(successRate, errorRate float64) ConfigOption {
 func WithPrometheusExport(enabled bool) ConfigOption {
 	return func(cfg *Config) {
 		cfg.EnablePrometheusExport = enabled
+	}
+}
+
+// WithInstanceID sets a custom instance ID for the service
+func WithInstanceID(instanceID string) ConfigOption {
+	return func(cfg *Config) {
+		cfg.InstanceID = instanceID
 	}
 }
 

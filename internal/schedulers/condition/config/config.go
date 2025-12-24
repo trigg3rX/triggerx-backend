@@ -54,7 +54,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                   env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		conditionSchedulerRPCPort: env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
 		dbServerURL:               env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
 		aggregatorRPCURL:          env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),

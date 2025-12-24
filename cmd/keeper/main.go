@@ -32,13 +32,17 @@ func main() {
 	}
 
 	// Initialize observability (logger, tracer, metrics)
-	obsCfg := observability.NewConfig(
+	// Generate instance ID that includes keeper address for better uniqueness
+	keeperInstanceID := observability.GenerateKeeperInstanceID(config.GetKeeperAddress())
+
+	obsCfg := observability.NewConfigWithOptions(
 		observability.KeeperService,
 		config.GetVersion(),
 		config.GetOTELExporterEndpoint(),
 		config.IsDevMode(),
+		observability.WithInstanceID(keeperInstanceID),
+		observability.WithPrometheusExport(config.GetEnablePrometheusExport()),
 	)
-	obsCfg.EnablePrometheusExport = config.GetEnablePrometheusExport()
 
 	// Create resource for observability
 	res, err := observability.NewResource(obsCfg)
@@ -62,6 +66,7 @@ func main() {
 	// Initialize tracer
 	tracer, tracerShutdown, err := observability.NewTracer(obsCfg, res)
 	if err != nil {
+		logger.Error(ctx, "Failed to initialize tracer", observability.Error(err))
 		panic(fmt.Sprintf("Failed to initialize tracer: %v", err))
 	}
 
@@ -70,10 +75,13 @@ func main() {
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize observability metrics", observability.Error(err))
 	}
+
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
+
 	// Create metrics collector with observability Metrics
 	collector := metrics.NewCollector(obsMetrics)
+
 	logger.Info(ctx, "[1/7] Dependency: Observability Module Initialised")
 
 	// Initialize health client first

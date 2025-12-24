@@ -52,11 +52,11 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
 
-	sm.logger.Info(ctx, "Updated keeper health status",
-		observability.String("keeper", address),
-		observability.String("version", keeperHealth.Version),
-		observability.Bool("is_imua", keeperHealth.IsImua),
-	)
+	// sm.logger.Info(ctx, "Updated keeper health status",
+	// 	observability.String("keeper", address),
+	// 	observability.String("version", keeperHealth.Version),
+	// 	observability.Bool("is_imua", keeperHealth.IsImua),
+	// )
 	return nil
 }
 
