@@ -12,7 +12,6 @@ import (
 
 func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	taskID := c.Param("id")
-	h.logger.Debug(c.Request.Context(), "[UpdateTaskExecutionData] Updating task execution data for task with ID", observability.String("task_id", taskID))
 
 	var taskData types.UpdateTaskExecutionDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
@@ -46,13 +45,12 @@ func (h *Handler) UpdateTaskExecutionData(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Debug(c.Request.Context(), "[UpdateTaskExecutionData] Successfully updated task execution data for task with ID", observability.String("task_id", taskID))
 	c.JSON(http.StatusOK, gin.H{"message": "Task execution data updated successfully"})
+	h.logger.Info(c.Request.Context(), "[UpdateTaskExecutionData] Updated task execution data", observability.String("task_id", taskID))
 }
 
 func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	taskID := c.Param("id")
-	h.logger.Debug(c.Request.Context(), "[UpdateTaskAttestationData] Updating task attestation data for task with ID", observability.String("task_id", taskID))
 
 	var taskData types.UpdateTaskAttestationDataRequest
 	if err := c.ShouldBindJSON(&taskData); err != nil {
@@ -86,13 +84,12 @@ func (h *Handler) UpdateTaskAttestationData(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Debug(c.Request.Context(), "[UpdateTaskAttestationData] Successfully updated task attestation data for task with ID", observability.String("task_id", taskID))
 	c.JSON(http.StatusOK, gin.H{"message": "Task attestation data updated successfully"})
+	h.logger.Info(c.Request.Context(), "[UpdateTaskAttestationData] Updated task attestation data", observability.String("task_id", taskID))
 }
 
 func (h *Handler) UpdateTaskFee(c *gin.Context) {
 	taskID := c.Param("id")
-	h.logger.Debug(c.Request.Context(), "[UpdateTaskFee] Updating task fee for task with ID", observability.String("task_id", taskID))
 
 	var taskFee struct {
 		Fee float64 `json:"fee"`
@@ -128,6 +125,6 @@ func (h *Handler) UpdateTaskFee(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Debug(c.Request.Context(), "[UpdateTaskFee] Successfully updated task fee for task with ID", observability.String("task_id", taskID))
 	c.JSON(http.StatusOK, taskFee)
+	h.logger.Info(c.Request.Context(), "[UpdateTaskFee] Updated task fee", observability.String("task_id", taskID))
 }

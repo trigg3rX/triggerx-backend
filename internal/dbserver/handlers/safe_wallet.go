@@ -26,13 +26,11 @@ func (h *Handler) GetSafeAddressesByUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"safe_addresses": safeAddresses})
+	h.logger.Debug(c.Request.Context(), "[GetSafeAddressesByUser] Retrieved safe addresses", observability.String("user_address", userAddress), observability.Int("safe_addresses_count", len(safeAddresses)))
 }
 
 // GetJobsBySafeAddress handles GET /jobs/safe-address/:safe_address
 func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobsBySafeAddress] Retrieving jobs by safe address", observability.String("trace_id", traceID))
-
 	safeAddress := strings.ToLower(c.Param("safe_address"))
 	if safeAddress == "" {
 		h.logger.Error(c.Request.Context(), "[GetJobsBySafeAddress] Invalid safe address")
@@ -42,8 +40,6 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 		})
 		return
 	}
-
-	h.logger.Info(c.Request.Context(), "[GetJobsBySafeAddress] Retrieving jobs for safe address", observability.String("safe_address", safeAddress))
 
 	// Get jobs by safe address
 	trackDBOp := metrics.TrackDBOperation("read", "job_data")
@@ -146,5 +142,5 @@ func (h *Handler) GetJobsBySafeAddress(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"jobs": jobsAPI,
 	})
-
+	h.logger.Debug(c.Request.Context(), "[GetJobsBySafeAddress] Retrieved jobs", observability.String("safe_address", safeAddress), observability.Int("jobs_count", len(jobs)))
 }

@@ -44,6 +44,6 @@ func (h *Handler) CreateTaskData(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[CreateTaskData] Successfully created task with ID", observability.Int64("task_id", taskID))
 	c.JSON(http.StatusCreated, gin.H{"task_id": taskID})
+	h.logger.Info(c.Request.Context(), "[CreateTaskData] Created task", observability.Int64("task_id", taskID))
 }

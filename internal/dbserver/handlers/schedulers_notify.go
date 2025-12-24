@@ -26,6 +26,7 @@ func (h *Handler) notifyConditionScheduler(ctx context.Context, jobID *big.Int, 
 		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job", observability.Int64("job_id", jobID.Int64()))
 		return false, fmt.Errorf("failed to notify condition scheduler for job %d", jobID)
 	}
+	h.logger.Info(ctx, "Successfully sent data to condition scheduler", observability.String("job_id", jobID.String()))
 	return true, nil
 }
 
@@ -40,7 +41,7 @@ func (h *Handler) notifyPauseToConditionScheduler(ctx context.Context, jobID *bi
 		h.logger.Error(ctx, "[NotifyEventScheduler] Failed to notify event scheduler for job", observability.Int64("job_id", jobID.Int64()))
 		return false, fmt.Errorf("failed to notify event scheduler for job %d", jobID)
 	}
-
+	h.logger.Info(ctx, "Successfully sent data to event scheduler", observability.String("job_id", jobID.String()))
 	return true, nil
 }
 
@@ -80,6 +81,5 @@ func (h *Handler) sendDataToScheduler(ctx context.Context, route string, data co
 		return false, fmt.Errorf("condition scheduler service error (status=%d): %s", resp.StatusCode, string(body))
 	}
 
-	h.logger.Info(ctx, "Successfully sent data to condition scheduler")
 	return true, nil
 }

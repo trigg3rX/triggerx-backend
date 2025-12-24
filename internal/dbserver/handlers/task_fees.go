@@ -99,8 +99,6 @@ func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDe
 }
 
 func (h *Handler) GetTaskFees(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetTaskFees] Getting task fees", observability.String("trace_id", traceID))
 
 	// Get query parameters
 	ipfsURLs := c.Query("ipfs_url")
@@ -126,7 +124,7 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 
 	totalFee, currentTotalFee, err := h.CalculateTaskFees(c.Request.Context(), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetTaskFees] Error calculating fees", observability.Error(err))
+		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Failed to calculate fees", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -137,4 +135,5 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 		"current_total_fee":     currentTotalFee,
 		"current_total_fee_wei": currentTotalFee.String(),
 	})
+	h.logger.Debug(c.Request.Context(), "[GetTaskFees] Calculated task fees", observability.Int("task_definition_id", taskDefinitionID))
 }

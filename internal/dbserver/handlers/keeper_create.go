@@ -34,7 +34,6 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	}
 
 	if existingKeeperID != -1 {
-		h.logger.Info(c.Request.Context(), "[CreateKeeperData] Keeper already exists with ID", observability.Int64("keeper_id", existingKeeperID))
 		c.JSON(http.StatusOK, gin.H{
 			"message":   "Keeper already exists",
 			"keeper_id": existingKeeperID,
@@ -80,13 +79,11 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	// 	h.logger.Info(c.Request.Context(), "[CreateKeeperData] Welcome email sent successfully to keeper", observability.String("keeper_name", keeperData.KeeperName), observability.String("email_id", keeperData.EmailID))
 	// }
 
-	h.logger.Info(c.Request.Context(), "[CreateKeeperData] Successfully created keeper with ID", observability.Int64("keeper_id", currentKeeperID))
 	c.JSON(http.StatusCreated, gin.H{"keeper_id": currentKeeperID})
+	h.logger.Info(c.Request.Context(), "[CreateKeeperData] Created keeper", observability.Int64("keeper_id", currentKeeperID))
 }
 
 func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[CreateKeeperDataGoogleForm] trace", observability.String("trace_id", traceID))
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
 		h.logger.Error(c.Request.Context(), "[CreateKeeperDataGoogleForm] Error decoding request body", observability.Error(err))
@@ -121,6 +118,6 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[CreateKeeperDataGoogleForm] Successfully processed keeper with ID", observability.Int64("keeper_id", keeperID))
 	c.JSON(http.StatusCreated, gin.H{"keeper_id": keeperID, "status": status})
+	h.logger.Info(c.Request.Context(), "[CreateKeeperDataGoogleForm] Created/updated keeper", observability.Int64("keeper_id", keeperID), observability.String("status", status))
 }

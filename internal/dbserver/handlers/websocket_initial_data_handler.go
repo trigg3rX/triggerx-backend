@@ -52,8 +52,6 @@ func (h *InitialDataHandler) handleJobRoomSubscription(ctx context.Context, room
 		return nil
 	}
 
-	h.logger.Info(ctx, "Fetching initial tasks for job ID", observability.String("job_id", jobIDStr))
-
 	// Fetch all tasks for this job
 	tasks, err := h.taskRepository.GetTasksByJobID(jobID)
 	if err != nil {

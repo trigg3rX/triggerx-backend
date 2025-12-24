@@ -176,16 +176,6 @@ func (h *Handler) ValidateCodeExecutable(c *gin.Context) {
 	}
 	// For HTTP endpoint, no IPFS URL is provided, so pass empty string
 	resp, _ := h.ValidateCodeInternal(c.Request.Context(), req, "", config.GetAlchemyAPIKey())
-	// Log the HTTP request + response coupling with trace if available
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[ValidateCodeExecutable] trace",
-		observability.String("trace_id", traceID),
-		observability.String("language", req.Language),
-		observability.String("target_function", req.TargetFunction),
-		observability.Bool("is_safe", req.IsSafe),
-		observability.String("selected_safe", req.SelectedSafe),
-		observability.Bool("executable", resp.Executable),
-		observability.Bool("safe_match", resp.SafeMatch),
-		observability.String("error", resp.Error))
+	h.logger.Debug(c.Request.Context(), "[ValidateCodeExecutable] Validation result", observability.Bool("executable", resp.Executable), observability.Bool("safe_match", resp.SafeMatch), observability.String("error", resp.Error))
 	c.JSON(http.StatusOK, resp)
 }

@@ -11,8 +11,6 @@ import (
 
 // HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[HealthCheck] Health check requested", observability.String("trace_id", traceID))
 	startTime := time.Now()
 
 	// Check database connection by executing a simple query
@@ -60,7 +58,6 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 
 	// Log health check
 	duration := time.Since(startTime)
-	h.logger.Info(c.Request.Context(), "[HealthCheck] Health check completed", observability.Any("status", response["status"]), observability.String("db_status", dbStatus), observability.Duration("duration", duration))
-
 	c.JSON(httpStatus, response)
+	h.logger.Debug(c.Request.Context(), "[HealthCheck] Health check completed", observability.Any("status", response["status"]), observability.String("db_status", dbStatus), observability.Duration("duration", duration))
 }

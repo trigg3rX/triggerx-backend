@@ -101,6 +101,7 @@ func (h *Handler) DeleteJobData(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Job deleted successfully"})
+	h.logger.Info(c.Request.Context(), "[DeleteJobData] Deleted job", observability.String("job_id", jobID))
 }
 
 func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
@@ -154,6 +155,7 @@ func (h *Handler) UpdateJobDataFromUser(c *gin.Context) {
 		"job_id":     updateData.JobID,
 		"updated_at": time.Now().UTC(),
 	})
+	h.logger.Info(c.Request.Context(), "[UpdateJobDataFromUser] Updated job", observability.String("job_id", updateData.JobID))
 }
 
 func (h *Handler) UpdateJobStatus(c *gin.Context) {
@@ -203,6 +205,7 @@ func (h *Handler) UpdateJobStatus(c *gin.Context) {
 		"status":     status,
 		"updated_at": time.Now().UTC(),
 	})
+	h.logger.Info(c.Request.Context(), "[UpdateJobStatus] Updated job status", observability.String("job_id", jobID), observability.String("status", status))
 }
 
 func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
@@ -229,4 +232,5 @@ func (h *Handler) UpdateJobLastExecutedAt(c *gin.Context) {
 		"last_executed_at": updateData.LastExecutedAt,
 		"updated_at":       time.Now().UTC(),
 	})
+	h.logger.Info(c.Request.Context(), "[UpdateJobLastExecutedAt] Updated job last executed time", observability.String("job_id", updateData.JobID.String()))
 }

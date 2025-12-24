@@ -20,13 +20,11 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetUserDataByAddress] Retrieving user with address", observability.String("user_address", userAddress))
-
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
 	userID, userData, err := h.userRepository.GetUserDataByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetUserData] Error retrieving user with ID", observability.Int64("user_id", userID), observability.Error(err))
+		h.logger.Warn(c.Request.Context(), "[GetUserDataByAddress] Failed to retrieve user", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "User not found",
 			"code":  "USER_NOT_FOUND",
@@ -34,13 +32,12 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetUserData] Successfully retrieved user with ID", observability.Int64("user_id", userID))
 	c.JSON(http.StatusOK, userData)
+	h.logger.Debug(c.Request.Context(), "[GetUserDataByAddress] Retrieved user data", observability.Int64("user_id", userID), observability.String("user_address", userAddress))
 }
 
 func (h *Handler) GetWalletPoints(c *gin.Context) {
 	walletAddress := strings.ToLower(c.Param("address"))
-	h.logger.Info(c.Request.Context(), "[GetWalletPoints] Retrieving points for wallet address", observability.String("wallet_address", walletAddress))
 
 	var userPoints float64
 	var keeperPoints float64
@@ -57,13 +54,12 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	// 	keeperPoints = 0
 	// }
 
-	h.logger.Info(c.Request.Context(), "[GetWalletPoints] Successfully retrieved points for wallet address", observability.String("wallet_address", walletAddress), observability.Float64("user_points", userPoints), observability.Float64("keeper_points", keeperPoints))
-
 	totalPoints := userPoints + keeperPoints
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,
 	})
+	h.logger.Debug(c.Request.Context(), "[GetWalletPoints] Retrieved wallet points", observability.String("wallet_address", walletAddress), observability.Float64("total_points", totalPoints))
 }
 
 func (h *Handler) StoreUserEmail(c *gin.Context) {
@@ -91,6 +87,6 @@ func (h *Handler) StoreUserEmail(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[StoreUserEmail] Successfully updated email for address", observability.String("user_address", req.UserAddress))
 	c.JSON(http.StatusOK, gin.H{"message": "Email updated successfully"})
+	h.logger.Info(c.Request.Context(), "[StoreUserEmail] Updated user email", observability.String("user_address", req.UserAddress))
 }

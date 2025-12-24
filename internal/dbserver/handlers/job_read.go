@@ -14,9 +14,6 @@ import (
 
 // GetJobDataByJobIDForUser handles GET /jobs/user/:user_address/:job_id
 func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobDataByJobIDForUser] Retrieving job data by job ID with user ownership check", observability.String("trace_id", traceID))
-
 	userAddress := strings.ToLower(c.Param("user_address"))
 	if userAddress == "" {
 		h.logger.Error(c.Request.Context(), "[GetJobDataByJobIDForUser] user_address param missing")
@@ -56,7 +53,7 @@ func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
 	}
 
 	if jobData.UserID != userID {
-		h.logger.Warn(c.Request.Context(), "[GetJobDataByJobIDForUser] Access denied: user does not have access to this job", observability.String("user_address", userAddress), observability.Int64("user_id", userID), observability.String("job_id", jobIDParam), observability.Int64("job_user_id", jobData.UserID))
+		h.logger.Warn(c.Request.Context(), "[GetJobDataByJobIDForUser] Access denied", observability.String("user_address", userAddress), observability.String("job_id", jobIDParam))
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: job does not belong to user"})
 		return
 	}
@@ -71,7 +68,7 @@ func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
 		timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[GetJobDataByJobIDForUser] Error getting time job data for jobID", observability.String("job_id", jobIDParam), observability.Error(err))
+			h.logger.Warn(c.Request.Context(), "[GetJobDataByJobIDForUser] Failed to get time job data", observability.String("job_id", jobIDParam), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get time job data"})
 			return
 		}
@@ -83,7 +80,7 @@ func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
 		eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[GetJobDataByJobIDForUser] Error getting event job data for jobID", observability.String("job_id", jobIDParam), observability.Error(err))
+			h.logger.Warn(c.Request.Context(), "[GetJobDataByJobIDForUser] Failed to get event job data", observability.String("job_id", jobIDParam), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get event job data"})
 			return
 		}
@@ -95,25 +92,24 @@ func (h *Handler) GetJobDataByJobIDForUser(c *gin.Context) {
 		conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[GetJobDataByJobIDForUser] Error getting condition job data for jobID", observability.String("job_id", jobIDParam), observability.Error(err))
+			h.logger.Warn(c.Request.Context(), "[GetJobDataByJobIDForUser] Failed to get condition job data", observability.String("job_id", jobIDParam), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get condition job data"})
 			return
 		}
 		jobResponse.ConditionJobData = &conditionJobData
 
 	default:
-		h.logger.Error(c.Request.Context(), "[GetJobDataByJobIDForUser] Unknown task definition ID for jobID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.String("job_id", jobIDParam))
+		h.logger.Warn(c.Request.Context(), "[GetJobDataByJobIDForUser] Unknown task definition ID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.String("job_id", jobIDParam))
 	}
 
 	c.JSON(http.StatusOK, types.ConvertJobResponseToAPI(jobResponse))
+	h.logger.Debug(c.Request.Context(), "[GetJobDataByJobIDForUser] Retrieved job data", observability.Int64("user_id", userID), observability.String("job_id", jobIDParam))
 }
 
 func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobsByUserAddress] Retrieving jobs by user address", observability.String("trace_id", traceID))
 	userAddress := strings.ToLower(c.Param("user_address"))
 	if userAddress == "" {
-		h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Invalid user address")
+		h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Invalid user address")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid user address",
 			"code":  "INVALID_ADDRESS",
@@ -121,18 +117,12 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetJobsByUserAddress] Retrieving jobs for user address", observability.String("user_address", userAddress))
-
 	// First get user ID and job IDs
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
-	userID, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
+	_, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		if err.Error() == "user address not found" {
-			h.logger.Info(c.Request.Context(), "[GetJobsByUserAddress] No user found for address", observability.String("user_address", userAddress))
-		} else {
-			h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Error getting user data for address", observability.String("user_address", userAddress), observability.Error(err))
-		}
+		h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Failed to get user data", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this user",
 			"jobs":    []types.JobResponse{},
@@ -157,7 +147,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 		jobData, err := h.jobRepository.GetJobByID(jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Error getting job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+			h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Failed to get job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 			hasErrors = true
 			continue
 		}
@@ -172,7 +162,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Error getting time job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Failed to get time job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
@@ -184,7 +174,7 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Error getting event job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Failed to get event job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
@@ -196,22 +186,20 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Error getting condition job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Failed to get condition job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
 			jobResponse.ConditionJobData = &conditionJobData
 
 		default:
-			h.logger.Error(c.Request.Context(), "[GetJobsByUserAddress] Unknown task definition ID for jobID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.Int64("job_id", jobID.Int64()))
+			h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddress] Unknown task definition ID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.Int64("job_id", jobID.Int64()))
 			hasErrors = true
 			continue
 		}
 
 		jobs = append(jobs, jobResponse)
 	}
-
-	h.logger.Info(c.Request.Context(), "[GetJobsByUserAddress] Found jobs for user ID", observability.Int("jobs_count", len(jobs)), observability.Int64("user_id", userID))
 
 	var jobsAPI []types.JobResponseAPI
 	for _, job := range jobs {
@@ -240,13 +228,11 @@ func (h *Handler) GetJobsByUserAddress(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"jobs": jobsAPI,
 	})
+	h.logger.Debug(c.Request.Context(), "[GetJobsByUserAddress] Retrieved jobs", observability.String("user_address", userAddress), observability.Int("jobs_count", len(jobs)))
 }
 
 // GetTaskFeesByJobID handles GET /jobs/:job_id/task-fees
 func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetTaskFeesByJobID] Getting task fees by job ID", observability.String("trace_id", traceID))
-
 	jobIDParam := c.Param("job_id")
 	if jobIDParam == "" {
 		h.logger.Error(c.Request.Context(), "[GetTaskFeesByJobID] job_id param missing")
@@ -264,18 +250,17 @@ func (h *Handler) GetTaskFeesByJobID(c *gin.Context) {
 
 	taskFees, err := h.jobRepository.GetTaskFeesByJobID(jobID)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetTaskFeesByJobID] failed to get task fees", observability.Error(err))
+		h.logger.Warn(c.Request.Context(), "[GetTaskFeesByJobID] Failed to get task fees", observability.String("job_id", jobIDParam), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get task fees"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"task_fees": taskFees})
+	h.logger.Debug(c.Request.Context(), "[GetTaskFeesByJobID] Retrieved task fees", observability.Int64("job_id", jobID.Int64()))
 }
 
 // GetJobsByApiKey handles GET /jobs/by-apikey
 func (h *Handler) GetJobsByApiKey(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobsByApiKey] Retrieving jobs by API key", observability.String("trace_id", traceID))
 	apiKey := c.GetHeader("X-Api-Key")
 	if apiKey == "" {
 		h.logger.Error(c.Request.Context(), "[GetJobsByApiKey] Missing X-Api-Key header")
@@ -285,8 +270,9 @@ func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 
 	apiKeyData, err := h.apiKeysRepository.GetApiKeyDataByKey(apiKey)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetJobsByApiKey] Invalid API key", observability.Error(err))
+		h.logger.Warn(c.Request.Context(), "[GetJobsByApiKey] Invalid API key", observability.Error(err))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key", "code": "INVALID_API_KEY"})
+		return
 	}
 
 	userAddress := apiKeyData.Owner
@@ -299,13 +285,11 @@ func (h *Handler) GetJobsByApiKey(c *gin.Context) {
 	// Reuse the logic from GetJobsByUserAddress
 	c.Params = append(c.Params, gin.Param{Key: "user_address", Value: userAddress})
 	h.GetJobsByUserAddress(c)
+	h.logger.Debug(c.Request.Context(), "[GetJobsByApiKey] Retrieved jobs", observability.String("user_address", userAddress))
 }
 
 // GetJobDataByJobID handles GET /jobs/:job_id
 func (h *Handler) GetJobDataByJobID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobDataByJobID] Retrieving job data by job ID", observability.String("trace_id", traceID))
-
 	jobIDParam := c.Param("job_id")
 	if jobIDParam == "" {
 		h.logger.Error(c.Request.Context(), "[GetJobDataByJobID] job_id param missing")
@@ -323,23 +307,21 @@ func (h *Handler) GetJobDataByJobID(c *gin.Context) {
 
 	jobData, err := h.jobRepository.GetJobByID(jobID)
 	if err != nil {
-		h.logger.Error(c.Request.Context(), "[GetJobDataByJobID] failed to get job data", observability.Error(err))
+		h.logger.Warn(c.Request.Context(), "[GetJobDataByJobID] Failed to get job data", observability.String("job_id", jobIDParam), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get job data"})
 		return
 	}
 
 	c.JSON(http.StatusOK, jobData)
+	h.logger.Debug(c.Request.Context(), "[GetJobDataByJobID] Retrieved job data", observability.String("job_id", jobIDParam))
 }
 
 func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Retrieving jobs by user address and created chain id", observability.String("trace_id", traceID))
-
 	userAddress := strings.ToLower(c.Param("user_address"))
 	createdChainIDParam := strings.ToLower(c.Param("created_chain_id"))
 
 	if userAddress == "" {
-		h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Invalid user address")
+		h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Invalid user address")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid user address",
 			"code":  "INVALID_ADDRESS",
@@ -347,7 +329,7 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 		return
 	}
 	if createdChainIDParam == "" {
-		h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Invalid created_chain_id")
+		h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Invalid created_chain_id")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid created_chain_id",
 			"code":  "INVALID_CREATED_CHAIN_ID",
@@ -355,18 +337,12 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Retrieving jobs for user address and created_chain_id", observability.String("user_address", userAddress), observability.String("created_chain_id", createdChainIDParam))
-
 	// First get user ID and job IDs
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
 	_, jobIDs, err := h.userRepository.GetUserJobIDsByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		if err.Error() == "user address not found" {
-			h.logger.Info(c.Request.Context(), "[GetJobsByUserAddressAndChainID] No user found for address", observability.String("user_address", userAddress))
-		} else {
-			h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Error getting user data for address", observability.String("user_address", userAddress), observability.Error(err))
-		}
+		h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Failed to get user data", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusOK, gin.H{
 			"message": "No jobs found for this user",
 			"jobs":    []types.JobResponse{},
@@ -391,7 +367,7 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 		jobData, err := h.jobRepository.GetJobByID(jobID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Error getting job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+			h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Failed to get job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 			hasErrors = true
 			continue
 		}
@@ -411,7 +387,7 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 			timeJobData, err := h.timeJobRepository.GetTimeJobByJobID(jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Error getting time job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Failed to get time job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
@@ -423,7 +399,7 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 			eventJobData, err := h.eventJobRepository.GetEventJobByJobID(jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Error getting event job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Failed to get event job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
@@ -435,14 +411,14 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 			conditionJobData, err := h.conditionJobRepository.GetConditionJobByJobID(jobID)
 			trackDBOp(err)
 			if err != nil {
-				h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Error getting condition job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Failed to get condition job data", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				hasErrors = true
 				continue
 			}
 			jobResponse.ConditionJobData = &conditionJobData
 
 		default:
-			h.logger.Error(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Unknown task definition ID for jobID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.Int64("job_id", jobID.Int64()))
+			h.logger.Warn(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Unknown task definition ID", observability.Int("task_definition_id", jobData.TaskDefinitionID), observability.Int64("job_id", jobID.Int64()))
 			hasErrors = true
 			continue
 		}
@@ -477,6 +453,9 @@ func (h *Handler) GetJobsByUserAddressAndChainID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"jobs": jobsAPI,
 	})
+	if len(jobs) > 0 {
+		h.logger.Debug(c.Request.Context(), "[GetJobsByUserAddressAndChainID] Retrieved jobs", observability.String("user_address", userAddress), observability.String("created_chain_id", createdChainIDParam), observability.Int("jobs_count", len(jobs)))
+	}
 }
 
 // parseInt64 is a helper to parse int64 from string

@@ -34,13 +34,9 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Owner is required"})
 		return
 	}
-
 	if req.RateLimit <= 0 {
-		h.logger.Info(c.Request.Context(), "[CreateApiKey] RateLimit not provided or invalid for owner", observability.String("owner", req.Owner))
 		req.RateLimit = 60
 	}
-
-	// No longer check for existing API key for this owner; allow multiple API keys per owner
 
 	apiKey := commonTypes.ApiKey{
 		Key:       "TGRX-" + uuid.New().String(),
@@ -60,15 +56,13 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Info(c.Request.Context(), "[CreateApiKey] Successfully created new API key for owner", observability.String("owner", req.Owner), observability.String("key", apiKey.Key))
 	c.JSON(http.StatusCreated, apiKey)
+	h.logger.Info(c.Request.Context(), "[CreateApiKey] Created API key", observability.String("owner", req.Owner))
 }
 
 func (h *Handler) UpdateApiKey(c *gin.Context) {
 	keyID := c.Param("key")
-
 	var req types.UpdateApiKeyRequest
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
@@ -86,7 +80,6 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 	if req.IsActive != nil {
 		apiKey.IsActive = *req.IsActive
 	}
-
 	if req.RateLimit != nil && *req.RateLimit > 0 {
 		apiKey.RateLimit = *req.RateLimit
 	}
@@ -101,11 +94,11 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 	trackDBOp(nil)
 
 	c.JSON(http.StatusOK, apiKey)
+	h.logger.Info(c.Request.Context(), "[UpdateApiKey] Updated API key", observability.String("key_id", keyID))
 }
 
 func (h *Handler) DeleteApiKey(c *gin.Context) {
 	keyID := c.Param("key")
-
 	// If the keyID is masked, resolve the real key
 	if strings.Contains(keyID, "*") {
 		owner := c.Query("owner") // require owner as query param for disambiguation
@@ -141,8 +134,8 @@ func (h *Handler) DeleteApiKey(c *gin.Context) {
 	}
 	trackDBOp(nil)
 
-	h.logger.Info(c.Request.Context(), "[DeleteApiKey] Successfully deleted API key", observability.String("key_id", keyID))
 	c.Status(http.StatusNoContent)
+	h.logger.Info(c.Request.Context(), "[DeleteApiKey] Deleted API key", observability.String("key_id", keyID))
 }
 
 // GetApiKeysByOwner returns all API keys for a given owner
@@ -154,10 +147,9 @@ func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[GetApiKeysByOwner] Fetching API keys for owner", observability.String("owner", owner))
 	apiKeys, err := h.apiKeysRepository.GetApiKeyDataByOwner(owner)
 	if err != nil {
-		h.logger.Warn(c.Request.Context(), "[GetApiKeysByOwner] No API keys found for owner", observability.String("owner", owner), observability.Error(err))
+		h.logger.Warn(c.Request.Context(), "[GetApiKeysByOwner] Failed to retrieve API keys", observability.String("owner", owner), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "No API keys found for this owner"})
 		return
 	}
@@ -178,4 +170,5 @@ func (h *Handler) GetApiKeysByOwner(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, masked)
+	h.logger.Debug(c.Request.Context(), "[GetApiKeysByOwner] Retrieved API keys", observability.String("owner", owner), observability.Int("keys_count", len(masked)))
 }

@@ -45,8 +45,6 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 	// Track database operation for checking wallet balance
 	trackDBOp := metrics.TrackDBOperation("read", "wallet_balance")
 
-	h.logger.Info(c.Request.Context(), "[ClaimFund] Network", observability.String("network", req.Network))
-
 	var rpcURL string
 	switch req.Network {
 	case "op_sepolia":
@@ -173,12 +171,11 @@ func (h *Handler) ClaimFund(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info(c.Request.Context(), "[ClaimFund] Fund sent successfully")
 	c.JSON(http.StatusOK, ClaimFundResponse{
 		Success:         true,
 		Message:         "Funds sent successfully",
 		TransactionHash: signedTx.Hash().Hex(),
 	})
-
 	trackDBOp(nil) // No error if we reach this point
+	h.logger.Info(c.Request.Context(), "[ClaimFund] Fund sent successfully", observability.String("transaction_hash", signedTx.Hash().Hex()))
 }
