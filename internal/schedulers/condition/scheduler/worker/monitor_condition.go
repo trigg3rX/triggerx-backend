@@ -349,7 +349,7 @@ func (w *ConditionWorker) fetchFromAPI(ctx context.Context) (float64, error) {
 
 	statusCode := strconv.Itoa(resp.StatusCode)
 	metrics.TrackHTTPRequest("GET", w.ConditionWorkerData.ValueSourceUrl, statusCode)
-	metrics.TrackAPIResponse(w.ConditionWorkerData.ValueSourceUrl, statusCode)
+	metrics.TrackAPIResponse(statusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("HTTP request failed with status: %s", resp.Status)

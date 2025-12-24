@@ -12,33 +12,33 @@ var (
 	ctx       = context.Background()
 
 	// Metrics instances
-	uptimeSeconds                     observability.Gauge
-	memoryUsageBytes                  observability.Gauge
-	cpuUsagePercent                   observability.Gauge
-	goroutinesActive                  observability.Gauge
-	gcDurationSeconds                 observability.Gauge
-	eventsPerMinute                   *observability.GaugeVec
-	jobsScheduled                     observability.Counter
-	jobsCompleted                     *observability.CounterVec
-	activeWorkers                     observability.Gauge
-	chainConnectionsTotal             *observability.CounterVec
-	rpcRequestsTotal                  *observability.CounterVec
-	conditionEvaluationDuration       observability.Histogram
-	conditionsByTypeTotal             *observability.CounterVec
-	conditionsBySourceTotal           *observability.CounterVec
-	apiResponseStatusTotal            *observability.CounterVec
-	valueParsingErrorsTotal           *observability.CounterVec
-	dbRequestsTotal                   *observability.CounterVec
-	dbConnectionErrorsTotal           observability.Counter
-	dbRetriesTotal                    *observability.CounterVec
+	uptimeSeconds               observability.Gauge
+	memoryUsageBytes            observability.Gauge
+	cpuUsagePercent             observability.Gauge
+	goroutinesActive            observability.Gauge
+	gcDurationSeconds           observability.Gauge
+	eventsPerMinute             *observability.GaugeVec
+	jobsScheduled               observability.Counter
+	jobsCompleted               *observability.CounterVec
+	activeWorkers               observability.Gauge
+	chainConnectionsTotal       *observability.CounterVec
+	rpcRequestsTotal            *observability.CounterVec
+	conditionEvaluationDuration observability.Histogram
+	conditionsByTypeTotal       *observability.CounterVec
+	conditionsBySourceTotal     *observability.CounterVec
+	apiResponseStatusTotal      *observability.CounterVec
+	valueParsingErrorsTotal     *observability.CounterVec
+	dbRequestsTotal             *observability.CounterVec
+	dbConnectionErrorsTotal     observability.Counter
+	dbRetriesTotal              *observability.CounterVec
 	// actionExecutionsTotal             *observability.CounterVec
-	actionExecutionDuration           *observability.HistogramVec
-	workerUptimeSeconds               *observability.GaugeVec
-	workerErrorsTotal                 *observability.CounterVec
-	workerMemoryUsageBytes            *observability.GaugeVec
-	httpRequestsTotal                 *observability.CounterVec
-	httpClientConnectionErrorsTotal   observability.Counter
-	duplicateConditionWindowSeconds   observability.Gauge
+	actionExecutionDuration         observability.Histogram
+	workerUptimeSeconds             observability.Gauge
+	workerErrorsTotal               *observability.CounterVec
+	workerMemoryUsageBytes          observability.Gauge
+	httpRequestsTotal               *observability.CounterVec
+	httpClientConnectionErrorsTotal observability.Counter
+	duplicateConditionWindowSeconds observability.Gauge
 	// duplicateEventWindowSeconds       observability.Gauge
 	averageConditionCheckTimeSeconds  observability.Gauge
 	connectionFailuresTotal           *observability.CounterVec
@@ -144,7 +144,7 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 	apiResponseStatusTotal = observability.NewCounterVec(
 		obsMetrics,
 		"triggerx.condition_scheduler.api_response_status_total",
-		[]string{"source_url", "status_code"},
+		[]string{"status_code"},
 		observability.WithDescription("API response status codes"),
 	)
 
@@ -174,34 +174,28 @@ func InitializeMetrics(obsMetrics observability.Metrics) {
 		observability.WithDescription("Database request retry attempts"),
 	)
 
-	actionExecutionDuration = observability.NewHistogramVec(
-		obsMetrics,
+	actionExecutionDuration = obsMetrics.Histogram(
 		"triggerx.condition_scheduler.action_execution_duration_seconds",
-		[]string{"job_id"},
 		observability.WithDescription("Time taken to execute actions"),
 		observability.WithUnit("s"),
 	)
 
-	workerUptimeSeconds = observability.NewGaugeVec(
-		obsMetrics,
+	workerUptimeSeconds = obsMetrics.Gauge(
 		"triggerx.condition_scheduler.worker_uptime_seconds",
-		[]string{"job_id"},
-		observability.WithDescription("Individual worker uptime"),
+		observability.WithDescription("Average worker uptime"),
 		observability.WithUnit("s"),
 	)
 
 	workerErrorsTotal = observability.NewCounterVec(
 		obsMetrics,
 		"triggerx.condition_scheduler.worker_errors_total",
-		[]string{"job_id", "error_type"},
+		[]string{"error_type"},
 		observability.WithDescription("Worker errors by type"),
 	)
 
-	workerMemoryUsageBytes = observability.NewGaugeVec(
-		obsMetrics,
+	workerMemoryUsageBytes = obsMetrics.Gauge(
 		"triggerx.condition_scheduler.worker_memory_usage_bytes",
-		[]string{"job_id"},
-		observability.WithDescription("Memory usage per worker"),
+		observability.WithDescription("Total memory usage across all workers"),
 		observability.WithUnit("By"),
 	)
 

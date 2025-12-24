@@ -98,7 +98,7 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 			observability.String("job_id", notification.JobID.String()),
 			observability.Duration("duration", duration),
 		)
-		metrics.TrackActionExecution(fmt.Sprintf("%d", notification.JobID), duration)
+		metrics.TrackActionExecution(duration)
 	} else {
 		s.logger.Error(ctx, "Failed to submit triggered task to task dispatcher",
 			observability.String("job_id", notification.JobID.String()),

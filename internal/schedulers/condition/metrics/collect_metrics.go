@@ -137,20 +137,26 @@ func collectWorkerMetrics() {
 	conditionStatsLock.RLock()
 	defer conditionStatsLock.RUnlock()
 
-	// Update worker uptime for each active worker
+	// Calculate average worker uptime
 	now := time.Now()
-	for jobID, startTime := range workerStartTimes {
-		uptime := now.Sub(startTime).Seconds()
+	if len(workerStartTimes) > 0 {
+		var totalUptime float64
+		for _, startTime := range workerStartTimes {
+			totalUptime += now.Sub(startTime).Seconds()
+		}
+		avgUptime := totalUptime / float64(len(workerStartTimes))
 		if workerUptimeSeconds != nil {
-			workerUptimeSeconds.WithLabelValues(jobID).Set(ctx, uptime)
+			workerUptimeSeconds.Set(ctx, avgUptime)
 		}
 	}
 
-	// Update worker memory usage
-	for jobID, memUsage := range workerMemoryUsage {
-		if workerMemoryUsageBytes != nil {
-			workerMemoryUsageBytes.WithLabelValues(jobID).Set(ctx, float64(memUsage))
-		}
+	// Calculate total worker memory usage
+	var totalMemory int64
+	for _, memUsage := range workerMemoryUsage {
+		totalMemory += memUsage
+	}
+	if workerMemoryUsageBytes != nil {
+		workerMemoryUsageBytes.Set(ctx, float64(totalMemory))
 	}
 }
 
@@ -300,9 +306,9 @@ func TrackConditionBySource(sourceType string) {
 }
 
 // TrackAPIResponse tracks API response status
-func TrackAPIResponse(sourceURL, statusCode string) {
+func TrackAPIResponse(statusCode string) {
 	if apiResponseStatusTotal != nil {
-		apiResponseStatusTotal.WithLabelValues(sourceURL, statusCode).Inc(ctx)
+		apiResponseStatusTotal.WithLabelValues(statusCode).Inc(ctx)
 	}
 }
 
@@ -323,17 +329,10 @@ func TrackInvalidValue(source string) {
 // Action execution tracking functions
 
 // TrackActionExecution tracks action execution with duration
-func TrackActionExecution(jobID string, duration time.Duration) {
+func TrackActionExecution(duration time.Duration) {
 	if actionExecutionDuration != nil {
-		actionExecutionDuration.WithLabelValues(jobID).Record(ctx, duration.Seconds())
+		actionExecutionDuration.Record(ctx, duration.Seconds())
 	}
-
-	conditionStatsLock.Lock()
-	defer conditionStatsLock.Unlock()
-	if actionExecutionTimes[jobID] == nil {
-		actionExecutionTimes[jobID] = make([]float64, 0)
-	}
-	actionExecutionTimes[jobID] = append(actionExecutionTimes[jobID], duration.Seconds())
 }
 
 // Error and recovery tracking functions
@@ -501,9 +500,9 @@ func TrackConnectionFailure(chainID string) {
 }
 
 // TrackWorkerError tracks worker errors
-func TrackWorkerError(jobID, errorType string) {
+func TrackWorkerError(errorType string) {
 	if workerErrorsTotal != nil {
-		workerErrorsTotal.WithLabelValues(jobID, errorType).Inc(ctx)
+		workerErrorsTotal.WithLabelValues(errorType).Inc(ctx)
 	}
 }
 
