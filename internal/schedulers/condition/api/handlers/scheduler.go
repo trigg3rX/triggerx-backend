@@ -36,7 +36,7 @@ func getTraceID(c *gin.Context) string {
 // ScheduleJob schedules a new condition-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[ScheduleJob] trace_id=" + traceID + " - Scheduling job")
+	h.logger.Info(c.Request.Context(), "[ScheduleJob] trace_id="+traceID+" - Scheduling job")
 
 	var jobData types.ScheduleConditionJobData
 	if err := c.ShouldBindJSON(&jobData); err != nil {
@@ -77,22 +77,34 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 // UnscheduleJob unschedules a condition-based job
 func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[UnscheduleJob] trace_id=" + traceID + " - Unscheduling job")
+	h.logger.Info(c.Request.Context(), "[UnscheduleJob] trace_id="+traceID+" - Unscheduling job")
 
-	jobIDStr := c.Param("job_id")
-	jobID := new(big.Int)
-	_, ok := jobID.SetString(jobIDStr, 10)
-	if !ok {
-		err := fmt.Errorf("invalid job ID: %s", jobIDStr)
-		h.logger.Error(c.Request.Context(), "Invalid job ID", observability.String("job_id", jobIDStr), observability.Error(err))
+	var jobData types.ScheduleConditionJobData
+	if err := c.ShouldBindJSON(&jobData); err != nil {
+		h.logger.Error(c.Request.Context(), "Invalid request payload", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
-			"message":   "Invalid job ID",
+			"message":   "Invalid request payload",
 			"error":     err.Error(),
 			"timestamp": time.Now().UTC(),
 		})
 		return
 	}
+
+	// Extract jobID from the request body
+	if jobData.JobID == nil {
+		err := fmt.Errorf("job ID is required")
+		h.logger.Error(c.Request.Context(), "Missing job ID in request", observability.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":    "error",
+			"message":   "Job ID is required",
+			"error":     err.Error(),
+			"timestamp": time.Now().UTC(),
+		})
+		return
+	}
+
+	jobID := jobData.JobID.ToBigInt()
 
 	// Unschedule the job
 	if err := h.scheduler.UnscheduleJob(c.Request.Context(), jobID); err != nil {
@@ -121,7 +133,7 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 // GetJobStats returns statistics for a specific condition job
 func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetJobStats] trace_id=" + traceID + " - Getting job stats")
+	h.logger.Info(c.Request.Context(), "[GetJobStats] trace_id="+traceID+" - Getting job stats")
 
 	jobIDStr := c.Param("job_id")
 	jobID := new(big.Int)
@@ -162,7 +174,7 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 // GetStats returns current scheduler statistics
 func (h *SchedulerHandler) GetStats(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info(c.Request.Context(), "[GetStats] trace_id=" + traceID + " - Getting scheduler stats")
+	h.logger.Info(c.Request.Context(), "[GetStats] trace_id="+traceID+" - Getting scheduler stats")
 
 	stats := h.scheduler.GetStats()
 

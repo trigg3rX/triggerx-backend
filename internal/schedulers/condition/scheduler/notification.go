@@ -61,11 +61,36 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 	// Get the job data from storage
 	s.workersMutex.RLock()
 	jobData, exists := s.jobDataStore[notification.JobID.String()]
+	jobIDStr := notification.JobID.String()
 	s.workersMutex.RUnlock()
 
 	if !exists || jobData == nil {
-		s.logger.Error(ctx, "Job data not found", observability.String("job_id", notification.JobID.String()))
+		s.logger.Error(ctx, "Job data not found", observability.String("job_id", jobIDStr))
 		return fmt.Errorf("job data not found for job %d", notification.JobID)
+	}
+
+	// Check cooldown for recurring condition-based jobs (TaskDefinitionID 5 or 6)
+	if (jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6) && jobData.ConditionWorkerData.Recurring {
+		s.workersMutex.RLock()
+		lastTrigger, hasLastTrigger := s.lastTriggerTime[jobIDStr]
+		s.workersMutex.RUnlock()
+
+		if hasLastTrigger {
+			timeSinceLastTrigger := time.Since(lastTrigger)
+			if timeSinceLastTrigger < s.cooldownPeriod {
+				remainingCooldown := s.cooldownPeriod - timeSinceLastTrigger
+				s.logger.Debug(ctx, "Trigger notification ignored due to cooldown",
+					observability.String("job_id", jobIDStr),
+					observability.Duration("time_since_last_trigger", timeSinceLastTrigger),
+					observability.Duration("remaining_cooldown", remainingCooldown),
+				)
+				scheduleSpan.AddEvent("trigger.skipped.cooldown", observability.WithEventAttributes(
+					attribute.Int64("remaining_cooldown_ms", remainingCooldown.Milliseconds()),
+				))
+				metrics.TrackCriticalError("trigger_skipped_cooldown")
+				return nil // Silently skip this trigger
+			}
+		}
 	}
 
 	createTaskRequest := dbserverTypes.CreateTaskDataRequest{
@@ -80,6 +105,13 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 		return fmt.Errorf("failed to create task in database: %w", err)
 	}
 	jobData.TaskTargetData.TaskID = taskID
+
+	// Update last trigger time for recurring condition-based jobs (after successful task creation)
+	if (jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6) && jobData.ConditionWorkerData.Recurring {
+		s.workersMutex.Lock()
+		s.lastTriggerTime[jobIDStr] = time.Now()
+		s.workersMutex.Unlock()
+	}
 
 	// Create individual task and submit to task dispatcher
 	success, err := s.submitTriggeredTaskToTaskDispatcher(ctx, jobData, notification)
