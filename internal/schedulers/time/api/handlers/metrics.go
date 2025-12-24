@@ -22,12 +22,5 @@ func NewMetricsHandler(logger observability.Logger, collector *metrics.Collector
 
 // Metrics exposes Prometheus metrics
 func (h *MetricsHandler) Metrics(c *gin.Context) {
-	// Simple trace ID extraction if getTraceID is not available in this package
-	traceID := c.GetHeader("X-Trace-ID")
-	if traceID == "" {
-		traceID = "unknown"
-	}
-
-	// h.logger.Info(c.Request.Context(), "[Metrics] Serving metrics", observability.String("trace_id", traceID))
 	h.collector.Handler().ServeHTTP(c.Writer, c.Request)
 }

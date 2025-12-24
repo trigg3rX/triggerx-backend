@@ -86,15 +86,12 @@ func main() {
     // 1. Initialize configuration
     cfg := config.Init()
 
-    // 2. Create observability configuration (using helper function)
+    // 2. Create observability configuration
     obsConfig := observability.NewConfig(
         observability.KeeperService,
         config.GetVersion(),
         config.GetOTELExporterEndpoint(),
         config.IsDevMode(),
-    // Add custom options:
-    //     observability.WithBatchTimeout(10*time.Second),
-    //     observability.WithLogLevel("debug"),
     )
 
     // 3. Initialize observability (all three pillars)
@@ -272,23 +269,42 @@ func (c *WebSocketClient) Connect(ctx context.Context) error {
 }
 ```
 
-### Alternative: Individual Initialization
+### Configuration Options
 
-If you only need specific components, you can initialize them individually:
+Both `NewConfig()` and `NewConfigWithOptions()` are available:
 
 ```go
-// Initialize only logger
-logger, loggerShutdown, err := observability.NewLogger(obsConfig, resource)
-defer loggerShutdown(ctx)
+// Simple configuration with defaults
+obsConfig := observability.NewConfig(
+    observability.KeeperService,
+    config.GetVersion(),
+    config.GetOTELExporterEndpoint(),
+    config.IsDevMode(),
+)
 
-// Initialize only tracer
-tracer, tracerShutdown, err := observability.NewTracer(obsConfig, resource)
-defer tracerShutdown(ctx)
-
-// Initialize only metrics
-metrics, metricsShutdown, err := observability.NewMetrics(obsConfig, resource)
-defer metricsShutdown(ctx)
+// Configuration with custom options
+obsConfig := observability.NewConfigWithOptions(
+    observability.KeeperService,
+    config.GetVersion(),
+    config.GetOTELExporterEndpoint(),
+    config.IsDevMode(),
+    observability.WithInstanceID(customInstanceID),
+    observability.WithPrometheusExport(true),
+    observability.WithBatchTimeout(10*time.Second),
+    observability.WithLogLevel("debug"),
+    observability.WithSamplingRates(0.05, 1.0), // 5% success, 100% errors
+)
 ```
+
+Available options:
+
+- `WithInstanceID(string)` - Custom instance ID
+- `WithPrometheusExport(bool)` - Enable Prometheus metrics endpoint
+- `WithBatchTimeout(time.Duration)` - Batch export timeout
+- `WithExportTimeout(time.Duration)` - Export operation timeout
+- `WithMaxExportBatch(int)` - Maximum batch size
+- `WithLogLevel(string)` - Log level ("debug", "info", "warn", "error")
+- `WithSamplingRates(successRate, errorRate float64)` - Trace sampling rates (0.0-1.0)
 
 ## Best Practices
 
@@ -626,7 +642,9 @@ func (h *HTTPHandler) HandleRequest(ctx context.Context, method, endpoint string
 
 ### 6. Service-Level Shutdown
 
-Handle observability shutdown in service main:
+Handle observability shutdown in service main. The pattern differs based on initialization method:
+
+#### Unified Initialization Shutdown
 
 ```go
 func main() {
@@ -634,6 +652,7 @@ func main() {
     if err != nil {
         panic(err)
     }
+    defer obs.Shutdown(context.Background())
 
     // Register shutdown handler
     sigChan := make(chan os.Signal, 1)
@@ -644,6 +663,42 @@ func main() {
         ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
         defer cancel()
         obs.Shutdown(ctx)
+        os.Exit(0)
+    }()
+
+    // ... service logic
+}
+```
+
+#### Individual Initialization Shutdown
+
+```go
+func main() {
+    // ... initialization code ...
+    
+    logger, loggerShutdown, _ := observability.NewLogger(obsCfg, res)
+    tracer, tracerShutdown, _ := observability.NewTracer(obsCfg, res)
+    metrics, metricsShutdown, _ := observability.NewMetrics(obsCfg, res)
+
+    // Register shutdown handler
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+    go func() {
+        <-sigChan
+        ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+        defer cancel()
+        
+        // Shutdown in reverse order: metrics, tracer, logger
+        if metricsShutdown != nil {
+            _ = metricsShutdown(ctx)
+        }
+        if tracerShutdown != nil {
+            _ = tracerShutdown(ctx)
+        }
+        if loggerShutdown != nil {
+            _ = loggerShutdown(ctx)
+        }
         os.Exit(0)
     }()
 
@@ -705,19 +760,28 @@ func NewClient(logger observability.Logger) *Client
 ```go
 // ❌ Bad: Multiple logger/tracer/metrics instances
 func main() {
-    wsLogger, _ := observability.NewLogger(config1, resource)
-    redisLogger, _ := observability.NewLogger(config2, resource)
-    wsTracer, _ := observability.NewTracer(config1, resource)
-    redisTracer, _ := observability.NewTracer(config2, resource)
+    wsLogger, _ := observability.NewLogger(config1, resource1)
+    redisLogger, _ := observability.NewLogger(config2, resource2)
+    wsTracer, _ := observability.NewTracer(config1, resource1)
+    redisTracer, _ := observability.NewTracer(config2, resource2)
     // ... creates multiple exporters, processors, etc.
 }
 
-// ✅ Good: Single instance
+// ✅ Good: Single instance (unified)
 func main() {
     obs, _ := observability.Initialize(config)
     logger := obs.Logger()
     tracer := obs.Tracer()
     metrics := obs.Metrics()
+    // Pass same instances to all packages
+}
+
+// ✅ Good: Single instance (individual)
+func main() {
+    res, _ := observability.NewResource(config)
+    logger, _, _ := observability.NewLogger(config, res)
+    tracer, _, _ := observability.NewTracer(config, res)
+    metrics, _, _ := observability.NewMetrics(config, res)
     // Pass same instances to all packages
 }
 ```

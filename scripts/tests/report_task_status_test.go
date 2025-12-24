@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
 )
 
@@ -50,7 +50,7 @@ func main() {
 		log.Fatal("PRIVATE_KEY_CONSENSUS environment variable is required")
 	}
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	// Create RPC client
 	rpcClient := client.NewClient(client.Config{

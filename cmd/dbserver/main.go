@@ -37,24 +37,22 @@ func main() {
 		config.IsDevMode(),
 	)
 
-	// Create resource for observability
-	res, err := observability.NewResource(obsCfg)
+	// Initialize observability (all three pillars)
+	obs, err := observability.Initialize(obsCfg)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create observability resource: %v", err))
+		panic(fmt.Sprintf("Failed to initialize observability: %v", err))
 	}
+	defer func() {
+		if err := obs.Shutdown(context.Background()); err != nil {
+			panic(fmt.Sprintf("Failed to shutdown observability: %v", err))
+		}
+	}()
 
-	// Initialize logger
-	logger, loggerShutdown, err := observability.NewLogger(obsCfg, res)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
+	// Extract individual components
+	logger := obs.Logger()
+	obsMetrics := obs.Metrics()
+
 	ctx := context.Background()
-
-	// Initialize observability Metrics
-	obsMetrics, metricsShutdown, err := observability.NewMetrics(obsCfg, res)
-	if err != nil {
-		logger.Fatal(ctx, "Failed to initialize metrics", observability.Error(err))
-	}
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
 	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
@@ -133,7 +131,7 @@ func main() {
 		logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 	}
 
-	performGracefulShutdown(ctx, srv, &wg, logger, loggerShutdown, metricsShutdown, dockerExecutor)
+	performGracefulShutdown(ctx, srv, &wg, logger, obs, dockerExecutor)
 }
 
 func performGracefulShutdown(
@@ -141,8 +139,7 @@ func performGracefulShutdown(
 	srv *http.Server,
 	wg *sync.WaitGroup,
 	logger observability.Logger,
-	loggerShutdown func(context.Context) error,
-	metricsShutdown func(context.Context) error,
+	obs *observability.Observability,
 	dockerExecutor dockerexecutor.DockerExecutorAPI,
 ) {
 	// Create shutdown context with timeout
@@ -153,12 +150,6 @@ func performGracefulShutdown(
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-
-		if metricsShutdown != nil {
-			if err := metricsShutdown(shutdownCtx); err != nil {
-				logger.Error(shutdownCtx, "Error shutting down metrics", observability.Error(err))
-			}
-		}
 
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
@@ -177,10 +168,9 @@ func performGracefulShutdown(
 
 		logger.Info(ctx, "Graceful shutdown completed successfully")
 
-		if loggerShutdown != nil {
-			if err := loggerShutdown(shutdownCtx); err != nil {
-				logger.Error(shutdownCtx, "Error shutting down logger", observability.Error(err))
-			}
+		// Shutdown observability (handles logger, tracer, metrics)
+		if err := obs.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down observability", observability.Error(err))
 		}
 	}()
 
