@@ -1,9 +1,11 @@
 package health
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+
 	// "strconv"
 	"strings"
 	"time"
@@ -14,18 +16,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
-	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // Handler encapsulates the dependencies for health handlers
 type Handler struct {
-	logger       logging.Logger
+	logger       observability.Logger
 	stateManager *keeper.StateManager
 }
 
 // NewHandler creates a new instance of Handler
-func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handler {
+func NewHandler(logger observability.Logger, stateManager *keeper.StateManager) *Handler {
 	return &Handler{
 		logger:       logger,
 		stateManager: stateManager,
@@ -33,53 +35,46 @@ func NewHandler(logger logging.Logger, stateManager *keeper.StateManager) *Handl
 }
 
 // LoggerMiddleware creates a gin middleware for logging
-func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
+func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 	middlewareLogger := logger
 	return func(c *gin.Context) {
-		// Skip logging for metrics endpoint
-		if c.Request.URL.Path == "/metrics" {
-			c.Next()
-			return
-		}
-
 		start := time.Now()
 		path := c.Request.URL.Path
 		method := c.Request.Method
+		ctx := c.Request.Context()
 
 		c.Next()
 
 		duration := time.Since(start)
 		status := c.Writer.Status()
+		statusCode := fmt.Sprintf("%d", status)
 
 		// Record HTTP metrics
-		statusCode := fmt.Sprintf("%d", status)
-		metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusCode).Inc()
-		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
+		metrics.RecordHTTPRequest(ctx, method, path, statusCode, duration)
 
-		middlewareLogger.Debug("HTTP Request",
-			"method", method,
-			"path", path,
-			"status", status,
-			"duration_ms", duration.Milliseconds(),
-			"ip", c.ClientIP(),
+		middlewareLogger.Debug(ctx, "HTTP Request",
+			observability.String("method", method),
+			observability.String("path", path),
+			observability.Int("status", status),
+			observability.Int64("duration_ms", duration.Milliseconds()),
+			observability.String("ip", c.ClientIP()),
 		)
 	}
 }
 
 // RegisterRoutes registers all HTTP routes for the health service
-func RegisterRoutes(router *gin.Engine, logger logging.Logger) {
+func RegisterRoutes(router *gin.Engine, logger observability.Logger) {
 	handler := NewHandler(logger, keeper.GetStateManager())
 
-	// Initialize metrics collector
-	metricsCollector := metrics.NewCollector()
-	metricsCollector.Start()
+	// Start metrics collection (metrics should already be initialized via InitializeMetrics)
+	metrics.StartMetricsCollection()
 
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
 	router.GET("/status", handler.GetKeeperStatus)
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
 	router.GET("/performers", handler.GetActivePerformers) // New endpoint for taskmanager
-	router.GET("/metrics", gin.WrapH(metricsCollector.Handler()))
+	// Note: /metrics endpoint removed - metrics are exported via OpenTelemetry collector
 }
 
 func (h *Handler) handleRoot(c *gin.Context) {
@@ -91,11 +86,12 @@ func (h *Handler) handleRoot(c *gin.Context) {
 }
 
 func (h *Handler) HandleCheckInEvent(c *gin.Context) {
-	var keeperHealth commonTypes.KeeperHealthCheckIn
-	var response commonTypes.KeeperHealthCheckInResponse
+	ctx := c.Request.Context()
+	var keeperHealth types.KeeperHealthCheckIn
+	var response types.KeeperHealthCheckInResponse
 	if err := c.ShouldBindJSON(&keeperHealth); err != nil {
-		h.logger.Error("Failed to parse keeper health check-in request",
-			"error", err,
+		h.logger.Error(ctx, "Failed to parse keeper health check-in request",
+			observability.Error(err),
 		)
 		response.Status = false
 		response.Data = err.Error()
@@ -118,15 +114,15 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	// )
 
 	// Record check-in by version metric
-	metrics.CheckinsByVersionTotal.WithLabelValues(keeperHealth.Version).Inc()
+	metrics.RecordKeeperCheckIn(ctx, keeperHealth.Version)
 
 	// Verify signature for all versions
-	ok, err := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
+	ok, _ := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 	if !ok {
-		h.logger.Error("Invalid keeper signature",
-			"keeper", keeperHealth.KeeperAddress,
-			"error", err,
-		)
+		// h.logger.Error(ctx, "Invalid keeper signature",
+		// 	observability.String("keeper", keeperHealth.KeeperAddress),
+		// 	observability.Error(err),
+		// )
 		c.JSON(http.StatusPreconditionFailed, gin.H{
 			"error": "Invalid signature",
 		})
@@ -143,10 +139,10 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
 
 	// Update keeper state for all versions
-	if err := h.stateManager.UpdateKeeperHealth(keeperHealth); err != nil {
+	if err := h.stateManager.UpdateKeeperHealth(ctx, keeperHealth); err != nil {
 		if errors.Is(err, keeper.ErrKeeperNotVerified) {
-			h.logger.Warn("Unverified keeper attempted health check-in",
-				"keeper", keeperHealth.KeeperAddress,
+			h.logger.Warn(ctx, "Unverified keeper attempted health check-in",
+				observability.String("keeper", keeperHealth.KeeperAddress),
 			)
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Keeper not verified",
@@ -155,19 +151,22 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 			return
 		}
 
-		h.logger.Error("Failed to update keeper state",
-			"error", err,
-			"keeper", keeperHealth.KeeperAddress,
+		h.logger.Error(ctx, "Failed to update keeper state",
+			observability.Error(err),
+			observability.String("keeper", keeperHealth.KeeperAddress),
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update keeper state"})
 		return
 	}
 
-	h.logger.Infof("CheckIn Successful: %s | %s", keeperHealth.KeeperAddress, keeperHealth.Version)
+	h.logger.Debug(ctx, "CheckIn Successful",
+		observability.String("keeper", keeperHealth.KeeperAddress),
+		observability.String("version", keeperHealth.Version),
+	)
 
 	// Handle different versions according to requirements
 	switch keeperHealth.Version {
-	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6":
+	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "0.3.0", "1.1.0":
 		// Latest version - return msgData with no warning
 		var message string
 		if keeperHealth.IsImua {
@@ -180,7 +179,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 				config.GetImuaTaskExecutionAddress(),
 			)
 		} else {
-			if (keeperHealth.Version == "1.0.0" || keeperHealth.Version == "1.0.1") {
+			if keeperHealth.Version == "1.0.0" || keeperHealth.Version == "1.0.1" {
 				message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
 					config.GetEtherscanAPIKey(),
 					config.GetAlchemyAPIKey(),
@@ -202,8 +201,8 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		}
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
-			h.logger.Error("Failed to encrypt message for keeper",
-				"error", err,
+			h.logger.Error(context.Background(), "Failed to encrypt message for keeper",
+				observability.Error(err),
 			)
 			response.Status = false
 			response.Data = err.Error()
@@ -226,8 +225,8 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
 		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
 		if err != nil {
-			h.logger.Error("Failed to encrypt message for keeper",
-				"error", err,
+			h.logger.Error(ctx, "Failed to encrypt message for keeper",
+				observability.Error(err),
 			)
 			response.Status = false
 			response.Data = err.Error()
@@ -254,13 +253,12 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 }
 
 func (h *Handler) GetKeeperStatus(c *gin.Context) {
-	total, active := h.stateManager.GetKeeperCount()
-	activeKeepers := h.stateManager.GetAllActiveKeepers()
+	ctx := c.Request.Context()
+	total, active := h.stateManager.GetKeeperCount(ctx)
+	activeKeepers := h.stateManager.GetAllActiveKeepers(ctx)
 
 	// Update keeper metrics
-	metrics.KeepersTotal.Set(float64(total))
-	metrics.KeepersActiveTotal.Set(float64(active))
-	metrics.KeepersInactiveTotal.Set(float64(total - active))
+	metrics.UpdateKeeperCounts(ctx, total, active)
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":      total,
@@ -270,13 +268,33 @@ func (h *Handler) GetKeeperStatus(c *gin.Context) {
 }
 
 func (h *Handler) GetDetailedKeeperStatus(c *gin.Context) {
-	total, active := h.stateManager.GetKeeperCount()
-	detailedInfo := h.stateManager.GetDetailedKeeperInfo()
+	ctx := c.Request.Context()
+	total, active := h.stateManager.GetKeeperCount(ctx)
+	detailedInfo := h.stateManager.GetDetailedKeeperInfo(ctx)
 
 	// Update keeper metrics
-	metrics.KeepersTotal.Set(float64(total))
-	metrics.KeepersActiveTotal.Set(float64(active))
-	metrics.KeepersInactiveTotal.Set(float64(total - active))
+	metrics.UpdateKeeperCounts(ctx, total, active)
+
+	// Update keeper uptime metrics for each keeper
+	now := time.Now().UTC()
+	var maxUptime float64
+	var mostActiveKeeper string
+	for _, keeper := range detailedInfo {
+		if keeper.IsActive && !keeper.LastCheckedIn.IsZero() {
+			// Calculate uptime from last check-in (for active keepers)
+			uptime := now.Sub(keeper.LastCheckedIn).Seconds()
+			metrics.UpdateKeeperUptime(ctx, keeper.KeeperAddress, uptime)
+			if uptime > maxUptime {
+				maxUptime = uptime
+				mostActiveKeeper = keeper.KeeperAddress
+			}
+		}
+	}
+
+	// Record the most active keeper uptime
+	if mostActiveKeeper != "" {
+		metrics.RecordMostActiveKeeperUptime(ctx, mostActiveKeeper, maxUptime)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_keepers":  total,
@@ -312,7 +330,7 @@ func (h *Handler) GetActivePerformers(c *gin.Context) {
 	// }
 
 	// Temporary fix for taskmanager
-	fallbackPerformers := []commonTypes.PerformerData{
+	fallbackPerformers := []types.PerformerData{
 		{
 			OperatorID:    4,
 			KeeperAddress: "0x0a067a261c5f5e8c4c0b9137430b4fe1255eb62e",

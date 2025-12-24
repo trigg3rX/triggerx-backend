@@ -17,13 +17,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, nonce uint64, client *ethclient.Client) (types.PerformerActionData, error) {
+func (e *TaskExecutor) executeAction(ctx context.Context, targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, client *ethclient.Client) (types.PerformerActionData, bool, error) {
 	if targetData.TaskDefinitionID != 7 && targetData.TargetContractAddress == "" {
-		e.logger.Errorf("Execution contract address not configured")
-		return types.PerformerActionData{}, fmt.Errorf("execution contract address not configured")
+		e.logger.Error(ctx, "Execution contract address not configured")
+		return types.PerformerActionData{}, false, fmt.Errorf("execution contract address not configured")
 	}
 
 	var timeToNextTrigger time.Duration
@@ -52,9 +53,9 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	var contractABI *abi.ABI
 	var method *abi.Method
 	if targetData.TaskDefinitionID != 7 {
-		contractABI, method, err = e.getContractMethodAndABI(targetData.TargetFunction, targetData)
+		contractABI, method, err = e.getContractMethodAndABI(ctx, targetData.TargetFunction, targetData)
 		if err != nil {
-			return types.PerformerActionData{}, fmt.Errorf("failed to get contract method and ABI: %v", err)
+			return types.PerformerActionData{}, false, fmt.Errorf("failed to get contract method and ABI: %v", err)
 		}
 	}
 
@@ -66,21 +67,22 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 	switch targetData.TaskDefinitionID {
 	case 7:
 		// Custom script execution (TaskDefinitionID = 7)
-		scriptOutput, updates, err := e.ExecuteCustomScript(context.Background(), targetData, triggerData)
+		// ExecuteCustomScript runs the script and calculates fees via Docker executor (pipeline.go)
+		scriptOutput, updates, dockerResult, err := e.ExecuteCustomScript(context.Background(), targetData, triggerData)
 		if err != nil {
-			return types.PerformerActionData{}, fmt.Errorf("custom script execution failed: %v", err)
+			return types.PerformerActionData{}, false, fmt.Errorf("custom script execution failed: %v", err)
 		}
 		customScriptOutput = scriptOutput
 		storageUpdates = updates
 
 		// If script says don't execute, return early
 		if !customScriptOutput.ShouldExecute {
-			e.logger.Infof("[CustomScript] Script returned shouldExecute=false, skipping execution")
+			e.logger.Debug(ctx, "[CustomScript] Script returned shouldExecute=false, skipping execution")
 			return types.PerformerActionData{
 				TaskID:         targetData.TaskID,
 				Status:         true,
 				StorageUpdates: storageUpdates,
-			}, nil
+			}, false, nil // false = no transaction submitted
 		}
 
 		// Override target contract address with script output
@@ -88,15 +90,12 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 		// Calldata is already built by the script
 		callData = ethcommon.FromHex(customScriptOutput.Calldata)
 
-		e.logger.Infof("[CustomScript] Script returned: target=%s, calldata=%s",
-			customScriptOutput.TargetContract, customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)])
+		e.logger.Debug(ctx, "[CustomScript] Script returned", observability.String("target", customScriptOutput.TargetContract), observability.String("calldata", customScriptOutput.Calldata[:min(len(customScriptOutput.Calldata), 66)]))
 
-		// Create dummy result for resource tracking
-		result = &dockertypes.ExecutionResult{
-			Stats: dockertypes.DockerResourceStats{
-				TotalCost: big.NewInt(int64(e.validator.GetDockerExecutor().GetExecutionFeeConfig().TransactionCost * 1e18)),
-			},
-		}
+		// Use the fee calculated by Docker executor (pipeline.go calculateFees)
+		// This reuses the same logic and avoids duplication
+		result = dockerResult
+		e.logger.Debug(ctx, "[CustomScript] Using fee from Docker execution", observability.String("total_cost", result.Stats.TotalCost.String()), observability.String("current_cost", result.Stats.CurrentTotalCost.String()))
 
 		// Skip normal argument processing for custom scripts
 		goto skipArgumentProcessing
@@ -116,57 +115,56 @@ func (e *TaskExecutor) executeAction(targetData *types.TaskTargetData, triggerDa
 			argData = e.parseStaticArgs(targetData.Arguments)
 			argDataJSON, err := json.Marshal(argData)
 			if err != nil {
-				return types.PerformerActionData{}, fmt.Errorf("failed to marshal static args: %v", err)
+				return types.PerformerActionData{}, false, fmt.Errorf("failed to marshal static args: %v", err)
 			}
 			metadata["on_chain_args"] = string(argDataJSON)
 		}
 
-		// e.logger.Infof("Metadata: %+v", metadata)
+		// e.logger.Info(ctx, "Metadata", observability.Any("metadata", metadata))
 
 		result, execErr = e.validator.GetDockerExecutor().Execute(context.Background(), targetData.DynamicArgumentsScriptUrl, "go", 1, config.GetAlchemyAPIKey(), metadata)
 		if execErr != nil {
-			return types.PerformerActionData{}, fmt.Errorf("failed to execute script: %v", execErr)
+			return types.PerformerActionData{}, false, fmt.Errorf("failed to execute script: %v", execErr)
 		}
 
 		if !result.Success {
-			return types.PerformerActionData{}, fmt.Errorf("failed to execute script: %v", result.Error)
+			return types.PerformerActionData{}, false, fmt.Errorf("failed to execute script: %v", result.Error)
 		}
 
 		if targetData.TaskDefinitionID == 2 || targetData.TaskDefinitionID == 4 || targetData.TaskDefinitionID == 6 {
-			argData = e.parseDynamicArgs(result.Output)
-			e.logger.Debugf("Parsed dynamic arguments: %+v", argData)
+			argData = e.parseDynamicArgs(ctx, result.Output)
+			e.logger.Debug(ctx, "Parsed dynamic arguments", observability.Any("arg_data", argData))
 		} else {
 			argData = e.parseStaticArgs(targetData.Arguments)
 		}
 	default:
-		return types.PerformerActionData{}, fmt.Errorf("unsupported task definition id: %d", targetData.TaskDefinitionID)
+		return types.PerformerActionData{}, false, fmt.Errorf("unsupported task definition id: %d", targetData.TaskDefinitionID)
 	}
 
 	// Handle args as potentially structured data
-	convertedArgs, err = e.processArguments(argData, method.Inputs, contractABI)
+	convertedArgs, err = e.processArguments(ctx, argData, method.Inputs)
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("error processing (dynamic) arguments: %v", err)
+		return types.PerformerActionData{}, false, fmt.Errorf("error processing (dynamic) arguments: %v", err)
 	}
 
 	// Pack the target contract's function call data
 	callData, err = contractABI.Pack(method.Name, convertedArgs...)
 	if err != nil {
-		e.logger.Warnf("Error packing arguments: %v", err)
-		return types.PerformerActionData{}, fmt.Errorf("error packing arguments to function call: %v", err)
+		e.logger.Warn(ctx, "Error packing arguments", observability.Error(err))
+		return types.PerformerActionData{}, false, fmt.Errorf("error packing arguments to function call: %v", err)
 	}
 
-skipArgumentProcessing:
+	skipArgumentProcessing:
 	// Create transaction data for execution contract
 	privateKey, err := crypto.HexToECDSA(config.GetPrivateKeyController())
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to parse private key: %v", err)
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to parse private key: %v", err)
 	}
-	e.logger.Debugf("Using nonce: %d", nonce)
 
 	// Pack the execution contract's executeFunction call
 	executionABI, err := abi.JSON(strings.NewReader(`[{"inputs":[{"internalType":"uint256","name":"jobId","type":"uint256"},{"internalType":"uint256","name":"tgAmount","type":"uint256"},{"internalType":"address","name":"target","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"executeFunction","outputs":[],"stateMutability":"payable","type":"function"}]`))
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to parse execution contract ABI: %v", err)
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to parse execution contract ABI: %v", err)
 	}
 
 	// Convert *BigInt to *big.Int for ABI packing
@@ -179,20 +177,29 @@ skipArgumentProcessing:
 
 	executionInput, err := executionABI.Pack("executeFunction", jobIDBigInt, result.Stats.CurrentTotalCost, targetContractAddress, callData)
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to pack execution contract input: %v", err)
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to pack execution contract input: %v", err)
 	}
 
 	executionContractAddress := config.GetTaskExecutionAddress()
 	chainID, err := client.ChainID(context.Background())
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to get chain ID: %v", err)
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to get chain ID: %v", err)
 	}
 
 	// Get nonce manager for this chain
 	nonceManager, err := e.getNonceManager(targetData.TargetChainID)
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to get nonce manager: %w", err)
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to get nonce manager: %w", err)
 	}
+
+	// IMPORTANT: Allocate nonce ONLY here, just before transaction submission
+	// This ensures nonce is only allocated when we're certain to submit a transaction
+	// (prevents nonce gaps in multi-task execution scenarios)
+	nonce, err := nonceManager.GetNextNonce(context.Background())
+	if err != nil {
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to get nonce: %w", err)
+	}
+	e.logger.Debug(ctx, "Allocated nonce", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
 
 	// Submit transaction with smart retry
 	receipt, finalTxHash, err := nonceManager.SubmitTransaction(
@@ -204,7 +211,14 @@ skipArgumentProcessing:
 		privateKey,
 	)
 	if err != nil {
-		return types.PerformerActionData{}, fmt.Errorf("failed to submit transaction: %v", err)
+		// CRITICAL: Release the nonce when submission fails after all retries
+		// This prevents nonce gaps that would cause subsequent transactions to get stuck
+		nonceManager.ReleaseNonce(context.Background(), nonce, privateKey)
+		e.logger.Warn(ctx, "Released nonce after failed submission", observability.Uint64("nonce", nonce), observability.Int64("task_id", targetData.TaskID))
+		if metrics.TransactionsSentTotal != nil {
+			metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "failed").Inc(ctx)
+		}
+		return types.PerformerActionData{}, false, fmt.Errorf("failed to submit transaction: %v", err)
 	}
 
 	executionResult := types.PerformerActionData{
@@ -226,11 +240,17 @@ skipArgumentProcessing:
 		ConvertedArguments: convertedArgs,
 		StorageUpdates:     storageUpdates, // Include storage updates for custom scripts
 	}
-	metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc()
-	metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
-	metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(float64(receipt.GasUsed))
+	if metrics.TransactionsSentTotal != nil {
+		metrics.TransactionsSentTotal.WithLabelValues(targetData.TargetChainID, "success").Inc(ctx)
+	}
+	if metrics.GasUsedTotal != nil {
+		metrics.GasUsedTotal.WithLabelValues(targetData.TargetChainID).Add(ctx, float64(receipt.GasUsed))
+	}
+	if metrics.TransactionFeesTotal != nil {
+		metrics.TransactionFeesTotal.WithLabelValues(targetData.TargetChainID).Add(ctx, float64(receipt.GasUsed))
+	}
 
-	e.logger.Infof("Task ID %d executed successfully. Transaction: %s", targetData.TaskID, finalTxHash)
+	e.logger.Debug(ctx, "Task executed successfully", observability.Int64("task_id", targetData.TaskID), observability.String("transaction_hash", finalTxHash))
 
-	return executionResult, nil
+	return executionResult, true, nil // true = transaction was submitted
 }

@@ -22,7 +22,7 @@ package scheduler
 // 	"github.com/stretchr/testify/mock"
 
 // 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/client"
-// 	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+// 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 // 	"github.com/trigg3rX/triggerx-backend/pkg/parser"
 // 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 // )
@@ -47,7 +47,7 @@ package scheduler
 // func (m *mockLogger) Warnf(template string, args ...interface{})  { m.Called(template, args) }
 // func (m *mockLogger) Errorf(template string, args ...interface{}) { m.Called(template, args) }
 // func (m *mockLogger) Fatalf(template string, args ...interface{}) { m.Called(template, args) }
-// func (m *mockLogger) With(tags ...any) logging.Logger             { m.Called(tags); return m }
+// func (m *mockLogger) With(tags ...any) observability.logger             { m.Called(tags); return m }
 
 // // --- DBServerClient Mock for direct struct usage ---
 // // For most tests, we use a custom struct with the same methods as DBServerClient.

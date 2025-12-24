@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // generateTestPrivateKey is a helper function to create a valid private key for testing.
@@ -27,7 +27,7 @@ func generateTestPrivateKey(t *testing.T) (*ecdsa.PrivateKey, string) {
 // TestNewAggregatorClient covers all scenarios for the client constructor.
 func TestNewAggregatorClient(t *testing.T) {
 	_, privateKeyHex := generateTestPrivateKey(t)
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 
 	t.Run("Success", func(t *testing.T) {
 		cfg := AggregatorClientConfig{
@@ -133,7 +133,7 @@ func TestNewAggregatorClient(t *testing.T) {
 
 // TestAggregatorClient_executeWithRetry tests the core RPC execution logic.
 func TestAggregatorClient_executeWithRetry(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	_, privateKeyHex := generateTestPrivateKey(t)
 
 	t.Run("Success: RPC Call Succeeds on First Try", func(t *testing.T) {

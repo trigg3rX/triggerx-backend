@@ -7,15 +7,16 @@ import (
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Client represents a Redis client with logging capabilities
 type Client struct {
 	redisClient      *redis.Client
 	config           RedisConfig
-	logger           logging.Logger
+	logger           observability.Logger
 	mu               sync.Mutex
+	ctx              context.Context
 	retryConfig      *RetryConfig
 	recoveryConfig   *ConnectionRecoveryConfig
 	isRecovering     bool
@@ -25,7 +26,7 @@ type Client struct {
 }
 
 // NewRedisClient creates a new Redis client instance with enhanced features
-func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) {
+func NewRedisClient(ctx context.Context, logger observability.Logger, config RedisConfig) (*Client, error) {
 	var opt *redis.Options
 
 	opt, err := parseRedisConfig(config)
@@ -42,6 +43,7 @@ func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) 
 		redisClient:     client,
 		config:          config,
 		logger:          logger,
+		ctx:             ctx,
 		retryConfig:     DefaultRetryConfig(),
 		recoveryConfig:  DefaultConnectionRecoveryConfig(),
 		isRecovering:    false,
@@ -49,7 +51,7 @@ func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) 
 	}
 
 	// Use a background context for the initial check. The timeout is handled by the client's config.
-	if err := redisClient.CheckConnection(context.Background()); err != nil {
+	if err := redisClient.CheckConnection(ctx); err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
@@ -58,7 +60,7 @@ func NewRedisClient(logger logging.Logger, config RedisConfig) (*Client, error) 
 		go redisClient.connectionRecoveryLoop()
 	}
 
-	logger.Infof("Successfully connected to Redis")
+	logger.Info(ctx, "Successfully connected to Redis")
 	return redisClient, nil
 }
 
@@ -97,7 +99,7 @@ func (c *Client) CheckConnection(ctx context.Context) error {
 	return c.executeWithRetry(ctx, func() error {
 		_, err := c.redisClient.Ping(ctx).Result()
 		if err != nil {
-			c.logger.Errorf("Redis connection failed: %v", err)
+			c.logger.Error(ctx, "Redis connection failed", observability.Error(err))
 			return fmt.Errorf("redis connection failed: %w", err)
 		}
 		return nil

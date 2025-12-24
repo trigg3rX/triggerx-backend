@@ -9,11 +9,15 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Worker polls blockchain for events and distributes to subscribers
@@ -21,7 +25,8 @@ type Worker struct {
 	entry         *types.RegistryEntry
 	nodeClient    *nodeclient.NodeClient
 	webhookClient *webhook.Client
-	logger        logging.Logger
+	logger        observability.Logger
+	tracer        observability.Tracer
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -31,7 +36,8 @@ func NewWorker(
 	entry *types.RegistryEntry,
 	nodeClient *nodeclient.NodeClient,
 	webhookClient *webhook.Client,
-	logger logging.Logger,
+	logger observability.Logger,
+	tracer observability.Tracer,
 ) *Worker {
 	ctx, cancel := context.WithCancel(entry.WorkerCtx)
 	return &Worker{
@@ -39,6 +45,7 @@ func NewWorker(
 		nodeClient:    nodeClient,
 		webhookClient: webhookClient,
 		logger:        logger,
+		tracer:        tracer,
 		ctx:           ctx,
 		cancel:        cancel,
 	}
@@ -46,16 +53,16 @@ func NewWorker(
 
 // Start starts the worker polling loop
 func (w *Worker) Start() {
-	w.logger.Info("Starting event worker",
-		"key", w.entry.Key,
-		"chain_id", w.entry.ChainID)
+	w.logger.Debug(w.ctx, "Starting event worker",
+		observability.String("key", w.entry.Key),
+		observability.String("chain_id", w.entry.ChainID))
 
 	// Initialize last block if needed
 	if w.entry.LastBlock == 0 {
 		// Look back a few blocks on startup
 		currentBlock, err := w.getCurrentBlock()
 		if err != nil {
-			w.logger.Error("Failed to get current block on startup", "error", err)
+			w.logger.Error(w.ctx, "Failed to get current block on startup", observability.Error(err))
 			// Set to 0, will retry on next poll
 			w.entry.LastBlock = 0
 		} else {
@@ -65,10 +72,10 @@ func (w *Worker) Start() {
 			} else {
 				w.entry.LastBlock = 0
 			}
-			w.logger.Info("Initialized last block",
-				"key", w.entry.Key,
-				"last_block", w.entry.LastBlock,
-				"current_block", currentBlock)
+			w.logger.Debug(w.ctx, "Initialized last block",
+				observability.String("key", w.entry.Key),
+				observability.Uint64("last_block", w.entry.LastBlock),
+				observability.Uint64("current_block", currentBlock))
 		}
 	}
 
@@ -78,11 +85,11 @@ func (w *Worker) Start() {
 	for {
 		select {
 		case <-w.ctx.Done():
-			w.logger.Info("Worker context cancelled, stopping", "key", w.entry.Key)
+			w.logger.Debug(w.ctx, "Worker context cancelled, stopping", observability.String("key", w.entry.Key))
 			return
 		case <-ticker.C:
 			if err := w.pollEvents(); err != nil {
-				w.logger.Error("Error polling events", "key", w.entry.Key, "error", err)
+				w.logger.Error(w.ctx, "Error polling events", observability.String("key", w.entry.Key), observability.Error(err))
 			}
 		}
 	}
@@ -119,11 +126,11 @@ func (w *Worker) pollEvents() error {
 		// Query logs for this range
 		logs, err := w.queryLogs(fromBlock, toBlock)
 		if err != nil {
-			w.logger.Error("Failed to query logs",
-				"key", w.entry.Key,
-				"from_block", fromBlock,
-				"to_block", toBlock,
-				"error", err)
+			w.logger.Error(w.ctx, "Failed to query logs",
+				observability.String("key", w.entry.Key),
+				observability.Uint64("from_block", fromBlock),
+				observability.Uint64("to_block", toBlock),
+				observability.Error(err))
 			// Continue to next chunk
 			fromBlock = toBlock + 1
 			continue
@@ -132,11 +139,11 @@ func (w *Worker) pollEvents() error {
 		// Process logs and notify subscribers
 		for _, log := range logs {
 			if err := w.processLog(log); err != nil {
-				w.logger.Error("Failed to process log",
-					"key", w.entry.Key,
-					"tx_hash", log.TransactionHash,
-					"log_index", log.LogIndex,
-					"error", err)
+				w.logger.Error(w.ctx, "Failed to process log",
+					observability.String("key", w.entry.Key),
+					observability.String("tx_hash", log.TransactionHash),
+					observability.String("log_index", log.LogIndex),
+					observability.Error(err))
 			}
 		}
 
@@ -206,6 +213,24 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			continue
 		}
 
+		// Create trace BEFORE sending notification
+		ctx, triggerSpan := w.tracer.Start(w.ctx, "task.trigger.event",
+			observability.WithSpanKind(trace.SpanKindProducer),
+			observability.WithAttributes(
+				attribute.String("job.id", subscriber.RequestID),
+				attribute.String("event.tx_hash", log.TransactionHash),
+				attribute.Int64("event.block_number", int64(blockNumber)),
+				attribute.String("event.chain_id", w.entry.ChainID),
+				attribute.String("event.signature", w.entry.EventSig.Hex()),
+			),
+		)
+		defer triggerSpan.End()
+
+		triggerSpan.AddEvent("event.detected", observability.WithEventAttributes(
+			attribute.String("tx_hash", log.TransactionHash),
+			attribute.Int64("block", int64(blockNumber)),
+		))
+
 		notification := &types.EventNotification{
 			RequestID:    subscriber.RequestID,
 			ChainID:      w.entry.ChainID,
@@ -219,15 +244,21 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			Timestamp:    time.Now(),
 		}
 
-		// Send webhook (non-blocking)
-		go func(sub *types.Subscriber, notif *types.EventNotification) {
-			if err := w.webhookClient.Send(sub.WebhookURL, notif); err != nil {
-				w.logger.Error("Failed to send webhook",
-					"request_id", sub.RequestID,
-					"webhook_url", sub.WebhookURL,
-					"error", err)
+		// Send webhook with trace context (non-blocking)
+		go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
+			if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
+				triggerSpan.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "webhook_delivery_failed"),
+				))
+				triggerSpan.SetStatus(codes.Error, "failed to send webhook")
+				w.logger.Error(traceCtx, "Failed to send webhook",
+					observability.String("request_id", sub.RequestID),
+					observability.String("webhook_url", sub.WebhookURL),
+					observability.Error(err))
+			} else {
+				triggerSpan.AddEvent("notification.sent")
 			}
-		}(subscriber, notification)
+		}(subscriber, notification, ctx)
 	}
 
 	return nil
@@ -264,8 +295,8 @@ func (w *Worker) matchesFilter(log nodeclient.Log, subscriber *types.Subscriber)
 			_, err = fmt.Sscanf(subscriber.FilterParam, "%d", &topicIndex)
 		}
 		if err != nil {
-			w.logger.Warn("Invalid filter param, matching all",
-				"filter_param", subscriber.FilterParam)
+			w.logger.Warn(w.ctx, "Invalid filter param, matching all",
+				observability.String("filter_param", subscriber.FilterParam))
 			return true
 		}
 	}

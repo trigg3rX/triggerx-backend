@@ -13,7 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"go.uber.org/mock/gomock"
 )
 
@@ -21,7 +21,7 @@ func setupManagerTest(t gomock.TestReporter) (*containerManager, *mocks.MockDock
 	mockDockerClient := mocks.NewMockDockerClient()
 	mockFileSystem := &fs.MockFileSystem{}
 	mockConfig := config.NewDefaultMockConfigProvider(t)
-	logger := &logging.NoOpLogger{}
+	logger := observability.NewNoOpLogger()
 
 	manager, _ := NewContainerManager(mockDockerClient, mockFileSystem, mockConfig, logger)
 	return manager, mockDockerClient, mockFileSystem, mockConfig
@@ -33,7 +33,7 @@ func TestNewManager_Success(t *testing.T) {
 	mockDockerClient := mocks.NewMockDockerClient()
 	mockFileSystem := &fs.MockFileSystem{}
 	mockConfig := config.NewMockConfigProviderInterface(ctrl)
-	logger := &logging.NoOpLogger{}
+	logger := observability.NewNoOpLogger()
 
 	manager, err := NewContainerManager(mockDockerClient, mockFileSystem, mockConfig, logger)
 
@@ -123,7 +123,7 @@ func TestManager_ReturnContainer_NotInitialized(t *testing.T) {
 		Language: types.LanguageGo,
 	}
 
-	err := manager.ReturnContainer(mockContainer)
+	err := manager.ReturnContainer(context.Background(), mockContainer)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "docker manager not initialized")
@@ -139,7 +139,7 @@ func TestManager_ReturnContainer_LanguageNotSupported(t *testing.T) {
 		Language: types.LanguageGo,
 	}
 
-	err := manager.ReturnContainer(mockContainer)
+	err := manager.ReturnContainer(context.Background(), mockContainer)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no pool available for language")
@@ -249,7 +249,7 @@ func TestManager_CleanupContainer_AutoCleanupDisabled(t *testing.T) {
 	mockDockerClient := mocks.NewMockDockerClient()
 	mockFileSystem := &fs.MockFileSystem{}
 	mockConfig := config.NewMockConfigProviderInterface(ctrl)
-	logger := &logging.NoOpLogger{}
+	logger := observability.NewNoOpLogger()
 
 	// Set up mock expectations for config with auto cleanup disabled
 	cfg := mockConfig.GetConfig()
@@ -527,7 +527,7 @@ func TestManager_PoolInteraction_Success(t *testing.T) {
 	assert.Equal(t, 0, stats.ReadyContainers)
 
 	// 5. Return the container
-	err = manager.ReturnContainer(pooledContainer)
+	err = manager.ReturnContainer(context.Background(), pooledContainer)
 	require.NoError(t, err)
 
 	// 6. Check stats again
@@ -553,7 +553,7 @@ func TestManager_Close_CallsPoolClose(t *testing.T) {
 	// Add a container to the pool to verify it gets cleaned up
 	container, err := pool.getContainer(ctx)
 	require.NoError(t, err)
-	err = pool.returnContainer(container)
+	err = pool.returnContainer(context.Background(), container)
 	require.NoError(t, err)
 	assert.Equal(t, 1, pool.getStats().TotalContainers)
 

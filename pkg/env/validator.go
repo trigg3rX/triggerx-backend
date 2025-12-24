@@ -56,6 +56,32 @@ func IsValidPort(port string) bool {
 	return matched
 }
 
+// IsValidHostPort validates a host:port format (e.g., "localhost:4318", "127.0.0.1:4318")
+func IsValidHostPort(hostPort string) bool {
+	if hostPort == "" {
+		return false
+	}
+	parts := strings.Split(hostPort, ":")
+	if len(parts) != 2 {
+		return false
+	}
+	host := parts[0]
+	port := parts[1]
+
+	// Validate host (IP address or hostname/localhost)
+	if !IsValidIPAddress(host) {
+		// Check if it's a valid hostname
+		domainPattern := `^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`
+		matched, _ := regexp.MatchString(domainPattern, host)
+		if !matched {
+			return false
+		}
+	}
+
+	// Validate port
+	return IsValidPort(port)
+}
+
 // URL
 func IsValidURL(url string) bool {
 	if url == "" {

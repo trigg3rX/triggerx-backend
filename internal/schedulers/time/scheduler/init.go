@@ -7,7 +7,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
@@ -15,7 +15,8 @@ import (
 type TimeBasedScheduler struct {
 	ctx                  context.Context
 	cancel               context.CancelFunc
-	logger               logging.Logger
+	logger               observability.Logger
+	tracer               observability.Tracer
 	activeTasks          map[int64]*types.ScheduleTimeTaskData
 	dbClient             *dbserver.DBServerClient
 	taskDispatcherClient *client.Client // RPC client for task dispatcher
@@ -30,7 +31,7 @@ type TimeBasedScheduler struct {
 }
 
 // NewTimeBasedScheduler creates a new instance of TimeBasedScheduler
-func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
+func NewTimeBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, dbClient *dbserver.DBServerClient) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -47,10 +48,11 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *db
 		ctx:                  ctx,
 		cancel:               cancel,
 		logger:               logger,
+		tracer:               tracer,
 		activeTasks:          make(map[int64]*types.ScheduleTimeTaskData),
 		dbClient:             dbClient,
 		taskDispatcherClient: taskDispatcherClient,
-		metrics:              metrics.NewCollector(),
+		metrics:              metrics.NewCollector(obsMetrics),
 		schedulerID:          config.GetSchedulerID(),
 		pollingInterval:      config.GetPollingInterval(),
 		pollingLookAhead:     config.GetPollingLookAhead(),
@@ -63,15 +65,15 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *db
 	// Start metrics collection
 	scheduler.metrics.Start()
 
-	scheduler.logger.Info("Time-based scheduler initialized",
-		"scheduler_id", scheduler.schedulerID,
-		"task_dispatcher_url", config.GetTaskDispatcherRPCUrl(),
-		"polling_interval", scheduler.pollingInterval,
-		"polling_look_ahead", scheduler.pollingLookAhead,
-		"task_batch_size", scheduler.taskBatchSize,
-		"performer_lock_ttl", scheduler.performerLockTTL,
-		"task_cache_ttl", scheduler.taskCacheTTL,
-		"duplicate_task_window", scheduler.duplicateTaskWindow,
+	scheduler.logger.Info(ctx, "Time-based scheduler initialized",
+		observability.Int("scheduler_id", scheduler.schedulerID),
+		observability.String("task_dispatcher_url", config.GetTaskDispatcherRPCUrl()),
+		observability.String("polling_interval", scheduler.pollingInterval.String()),
+		observability.String("polling_look_ahead", scheduler.pollingLookAhead.String()),
+		observability.Int("task_batch_size", scheduler.taskBatchSize),
+		observability.String("performer_lock_ttl", scheduler.performerLockTTL.String()),
+		observability.String("task_cache_ttl", scheduler.taskCacheTTL.String()),
+		observability.String("duplicate_task_window", scheduler.duplicateTaskWindow.String()),
 	)
 
 	return scheduler, nil
@@ -79,31 +81,31 @@ func NewTimeBasedScheduler(managerID string, logger logging.Logger, dbClient *db
 
 // Start begins the scheduler's main polling and execution loop
 func (s *TimeBasedScheduler) Start(ctx context.Context) {
-	s.logger.Info("Starting time-based scheduler", "scheduler_id", s.schedulerID)
+	s.logger.Info(ctx, "Starting time-based scheduler", observability.Int("scheduler_id", s.schedulerID))
 
 	ticker := time.NewTicker(s.pollingInterval)
 	defer ticker.Stop()
 	// Poll and schedule tasks immediately on startup
-	s.pollAndScheduleTasks()
+	s.pollAndScheduleTasks(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
-			s.logger.Info("Scheduler context cancelled, stopping")
+			s.logger.Info(ctx, "Scheduler context cancelled, stopping")
 			return
 		case <-s.ctx.Done():
-			s.logger.Info("Scheduler stopped")
+			s.logger.Info(ctx, "Scheduler stopped")
 			return
 		case <-ticker.C:
-			s.pollAndScheduleTasks()
+			s.pollAndScheduleTasks(ctx)
 		}
 	}
 }
 
 // Stop gracefully stops the scheduler
-func (s *TimeBasedScheduler) Stop() {
+func (s *TimeBasedScheduler) Stop(ctx context.Context) {
 	startTime := time.Now()
-	s.logger.Info("Stopping time-based scheduler")
+	s.logger.Info(ctx, "Stopping time-based scheduler")
 
 	// Capture statistics before shutdown
 	activeTasksCount := len(s.activeTasks)
@@ -112,11 +114,11 @@ func (s *TimeBasedScheduler) Stop() {
 
 	duration := time.Since(startTime)
 
-	s.logger.Info("Time-based scheduler stopped",
-		"duration", duration,
-		"active_tasks_stopped", activeTasksCount,
-		"performer_lock_ttl", s.performerLockTTL,
-		"task_cache_ttl", s.taskCacheTTL,
-		"duplicate_task_window", s.duplicateTaskWindow,
+	s.logger.Info(ctx, "Time-based scheduler stopped",
+		observability.Duration("duration", duration),
+		observability.Int("active_tasks_stopped", activeTasksCount),
+		observability.String("performer_lock_ttl", s.performerLockTTL.String()),
+		observability.String("task_cache_ttl", s.taskCacheTTL.String()),
+		observability.String("duplicate_task_window", s.duplicateTaskWindow.String()),
 	)
 }

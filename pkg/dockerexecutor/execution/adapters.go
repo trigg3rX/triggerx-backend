@@ -26,8 +26,8 @@ func (a *ContainerManagerAdapter) GetContainer(ctx context.Context, language typ
 }
 
 // ReturnContainer implements execution.ContainerManager.ReturnContainer
-func (a *ContainerManagerAdapter) ReturnContainer(container *types.PooledContainer) error {
-	return a.manager.ReturnContainer(container)
+func (a *ContainerManagerAdapter) ReturnContainer(ctx context.Context, container *types.PooledContainer) error {
+	return a.manager.ReturnContainer(ctx, container)
 }
 
 // ExecuteInContainer implements execution.ContainerManager.ExecuteInContainer
@@ -36,8 +36,8 @@ func (a *ContainerManagerAdapter) ExecuteInContainer(ctx context.Context, contai
 }
 
 // MarkContainerAsFailed implements execution.ContainerManager.MarkContainerAsFailed
-func (a *ContainerManagerAdapter) MarkContainerAsFailed(containerID string, language types.Language, err error) {
-	a.manager.MarkContainerAsFailed(containerID, language, err)
+func (a *ContainerManagerAdapter) MarkContainerAsFailed(ctx context.Context, containerID string, language types.Language, err error) {
+	a.manager.MarkContainerAsFailed(ctx, containerID, language, err)
 }
 
 // KillExecProcess implements execution.ContainerManager.KillExecProcess

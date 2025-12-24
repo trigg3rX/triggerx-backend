@@ -10,8 +10,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
 	devMode bool
+	otelExporterEndpoint string
 
 	// Task Monitor RPC port
 	taskMonitorRPCPort string
@@ -90,6 +95,7 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:                      env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		taskMonitorRPCPort:           env.GetEnvString("TASK_MONITOR_RPC_PORT", "9007"),
 		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
 		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
@@ -137,6 +143,14 @@ func Init() error {
 
 func IsDevMode() bool {
 	return cfg.devMode
+}
+
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 func GetDatabaseHostAddress() string {

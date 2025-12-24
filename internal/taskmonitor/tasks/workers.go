@@ -7,11 +7,12 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // StartTimeoutWorker monitors processing tasks for timeouts
 func (tsm *TaskStreamManager) StartTimeoutWorker(ctx context.Context) {
-	tsm.logger.Info("Starting task timeout worker")
+	tsm.logger.Info(ctx, "Starting task timeout worker")
 
 	ticker := time.NewTicker(30 * time.Second) // Check timeouts every 30 seconds
 	defer ticker.Stop()
@@ -19,7 +20,7 @@ func (tsm *TaskStreamManager) StartTimeoutWorker(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			tsm.logger.Info("Timeout worker stopping")
+			tsm.logger.Info(ctx, "Timeout worker stopping")
 			return
 		case <-ticker.C:
 			// tsm.logger.Debug("Timeout worker checking for timed out tasks")
@@ -35,7 +36,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	// Get expired tasks efficiently using sorted set
 	expiredTaskIDs, err := tsm.expirationManager.GetExpiredTasks(ctx)
 	if err != nil {
-		tsm.logger.Error("Failed to get expired tasks", "error", err)
+		tsm.logger.Error(ctx, "Failed to get expired tasks", observability.Error(err))
 		return
 	}
 
@@ -44,7 +45,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 		return
 	}
 
-	tsm.logger.Info("Found expired tasks", "expired_count", len(expiredTaskIDs))
+	tsm.logger.Info(ctx, "Found expired tasks", observability.Int("expired_count", len(expiredTaskIDs)))
 
 	// Process each expired task
 	processedCount := 0
@@ -54,24 +55,29 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 		// Find the task using the efficient index lookup
 		task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
 		if err != nil {
-			tsm.logger.Error("Failed to find expired task",
-				"task_id", taskID,
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to find expired task",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
 			// Still remove from timeout tracking to prevent reprocessing
 			processedTaskIDs = append(processedTaskIDs, taskID)
 			continue
 		}
 
-		tsm.logger.Warn("Task timeout detected",
-			"task_id", taskID,
-			"dispatched_at", task.DispatchedAt,
-			"created_at", task.CreatedAt)
+		// Log task timeout with dispatched_at if available
+		logFields := []observability.Field{
+			observability.Int64("task_id", taskID),
+			observability.Time("created_at", task.CreatedAt),
+		}
+		if task.DispatchedAt != nil {
+			logFields = append(logFields, observability.Time("dispatched_at", *task.DispatchedAt))
+		}
+		tsm.logger.Warn(ctx, "Task timeout detected", logFields...)
 
 		// Move to failed stream
 		if err := tsm.moveTaskToFailed(ctx, *task, "dispatched timeout"); err != nil {
-			tsm.logger.Error("Failed to handle timeout task",
-				"task_id", taskID,
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to handle timeout task",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
 			continue // Don't acknowledge if we failed to move to failed stream
 		}
 
@@ -79,40 +85,42 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 		if messageID != "" {
 			err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageID)
 			if err != nil {
-				tsm.logger.Error("Failed to acknowledge timed-out task",
-					"task_id", taskID,
-					"message_id", messageID,
-					"error", err)
+				tsm.logger.Error(ctx, "Failed to acknowledge timed-out task",
+					observability.Int64("task_id", taskID),
+					observability.String("message_id", messageID),
+					observability.Error(err))
 			} else {
-				tsm.logger.Info("Task timeout processed and acknowledged successfully",
-					"task_id", taskID,
-					"message_id", messageID)
+				tsm.logger.Info(ctx, "Task timeout processed and acknowledged successfully",
+					observability.Int64("task_id", taskID),
+					observability.String("message_id", messageID))
 			}
 		}
 
 		// Remove from task index since it's been processed
 		err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
 		if err != nil {
-			tsm.logger.Warn("failed to remove timed-out task from index",
-				"task_id", taskID,
-				"error", err)
+			tsm.logger.Warn(ctx, "failed to remove timed-out task from index",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
 		}
 
 		processedCount++
 		processedTaskIDs = append(processedTaskIDs, taskID)
 
-		err = tsm.dbClient.UpdateTaskFailed(taskID)
+		err = tsm.dbClient.UpdateTaskFailed(ctx, taskID)
 		if err != nil {
-			tsm.logger.Error("Failed to update task failed",
-				"task_id", taskID,
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to update task failed",
+				observability.Int64("task_id", taskID),
+				observability.Error(err))
 		}
 
 		// Notify user on failure
 		if tsm.notifier != nil {
-			email, e := tsm.dbClient.GetUserEmailByTaskID(taskID)
+			email, e := tsm.dbClient.GetUserEmailByTaskID(ctx, taskID)
 			if e != nil {
-				tsm.logger.Warn("Could not fetch user email for task failure", "task_id", taskID, "error", e)
+				tsm.logger.Warn(ctx, "Could not fetch user email for task failure",
+					observability.Int64("task_id", taskID),
+					observability.Error(e))
 			} else if email != "" {
 				payload := notify.TaskStatusPayload{
 					TaskID:     taskID,
@@ -123,7 +131,10 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 					OccurredAt: time.Now(),
 				}
 				if err := tsm.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
-					tsm.logger.Warn("Failed to notify user for task failure", "email", email, "task_id", taskID, "error", err)
+					tsm.logger.Warn(ctx, "Failed to notify user for task failure",
+						observability.String("email", email),
+						observability.Int64("task_id", taskID),
+						observability.Error(err))
 				}
 			}
 		}
@@ -133,17 +144,17 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	if len(processedTaskIDs) > 0 {
 		err = tsm.expirationManager.RemoveMultipleTaskTimeouts(ctx, processedTaskIDs)
 		if err != nil {
-			tsm.logger.Error("Failed to remove processed tasks from timeout tracking",
-				"task_count", len(processedTaskIDs),
-				"error", err)
+			tsm.logger.Error(ctx, "Failed to remove processed tasks from timeout tracking",
+				observability.Int("task_count", len(processedTaskIDs)),
+				observability.Error(err))
 		} else {
-			tsm.logger.Info("Removed processed tasks from timeout tracking",
-				"task_count", len(processedTaskIDs))
+			tsm.logger.Info(ctx, "Removed processed tasks from timeout tracking",
+				observability.Int("task_count", len(processedTaskIDs)))
 		}
 	}
 
 	if processedCount > 0 {
-		tsm.logger.Info("Processed task timeouts", "processed_count", processedCount)
+		tsm.logger.Info(ctx, "Processed task timeouts", observability.Int("processed_count", processedCount))
 	}
 }
 
@@ -154,11 +165,11 @@ func (tsm *TaskStreamManager) AckTaskProcessed(ctx context.Context, stream, cons
 
 // AckTaskProcessedWithDelete acknowledges that a task has been processed and optionally deletes it from the stream
 func (tsm *TaskStreamManager) AckTaskProcessedWithDelete(ctx context.Context, stream, consumerGroup, messageID string, deleteFromStream bool) error {
-	tsm.logger.Debug("Acknowledging task processed",
-		"stream", stream,
-		"consumer_group", consumerGroup,
-		"message_id", messageID,
-		"delete_from_stream", deleteFromStream)
+	tsm.logger.Debug(ctx, "Acknowledging task processed",
+		observability.String("stream", stream),
+		observability.String("consumer_group", consumerGroup),
+		observability.String("message_id", messageID),
+		observability.Bool("delete_from_stream", deleteFromStream))
 
 	// Increase timeout for acknowledgment operations
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -167,21 +178,22 @@ func (tsm *TaskStreamManager) AckTaskProcessedWithDelete(ctx context.Context, st
 	// First acknowledge the message (removes from PEL)
 	err := tsm.redisClient.XAck(ctx, stream, consumerGroup, messageID)
 	if err != nil {
-		tsm.logger.Error("Failed to acknowledge task",
-			"stream", stream,
-			"consumer_group", consumerGroup,
-			"message_id", messageID,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to acknowledge task",
+			observability.String("stream", stream),
+			observability.String("consumer_group", consumerGroup),
+			observability.String("message_id", messageID),
+			observability.Error(err))
 		return err
 	}
 
 	// Remove from expiration tracking since the message has been processed
 	err = tsm.expirationManager.RemoveMessageExpiration(ctx, stream, messageID)
 	if err != nil {
-		tsm.logger.Warn("Failed to remove stream entry expiration after acknowledgment",
-			"stream", stream,
-			"message_id", messageID,
-			"error", err)
+		tsm.logger.Warn(ctx, "Failed to remove stream entry expiration after acknowledgment",
+			observability.String("stream", stream),
+			observability.String("consumer_group", consumerGroup),
+			observability.String("message_id", messageID),
+			observability.Error(err))
 		// Don't return error - message was acknowledged, just couldn't remove from expiration tracking
 	}
 
@@ -190,20 +202,23 @@ func (tsm *TaskStreamManager) AckTaskProcessedWithDelete(ctx context.Context, st
 	if deleteFromStream {
 		deleted, err := tsm.redisClient.XDel(ctx, stream, messageID)
 		if err != nil {
-			tsm.logger.Warn("Failed to delete message from stream after acknowledgment",
-				"stream", stream,
-				"message_id", messageID,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to delete message from stream after acknowledgment",
+				observability.String("stream", stream),
+				observability.String("consumer_group", consumerGroup),
+				observability.String("message_id", messageID),
+				observability.Error(err))
 			// Don't return error - message was acknowledged, just couldn't delete
 			// The message will be cleaned up by periodic trimming or expiration
 		} else if deleted > 0 {
-			tsm.logger.Debug("Task acknowledged and deleted from stream successfully",
-				"stream", stream,
-				"message_id", messageID)
+			tsm.logger.Debug(ctx, "Task acknowledged and deleted from stream successfully",
+				observability.String("stream", stream),
+				observability.String("consumer_group", consumerGroup),
+				observability.String("message_id", messageID))
 		} else {
-			tsm.logger.Debug("Task acknowledged but message not found in stream (may have been already deleted)",
-				"stream", stream,
-				"message_id", messageID)
+			tsm.logger.Debug(ctx, "Task acknowledged but message not found in stream (may have been already deleted)",
+				observability.String("stream", stream),
+				observability.String("consumer_group", consumerGroup),
+				observability.String("message_id", messageID))
 		}
 	}
 
@@ -221,12 +236,13 @@ func (tsm *TaskStreamManager) moveTaskToFailed(ctx context.Context, task TaskStr
 		return fmt.Errorf("failed to add to failed stream: %w", err)
 	}
 
-	tsm.logger.Error("Task permanently failed",
-		"task_id", task.SendTaskDataToKeeper.TaskID[0],
-		"retry_count", task.RetryCount,
-		"error", errorMsg)
-
-	metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc()
+	tsm.logger.Error(ctx, "Task permanently failed",
+		observability.Int64("task_id", task.SendTaskDataToKeeper.TaskID[0]),
+		observability.Int("retry_count", task.RetryCount),
+		observability.String("error", errorMsg))
+	if metrics.TasksAddedToStreamTotal != nil {
+		metrics.TasksAddedToStreamTotal.WithLabelValues("failed", "success").Inc(ctx)
+	}
 
 	return nil
 }

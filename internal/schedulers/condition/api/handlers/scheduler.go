@@ -8,16 +8,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 type SchedulerHandler struct {
-	logger    logging.Logger
+	logger    observability.Logger
 	scheduler *scheduler.ConditionBasedScheduler
 }
 
-func NewSchedulerHandler(logger logging.Logger, scheduler *scheduler.ConditionBasedScheduler) *SchedulerHandler {
+func NewSchedulerHandler(logger observability.Logger, scheduler *scheduler.ConditionBasedScheduler) *SchedulerHandler {
 	return &SchedulerHandler{
 		logger:    logger,
 		scheduler: scheduler,
@@ -36,11 +36,11 @@ func getTraceID(c *gin.Context) string {
 // ScheduleJob schedules a new condition-based job
 func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info("[ScheduleJob] trace_id=" + traceID + " - Scheduling job")
+	h.logger.Info(c.Request.Context(), "[ScheduleJob] trace_id=" + traceID + " - Scheduling job")
 
 	var jobData types.ScheduleConditionJobData
 	if err := c.ShouldBindJSON(&jobData); err != nil {
-		h.logger.Error("Invalid request payload", "error", err)
+		h.logger.Error(c.Request.Context(), "Invalid request payload", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
 			"message":   "Invalid request payload",
@@ -51,8 +51,8 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 	}
 
 	// Schedule the job
-	if err := h.scheduler.ScheduleJob(&jobData); err != nil {
-		h.logger.Error("Failed to schedule condition job", "job_id", jobData.JobID, "error", err)
+	if err := h.scheduler.ScheduleJob(c.Request.Context(), &jobData); err != nil {
+		h.logger.Error(c.Request.Context(), "Failed to schedule condition job", observability.String("job_id", jobData.JobID.String()), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":    "error",
 			"message":   "Failed to schedule condition job",
@@ -62,7 +62,7 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Condition job scheduled successfully", "job_id", jobData.JobID)
+	h.logger.Info(c.Request.Context(), "Condition job scheduled successfully", observability.String("job_id", jobData.JobID.String()))
 
 	response := gin.H{
 		"status":    "success",
@@ -77,14 +77,14 @@ func (h *SchedulerHandler) ScheduleJob(c *gin.Context) {
 // UnscheduleJob unschedules a condition-based job
 func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info("[UnscheduleJob] trace_id=" + traceID + " - Unscheduling job")
+	h.logger.Info(c.Request.Context(), "[UnscheduleJob] trace_id=" + traceID + " - Unscheduling job")
 
 	jobIDStr := c.Param("job_id")
 	jobID := new(big.Int)
 	_, ok := jobID.SetString(jobIDStr, 10)
 	if !ok {
 		err := fmt.Errorf("invalid job ID: %s", jobIDStr)
-		h.logger.Error("Invalid job ID", "job_id", jobIDStr, "error", err)
+		h.logger.Error(c.Request.Context(), "Invalid job ID", observability.String("job_id", jobIDStr), observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
 			"message":   "Invalid job ID",
@@ -95,8 +95,8 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 	}
 
 	// Unschedule the job
-	if err := h.scheduler.UnscheduleJob(jobID); err != nil {
-		h.logger.Error("Failed to unschedule condition job", "job_id", jobID, "error", err)
+	if err := h.scheduler.UnscheduleJob(c.Request.Context(), jobID); err != nil {
+		h.logger.Error(c.Request.Context(), "Failed to unschedule condition job", observability.String("job_id", jobID.String()), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":    "error",
 			"message":   "Failed to unschedule condition job",
@@ -106,7 +106,7 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("Condition job unscheduled successfully", "job_id", jobID)
+	h.logger.Info(c.Request.Context(), "Condition job unscheduled successfully", observability.String("job_id", jobID.String()))
 
 	response := gin.H{
 		"status":    "success",
@@ -121,14 +121,14 @@ func (h *SchedulerHandler) UnscheduleJob(c *gin.Context) {
 // GetJobStats returns statistics for a specific condition job
 func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info("[GetJobStats] trace_id=" + traceID + " - Getting job stats")
+	h.logger.Info(c.Request.Context(), "[GetJobStats] trace_id=" + traceID + " - Getting job stats")
 
 	jobIDStr := c.Param("job_id")
 	jobID := new(big.Int)
 	_, ok := jobID.SetString(jobIDStr, 10)
 	if !ok {
 		err := fmt.Errorf("invalid job ID: %s", jobIDStr)
-		h.logger.Error("Invalid job ID", "job_id", jobIDStr, "error", err)
+		h.logger.Error(c.Request.Context(), "Invalid job ID", observability.String("job_id", jobIDStr), observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":    "error",
 			"message":   "Invalid job ID",
@@ -140,7 +140,7 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 
 	stats := h.scheduler.GetStats()
 	if stats == nil {
-		h.logger.Error("Failed to get condition job stats", "job_id", jobID)
+		h.logger.Error(c.Request.Context(), "Failed to get condition job stats", observability.String("job_id", jobID.String()))
 		c.JSON(http.StatusNotFound, gin.H{
 			"status":    "error",
 			"message":   "Condition job not found",
@@ -162,7 +162,7 @@ func (h *SchedulerHandler) GetJobStats(c *gin.Context) {
 // GetStats returns current scheduler statistics
 func (h *SchedulerHandler) GetStats(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info("[GetStats] trace_id=" + traceID + " - Getting scheduler stats")
+	h.logger.Info(c.Request.Context(), "[GetStats] trace_id=" + traceID + " - Getting scheduler stats")
 
 	stats := h.scheduler.GetStats()
 

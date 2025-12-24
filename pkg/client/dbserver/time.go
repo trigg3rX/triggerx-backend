@@ -35,9 +35,5 @@ func (c *DBServerClient) GetTimeBasedTasks(ctx context.Context) ([]types.Schedul
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response body: %v", err)
 	}
-
-	if len(tasks) != 0 {
-		c.logger.Debugf("Fetched %d time-based tasks", len(tasks))
-	}
 	return tasks, nil
 }

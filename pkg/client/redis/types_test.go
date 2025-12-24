@@ -107,7 +107,6 @@ func TestDefaultRetryConfig(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, config.InitialDelay)
 	assert.Equal(t, 5*time.Second, config.MaxDelay)
 	assert.Equal(t, 0.1, config.JitterFactor)
-	assert.True(t, config.LogRetryAttempt)
 }
 
 func TestServerInfo_DefaultValues(t *testing.T) {

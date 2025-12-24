@@ -1,16 +1,18 @@
 package validation
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/proof"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
-func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (bool, error) {
+func (v *TaskValidator) ValidateProof(ctx context.Context, ipfsData types.IPFSData, traceID string) (bool, error) {
 	proofData := ipfsData.ProofData
 	if proofData == nil {
 		return false, fmt.Errorf("proof data is missing")
@@ -29,7 +31,7 @@ func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (
 
 	connState, err := proof.EstablishTLSConnection(tlsConfig)
 	if err != nil {
-		v.logger.Warn("Failed to establish TLS connection for validation", "trace_id", traceID, "error", err)
+		v.logger.Warn(ctx, "Failed to establish TLS connection for validation", observability.String("trace_id", traceID), observability.Error(err))
 	}
 	if connState == nil {
 		return false, fmt.Errorf("failed to establish TLS connection for validation")
@@ -44,19 +46,19 @@ func (v *TaskValidator) ValidateProof(ipfsData types.IPFSData, traceID string) (
 	currentCertHashStr := hex.EncodeToString(currentCertHash[:])
 
 	if currentCertHashStr != proofData.CertificateHash {
-		v.logger.Warn("Certificate hash mismatch during validation",
-			"trace_id", traceID,
-			"expected", proofData.CertificateHash,
-			"actual", currentCertHashStr)
+		v.logger.Warn(ctx, "Certificate hash mismatch during validation",
+			observability.String("trace_id", traceID),
+			observability.String("expected", proofData.CertificateHash),
+			observability.String("actual", currentCertHashStr))
 		// Certificate might have been renewed, this is not necessarily an error
 		// but should be logged for investigation
 	}
 
 	// Validate the proof hash by regenerating it
-	return v.validateProofHash(ipfsData, traceID)
+	return v.validateProofHash(ctx, ipfsData, traceID)
 }
 
-func (v *TaskValidator) validateProofHash(ipfsData types.IPFSData, traceID string) (bool, error) {
+func (v *TaskValidator) validateProofHash(ctx context.Context, ipfsData types.IPFSData, traceID string) (bool, error) {
 	// Create a copy of IPFS data without the proof for hash validation
 	ipfsDataForValidation := types.IPFSData{
 		TaskData:           ipfsData.TaskData,
@@ -82,6 +84,6 @@ func (v *TaskValidator) validateProofHash(ipfsData types.IPFSData, traceID strin
 			expectedProofHashStr, ipfsData.ProofData.ProofOfTask)
 	}
 
-	v.logger.Info("Proof validation passed", "trace_id", traceID, "task_id", ipfsData.TaskData.TaskID)
+	// v.logger.Info(ctx, "Proof validation passed", observability.String("trace_id", traceID), observability.Int64("task_id", ipfsData.TaskData.TaskID[0]))
 	return true, nil
 }

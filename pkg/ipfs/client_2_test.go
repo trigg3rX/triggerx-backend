@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Unit Tests for Delete method
@@ -45,7 +46,7 @@ func TestDelete_ValidCID_ReturnsNoError(t *testing.T) {
 
 	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
 	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
-	mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"test-file-id-123"}).Return()
+	mockLogger.On("Infof", "Successfully deleted file from Pinata", observability.String("file_id", "test-file-id-123")).Return()
 
 	err := client.Delete(context.Background(), "QmTestCID123")
 
@@ -227,7 +228,7 @@ func TestDelete_AcceptedStatus_ReturnsNoError(t *testing.T) {
 
 	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmTestCID123&limit=1").Return(mockSearchResp, nil)
 	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id-123").Return(mockDeleteResp, nil)
-	mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"test-file-id-123"}).Return()
+	mockLogger.On("Infof", "Successfully deleted file from Pinata", observability.String("file_id", "test-file-id-123")).Return()
 
 	err := client.Delete(context.Background(), "QmTestCID123")
 
@@ -501,7 +502,7 @@ func TestDelete_EdgeCases(t *testing.T) {
 				expectedSearchURL := fmt.Sprintf("https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=%s&limit=1", tt.cid)
 				mockHTTP.On("Get", mock.Anything, expectedSearchURL).Return(mockSearchResp, nil)
 				mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/test-file-id").Return(mockDeleteResp, nil)
-				mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"test-file-id"}).Return()
+				mockLogger.On("Infof", "Successfully deleted file from Pinata", observability.String("file_id", "test-file-id")).Return()
 			}
 
 			err := client.Delete(context.Background(), tt.cid)
@@ -664,7 +665,7 @@ func TestIPFSClientIntegration_UploadDeleteList_CompleteWorkflow(t *testing.T) {
 	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmIntegrationTestCID&limit=1").Return(mockSearchResp, nil)
 	mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/integration-file-id").Return(mockDeleteResp, nil)
 	mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?limit=1000").Return(mockListResp, nil)
-	mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"integration-file-id"}).Return()
+	mockLogger.On("Infof", "Successfully deleted file from Pinata", observability.String("file_id", "integration-file-id")).Return()
 
 	// Test upload
 	filename := "integration-test.txt"
@@ -684,8 +685,7 @@ func TestIPFSClientIntegration_UploadDeleteList_CompleteWorkflow(t *testing.T) {
 	assert.Equal(t, "other-file-id", files[0].ID)
 
 	// Close client
-	err = client.Close()
-	assert.NoError(t, err)
+	client.Close()
 
 	mockHTTP.AssertExpectations(t)
 	mockLogger.AssertExpectations(t)
@@ -722,7 +722,7 @@ func BenchmarkDelete_SingleFile(b *testing.B) {
 
 		mockHTTP.On("Get", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud?cid=QmBenchmarkCID&limit=1").Return(mockSearchResp, nil)
 		mockHTTP.On("Delete", mock.Anything, "https://api.pinata.cloud/v3/files/gateway.pinata.cloud/benchmark-file-id").Return(mockDeleteResp, nil)
-		mockLogger.On("Infof", "Successfully deleted file %s from Pinata", []interface{}{"benchmark-file-id"}).Return()
+		mockLogger.On("Infof", "Successfully deleted file from Pinata", observability.String("file_id", "benchmark-file-id")).Return()
 
 		err := client.Delete(context.Background(), "QmBenchmarkCID")
 		if err != nil {

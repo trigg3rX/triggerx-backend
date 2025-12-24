@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging" // Assuming you have a logger, otherwise use a mock/simple one
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 // TestMain runs before any other tests in this package.
 func TestMain(m *testing.M) {
 	// Use a mock logger for tests
-	logger := logging.NewNoOpLogger() // Replace with your actual logger initialization if needed
+	logger := observability.NewNoOpLogger() // Replace with your actual logger initialization if needed
 
 	// Configuration for local Redis test server
 	config := RedisConfig{
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	}
 
 	var err error
-	testClient, err = NewRedisClient(logger, config)
+	testClient, err = NewRedisClient(context.Background(), logger, config)
 	if err != nil {
 		fmt.Printf("Failed to connect to local Redis for testing: %v\n", err)
 		fmt.Println("Please ensure Redis is running on localhost:6379. You can use 'docker compose up -d'.")

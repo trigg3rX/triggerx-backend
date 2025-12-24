@@ -6,12 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // HealthCheck provides a health check endpoint for the database server
 func (h *Handler) HealthCheck(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[HealthCheck] trace_id=%s - Health check requested", traceID)
 	startTime := time.Now()
 
 	// Check database connection by executing a simple query
@@ -26,12 +25,12 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	if err := h.scanNowQuery(&timestamp); err != nil {
 		dbStatus = "unhealthy"
 		dbError = err.Error()
-		h.logger.Errorf("Database health check failed: %v", err)
+		h.logger.Error(c.Request.Context(), "[HealthCheck] Database health check failed", observability.Error(err))
 		trackDBOp(err)
-		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc()
+		metrics.HealthChecksTotal.WithLabelValues("unhealthy").Inc(c.Request.Context())
 	} else {
 		trackDBOp(nil)
-		metrics.HealthChecksTotal.WithLabelValues("healthy").Inc()
+		metrics.HealthChecksTotal.WithLabelValues("healthy").Inc(c.Request.Context())
 	}
 
 	// Prepare response
@@ -59,8 +58,6 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 
 	// Log health check
 	duration := time.Since(startTime)
-	h.logger.Debugf("Health check completed: status=%s, db_status=%s, duration=%v",
-		response["status"], dbStatus, duration)
-
 	c.JSON(httpStatus, response)
+	h.logger.Debug(c.Request.Context(), "[HealthCheck] Health check completed", observability.Any("status", response["status"]), observability.String("db_status", dbStatus), observability.Duration("duration", duration))
 }

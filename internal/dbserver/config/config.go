@@ -9,8 +9,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
 	devMode bool
+	otelExporterEndpoint string
 
 	// Scheduler RPC URLs
 	timeSchedulerRPCUrl      string
@@ -40,6 +45,11 @@ type Config struct {
 	upstashRedisRestToken string
 	otTempoEndpoint       string
 
+	// Task Execution Address
+	taskExecutionAddress string
+	testTaskExecutionAddress string
+	imuaTaskExecutionAddress string
+
 	// Polling Look Ahead
 	timeSchedulerPollingLookAhead int
 }
@@ -51,6 +61,8 @@ func Init() error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 	cfg = Config{
+		devMode:                       env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		timeSchedulerRPCUrl:           env.GetEnvString("TIME_SCHEDULER_RPC_URL", "http://localhost:9005"),
 		conditionSchedulerRPCUrl:      env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9006"),
 		dbserverRPCPort:               env.GetEnvString("DBSERVER_RPC_PORT", "9002"),
@@ -65,7 +77,9 @@ func Init() error {
 		upstashRedisUrl:               env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		otTempoEndpoint:               env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
-		devMode:                       env.GetEnvBool("DEV_MODE", false),
+		taskExecutionAddress:          env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
+		testTaskExecutionAddress:      env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
+		imuaTaskExecutionAddress:      env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
 		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
 	}
 	if err := validateConfig(cfg); err != nil {
@@ -99,6 +113,15 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidPrivateKey(cfg.faucetPrivateKey) {
 		return fmt.Errorf("invalid faucet private key: %s", cfg.faucetPrivateKey)
 	}
+	if !env.IsValidEthAddress(cfg.taskExecutionAddress) {
+		return fmt.Errorf("invalid task execution address: %s", cfg.taskExecutionAddress)
+	}
+	if !env.IsValidEthAddress(cfg.testTaskExecutionAddress) {
+		return fmt.Errorf("invalid test task execution address: %s", cfg.testTaskExecutionAddress)
+	}
+	if !env.IsValidEthAddress(cfg.imuaTaskExecutionAddress) {
+		return fmt.Errorf("invalid Imua task execution address: %s", cfg.imuaTaskExecutionAddress)
+	}
 	if env.IsEmpty(cfg.otTempoEndpoint) {
 		return fmt.Errorf("invalid tempo otlp endpoint: %s", cfg.otTempoEndpoint)
 	}
@@ -120,6 +143,14 @@ func validateConfig(cfg Config) error {
 		}
 	}
 	return nil
+}
+
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
 }
 
 func GetTimeSchedulerRPCUrl() string {
@@ -172,6 +203,18 @@ func GetUpstashRedisUrl() string {
 
 func GetUpstashRedisRestToken() string {
 	return cfg.upstashRedisRestToken
+}
+
+func GetTaskExecutionAddress() string {
+	return cfg.taskExecutionAddress
+}
+
+func GetTestTaskExecutionAddress() string {
+	return cfg.testTaskExecutionAddress
+}
+
+func GetImuaTaskExecutionAddress() string {
+	return cfg.imuaTaskExecutionAddress
 }
 
 func GetOTTempoEndpoint() string {

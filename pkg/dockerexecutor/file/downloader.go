@@ -10,14 +10,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	fs "github.com/trigg3rX/triggerx-backend/pkg/filesystem"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type downloader struct {
 	client    httppkg.HTTPClientInterface
 	cache     *fileCache
 	validator *codeValidator
-	logger    logging.Logger
+	logger    observability.Logger
 	fs        fs.FileSystemAPI
 }
 
@@ -30,8 +30,8 @@ type downloadResult struct {
 	Validation *types.ValidationResult
 }
 
-func newDownloader(cfg config.FileCacheConfig, validationCfg config.ValidationConfig, httpClient httppkg.HTTPClientInterface, logger logging.Logger, fs fs.FileSystemAPI) (*downloader, error) {
-	cache, err := newFileCache(cfg, logger, fs)
+func newDownloader(ctx context.Context, cfg config.FileCacheConfig, validationCfg config.ValidationConfig, httpClient httppkg.HTTPClientInterface, logger observability.Logger, fs fs.FileSystemAPI) (*downloader, error) {
+	cache, err := newFileCache(ctx, cfg, logger, fs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file cache: %w", err)
 	}
@@ -50,7 +50,7 @@ func newDownloader(cfg config.FileCacheConfig, validationCfg config.ValidationCo
 func (d *downloader) downloadFile(ctx context.Context, key string, url string, fileLanguage string) (*downloadResult, error) {
 	// Get file from cache or download it
 	var isCached bool
-	filePath, err := d.cache.getOrDownloadFile(key, fileLanguage, func() ([]byte, error) {
+	filePath, err := d.cache.getOrDownloadFile(ctx, key, fileLanguage, func() ([]byte, error) {
 		return d.downloadContent(ctx, url)
 	})
 	if err != nil {
@@ -61,16 +61,15 @@ func (d *downloader) downloadFile(ctx context.Context, key string, url string, f
 	if err != nil {
 		return nil, fmt.Errorf("failed to read downloaded file: %w", err)
 	}
-	d.logger.Infof("File downloaded and stored in cache: %s", key)
 
 	// Validate content (either fresh or from cache)
-	validation, err := d.validator.validateFile(filePath)
+	validation, err := d.validator.validateFile(ctx, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate content: %w", err)
 	}
 
 	if !validation.IsValid {
-		d.logger.Warnf("File validation failed: %v", validation.Errors)
+		d.logger.Warn(ctx, "File validation failed", observability.Any("validationErrors", validation.Errors))
 		return &downloadResult{
 			Content:    content,
 			Validation: validation,
@@ -99,7 +98,7 @@ func (d *downloader) downloadContent(ctx context.Context, url string) ([]byte, e
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			d.logger.Error("Error closing response body", "error", err)
+			d.logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 
@@ -112,7 +111,7 @@ func (d *downloader) downloadContent(ctx context.Context, url string) ([]byte, e
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	d.logger.Debugf("Downloaded %d bytes", len(content))
+	d.logger.Debug(ctx, "File downloaded", observability.Int("size", len(content)))
 	return content, nil
 }
 

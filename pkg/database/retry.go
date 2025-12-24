@@ -44,7 +44,7 @@ func (q *Queryx) Exec() error {
 		return gocqlShouldRetry(err)
 	}
 
-	return retry.RetryFunc(q.query.Context(), operation, &cfg, q.conn.logger)
+	return retry.RetryFunc(q.query.Context(), operation, &cfg)
 }
 
 // Scan executes a query and scans the result, with retry logic.
@@ -66,7 +66,7 @@ func (q *Queryx) Scan(dest ...interface{}) error {
 
 	_, err := retry.Retry(q.query.Context(), func() (struct{}, error) {
 		return struct{}{}, operation()
-	}, &cfg, q.conn.logger)
+	}, &cfg)
 
 	return err
 }

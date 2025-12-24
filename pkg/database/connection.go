@@ -5,14 +5,14 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Connection holds the database session and configuration.
 type Connection struct {
 	session Sessioner
 	config  *Config
-	logger  logging.Logger
+	logger  observability.Logger
 }
 
 var (
@@ -22,7 +22,7 @@ var (
 
 // NewConnection creates a new ScyllaDB connection.
 // It uses a singleton pattern to ensure only one connection is created.
-func NewConnection(config *Config, logger logging.Logger) (*Connection, error) {
+func NewConnection(config *Config, logger observability.Logger) (*Connection, error) {
 	var err error
 	once.Do(func() {
 		cluster := gocql.NewCluster(config.Hosts...)
@@ -81,6 +81,6 @@ func (c *Connection) SetConfig(config *Config) {
 }
 
 // SetLogger sets the logger for the connection.
-func (c *Connection) SetLogger(logger logging.Logger) {
+func (c *Connection) SetLogger(logger observability.Logger) {
 	c.logger = logger
 }

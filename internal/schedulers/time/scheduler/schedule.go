@@ -6,27 +6,57 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // pollAndScheduleTasks fetches tasks from database and schedules them for execution
-func (s *TimeBasedScheduler) pollAndScheduleTasks() {
-	tasks, err := s.dbClient.GetTimeBasedTasks(context.Background())
+func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
+	// Create root span for polling cycle BEFORE polling DB
+	ctx, pollSpan := s.tracer.Start(ctx, "task.poll",
+		observability.WithSpanKind(trace.SpanKindProducer),
+		observability.WithAttributes(
+			attribute.Int("scheduler.id", s.schedulerID),
+			attribute.String("scheduler.type", "time"),
+			attribute.String("poll.look_ahead", s.pollingLookAhead.String()),
+		),
+	)
+	defer pollSpan.End()
+
+	pollSpan.AddEvent("poll.started")
+
+	// NOW poll the DB server
+	tasks, err := s.dbClient.GetTimeBasedTasks(ctx)
 	if err != nil {
-		s.logger.Errorf("Failed to fetch time-based tasks: %v", err)
+		pollSpan.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "db_connection_error"),
+		))
+		pollSpan.SetStatus(codes.Error, "failed to fetch tasks")
+		s.logger.Error(ctx, "Failed to fetch time-based tasks", observability.Error(err))
 		metrics.TrackDBConnectionError()
 		return
 	}
+
+	pollSpan.SetAttributes(
+		attribute.Int("poll.tasks_found", len(tasks)),
+	)
+	pollSpan.AddEvent("poll.completed", observability.WithEventAttributes(
+		attribute.Int("task_count", len(tasks)),
+	))
 
 	if len(tasks) == 0 {
 		return
 	}
 
-	s.logger.Infof("Found %d tasks to process", len(tasks))
-	metrics.TasksScheduled.Set(float64(len(tasks)))
-	metrics.TaskBatchSize.Set(float64(s.taskBatchSize))
+	s.logger.Debug(ctx, "Found tasks to process", observability.Int("task_count", len(tasks)))
+	metrics.UpdateTasksScheduled(float64(len(tasks)))
+	metrics.UpdateTaskBatchSize(float64(s.taskBatchSize))
 
 	// Separate tasks based on is_imua flag
 	var imuaTasks []types.ScheduleTimeTaskData
@@ -42,7 +72,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 
 	// Process non-imua tasks in batches
 	if len(nonImuaTasks) > 0 {
-		s.logger.Infof("Processing %d non-imua tasks in batches", len(nonImuaTasks))
+		s.logger.Debug(ctx, "Processing non-imua tasks in batches", observability.Int("task_count", len(nonImuaTasks)))
 		for i := 0; i < len(nonImuaTasks); i += s.taskBatchSize {
 			end := i + s.taskBatchSize
 			if end > len(nonImuaTasks) {
@@ -50,13 +80,13 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 			}
 
 			batch := nonImuaTasks[i:end]
-			s.processBatch(batch)
+			s.processBatch(ctx, batch)
 		}
 	}
 
 	// Process imua tasks in separate batches
 	if len(imuaTasks) > 0 {
-		s.logger.Infof("Processing %d imua tasks in separate batches", len(imuaTasks))
+		s.logger.Debug(ctx, "Processing imua tasks in separate batches", observability.Int("task_count", len(imuaTasks)))
 		for i := 0; i < len(imuaTasks); i += s.taskBatchSize {
 			end := i + s.taskBatchSize
 			if end > len(imuaTasks) {
@@ -64,14 +94,14 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks() {
 			}
 
 			batch := imuaTasks[i:end]
-			s.processBatch(batch)
+			s.processBatch(ctx, batch)
 		}
 	}
 }
 
 // processBatch processes a batch of tasks by submitting to task dispatcher
-func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
-	s.logger.Infof("Processing batch of %d time-based tasks", len(tasks))
+func (s *TimeBasedScheduler) processBatch(ctx context.Context, tasks []types.ScheduleTimeTaskData) {
+	s.logger.Debug(ctx, "Processing batch of time-based tasks", observability.Int("task_count", len(tasks)))
 
 	var targetDataList []types.TaskTargetData
 	var triggerDataList []types.TaskTriggerData
@@ -80,7 +110,7 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	for _, task := range tasks {
 		// Check if ExpirationTime of the job has passed or not
 		if task.ExpirationTime.Before(time.Now()) {
-			s.logger.Infof("Task ID %d has expired, skipping execution", task.TaskID)
+			s.logger.Info(ctx, "Task has expired, skipping execution", observability.Int64("task_id", task.TaskID))
 			metrics.TrackTaskExpired()
 			continue
 		}
@@ -121,7 +151,7 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 
 	// If no valid tasks, return early
 	if len(validTaskIDs) == 0 {
-		s.logger.Debug("No valid tasks in batch after filtering expired tasks")
+		s.logger.Debug(ctx, "No valid tasks in batch after filtering expired tasks")
 		return
 	}
 
@@ -148,30 +178,29 @@ func (s *TimeBasedScheduler) processBatch(tasks []types.ScheduleTimeTaskData) {
 	taskIDs := strings.Join(taskIDStrs, ", ")
 
 	// Submit batch to task dispatcher
-	success := s.submitBatchToTaskDispatcher(request, taskIDs, len(validTaskIDs))
+	success := s.submitBatchToTaskDispatcher(ctx, request, taskIDs, len(validTaskIDs))
 
 	if success {
-		s.logger.Infof("Batch processing completed successfully: %d tasks submitted", len(validTaskIDs))
+		s.logger.Info(ctx, "Batch processing completed successfully", observability.Int("task_count", len(validTaskIDs)))
 		metrics.TrackTaskCompletion(true, time.Since(time.Now()))
 		metrics.TrackTaskBroadcast("task_dispatcher_submitted")
 	} else {
-		s.logger.Errorf("Batch processing failed: %d tasks", len(validTaskIDs))
+		s.logger.Error(ctx, "Batch processing failed", observability.Int("task_count", len(validTaskIDs)))
 		metrics.TrackTaskBroadcast("failed")
 	}
 }
 
 // submitBatchToTaskDispatcher submits the batch task data to Task Dispatcher via RPC
-func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
+func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(ctx context.Context, request types.SchedulerTaskRequest, taskIDs string, taskCount int) bool {
 	startTime := time.Now()
 
 	// Create retry configuration for task dispatcher calls
 	retryConfig := &retry.RetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    1 * time.Second,
-		MaxDelay:        10 * time.Second,
-		BackoffFactor:   2.0,
-		JitterFactor:    0.2,
-		LogRetryAttempt: true,
+		MaxRetries:    3,
+		InitialDelay:  1 * time.Second,
+		MaxDelay:      10 * time.Second,
+		BackoffFactor: 2.0,
+		JitterFactor:  0.2,
 		ShouldRetry: func(err error, attempt int) bool {
 			// Retry on network errors, timeouts, and temporary failures
 			// Don't retry on permanent errors like invalid requests
@@ -181,13 +210,13 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.Scheduler
 	}
 
 	// Create context with timeout for the entire retry operation
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	// Define the operation to retry
 	operation := func() (bool, error) {
 		// Create context with timeout for individual RPC call
-		rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		rpcCtx, rpcCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer rpcCancel()
 
 		// Make RPC call to task dispatcher
@@ -205,22 +234,22 @@ func (s *TimeBasedScheduler) submitBatchToTaskDispatcher(request types.Scheduler
 	}
 
 	// Execute with retry logic
-	success, err := retry.Retry(ctx, operation, retryConfig, s.logger)
+	success, err := retry.Retry(ctx, operation, retryConfig)
 	if err != nil {
 		duration := time.Since(startTime)
-		s.logger.Error("Failed to submit batch to task dispatcher after retries",
-			"task_ids", taskIDs,
-			"task_count", taskCount,
-			"error", err,
-			"duration", duration)
+		s.logger.Error(ctx, "Failed to submit batch to task dispatcher after retries",
+			observability.String("task_ids", taskIDs),
+			observability.Int("task_count", taskCount),
+			observability.Error(err),
+			observability.Duration("duration", duration))
 		return false
 	}
 
 	duration := time.Since(startTime)
-	s.logger.Info("Successfully submitted batch to task dispatcher",
-		"task_ids", taskIDs,
-		"task_count", taskCount,
-		"duration", duration)
+	s.logger.Debug(ctx, "Successfully submitted batch to task dispatcher",
+		observability.String("task_ids", taskIDs),
+		observability.Int("task_count", taskCount),
+		observability.Duration("duration", duration))
 
 	return success
 }

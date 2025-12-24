@@ -17,7 +17,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -35,7 +35,7 @@ type ErrorResponse struct {
 // Client represents a Health service client
 type Client struct {
 	httpClient *httppkg.HTTPClient
-	logger     logging.Logger
+	logger     observability.Logger
 	config     Config
 }
 
@@ -50,7 +50,7 @@ type Config struct {
 }
 
 // NewClient creates a new Health service client
-func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
+func NewClient(logger observability.Logger, cfg Config) (*Client, error) {
 	if cfg.RequestTimeout == 0 {
 		cfg.RequestTimeout = 10 * time.Second
 	}
@@ -61,7 +61,7 @@ func NewClient(logger logging.Logger, cfg Config) (*Client, error) {
 
 	retryConfig := httppkg.DefaultHTTPRetryConfig()
 
-	httpClient, err := httppkg.NewHTTPClient(retryConfig, logger)
+	httpClient, err := httppkg.NewHTTPClient(retryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
@@ -109,7 +109,7 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		IsImua:           config.IsImua(),
 	}
 
-	// c.logger.Infof("Payload: %+v", payload)
+	// c.logger.Info(ctx, "Payload", observability.Any("payload", payload))
 
 	// Send health check request
 	response, err := c.sendHealthCheck(ctx, payload)
@@ -120,7 +120,9 @@ func (c *Client) CheckIn(ctx context.Context) (types.KeeperHealthCheckInResponse
 		}, fmt.Errorf("health check failed: %w", err)
 	}
 
-	metrics.SuccessfulHealthCheckinsTotal.Inc()
+	if metrics.SuccessfulHealthCheckinsTotal != nil {
+		metrics.SuccessfulHealthCheckinsTotal.Inc(ctx)
+	}
 
 	// c.logger.Debug("Successfully completed health check-in",
 	// 	"status", response.Status,
@@ -161,7 +163,7 @@ func (c *Client) sendHealthCheck(ctx context.Context, payload types.KeeperHealth
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.logger.Warn("failed to close response body", "error", err)
+			c.logger.Warn(ctx, "failed to close response body", observability.Error(err))
 		}
 	}()
 

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -14,15 +15,15 @@ import (
 )
 
 type TaskRepository interface {
-	CreateTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error)
+	CreateTaskDataInDB(ctx context.Context, task *types.CreateTaskDataRequest) (int64, error)
 	AddTaskPerformerID(taskID int64, performerID int64) error
-	UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error
-	UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error
-	UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error
+	UpdateTaskExecutionDataInDB(ctx context.Context, task *types.UpdateTaskExecutionDataRequest) error
+	UpdateTaskAttestationDataInDB(ctx context.Context, task *types.UpdateTaskAttestationDataRequest) error
+	UpdateTaskNumberAndStatus(ctx context.Context, taskID int64, taskNumber int64, status string, txHash string) error
 	GetTaskDataByID(taskID int64) (commonTypes.TaskData, error)
 	GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobID, error)
 	AddTaskIDToJob(jobID *big.Int, taskID int64) error
-	UpdateTaskFee(taskID int64, fee float64) error
+	UpdateTaskFee(ctx context.Context, taskID int64, fee float64) error
 	GetTaskFee(taskID int64) (float64, error)
 	GetCreatedChainIDByJobID(jobID *big.Int) (string, error)
 	GetRecentTasks(limit int) ([]types.RecentTaskResponse, error)
@@ -47,7 +48,7 @@ func NewTaskRepositoryWithPublisher(db *database.Connection, publisher *events.P
 	}
 }
 
-func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (int64, error) {
+func (r *taskRepository) CreateTaskDataInDB(ctx context.Context, task *types.CreateTaskDataRequest) (int64, error) {
 	var maxTaskID int64
 	err := r.db.Session().Query(queries.GetMaxTaskIDQuery).Scan(&maxTaskID)
 	if err != nil {
@@ -64,7 +65,7 @@ func (r *taskRepository) CreateTaskDataInDB(task *types.CreateTaskDataRequest) (
 	if r.publisher != nil {
 		// Extract user ID from job data if available
 		userID := r.getUserIDFromJobID(task.JobID)
-		r.publisher.PublishTaskCreated(taskID, task.JobID.String(), int64(task.TaskDefinitionID), task.IsImua, userID)
+		r.publisher.PublishTaskCreated(ctx, taskID, task.JobID.String(), int64(task.TaskDefinitionID), task.IsImua, userID)
 	}
 
 	return taskID, nil
@@ -78,7 +79,7 @@ func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) err
 	return nil
 }
 
-func (r *taskRepository) UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecutionDataRequest) error {
+func (r *taskRepository) UpdateTaskExecutionDataInDB(ctx context.Context, task *types.UpdateTaskExecutionDataRequest) error {
 	err := r.db.Session().Query(queries.UpdateTaskExecutionDataQuery, task.TaskPerformerID, task.ExecutionTimestamp, task.ExecutionTxHash, task.ProofOfTask, task.TaskOpXCost, task.TaskID).Exec()
 	if err != nil {
 		return errors.New("error updating task execution data")
@@ -96,13 +97,13 @@ func (r *taskRepository) UpdateTaskExecutionDataInDB(task *types.UpdateTaskExecu
 			ProofOfTask:        &task.ProofOfTask,
 			TaskOpXCost:        &task.TaskOpXCost,
 		}
-		r.publisher.PublishTaskUpdated(task.TaskID, jobID.String(), userID, updateEvent)
+		r.publisher.PublishTaskUpdated(ctx, task.TaskID, jobID.String(), userID, updateEvent)
 	}
 
 	return nil
 }
 
-func (r *taskRepository) UpdateTaskAttestationDataInDB(task *types.UpdateTaskAttestationDataRequest) error {
+func (r *taskRepository) UpdateTaskAttestationDataInDB(ctx context.Context, task *types.UpdateTaskAttestationDataRequest) error {
 	err := r.db.Session().Query(queries.UpdateTaskAttestationDataQuery, task.TaskNumber, task.TaskAttesterIDs, task.TpSignature, task.TaSignature, task.TaskSubmissionTxHash, task.IsSuccessful, task.TaskID).Exec()
 	if err != nil {
 		return errors.New("error updating task attestation data")
@@ -136,13 +137,13 @@ func (r *taskRepository) UpdateTaskAttestationDataInDB(task *types.UpdateTaskAtt
 			TaskSubmissionTxHash: &task.TaskSubmissionTxHash,
 			IsSuccessful:         &task.IsSuccessful,
 		}
-		r.publisher.PublishTaskUpdated(task.TaskID, jobID.String(), userID, updateEvent)
+		r.publisher.PublishTaskUpdated(ctx, task.TaskID, jobID.String(), userID, updateEvent)
 	}
 
 	return nil
 }
 
-func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int64, status string, txHash string) error {
+func (r *taskRepository) UpdateTaskNumberAndStatus(ctx context.Context, taskID int64, taskNumber int64, status string, txHash string) error {
 	// Get old status for comparison
 	oldStatus := r.getTaskStatus(taskID)
 
@@ -156,7 +157,7 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(taskID int64, taskNumber int6
 		jobID := r.getJobIDFromTaskID(taskID)
 		userID := r.getUserIDFromJobID(jobID)
 
-		r.publisher.PublishTaskStatusChanged(taskID, jobID.String(), oldStatus, status, userID, &taskNumber, &txHash)
+		r.publisher.PublishTaskStatusChanged(ctx, taskID, jobID.String(), oldStatus, status, userID, &taskNumber, &txHash)
 	}
 
 	return nil
@@ -218,7 +219,7 @@ func (r *taskRepository) AddTaskIDToJob(jobID *big.Int, taskID int64) error {
 	return nil
 }
 
-func (r *taskRepository) UpdateTaskFee(taskID int64, fee float64) error {
+func (r *taskRepository) UpdateTaskFee(ctx context.Context, taskID int64, fee float64) error {
 	// Get old fee for comparison
 	oldFee, _ := r.GetTaskFee(taskID)
 
@@ -232,7 +233,7 @@ func (r *taskRepository) UpdateTaskFee(taskID int64, fee float64) error {
 		jobID := r.getJobIDFromTaskID(taskID)
 		userID := r.getUserIDFromJobID(jobID)
 
-		r.publisher.PublishTaskFeeUpdated(taskID, jobID.String(), oldFee, fee, userID)
+		r.publisher.PublishTaskFeeUpdated(ctx, taskID, jobID.String(), oldFee, fee, userID)
 	}
 
 	return nil

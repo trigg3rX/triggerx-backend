@@ -6,17 +6,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/websocket"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // WebSocketHandler handles WebSocket-related HTTP requests
 type WebSocketHandler struct {
 	connectionManager *websocket.WebSocketConnectionManager
-	logger            logging.Logger
+	logger            observability.Logger
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
-func NewWebSocketHandler(connectionManager *websocket.WebSocketConnectionManager, logger logging.Logger) *WebSocketHandler {
+func NewWebSocketHandler(connectionManager *websocket.WebSocketConnectionManager, logger observability.Logger) *WebSocketHandler {
 	return &WebSocketHandler{
 		connectionManager: connectionManager,
 		logger:            logger,

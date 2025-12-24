@@ -13,40 +13,42 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/pkg/client/aggregator"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type TaskStreamManager struct {
-	client           redisClient.RedisClientInterface
-	logger           logging.Logger
-	consumerGroups   map[string]bool
-	mu               sync.RWMutex
-	startTime        time.Time
-	aggregatorClient *aggregator.AggregatorClient
+	client               redisClient.RedisClientInterface
+	logger               observability.Logger
+	consumerGroups       map[string]bool
+	mu                   sync.RWMutex
+	startTime            time.Time
+	aggregatorClient     *aggregator.AggregatorClient
 	testAggregatorClient *aggregator.AggregatorClient
 }
 
-func NewTaskStreamManager(client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, testAggregatorClient *aggregator.AggregatorClient, logger logging.Logger) (*TaskStreamManager, error) {
-	logger.Info("Initializing TaskStreamManager...")
+func NewTaskStreamManager(ctx context.Context, client redisClient.RedisClientInterface, aggClient *aggregator.AggregatorClient, testAggregatorClient *aggregator.AggregatorClient, logger observability.Logger) (*TaskStreamManager, error) {
+	logger.Info(ctx, "Initializing TaskStreamManager...")
 
 	tsm := &TaskStreamManager{
-		client:           client,
-		logger:           logger,
-		consumerGroups:   make(map[string]bool),
-		startTime:        time.Now(),
-		aggregatorClient:  aggClient,
+		client:               client,
+		logger:               logger,
+		consumerGroups:       make(map[string]bool),
+		startTime:            time.Now(),
+		aggregatorClient:     aggClient,
 		testAggregatorClient: testAggregatorClient,
 	}
 
-	logger.Info("TaskStreamManager initialized successfully")
-	metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(1)
+	logger.Info(ctx, "TaskStreamManager initialized successfully")
+	if metrics.ServiceStatus != nil {
+		metrics.ServiceStatus.WithLabelValues("task_stream_manager").Set(ctx, 1)
+	}
 	return tsm, nil
 }
 
-func (tsm *TaskStreamManager) Initialize() error {
-	tsm.logger.Info("Initializing task streams...")
+func (tsm *TaskStreamManager) Initialize(ctx context.Context) error {
+	tsm.logger.Info(ctx, "Initializing task streams...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetInitializationTimeout())
+	ctx, cancel := context.WithTimeout(ctx, config.GetInitializationTimeout())
 	defer cancel()
 
 	// Initialize task streams with specific expiration rules
@@ -58,78 +60,78 @@ func (tsm *TaskStreamManager) Initialize() error {
 	}
 
 	for stream, ttl := range streamConfigs {
-		tsm.logger.Debug("Creating stream", "stream", stream, "ttl", ttl)
+		tsm.logger.Debug(ctx, "Creating stream", observability.String("stream", stream), observability.Int64("ttl", int64(ttl)))
 		if err := tsm.client.CreateStreamIfNotExists(ctx, stream, ttl); err != nil {
-			tsm.logger.Error("Failed to initialize stream",
-				"stream", stream,
-				"error", err,
-				"ttl", ttl)
+			tsm.logger.Error(ctx, "Failed to initialize stream",
+				observability.String("stream", stream),
+				observability.Error(err),
+				observability.Int64("ttl", int64(ttl)))
 			return fmt.Errorf("failed to initialize stream %s: %w", stream, err)
 		}
-		tsm.logger.Info("Stream initialized successfully", "stream", stream, "ttl", ttl)
+		tsm.logger.Debug(ctx, "Stream initialized successfully", observability.String("stream", stream), observability.Int64("ttl", int64(ttl)))
 	}
 
 	// Register consumer groups for task processing
-	if err := tsm.RegisterConsumerGroup(StreamTaskDispatched, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskDispatched, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task completion
-	if err := tsm.RegisterConsumerGroup(StreamTaskCompleted, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskCompleted, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task failure
-	if err := tsm.RegisterConsumerGroup(StreamTaskFailed, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskFailed, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	// Register consumer groups for task retry
-	if err := tsm.RegisterConsumerGroup(StreamTaskRetry, "task-processors"); err != nil {
+	if err := tsm.RegisterConsumerGroup(ctx, StreamTaskRetry, "task-processors"); err != nil {
 		return fmt.Errorf("failed to register task-processors group: %w", err)
 	}
 
 	go tsm.StartStreamHealthMonitor(ctx)
 
-	tsm.logger.Info("All task streams initialized successfully")
+	tsm.logger.Info(ctx, "All task streams initialized successfully")
 
 	return nil
 }
 
 // RegisterConsumerGroup registers a consumer group for a stream
-func (tsm *TaskStreamManager) RegisterConsumerGroup(stream string, group string) error {
+func (tsm *TaskStreamManager) RegisterConsumerGroup(ctx context.Context, stream string, group string) error {
 	tsm.mu.Lock()
 	defer tsm.mu.Unlock()
 
 	key := fmt.Sprintf("%s:%s", stream, group)
 	if _, exists := tsm.consumerGroups[key]; exists {
-		tsm.logger.Debug("Consumer group already exists", "stream", stream, "group", group)
+		tsm.logger.Debug(ctx, "Consumer group already exists", observability.String("stream", stream), observability.String("group", group))
 		return nil
 	}
 
-	tsm.logger.Info("Registering consumer group", "stream", stream, "group", group)
+	tsm.logger.Debug(ctx, "Registering consumer group", observability.String("stream", stream), observability.String("group", group))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err := tsm.client.CreateConsumerGroup(ctx, stream, group); err != nil {
-		tsm.logger.Error("Failed to create consumer group",
-			"stream", stream,
-			"group", group,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to create consumer group",
+			observability.String("stream", stream),
+			observability.String("group", group),
+			observability.Error(err))
 		return fmt.Errorf("failed to create consumer group for %s: %w", stream, err)
 	}
 
 	tsm.consumerGroups[key] = true
-	tsm.logger.Info("Consumer group created successfully", "stream", stream, "group", group)
+	tsm.logger.Debug(ctx, "Consumer group created successfully", observability.String("stream", stream), observability.String("group", group))
 	return nil
 }
 
 // GetStreamInfo returns information about task streams
-func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
-	tsm.logger.Debug("Getting stream information")
+func (tsm *TaskStreamManager) GetStreamInfo(ctx context.Context) map[string]interface{} {
+	tsm.logger.Debug(ctx, "Getting stream information")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	streamLengths := make(map[string]int64)
@@ -138,9 +140,9 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 	for _, stream := range streams {
 		length, err := tsm.client.XLen(ctx, stream)
 		if err != nil {
-			tsm.logger.Warn("Failed to get stream length",
-				"stream", stream,
-				"error", err)
+			tsm.logger.Warn(ctx, "Failed to get stream length",
+				observability.String("stream", stream),
+				observability.Error(err))
 			length = -1
 		}
 		streamLengths[stream] = length
@@ -148,13 +150,21 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 		// Update stream length metrics
 		switch stream {
 		case StreamTaskDispatched:
-			metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("dispatched").Set(ctx, float64(length))
+			}
 		case StreamTaskRetry:
-			metrics.TaskStreamLengths.WithLabelValues("retry").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("retry").Set(ctx, float64(length))
+			}
 		case StreamTaskCompleted:
-			metrics.TaskStreamLengths.WithLabelValues("completed").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("completed").Set(ctx, float64(length))
+			}
 		case StreamTaskFailed:
-			metrics.TaskStreamLengths.WithLabelValues("failed").Set(float64(length))
+			if metrics.TaskStreamLengths != nil {
+				metrics.TaskStreamLengths.WithLabelValues("failed").Set(ctx, float64(length))
+			}
 		}
 	}
 
@@ -170,20 +180,20 @@ func (tsm *TaskStreamManager) GetStreamInfo() map[string]interface{} {
 		"consumer_groups":      len(tsm.consumerGroups),
 	}
 
-	tsm.logger.Debug("Stream information retrieved", "info", info)
+	tsm.logger.Debug(ctx, "Stream information retrieved", observability.Any("info", info))
 	return info
 }
 
-func (tsm *TaskStreamManager) Close() error {
-	tsm.logger.Info("Closing TaskStreamManager")
+func (tsm *TaskStreamManager) Close(ctx context.Context) error {
+	tsm.logger.Info(ctx, "Closing TaskStreamManager")
 
 	err := tsm.client.Close()
 	if err != nil {
-		tsm.logger.Error("Failed to close Redis client", "error", err)
+		tsm.logger.Error(ctx, "Failed to close Redis client", observability.Error(err))
 		return err
 	}
 
-	tsm.logger.Info("TaskStreamManager closed successfully")
+	tsm.logger.Info(ctx, "TaskStreamManager closed successfully")
 	return nil
 }
 
@@ -197,27 +207,27 @@ func (tsm *TaskStreamManager) storeTaskIndex(ctx context.Context, taskID int64, 
 	duration := time.Since(start)
 
 	if err != nil {
-		tsm.logger.Error("Failed to store task index",
-			"task_id", taskID,
-			"message_id", messageID,
-			"duration", duration,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to store task index",
+			observability.Int64("task_id", taskID),
+			observability.String("message_id", messageID),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to store task index: %w", err)
 	}
 
 	// Set TTL on the hash to ensure it expires (2 hours)
 	err = tsm.client.SetTTL(ctx, "task_id_to_message_id", 2*time.Hour)
 	if err != nil {
-		tsm.logger.Warn("Failed to set TTL on task index",
-			"task_id", taskID,
-			"error", err)
+		tsm.logger.Warn(ctx, "Failed to set TTL on task index",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
 		// Don't return error as the main operation succeeded
 	}
 
-	tsm.logger.Debug("Task index stored successfully",
-		"task_id", taskID,
-		"message_id", messageID,
-		"duration", duration)
+	tsm.logger.Debug(ctx, "Task index stored successfully",
+		observability.Int64("task_id", taskID),
+		observability.String("message_id", messageID),
+		observability.Duration("duration", duration))
 
 	return nil
 }
@@ -238,34 +248,34 @@ func (tsm *TaskStreamManager) addTaskToTimeoutTracking(ctx context.Context, task
 	duration := time.Since(start)
 
 	if err != nil {
-		tsm.logger.Error("Failed to add task to timeout tracking",
-			"task_id", taskID,
-			"timeout_timestamp", timeoutTimestamp,
-			"duration", duration,
-			"error", err)
+		tsm.logger.Error(ctx, "Failed to add task to timeout tracking",
+			observability.Int64("task_id", taskID),
+			observability.Float64("timeout_timestamp", timeoutTimestamp),
+			observability.Duration("duration", duration),
+			observability.Error(err))
 		return fmt.Errorf("failed to add task to timeout tracking: %w", err)
 	}
 
 	// Set TTL on the sorted set to ensure it expires (2 hours)
 	err = tsm.client.SetTTL(ctx, "dispatched_timeouts", 2*time.Hour)
 	if err != nil {
-		tsm.logger.Warn("Failed to set TTL on timeout tracking",
-			"task_id", taskID,
-			"error", err)
+		tsm.logger.Warn(ctx, "Failed to set TTL on timeout tracking",
+			observability.Int64("task_id", taskID),
+			observability.Error(err))
 		// Don't return error as the main operation succeeded
 	}
 
-	tsm.logger.Debug("Task added to timeout tracking successfully",
-		"task_id", taskID,
-		"timeout_timestamp", timeoutTimestamp,
-		"duration", duration)
+	tsm.logger.Debug(ctx, "Task added to timeout tracking successfully",
+		observability.Int64("task_id", taskID),
+		observability.Float64("timeout_timestamp", timeoutTimestamp),
+		observability.Duration("duration", duration))
 
 	return nil
 }
 
 // startStreamHealthMonitor monitors the health of Redis streams
 func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
-	tsm.logger.Info("Starting stream health monitor")
+	tsm.logger.Info(ctx, "Starting stream health monitor")
 
 	ticker := time.NewTicker(30 * time.Second) // Check health every 30 seconds
 	defer ticker.Stop()
@@ -273,11 +283,11 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			tsm.logger.Info("Stream health monitor shutting down")
+			tsm.logger.Info(ctx, "Stream health monitor shutting down")
 			return
 		case <-ticker.C:
 			// Get stream information
-			taskInfo := tsm.GetStreamInfo()
+			taskInfo := tsm.GetStreamInfo(ctx)
 
 			// logger.Info("Stream health status",
 			// 	"job_streams", jobInfo,
@@ -287,9 +297,9 @@ func (tsm *TaskStreamManager) StartStreamHealthMonitor(ctx context.Context) {
 			if taskLengths, ok := taskInfo["stream_lengths"].(map[string]int64); ok {
 				for stream, length := range taskLengths {
 					if length > 50 && stream != StreamTaskFailed { // Warn if more than 50 tasks in any stream, ignore the StreamTaskFailed stream
-						tsm.logger.Warn("High task stream length detected",
-							"stream", stream,
-							"length", length)
+						tsm.logger.Warn(ctx, "High task stream length detected",
+							observability.String("stream", stream),
+							observability.Int64("length", length))
 					}
 				}
 			}

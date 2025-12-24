@@ -11,17 +11,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // ContainerManager defines what the execution pipeline needs from a container manager
 type ContainerManager interface {
 	GetContainer(ctx context.Context, language types.Language) (*types.PooledContainer, error)
-	ReturnContainer(container *types.PooledContainer) error
+	ReturnContainer(ctx context.Context, container *types.PooledContainer) error
 	ExecuteInContainer(ctx context.Context, containerID string, filePath string, language types.Language) (*types.ExecutionResult, string, error)
-	MarkContainerAsFailed(containerID string, language types.Language, err error)
+	MarkContainerAsFailed(ctx context.Context, containerID string, language types.Language, err error)
 	KillExecProcess(ctx context.Context, execID string) error
 	GetPoolStats() map[types.Language]*types.PoolStats
 	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
@@ -40,16 +43,17 @@ type executionPipeline struct {
 	fileManager        FileManager
 	containerMgr       ContainerManager
 	config             config.ConfigProviderInterface
-	logger             logging.Logger
+	logger             observability.Logger
 	mutex              sync.RWMutex
 	activeExecutions   map[string]*types.ExecutionContext
 	stats              *types.PerformanceMetrics
 	activeExecutionsWG sync.WaitGroup // Track active executions for graceful shutdown
 	shutdownChan       chan struct{}  // Signal for shutdown
 	closed             bool
+	gasEstimator       *GasEstimator // Shared gas estimator with 7-day cache
 }
 
-func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManager, containerMgr ContainerManager, logger logging.Logger) *executionPipeline {
+func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManager, containerMgr ContainerManager, logger observability.Logger) *executionPipeline {
 	return &executionPipeline{
 		fileManager:      fileMgr,
 		containerMgr:     containerMgr,
@@ -57,6 +61,7 @@ func newExecutionPipeline(cfg config.ConfigProviderInterface, fileMgr FileManage
 		logger:           logger,
 		activeExecutions: make(map[string]*types.ExecutionContext),
 		shutdownChan:     make(chan struct{}),
+		gasEstimator:     NewGasEstimator(logger), // Shared gas estimator instance
 		stats: &types.PerformanceMetrics{
 			TotalExecutions:      0,
 			SuccessfulExecutions: 0,
@@ -75,7 +80,7 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
-	ep.logger.Infof("Starting execution %s for file: %s", executionID, fileURL)
+	ep.logger.Debug(ctx, "Starting execution", observability.String("executionID", executionID), observability.String("fileURL", fileURL))
 
 	// Check if pipeline is shutting down
 	select {
@@ -137,7 +142,7 @@ func (ep *executionPipeline) execute(ctx context.Context, fileURL string, fileLa
 	executionContext.CompletedAt = time.Now()
 	duration := time.Since(startTime)
 
-	ep.logger.Infof("Execution %s completed successfully in %v", executionID, duration)
+	ep.logger.Debug(ctx, "Execution completed successfully", observability.String("executionID", executionID), observability.Duration("duration", duration))
 	return result, nil
 }
 
@@ -146,7 +151,7 @@ func (ep *executionPipeline) executeSource(ctx context.Context, code string, lan
 	startTime := time.Now()
 	executionID := generateExecutionID()
 
-	ep.logger.Infof("Starting raw execution %s for language: %s", executionID, language)
+	ep.logger.Debug(ctx, "Starting raw execution", observability.String("executionID", executionID), observability.String("language", language))
 
 	select {
 	case <-ep.shutdownChan:
@@ -239,8 +244,8 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			if taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7 {
-				ep.logger.Debugf("Skipping to Stage 4: Only processing results for task_definition_id=%d", taskDefinitionID)
+			if (taskDefinitionID == 1 || taskDefinitionID == 3 || taskDefinitionID == 5 || taskDefinitionID == 7) && execCtx.FileURL == "" {
+				ep.logger.Debug(ctx, "Skipping to Stage 4: Only processing results for task_definition_id", observability.Int("taskDefinitionID", taskDefinitionID))
 				// No execution result available, so construct a minimal ExecutionResult to allow fee calculation
 				result := &types.ExecutionResult{
 					Stats:   types.DockerResourceStats{},
@@ -248,7 +253,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 					Success: true,
 					Error:   nil,
 				}
-				finalResult := ep.processResults(result, execCtx, alchemyAPIKey)
+				finalResult := ep.processResults(ctx, result, execCtx, alchemyAPIKey)
 				return finalResult, nil
 			}
 		}
@@ -256,10 +261,10 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	// Stage 1: Prepare file (download/validate) unless already provided (inline code)
 	var fileCtx *types.ExecutionContext
 	if existingPath := execCtx.Metadata["file_path"]; existingPath != "" {
-		ep.logger.Debugf("Stage 1: Using provided file path (inline source): %s", existingPath)
+		ep.logger.Debug(ctx, "Stage 1: Using provided file path (inline source)", observability.String("existingPath", existingPath))
 		fileCtx = execCtx
 	} else {
-		ep.logger.Debugf("Stage 1: Downloading and validating file")
+		ep.logger.Debug(ctx, "Stage 1: Downloading and validating file")
 		var err error
 		fileCtx, err = ep.fileManager.GetOrDownload(ctx, execCtx.FileURL, execCtx.FileLanguage)
 		if err != nil {
@@ -276,7 +281,7 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	}
 
 	// Stage 2: Get Container
-	ep.logger.Debugf("Stage 2: Getting container from pool")
+	ep.logger.Debug(ctx, "Stage 2: Getting container from pool")
 
 	// Determine language from file extension
 	filePath := fileCtx.Metadata["file_path"]
@@ -285,30 +290,30 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	}
 
 	language := types.GetLanguageFromFile(filePath)
-	ep.logger.Debugf("Detected language: %s for file: %s", language, filePath)
+	ep.logger.Debug(ctx, "Detected language", observability.String("language", string(language)), observability.String("filePath", filePath))
 
 	container, err := ep.containerMgr.GetContainer(ctx, language)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container: %w", err)
 	}
 
-	ep.logger.Debugf("Got container %s from %s pool", container.ID, container.Language)
+	ep.logger.Debug(ctx, "Got container from pool", observability.String("containerID", container.ID), observability.String("containerLanguage", string(container.Language)))
 
 	// Return container to pool synchronously for proper cleanup during shutdown
 	defer func() {
-		ep.logger.Debugf("Returning container %s to pool (sync)", container.ID)
-		if err := ep.containerMgr.ReturnContainer(container); err != nil {
-			ep.logger.Warnf("Failed to return container to pool: %v", err)
+		ep.logger.Debug(ctx, "Returning container to pool (sync)", observability.String("containerID", container.ID))
+		if err := ep.containerMgr.ReturnContainer(ctx, container); err != nil {
+			ep.logger.Warn(ctx, "Failed to return container to pool", observability.Error(err))
 		}
 	}()
 
 	// Stage 3: Execute Code
-	ep.logger.Debugf("Stage 3: Executing code in container %s", container.ID)
+	ep.logger.Debug(ctx, "Stage 3: Executing code in container", observability.String("containerID", container.ID))
 	result, execID, err := ep.containerMgr.ExecuteInContainer(ctx, container.ID, filePath, container.Language)
 	if err != nil {
 		// Mark container as failed if execution fails
-		ep.logger.Warnf("Execution failed in container %s, marking as failed: %v", container.ID, err)
-		ep.containerMgr.MarkContainerAsFailed(container.ID, container.Language, err)
+		ep.logger.Warn(ctx, "Execution failed in container, marking as failed", observability.String("containerID", container.ID), observability.Error(err))
+		ep.containerMgr.MarkContainerAsFailed(ctx, container.ID, container.Language, err)
 		return nil, fmt.Errorf("failed to execute code: %w", err)
 	}
 
@@ -319,35 +324,36 @@ func (ep *executionPipeline) executeStages(ctx context.Context, execCtx *types.E
 	// Check if execution was successful
 	if !result.Success {
 		// Mark container as failed if execution returned non-zero exit code
-		ep.logger.Warnf("Execution failed in container %s with error: %v", container.ID, result.Error)
-		ep.containerMgr.MarkContainerAsFailed(container.ID, container.Language, result.Error)
+		ep.logger.Warn(ctx, "Execution failed in container with error", observability.String("containerID", container.ID), observability.Error(result.Error))
+		ep.containerMgr.MarkContainerAsFailed(ctx, container.ID, container.Language, result.Error)
 	}
 
 	// Stage 4: Process Results
-	ep.logger.Debugf("Stage 4: Processing results")
-	finalResult := ep.processResults(result, execCtx, alchemyAPIKey)
+	ep.logger.Debug(ctx, "Stage 4: Processing results")
+	finalResult := ep.processResults(ctx, result, execCtx, alchemyAPIKey)
 
 	// Stage 5: Cleanup
 	// ep.logger.Debugf("Stage 5: Cleaning up")
 	// if err := ep.cleanupExecution(execCtx); err != nil {
-	// 	ep.logger.Warnf("Failed to cleanup execution: %v", err)
+	// 	ep.logger.Warn(ctx, "Failed to cleanup execution", observability.Error(err))
 	// }
 
 	return finalResult, nil
 }
 
-func (ep *executionPipeline) processResults(result *types.ExecutionResult, execCtx *types.ExecutionContext, alchemyAPIKey string) *types.ExecutionResult {
+func (ep *executionPipeline) processResults(ctx context.Context, result *types.ExecutionResult, execCtx *types.ExecutionContext, alchemyAPIKey string) *types.ExecutionResult {
 	// Add execution metadata
 	execCtx.Metadata["execution_time"] = result.Stats.ExecutionTime.String()
 	execCtx.Metadata["static_complexity"] = fmt.Sprintf("%.6f", result.Stats.StaticComplexity)
 	execCtx.Metadata["dynamic_complexity"] = fmt.Sprintf("%.6f", result.Stats.DynamicComplexity)
 
-	// Extract arguments for dynamic tasks (2, 4, 6)
+	// Extract arguments for dynamic tasks (2, 4, 6) and custom scripts (7)
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		var taskDefinitionID int
 		if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
-			ep.logger.Infof("task defination id in process %d",taskDefinitionID)
-			if taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6 {
+			ep.logger.Debug(ctx, "task defination id in process", observability.Int("taskDefinitionID", taskDefinitionID))
+			switch taskDefinitionID {
+			case 2, 4, 6:
 				// For dynamic tasks, the output is expected to be a JSON array of arguments
 				// We store this in metadata to be used by calculateFees
 				// Clean up output - sometimes it might have newlines or extra whitespace
@@ -355,17 +361,36 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 				// Basic validation that it looks like a JSON array
 				if strings.HasPrefix(cleanOutput, "[") && strings.HasSuffix(cleanOutput, "]") {
 					execCtx.Metadata["on_chain_args"] = cleanOutput
-				// } else {
+					// } else {
 					// If it's not a JSON array, we might want to log a warning or handle it
 					// For now, we'll just log it
-					// ep.logger.Warnf("Dynamic task output does not look like a JSON array: %s", cleanOutput)
+					// ep.logger.Warn(ctx, "Dynamic task output does not look like a JSON array", observability.String("cleanOutput", cleanOutput))
+				}
+			case 7:
+				// For custom scripts, parse the JSON output to extract targetContract and calldata
+				cleanOutput := strings.TrimSpace(result.Output)
+				if cleanOutput != "" && strings.HasPrefix(cleanOutput, "{") {
+					var scriptOutput struct {
+						ShouldExecute  bool   `json:"shouldExecute"`
+						TargetContract string `json:"targetContract"`
+						Calldata       string `json:"calldata"`
+					}
+					if err := json.Unmarshal([]byte(cleanOutput), &scriptOutput); err == nil {
+						if scriptOutput.ShouldExecute && scriptOutput.TargetContract != "" && scriptOutput.Calldata != "" {
+							execCtx.Metadata["script_target_contract"] = scriptOutput.TargetContract
+							execCtx.Metadata["script_calldata"] = scriptOutput.Calldata
+							ep.logger.Debug(ctx, "Custom script output", observability.String("targetContract", scriptOutput.TargetContract), observability.String("calldata", scriptOutput.Calldata[:min(len(scriptOutput.Calldata), 66)]))
+						}
+					} else {
+						ep.logger.Warn(ctx, "Failed to parse custom script output", observability.Error(err))
+					}
 				}
 			}
 		}
 	}
 
 	// Calculate fees
-	fees, currentFees := ep.calculateFees(execCtx, alchemyAPIKey)
+	fees, currentFees := ep.calculateFees(ctx, execCtx, alchemyAPIKey)
 	execCtx.Metadata["fees"] = fees.String()
 	execCtx.Metadata["current_fees"] = currentFees.String()
 	result.Stats.TotalCost = fees
@@ -374,19 +399,118 @@ func (ep *executionPipeline) processResults(result *types.ExecutionResult, execC
 	return result
 }
 
-func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alchemyAPIKey string) (*big.Int, *big.Int) {
+// getChainlinkETHUSDPrice fetches ETH/USD price from Chainlink oracle on Arbitrum One
+// Returns price in USD (float64) and error
+// We use Arbitrum One as a single source of truth since ETH/USD price is the same across all chains
+func (ep *executionPipeline) getChainlinkETHUSDPrice(ctx context.Context, alchemyAPIKey string) (float64, error) {
+	// Always use Arbitrum One's Chainlink ETH/USD price feed
+	const arbitrumOneChainID = "42161"
+	const arbitrumOnePriceFeedAddr = "0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6" // Arbitrum One ETH/USD
+
+	// Get Ethereum client for Arbitrum One
+	client, err := ep.gasEstimator.getOrCreateClient(ctx, arbitrumOneChainID, alchemyAPIKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get eth client for Arbitrum One (chain %s): %w", arbitrumOneChainID, err)
+	}
+
+	// Chainlink Aggregator V3 ABI for latestRoundData()
+	// function latestRoundData() external view returns (
+	//     uint80 roundId,
+	//     int256 answer,
+	//     uint256 startedAt,
+	//     uint256 updatedAt,
+	//     uint80 answeredInRound
+	// )
+	// The answer is in 8 decimals (e.g., 300000000000 = $3000)
+	priceFeedABI := `[{"inputs":[],"name":"latestRoundData","outputs":[{"internalType":"uint80","name":"roundId","type":"uint80"},{"internalType":"int256","name":"answer","type":"int256"},{"internalType":"uint256","name":"startedAt","type":"uint256"},{"internalType":"uint256","name":"updatedAt","type":"uint256"},{"internalType":"uint80","name":"answeredInRound","type":"uint80"}],"stateMutability":"view","type":"function"}]`
+
+	// Parse ABI
+	abiParsed, err := abi.JSON(strings.NewReader(priceFeedABI))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse Chainlink ABI: %w", err)
+	}
+
+	// Pack the function call
+	callData, err := abiParsed.Pack("latestRoundData")
+	if err != nil {
+		return 0, fmt.Errorf("failed to pack latestRoundData call: %w", err)
+	}
+
+	// Call the contract
+	priceFeedAddress := common.HexToAddress(arbitrumOnePriceFeedAddr)
+	result, err := client.CallContract(ctx, ethereum.CallMsg{
+		To:   &priceFeedAddress,
+		Data: callData,
+	}, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to call Chainlink contract on Arbitrum One: %w", err)
+	}
+
+	// Unpack the result
+	// Unpack returns (roundId, answer, startedAt, updatedAt, answeredInRound)
+	outputs, err := abiParsed.Unpack("latestRoundData", result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unpack Chainlink response: %w", err)
+	}
+
+	// Extract values from outputs
+	if len(outputs) < 5 {
+		return 0, fmt.Errorf("invalid Chainlink response: expected 5 values, got %d", len(outputs))
+	}
+
+	// uint80 is represented as *big.Int in Go
+	var answer *big.Int
+	var updatedAt *big.Int
+
+	// Extract answer (index 1) and updatedAt (index 3)
+	if answerBig, ok := outputs[1].(*big.Int); ok {
+		answer = answerBig
+	} else {
+		return 0, fmt.Errorf("invalid answer type: expected *big.Int")
+	}
+
+	if updatedAtBig, ok := outputs[3].(*big.Int); ok {
+		updatedAt = updatedAtBig
+	}
+
+	// Check if answer is valid (not zero or negative)
+	if answer == nil || answer.Sign() <= 0 {
+		return 0, fmt.Errorf("invalid Chainlink price: answer is zero or negative")
+	}
+
+	// Check if price is stale (updated more than 1 hour ago)
+	if updatedAt != nil {
+		now := time.Now().Unix()
+		updatedAtUnix := updatedAt.Int64()
+		if updatedAtUnix > 0 && now-updatedAtUnix > 3600 {
+			ep.logger.Warn(ctx, "Chainlink price feed is stale", observability.Int64("updatedAtUnix", now-updatedAtUnix))
+		}
+	}
+
+	// Convert answer from 8 decimals to USD price
+	// answer is in 8 decimals, so divide by 1e8
+	priceFloat := new(big.Float).SetInt(answer)
+	decimals := new(big.Float).SetInt(big.NewInt(1e8))
+	priceFloat.Quo(priceFloat, decimals)
+	price, _ := priceFloat.Float64()
+
+	ep.logger.Debug(ctx, "Fetched ETH/USD price from Chainlink on Arbitrum One", observability.String("arbitrumOnePriceFeedAddr", arbitrumOnePriceFeedAddr), observability.Float64("price", price))
+	return price, nil
+}
+
+func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.ExecutionContext, alchemyAPIKey string) (*big.Int, *big.Int) {
 	feesConfig := ep.config.GetFeesConfig()
 
 	// Get task definition ID from metadata
 	var taskDefinitionID int
 	if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
 		if parsed, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err != nil || parsed != 1 {
-			ep.logger.Warnf("Failed to parse task_definition_id: %s", taskDefStr)
+			ep.logger.Warn(ctx, "Failed to parse task_definition_id", observability.String("taskDefStr", taskDefStr))
 			taskDefinitionID = 0
 		}
 	}
 
-	ep.logger.Infof("task defination id in the calculate fees: %d",taskDefinitionID)
+	ep.logger.Debug(ctx, "task defination id in the calculate fees", observability.Int("taskDefinitionID", taskDefinitionID))
 
 	// Calculate off-chain fees based on task definition ID
 	var offChainFeeUSD float64
@@ -394,30 +518,30 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	case 1, 3, 5:
 		// Static tasks
 		offChainFeeUSD = feesConfig.StaticOffChainFeeUSD
-		ep.logger.Debugf("Using static off-chain fee: $%.6f USD", offChainFeeUSD)
+		ep.logger.Debug(ctx, "Using static off-chain fee", observability.Float64("offChainFeeUSD", offChainFeeUSD))
 	case 2, 4, 6:
 		// Dynamic tasks
 		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
-		ep.logger.Debugf("Using dynamic off-chain fee: $%.6f USD", offChainFeeUSD)
+		ep.logger.Debug(ctx, "Using dynamic off-chain fee", observability.Float64("offChainFeeUSD", offChainFeeUSD))
 	case 7:
-		// Custom script - only off-chain, no on-chain
-		offChainFeeUSD = feesConfig.CustomScriptFeeUSD
-		ep.logger.Debugf("Using custom script off-chain fee: $%.6f USD", offChainFeeUSD)
+		// Custom script - uses dynamic off-chain fee (same as 2, 4, 6)
+		offChainFeeUSD = feesConfig.DynamicOffChainFeeUSD
+		ep.logger.Debug(ctx, "Using dynamic off-chain fee for custom script", observability.Float64("offChainFeeUSD", offChainFeeUSD))
 	default:
 		// Fallback to old calculation for unknown task types
-		ep.logger.Warnf("Unknown task_definition_id: %d, using legacy fee calculation", taskDefinitionID)
-		return ep.calculateLegacyFees(execCtx, feesConfig), big.NewInt(0)
+		ep.logger.Warn(ctx, "Unknown task_definition_id, using legacy fee calculation", observability.Int("taskDefinitionID", taskDefinitionID))
+		return ep.calculateLegacyFees(ctx, execCtx, feesConfig), big.NewInt(0)
 	}
 
 	// Fetch ETH to USD conversion rate from CoinGecko API
 	resp, err := http.Get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd")
 	if err != nil {
-		ep.logger.Warnf("failed to fetch ETH-USD rate from CoinGecko: %v", err)
+		ep.logger.Warn(ctx, "failed to fetch ETH-USD rate from CoinGecko", observability.Error(err))
 		return big.NewInt(0), big.NewInt(0)
 	}
-	defer func () {
+	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			ep.logger.Errorf("Error closing response body: %v", err)
+			ep.logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 
@@ -427,10 +551,24 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		} `json:"ethereum"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&coingeckoResp); err != nil {
-		ep.logger.Warnf("failed to decode CoinGecko response: %v", err)
+		ep.logger.Warn(ctx, "failed to decode CoinGecko response", observability.Error(err))
 		return big.NewInt(0), big.NewInt(0)
 	}
 	EthToUSDRate := coingeckoResp.Ethereum.USD
+
+	// Check if ETH/USD rate is valid (not zero or negative)
+	if EthToUSDRate <= 0 {
+		ep.logger.Warn(ctx, "invalid ETH/USD rate from CoinGecko, fetching from Chainlink oracle on Arbitrum One", observability.Float64("EthToUSDRate", EthToUSDRate))
+		// Fetch from Chainlink oracle on Arbitrum One as fallback
+		ctx := context.Background()
+		chainlinkPrice, err := ep.getChainlinkETHUSDPrice(ctx, alchemyAPIKey)
+		if err != nil {
+			ep.logger.Warn(ctx, "failed to fetch ETH/USD rate from Chainlink on Arbitrum One", observability.Error(err))
+			return big.NewInt(0), big.NewInt(0)
+		}
+		EthToUSDRate = chainlinkPrice
+		ep.logger.Debug(ctx, "Using Chainlink ETH/USD rate for Arbitrum One", observability.Float64("EthToUSDRate", EthToUSDRate))
+	}
 
 	// Convert off-chain fee from USD to Wei
 	offChainFeeInEther := offChainFeeUSD / EthToUSDRate
@@ -439,11 +577,131 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	offChainFeeFloat.Mul(offChainFeeFloat, weiMultiplier)
 	offChainFeeWei, _ := offChainFeeFloat.Int(nil)
 
-	// For task definition ID 7 (custom script), only return off-chain fees
+	// Safety check: ensure offChainFeeWei is not nil (could happen if float is Inf or NaN)
+	if offChainFeeWei == nil {
+		ep.logger.Warn(ctx, "offChainFeeWei conversion resulted in nil, using $3000 USD fallback")
+		// Use $3000 USD as fallback
+		fallbackFeeInEther := 3000.0 / EthToUSDRate
+		fallbackFeeFloat := big.NewFloat(fallbackFeeInEther)
+		weiMultiplierFallback := big.NewFloat(1e18)
+		fallbackFeeFloat.Mul(fallbackFeeFloat, weiMultiplierFallback)
+		offChainFeeWei, _ = fallbackFeeFloat.Int(nil)
+	}
+
+	// For task definition ID 7 (custom script), calculate on-chain fees using fixed 1M gas
+	// During actual execution (in keeper), real gas estimation with actual calldata is used
 	if taskDefinitionID == 7 {
-		ep.logger.Debugf("Fee calculation for custom script (ID 7): offchain_fee_usd=%.6f, offchain_fee_wei=%s",
-			offChainFeeUSD, offChainFeeWei.String())
-		return offChainFeeWei, offChainFeeWei
+		var onChainFeeWei = big.NewInt(0)
+		var currentOnChainFeeWei = big.NewInt(0)
+		var aggregatorOnChainFeeWei = big.NewInt(0)
+
+		chainID := execCtx.Metadata["target_chain_id"]
+		ctx := context.Background()
+
+		if chainID != "" {
+			// Check if we have real calldata from script execution
+			scriptTargetContract := execCtx.Metadata["script_target_contract"]
+			scriptCalldata := execCtx.Metadata["script_calldata"]
+			fromAddress := execCtx.Metadata["from_address"]
+
+			var gasLimit uint64
+			var gasPrice, currentGasPrice *big.Int
+
+			if scriptTargetContract != "" && scriptCalldata != "" {
+				// EXECUTION: Use real gas estimation with actual calldata
+				ep.logger.Debug(ctx, "Custom script: using real calldata for gas estimation")
+
+				var err error
+				gasLimit, gasPrice, currentGasPrice, err = ep.gasEstimator.EstimateGasWithCalldata(
+					ctx,
+					chainID,
+					scriptTargetContract,
+					common.FromHex(scriptCalldata), // Properly decode hex string to bytes
+					fromAddress,
+					alchemyAPIKey,
+				)
+				if err != nil {
+					ep.logger.Warn(ctx, "Failed to estimate gas with calldata, using fallback 600K gas", observability.Error(err))
+					gasLimit = 600000
+					gasPrice = big.NewInt(1000000000)
+					currentGasPrice = gasPrice
+				}
+
+				// Add 20% buffer to gas limit (for execution safety margin)
+				gasLimit = gasLimit * 120 / 100
+
+				ep.logger.Debug(ctx, "Custom script execution", observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("currentGasPrice", currentGasPrice.String()))
+			} else {
+				// JOB CREATION: Use fixed 1M gas (conservative estimate)
+				gasLimit = uint64(1000000)
+
+				var err error
+				gasPrice, err = ep.gasEstimator.GetGasPrice(ctx, chainID, alchemyAPIKey)
+				if err != nil {
+					ep.logger.Warn(ctx, "Failed to get gas price for custom script, using default", observability.Error(err))
+					gasPrice = big.NewInt(1000000000) // 1 gwei fallback
+				}
+
+				currentGasPrice, err = ep.gasEstimator.GetCurrentGasPrice(ctx, chainID, alchemyAPIKey)
+				if err != nil {
+					ep.logger.Warn(ctx, "Failed to get current gas price, using historical price", observability.Error(err))
+					currentGasPrice = gasPrice
+				}
+
+				ep.logger.Debug(ctx, "Custom script job creation", observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("currentGasPrice", currentGasPrice.String()))
+			}
+
+			// Calculate on-chain fee
+			onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
+			currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
+		} else {
+			ep.logger.Debug(ctx, "Custom script: no chain ID provided, skipping on-chain fee calculation")
+		}
+
+		// Calculate aggregator fee (same as other task types)
+		const aggregatorGasUsed = uint64(720000)
+		const (
+			baseMainnetChainID = "8453"
+			baseTestnetChainID = "84532"
+		)
+		targetChainID := execCtx.Metadata["target_chain_id"]
+		var baseAggregatorFeeChainID string
+		if targetChainID == "42161" || targetChainID == "8453" {
+			baseAggregatorFeeChainID = baseMainnetChainID
+		} else {
+			baseAggregatorFeeChainID = baseTestnetChainID
+		}
+
+		// Use shared gasEstimator for aggregator fee
+		ethClient, err := ep.gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
+		var aggregatorGasPrice *big.Int
+		if err != nil {
+			ep.logger.Warn(ctx, "Failed to get eth client for aggregator gas estimation", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.Error(err))
+			aggregatorGasPrice = big.NewInt(1000000000) // 1 gwei fallback
+		} else {
+			aggregatorGasPrice, err = ethClient.SuggestGasPrice(ctx)
+			if err != nil {
+				ep.logger.Warn(ctx, "Failed to get current gas price for aggregator", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.Error(err))
+				aggregatorGasPrice = big.NewInt(1000000000)
+			} else {
+				ep.logger.Debug(ctx, "Current gas price for aggregator fee (custom script)", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.String("aggregatorGasPrice", aggregatorGasPrice.String()))
+			}
+		}
+
+		aggregatorOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
+
+		// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
+		totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
+		currentTotalFeeWei := new(big.Int).Add(offChainFeeWei, currentOnChainFeeWei)
+		currentTotalFeeWei.Add(currentTotalFeeWei, aggregatorOnChainFeeWei)
+		totalFeeWei.Add(totalFeeWei, aggregatorOnChainFeeWei)
+		// Apply 20% buffer (same as other task types)
+		totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
+		totalFeeWei.Div(totalFeeWei, big.NewInt(100))
+
+		ep.logger.Debug(ctx, "Fee calculation for custom script (ID 7)", observability.Float64("offChainFeeUSD", offChainFeeUSD), observability.String("offChainFeeWei", offChainFeeWei.String()), observability.String("onChainFeeWei", onChainFeeWei.String()), observability.String("aggregatorOnChainFeeWei", aggregatorOnChainFeeWei.String()), observability.String("totalFeeWei", totalFeeWei.String()), observability.String("currentTotalFeeWei", currentTotalFeeWei.String()))
+
+		return totalFeeWei, currentTotalFeeWei
 	}
 
 	// Initialize on-chain related fee variables to zero by default
@@ -462,7 +720,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 			var args []interface{}
 			if argsStr, ok := execCtx.Metadata["on_chain_args"]; ok && argsStr != "" {
 				if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
-					ep.logger.Warnf("Failed to parse on_chain_args: %v, using empty args", err)
+					ep.logger.Warn(ctx, "Failed to parse on_chain_args, using empty args", observability.Error(err))
 					args = []interface{}{}
 				}
 			} else {
@@ -473,11 +731,7 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 			fromAddress := execCtx.Metadata["from_address"]
 
 			// Estimate gas for the on-chain transaction
-			ctx := context.Background()
-			gasEstimator := NewGasEstimator(ep.logger)
-			defer gasEstimator.Close()
-
-			gasLimit, gasPrice, currentGasPrice, err := gasEstimator.EstimateGasForFunction(
+			gasLimit, gasPrice, currentGasPrice, err := ep.gasEstimator.EstimateGasForFunction(
 				ctx,
 				chainID,
 				contractAddr,
@@ -489,25 +743,24 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 			)
 
 			if err != nil {
-				ep.logger.Warnf("Failed to estimate gas: %v, using default on-chain fee", err)
+				ep.logger.Warn(ctx, "Failed to estimate gas, using default on-chain fee", observability.Error(err))
 				// Use a default on-chain fee if estimation fails (e.g., 0.001 ETH)
 				defaultOnChainFee := big.NewFloat(0.001)
 				defaultOnChainFee.Mul(defaultOnChainFee, weiMultiplier)
 				onChainFeeWei, _ = defaultOnChainFee.Int(nil)
 			} else {
 				// Calculate gas cost in Wei
-				onChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
-				currentOnChainFeeWei = gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
-				ep.logger.Debugf("Gas estimation: gasLimit=%d, gasPrice=%s, currentGasPrice=%s, gasCost=%s Wei, currentGasCost=%s Wei",
-					gasLimit, gasPrice.String(), currentGasPrice.String(), onChainFeeWei.String(), currentOnChainFeeWei.String())
+				onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
+				currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
+				ep.logger.Debug(ctx, "Gas estimation", observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("currentGasPrice", currentGasPrice.String()), observability.String("gasCost", onChainFeeWei.String()), observability.String("currentGasCost", currentOnChainFeeWei.String()))
 			}
 		} else {
-			ep.logger.Warnf("Missing contract details for on-chain fee calculation")
+			ep.logger.Warn(ctx, "Missing contract details for on-chain fee calculation")
 			onChainFeeWei = big.NewInt(0)
 			currentOnChainFeeWei = big.NewInt(0)
 		}
 	} else {
-		ep.logger.Debugf("No chain ID provided, skipping on-chain fee calculation")
+		ep.logger.Debug(ctx, "No chain ID provided, skipping on-chain fee calculation")
 		onChainFeeWei = big.NewInt(0)
 		currentOnChainFeeWei = big.NewInt(0)
 	}
@@ -535,32 +788,26 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 		baseAggregatorFeeChainID = baseTestnetChainID
 	}
 
-	ctx := context.Background()
-	gasEstimator := NewGasEstimator(ep.logger)
-	defer gasEstimator.Close()
-
-	// Use eth client to fetch current gas price (not historical/cached)
-	ethClient, err := gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
+	// Use shared gasEstimator to fetch current gas price
+	ethClient, err := ep.gasEstimator.getOrCreateClient(ctx, baseAggregatorFeeChainID, alchemyAPIKey)
 	var aggregatorGasPrice *big.Int
 	if err != nil {
-		ep.logger.Warnf("Failed to get eth client for aggregator gas estimation on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+		ep.logger.Warn(ctx, "Failed to get eth client for aggregator gas estimation", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.Error(err))
 		aggregatorGasPrice = big.NewInt(1000000000) // 1 gwei fallback
 	} else {
 		aggregatorGasPrice, err = ethClient.SuggestGasPrice(ctx)
 		if err != nil {
-			ep.logger.Warnf("Failed to get current gas price for aggregator on chain %s: %v, using default", baseAggregatorFeeChainID, err)
+			ep.logger.Warn(ctx, "Failed to get current gas price for aggregator", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.Error(err))
 			aggregatorGasPrice = big.NewInt(1000000000)
 		} else {
-			ep.logger.Debugf("Current gas price for aggregator fee, chain %s: %s Wei", baseAggregatorFeeChainID, aggregatorGasPrice.String())
+			ep.logger.Debug(ctx, "Current gas price for aggregator fee", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.String("aggregatorGasPrice", aggregatorGasPrice.String()))
 		}
 	}
 
-	aggregatorOnChainFeeWei = gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
+	aggregatorOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(aggregatorGasUsed, aggregatorGasPrice)
 
 	// Log aggregator fee calculation
-	ep.logger.Debugf("Aggregator on-chain fee: baseAggregatorFeeChainID=%s, gasUsed=%d, currentGasPrice=%s Wei, aggregatorFee=%s Wei",
-		baseAggregatorFeeChainID, aggregatorGasUsed, aggregatorGasPrice.String(), aggregatorOnChainFeeWei.String())
-
+	ep.logger.Debug(ctx, "Aggregator on-chain fee", observability.String("baseAggregatorFeeChainID", baseAggregatorFeeChainID), observability.Uint64("gasUsed", aggregatorGasUsed), observability.String("aggregatorGasPrice", aggregatorGasPrice.String()), observability.String("aggregatorOnChainFeeWei", aggregatorOnChainFeeWei.String()))
 	// Total fee = off-chain fee + on-chain fee + aggregator on-chain fee
 	totalFeeWei := new(big.Int).Add(offChainFeeWei, onChainFeeWei)
 	currentTotalFeeWei := new(big.Int).Add(offChainFeeWei, currentOnChainFeeWei)
@@ -569,26 +816,25 @@ func (ep *executionPipeline) calculateFees(execCtx *types.ExecutionContext, alch
 	totalFeeWei.Mul(totalFeeWei, big.NewInt(120))
 	totalFeeWei.Div(totalFeeWei, big.NewInt(100)) // 20% buffer
 
-	ep.logger.Infof("Fee calculation: task_definition_id=%d, offchain_fee_usd=%.6f, offchain_fee_wei=%s, onchain_fee_wei=%s, current_onchain_fee_wei=%s, aggregator_onchain_fee_wei=%s, total_fee_wei=%s, current_total_fee_wei=%s",
-		taskDefinitionID, offChainFeeUSD, offChainFeeWei.String(), onChainFeeWei.String(), currentOnChainFeeWei.String(), aggregatorOnChainFeeWei.String(), totalFeeWei.String(), currentTotalFeeWei.String())
+	ep.logger.Debug(ctx, "Fee calculation", observability.Int("taskDefinitionID", taskDefinitionID), observability.Float64("offChainFeeUSD", offChainFeeUSD), observability.String("offChainFeeWei", offChainFeeWei.String()), observability.String("onChainFeeWei", onChainFeeWei.String()), observability.String("currentOnChainFeeWei", currentOnChainFeeWei.String()), observability.String("aggregatorOnChainFeeWei", aggregatorOnChainFeeWei.String()), observability.String("totalFeeWei", totalFeeWei.String()), observability.String("currentTotalFeeWei", currentTotalFeeWei.String()))
 	return totalFeeWei, currentTotalFeeWei
 }
 
 // calculateLegacyFees is the old fee calculation method for backward compatibility
-func (ep *executionPipeline) calculateLegacyFees(execCtx *types.ExecutionContext, feesConfig config.ExecutionFeeConfig) *big.Int {
+func (ep *executionPipeline) calculateLegacyFees(ctx context.Context, execCtx *types.ExecutionContext, feesConfig config.ExecutionFeeConfig) *big.Int {
 	var staticComplexity, dynamicComplexity float64
 
 	// Try to get complexity from metadata first (set in processResults)
 	if staticStr, ok := execCtx.Metadata["static_complexity"]; ok {
 		if parsed, err := fmt.Sscanf(staticStr, "%f", &staticComplexity); err != nil || parsed != 1 {
-			ep.logger.Warnf("Failed to parse static complexity: %s", staticStr)
+			ep.logger.Warn(ctx, "Failed to parse static complexity", observability.String("staticStr", staticStr))
 			staticComplexity = 0.0
 		}
 	}
 
 	if dynamicStr, ok := execCtx.Metadata["dynamic_complexity"]; ok {
 		if parsed, err := fmt.Sscanf(dynamicStr, "%f", &dynamicComplexity); err != nil || parsed != 1 {
-			ep.logger.Warnf("Failed to parse dynamic complexity: %s", dynamicStr)
+			ep.logger.Warn(ctx, "Failed to parse dynamic complexity", observability.String("dynamicStr", dynamicStr))
 			dynamicComplexity = 0.0
 		}
 	}
@@ -614,8 +860,7 @@ func (ep *executionPipeline) calculateLegacyFees(execCtx *types.ExecutionContext
 	// Convert to big.Int (Wei)
 	feeWei, _ := feeFloat.Int(nil)
 
-	ep.logger.Debugf("Legacy fee calculation: static_complexity=%.6f, dynamic_complexity=%.6f, x=%.6f, fee_in_tg=%.6f, fee_in_ether=%.6f, fee_in_wei=%s",
-		staticComplexity, dynamicComplexity, x, feeInTG, feeInEther, feeWei.String())
+	ep.logger.Debug(ctx, "Legacy fee calculation", observability.Float64("staticComplexity", staticComplexity), observability.Float64("dynamicComplexity", dynamicComplexity), observability.Float64("x", x), observability.Float64("feeInTG", feeInTG), observability.Float64("feeInEther", feeInEther), observability.String("feeWei", feeWei.String()))
 
 	return feeWei
 }
@@ -639,7 +884,7 @@ func (ep *executionPipeline) getActiveExecutions() []*types.ExecutionContext {
 }
 
 // Close gracefully shuts down the execution pipeline
-func (ep *executionPipeline) close() error {
+func (ep *executionPipeline) close(ctx context.Context) error {
 	ep.mutex.Lock()
 	defer ep.mutex.Unlock()
 
@@ -647,7 +892,7 @@ func (ep *executionPipeline) close() error {
 		return nil
 	}
 
-	ep.logger.Info("Closing execution pipeline")
+	ep.logger.Debug(ctx, "Closing execution pipeline")
 
 	// Signal shutdown to prevent new executions
 	close(ep.shutdownChan)
@@ -655,7 +900,7 @@ func (ep *executionPipeline) close() error {
 
 	// Cancel all active executions
 	for executionID, execCtx := range ep.activeExecutions {
-		ep.logger.Infof("Cancelling active execution: %s", executionID)
+		ep.logger.Debug(ctx, "Cancelling active execution", observability.String("executionID", executionID))
 		if execCtx.State.CancelFunc != nil {
 			execCtx.State.CancelFunc()
 		}
@@ -670,16 +915,16 @@ func (ep *executionPipeline) close() error {
 
 	select {
 	case <-done:
-		ep.logger.Info("All active executions completed")
+		ep.logger.Debug(ctx, "All active executions completed")
 	case <-time.After(30 * time.Second):
-		ep.logger.Warn("Timeout waiting for active executions to complete")
+		ep.logger.Warn(ctx, "Timeout waiting for active executions to complete")
 	}
 
-	ep.logger.Info("Execution pipeline closed")
+	ep.logger.Debug(ctx, "Execution pipeline closed")
 	return nil
 }
 
-func (ep *executionPipeline) cancelExecution(executionID string) error {
+func (ep *executionPipeline) cancelExecution(ctx context.Context, executionID string) error {
 	ep.mutex.Lock()
 	defer ep.mutex.Unlock()
 
@@ -691,22 +936,22 @@ func (ep *executionPipeline) cancelExecution(executionID string) error {
 	// Actually cancel the execution by calling the cancel function
 	if exec.State.CancelFunc != nil {
 		exec.State.CancelFunc()
-		ep.logger.Infof("Execution %s cancelled - context cancellation will terminate Docker processes", executionID)
+		ep.logger.Debug(ctx, "Execution cancelled - context cancellation will terminate Docker processes", observability.String("executionID", executionID))
 	} else {
-		ep.logger.Warnf("Execution %s has no cancel function - marking as cancelled", executionID)
+		ep.logger.Warn(ctx, "Execution has no cancel function - marking as cancelled", observability.String("executionID", executionID))
 	}
 
 	// Attempt to terminate the Docker exec process if we have the exec ID
 	if exec.State.ExecID != "" {
-		ep.logger.Infof("Attempting to terminate Docker exec process %s for execution %s", exec.State.ExecID, executionID)
+		ep.logger.Debug(ctx, "Attempting to terminate Docker exec process", observability.String("execID", exec.State.ExecID), observability.String("executionID", executionID))
 		if err := ep.containerMgr.KillExecProcess(context.Background(), exec.State.ExecID); err != nil {
-			ep.logger.Warnf("Failed to terminate exec process %s: %v", exec.State.ExecID, err)
+			ep.logger.Warn(ctx, "Failed to terminate exec process", observability.String("execID", exec.State.ExecID), observability.Error(err))
 		}
 	}
 
 	exec.CompletedAt = time.Now()
 
-	ep.logger.Infof("Execution %s cancelled", executionID)
+	ep.logger.Debug(ctx, "Execution cancelled", observability.String("executionID", executionID))
 	return nil
 }
 

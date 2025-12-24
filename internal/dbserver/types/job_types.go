@@ -73,9 +73,9 @@ type CreateJobData struct {
 
 	// Target fields (common for all job types)
 	TargetChainID             string   `json:"target_chain_id" validate:"required,chain_id"`
-	TargetContractAddress     string   `json:"target_contract_address" validate:"required,ethereum_address"`
-	TargetFunction            string   `json:"target_function" validate:"required"`
-	ABI                       string   `json:"abi" validate:"required"`
+	TargetContractAddress     string   `json:"target_contract_address" validate:"required_unless=TaskDefinitionID 7,ethereum_address"`
+	TargetFunction            string   `json:"target_function" validate:"required_unless=TaskDefinitionID 7"`
+	ABI                       string   `json:"abi" validate:"required_unless=TaskDefinitionID 7"`
 	ArgType                   int      `json:"arg_type" validate:"required"`
 	Arguments                 []string `json:"arguments" validate:"omitempty"`
 	DynamicArgumentsScriptUrl string   `json:"dynamic_arguments_script_url,omitempty" validate:"omitempty,ipfs_url"`

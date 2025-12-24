@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
 	// "time"
 
 	// "github.com/ethereum/go-ethereum/crypto"
@@ -14,10 +15,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	dockertypes "github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // ExecuteCustomScript handles custom script execution (TaskDefinitionID = 7)
-// Returns: script output, storage updates, error
+// Returns: script output, storage updates, execution result (with fees), error
 //
 // Phase 1: Scripts execute without environment variable injection
 // - Scripts can OUTPUT storage via stderr: STORAGE_SET:key=value
@@ -27,9 +29,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	ctx context.Context,
 	targetData *types.TaskTargetData,
 	triggerData *types.TaskTriggerData,
-) (*types.CustomScriptOutput, map[string]string, error) {
-	e.logger.Infof("[CustomScript] Starting execution for job %s", targetData.JobID.String())
-
+) (*types.CustomScriptOutput, map[string]string, *dockertypes.ExecutionResult, error) {
 	// Execute script in Docker (Phase 1: no env var injection)
 	scriptURL := targetData.DynamicArgumentsScriptUrl
 	scriptLanguage := targetData.ScriptLanguage
@@ -37,7 +37,7 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		scriptLanguage = string(dockertypes.LanguageTS) // Default
 	}
 
-	e.logger.Infof("[CustomScript] Executing %s script from: %s", scriptLanguage, scriptURL)
+	// e.logger.Debug(ctx, "[CustomScript] Executing script", observability.String("script_language", scriptLanguage), observability.String("script_url", scriptURL))
 
 	// Use standard Execute method (env var injection deferred to Phase 2)
 	metadata := map[string]string{
@@ -58,38 +58,42 @@ func (e *TaskExecutor) ExecuteCustomScript(
 		metadata,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("docker execution failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("docker execution failed: %w", err)
 	}
 
 	if !result.Success {
-		return nil, nil, fmt.Errorf("script execution failed: %s", result.Error)
+		return nil, nil, nil, fmt.Errorf("script execution failed: %s", result.Error)
 	}
 
 	// Parse script output (JSON from stdout)
 	var scriptOutput types.CustomScriptOutput
 	err = json.Unmarshal([]byte(result.Output), &scriptOutput)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse script output: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse script output: %w", err)
 	}
 
 	// Validate output
 	if err := validateCustomScriptOutput(&scriptOutput); err != nil {
-		return nil, nil, fmt.Errorf("invalid script output: %w", err)
+		return nil, nil, nil, fmt.Errorf("invalid script output: %w", err)
 	}
 
-	e.logger.Infof("[CustomScript] Script output: shouldExecute=%v, targetContract=%s",
-		scriptOutput.ShouldExecute, scriptOutput.TargetContract)
+	e.logger.Debug(ctx, "[CustomScript] Script output", observability.Bool("should_execute", scriptOutput.ShouldExecute), observability.String("target_contract", scriptOutput.TargetContract))
 
 	// Extract storage updates from JSON output
 	storageUpdates := scriptOutput.StorageUpdates
 	if storageUpdates == nil {
 		storageUpdates = make(map[string]string)
 	}
-	if len(storageUpdates) > 0 {
-		e.logger.Infof("[CustomScript] Found %d storage updates", len(storageUpdates))
-	}
+	// if len(storageUpdates) > 0 {
+		// e.logger.Debug(ctx, "[CustomScript] Found storage updates", observability.Int("storage_updates", len(storageUpdates)))
+	// }
 
-	return &scriptOutput, storageUpdates, nil
+	// Log the calculated fees from Docker execution
+	// if result.Stats.CurrentTotalCost != nil {
+	// 	e.logger.Debug(ctx, "[CustomScript] Fee from Docker execution", observability.String("fee", result.Stats.CurrentTotalCost.String()))
+	// }
+
+	return &scriptOutput, storageUpdates, result, nil
 }
 
 // prepareCustomScriptEnv prepares environment variables for script execution

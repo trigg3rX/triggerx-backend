@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"context"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Helper functions
@@ -38,7 +40,7 @@ func isValidSourceType(sourceType string) bool {
 func (s *ConditionBasedScheduler) initRetryClient() error {
 	retryConfig := httppkg.DefaultHTTPRetryConfig()
 	var err error
-	s.HTTPClient, err = httppkg.NewHTTPClient(retryConfig, s.logger)
+	s.HTTPClient, err = httppkg.NewHTTPClient(retryConfig)
 	if err != nil {
 		return fmt.Errorf("failed to initialize retry client: %w", err)
 	}
@@ -46,7 +48,7 @@ func (s *ConditionBasedScheduler) initRetryClient() error {
 }
 
 // initChainClients initializes blockchain clients for different chains
-func (s *ConditionBasedScheduler) initChainClients() error {
+func (s *ConditionBasedScheduler) initChainClients(ctx context.Context) error {
 	// Get chain RPC URLs from config
 	chainRPCs := config.GetChainRPCUrls()
 
@@ -61,18 +63,18 @@ func (s *ConditionBasedScheduler) initChainClients() error {
 
 		client, err := nodeclient.NewNodeClient(nodeCfg)
 		if err != nil {
-			s.logger.Warn("Failed to create node client for chain",
-				"chain_id", chainID,
-				"rpc_url", rpcURL,
-				"error", err,
+			s.logger.Warn(ctx, "Failed to create node client for chain",
+				observability.String("chain_id", chainID),
+				observability.String("rpc_url", rpcURL),
+				observability.Error(err),
 			)
 			continue
 		}
 
 		s.chainClients[chainID] = client
-		s.logger.Info("Connected to chain",
-			"chain_id", chainID,
-			"rpc_url", rpcURL,
+		s.logger.Info(ctx, "Connected to chain",
+			observability.String("chain_id", chainID),
+			observability.String("rpc_url", rpcURL),
 		)
 	}
 

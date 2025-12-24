@@ -10,15 +10,16 @@ import (
 
 type ExecutionAPI interface {
 	Execute(ctx context.Context, fileURL string, fileLanguage string, noOfAttesters int) (*types.ExecutionResult, error)
+	ExecuteSource(ctx context.Context, code string, language string) (*types.ExecutionResult, error)
 	GetHealthStatus() *HealthStatus
-	GetStats() *types.PerformanceMetrics
-	GetPoolStats() map[types.Language]*types.PoolStats
+	GetStats(ctx context.Context) *types.PerformanceMetrics
+	GetPoolStats(ctx context.Context) map[types.Language]*types.PoolStats
 	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
 	GetSupportedLanguages() []types.Language
 	IsLanguageSupported(language types.Language) bool
 	GetActiveExecutions() []*types.ExecutionContext
 	GetAlerts(severity string, limit int) []Alert
-	ClearAlerts()
-	CancelExecution(executionID string) error
+	ClearAlerts(ctx context.Context)
+	CancelExecution(ctx context.Context, executionID string) error
 	Close(ctx context.Context) error
 }

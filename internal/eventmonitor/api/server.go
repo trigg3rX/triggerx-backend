@@ -4,21 +4,20 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Server represents the API server
 type Server struct {
 	router     *gin.Engine
 	httpServer *http.Server
-	logger     logging.Logger
+	logger     observability.Logger
 }
 
 // Config holds the server configuration
@@ -28,7 +27,7 @@ type Config struct {
 
 // Dependencies holds the server dependencies
 type Dependencies struct {
-	Logger          logging.Logger
+	Logger          observability.Logger
 	RegistryManager *registry.RegistryManager
 	Service         *service.Service
 }
@@ -63,8 +62,8 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 }
 
 // Start starts the server
-func (s *Server) Start() error {
-	s.logger.Info("Starting API server", "addr", s.httpServer.Addr)
+func (s *Server) Start(ctx context.Context) error {
+	s.logger.Info(ctx, "Starting API server", observability.String("addr", s.httpServer.Addr))
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
@@ -73,7 +72,7 @@ func (s *Server) Start() error {
 
 // Stop gracefully stops the server
 func (s *Server) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping API server")
+	s.logger.Info(ctx, "Stopping API server")
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -82,17 +81,8 @@ func (s *Server) setupMiddleware() {
 	// Recovery middleware
 	s.router.Use(gin.Recovery())
 
-	// Logging middleware
-	s.router.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		return fmt.Sprintf("[%s] %s %s %d %s %s\n",
-			param.TimeStamp.Format(time.RFC3339),
-			param.Method,
-			param.Path,
-			param.StatusCode,
-			param.Latency,
-			param.ErrorMessage,
-		)
-	}))
+	// Logging and Metrics middleware
+	s.router.Use(LoggerMiddleware(s.logger))
 }
 
 // setupRoutes sets up the routes for the server

@@ -5,14 +5,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 type StatusHandler struct {
-	logger logging.Logger
+	logger observability.Logger
 }
 
-func NewStatusHandler(logger logging.Logger) *StatusHandler {
+func NewStatusHandler(logger observability.Logger) *StatusHandler {
 	return &StatusHandler{
 		logger: logger,
 	}
@@ -21,7 +21,7 @@ func NewStatusHandler(logger logging.Logger) *StatusHandler {
 // Status returns the health status of the condition scheduler service
 func (h *StatusHandler) Status(c *gin.Context) {
 	traceID := getTraceID(c)
-	h.logger.Info("[Status] trace_id=" + traceID + " - Checking service health")
+	h.logger.Info(c.Request.Context(), "[Status] trace_id=" + traceID + " - Checking service health")
 
 	response := gin.H{
 		"status":    "healthy",

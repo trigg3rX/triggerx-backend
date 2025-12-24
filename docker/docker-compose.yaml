@@ -1,5 +1,6 @@
 services:
   scylla:
+    profiles: [scylla]
     image: scylladb/scylla
     container_name: triggerx-scylla
     ports:
@@ -8,12 +9,95 @@ services:
       - scylla_data:/var/lib/scylla
     logging:
       driver: "json-file"
+    networks:
+      - triggerx-network
 
-  # redis:
-  #   image: "redis:7-alpine"
-  #   container_name: triggerx-redis
-  #   ports:
-  #     - "6379:6379"
+  otel-collector:
+    profiles: [lgtm]
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./../config/otel-collector.yaml:/etc/otel-collector.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+    networks:
+      - triggerx-obs
+
+  loki:
+    profiles: [lgtm]
+    image: grafana/loki:latest
+    user: "1000:1000"
+    command: -config.file=/etc/loki.yaml
+    volumes:
+      - ./../config/loki.yaml:/etc/loki.yaml
+      - ./../data/loki:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - triggerx-obs
+
+  tempo:
+    profiles: [lgtm]
+    image: grafana/tempo:latest
+    user: "1000:1000"
+    command: -config.file=/etc/tempo.yaml
+    volumes:
+      - ./../config/tempo.yaml:/etc/tempo.yaml
+      - ./../data/tempo:/var/tempo
+    ports:
+      - "3200:3200"
+    networks:
+      - triggerx-obs
+
+  mimir:
+    profiles: [lgtm]
+    image: grafana/mimir:latest
+    user: "1000:1000"
+    command: -config.file=/etc/mimir.yaml -target=all
+    volumes:
+      - ./../config/mimir.yaml:/etc/mimir.yaml
+      - ./../data/mimir:/mimir
+    ports:
+      - "9090:9090"
+    networks:
+      - triggerx-obs
+
+  grafana:
+    profiles: [lgtm]
+    image: grafana/grafana:latest
+    user: "1000:1000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./../data/grafana:/var/lib/grafana
+      - ./../config/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+    networks:
+      - triggerx-obs
+
+  redis:
+    profiles: [redis]
+    image: "redis:7-alpine"
+    container_name: triggerx-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - ./../data/redis:/data
+
+networks:
+  triggerx-network:
+    driver: bridge
+  triggerx-obs:
+    driver: bridge
 
 volumes:
-  scylla_data: 
+  scylla_data:

@@ -10,14 +10,14 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/api/handlers"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Server represents the API server
 type Server struct {
 	router     *gin.Engine
 	httpServer *http.Server
-	logger     logging.Logger
+	logger     observability.Logger
 }
 
 // Config holds the server configuration
@@ -30,7 +30,8 @@ type Config struct {
 
 // Dependencies holds the server dependencies
 type Dependencies struct {
-	Logger    logging.Logger
+	Logger    observability.Logger
+	Metrics   observability.Metrics
 	Executor  *execution.TaskExecutor
 	Validator *validation.TaskValidator
 }
@@ -74,7 +75,6 @@ func NewServer(cfg Config, deps *Dependencies) *Server {
 
 // Start starts the server
 func (s *Server) Start() error {
-	s.logger.Info("Starting API server", "addr", s.httpServer.Addr)
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
@@ -83,7 +83,7 @@ func (s *Server) Start() error {
 
 // Stop gracefully stops the server
 func (s *Server) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping API server")
+	// s.logger.Info(ctx, "Stopping API server")
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -102,7 +102,7 @@ func (s *Server) setupMiddleware() {
 func (s *Server) setupRoutes(deps *Dependencies) {
 	// Create handlers
 	taskHandler := handlers.NewTaskHandler(deps.Logger, deps.Executor, deps.Validator)
-	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
+	metricsHandler := handlers.NewMetricsHandler(deps.Logger, deps.Metrics)
 
 	// Task routes
 	s.router.POST("/p2p/message", taskHandler.ExecuteTask)

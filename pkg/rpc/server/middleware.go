@@ -8,33 +8,33 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	metricspkg "github.com/trigg3rX/triggerx-backend/pkg/rpc/metrics"
 )
 
 // LoggingInterceptor provides request/response logging for gRPC
-func LoggingInterceptor(logger logging.Logger) grpc.UnaryServerInterceptor {
+func LoggingInterceptor(logger observability.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		start := time.Now()
 
-		logger.Debug("gRPC request started",
-			"method", info.FullMethod,
-			"request", req)
+		logger.Debug(ctx, "gRPC request started",
+			observability.String("method", info.FullMethod),
+			observability.Any("request", req))
 
 		response, err := handler(ctx, req)
 
 		duration := time.Since(start)
 
 		if err != nil {
-			logger.Error("gRPC request failed",
-				"method", info.FullMethod,
-				"duration", duration,
-				"error", err)
+			logger.Error(ctx, "gRPC request failed",
+				observability.String("method", info.FullMethod),
+				observability.Duration("duration", duration),
+				observability.Error(err))
 		} else {
-			logger.Debug("gRPC request completed",
-				"method", info.FullMethod,
-				"duration", duration,
-				"response", response)
+			logger.Debug(ctx, "gRPC request completed",
+				observability.String("method", info.FullMethod),
+				observability.Duration("duration", duration),
+				observability.Any("response", response))
 		}
 
 		return response, err
@@ -74,13 +74,13 @@ func AuthInterceptor() grpc.UnaryServerInterceptor {
 }
 
 // RecoveryInterceptor provides panic recovery for gRPC
-func RecoveryInterceptor(logger logging.Logger) grpc.UnaryServerInterceptor {
+func RecoveryInterceptor(logger observability.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Error("gRPC panic recovered",
-					"method", info.FullMethod,
-					"panic", r)
+				logger.Error(ctx, "gRPC panic recovered",
+					observability.String("method", info.FullMethod),
+					observability.Any("panic", r))
 				err = status.Errorf(codes.Internal, "internal server error")
 			}
 		}()

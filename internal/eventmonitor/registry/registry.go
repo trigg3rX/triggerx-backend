@@ -5,32 +5,29 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
+	// "time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // RegistryManager manages the registry of monitoring requests
 type RegistryManager struct {
 	registry map[string]*types.RegistryEntry
 	mu       sync.RWMutex
-	logger   logging.Logger
+	logger   observability.Logger
+	ctx      context.Context
 }
 
 // NewRegistryManager creates a new registry manager
-func NewRegistryManager(logger logging.Logger) *RegistryManager {
-	rm := &RegistryManager{
+func NewRegistryManager(ctx context.Context, logger observability.Logger) *RegistryManager {
+	return &RegistryManager{
 		registry: make(map[string]*types.RegistryEntry),
 		logger:   logger,
+		ctx:      ctx,
 	}
-
-	// Start background cleanup goroutine
-	go rm.cleanupExpired()
-
-	return rm
 }
 
 // generateRegistryKey generates a composite key for the registry
@@ -71,7 +68,7 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 			WorkerCancel: cancel,
 		}
 		rm.registry[key] = entry
-		rm.logger.Info("Created new registry entry", "key", key, "chain_id", req.ChainID)
+		rm.logger.Debug(rm.ctx, "Created new registry entry", observability.String("key", key), observability.String("chain_id", req.ChainID))
 	}
 
 	// Add subscriber
@@ -85,10 +82,10 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 	}
 	entry.Mu.Unlock()
 
-	rm.logger.Info("Registered monitoring request",
-		"request_id", req.RequestID,
-		"key", key,
-		"subscribers", len(entry.Subscribers))
+	rm.logger.Debug(rm.ctx, "Registered monitoring request",
+		observability.String("request_id", req.RequestID),
+		observability.String("key", key),
+		observability.Int("subscribers", len(entry.Subscribers)))
 
 	return nil
 }
@@ -123,16 +120,16 @@ func (rm *RegistryManager) Unregister(requestID string) error {
 	subscriberCount := len(foundEntry.Subscribers)
 	foundEntry.Mu.Unlock()
 
-	rm.logger.Info("Unregistered monitoring request",
-		"request_id", requestID,
-		"key", foundKey,
-		"remaining_subscribers", subscriberCount)
+	rm.logger.Debug(rm.ctx, "Unregistered monitoring request",
+		observability.String("request_id", requestID),
+		observability.String("key", foundKey),
+		observability.Int("remaining_subscribers", subscriberCount))
 
 	// If no subscribers remain, stop worker and remove entry
 	if subscriberCount == 0 {
 		foundEntry.WorkerCancel()
 		delete(rm.registry, foundKey)
-		rm.logger.Info("Removed registry entry (no subscribers)", "key", foundKey)
+		rm.logger.Debug(rm.ctx, "Removed registry entry (no subscribers)", observability.String("key", foundKey))
 	}
 
 	return nil
@@ -204,43 +201,43 @@ func (rm *RegistryManager) GetChainsSupported() []string {
 }
 
 // cleanupExpired periodically cleans up expired requests
-func (rm *RegistryManager) cleanupExpired() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+// func (rm *RegistryManager) cleanupExpired() {
+// 	ticker := time.NewTicker(30 * time.Second)
+// 	defer ticker.Stop()
 
-	for range ticker.C {
-		rm.mu.Lock()
-		now := time.Now()
+// 	for range ticker.C {
+// 		rm.mu.Lock()
+// 		now := time.Now()
 
-		for key, entry := range rm.registry {
-			entry.Mu.Lock()
-			expiredRequestIDs := make([]string, 0)
+// 		for key, entry := range rm.registry {
+// 			entry.Mu.Lock()
+// 			expiredRequestIDs := make([]string, 0)
 
-			for requestID, subscriber := range entry.Subscribers {
-				if subscriber.ExpiresAt.Before(now) {
-					expiredRequestIDs = append(expiredRequestIDs, requestID)
-				}
-			}
+// 			for requestID, subscriber := range entry.Subscribers {
+// 				if subscriber.ExpiresAt.Before(now) {
+// 					expiredRequestIDs = append(expiredRequestIDs, requestID)
+// 				}
+// 			}
 
-			// Remove expired subscribers
-			for _, requestID := range expiredRequestIDs {
-				delete(entry.Subscribers, requestID)
-				rm.logger.Info("Removed expired subscriber",
-					"request_id", requestID,
-					"key", key)
-			}
+// 			// Remove expired subscribers
+// 			for _, requestID := range expiredRequestIDs {
+// 				delete(entry.Subscribers, requestID)
+// 				rm.logger.Info(rm.ctx, "Removed expired subscriber",
+// 					observability.String("request_id", requestID),
+// 					observability.String("key", key))
+// 			}
 
-			subscriberCount := len(entry.Subscribers)
-			entry.Mu.Unlock()
+// 			subscriberCount := len(entry.Subscribers)
+// 			entry.Mu.Unlock()
 
-			// If no subscribers remain, stop worker and remove entry
-			if subscriberCount == 0 {
-				entry.WorkerCancel()
-				delete(rm.registry, key)
-				rm.logger.Info("Removed registry entry (expired)", "key", key)
-			}
-		}
+// 			// If no subscribers remain, stop worker and remove entry
+// 			if subscriberCount == 0 {
+// 				entry.WorkerCancel()
+// 				delete(rm.registry, key)
+// 				rm.logger.Info(rm.ctx, "Removed registry entry (expired)", observability.String("key", key))
+// 			}
+// 		}
 
-		rm.mu.Unlock()
-	}
-}
+// 		rm.mu.Unlock()
+// 	}
+// }

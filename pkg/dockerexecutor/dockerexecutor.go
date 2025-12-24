@@ -10,7 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/execution"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // CodeExecutor defines what the DockerManager needs from a code executor
@@ -19,14 +19,14 @@ type CodeExecutor interface {
 	ExecuteSource(ctx context.Context, code string, language string, alchemyAPIKey string, metadata ...map[string]string) (*types.ExecutionResult, error)
 	GetHealthStatus() *execution.HealthStatus
 	GetStats() *types.PerformanceMetrics
-	GetPoolStats() map[types.Language]*types.PoolStats
+	GetPoolStats(ctx context.Context) map[types.Language]*types.PoolStats
 	InitializeLanguagePools(ctx context.Context, languages []types.Language) error
-	GetSupportedLanguages() []types.Language
+	GetSupportedLanguages(ctx context.Context) []types.Language
 	IsLanguageSupported(language types.Language) bool
 	GetActiveExecutions() []*types.ExecutionContext
 	GetAlerts(severity string, limit int) []execution.Alert
-	ClearAlerts()
-	CancelExecution(executionID string) error
+	ClearAlerts(ctx context.Context)
+	CancelExecution(ctx context.Context, executionID string) error
 	Close(ctx context.Context) error
 }
 
@@ -35,7 +35,7 @@ type CodeExecutor interface {
 type DockerExecutor struct {
 	executor    CodeExecutor
 	config      config.ConfigProviderInterface
-	logger      logging.Logger
+	logger      observability.Logger
 	mutex       sync.RWMutex
 	initialized bool
 	closed      bool
@@ -45,7 +45,7 @@ type DockerExecutor struct {
 func NewDockerExecutor(
 	executor CodeExecutor,
 	cfg config.ConfigProviderInterface,
-	logger logging.Logger,
+	logger observability.Logger,
 ) (*DockerExecutor, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
@@ -68,7 +68,7 @@ func NewDockerExecutor(
 
 // NewDockerManagerFromFile creates a new Docker manager from a configuration file
 // This is a convenience function for backward compatibility
-func NewDockerExecutorFromFile(configFilePath string, logger logging.Logger) (*DockerExecutor, error) {
+func NewDockerExecutorFromFile(configFilePath string, logger observability.Logger) (*DockerExecutor, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
@@ -79,7 +79,7 @@ func NewDockerExecutorFromFile(configFilePath string, logger logging.Logger) (*D
 	}
 
 	// Create default implementations
-	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), logger)
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
@@ -100,7 +100,7 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 		return fmt.Errorf("docker manager already initialized")
 	}
 
-	de.logger.Info("Initializing Docker manager")
+	de.logger.Debug(ctx, "Initializing Docker manager")
 
 	// Initialize language-specific container pools
 	supportedLanguages := de.config.GetSupportedLanguages()
@@ -110,7 +110,7 @@ func (de *DockerExecutor) Initialize(ctx context.Context) error {
 
 	de.initialized = true
 
-	de.logger.Infof("Docker manager initialized successfully with %d language pools", len(supportedLanguages))
+	de.logger.Debug(ctx, "Docker manager initialized successfully", observability.Int("language_pools", len(supportedLanguages)), observability.Any("supported_languages", supportedLanguages))
 	return nil
 }
 
@@ -138,27 +138,28 @@ func (de *DockerExecutor) Execute(ctx context.Context, fileURL string, fileLangu
 		if taskDefStr, ok := metadataMap["task_definition_id"]; ok {
 			_, err := fmt.Sscanf(taskDefStr, "%d", &taskDefID)
 			if err != nil {
-				de.logger.Errorf("Error scanning task_definition_id: %v", err)
+				de.logger.Error(ctx, "Error scanning task_definition_id", observability.Error(err))
 				return nil, fmt.Errorf("error scanning task_definition_id: %w", err)
 			}
 		}
 	}
 	// For all except dynamic task IDs, only calculate fees (skip code fetch/exec)
-	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 {
-		de.logger.Infof("Skipping code execution for static task. Only calculating fees for task_definition_id=%d", taskDefID)
+	// Note: TaskDefinitionID 7 (Custom Script) also needs code execution as it runs IPFS scripts
+	if taskDefID != 2 && taskDefID != 4 && taskDefID != 6 && taskDefID != 7 {
+		de.logger.Debug(ctx, "Skipping code execution for static task", observability.Int("task_definition_id", taskDefID))
 		result, err := de.executor.Execute(ctx, "", "", noOfAttesters, alchemyAPIKey, metadataMap)
 		if err != nil {
-			de.logger.Errorf("Fee calculation (static) failed: %v", err)
+			de.logger.Error(ctx, "Fee calculation (static) failed", observability.Error(err))
 			return nil, fmt.Errorf("fee calculation failed: %w", err)
 		}
 		return result, nil
 	}
 
-	// Dynamic tasks (2,4,6): perform full execution as before
-	de.logger.Infof("Executing code for dynamic task task_definition_id=%d (should run code)", taskDefID)
+	// Dynamic tasks (2,4,6,7): perform full execution as before
+	de.logger.Debug(ctx, "Executing code for dynamic task", observability.Int("taskDefinitionID", taskDefID))
 	result, err := de.executor.Execute(ctx, fileURL, fileLanguage, noOfAttesters, alchemyAPIKey, metadataMap)
 	if err != nil {
-		de.logger.Errorf("Execution failed: %v", err)
+		de.logger.Error(ctx, "Execution failed", observability.Error(err))
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
 	return result, nil
@@ -178,13 +179,13 @@ func (de *DockerExecutor) ExecuteSource(ctx context.Context, code string, langua
 	}
 	de.mutex.RUnlock()
 
-	de.logger.Infof("Executing raw source for language: %s", language)
+	de.logger.Debug(ctx, "Executing raw source", observability.String("language", language))
 	result, err := de.executor.ExecuteSource(ctx, code, language, alchemyAPIKey, metadata...)
 	if err != nil {
-		de.logger.Errorf("Execution (raw) failed: %v", err)
+		de.logger.Error(ctx, "Execution (raw) failed", observability.Error(err))
 		return nil, fmt.Errorf("execution failed: %w", err)
 	}
-	de.logger.Infof("Execution (raw) completed successfully")
+	de.logger.Debug(ctx, "Execution (raw) completed successfully")
 	return result, nil
 }
 
@@ -226,7 +227,7 @@ func (de *DockerExecutor) GetStats() *types.PerformanceMetrics {
 }
 
 // GetPoolStats returns statistics for all language pools
-func (de *DockerExecutor) GetAllPoolStats() map[types.Language]*types.PoolStats {
+func (de *DockerExecutor) GetAllPoolStats(ctx context.Context) map[types.Language]*types.PoolStats {
 	de.mutex.RLock()
 	defer de.mutex.RUnlock()
 
@@ -234,11 +235,11 @@ func (de *DockerExecutor) GetAllPoolStats() map[types.Language]*types.PoolStats 
 		return make(map[types.Language]*types.PoolStats)
 	}
 
-	return de.executor.GetPoolStats()
+	return de.executor.GetPoolStats(ctx)
 }
 
 // GetLanguageStats returns statistics for a specific language pool
-func (de *DockerExecutor) GetPoolStats(language types.Language) *types.PoolStats {
+func (de *DockerExecutor) GetPoolStats(ctx context.Context, language types.Language) *types.PoolStats {
 	de.mutex.RLock()
 	defer de.mutex.RUnlock()
 
@@ -246,7 +247,7 @@ func (de *DockerExecutor) GetPoolStats(language types.Language) *types.PoolStats
 		return nil
 	}
 
-	stats := de.executor.GetPoolStats()
+	stats := de.executor.GetPoolStats(ctx)
 	if stats == nil {
 		return nil
 	}
@@ -255,7 +256,7 @@ func (de *DockerExecutor) GetPoolStats(language types.Language) *types.PoolStats
 }
 
 // GetLanguageStats returns statistics for a specific language pool
-func (de *DockerExecutor) GetLanguageStats(language types.Language) (*types.PoolStats, bool) {
+func (de *DockerExecutor) GetLanguageStats(ctx context.Context, language types.Language) (*types.PoolStats, bool) {
 	de.mutex.RLock()
 	defer de.mutex.RUnlock()
 
@@ -263,7 +264,7 @@ func (de *DockerExecutor) GetLanguageStats(language types.Language) (*types.Pool
 		return nil, false
 	}
 
-	stats := de.executor.GetPoolStats()
+	stats := de.executor.GetPoolStats(ctx)
 	if stats == nil {
 		return nil, false
 	}
@@ -273,7 +274,7 @@ func (de *DockerExecutor) GetLanguageStats(language types.Language) (*types.Pool
 }
 
 // GetSupportedLanguages returns all languages with active pools
-func (de *DockerExecutor) GetSupportedLanguages() []types.Language {
+func (de *DockerExecutor) GetSupportedLanguages(ctx context.Context) []types.Language {
 	de.mutex.RLock()
 	defer de.mutex.RUnlock()
 
@@ -281,7 +282,7 @@ func (de *DockerExecutor) GetSupportedLanguages() []types.Language {
 		return []types.Language{}
 	}
 
-	return de.executor.GetSupportedLanguages()
+	return de.executor.GetSupportedLanguages(ctx)
 }
 
 // IsLanguageSupported checks if a language is supported
@@ -309,7 +310,7 @@ func (de *DockerExecutor) GetActiveExecutions() []*types.ExecutionContext {
 }
 
 // CancelExecution cancels a running execution
-func (de *DockerExecutor) CancelExecution(executionID string) error {
+func (de *DockerExecutor) CancelExecution(ctx context.Context, executionID string) error {
 	de.mutex.RLock()
 	defer de.mutex.RUnlock()
 
@@ -320,7 +321,7 @@ func (de *DockerExecutor) CancelExecution(executionID string) error {
 		return fmt.Errorf("docker manager is closed")
 	}
 
-	return de.executor.CancelExecution(executionID)
+	return de.executor.CancelExecution(ctx, executionID)
 }
 
 // GetAlerts returns alerts from the monitoring system
@@ -336,7 +337,7 @@ func (de *DockerExecutor) GetAlerts(severity string, limit int) []execution.Aler
 }
 
 // ClearAlerts clears all alerts from the monitoring system
-func (de *DockerExecutor) ClearAlerts() {
+func (de *DockerExecutor) ClearAlerts(ctx context.Context) {
 	de.mutex.RLock()
 	defer de.mutex.RUnlock()
 
@@ -344,7 +345,7 @@ func (de *DockerExecutor) ClearAlerts() {
 		return
 	}
 
-	de.executor.ClearAlerts()
+	de.executor.ClearAlerts(ctx)
 }
 
 // GetConfig returns the current configuration provider
@@ -363,15 +364,15 @@ func (de *DockerExecutor) Close(ctx context.Context) error {
 		return nil
 	}
 
-	de.logger.Info("Closing Docker manager")
+	de.logger.Debug(ctx, "Closing Docker manager")
 
 	if de.executor != nil {
 		if err := de.executor.Close(ctx); err != nil {
-			de.logger.Warnf("Failed to close executor: %v", err)
+			de.logger.Warn(ctx, "Failed to close executor", observability.Error(err))
 		}
 	}
 
 	de.closed = true
-	de.logger.Info("Docker manager closed")
+	de.logger.Debug(ctx, "Docker manager closed")
 	return nil
 }

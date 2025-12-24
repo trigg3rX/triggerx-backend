@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -24,7 +24,7 @@ type NonceManager struct {
 	currentNonce uint64
 	client       *ethclient.Client
 	address      common.Address
-	logger       logging.Logger
+	logger       observability.Logger
 	lastSyncTime time.Time
 	syncInterval time.Duration
 
@@ -32,7 +32,7 @@ type NonceManager struct {
 	pendingTxs map[uint64]*PendingTransaction
 	txMutex    sync.RWMutex
 
-	// Retry configurations for different operations
+	// Retry configurations
 	rpcRetryConfig     *retry.RetryConfig
 	submitRetryConfig  *retry.RetryConfig
 	confirmRetryConfig *retry.RetryConfig
@@ -51,53 +51,46 @@ type PendingTransaction struct {
 	PrivateKey   *ecdsa.PrivateKey
 }
 
-// NewNonceManager creates a new nonce manager with optimized retry settings
-func NewNonceManager(client *ethclient.Client, logger logging.Logger) *NonceManager {
+// NewNonceManager creates a new nonce manager optimized for L2 chains
+func NewNonceManager(client *ethclient.Client, logger observability.Logger) *NonceManager {
 	return &NonceManager{
 		client:       client,
 		address:      common.HexToAddress(config.GetKeeperAddress()),
 		logger:       logger,
-		syncInterval: 10 * time.Second, // More frequent sync for L2 chains
+		syncInterval: 10 * time.Second,
 		pendingTxs:   make(map[uint64]*PendingTransaction),
 
-		// Aggressive retry configs optimized for L2 chains (1-2 sec block time)
 		rpcRetryConfig: &retry.RetryConfig{
-			MaxRetries:      8,                      // More retries for RPC calls
-			InitialDelay:    200 * time.Millisecond, // Fast initial retry
-			MaxDelay:        5 * time.Second,        // Cap at 5 seconds
-			BackoffFactor:   1.5,                    // Moderate backoff
-			JitterFactor:    0.3,                    // High jitter to avoid conflicts
-			LogRetryAttempt: true,
+			MaxRetries:      8,
+			InitialDelay:    200 * time.Millisecond,
+			MaxDelay:        5 * time.Second,
+			BackoffFactor:   1.5,
+			JitterFactor:    0.3,
 			ShouldRetry:     shouldRetryRPCError,
 		},
-
 		submitRetryConfig: &retry.RetryConfig{
-			MaxRetries:      10,                     // Very aggressive for submission
-			InitialDelay:    100 * time.Millisecond, // Very fast initial retry
-			MaxDelay:        3 * time.Second,        // Shorter max delay for L2
-			BackoffFactor:   1.3,                    // Gentle backoff
-			JitterFactor:    0.4,                    // High jitter
-			LogRetryAttempt: true,
+			MaxRetries:      10,
+			InitialDelay:    100 * time.Millisecond,
+			MaxDelay:        3 * time.Second,
+			BackoffFactor:   1.3,
+			JitterFactor:    0.4,
 			ShouldRetry:     shouldRetrySubmissionError,
 		},
-
 		confirmRetryConfig: &retry.RetryConfig{
-			MaxRetries:      15,                     // Very aggressive for confirmation
-			InitialDelay:    500 * time.Millisecond, // Start with 500ms for confirmation
-			MaxDelay:        8 * time.Second,        // Allow up to 8 seconds
-			BackoffFactor:   1.2,                    // Very gentle backoff
-			JitterFactor:    0.2,                    // Lower jitter for confirmation
-			LogRetryAttempt: true,
+			MaxRetries:      15,
+			InitialDelay:    500 * time.Millisecond,
+			MaxDelay:        8 * time.Second,
+			BackoffFactor:   1.2,
+			JitterFactor:    0.2,
 			ShouldRetry:     shouldRetryConfirmationError,
 		},
 	}
 }
 
-// Initialize sets up the initial nonce
+// Initialize sets up the initial nonce from blockchain
 func (nm *NonceManager) Initialize(ctx context.Context) error {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
-
 	return nm.syncWithBlockchain(ctx)
 }
 
@@ -106,42 +99,149 @@ func (nm *NonceManager) GetNextNonce(ctx context.Context) (uint64, error) {
 	nm.mu.Lock()
 	defer nm.mu.Unlock()
 
-	// Sync with blockchain if needed
 	if time.Since(nm.lastSyncTime) > nm.syncInterval {
 		if err := nm.syncWithBlockchain(ctx); err != nil {
-			return 0, fmt.Errorf("failed to sync nonce with blockchain: %w", err)
+			return 0, fmt.Errorf("failed to sync nonce: %w", err)
 		}
 	}
 
 	nonce := nm.currentNonce
 	nm.currentNonce++
-
-	nm.logger.Debugf("Allocated nonce: %d", nonce)
+	// nm.logger.Debug(ctx, "Allocated nonce", observability.Uint64("nonce", nonce))
 	return nonce, nil
 }
 
-// syncWithBlockchain updates the current nonce from the blockchain
-func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
-	operation := func() (uint64, error) {
-		return nm.client.PendingNonceAt(ctx, nm.address)
+// ReleaseNonce handles failed nonce allocation by either filling the gap or syncing
+func (nm *NonceManager) ReleaseNonce(ctx context.Context, nonce uint64, privateKey *ecdsa.PrivateKey) {
+	nm.mu.Lock()
+	snapshotNonce := nm.currentNonce
+	nm.mu.Unlock()
+
+	if nonce+1 < snapshotNonce {
+		// Higher nonces allocated - must fill the gap
+		// nm.logger.Warn(ctx, "Filling nonce gap", observability.Uint64("nonce", nonce), observability.Uint64("snapshot_nonce", snapshotNonce-1))
+		nm.fillNonceGap(ctx, nonce, privateKey)
+	} else {
+		// No higher nonces - safe to sync with blockchain
+		// nm.logger.Debug(ctx, "Nonce released, syncing with blockchain", observability.Uint64("nonce", nonce))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := nm.safeSyncFromBlockchain(ctx, snapshotNonce); err != nil {
+			nm.logger.Error(ctx, "Failed to sync after release", observability.Error(err))
+		}
+	}
+}
+
+// fillNonceGap submits a self-transaction to fill a nonce gap
+func (nm *NonceManager) fillNonceGap(ctx context.Context, nonce uint64, privateKey *ecdsa.PrivateKey) {
+	if privateKey == nil {
+		nm.logger.Error(ctx, "Cannot fill nonce gap", observability.Uint64("nonce", nonce))
+		return
 	}
 
-	pendingNonce, err := retry.Retry(ctx, operation, nm.rpcRetryConfig, nm.logger)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	chainID, err := retry.Retry(ctx, func() (*big.Int, error) {
+		return nm.client.ChainID(ctx)
+	}, nm.rpcRetryConfig)
 	if err != nil {
-		return fmt.Errorf("failed to get pending nonce after retries: %w", err)
+		nm.logger.Error(ctx, "Failed to get chain ID for gap fill", observability.Error(err))
+		return
 	}
 
-	// Use the higher of pending nonce or our current nonce
+	_, err = retry.Retry(ctx, func() (string, error) {
+		return nm.submitGapFillTx(ctx, nonce, chainID, privateKey)
+	}, nm.submitRetryConfig)
+
+	if err != nil {
+		nm.logger.Error(ctx, "Failed to fill nonce gap", observability.Uint64("nonce", nonce), observability.Error(err))
+	}
+}
+
+// submitGapFillTx creates and submits a minimal self-transaction
+func (nm *NonceManager) submitGapFillTx(ctx context.Context, nonce uint64, chainID *big.Int, privateKey *ecdsa.PrivateKey) (string, error) {
+	gasPrice, err := nm.getGasPrice(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	// Bump gas if replacing existing tx
+	nm.txMutex.RLock()
+	if existing, exists := nm.pendingTxs[nonce]; exists && existing.LastGasPrice != nil {
+		minPrice := new(big.Int).Mul(existing.LastGasPrice, big.NewInt(120))
+		minPrice.Div(minPrice, big.NewInt(100))
+		if gasPrice.Cmp(minPrice) < 0 {
+			gasPrice = minPrice
+		}
+	}
+	nm.txMutex.RUnlock()
+
+	// Minimal self-transaction: 0 ETH, 21k gas
+	tx := types.NewTransaction(nonce, nm.address, big.NewInt(0), 21000, gasPrice, nil)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	if err := nm.client.SendTransaction(ctx, signedTx); err != nil {
+		if strings.Contains(err.Error(), "already known") {
+			nm.trackPendingTx(nonce, signedTx.Hash().Hex(), chainID, privateKey, gasPrice)
+			return signedTx.Hash().Hex(), nil
+		}
+		return "", err
+	}
+
+	nm.trackPendingTx(nonce, signedTx.Hash().Hex(), chainID, privateKey, gasPrice)
+	return signedTx.Hash().Hex(), nil
+}
+
+// syncWithBlockchain updates nonce from blockchain (only increases)
+func (nm *NonceManager) syncWithBlockchain(ctx context.Context) error {
+	pendingNonce, err := retry.Retry(ctx, func() (uint64, error) {
+		return nm.client.PendingNonceAt(ctx, nm.address)
+	}, nm.rpcRetryConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get pending nonce: %w", err)
+	}
+
 	if pendingNonce > nm.currentNonce {
 		nm.currentNonce = pendingNonce
-		nm.logger.Infof("Synced nonce with blockchain: %d", nm.currentNonce)
+		// nm.logger.Debug(ctx, "Synced nonce", observability.Uint64("nonce", nm.currentNonce))
 	}
-
 	nm.lastSyncTime = time.Now()
 	return nil
 }
 
-// SubmitTransaction submits a transaction with intelligent retry logic
+// safeSyncFromBlockchain syncs only if no new allocations since snapshot
+func (nm *NonceManager) safeSyncFromBlockchain(ctx context.Context, snapshotNonce uint64) error {
+	pendingNonce, err := retry.Retry(ctx, func() (uint64, error) {
+		return nm.client.PendingNonceAt(ctx, nm.address)
+	}, nm.rpcRetryConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get pending nonce: %w", err)
+	}
+
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	// Skip if other threads allocated nonces
+	if nm.currentNonce > snapshotNonce {
+		// nm.logger.Debug(ctx, "Skipping sync: nonces allocated", observability.Uint64("snapshot_nonce", snapshotNonce), observability.Uint64("current_nonce", nm.currentNonce))
+		return nil
+	}
+
+	oldNonce := nm.currentNonce
+	nm.currentNonce = pendingNonce
+	nm.lastSyncTime = time.Now()
+
+	if pendingNonce != oldNonce {
+		nm.logger.Debug(ctx, "Safe synced nonce", observability.Uint64("old_nonce", oldNonce), observability.Uint64("pending_nonce", pendingNonce))
+	}
+	return nil
+}
+
+// SubmitTransaction submits a transaction with retry and replacement logic
 func (nm *NonceManager) SubmitTransaction(
 	ctx context.Context,
 	nonce uint64,
@@ -150,27 +250,18 @@ func (nm *NonceManager) SubmitTransaction(
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
 ) (*types.Receipt, string, error) {
-
-	// Check if we should replace an existing transaction
+	// Check for stuck transaction to replace
 	nm.txMutex.RLock()
-	if existingTx, exists := nm.pendingTxs[nonce]; exists && existingTx.Status == "pending" {
-		nm.txMutex.RUnlock()
-
-		// If existing tx is older than 30 seconds, replace it
-		if time.Since(existingTx.CreatedAt) > 30*time.Second {
-			return nm.replaceTransaction(ctx, existingTx, data, to, chainID, privateKey)
-		}
-
-		// Otherwise, wait for the existing transaction
-		return nm.waitForExistingTransaction(ctx, existingTx)
-	}
+	existingTx, exists := nm.pendingTxs[nonce]
 	nm.txMutex.RUnlock()
 
-	// Submit new transaction
+	if exists && existingTx.Status == "pending" && time.Since(existingTx.CreatedAt) > 30*time.Second {
+		return nm.replaceTransaction(ctx, existingTx, data, to, chainID, privateKey)
+	}
+
 	return nm.submitNewTransaction(ctx, nonce, to, data, chainID, privateKey)
 }
 
-// submitNewTransaction submits a new transaction with EIP-1559 support
 func (nm *NonceManager) submitNewTransaction(
 	ctx context.Context,
 	nonce uint64,
@@ -179,31 +270,21 @@ func (nm *NonceManager) submitNewTransaction(
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
 ) (*types.Receipt, string, error) {
-
-	// Get current gas price
-	gasPrice, err := nm.getOptimalGasParams(ctx)
+	gasPrice, err := nm.getGasPrice(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get gas price: %w", err)
-	}
-
-	// Create and sign transaction
-	if gasPrice == nil {
-		return nil, "", fmt.Errorf("gas price is required for transaction")
+		return nil, "", err
 	}
 
 	tx := types.NewTransaction(nonce, to, big.NewInt(0), 600000, gasPrice, data)
-	signedTx, signErr := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-	if signErr != nil {
-		return nil, "", fmt.Errorf("failed to sign transaction: %w", signErr)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to sign: %w", err)
 	}
 
-	// Track the transaction
 	nm.trackTransaction(nonce, signedTx.Hash().Hex(), data, to, chainID, privateKey, gasPrice)
-
 	return nm.submitWithRetry(ctx, signedTx, nonce, privateKey)
 }
 
-// replaceTransaction replaces a stuck transaction with higher fees
 func (nm *NonceManager) replaceTransaction(
 	ctx context.Context,
 	existingTx *PendingTransaction,
@@ -212,321 +293,188 @@ func (nm *NonceManager) replaceTransaction(
 	chainID *big.Int,
 	privateKey *ecdsa.PrivateKey,
 ) (*types.Receipt, string, error) {
+	// nm.logger.Debug(ctx, "Replacing stuck tx", observability.Uint64("nonce", existingTx.Nonce))
 
-	nm.logger.Infof("Replacing stuck transaction with nonce %d", existingTx.Nonce)
-
-	// Get higher gas price for replacement
-	gasPrice, err := nm.getOptimalGasParams(ctx)
+	gasPrice, err := nm.getGasPrice(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to get gas price: %w", err)
+		return nil, "", err
 	}
 
-	// Increase fees by 20% for replacement
+	// 20% bump for replacement
 	gasPrice = new(big.Int).Mul(gasPrice, big.NewInt(120))
-	gasPrice = new(big.Int).Div(gasPrice, big.NewInt(100))
+	gasPrice.Div(gasPrice, big.NewInt(100))
 
-	// Create legacy replacement transaction
 	tx := types.NewTransaction(existingTx.Nonce, to, big.NewInt(0), 600000, gasPrice, data)
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to sign replacement transaction: %w", err)
+		return nil, "", fmt.Errorf("failed to sign replacement: %w", err)
 	}
 
-	// Update tracking
-	nm.updateTransactionStatus(existingTx.Nonce, signedTx.Hash().Hex(), gasPrice)
-
+	nm.updateTxStatus(existingTx.Nonce, signedTx.Hash().Hex(), gasPrice)
 	return nm.submitWithRetry(ctx, signedTx, existingTx.Nonce, privateKey)
 }
 
-// waitForExistingTransaction waits for an existing transaction to be confirmed
-func (nm *NonceManager) waitForExistingTransaction(ctx context.Context, existingTx *PendingTransaction) (*types.Receipt, string, error) {
-	nm.logger.Infof("Waiting for existing transaction with nonce %d: %s", existingTx.Nonce, existingTx.TxHash)
-
-	// Wait for the transaction to be confirmed
-	receipt, err := bind.WaitMined(ctx, nm.client, &types.Transaction{})
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to wait for existing transaction: %w", err)
-	}
-
-	nm.markTransactionConfirmed(existingTx.Nonce, existingTx.TxHash)
-	return receipt, existingTx.TxHash, nil
-}
-
-// submitWithRetry handles the actual submission with intelligent retry logic
 func (nm *NonceManager) submitWithRetry(ctx context.Context, signedTx *types.Transaction, nonce uint64, privateKey *ecdsa.PrivateKey) (*types.Receipt, string, error) {
-	// First, submit the transaction with retry logic
-	submitOperation := func() (string, error) {
-		err := nm.client.SendTransaction(ctx, signedTx)
-		if err != nil {
-			// Check if it's a nonce too low error - this means we need to sync
+	// Submit with retry
+	txHash, err := retry.Retry(ctx, func() (string, error) {
+		if err := nm.client.SendTransaction(ctx, signedTx); err != nil {
 			if isNonceTooLowError(err) {
-				if syncErr := nm.syncWithBlockchain(ctx); syncErr != nil {
-					return "", fmt.Errorf("failed to sync after nonce error: %w", syncErr)
-				}
+				nm.mu.Lock()
+				_ = nm.syncWithBlockchain(ctx)
+				nm.mu.Unlock()
 			}
 			return "", err
 		}
-
-		txHash := signedTx.Hash().Hex()
-		nm.logger.Infof("Transaction sent: %s", txHash)
-		return txHash, nil
-	}
-
-	txHash, err := retry.Retry(ctx, submitOperation, nm.submitRetryConfig, nm.logger)
+		nm.logger.Debug(ctx, "Transaction sent", observability.String("tx_hash", signedTx.Hash().Hex()))
+		return signedTx.Hash().Hex(), nil
+	}, nm.submitRetryConfig)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to submit transaction after retries: %w", err)
+		return nil, "", fmt.Errorf("submit failed: %w", err)
 	}
 
-	// Now wait for confirmation with retry logic
-	confirmOperation := func() (*types.Receipt, error) {
-		// Create a timeout context for this specific confirmation attempt
+	// Wait for confirmation with retry
+	receipt, err := retry.Retry(ctx, func() (*types.Receipt, error) {
 		confirmCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-
 		receipt, err := bind.WaitMined(confirmCtx, nm.client, signedTx)
-		if err != nil {
-			// If we get a timeout, we might need to create a replacement transaction
-			if confirmCtx.Err() == context.DeadlineExceeded {
-				nm.logger.Warnf("Transaction %s confirmation timed out, will create replacement", txHash)
-				return nil, fmt.Errorf("confirmation timeout")
-			}
-			return nil, err
+		if confirmCtx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("confirmation timeout")
 		}
+		return receipt, err
+	}, nm.confirmRetryConfig)
 
-		return receipt, nil
-	}
-
-	receipt, err := retry.Retry(ctx, confirmOperation, nm.confirmRetryConfig, nm.logger)
 	if err != nil {
-		// If confirmation failed, try to create a replacement transaction
-		nm.logger.Warnf("Transaction %s confirmation failed, creating replacement: %v", txHash, err)
-
-		// Create replacement transaction with higher fees
-		signedReplacementTx, replaceErr := nm.createReplacementTransaction(signedTx, 1, privateKey)
+		// Try replacement
+		nm.logger.Warn(ctx, "Confirmation failed, replacing", observability.Error(err))
+		replacementTx, replaceErr := nm.createReplacementTx(signedTx, 1, privateKey)
 		if replaceErr != nil {
-			return nil, "", fmt.Errorf("failed to create replacement transaction: %w", replaceErr)
+			return nil, "", fmt.Errorf("replacement failed: %w", replaceErr)
 		}
-
-		// Update tracking
-		nm.updateTransactionStatus(nonce, signedReplacementTx.Hash().Hex(), signedReplacementTx.GasPrice())
-
-		// Recursively try with the replacement transaction (but limit depth)
-		return nm.submitWithRetry(ctx, signedReplacementTx, nonce, privateKey)
+		nm.updateTxStatus(nonce, replacementTx.Hash().Hex(), replacementTx.GasPrice())
+		return nm.submitWithRetry(ctx, replacementTx, nonce, privateKey)
 	}
 
-	// Success!
-	nm.markTransactionConfirmed(nonce, txHash)
-	nm.logger.Infof("Transaction confirmed: %s", txHash)
+	nm.markConfirmed(nonce, txHash)
+	nm.logger.Debug(ctx, "Transaction confirmed", observability.String("tx_hash", txHash))
 	return receipt, txHash, nil
 }
 
-// getOptimalGasParams gets optimal gas price for current network conditions with retry logic
-func (nm *NonceManager) getOptimalGasParams(ctx context.Context) (*big.Int, error) {
-	operation := func() (*big.Int, error) {
+func (nm *NonceManager) getGasPrice(ctx context.Context) (*big.Int, error) {
+	gasPrice, err := retry.Retry(ctx, func() (*big.Int, error) {
 		return nm.client.SuggestGasPrice(ctx)
-	}
-
-	gasPrice, err := retry.Retry(ctx, operation, nm.rpcRetryConfig, nm.logger)
+	}, nm.rpcRetryConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get gas price after retries: %w", err)
+		return nil, fmt.Errorf("failed to get gas price: %w", err)
 	}
 
-	// Add 20% buffer for network congestion
+	// 20% buffer
 	gasPrice.Mul(gasPrice, big.NewInt(120))
 	gasPrice.Div(gasPrice, big.NewInt(100))
-
-	nm.logger.Debugf("Using legacy gas price: %s", gasPrice.String())
 	return gasPrice, nil
 }
 
-// createReplacementTransaction creates a replacement transaction with higher fees
-func (nm *NonceManager) createReplacementTransaction(originalTx *types.Transaction, attempt int, privateKey *ecdsa.PrivateKey) (*types.Transaction, error) {
-	// Get the transaction data
-	var to common.Address
-	var data []byte
-	var chainID *big.Int
-
-	switch tx := originalTx.Type(); tx {
-	case 0: // Legacy transaction
-		to = *originalTx.To()
-		data = originalTx.Data()
-		chainID = originalTx.ChainId()
-	case 2: // EIP-1559 transaction - convert to legacy
-		to = *originalTx.To()
-		data = originalTx.Data()
-		chainID = originalTx.ChainId()
-	default:
-		return nil, fmt.Errorf("unsupported transaction type: %d", tx)
-	}
-
-	// Get higher gas price with retry logic
+func (nm *NonceManager) createReplacementTx(originalTx *types.Transaction, attempt int, privateKey *ecdsa.PrivateKey) (*types.Transaction, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	gasPrice, err := nm.getOptimalGasParams(ctx)
+	gasPrice, err := nm.getGasPrice(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get gas price for replacement: %w", err)
+		return nil, err
 	}
 
-	// Increase fees by 20% for each attempt
-	feeMultiplier := big.NewInt(int64(120 + (attempt * 20))) // 120%, 140%, 160%, etc.
-	feeDivisor := big.NewInt(100)
+	// Increase by 20% per attempt
+	multiplier := big.NewInt(int64(120 + (attempt * 20)))
+	gasPrice.Mul(gasPrice, multiplier)
+	gasPrice.Div(gasPrice, big.NewInt(100))
 
-	gasPrice.Mul(gasPrice, feeMultiplier)
-	gasPrice.Div(gasPrice, feeDivisor)
-
-	// Create and sign the replacement transaction
-	tx := types.NewTransaction(originalTx.Nonce(), to, big.NewInt(0), 600000, gasPrice, data)
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign replacement transaction: %w", err)
-	}
-
-	return signedTx, nil
+	tx := types.NewTransaction(originalTx.Nonce(), *originalTx.To(), big.NewInt(0), 600000, gasPrice, originalTx.Data())
+	return types.SignTx(tx, types.NewEIP155Signer(originalTx.ChainId()), privateKey)
 }
 
-// Helper methods for transaction tracking
+// Transaction tracking helpers
 func (nm *NonceManager) trackTransaction(nonce uint64, txHash string, data []byte, to common.Address, chainID *big.Int, privateKey *ecdsa.PrivateKey, gasPrice *big.Int) {
 	nm.txMutex.Lock()
 	defer nm.txMutex.Unlock()
-
 	nm.pendingTxs[nonce] = &PendingTransaction{
-		Nonce:        nonce,
-		TxHash:       txHash,
-		CreatedAt:    time.Now(),
-		Status:       "pending",
-		Attempts:     1,
-		LastGasPrice: gasPrice,
-		Data:         data,
-		To:           to,
-		ChainID:      chainID,
-		PrivateKey:   privateKey,
+		Nonce: nonce, TxHash: txHash, CreatedAt: time.Now(), Status: "pending",
+		Attempts: 1, LastGasPrice: gasPrice, Data: data, To: to, ChainID: chainID, PrivateKey: privateKey,
 	}
 }
 
-func (nm *NonceManager) updateTransactionStatus(nonce uint64, txHash string, gasPrice *big.Int) {
+func (nm *NonceManager) trackPendingTx(nonce uint64, txHash string, chainID *big.Int, privateKey *ecdsa.PrivateKey, gasPrice *big.Int) {
 	nm.txMutex.Lock()
 	defer nm.txMutex.Unlock()
+	if existing, exists := nm.pendingTxs[nonce]; exists {
+		existing.TxHash = txHash
+		existing.LastGasPrice = gasPrice
+		existing.Attempts++
+	} else {
+		nm.pendingTxs[nonce] = &PendingTransaction{
+			Nonce: nonce, TxHash: txHash, CreatedAt: time.Now(), Status: "pending",
+			Attempts: 1, LastGasPrice: gasPrice, To: nm.address, ChainID: chainID, PrivateKey: privateKey,
+		}
+	}
+}
 
+func (nm *NonceManager) updateTxStatus(nonce uint64, txHash string, gasPrice *big.Int) {
+	nm.txMutex.Lock()
+	defer nm.txMutex.Unlock()
 	if tx, exists := nm.pendingTxs[nonce]; exists {
 		tx.TxHash = txHash
 		tx.Status = "pending"
 		tx.Attempts++
 		tx.LastGasPrice = gasPrice
-		tx.CreatedAt = time.Now()
 	}
 }
 
-func (nm *NonceManager) markTransactionConfirmed(nonce uint64, txHash string) {
+func (nm *NonceManager) markConfirmed(nonce uint64, txHash string) {
 	nm.txMutex.Lock()
 	defer nm.txMutex.Unlock()
-
 	if tx, exists := nm.pendingTxs[nonce]; exists {
 		tx.Status = "confirmed"
 		tx.TxHash = txHash
 	}
 }
 
-// Custom error predicates for different operation types
-func shouldRetryRPCError(err error, attempt int) bool {
+// Error retry predicates
+func shouldRetryRPCError(err error, _ int) bool {
 	if err == nil {
 		return false
 	}
-
-	errStr := strings.ToLower(err.Error())
-
-	// Retry on network/connection issues
-	if strings.Contains(errStr, "connection") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "network") ||
-		strings.Contains(errStr, "dial") ||
-		strings.Contains(errStr, "refused") ||
-		strings.Contains(errStr, "unavailable") {
-		return true
-	}
-
-	// Retry on rate limiting
-	if strings.Contains(errStr, "rate limit") ||
-		strings.Contains(errStr, "too many requests") ||
-		strings.Contains(errStr, "429") {
-		return true
-	}
-
-	// Retry on temporary server errors
-	if strings.Contains(errStr, "500") ||
-		strings.Contains(errStr, "502") ||
-		strings.Contains(errStr, "503") ||
-		strings.Contains(errStr, "504") {
-		return true
-	}
-
-	return false
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "connection") || strings.Contains(s, "timeout") ||
+		strings.Contains(s, "network") || strings.Contains(s, "dial") ||
+		strings.Contains(s, "refused") || strings.Contains(s, "unavailable") ||
+		strings.Contains(s, "rate limit") || strings.Contains(s, "429") ||
+		strings.Contains(s, "500") || strings.Contains(s, "502") ||
+		strings.Contains(s, "503") || strings.Contains(s, "504")
 }
 
 func shouldRetrySubmissionError(err error, attempt int) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := strings.ToLower(err.Error())
-
-	// Retry on network issues
 	if shouldRetryRPCError(err, attempt) {
 		return true
 	}
-
-	// Retry on nonce issues (but not too many times)
-	if attempt < 3 && (strings.Contains(errStr, "nonce too low") ||
-		strings.Contains(errStr, "replacement transaction underpriced") ||
-		strings.Contains(errStr, "already known")) {
+	s := strings.ToLower(err.Error())
+	if attempt < 3 && (strings.Contains(s, "nonce too low") ||
+		strings.Contains(s, "replacement transaction underpriced") ||
+		strings.Contains(s, "already known")) {
 		return true
 	}
-
-	// Retry on gas estimation issues
-	if strings.Contains(errStr, "gas") &&
-		(strings.Contains(errStr, "estimate") || strings.Contains(errStr, "limit")) {
-		return true
-	}
-
-	// Retry on temporary blockchain issues
-	if strings.Contains(errStr, "insufficient funds") && attempt < 2 {
-		return true // Might be a temporary balance issue
-	}
-
-	return false
+	return strings.Contains(s, "gas") && (strings.Contains(s, "estimate") || strings.Contains(s, "limit"))
 }
 
 func shouldRetryConfirmationError(err error, attempt int) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := strings.ToLower(err.Error())
-
-	// Retry on network issues
 	if shouldRetryRPCError(err, attempt) {
 		return true
 	}
-
-	// Retry on transaction not found (might be pending)
-	if strings.Contains(errStr, "not found") ||
-		strings.Contains(errStr, "unknown transaction") {
-		return true
-	}
-
-	// Retry on timeout errors
-	if strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "deadline exceeded") {
-		return true
-	}
-
-	return false
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "not found") || strings.Contains(s, "unknown transaction") ||
+		strings.Contains(s, "timeout") || strings.Contains(s, "deadline exceeded")
 }
 
-// Utility functions
 func isNonceTooLowError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "nonce too low") ||
-		strings.Contains(errStr, "replacement transaction underpriced") ||
-		strings.Contains(errStr, "already known")
+	s := err.Error()
+	return strings.Contains(s, "nonce too low") ||
+		strings.Contains(s, "replacement transaction underpriced") ||
+		strings.Contains(s, "already known")
 }

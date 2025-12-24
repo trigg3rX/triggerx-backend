@@ -17,14 +17,14 @@ type DockerExecutorAPI interface {
 	GetHealthStatus() *execution.HealthStatus
 	GetExecutionFeeConfig() config.ExecutionFeeConfig
 	GetStats() *types.PerformanceMetrics
-	GetAllPoolStats() map[types.Language]*types.PoolStats
-	GetPoolStats(language types.Language) *types.PoolStats
-	GetLanguageStats(language types.Language) (*types.PoolStats, bool)
-	GetSupportedLanguages() []types.Language
+	GetAllPoolStats(ctx context.Context) map[types.Language]*types.PoolStats
+	GetPoolStats(ctx context.Context, language types.Language) *types.PoolStats
+	GetLanguageStats(ctx context.Context, language types.Language) (*types.PoolStats, bool)
+	GetSupportedLanguages(ctx context.Context) []types.Language
 	IsLanguageSupported(language types.Language) bool
 	GetActiveExecutions() []*types.ExecutionContext
-	CancelExecution(executionID string) error
+	CancelExecution(ctx context.Context, executionID string) error
 	GetAlerts(severity string, limit int) []execution.Alert
-	ClearAlerts()
+	ClearAlerts(ctx context.Context)
 	Close(ctx context.Context) error
 }

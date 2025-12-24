@@ -13,18 +13,23 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // checkCondition fetches the current value and checks if condition is satisfied
-func (w *ConditionWorker) checkCondition() error {
+func (w *ConditionWorker) checkCondition(ctx context.Context) error {
 	startTime := time.Now()
 
 	// Track condition check by source type
 	metrics.TrackConditionBySource(w.ConditionWorkerData.ValueSourceType)
 
 	// Fetch current value from source (with caching)
-	currentValue, err := w.fetchValueWithCache()
+	currentValue, err := w.fetchValueWithCache(ctx)
 	if err != nil {
 		metrics.TrackValueParsingError(w.ConditionWorkerData.ValueSourceType)
 		return fmt.Errorf("failed to fetch value: %w", err)
@@ -67,14 +72,31 @@ func (w *ConditionWorker) checkCondition() error {
 		conditionContext["status"] = "satisfied"
 		conditionContext["consecutive_checks"] = w.ConditionMet
 
-		w.Logger.Info("Condition satisfied",
-			"job_id", w.ConditionWorkerData.JobID,
-			"current_value", currentValue,
-			"condition_type", w.ConditionWorkerData.ConditionType,
-			"upper_limit", w.ConditionWorkerData.UpperLimit,
-			"lower_limit", w.ConditionWorkerData.LowerLimit,
-			"consecutive_checks", w.ConditionMet,
+		w.Logger.Debug(ctx, "Condition satisfied",
+			observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+			observability.Float64("current_value", currentValue),
+			observability.String("condition_type", w.ConditionWorkerData.ConditionType),
+			observability.Float64("upper_limit", w.ConditionWorkerData.UpperLimit),
+			observability.Float64("lower_limit", w.ConditionWorkerData.LowerLimit),
+			observability.Int64("consecutive_checks", w.ConditionMet),
 		)
+
+		// Create trace BEFORE sending notification
+		ctx, triggerSpan := w.Tracer.Start(ctx, "task.trigger.condition",
+			observability.WithSpanKind(trace.SpanKindProducer),
+			observability.WithAttributes(
+				attribute.String("job.id", w.ConditionWorkerData.JobID.String()),
+				attribute.String("condition.type", w.ConditionWorkerData.ConditionType),
+				attribute.Float64("trigger.value", currentValue),
+				attribute.Float64("condition.upper_limit", w.ConditionWorkerData.UpperLimit),
+				attribute.Float64("condition.lower_limit", w.ConditionWorkerData.LowerLimit),
+			),
+		)
+		defer triggerSpan.End()
+
+		triggerSpan.AddEvent("condition.satisfied", observability.WithEventAttributes(
+			attribute.Float64("current_value", currentValue),
+		))
 
 		// Notify scheduler about the trigger
 		if w.TriggerCallback != nil {
@@ -84,28 +106,34 @@ func (w *ConditionWorker) checkCondition() error {
 				TriggeredAt:  time.Now(),
 			}
 
-			if err := w.TriggerCallback(notification); err != nil {
-				w.Logger.Error("Failed to notify scheduler about trigger",
-					"job_id", w.ConditionWorkerData.JobID,
-					"error", err,
+			// Callback receives ctx with trace context
+			if err := w.TriggerCallback(ctx, notification); err != nil {
+				triggerSpan.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "notification_failed"),
+				))
+				triggerSpan.SetStatus(codes.Error, "failed to notify scheduler")
+				w.Logger.Error(ctx, "Failed to notify scheduler about trigger",
+					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.Error(err),
 				)
 				metrics.TrackCriticalError("trigger_notification_failed")
 			} else {
-				w.Logger.Info("Successfully notified scheduler about trigger",
-					"job_id", w.ConditionWorkerData.JobID,
-					"trigger_value", currentValue,
+				triggerSpan.AddEvent("notification.sent")
+				w.Logger.Debug(ctx, "Successfully notified scheduler about trigger",
+					observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+					observability.Float64("trigger_value", currentValue),
 				)
 			}
 		} else {
-			w.Logger.Warn("No trigger callback configured for worker",
-				"job_id", w.ConditionWorkerData.JobID,
+			w.Logger.Warn(ctx, "No trigger callback configured for worker",
+				observability.String("job_id", w.ConditionWorkerData.JobID.String()),
 			)
 		}
 
 		// For non-recurring jobs, stop the worker after triggering
 		if !w.ConditionWorkerData.Recurring {
-			w.Logger.Info("Non-recurring job triggered, stopping worker", "job_id", w.ConditionWorkerData.JobID)
-			go w.Stop() // Stop in a goroutine to avoid deadlock
+			w.Logger.Info(ctx, "Non-recurring job triggered, stopping worker", observability.String("job_id", w.ConditionWorkerData.JobID.String()))
+			go w.Stop(ctx) // Stop in a goroutine to avoid deadlock
 		}
 
 		duration := time.Since(startTime)
@@ -116,19 +144,19 @@ func (w *ConditionWorker) checkCondition() error {
 		w.ConditionMet = 0
 		conditionContext["status"] = "not_satisfied"
 
-		w.Logger.Debug("Condition not satisfied",
-			"job_id", w.ConditionWorkerData.JobID,
-			"current_value", currentValue,
-			"condition_type", w.ConditionWorkerData.ConditionType,
+		w.Logger.Debug(ctx, "Condition not satisfied",
+			observability.String("job_id", w.ConditionWorkerData.JobID.String()),
+			observability.Float64("current_value", currentValue),
+			observability.String("condition_type", w.ConditionWorkerData.ConditionType),
 		)
 	}
 	return nil
 }
 
 // fetchValueWithCache retrieves the current value with caching support
-func (w *ConditionWorker) fetchValueWithCache() (float64, error) {
+func (w *ConditionWorker) fetchValueWithCache(ctx context.Context) (float64, error) {
 	// Fetch fresh value
-	currentValue, err := w.fetchValue()
+	currentValue, err := w.fetchValue(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -137,12 +165,12 @@ func (w *ConditionWorker) fetchValueWithCache() (float64, error) {
 }
 
 // fetchValue retrieves the current value from the configured source
-func (w *ConditionWorker) fetchValue() (float64, error) {
+func (w *ConditionWorker) fetchValue(ctx context.Context) (float64, error) {
 	switch w.ConditionWorkerData.ValueSourceType {
 	case SourceTypeAPI:
-		return w.fetchFromAPI()
+		return w.fetchFromAPI(ctx)
 	case SourceTypeOracle:
-		return w.fetchFromOracle()
+		return w.fetchFromOracle(ctx)
 	case SourceTypeStatic:
 		return w.fetchStaticValue()
 	default:
@@ -296,7 +324,7 @@ func (w *ConditionWorker) parseDirectValue(body []byte) (float64, error) {
 }
 
 // fetchFromAPI fetches value from an HTTP API endpoint
-func (w *ConditionWorker) fetchFromAPI() (float64, error) {
+func (w *ConditionWorker) fetchFromAPI(ctx context.Context) (float64, error) {
 	req, err := http.NewRequestWithContext(context.Background(), "GET", w.ConditionWorkerData.ValueSourceUrl, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create request: %w", err)
@@ -315,13 +343,13 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			w.Logger.Errorf("Error closing response body: %v", err)
+			w.Logger.Error(ctx, "Error closing response body", observability.Error(err))
 		}
 	}()
 
 	statusCode := strconv.Itoa(resp.StatusCode)
 	metrics.TrackHTTPRequest("GET", w.ConditionWorkerData.ValueSourceUrl, statusCode)
-	metrics.TrackAPIResponse(w.ConditionWorkerData.ValueSourceUrl, statusCode)
+	metrics.TrackAPIResponse(statusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("HTTP request failed with status: %s", resp.Status)
@@ -344,10 +372,10 @@ func (w *ConditionWorker) fetchFromAPI() (float64, error) {
 }
 
 // fetchFromOracle fetches value from an oracle (placeholder implementation)
-func (w *ConditionWorker) fetchFromOracle() (float64, error) {
+func (w *ConditionWorker) fetchFromOracle(ctx context.Context) (float64, error) {
 	// TODO: Implement oracle-specific logic
 	// For now, treat as API endpoint
-	return w.fetchFromAPI()
+	return w.fetchFromAPI(ctx)
 }
 
 // fetchStaticValue returns a static value (for testing purposes)

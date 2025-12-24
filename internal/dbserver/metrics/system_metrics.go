@@ -16,7 +16,7 @@ func StartSystemMetricsCollection() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			UptimeSeconds.Set(time.Since(startTime).Seconds())
+			UptimeSeconds.Set(ctx, time.Since(startTime).Seconds())
 		}
 	}()
 
@@ -28,16 +28,16 @@ func StartSystemMetricsCollection() {
 		for range ticker.C {
 			// Memory usage
 			if vmStat, err := mem.VirtualMemory(); err == nil {
-				MemoryUsageBytes.Set(float64(vmStat.Used))
+				MemoryUsageBytes.Set(ctx, float64(vmStat.Used))
 			}
 
 			// CPU usage
 			if cpuPercent, err := cpu.Percent(time.Second, false); err == nil && len(cpuPercent) > 0 {
-				CPUUsagePercent.Set(cpuPercent[0])
+				CPUUsagePercent.Set(ctx, cpuPercent[0])
 			}
 
 			// Goroutines count
-			GoroutinesActive.Set(float64(runtime.NumGoroutine()))
+			GoroutinesActive.Set(ctx, float64(runtime.NumGoroutine()))
 		}
 	}()
 
@@ -55,7 +55,7 @@ func StartSystemMetricsCollection() {
 
 			// Calculate GC duration
 			gcDuration := float64(currentGCStats.PauseTotalNs-lastGCStats.PauseTotalNs) / float64(time.Second)
-			GCDurationSeconds.Set(gcDuration)
+			GCDurationSeconds.Set(ctx, gcDuration)
 
 			lastGCStats = currentGCStats
 		}

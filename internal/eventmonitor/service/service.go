@@ -13,7 +13,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/worker"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Service manages the event monitor service
@@ -22,7 +22,8 @@ type Service struct {
 	nodeClients     map[string]*nodeclient.NodeClient // chainID -> NodeClient
 	workers         map[string]*worker.Worker         // registry key -> Worker
 	webhookClient   *webhook.Client
-	logger          logging.Logger
+	logger          observability.Logger
+	tracer          observability.Tracer
 	mu              sync.RWMutex
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -30,10 +31,10 @@ type Service struct {
 }
 
 // NewService creates a new event monitor service
-func NewService(logger logging.Logger) (*Service, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewService(ctx context.Context, logger observability.Logger, tracer observability.Tracer) (*Service, error) {
+	ctx, cancel := context.WithCancel(ctx)
 
-	rm := registry.NewRegistryManager(logger)
+	rm := registry.NewRegistryManager(ctx, logger)
 	wc := webhook.NewClient(logger)
 
 	// Initialize node clients for supported chains
@@ -53,13 +54,13 @@ func NewService(logger logging.Logger) (*Service, error) {
 		case "421614":
 			network = nodeclient.NetworkArbitrumSepolia
 		default:
-			logger.Warn("Unknown chain ID, using custom URL", "chain_id", chainID)
+			logger.Warn(ctx, "Unknown chain ID, using custom URL", observability.String("chain_id", chainID))
 			// Create custom config with base URL
 			cfg := nodeclient.DefaultConfig(config.GetAlchemyAPIKey(), "", logger)
 			cfg.BaseURL = rpcURL
 			client, err := nodeclient.NewNodeClient(cfg)
 			if err != nil {
-				logger.Error("Failed to create node client", "chain_id", chainID, "error", err)
+				logger.Error(ctx, "Failed to create node client", observability.String("chain_id", chainID), observability.Error(err))
 				continue
 			}
 			nodeClients[chainID] = client
@@ -74,11 +75,11 @@ func NewService(logger logging.Logger) (*Service, error) {
 		}
 		client, err := nodeclient.NewNodeClient(cfg)
 		if err != nil {
-			logger.Error("Failed to create node client", "chain_id", chainID, "error", err)
+			logger.Error(ctx, "Failed to create node client", observability.String("chain_id", chainID), observability.Error(err))
 			continue
 		}
 		nodeClients[chainID] = client
-		logger.Info("Initialized node client", "chain_id", chainID)
+		// logger.Info(ctx, "Initialized node client", observability.String("chain_id", chainID))
 	}
 
 	return &Service{
@@ -87,6 +88,7 @@ func NewService(logger logging.Logger) (*Service, error) {
 		workers:         make(map[string]*worker.Worker),
 		webhookClient:   wc,
 		logger:          logger,
+		tracer:          tracer,
 		ctx:             ctx,
 		cancel:          cancel,
 	}, nil
@@ -94,7 +96,7 @@ func NewService(logger logging.Logger) (*Service, error) {
 
 // Start starts the service
 func (s *Service) Start() error {
-	s.logger.Info("Starting event monitor service")
+	s.logger.Info(s.ctx, "Starting event monitor service")
 
 	// Start monitoring registry changes
 	go s.monitorRegistry()
@@ -104,7 +106,7 @@ func (s *Service) Start() error {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	s.logger.Info("Stopping event monitor service")
+	s.logger.Info(s.ctx, "Stopping event monitor service")
 
 	// Cancel context
 	s.cancel()
@@ -123,10 +125,10 @@ func (s *Service) Stop() {
 	// Close node clients
 	for chainID, client := range s.nodeClients {
 		client.Close()
-		s.logger.Info("Closed node client", "chain_id", chainID)
+		s.logger.Debug(s.ctx, "Closed node client", observability.String("chain_id", chainID))
 	}
 
-	s.logger.Info("Event monitor service stopped")
+	s.logger.Info(s.ctx, "Event monitor service stopped")
 }
 
 // Register registers a monitoring request and starts a worker if needed
@@ -180,7 +182,7 @@ func (s *Service) Unregister(requestID string) error {
 		if w, exists := s.workers[key]; exists {
 			w.Stop()
 			delete(s.workers, key)
-			s.logger.Info("Stopped worker", "key", key)
+			s.logger.Debug(s.ctx, "Stopped worker due to no subscribers", observability.String("key", key))
 		}
 		s.mu.Unlock()
 	}
@@ -207,7 +209,7 @@ func (s *Service) startWorker(key string) error {
 	}
 
 	// Create worker
-	w := worker.NewWorker(entry, nodeClient, s.webhookClient, s.logger)
+	w := worker.NewWorker(entry, nodeClient, s.webhookClient, s.logger, s.tracer)
 
 	s.mu.Lock()
 	s.workers[key] = w
@@ -220,7 +222,7 @@ func (s *Service) startWorker(key string) error {
 		w.Start()
 	}()
 
-	s.logger.Info("Started worker", "key", key, "chain_id", entry.ChainID)
+	s.logger.Debug(s.ctx, "Started worker", observability.String("key", key), observability.String("chain_id", entry.ChainID))
 	return nil
 }
 
@@ -252,14 +254,14 @@ func (s *Service) syncWorkers() {
 			// Check if node client exists
 			if _, exists := s.nodeClients[entry.ChainID]; exists {
 				// Start worker
-				w := worker.NewWorker(entry, s.nodeClients[entry.ChainID], s.webhookClient, s.logger)
+				w := worker.NewWorker(entry, s.nodeClients[entry.ChainID], s.webhookClient, s.logger, s.tracer)
 				s.workers[key] = w
 				s.wg.Add(1)
 				go func(workerKey string, worker *worker.Worker) {
 					defer s.wg.Done()
 					worker.Start()
 				}(key, w)
-				s.logger.Info("Started worker (sync)", "key", key)
+				s.logger.Debug(s.ctx, "Started worker (sync)", observability.String("key", key))
 			}
 		}
 	}
@@ -269,7 +271,7 @@ func (s *Service) syncWorkers() {
 		if _, exists := entries[key]; !exists {
 			w.Stop()
 			delete(s.workers, key)
-			s.logger.Info("Stopped worker (sync)", "key", key)
+			s.logger.Debug(s.ctx, "Stopped worker (sync)", observability.String("key", key))
 		}
 	}
 }

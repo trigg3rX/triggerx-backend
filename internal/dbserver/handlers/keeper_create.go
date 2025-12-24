@@ -7,14 +7,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (h *Handler) CreateKeeperData(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[CreateKeeperData] trace_id=%s - Creating keeper data", traceID)
 	var keeperData types.CreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
-		h.logger.Errorf("[CreateKeeperData] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateKeeperData] Error decoding request body", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid request format",
 			"code":  "INVALID_REQUEST",
@@ -26,7 +25,7 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	existingKeeperID, err := h.keeperRepository.CheckKeeperExists(keeperData.KeeperAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateKeeperData] Database error while checking keeper existence: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateKeeperData] Database error while checking keeper existence", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Database error while checking keeper status",
 			"code":  "DB_ERROR",
@@ -35,7 +34,6 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	}
 
 	if existingKeeperID != -1 {
-		h.logger.Infof("[CreateKeeperData] Keeper already exists with ID: %d", existingKeeperID)
 		c.JSON(http.StatusOK, gin.H{
 			"message":   "Keeper already exists",
 			"keeper_id": existingKeeperID,
@@ -48,7 +46,7 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	currentKeeperID, err := h.keeperRepository.CreateKeeper(keeperData)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateKeeperData] Error creating keeper data: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateKeeperData] Error creating keeper data", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create keeper",
 			"code":  "KEEPER_CREATION_ERROR",
@@ -75,22 +73,20 @@ func (h *Handler) CreateKeeperData(c *gin.Context) {
 	// `, keeperData.KeeperName)
 
 	// if err := h.sendEmailNotification(keeperData.EmailID, subject, emailBody); err != nil {
-	// 	h.logger.Errorf(" Error sending welcome email to keeper %s: %v", keeperData.KeeperName, err)
+	// 	h.logger.Error(c.Request.Context(), "[CreateKeeperData] Error sending welcome email to keeper", observability.Error(err))
 	// 	// Note: We don't return here as the keeper creation was successful
 	// } else {
-	// 	h.logger.Infof(" Welcome email sent successfully to keeper %s at %s", keeperData.KeeperName, keeperData.EmailID)
+	// 	h.logger.Info(c.Request.Context(), "[CreateKeeperData] Welcome email sent successfully to keeper", observability.String("keeper_name", keeperData.KeeperName), observability.String("email_id", keeperData.EmailID))
 	// }
 
-	h.logger.Infof("[CreateKeeperData] Successfully created keeper with ID: %d", currentKeeperID)
 	c.JSON(http.StatusCreated, gin.H{"keeper_id": currentKeeperID})
+	h.logger.Info(c.Request.Context(), "[CreateKeeperData] Created keeper", observability.Int64("keeper_id", currentKeeperID))
 }
 
 func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[CreateKeeperDataGoogleForm] trace_id=%s - Creating keeper data from Google Form", traceID)
 	var keeperData types.GoogleFormCreateKeeperData
 	if err := c.ShouldBindJSON(&keeperData); err != nil {
-		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error decoding request body: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateKeeperDataGoogleForm] Error decoding request body", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format", "code": "INVALID_REQUEST"})
 		return
 	}
@@ -101,7 +97,7 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 	existingKeeperID, err := h.keeperRepository.CheckKeeperExistsByAddress(keeperData.KeeperAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateKeeperDataGoogleForm] Database error while checking keeper existence: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateKeeperDataGoogleForm] Database error while checking keeper existence", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error while checking keeper status", "code": "DB_ERROR"})
 		return
 	}
@@ -117,11 +113,11 @@ func (h *Handler) CreateKeeperDataGoogleForm(c *gin.Context) {
 	keeperID, err := h.keeperRepository.CreateOrUpdateKeeperFromGoogleForm(keeperData)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[CreateKeeperDataGoogleForm] Error creating/updating keeper data: %v", err)
+		h.logger.Error(c.Request.Context(), "[CreateKeeperDataGoogleForm] Error creating/updating keeper data", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create/update keeper", "code": "KEEPER_CREATION_ERROR"})
 		return
 	}
 
-	h.logger.Infof("[CreateKeeperDataGoogleForm] Successfully processed keeper with ID: %d", keeperID)
 	c.JSON(http.StatusCreated, gin.H{"keeper_id": keeperID, "status": status})
+	h.logger.Info(c.Request.Context(), "[CreateKeeperDataGoogleForm] Created/updated keeper", observability.Int64("keeper_id", keeperID), observability.String("status", status))
 }

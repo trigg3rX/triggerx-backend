@@ -5,7 +5,7 @@ import (
 	"time"
 
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	wsclient "github.com/trigg3rX/triggerx-backend/pkg/websocket"
 )
 
@@ -30,7 +30,7 @@ type Config struct {
 	WebSocketURL string
 
 	// Logger is the logger instance
-	Logger logging.Logger
+	Logger observability.Logger
 
 	// RequestTimeout is the timeout for individual requests
 	RequestTimeout time.Duration
@@ -89,7 +89,7 @@ func (c *Config) GetFullURL() string {
 }
 
 // DefaultConfig returns a default configuration with sensible defaults
-func DefaultConfig(apiKey string, network Network, logger logging.Logger) *Config {
+func DefaultConfig(apiKey string, network Network, logger observability.Logger) *Config {
 	return &Config{
 		APIKey:         apiKey,
 		Network:        network,

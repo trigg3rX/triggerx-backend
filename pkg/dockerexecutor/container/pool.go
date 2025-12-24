@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/docker/docker/api/types/container"
+	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/pkg/client/docker"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/scripts"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // ContainerManager defines what the container pool needs from a container manager
@@ -29,7 +29,7 @@ type containerPool struct {
 	containers        map[string]*types.PooledContainer
 	mutex             sync.RWMutex
 	config            config.LanguagePoolConfig
-	logger            logging.Logger
+	logger            observability.Logger
 	manager           ContainerManager
 	stats             *types.PoolStats
 	statsMutex        sync.RWMutex
@@ -39,7 +39,7 @@ type containerPool struct {
 	creationSemaphore chan struct{}               // Semaphore to control container creation
 }
 
-func newContainerPool(cfg config.LanguagePoolConfig, manager ContainerManager, logger logging.Logger) *containerPool {
+func newContainerPool(ctx context.Context, cfg config.LanguagePoolConfig, manager ContainerManager, logger observability.Logger) *containerPool {
 	pool := &containerPool{
 		language:          cfg.LanguageConfig.Language,
 		containers:        make(map[string]*types.PooledContainer),
@@ -72,13 +72,13 @@ func newContainerPool(cfg config.LanguagePoolConfig, manager ContainerManager, l
 	}
 
 	// Start health check routine
-	pool.startHealthCheckRoutine()
+	pool.startHealthCheckRoutine(ctx)
 
 	return pool
 }
 
 func (p *containerPool) initialize(ctx context.Context) error {
-	// p.logger.Infof("Initializing %s language pool with %d pre-warmed containers", p.language, p.config.MinContainers)
+	// p.logger.Debug(ctx, "Initializing language pool", observability.String("language", string(p.language)), observability.Int("pre_warmed_containers", p.config.BasePoolConfig.MinContainers))
 
 	// Pre-warm containers in parallel for faster initialization
 	containerChan := make(chan *types.PooledContainer, p.config.BasePoolConfig.MinContainers)
@@ -89,7 +89,7 @@ func (p *containerPool) initialize(ctx context.Context) error {
 		go func(index int) {
 			container, err := p.createPreparedContainer(ctx)
 			if err != nil {
-				p.logger.Warnf("Failed to create pre-warmed container %d for language %s: %v", index, p.language, err)
+				p.logger.Warn(ctx, "Failed to create pre-warmed container", observability.Int("index", index), observability.String("language", string(p.language)), observability.Error(err))
 				errorChan <- err
 				return
 			}
@@ -103,18 +103,18 @@ func (p *containerPool) initialize(ctx context.Context) error {
 		select {
 		case container := <-containerChan:
 			successCount++
-			p.logger.Debugf("Successfully created pre-warmed container %d: %s", successCount, container.ID)
+			p.logger.Debug(ctx, "Successfully created pre-warmed container", observability.Int("index", successCount), observability.String("container_id", container.ID))
 		case err := <-errorChan:
-			p.logger.Warnf("Container creation failed: %v", err)
+			p.logger.Warn(ctx, "Container creation failed", observability.Error(err))
 		case <-ctx.Done():
 			return fmt.Errorf("context cancelled during container initialization: %w", ctx.Err())
 		}
 	}
 
-	p.logger.Infof("%s language pool initialized with %d containers", p.language, successCount)
+	p.logger.Debug(ctx, "Language pool initialized", observability.String("language", string(p.language)), observability.Int("success_count", successCount))
 
 	// Populate ready queue with existing ready containers
-	p.populateReadyQueue()
+	p.populateReadyQueue(ctx)
 
 	return nil
 }
@@ -131,7 +131,7 @@ func (p *containerPool) getContainer(ctx context.Context) (*types.PooledContaine
 			// Only update status and return immediately for better performance
 			container.Status = types.ContainerStatusRunning
 			container.LastUsed = time.Now()
-			p.updateStats()
+			p.updateStats(ctx)
 			return container, nil
 
 		// If no container is ready, wait.
@@ -157,7 +157,7 @@ func (p *containerPool) getContainer(ctx context.Context) (*types.PooledContaine
 					// A container was returned. Loop to the top to grab and validate it.
 					container.Status = types.ContainerStatusRunning
 					container.LastUsed = time.Now()
-					p.updateStats()
+					p.updateStats(ctx)
 					return container, nil
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -169,26 +169,26 @@ func (p *containerPool) getContainer(ctx context.Context) (*types.PooledContaine
 	}
 }
 
-func (p *containerPool) returnContainer(container *types.PooledContainer) error {
-	p.logger.Debugf("Returning container %s to %s language pool", container.ID, p.language)
+func (p *containerPool) returnContainer(ctx context.Context, container *types.PooledContainer) error {
+	p.logger.Debug(ctx, "Returning container to language pool", observability.String("container_id", container.ID), observability.String("language", string(p.language)))
 
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	if pooledContainer, exists := p.containers[container.ID]; exists {
-		p.logger.Debugf("Found container %s in pool, resetting it", container.ID)
+		p.logger.Debug(ctx, "Found container in pool, resetting it", observability.String("container_id", container.ID))
 
 		// Reset container for reuse
-		if err := p.resetContainer(container.ID); err != nil {
-			p.logger.Warnf("Failed to reset container %s: %v", container.ID, err)
+		if err := p.resetContainer(ctx, container.ID); err != nil {
+			p.logger.Warn(ctx, "Failed to reset container", observability.String("container_id", container.ID), observability.Error(err))
 			// Mark as error and remove from pool
 			pooledContainer.Status = types.ContainerStatusError
 			pooledContainer.Error = err
-			p.updateStats()
+			p.updateStats(ctx)
 
 			// Try to cleanup the failed container
 			if cleanupErr := p.manager.CleanupContainer(context.Background(), container.ID); cleanupErr != nil {
-				p.logger.Warnf("Failed to cleanup failed container %s: %v", container.ID, cleanupErr)
+				p.logger.Warn(ctx, "Failed to cleanup failed container", observability.String("container_id", container.ID), observability.Error(cleanupErr))
 			} else {
 				delete(p.containers, container.ID)
 				// Release a token back to the semaphore since we removed a container
@@ -196,22 +196,22 @@ func (p *containerPool) returnContainer(container *types.PooledContainer) error 
 				case p.creationSemaphore <- struct{}{}:
 				default:
 					// Semaphore is full, which shouldn't happen but handle gracefully
-					p.logger.Warnf("Creation semaphore is full when trying to release token for removed container %s", container.ID)
+					p.logger.Warn(ctx, "Creation semaphore is full when trying to release token for removed container", observability.String("container_id", container.ID))
 				}
 			}
 
 			return err
 		}
 
-		p.logger.Debugf("Container %s reset successfully, marking as ready", container.ID)
+		p.logger.Debug(ctx, "Container reset successfully, marking as ready", observability.String("container_id", container.ID))
 		pooledContainer.Status = types.ContainerStatusReady
 		pooledContainer.Error = nil // Clear any previous errors
-		p.updateStats()
+		p.updateStats(ctx)
 
 		// Add container to ready queue for immediate availability
 		select {
 		case p.readyQueue <- pooledContainer:
-			p.logger.Debugf("Added container %s to ready queue", container.ID)
+			p.logger.Debug(ctx, "Added container to ready queue", observability.String("container_id", container.ID))
 		default:
 			// Ready queue is full, signal via wait queue as fallback
 			select {
@@ -221,9 +221,9 @@ func (p *containerPool) returnContainer(container *types.PooledContainer) error 
 			}
 		}
 
-		p.logger.Debugf("Returned container %s to %s language pool", container.ID, p.language)
+		p.logger.Debug(ctx, "Returned container to language pool", observability.String("container_id", container.ID), observability.String("language", string(p.language)))
 	} else {
-		p.logger.Warnf("Container %s not found in %s language pool", container.ID, p.language)
+		p.logger.Warn(ctx, "Container not found in language pool", observability.String("container_id", container.ID), observability.String("language", string(p.language)))
 	}
 
 	return nil
@@ -246,7 +246,7 @@ func (p *containerPool) createPreparedContainer(ctx context.Context) (*types.Poo
 	if err := p.initializeContainer(ctx, containerID); err != nil {
 		// Cleanup container if initialization fails
 		if cleanupErr := p.manager.CleanupContainer(ctx, containerID); cleanupErr != nil {
-			p.logger.Warnf("Failed to cleanup container %s after initialization failure: %v", containerID, cleanupErr)
+			p.logger.Warn(ctx, "Failed to cleanup container after initialization failure", observability.String("container_id", containerID), observability.Error(cleanupErr))
 		}
 		return nil, fmt.Errorf("failed to initialize container: %w", err)
 	}
@@ -266,30 +266,30 @@ func (p *containerPool) createPreparedContainer(ctx context.Context) (*types.Poo
 	p.mutex.Lock()
 	p.containers[containerID] = pooledContainer
 	p.stats.CreatedCount++
-	p.updateStats()
+	p.updateStats(ctx)
 	p.mutex.Unlock()
 
 	// Add to ready queue for immediate availability
 	select {
 	case p.readyQueue <- pooledContainer:
-		p.logger.Debugf("Added newly created container %s to ready queue", containerID)
+		p.logger.Debug(ctx, "Added newly created container to ready queue", observability.String("container_id", containerID))
 	default:
 		// Ready queue is full, container will be available on next GetContainer call
-		p.logger.Debugf("Ready queue full, container %s will be available on next request", containerID)
+		p.logger.Debug(ctx, "Ready queue full, container will be available on next request", observability.String("container_id", containerID))
 	}
 
-	p.logger.Infof("Created prepared container for language %s: %s", p.language, containerID)
+	p.logger.Debug(ctx, "Created prepared container", observability.String("language", string(p.language)), observability.String("container_id", containerID))
 	return pooledContainer, nil
 }
 
 func (p *containerPool) createContainer(ctx context.Context, codePath string) (string, error) {
 	absPath, err := filepath.Abs(codePath)
 	if err != nil {
-		p.logger.Errorf("failed to get absolute path: %v", err)
+		p.logger.Error(ctx, "Failed to get absolute path", observability.Error(err))
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	p.logger.Debugf("Creating container with code directory: %s", absPath)
+	p.logger.Debug(ctx, "Creating container with code directory", observability.String("code_path", absPath))
 
 	// For Docker-in-Docker, make sure the mount path is absolute and exists on the host
 	hostMountPath := absPath
@@ -330,20 +330,20 @@ func (p *containerPool) createContainer(ctx context.Context, codePath string) (s
 
 	resp, err := p.manager.GetDockerClient().ContainerCreate(ctx, config, hostConfig, nil, nil, containerName)
 	if err != nil {
-		p.logger.Errorf("failed to create container: %v", err)
+		p.logger.Error(ctx, "Failed to create container", observability.Error(err))
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 
 	containerID := resp.ID
-	p.logger.Infof("Container created with ID: %s", containerID)
+	p.logger.Debug(ctx, "Container created", observability.String("container_id", containerID))
 
 	// Start the container
 	err = p.manager.GetDockerClient().ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil {
-		p.logger.Errorf("failed to start container: %v", err)
+		p.logger.Error(ctx, "Failed to start container", observability.Error(err))
 		// Try to cleanup the created container
 		if cleanupErr := p.manager.GetDockerClient().ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); cleanupErr != nil {
-			p.logger.Warnf("Failed to cleanup container after start failure: %v", cleanupErr)
+			p.logger.Warn(ctx, "Failed to cleanup container after start failure", observability.Error(cleanupErr))
 		}
 		return "", fmt.Errorf("failed to start container: %w", err)
 	}
@@ -357,11 +357,11 @@ func (p *containerPool) createContainer(ctx context.Context, codePath string) (s
 		}
 
 		if inspect.State.Running {
-			p.logger.Infof("Container %s is running", containerID)
+			p.logger.Debug(ctx, "Container is running", observability.String("container_id", containerID))
 			return containerID, nil
 		}
 
-		p.logger.Debugf("Container %s not running yet (attempt %d/%d), status: %s", containerID, i+1, maxRetries, inspect.State.Status)
+		p.logger.Debug(ctx, "Container not running yet", observability.String("container_id", containerID), observability.Int("attempt", i+1), observability.Int("max_retries", maxRetries), observability.String("status", inspect.State.Status))
 		time.Sleep(500 * time.Millisecond)
 	}
 
@@ -375,7 +375,7 @@ func (p *containerPool) generateContainerName() string {
 	return fmt.Sprintf("triggerx-executor-%s-%s", p.language, uuid[:8])
 }
 
-func (p *containerPool) populateReadyQueue() {
+func (p *containerPool) populateReadyQueue(ctx context.Context) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 
@@ -384,10 +384,10 @@ func (p *containerPool) populateReadyQueue() {
 		if container.Status == types.ContainerStatusReady {
 			select {
 			case p.readyQueue <- container:
-				p.logger.Debugf("Added existing ready container %s to ready queue", container.ID)
+				p.logger.Debug(ctx, "Added existing ready container to ready queue", observability.String("container_id", container.ID))
 			default:
 				// Ready queue is full, stop adding more
-				p.logger.Debugf("Ready queue full, stopping population")
+				p.logger.Debug(ctx, "Ready queue full, stopping population")
 				return
 			}
 		}
@@ -404,7 +404,7 @@ func (p *containerPool) createTempDirectory() (string, error) {
 
 // initializeContainer sets up the container with /code folder and basic initialization
 func (p *containerPool) initializeContainer(ctx context.Context, containerID string) error {
-	p.logger.Debugf("Initializing container %s with /code folder setup", containerID)
+	p.logger.Debug(ctx, "Initializing container with /code folder setup", observability.String("container_id", containerID))
 
 	// Create /code directory and initialize basic files
 	initScript := scripts.GetInitializationScript(p.language)
@@ -449,7 +449,7 @@ func (p *containerPool) initializeContainer(ctx context.Context, containerID str
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	p.logger.Debugf("Container %s initialized successfully", containerID)
+	p.logger.Debug(ctx, "Container initialized successfully", observability.String("container_id", containerID))
 
 	// Verify container is ready by running a quick test
 	if err := p.verifyContainerReady(ctx, containerID); err != nil {
@@ -461,7 +461,7 @@ func (p *containerPool) initializeContainer(ctx context.Context, containerID str
 
 // verifyContainerReady runs a quick test to ensure the container is fully ready
 func (p *containerPool) verifyContainerReady(ctx context.Context, containerID string) error {
-	p.logger.Debugf("Verifying container %s is ready", containerID)
+	p.logger.Debug(ctx, "Verifying container is ready", observability.String("container_id", containerID))
 
 	// Run a simple test command based on language
 	var testCmd string
@@ -518,7 +518,7 @@ func (p *containerPool) verifyContainerReady(ctx context.Context, containerID st
 				if inspectResp.ExitCode != 0 {
 					return fmt.Errorf("container verification failed with exit code: %d", inspectResp.ExitCode)
 				}
-				p.logger.Debugf("Container %s verified as ready", containerID)
+				p.logger.Debug(ctx, "Container verified as ready", observability.String("container_id", containerID))
 				return nil
 			}
 			time.Sleep(100 * time.Millisecond)
@@ -526,8 +526,8 @@ func (p *containerPool) verifyContainerReady(ctx context.Context, containerID st
 	}
 }
 
-func (p *containerPool) resetContainer(containerID string) error {
-	p.logger.Debugf("Resetting container %s", containerID)
+func (p *containerPool) resetContainer(ctx context.Context, containerID string) error {
+	p.logger.Debug(ctx, "Resetting container", observability.String("container_id", containerID))
 
 	// Instead of full restart, just clean up the code files
 	resetScript := scripts.GetCleanupScript(p.language)
@@ -572,18 +572,18 @@ func (p *containerPool) resetContainer(containerID string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	p.logger.Debugf("Container %s reset successfully", containerID)
+	p.logger.Debug(ctx, "Container reset successfully", observability.String("container_id", containerID))
 	return nil
 }
 
-func (p *containerPool) startHealthCheckRoutine() {
+func (p *containerPool) startHealthCheckRoutine(ctx context.Context) {
 	ticker := time.NewTicker(p.config.BasePoolConfig.HealthCheckInterval)
 
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				p.healthCheck()
+				p.healthCheck(ctx)
 			case <-p.stopHealth:
 				ticker.Stop()
 				return
@@ -592,7 +592,7 @@ func (p *containerPool) startHealthCheckRoutine() {
 	}()
 }
 
-func (p *containerPool) healthCheck() {
+func (p *containerPool) healthCheck(ctx context.Context) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -606,7 +606,7 @@ func (p *containerPool) healthCheck() {
 		// Check if container is still running
 		inspect, err := p.manager.GetDockerClient().ContainerInspect(context.Background(), id)
 		if err != nil {
-			p.logger.Warnf("Container %s health check failed: %v", id, err)
+			p.logger.Warn(ctx, "Container health check failed", observability.String("container_id", id), observability.Error(err))
 			container.Status = types.ContainerStatusError
 			container.Error = err
 			container.Status = types.ContainerStatusError
@@ -616,7 +616,7 @@ func (p *containerPool) healthCheck() {
 		}
 
 		if !inspect.State.Running {
-			p.logger.Warnf("Container %s is not running, marking for removal", id)
+			p.logger.Warn(ctx, "Container is not running, marking for removal", observability.String("container_id", id))
 			container.Status = types.ContainerStatusStopped
 			container.Status = types.ContainerStatusError
 			containersWithIssues++
@@ -626,7 +626,7 @@ func (p *containerPool) healthCheck() {
 
 		// Container is running, ensure it's marked as ready if it was in error state
 		if container.Status == types.ContainerStatusError {
-			p.logger.Infof("Container %s recovered from error state", id)
+			p.logger.Debug(ctx, "Container recovered from error state", observability.String("container_id", id))
 			container.Status = types.ContainerStatusReady
 			container.Error = nil
 			container.Status = types.ContainerStatusReady
@@ -635,7 +635,7 @@ func (p *containerPool) healthCheck() {
 
 	// Remove unhealthy containers from the pool
 	for _, id := range containersToRemove {
-		p.logger.Infof("Removing unhealthy container %s from pool", id)
+		p.logger.Debug(ctx, "Removing unhealthy container from pool", observability.String("container_id", id))
 		delete(p.containers, id)
 
 		// Release a token back to the semaphore since we removed a container
@@ -643,23 +643,22 @@ func (p *containerPool) healthCheck() {
 		case p.creationSemaphore <- struct{}{}:
 		default:
 			// Semaphore is full, which shouldn't happen but handle gracefully
-			p.logger.Warnf("Creation semaphore is full when trying to release token for unhealthy container %s", id)
+			p.logger.Warn(ctx, "Creation semaphore is full when trying to release token for unhealthy container", observability.String("container_id", id))
 		}
 
 		// Try to cleanup the container
 		if err := p.manager.CleanupContainer(context.Background(), id); err != nil {
-			p.logger.Warnf("Failed to cleanup unhealthy container %s: %v", id, err)
+			p.logger.Warn(ctx, "Failed to cleanup unhealthy container", observability.String("container_id", id), observability.Error(err))
 		}
 	}
 
 	if containersChecked > 0 {
 		totalContainers := len(p.containers)
 		checkPercentage := float64(containersChecked) / float64(totalContainers+len(containersToRemove)) * 100
-		p.logger.Debugf("Health check completed for %s pool: %d containers checked (%.1f%%), %d with issues, %d removed",
-			p.language, containersChecked, checkPercentage, containersWithIssues, len(containersToRemove))
+		p.logger.Debug(ctx, "Health check completed for pool", observability.String("language", string(p.language)), observability.Int("containers_checked", containersChecked), observability.Float64("check_percentage", checkPercentage), observability.Int("containers_with_issues", containersWithIssues), observability.Int("containers_removed", len(containersToRemove)))
 	}
 
-	p.updateStats()
+	p.updateStats(ctx)
 }
 
 // getHealthCheckStats returns statistics about the last health check
@@ -686,38 +685,38 @@ func (p *containerPool) getHealthCheckStats() (int, int, int) {
 
 // markContainerAsFailed marks a container as failed and removes it from the pool
 // This should be called when a container fails during command execution
-func (p *containerPool) markContainerAsFailed(containerID string, err error) {
+func (p *containerPool) markContainerAsFailed(ctx context.Context, containerID string, err error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	if container, exists := p.containers[containerID]; exists {
-		p.logger.Warnf("Marking container %s as failed due to execution error: %v", containerID, err)
+		p.logger.Warn(ctx, "Marking container as failed due to execution error", observability.String("container_id", containerID), observability.Error(err))
 		container.Status = types.ContainerStatusError
 		container.Error = err
 		container.Status = types.ContainerStatusError
 
 		// Remove from pool immediately
 		delete(p.containers, containerID)
-		p.updateStats()
+		p.updateStats(ctx)
 
 		// Release a token back to the semaphore since we removed a container
 		select {
 		case p.creationSemaphore <- struct{}{}:
 		default:
 			// Semaphore is full, which shouldn't happen but handle gracefully
-			p.logger.Warnf("Creation semaphore is full when trying to release token for failed container %s", containerID)
+			p.logger.Warn(ctx, "Creation semaphore is full when trying to release token for failed container", observability.String("container_id", containerID))
 		}
 
 		// Cleanup the failed container
 		go func() {
 			if cleanupErr := p.manager.CleanupContainer(context.Background(), containerID); cleanupErr != nil {
-				p.logger.Warnf("Failed to cleanup failed container %s: %v", containerID, cleanupErr)
+				p.logger.Warn(ctx, "Failed to cleanup failed container", observability.String("container_id", containerID), observability.Error(cleanupErr))
 			}
 		}()
 	}
 }
 
-func (p *containerPool) updateStats() {
+func (p *containerPool) updateStats(ctx context.Context) {
 	readyCount := 0
 	busyCount := 0
 	errorCount := 0
@@ -764,11 +763,11 @@ func (p *containerPool) close(ctx context.Context) error {
 	// Cleanup all containers
 	for id := range p.containers {
 		if err := p.manager.CleanupContainer(ctx, id); err != nil {
-			p.logger.Warnf("Failed to cleanup container %s: %v", id, err)
+			p.logger.Warn(ctx, "Failed to cleanup container", observability.String("container_id", id), observability.Error(err))
 		}
 	}
 
 	p.containers = make(map[string]*types.PooledContainer)
-	p.logger.Infof("Closed %s language pool", p.language)
+	p.logger.Debug(ctx, "Closed language pool", observability.String("language", string(p.language)))
 	return nil
 }

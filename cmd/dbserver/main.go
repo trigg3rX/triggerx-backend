@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	// "github.com/gin-gonic/gin"
 
 	dbserver "github.com/trigg3rX/triggerx-backend/internal/dbserver"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -29,21 +29,33 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
-	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.DatabaseProcess,
-		IsDevelopment: config.IsDevMode(),
-	}
-
-	logger, err := logging.NewZapLogger(logConfig)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
-	}
-
-	logger.Info("Starting database server...",
-		"mode", config.IsDevMode(),
-		"port", config.GetDBServerRPCPort(),
-		"host", config.GetDatabaseHostAddress(),
+	// Initialize observability (logger, tracer, metrics)
+	obsCfg := observability.NewConfig(
+		observability.ServerService,
+		config.GetVersion(),
+		config.GetOTELExporterEndpoint(),
+		config.IsDevMode(),
 	)
+
+	// Initialize observability (all three pillars)
+	obs, err := observability.Initialize(obsCfg)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize observability: %v", err))
+	}
+	defer func() {
+		if err := obs.Shutdown(context.Background()); err != nil {
+			panic(fmt.Sprintf("Failed to shutdown observability: %v", err))
+		}
+	}()
+
+	// Extract individual components
+	logger := obs.Logger()
+	obsMetrics := obs.Metrics()
+
+	ctx := context.Background()
+	// Initialize application metrics
+	metrics.InitializeMetrics(obsMetrics)
+	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
 
 	dbConfig := &database.Config{
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
@@ -57,14 +69,15 @@ func main() {
 
 	conn, err := database.NewConnection(dbConfig, logger)
 	if err != nil || conn == nil {
-		logger.Fatalf("Failed to initialize main database connection: %v", err)
+		logger.Fatal(ctx, "Failed to initialize main database connection", observability.Error(err))
 	}
 	defer conn.Close()
 
 	mainSession := conn.Session()
 	if mainSession == nil {
-		logger.Fatalf("Database session cannot be nil")
+		logger.Fatal(ctx, "Database session cannot be nil")
 	}
+	logger.Info(ctx, "[2/4] Dependency: Database Connection Initialised")
 
 	var wg sync.WaitGroup
 	serverErrors := make(chan error, 1)
@@ -72,19 +85,25 @@ func main() {
 
 	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
 	if err != nil {
-		logger.Errorf("Failed to create Docker manager: %v", err)
+		logger.Error(ctx, "Failed to create Docker manager", observability.Error(err))
 	} else {
 		// Initialize Docker manager with language-specific pools
 		if err := dockerExecutor.Initialize(context.Background()); err != nil {
-			logger.Errorf("Failed to initialize Docker manager: %v", err)
+			logger.Error(ctx, "Failed to initialize Docker manager", observability.Error(err))
 		} else {
-			logger.Infof("Docker manager initialized successfully")
+			logger.Info(ctx, "[3/4] Dependency: Docker Executor Initialised")
 		}
 	}
 
-	dbServer := dbserver.NewServer(conn, logger)
+	dbServer := dbserver.NewServer(ctx, conn, logger, obsMetrics)
 
-	dbServer.RegisterRoutes(dbServer.GetRouter(), dockerExecutor)
+	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
+	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
+
+	// Start metrics collector
+	collector := metrics.NewCollector(obsMetrics)
+	collector.Start()
+	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
@@ -94,47 +113,73 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Info("Starting HTTP server...")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
+	logger.Info(ctx, "[2/2] Process: HTTP Server Started")
 
 	close(ready)
-	logger.Infof("Database Server initialized, starting on port %s...", config.GetDBServerRPCPort())
 
 	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	select {
 	case err := <-serverErrors:
-		logger.Error("Server error received", "error", err)
+		logger.Error(ctx, "Server error received", observability.Error(err))
 	case sig := <-shutdown:
-		logger.Info("Received shutdown signal", "signal", sig.String())
+		logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 	}
 
-	performGracefulShutdown(srv, &wg, logger, dockerExecutor)
+	performGracefulShutdown(ctx, srv, &wg, logger, obs, dockerExecutor)
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger, dockerExecutor dockerexecutor.DockerExecutorAPI) {
-	logger.Info("Initiating graceful shutdown...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+func performGracefulShutdown(
+	ctx context.Context,
+	srv *http.Server,
+	wg *sync.WaitGroup,
+	logger observability.Logger,
+	obs *observability.Observability,
+	dockerExecutor dockerexecutor.DockerExecutorAPI,
+) {
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", "error", err)
-		if err := srv.Close(); err != nil {
-			logger.Error("Forced HTTP server close error", "error", err)
-		}
-	}
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 
-	if dockerExecutor != nil {
-		if err := dockerExecutor.Close(ctx); err != nil {
-			logger.Error("Failed to close Docker manager", "error", err)
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
+			if err := srv.Close(); err != nil {
+				logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+			}
 		}
-	}
 
-	wg.Wait()
-	logger.Info("Shutdown complete")
+		if dockerExecutor != nil {
+			if err := dockerExecutor.Close(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Failed to close Docker manager", observability.Error(err))
+			}
+		}
+
+		wg.Wait()
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown observability (handles logger, tracer, metrics)
+		if err := obs.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Error shutting down observability", observability.Error(err))
+		}
+	}()
+
+	// Wait for shutdown to complete or timeout
+	select {
+	case <-done:
+		// Shutdown completed successfully
+	case <-shutdownCtx.Done():
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
+	}
+	os.Exit(0)
 }

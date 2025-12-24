@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // ConnectionPool manages a pool of gRPC connections
@@ -17,7 +17,7 @@ type ConnectionPool struct {
 	address string
 	maxSize int
 	timeout time.Duration
-	logger  logging.Logger
+	logger  observability.Logger
 
 	connections chan *grpc.ClientConn
 	mu          sync.RWMutex
@@ -25,7 +25,7 @@ type ConnectionPool struct {
 }
 
 // NewConnectionPool creates a new connection pool
-func NewConnectionPool(maxSize int, timeout time.Duration, logger logging.Logger) *ConnectionPool {
+func NewConnectionPool(maxSize int, timeout time.Duration, logger observability.Logger) *ConnectionPool {
 	return &ConnectionPool{
 		maxSize:     maxSize,
 		timeout:     timeout,
@@ -57,12 +57,12 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*gr
 		}
 		// Connection is unhealthy, close it and create new one
 		if err := conn.Close(); err != nil {
-			p.logger.Errorf("Failed to close connection: %v", err)
+			p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
 		}
 	default:
 		// No connection available, create new one if under limit
 		if len(p.connections) < p.maxSize {
-			return p.createConnection(address)
+			return p.createConnection(ctx, address)
 		}
 	}
 
@@ -76,13 +76,13 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*gr
 }
 
 // ReturnConnection returns a connection to the pool
-func (p *ConnectionPool) ReturnConnection(conn *grpc.ClientConn, failed bool) {
+func (p *ConnectionPool) ReturnConnection(ctx context.Context, conn *grpc.ClientConn, failed bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.closed {
 		if err := conn.Close(); err != nil {
-			p.logger.Errorf("Failed to close connection: %v", err)
+			p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
 		}
 		return
 	}
@@ -90,7 +90,7 @@ func (p *ConnectionPool) ReturnConnection(conn *grpc.ClientConn, failed bool) {
 	if failed {
 		// Connection failed, close it
 		if err := conn.Close(); err != nil {
-			p.logger.Errorf("Failed to close connection: %v", err)
+			p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
 		}
 		return
 	}
@@ -102,13 +102,13 @@ func (p *ConnectionPool) ReturnConnection(conn *grpc.ClientConn, failed bool) {
 	default:
 		// Pool is full, close connection
 		if err := conn.Close(); err != nil {
-			p.logger.Errorf("Failed to close connection: %v", err)
+			p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
 		}
 	}
 }
 
 // createConnection creates a new gRPC connection
-func (p *ConnectionPool) createConnection(address string) (*grpc.ClientConn, error) {
+func (p *ConnectionPool) createConnection(ctx context.Context, address string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -116,7 +116,7 @@ func (p *ConnectionPool) createConnection(address string) (*grpc.ClientConn, err
 		return nil, fmt.Errorf("failed to dial gRPC server: %w", err)
 	}
 
-	p.logger.Debug("Created new gRPC connection", "address", address)
+	p.logger.Debug(ctx, "Created new gRPC connection", observability.String("address", address))
 	return conn, nil
 }
 
@@ -128,7 +128,7 @@ func (p *ConnectionPool) isConnectionHealthy(conn *grpc.ClientConn) bool {
 }
 
 // Close closes the connection pool
-func (p *ConnectionPool) Close() error {
+func (p *ConnectionPool) Close(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -142,7 +142,7 @@ func (p *ConnectionPool) Close() error {
 	// Close all connections
 	for conn := range p.connections {
 		if err := conn.Close(); err != nil {
-			p.logger.Errorf("Failed to close connection: %v", err)
+			p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
 		}
 	}
 

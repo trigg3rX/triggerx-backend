@@ -82,7 +82,6 @@ func (l *Lock) Acquire(ctx context.Context) (bool, error) {
 		MaxDelay:        l.retryStrategy.Delay, // Use the same delay for all retries
 		BackoffFactor:   1.0,                   // No exponential backoff for locks
 		JitterFactor:    0.0,                   // No jitter for locks
-		LogRetryAttempt: false,                 // Don't log retry attempts for locks
 		ShouldRetry:     l.shouldRetryLockAcquisition,
 	}
 
@@ -105,7 +104,7 @@ func (l *Lock) Acquire(ctx context.Context) (bool, error) {
 	}
 
 	// Use the generic retry package
-	result, err := retry.Retry(ctx, operation, retryConfig, l.client.logger)
+	result, err := retry.Retry(ctx, operation, retryConfig)
 	if err != nil {
 		if errors.Is(err, ErrLockContention) {
 			// Lock contention after all retries - this is not an error, just couldn't acquire

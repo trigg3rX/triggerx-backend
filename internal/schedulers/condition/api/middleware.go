@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
@@ -73,7 +73,7 @@ func MetricsMiddleware() gin.HandlerFunc {
 }
 
 // LoggerMiddleware creates a gin middleware for logging API group requests only
-func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
+func LoggerMiddleware(logger observability.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Only log requests under the /api/ path
 		if len(c.Request.URL.Path) < 5 || c.Request.URL.Path[:5] != "/api/" {
@@ -92,21 +92,21 @@ func LoggerMiddleware(logger logging.Logger) gin.HandlerFunc {
 		duration := time.Since(startTime)
 		statusCode := c.Writer.Status()
 
-		logger.Info("Request processed",
-			"trace_id", traceID,
-			"status", statusCode,
-			"method", c.Request.Method,
-			"path", path,
-			"query", rawQuery,
-			"ip", c.ClientIP(),
-			"latency", duration,
-			"user-agent", c.Request.UserAgent(),
+		logger.Debug(c.Request.Context(), "Request processed",
+			observability.String("trace_id", traceID.(string)),
+			observability.Int("status", statusCode),
+			observability.String("method", c.Request.Method),
+			observability.String("path", path),
+			observability.String("query", rawQuery),
+			observability.String("ip", c.ClientIP()),
+			observability.Duration("latency", duration),
+			observability.String("user-agent", c.Request.UserAgent()),
 		)
 	}
 }
 
 // ErrorMiddleware handles errors in a consistent way
-func ErrorMiddleware(logger logging.Logger) gin.HandlerFunc {
+func ErrorMiddleware(logger observability.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 
@@ -116,10 +116,10 @@ func ErrorMiddleware(logger logging.Logger) gin.HandlerFunc {
 			err := c.Errors.Last()
 			traceID, _ := c.Get(TraceIDKey)
 
-			logger.Error("Error",
-				"trace_id", traceID,
-				"error", err.Error(),
-				"path", c.Request.URL.Path,
+			logger.Error(c.Request.Context(), "Error",
+				observability.String("trace_id", traceID.(string)),
+				observability.Error(err),
+				observability.String("path", c.Request.URL.Path),
 			)
 
 			// If the response hasn't been written yet

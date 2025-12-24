@@ -1,18 +1,20 @@
 package keeper
 
 import (
+	"context"
 	"sync"
 
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
-	"github.com/trigg3rX/triggerx-backend/internal/health/types"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // StateManager manages the state of all keepers
 type StateManager struct {
 	keepers     map[string]*types.KeeperInfo
 	mu          sync.RWMutex
-	logger      logging.Logger
+	logger      observability.Logger
+	tracer      observability.Tracer
 	initialized bool
 	db          *client.DatabaseManager
 }
@@ -23,18 +25,19 @@ var (
 )
 
 // InitializeStateManager creates and initializes the state manager
-func InitializeStateManager(logger logging.Logger) *StateManager {
+func InitializeStateManager(ctx context.Context, logger observability.Logger, tracer observability.Tracer) *StateManager {
 	stateManagerOnce.Do(func() {
 		// Create a new logger with component field and proper level
-		stateLogger := logger.With("component", "state_manager")
+		stateLogger := logger.With(observability.String("component", "state_manager"))
 
 		stateManager = &StateManager{
 			keepers:     make(map[string]*types.KeeperInfo),
 			logger:      stateLogger,
+			tracer:      tracer,
 			initialized: true,
 			db:          client.GetInstance(),
 		}
-		go stateManager.startCleanupRoutine()
+		go stateManager.startCleanupRoutine(ctx)
 	})
 	return stateManager
 }
@@ -48,24 +51,24 @@ func GetStateManager() *StateManager {
 }
 
 // IsKeeperActive checks if a keeper is currently active
-func (sm *StateManager) IsKeeperActive(keeperAddress string) bool {
+func (sm *StateManager) IsKeeperActive(ctx context.Context, keeperAddress string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
 	state, exists := sm.keepers[keeperAddress]
 	isActive := exists && state.IsActive
 
-	sm.logger.Debug("Checked keeper active status",
-		"keeper", keeperAddress,
-		"exists", exists,
-		"is_active", isActive,
-	)
+	// sm.logger.Debug(ctx, "Checked keeper active status",
+	// 	observability.String("keeper", keeperAddress),
+	// 	observability.Bool("exists", exists),
+	// 	observability.Bool("is_active", isActive),
+	// )
 
 	return isActive
 }
 
 // GetAllActiveKeepers returns a list of all active keeper addresses
-func (sm *StateManager) GetAllActiveKeepers() []string {
+func (sm *StateManager) GetAllActiveKeepers(ctx context.Context) []string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -76,15 +79,15 @@ func (sm *StateManager) GetAllActiveKeepers() []string {
 		}
 	}
 
-	sm.logger.Debug("Retrieved active keepers list",
-		"total_active", len(activeKeepers),
-	)
+	// sm.logger.Debug(ctx, "Retrieved active keepers list",
+	// 	observability.Int("total_active", len(activeKeepers)),
+	// )
 
 	return activeKeepers
 }
 
 // GetKeeperCount returns the total number of keepers and active keepers
-func (sm *StateManager) GetKeeperCount() (total int, active int) {
+func (sm *StateManager) GetKeeperCount(ctx context.Context) (total int, active int) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -95,16 +98,16 @@ func (sm *StateManager) GetKeeperCount() (total int, active int) {
 		}
 	}
 
-	sm.logger.Debug("Retrieved keeper counts",
-		"total", total,
-		"active", active,
-	)
+	// sm.logger.Debug(ctx, "Retrieved keeper counts",
+	// 	observability.Int("total", total),
+	// 	observability.Int("active", active),
+	// )
 
 	return total, active
 }
 
 // GetDetailedKeeperInfo returns detailed information about all keepers
-func (sm *StateManager) GetDetailedKeeperInfo() []types.KeeperInfo {
+func (sm *StateManager) GetDetailedKeeperInfo(ctx context.Context) []types.KeeperInfo {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
@@ -125,9 +128,9 @@ func (sm *StateManager) GetDetailedKeeperInfo() []types.KeeperInfo {
 		keeperInfoList = append(keeperInfoList, info)
 	}
 
-	sm.logger.Debug("Retrieved detailed keeper information",
-		"total_keepers", len(keeperInfoList),
-	)
+	// sm.logger.Debug(ctx, "Retrieved detailed keeper information",
+	// 	observability.Int("total_keepers", len(keeperInfoList)),
+	// )
 
 	return keeperInfoList
 }

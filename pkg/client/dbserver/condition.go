@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (c *DBServerClient) CreateTask(ctx context.Context, createTaskData types.CreateTaskDataRequest) (int64, error) {
@@ -32,7 +33,7 @@ func (c *DBServerClient) CreateTask(ctx context.Context, createTaskData types.Cr
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			c.logger.Errorf("Failed to close response body: %v", err)
+			c.logger.Error(ctx, "Failed to close response body", observability.Error(err))
 		}
 	}()
 

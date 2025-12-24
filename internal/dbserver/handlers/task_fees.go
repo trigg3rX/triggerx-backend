@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
@@ -13,10 +12,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/dockerexecutor/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress string) (*big.Int, *big.Int, error) {
-	// Only for taskDefinitionID 2, 4, 6 require ipfsURL(s)
+func (h *Handler) CalculateTaskFees(ctx context.Context, ipfsURLs string, taskDefinitionID int, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress string) (*big.Int, *big.Int, error) {
+	// TaskDefinitionID 2, 4, 6 require ipfsURL(s) for dynamic argument scripts
+	// TaskDefinitionID 7 (Custom Script) does NOT require IPFS script execution during job creation
+	// For ID 7, fee estimation uses fixed 1M gas (handled in pipeline.go calculateFees)
 	needsIPFS := taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6
 
 	if needsIPFS && ipfsURLs == "" {
@@ -27,7 +29,6 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 	totalFee := big.NewInt(0)
 	currentTotalFee := big.NewInt(0)
 
-	ctx := context.Background()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -50,14 +51,15 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 					"from_address":            from,
 				}
 
+				// Dynamic argument scripts (2, 4, 6) use Go
 				result, err := h.dockerExecutor.Execute(ctx, url, string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 				if err != nil {
-					h.logger.Errorf("Error executing code: %v", err)
+					h.logger.Error(ctx, "Error executing code", observability.Error(err))
 					return
 				}
 
 				if !result.Success {
-					h.logger.Errorf("Code execution failed: %v", result.Error)
+					h.logger.Error(ctx, "Code execution failed", observability.Error(fmt.Errorf("code execution failed: %v", result.Error)))
 					return
 				}
 
@@ -81,11 +83,11 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 		}
 		result, err := h.dockerExecutor.Execute(ctx, "", string(types.LanguageGo), 10, config.GetAlchemyAPIKey(), metadata)
 		if err != nil {
-			h.logger.Errorf("Error executing code: %v", err)
+			h.logger.Error(ctx, "Error executing code", observability.Error(err))
 			return big.NewInt(0), big.NewInt(0), err
 		}
 		if !result.Success {
-			h.logger.Errorf("Code execution failed: %v", result.Error)
+			h.logger.Error(ctx, "Code execution failed", observability.Error(fmt.Errorf("code execution failed: %v", result.Error)))
 			return big.NewInt(0), big.NewInt(0), fmt.Errorf("code execution failed")
 		}
 		totalFee.Set(result.Stats.TotalCost)
@@ -97,8 +99,6 @@ func (h *Handler) CalculateTaskFees(ipfsURLs string, taskDefinitionID int, targe
 }
 
 func (h *Handler) GetTaskFees(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetTaskFees] trace_id=%s - Getting task fees", traceID)
 
 	// Get query parameters
 	ipfsURLs := c.Query("ipfs_url")
@@ -110,38 +110,30 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 
 	args := c.Query("args")
 
-	// Determine the fromAddress based on chain ID
-	mainnetFromAddress := os.Getenv("TASK_EXECUTION_ADDRESS")
-	testnetFromAddress := os.Getenv("TEST_TASK_EXECUTION_ADDRESS")
-
 	// Default to testnet address unless targetChainID is 42161 or 8453 (mainnet/arbitrum)
-	fromAddress := testnetFromAddress
+	fromAddress := config.GetTestTaskExecutionAddress()
 	if targetChainID == "42161" || targetChainID == "8453" {
-		fromAddress = mainnetFromAddress
-	}
-	if fromAddress == "" {
-		h.logger.Errorf("[GetTaskFees] TASK_EXECUTION_ADDRESS environment variable not set")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "from_address not configured"})
-		return
+		fromAddress = config.GetTaskExecutionAddress()
 	}
 
 	// Parse task definition ID
 	taskDefinitionID := 0
 	if parsed, err := fmt.Sscanf(taskDefID, "%d", &taskDefinitionID); err != nil || parsed != 1 {
-		h.logger.Warnf("[GetTaskFees] Invalid task_definition_id: %s, using 0", taskDefID)
+		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Validation failed: Invalid task_definition_id", observability.String("task_definition_id", taskDefID))
 	}
 
-	totalFee, currentTotalFee, err := h.CalculateTaskFees(ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
+	totalFee, currentTotalFee, err := h.CalculateTaskFees(c.Request.Context(), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
 	if err != nil {
-		h.logger.Errorf("[GetTaskFees] Error calculating fees: %v", err)
+		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Failed to calculate fees", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"total_fee":     totalFee,
-		"total_fee_wei": totalFee.String(),
-		"current_total_fee": currentTotalFee,
+		"total_fee":             totalFee,
+		"total_fee_wei":         totalFee.String(),
+		"current_total_fee":     currentTotalFee,
 		"current_total_fee_wei": currentTotalFee.String(),
 	})
+	h.logger.Debug(c.Request.Context(), "[GetTaskFees] Calculated task fees", observability.Int("task_definition_id", taskDefinitionID))
 }

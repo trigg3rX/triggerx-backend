@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	wsclient "github.com/trigg3rX/triggerx-backend/pkg/websocket"
 )
 
@@ -74,7 +74,7 @@ func TestNodeClient_ConnectWebSocket_Success(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithWebSocketURL(wsURL)
 	wsConfig := wsclient.DefaultWebSocketRetryConfig()
@@ -99,7 +99,7 @@ func TestNodeClient_ConnectWebSocket_Success(t *testing.T) {
 // TestNodeClient_ConnectWebSocket_NoURL_ReturnsError tests ConnectWebSocket without URL
 // Note: Since config validation requires network or baseURL, we test with an invalid WebSocket URL
 func TestNodeClient_ConnectWebSocket_NoURL_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	// Create a config with a baseURL that can't be converted to WebSocket URL
 	config := &Config{
 		APIKey:  "test-key",
@@ -123,7 +123,7 @@ func TestNodeClient_ConnectWebSocket_NoURL_ReturnsError(t *testing.T) {
 
 // TestNodeClient_IsWebSocketConnected_ReturnsStatus tests IsWebSocketConnected
 func TestNodeClient_IsWebSocketConnected_ReturnsStatus(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 
 	client, err := NewNodeClient(config)
@@ -148,7 +148,7 @@ func TestNodeClient_DisconnectWebSocket_ClosesConnection(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithWebSocketURL(wsURL)
 	wsConfig := wsclient.DefaultWebSocketRetryConfig()
@@ -211,7 +211,7 @@ func TestNodeClient_EthSubscribe_Success(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithWebSocketURL(wsURL)
 	wsConfig := wsclient.DefaultWebSocketRetryConfig()
@@ -298,7 +298,7 @@ func TestNodeClient_EthUnsubscribe_Success(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + server.URL[4:]
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithWebSocketURL(wsURL)
 	wsConfig := wsclient.DefaultWebSocketRetryConfig()
@@ -333,7 +333,7 @@ func TestNodeClient_EthUnsubscribe_Success(t *testing.T) {
 
 // TestNodeClient_EthUnsubscribe_NotConnected_ReturnsError tests EthUnsubscribe when not connected
 func TestNodeClient_EthUnsubscribe_NotConnected_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 
 	client, err := NewNodeClient(config)
@@ -348,7 +348,7 @@ func TestNodeClient_EthUnsubscribe_NotConnected_ReturnsError(t *testing.T) {
 
 // TestNodeClient_GetWebSocketURL_DerivesFromBaseURL tests getWebSocketURL derivation
 func TestNodeClient_GetWebSocketURL_DerivesFromBaseURL(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL("https://eth-mainnet.g.alchemy.com/v2/")
 
@@ -364,7 +364,7 @@ func TestNodeClient_GetWebSocketURL_DerivesFromBaseURL(t *testing.T) {
 
 // TestNodeClient_GetWebSocketURL_UsesExplicitURL tests getWebSocketURL with explicit URL
 func TestNodeClient_GetWebSocketURL_UsesExplicitURL(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithWebSocketURL("wss://custom.example.com/ws")
 
@@ -382,7 +382,7 @@ func TestNodeClient_HandleSubscriptionNotification_RoutesToChannel(t *testing.T)
 	ch := make(chan *SubscriptionNotification, 10)
 	manager.AddSubscription("sub-1", ch)
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	client, err := NewNodeClient(config)
 	require.NoError(t, err)
@@ -400,7 +400,7 @@ func TestNodeClient_HandleSubscriptionNotification_RoutesToChannel(t *testing.T)
 		},
 	}
 
-	client.handleSubscriptionNotification(msg)
+	client.handleSubscriptionNotification(context.Background(), msg)
 
 	// Check if notification was sent to channel
 	select {
@@ -414,7 +414,7 @@ func TestNodeClient_HandleSubscriptionNotification_RoutesToChannel(t *testing.T)
 
 // TestNodeClient_HandleResponse_RoutesToPendingRequest tests response handling
 func TestNodeClient_HandleResponse_RoutesToPendingRequest(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	client, err := NewNodeClient(config)
 	require.NoError(t, err)
@@ -426,7 +426,7 @@ func TestNodeClient_HandleResponse_RoutesToPendingRequest(t *testing.T) {
 
 	// Simulate response
 	message := []byte(`{"jsonrpc":"2.0","id":1,"result":"0x1234"}`)
-	client.handleResponse(1, message)
+	client.handleResponse(context.Background(), 1, message)
 
 	// Check if response was sent to channel
 	select {

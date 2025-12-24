@@ -8,20 +8,20 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcproto "github.com/trigg3rX/triggerx-backend/pkg/rpc/proto"
 )
 
 // HealthService implements a simple health check service
 type HealthService struct {
 	rpcproto.UnimplementedGenericServiceServer
-	logger      logging.Logger
+	logger      observability.Logger
 	serviceName string
 	startTime   time.Time
 }
 
 // NewHealthService creates a new health service
-func NewHealthService(serviceName string, logger logging.Logger) *HealthService {
+func NewHealthService(serviceName string, logger observability.Logger) *HealthService {
 	return &HealthService{
 		logger:      logger,
 		serviceName: serviceName,
@@ -31,9 +31,10 @@ func NewHealthService(serviceName string, logger logging.Logger) *HealthService 
 
 // HealthCheck performs a health check
 func (s *HealthService) HealthCheck(ctx context.Context, req *rpcproto.HealthCheckRequest) (*rpcproto.HealthCheckResponse, error) {
-	s.logger.Debug("Health check requested",
-		"service", s.serviceName,
-		"requested_service", req.Service)
+	s.logger.Debug(ctx, "Health check requested",
+		observability.String("service", s.serviceName),
+		observability.String("requested_service", req.Service),
+	)
 
 	// Create health status
 	healthStatus := &rpcproto.HealthStatus{
@@ -53,8 +54,9 @@ func (s *HealthService) HealthCheck(ctx context.Context, req *rpcproto.HealthChe
 
 // GetMethods returns available methods
 func (s *HealthService) GetMethods(ctx context.Context, _ *emptypb.Empty) (*rpcproto.GetMethodsResponse, error) {
-	s.logger.Debug("Get methods requested",
-		"service", s.serviceName)
+	s.logger.Debug(ctx, "Get methods requested",
+		observability.String("service", s.serviceName),
+	)
 
 	methods := []*rpcproto.RPCMethod{
 		{

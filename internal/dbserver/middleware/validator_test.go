@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,22 +11,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func setupTestRouter() (*gin.Engine, *Validator) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	loggerConfig := logging.LoggerConfig{
-		ProcessName:   logging.DatabaseProcess,
-		IsDevelopment: true,
-	}
-	logger, err := logging.NewZapLogger(loggerConfig)
-	if err != nil {
-		panic("failed to initialize logger: " + err.Error())
-	}
-	validator := NewValidator(logger)
+	logger := observability.NewNoOpLogger()
+	validator := NewValidator(context.Background(), logger)
 	return router, validator
 }
 

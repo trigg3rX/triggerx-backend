@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	version = "0.2.4"
+	version = "1.1.0"
 	isImua  = false
 )
 
@@ -73,6 +73,10 @@ type Config struct {
 
 	// Othentic Bootstrap ID
 	othenticBootstrapID string
+
+	// Observability configuration
+	otelExporterEndpoint   string
+	enablePrometheusExport bool
 }
 
 var cfg Config
@@ -100,15 +104,17 @@ func Init() error {
 		taskMonitorRPCUrl:    env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
 		tlsProofHost:         "www.google.com",
 		tlsProofPort:         "443",
-		l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
-		l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
-		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0x21B099554F6D27E47D57991D2B44251DaFa9323b"),
-		// l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
-		// l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
-		// avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
-		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
-		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		// l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
+		// l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
+		// avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
+		// attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0x21B099554F6D27E47D57991D2B44251DaFa9323b"),
+		l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
+		l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
+		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
+		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
+		othenticBootstrapID:	env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		otelExporterEndpoint:   env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "collector.triggerx.network:9051"),
+		enablePrometheusExport: env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -143,6 +149,9 @@ func validateConfig(cfg Config) error {
 	// if !env.IsValidPeerID(cfg.peerID) {
 	// 	return fmt.Errorf("invalid peer id: %s", cfg.peerID)
 	// }
+	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
+		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
+	}
 	return nil
 }
 
@@ -292,4 +301,13 @@ func GetTaskExecutionAddress() string {
 // SetKeeperAddress sets the keeper address in the config (for testing)
 func SetKeeperAddress(addr string) {
 	cfg.keeperAddress = addr
+}
+
+// Observability configuration getters
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
+}
+
+func GetEnablePrometheusExport() bool {
+	return cfg.enablePrometheusExport
 }

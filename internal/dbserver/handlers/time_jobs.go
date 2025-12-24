@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
@@ -23,7 +25,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 	tasks, err = h.timeJobRepository.GetTimeJobsByNextExecutionTimestamp(lookAheadTime)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetTimeBasedTasks] Error retrieving time based tasks: %v", err)
+		h.logger.Error(c.Request.Context(), "[GetTimeBasedTasks] Error retrieving time based tasks", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve time based tasks",
 			"code":  "TIME_TASKS_FETCH_ERROR",
@@ -38,27 +40,26 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		customJobs, err := h.customJobRepository.GetCustomJobsDueForExecution(lookAheadTime)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Warnf("[GetCustomBasedTasks] Error retrieving custom jobs: %v", err)
+			h.logger.Warn(c.Request.Context(), "[GetCustomBasedTasks] Error retrieving custom jobs", observability.Error(err))
 			// Don't fail, just log and continue with time jobs only
 		} else {
 			// Convert custom jobs to ScheduleTimeTaskData format
 			for _, customJob := range customJobs {
-				taskData := h.convertCustomJobToScheduleTimeTaskData(&customJob)
+				taskData := h.convertCustomJobToScheduleTimeTaskData(c.Request.Context(), &customJob)
 				tasks = append(tasks, taskData)
 			}
-			h.logger.Infof("[getCustomBasedTasks] Retrieved %d custom jobs", len(customJobs))
 		}
 	}
 
 	for i := range tasks {
 		trackDBOp = metrics.TrackDBOperation("create", "task_data")
-		taskID, err := h.taskRepository.CreateTaskDataInDB(&types.CreateTaskDataRequest{
+		taskID, err := h.taskRepository.CreateTaskDataInDB(c.Request.Context(), &types.CreateTaskDataRequest{
 			JobID:            tasks[i].TaskTargetData.JobID.Int,
 			TaskDefinitionID: tasks[i].TaskDefinitionID,
 		})
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Errorf("[GetTimeBasedJobs] Error creating task data: %v", err)
+			h.logger.Error(c.Request.Context(), "[GetTimeBasedJobs] Error creating task data", observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to create task data",
 				"code":  "TASK_CREATION_ERROR",
@@ -70,7 +71,7 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 		err = h.taskRepository.AddTaskIDToJob(tasks[i].TaskTargetData.JobID.Int, taskID)
 		trackDBOp(err)
 		if err != nil {
-			h.logger.Errorf("[GetTimeBasedJobs] Error adding task ID: %v", err)
+			h.logger.Error(c.Request.Context(), "[GetTimeBasedJobs] Error adding task ID", observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to add task ID",
 				"code":  "TASK_ID_ADDITION_ERROR",
@@ -80,19 +81,15 @@ func (h *Handler) GetTimeBasedTasks(c *gin.Context) {
 
 		tasks[i].TaskID = taskID
 	}
-
-	if len(tasks) != 0 {
-		h.logger.Infof("[GetTimeBasedJobs] Successfully retrieved %d time based jobs", len(tasks))
-	}
 	c.JSON(http.StatusOK, tasks)
 }
 
 // convertCustomJobToScheduleTimeTaskData converts a CustomJobData to ScheduleTimeTaskData format
-func (h *Handler) convertCustomJobToScheduleTimeTaskData(customJob *commonTypes.CustomJobData) commonTypes.ScheduleTimeTaskData {
+func (h *Handler) convertCustomJobToScheduleTimeTaskData(ctx context.Context, customJob *commonTypes.CustomJobData) commonTypes.ScheduleTimeTaskData {
 	// Fetch storage for this custom job
 	storage, err := h.scriptStorageRepository.GetStorageByJobID(customJob.JobID.ToBigInt())
 	if err != nil {
-		h.logger.Warnf("[GetTimeBasedTasks] Failed to get storage for job %s: %v", customJob.JobID.String(), err)
+		h.logger.Warn(ctx, "[GetTimeBasedTasks] Failed to get storage for job", observability.String("job_id", customJob.JobID.String()), observability.Error(err))
 		storage = make(map[string]string) // Continue with empty storage
 	}
 

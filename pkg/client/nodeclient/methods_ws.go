@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	wsclient "github.com/trigg3rX/triggerx-backend/pkg/websocket"
 )
 
@@ -105,7 +106,6 @@ func (c *NodeClient) ConnectWebSocket(ctx context.Context) error {
 	// Start message handler
 	go c.handleWebSocketMessages(ctx)
 
-	c.config.Logger.Infof("WebSocket connected to %s", wsURL)
 	return nil
 }
 
@@ -186,45 +186,45 @@ func (c *NodeClient) handleWebSocketMessages(ctx context.Context) {
 			// Parse message
 			var msg map[string]interface{}
 			if err := json.Unmarshal(message, &msg); err != nil {
-				c.config.Logger.Warnf("Failed to parse WebSocket message: %v", err)
+				c.config.Logger.Warn(ctx, "Failed to parse WebSocket message", observability.Error(err))
 				continue
 			}
 
 			// Check if it's a subscription notification (no ID field)
 			if method, ok := msg["method"].(string); ok && method == "eth_subscription" {
-				c.handleSubscriptionNotification(msg)
+				c.handleSubscriptionNotification(ctx, msg)
 				continue
 			}
 
 			// Otherwise, it's a response to a request (has ID field)
 			if id, ok := msg["id"].(float64); ok {
 				requestID := int(id)
-				c.handleResponse(requestID, message)
+				c.handleResponse(ctx, requestID, message)
 			}
 		case err, ok := <-errChan:
 			if !ok {
 				return
 			}
-			c.config.Logger.Errorf("WebSocket error: %v", err)
+			c.config.Logger.Error(ctx, "WebSocket error", observability.Error(err))
 		}
 	}
 }
 
 // handleResponse routes a response to the appropriate pending request
-func (c *NodeClient) handleResponse(requestID int, message []byte) {
+func (c *NodeClient) handleResponse(ctx context.Context, requestID int, message []byte) {
 	c.mu.RLock()
 	responseChan, exists := c.pendingRequests[requestID]
 	c.mu.RUnlock()
 
 	if !exists {
-		c.config.Logger.Warnf("Received response for unknown request ID: %d", requestID)
+		c.config.Logger.Warn(ctx, "Received response for unknown request ID", observability.Int("requestID", requestID))
 		return
 	}
 
 	// Parse response
 	var rpcResp RPCResponse
 	if err := json.Unmarshal(message, &rpcResp); err != nil {
-		c.config.Logger.Warnf("Failed to parse response: %v", err)
+		c.config.Logger.Warn(ctx, "Failed to parse response", observability.Error(err))
 		return
 	}
 
@@ -232,7 +232,7 @@ func (c *NodeClient) handleResponse(requestID int, message []byte) {
 	select {
 	case responseChan <- &rpcResp:
 	default:
-		c.config.Logger.Warnf("Response channel full for request ID: %d", requestID)
+		c.config.Logger.Warn(ctx, "Response channel full", observability.Int("requestID", requestID))
 	}
 
 	// Clean up
@@ -242,28 +242,28 @@ func (c *NodeClient) handleResponse(requestID int, message []byte) {
 }
 
 // handleSubscriptionNotification handles subscription notifications
-func (c *NodeClient) handleSubscriptionNotification(msg map[string]interface{}) {
+func (c *NodeClient) handleSubscriptionNotification(ctx context.Context, msg map[string]interface{}) {
 	params, ok := msg["params"].(map[string]interface{})
 	if !ok {
-		c.config.Logger.Warnf("Invalid subscription notification format")
+		c.config.Logger.Warn(ctx, "Invalid subscription notification format")
 		return
 	}
 
 	subID, ok := params["subscription"].(string)
 	if !ok {
-		c.config.Logger.Warnf("Missing subscription ID in notification")
+		c.config.Logger.Warn(ctx, "Missing subscription ID in notification")
 		return
 	}
 
 	result, ok := params["result"]
 	if !ok {
-		c.config.Logger.Warnf("Missing result in subscription notification")
+		c.config.Logger.Warn(ctx, "Missing result in subscription notification")
 		return
 	}
 
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
-		c.config.Logger.Warnf("Failed to marshal subscription result: %v", err)
+		c.config.Logger.Warn(ctx, "Failed to marshal subscription result", observability.Error(err))
 		return
 	}
 
@@ -278,7 +278,7 @@ func (c *NodeClient) handleSubscriptionNotification(msg map[string]interface{}) 
 			select {
 			case ch <- notification:
 			default:
-				c.config.Logger.Warnf("Subscription channel full for %s", subID)
+				c.config.Logger.Warn(ctx, "Subscription channel full", observability.String("subID", subID))
 			}
 		}
 	}
@@ -380,8 +380,6 @@ func (c *NodeClient) EthSubscribe(ctx context.Context, subscriptionType string, 
 	}
 	c.wsSubManager.AddSubscription(subscriptionID, notifChan)
 
-	c.config.Logger.Infof("Subscribed to %s with ID: %s", subscriptionType, subscriptionID)
-
 	return subscriptionID, notifChan, nil
 }
 
@@ -465,8 +463,6 @@ func (c *NodeClient) EthUnsubscribe(ctx context.Context, subscriptionID string) 
 	if c.wsSubManager != nil {
 		c.wsSubManager.RemoveSubscription(subscriptionID)
 	}
-
-	c.config.Logger.Infof("Unsubscribed from subscription: %s", subscriptionID)
 
 	return nil
 }

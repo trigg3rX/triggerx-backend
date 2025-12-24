@@ -17,9 +17,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/client"
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
+	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 const shutdownTimeout = 30 * time.Second
@@ -30,23 +31,38 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
-	// Initialize logger
-	logConfig := logging.LoggerConfig{
-		ProcessName:   logging.HealthProcess,
-		IsDevelopment: config.IsDevMode(),
-	}
+	// Create observability configuration
+	obsConfig := observability.NewConfig(
+		observability.HealthService,
+		config.GetVersion(),
+		config.GetOTELExporterEndpoint(),
+		config.IsDevMode(),
+	)
 
-	logger, err := logging.NewZapLogger(logConfig)
+	// Initialize observability (all three pillars: logger, tracer, metrics)
+	obs, err := observability.Initialize(obsConfig)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+		panic(fmt.Sprintf("Failed to initialize observability: %v", err))
 	}
+	defer func() {
+		if err := obs.Shutdown(context.Background()); err != nil {
+			panic(fmt.Sprintf("Failed to shutdown observability: %v", err))
+		}
+	}()
 
-	logger.Info("Starting health service...")
+	// Extract individual components
+	logger := obs.Logger()
+	obsTracer := obs.Tracer()
+	obsMetrics := obs.Metrics()
+
+	// Use observability logger for initial startup log
+	ctx := context.Background()
+	logger.Info(ctx, "Starting health service...")
+	logger.Info(ctx, "[1/6] Dependency: Observability Module Initialised")
 
 	// Initialize server components
 	var wg sync.WaitGroup
 	serverErrors := make(chan error, 3)
-	ready := make(chan struct{})
 
 	// Initialize database connection
 	dbConfig := &database.Config{
@@ -60,44 +76,54 @@ func main() {
 	}
 	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize database connection: %v", err))
+		logger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))
 	}
+	logger.Info(ctx, "[2/6] Dependency: Database Connection Initialised")
 
 	// Initialize Telegram bot
 	telegramBot, err := telegram.NewBot(config.GetBotToken(), logger, dbConn)
 	if err != nil {
-		logger.Errorf("Failed to initialize Telegram bot: %v", err)
+		logger.Warn(ctx, "Failed to initialize Telegram bot", observability.Error(err))
 	}
+	logger.Info(ctx, "[3/6] Dependency: Telegram Bot Initialised")
 
 	// Initialize database manager
-	client.InitDatabaseManager(logger, dbConn, telegramBot)
-	logger.Info("Database manager initialized")
+	client.InitDatabaseManager(ctx, logger, obsTracer, dbConn, telegramBot)
+	logger.Info(ctx, "[4/6] Dependency: Database Manager Initialised")
 
 	// Initialize state manager
-	stateManager := keeper.InitializeStateManager(logger)
-	logger.Info("Keeper state manager initialized")
+	stateManager := keeper.InitializeStateManager(ctx, logger, obsTracer)
+	logger.Info(ctx, "[5/6] Dependency: Keeper State Manager Initialised")
 
 	// Load verified keepers from database
-	if err := stateManager.LoadVerifiedKeepers(); err != nil {
-		logger.Debug("Failed to load verified keepers from database", "error", err)
+	if err := stateManager.LoadVerifiedKeepers(ctx); err != nil {
+		logger.Debug(ctx, "Failed to load verified keepers from database", observability.Error(err))
 		// Continue anyway, as we can still operate with an empty state
 	}
 
-	// Setup HTTP server
-	srv := setupHTTPServer(logger)
+	// Setup HTTP server with tracing
+	srv := setupHTTPServer(logger, obsTracer)
+	logger.Info(ctx, "[6/6] Dependency: API Server Initialised")
 
-	// Start server
+	// Initialize metrics using observability metrics
+	metrics.InitializeMetrics(obsMetrics)
+	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
+
+	// Start HTTP server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Info("Starting HTTP server...")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
+	logger.Info(ctx, "[1/1] Process: HTTP Server Started")
 
-	close(ready)
-	logger.Infof("Health service is ready on port %s", config.GetHealthRPCPort())
+	// TODO: When adding gRPC server, use the tracing interceptor:
+	// import "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
+	// grpcServer := grpc.NewServer(
+	//     grpc.UnaryInterceptor(tracing.TraceInterceptor(obsTracer, "health")),
+	// )
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -105,21 +131,26 @@ func main() {
 
 	select {
 	case err := <-serverErrors:
-		logger.Error("Server error received", "error", err)
+		logger.Error(ctx, "Error during HTTP server shutdown", observability.Error(err))
 	case sig := <-shutdown:
-		logger.Info("Received shutdown signal", "signal", sig.String())
+		logger.Info(ctx, "Received shutdown signal",
+			observability.String("signal", sig.String()),
+		)
 	}
 
-	performGracefulShutdown(srv, &wg, logger)
+	performGracefulShutdown(ctx, srv, &wg, obs, logger, stateManager)
 }
 
-func setupHTTPServer(logger logging.Logger) *http.Server {
+func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *http.Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+
+	// Add tracing middleware before logging middleware to ensure trace context is available
+	router.Use(health.TraceMiddleware(tracer))
 	router.Use(health.LoggerMiddleware(logger))
 
 	// Register routes
@@ -131,25 +162,55 @@ func setupHTTPServer(logger logging.Logger) *http.Server {
 	}
 }
 
-func performGracefulShutdown(srv *http.Server, wg *sync.WaitGroup, logger logging.Logger) {
-	logger.Info("Initiating graceful shutdown...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+func performGracefulShutdown(
+	ctx context.Context,
+	srv *http.Server,
+	wg *sync.WaitGroup,
+	obs *observability.Observability,
+	logger observability.Logger,
+	stateManager *keeper.StateManager,
+) {
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
 
-	// Update all keepers to inactive in database
-	stateManager := keeper.GetStateManager()
-	if err := stateManager.DumpState(); err != nil {
-		logger.Error("Failed to dump keeper state", "error", err)
-	}
+	// Start shutdown in a goroutine to handle timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 
-	if err := srv.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error", "error", err)
-		if err := srv.Close(); err != nil {
-			logger.Error("Forced HTTP server close error", "error", err)
+		// Update all keepers to inactive in database
+		if stateManager != nil {
+			if err := stateManager.DumpState(ctx); err != nil {
+				logger.Error(shutdownCtx, "Failed to dump keeper state", observability.Error(err))
+			}
 		}
-	}
 
-	wg.Wait()
-	logger.Info("Shutdown complete")
+		// Shutdown HTTP server
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
+			if err := srv.Close(); err != nil {
+				logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+			}
+		}
+
+		// Wait for all goroutines to finish
+		wg.Wait()
+
+		logger.Info(ctx, "Graceful shutdown completed successfully")
+
+		// Shutdown observability (logger, tracer, metrics)
+		if err := obs.Shutdown(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "Observability shutdown error", observability.Error(err))
+		}
+	}()
+
+	// Wait for shutdown to complete or timeout
+	select {
+	case <-done:
+		// Shutdown completed successfully
+	case <-shutdownCtx.Done():
+		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
+	}
+	os.Exit(0)
 }

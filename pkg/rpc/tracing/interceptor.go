@@ -11,10 +11,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // TraceInterceptor provides OpenTelemetry tracing for gRPC requests
-func TraceInterceptor(serviceName string) grpc.UnaryServerInterceptor {
+func TraceInterceptor(tracer observability.Tracer, serviceName string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		// Extract trace context from incoming metadata
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -27,10 +29,9 @@ func TraceInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 		ctx = propagator.Extract(ctx, MetadataTextMapCarrier(md))
 
 		// Start a new span for this gRPC request
-		tracer := otel.Tracer(serviceName)
 		ctx, span := tracer.Start(ctx, info.FullMethod,
-			trace.WithSpanKind(trace.SpanKindServer),
-			trace.WithAttributes(
+			observability.WithSpanKind(trace.SpanKindServer),
+			observability.WithAttributes(
 				attribute.String("grpc.method", info.FullMethod),
 				attribute.String("grpc.service", serviceName),
 			),
@@ -73,13 +74,12 @@ func TraceInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 }
 
 // TraceClientInterceptor provides OpenTelemetry tracing for gRPC client requests
-func TraceClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
+func TraceClientInterceptor(tracer observability.Tracer, serviceName string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		// Start a new span for this gRPC client request
-		tracer := otel.Tracer(serviceName)
 		ctx, span := tracer.Start(ctx, method,
-			trace.WithSpanKind(trace.SpanKindClient),
-			trace.WithAttributes(
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
 				attribute.String("grpc.method", method),
 				attribute.String("grpc.service", serviceName),
 				attribute.String("grpc.target", cc.Target()),
@@ -150,28 +150,4 @@ func (m MetadataTextMapCarrier) Keys() []string {
 		keys = append(keys, k)
 	}
 	return keys
-}
-
-// WithTraceContext adds trace context to gRPC metadata
-func WithTraceContext(ctx context.Context) context.Context {
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		md = metadata.New(nil)
-	}
-
-	propagator := otel.GetTextMapPropagator()
-	propagator.Inject(ctx, MetadataTextMapCarrier(md))
-
-	return metadata.NewOutgoingContext(ctx, md)
-}
-
-// ExtractTraceContext extracts trace context from gRPC metadata
-func ExtractTraceContext(ctx context.Context) context.Context {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ctx
-	}
-
-	propagator := otel.GetTextMapPropagator()
-	return propagator.Extract(ctx, MetadataTextMapCarrier(md))
 }

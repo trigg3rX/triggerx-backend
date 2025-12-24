@@ -6,14 +6,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 func (h *Handler) GetUserDataByAddress(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetUserDataByAddress] trace_id=%s - Retrieving user data by address", traceID)
 	userAddress := strings.ToLower(c.Param("address"))
 	if userAddress == "" {
-		h.logger.Errorf("[GetUserDataByAddress] Invalid user address: %v", userAddress)
+		h.logger.Error(c.Request.Context(), "[GetUserDataByAddress] Invalid user address", observability.String("user_address", userAddress))
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid user address",
 			"code":  "INVALID_ADDRESS",
@@ -21,13 +20,11 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetUserDataByAddress] Retrieving user with address: %s", userAddress)
-
 	trackDBOp := metrics.TrackDBOperation("read", "user_data")
 	userID, userData, err := h.userRepository.GetUserDataByAddress(userAddress)
 	trackDBOp(err)
 	if err != nil {
-		h.logger.Errorf("[GetUserData] Error retrieving user with ID %d: %v", userID, err)
+		h.logger.Warn(c.Request.Context(), "[GetUserDataByAddress] Failed to retrieve user", observability.String("user_address", userAddress), observability.Error(err))
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "User not found",
 			"code":  "USER_NOT_FOUND",
@@ -35,15 +32,12 @@ func (h *Handler) GetUserDataByAddress(c *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("[GetUserData] Successfully retrieved user with ID: %d", userID)
 	c.JSON(http.StatusOK, userData)
+	h.logger.Debug(c.Request.Context(), "[GetUserDataByAddress] Retrieved user data", observability.Int64("user_id", userID), observability.String("user_address", userAddress))
 }
 
 func (h *Handler) GetWalletPoints(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[GetWalletPoints] trace_id=%s - Retrieving wallet points", traceID)
 	walletAddress := strings.ToLower(c.Param("address"))
-	h.logger.Infof("[GetWalletPoints] Retrieving points for wallet address: %s", walletAddress)
 
 	var userPoints float64
 	var keeperPoints float64
@@ -60,30 +54,26 @@ func (h *Handler) GetWalletPoints(c *gin.Context) {
 	// 	keeperPoints = 0
 	// }
 
-	h.logger.Infof("[GetWalletPoints] Successfully retrieved points for wallet address %s: %.2f + %.2f", walletAddress, userPoints, keeperPoints)
-
 	totalPoints := userPoints + keeperPoints
 
 	c.JSON(http.StatusOK, gin.H{
 		"total_points": totalPoints,
 	})
+	h.logger.Debug(c.Request.Context(), "[GetWalletPoints] Retrieved wallet points", observability.String("wallet_address", walletAddress), observability.Float64("total_points", totalPoints))
 }
 
 func (h *Handler) StoreUserEmail(c *gin.Context) {
-	traceID := h.getTraceID(c)
-	h.logger.Infof("[StoreUserEmail] trace_id=%s - Storing user email", traceID)
-
 	var req struct {
 		UserAddress string `json:"user_address"`
 		Email       string `json:"email_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Errorf("[StoreUserEmail] Invalid request: %v", err)
+		h.logger.Error(c.Request.Context(), "[StoreUserEmail] Invalid request", observability.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request", "code": "INVALID_REQUEST"})
 		return
 	}
 	if req.UserAddress == "" || req.Email == "" {
-		h.logger.Errorf("[StoreUserEmail] Missing user_address or email")
+		h.logger.Error(c.Request.Context(), "[StoreUserEmail] Missing user_address or email", observability.String("user_address", req.UserAddress), observability.String("email", req.Email))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing user_address or email", "code": "MISSING_FIELDS"})
 		return
 	}
@@ -92,11 +82,11 @@ func (h *Handler) StoreUserEmail(c *gin.Context) {
 
 	err := h.userRepository.UpdateUserEmail(req.UserAddress, req.Email)
 	if err != nil {
-		h.logger.Errorf("[StoreUserEmail] Failed to update email %s for address %s: %v", req.Email, req.UserAddress, err)
+		h.logger.Error(c.Request.Context(), "[StoreUserEmail] Failed to update email for address", observability.String("email", req.Email), observability.String("user_address", req.UserAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update email", "code": "UPDATE_FAILED"})
 		return
 	}
 
-	h.logger.Infof("[StoreUserEmail] Successfully updated email for address: %s", req.UserAddress)
 	c.JSON(http.StatusOK, gin.H{"message": "Email updated successfully"})
+	h.logger.Info(c.Request.Context(), "[StoreUserEmail] Updated user email", observability.String("user_address", req.UserAddress))
 }

@@ -12,12 +12,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // TestConfig_Validate_ValidConfig_ReturnsNoError tests validation of valid config
 func TestConfig_Validate_ValidConfig_ReturnsNoError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := &Config{
 		APIKey:  "test-api-key",
 		Network: NetworkEthereum,
@@ -40,7 +40,7 @@ func TestConfig_Validate_InvalidConfig_ReturnsError(t *testing.T) {
 			config: &Config{
 				APIKey:  "",
 				Network: NetworkEthereum,
-				Logger:  logging.NewNoOpLogger(),
+				Logger:  observability.NewNoOpLogger(),
 			},
 			expectedErr: "API key cannot be empty",
 		},
@@ -50,7 +50,7 @@ func TestConfig_Validate_InvalidConfig_ReturnsError(t *testing.T) {
 				APIKey:  "test-api-key",
 				Network: "",
 				BaseURL: "",
-				Logger:  logging.NewNoOpLogger(),
+				Logger:  observability.NewNoOpLogger(),
 			},
 			expectedErr: "either network or base URL must be specified",
 		},
@@ -119,7 +119,7 @@ func TestConfig_GetFullURL_ReturnsCorrectURL(t *testing.T) {
 
 // TestConfig_WithBaseURL_SetsBaseURL tests WithBaseURL
 func TestConfig_WithBaseURL_SetsBaseURL(t *testing.T) {
-	config := DefaultConfig("test-key", NetworkEthereum, logging.NewNoOpLogger())
+	config := DefaultConfig("test-key", NetworkEthereum, observability.NewNoOpLogger())
 	config = config.WithBaseURL("https://custom.example.com/v2/")
 
 	assert.Equal(t, "https://custom.example.com/v2/", config.BaseURL)
@@ -127,7 +127,7 @@ func TestConfig_WithBaseURL_SetsBaseURL(t *testing.T) {
 
 // TestNewNodeClient_ValidConfig_ReturnsClient tests client creation with valid config
 func TestNewNodeClient_ValidConfig_ReturnsClient(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-api-key", NetworkEthereum, logger)
 
 	client, err := NewNodeClient(config)
@@ -140,7 +140,7 @@ func TestNewNodeClient_ValidConfig_ReturnsClient(t *testing.T) {
 
 // TestNewNodeClient_InvalidConfig_ReturnsError tests client creation with invalid config
 func TestNewNodeClient_InvalidConfig_ReturnsError(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := &Config{
 		APIKey:  "", // Invalid
 		Network: NetworkEthereum,
@@ -212,7 +212,7 @@ func TestNodeClient_EthBlockNumber_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -233,7 +233,7 @@ func TestNodeClient_EthChainId_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -254,7 +254,7 @@ func TestNodeClient_EthGasPrice_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -276,7 +276,7 @@ func TestNodeClient_EthGetCode_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -298,7 +298,7 @@ func TestNodeClient_EthGetStorageAt_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -319,7 +319,7 @@ func TestNodeClient_EthEstimateGas_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -346,7 +346,7 @@ func TestNodeClient_EthSendRawTransaction_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -373,7 +373,7 @@ func TestNodeClient_EthGetBlockByNumber_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -394,7 +394,7 @@ func TestNodeClient_EthGetBlockByNumber_NullResult_ReturnsNil(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -421,7 +421,7 @@ func TestNodeClient_EthGetTransactionByHash_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -449,7 +449,7 @@ func TestNodeClient_EthGetTransactionReceipt_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -478,7 +478,7 @@ func TestNodeClient_EthGetLogs_Success(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -504,7 +504,7 @@ func TestNodeClient_EthGetLogs_EmptyResult_ReturnsEmptySlice(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -526,7 +526,7 @@ func TestNodeClient_RPCError_ReturnsError(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -550,7 +550,7 @@ func TestNodeClient_HTTPError_ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -580,7 +580,7 @@ func TestNodeClient_InvalidJSON_ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -595,7 +595,7 @@ func TestNodeClient_InvalidJSON_ReturnsError(t *testing.T) {
 
 // TestNodeClient_Close_ClosesConnections tests Close method
 func TestNodeClient_Close_ClosesConnections(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 
 	client, err := NewNodeClient(config)
@@ -607,7 +607,7 @@ func TestNodeClient_Close_ClosesConnections(t *testing.T) {
 
 // TestNodeClient_GetConfig_ReturnsConfig tests GetConfig
 func TestNodeClient_GetConfig_ReturnsConfig(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 
 	client, err := NewNodeClient(config)
@@ -620,7 +620,7 @@ func TestNodeClient_GetConfig_ReturnsConfig(t *testing.T) {
 
 // TestNodeClient_SetRequestTimeout_UpdatesTimeout tests SetRequestTimeout
 func TestNodeClient_SetRequestTimeout_UpdatesTimeout(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 
 	client, err := NewNodeClient(config)
@@ -642,7 +642,7 @@ func TestNodeClient_RequestID_Increments(t *testing.T) {
 	})
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -672,7 +672,7 @@ func TestNodeClient_ContextCancellation_ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 	config = config.WithBaseURL(server.URL + "/")
 
@@ -700,7 +700,7 @@ func TestRPCError_Error_ReturnsFormattedMessage(t *testing.T) {
 
 // TestDefaultConfig_ReturnsValidConfig tests DefaultConfig
 func TestDefaultConfig_ReturnsValidConfig(t *testing.T) {
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	config := DefaultConfig("test-key", NetworkEthereum, logger)
 
 	assert.Equal(t, "test-key", config.APIKey)

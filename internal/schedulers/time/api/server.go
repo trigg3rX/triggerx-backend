@@ -9,8 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/api/handlers"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/time/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	gootel "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -22,7 +23,7 @@ import (
 type Server struct {
 	router     *gin.Engine
 	httpServer *http.Server
-	logger     logging.Logger
+	logger     observability.Logger
 }
 
 // Config holds the server configuration
@@ -32,7 +33,8 @@ type Config struct {
 
 // Dependencies holds the server dependencies
 type Dependencies struct {
-	Logger    logging.Logger
+	Logger    observability.Logger
+	Metrics   observability.Metrics
 	Scheduler *scheduler.TimeBasedScheduler
 }
 
@@ -44,7 +46,7 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 	// Initialize OpenTelemetry tracer
 	_, err := InitTracer()
 	if err != nil {
-		deps.Logger.Error("Failed to initialize OpenTelemetry tracer", "error", err)
+		deps.Logger.Error(context.Background(), "Failed to initialize OpenTelemetry tracer", observability.Error(err))
 	}
 
 	// Create server instance
@@ -67,8 +69,8 @@ func NewServer(cfg Config, deps Dependencies) *Server {
 }
 
 // Start starts the server
-func (s *Server) Start() error {
-	s.logger.Info("Starting API server", "addr", s.httpServer.Addr)
+func (s *Server) Start(ctx context.Context) error {
+	s.logger.Info(ctx, "Starting API server", observability.String("addr", s.httpServer.Addr))
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
@@ -77,7 +79,7 @@ func (s *Server) Start() error {
 
 // Stop gracefully stops the server
 func (s *Server) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping API server")
+	s.logger.Info(ctx, "Stopping API server")
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -94,7 +96,11 @@ func (s *Server) setupMiddleware(deps Dependencies) {
 func (s *Server) setupRoutes(deps Dependencies) {
 	// Create handlers
 	statusHandler := handlers.NewStatusHandler(deps.Logger)
-	metricsHandler := handlers.NewMetricsHandler(deps.Logger)
+
+	// Create collector for metrics handler
+	collector := metrics.NewCollector(deps.Metrics)
+	metricsHandler := handlers.NewMetricsHandler(deps.Logger, collector)
+
 	schedulerHandler := handlers.NewSchedulerHandler(deps.Logger, deps.Scheduler)
 
 	// Health and monitoring endpoints

@@ -10,8 +10,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
 )
 
+const (
+	version = "0.0.1"
+)
+
 type Config struct {
 	devMode bool
+	otelExporterEndpoint string
 
 	// Task Dispatcher RPC port
 	taskDispatcherRPCPort int
@@ -19,8 +24,12 @@ type Config struct {
 	// Health RPC URL
 	healthRPCUrl string
 	// Aggregator RPC URL
-	aggregatorRPCUrl string
+	aggregatorRPCUrl     string
 	testAggregatorRPCUrl string
+
+	// Performer API URLs (for direct HTTP calls to keeper)
+	performerAPIUrl     string
+	testPerformerAPIUrl string
 
 	// Task Dispatcher signing key
 	signingKey     string
@@ -62,10 +71,13 @@ func Init() error {
 	}
 	cfg = Config{
 		devMode:               env.GetEnvBool("DEV_MODE", false),
+		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		taskDispatcherRPCPort: env.GetEnvInt("TASK_DISPATCHER_RPC_PORT", 9003),
 		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
 		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
 		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "http://localhost:9001"),
+		performerAPIUrl:       env.GetEnvString("PERFORMER_API_URL", "http://localhost:9008"),
+		testPerformerAPIUrl:   env.GetEnvString("TEST_PERFORMER_API_URL", "http://localhost:9008"),
 		signingKey:            env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
 		signingAddress:        env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
 		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
@@ -95,6 +107,14 @@ func IsDevMode() bool {
 	return cfg.devMode
 }
 
+func GetVersion() string {
+	return version
+}
+
+func GetOTELExporterEndpoint() string {
+	return cfg.otelExporterEndpoint
+}
+
 func GetHealthRPCUrl() string {
 	return cfg.healthRPCUrl
 }
@@ -109,6 +129,14 @@ func GetAggregatorRPCUrl() string {
 
 func GetTestAggregatorRPCUrl() string {
 	return cfg.testAggregatorRPCUrl
+}
+
+func GetPerformerAPIUrl() string {
+	return cfg.performerAPIUrl
+}
+
+func GetTestPerformerAPIUrl() string {
+	return cfg.testPerformerAPIUrl
 }
 
 func GetTaskDispatcherSigningKey() string {

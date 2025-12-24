@@ -8,8 +8,6 @@ import (
 	"fmt"
 	mathrand "math/rand"
 	"time"
-
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 )
 
 // Config holds the configuration for retry operations
@@ -19,7 +17,6 @@ type RetryConfig struct {
 	MaxDelay        time.Duration         // Maximum delay between retries
 	BackoffFactor   float64               // Multiplier for exponential backoff
 	JitterFactor    float64               // Factor for adding jitter to delays (% of delay)
-	LogRetryAttempt bool                  // Whether to log retry attempts
 	ShouldRetry     func(error, int) bool // Custom function to determine if error should be retried (error, attempt number)
 }
 
@@ -31,7 +28,6 @@ func DefaultRetryConfig() *RetryConfig {
 		MaxDelay:        30 * time.Second,
 		BackoffFactor:   2.0,
 		JitterFactor:    0.2,
-		LogRetryAttempt: true,
 		ShouldRetry:     nil,
 	}
 }
@@ -88,7 +84,7 @@ func CalculateNextDelay(currentDelay time.Duration, backoffFactor float64, maxDe
 
 // Retry executes the given operation with exponential backoff and retry logic.
 // Returns the result of the operation if successful, or an error if all attempts fail.
-func Retry[T any](ctx context.Context, operation func() (T, error), retryConfig *RetryConfig, logger logging.Logger) (T, error) {
+func Retry[T any](ctx context.Context, operation func() (T, error), retryConfig *RetryConfig) (T, error) {
 	var zero T
 	var err error
 
@@ -120,10 +116,6 @@ func Retry[T any](ctx context.Context, operation func() (T, error), retryConfig 
 
 		sleepDuration := CalculateDelayWithJitter(delay, retryConfig.JitterFactor)
 
-		if retryConfig.LogRetryAttempt {
-			logger.Warnf("Attempt %d/%d failed: %v. Retrying in %v...", attempt+1, retryConfig.MaxRetries, err, sleepDuration)
-		}
-
 		select {
 		case <-time.After(sleepDuration):
 			// Calculate next delay
@@ -138,10 +130,10 @@ func Retry[T any](ctx context.Context, operation func() (T, error), retryConfig 
 
 // RetryFunc executes an operation that only returns an error, with exponential backoff.
 // This is a convenience wrapper around Retry.
-func RetryFunc(ctx context.Context, operation func() error, config *RetryConfig, logger logging.Logger) error {
+func RetryFunc(ctx context.Context, operation func() error, config *RetryConfig) error {
 	opWithValue := func() (struct{}, error) {
 		return struct{}{}, operation()
 	}
-	_, err := Retry(ctx, opWithValue, config, logger)
+	_, err := Retry(ctx, opWithValue, config)
 	return err
 }

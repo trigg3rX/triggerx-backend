@@ -1,10 +1,12 @@
 package metrics
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"fmt"
+
 	"github.com/gocql/gocql"
 )
 
@@ -12,6 +14,7 @@ import (
 // It tracks operation duration, success/failure, errors, and slow queries
 func TrackDBOperation(operation string, table string) func(error) {
 	startTime := time.Now()
+	ctx := context.Background() // Helper usually called in defer, so bg context is safer/easier unless passed
 	return func(err error) {
 		duration := time.Since(startTime).Seconds()
 		status := "success"
@@ -21,12 +24,18 @@ func TrackDBOperation(operation string, table string) func(error) {
 		}
 
 		// Record operation metrics
-		DatabaseOperationsTotal.WithLabelValues(operation, table, status).Inc()
-		DatabaseOperationDuration.WithLabelValues(operation, table).Observe(duration)
+		if DatabaseOperationsTotal != nil {
+			DatabaseOperationsTotal.WithLabelValues(operation, table, status).Inc(ctx)
+		}
+		if DatabaseOperationDuration != nil {
+			DatabaseOperationDuration.WithLabelValues(operation, table).Record(ctx, duration)
+		}
 
 		// Track slow queries
 		if duration > 1.0 { // Consider queries taking more than 1 second as slow
-			DBSlowQueriesTotal.WithLabelValues("1s").Inc()
+			if DBSlowQueriesTotal != nil {
+				DBSlowQueriesTotal.WithLabelValues("1s").Inc(ctx)
+			}
 		}
 	}
 }
@@ -49,15 +58,24 @@ func TrackDBError(err error) {
 		errorType = "constraint"
 	}
 
-	DatabaseErrorsTotal.WithLabelValues(errorType).Inc()
+	if DatabaseErrorsTotal != nil {
+		DatabaseErrorsTotal.WithLabelValues(errorType).Inc(context.Background())
+	}
 }
 
 // TrackRetry tracks retry mechanism metrics
 func TrackRetry(endpoint string, attempt int, success bool) {
-	RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprint(rune(attempt))).Inc()
+	ctx := context.Background()
+	if RetryAttemptsTotal != nil {
+		RetryAttemptsTotal.WithLabelValues(endpoint, fmt.Sprint(rune(attempt))).Inc(ctx)
+	}
 	if success {
-		RetrySuccessesTotal.WithLabelValues(endpoint).Inc()
+		if RetrySuccessesTotal != nil {
+			RetrySuccessesTotal.WithLabelValues(endpoint).Inc(ctx)
+		}
 	} else {
-		RetryFailuresTotal.WithLabelValues(endpoint).Inc()
+		if RetryFailuresTotal != nil {
+			RetryFailuresTotal.WithLabelValues(endpoint).Inc(ctx)
+		}
 	}
 }

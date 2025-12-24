@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -60,11 +59,10 @@ func (e *HTTPError) Error() string {
 type HTTPClient struct {
 	client     *http.Client
 	HTTPConfig *HTTPRetryConfig
-	logger     logging.Logger
 }
 
 // NewHTTPClient creates a new HTTP client with retry capabilities
-func NewHTTPClient(httpConfig *HTTPRetryConfig, logger logging.Logger) (*HTTPClient, error) {
+func NewHTTPClient(httpConfig *HTTPRetryConfig) (*HTTPClient, error) {
 	if httpConfig == nil {
 		httpConfig = DefaultHTTPRetryConfig()
 	}
@@ -105,7 +103,6 @@ func NewHTTPClient(httpConfig *HTTPRetryConfig, logger logging.Logger) (*HTTPCli
 	return &HTTPClient{
 		client:     client,
 		HTTPConfig: httpConfig,
-		logger:     logger,
 	}, nil
 }
 
@@ -125,7 +122,7 @@ func (c *HTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.
 			return nil, fmt.Errorf("error reading request body for retry: %w", err)
 		}
 		if err := req.Body.Close(); err != nil {
-			c.logger.Warnf("Failed to close request body: %v", err)
+			return nil, fmt.Errorf("failed to close request body: %w", err)
 		}
 		req.GetBody = func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewBuffer(bodyBytes)), nil
@@ -174,7 +171,7 @@ func (c *HTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.
 				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, c.HTTPConfig.MaxResponseSize))
 				err := resp.Body.Close()
 				if err != nil {
-					c.logger.Warnf("Failed to close response body: %v", err)
+					return nil, fmt.Errorf("failed to close response body: %w", err)
 				}
 
 				return nil, &HTTPError{
@@ -189,7 +186,7 @@ func (c *HTTPClient) DoWithRetry(ctx context.Context, req *http.Request) (*http.
 	}
 
 	// Use retry package to execute the operation
-	return retry.Retry(ctx, operation, c.HTTPConfig.RetryConfig, c.logger)
+	return retry.Retry(ctx, operation, c.HTTPConfig.RetryConfig)
 }
 
 // Get performs a GET request with retry logic

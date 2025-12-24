@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -14,7 +14,7 @@ type MockAggregatorClient struct {
 	mock.Mock
 }
 
-func NewMockAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*MockAggregatorClient, error) {
+func NewMockAggregatorClient(logger observability.Logger, cfg AggregatorClientConfig) (*MockAggregatorClient, error) {
 	return &MockAggregatorClient{}, nil
 }
 
@@ -103,7 +103,7 @@ func NewMockAggregatorClientFactory() *MockAggregatorClientFactory {
 }
 
 // CreateAggregatorClient mocks the aggregator client creation process
-func (f *MockAggregatorClientFactory) CreateAggregatorClient(logger logging.Logger, cfg AggregatorClientConfig) (*MockAggregatorClient, error) {
+func (f *MockAggregatorClientFactory) CreateAggregatorClient(logger observability.Logger, cfg AggregatorClientConfig) (*MockAggregatorClient, error) {
 	args := f.Called(logger, cfg)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -153,7 +153,7 @@ func NewMockAggregatorClientConfig() AggregatorClientConfig {
 
 // NewMockAggregatorClientWithHTTP creates a mock client that can be used with real HTTP servers
 // This is useful for integration tests where you want to test the actual HTTP interaction
-func NewMockAggregatorClientWithHTTP(logger logging.Logger, cfg AggregatorClientConfig) (*MockAggregatorClient, error) {
+func NewMockAggregatorClientWithHTTP(logger observability.Logger, cfg AggregatorClientConfig) (*MockAggregatorClient, error) {
 	client := &MockAggregatorClient{}
 
 	// Set up expectations that will be called by the real client
@@ -166,7 +166,7 @@ func NewMockAggregatorClientWithHTTP(logger logging.Logger, cfg AggregatorClient
 
 // NewMockAggregatorClientForHTTPTest creates a mock client specifically for HTTP testing
 // This sets up the mock to work with real HTTP servers in tests
-func NewMockAggregatorClientForHTTPTest(logger logging.Logger, cfg AggregatorClientConfig, expectedSuccess bool, expectedError error) (*MockAggregatorClient, error) {
+func NewMockAggregatorClientForHTTPTest(logger observability.Logger, cfg AggregatorClientConfig, expectedSuccess bool, expectedError error) (*MockAggregatorClient, error) {
 	client := &MockAggregatorClient{}
 
 	// Set up expectations for HTTP testing

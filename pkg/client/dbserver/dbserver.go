@@ -7,18 +7,18 @@ import (
 	"time"
 
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // DBServerClient handles communication with the DBServer service
 type DBServerClient struct {
-	logger      logging.Logger
+	logger      observability.Logger
 	dbserverUrl string
 	httpClient  *httppkg.HTTPClient
 }
 
 // NewDBServerClient creates a new instance of DBServerClient
-func NewDBServerClient(logger logging.Logger, dbserverUrl string) (*DBServerClient, error) {
+func NewDBServerClient(logger observability.Logger, dbserverUrl string) (*DBServerClient, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger cannot be nil")
 	}
@@ -26,7 +26,7 @@ func NewDBServerClient(logger logging.Logger, dbserverUrl string) (*DBServerClie
 		return nil, fmt.Errorf("RPC address cannot be empty")
 	}
 
-	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig(), logger)
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}

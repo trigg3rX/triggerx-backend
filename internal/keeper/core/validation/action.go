@@ -25,7 +25,6 @@ func getReceiptRetryConfig() *retry.RetryConfig {
 		MaxDelay:        6 * time.Second,        // Cap at 6 seconds
 		BackoffFactor:   1.4,                    // Moderate backoff
 		JitterFactor:    0.3,                    // High jitter to avoid conflicts
-		LogRetryAttempt: true,
 		ShouldRetry:     shouldRetryReceiptError,
 	}
 }
@@ -73,7 +72,7 @@ func shouldRetryReceiptError(err error, attempt int) bool {
 }
 
 func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, triggerData *types.TaskTriggerData, actionData *types.PerformerActionData, client *ethclient.Client, traceID string) (bool, error) {
-	// v.logger.Infof("txHash: %s", actionData.ActionTxHash)
+	// v.logger.Debug(ctx, "txHash", observability.String("txHash", actionData.ActionTxHash))
 	// time.Sleep(10 * time.Second)
 	// Fetch the tx details from the action data
 	txHash := common.HexToHash(actionData.ActionTxHash)
@@ -86,7 +85,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 		return client.TransactionReceipt(context.Background(), txHash)
 	}
 
-	receipt, err := retry.Retry(context.Background(), receiptOperation, retryConfig, v.logger)
+	receipt, err := retry.Retry(context.Background(), receiptOperation, retryConfig)
 	if err != nil || receipt == nil {
 		// If receipt fetch failed, try to get transaction status with retry logic
 		txOperation := func() (bool, error) {
@@ -94,7 +93,7 @@ func (v *TaskValidator) ValidateAction(targetData *types.TaskTargetData, trigger
 			return isPending, err
 		}
 
-		isPending, err := retry.Retry(context.Background(), txOperation, retryConfig, v.logger)
+		isPending, err := retry.Retry(context.Background(), txOperation, retryConfig)
 		if err != nil {
 			return false, fmt.Errorf("failed to get transaction after retries: %v", err)
 		}

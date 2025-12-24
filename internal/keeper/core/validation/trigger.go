@@ -23,9 +23,7 @@ const (
 	ConditionLessEqual    = "less_equal"
 )
 
-func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, traceID string) (bool, error) {
-	e.logger.Info("Validating trigger data", "task_id", triggerData.TaskID, "trace_id", traceID)
-
+func (e *TaskValidator) ValidateTrigger(ctx context.Context, triggerData *types.TaskTriggerData, traceID string) (bool, error) {
 	switch triggerData.TaskDefinitionID {
 	case 1, 2:
 		isValid, err := e.IsValidTimeBasedTrigger(triggerData)
@@ -33,7 +31,7 @@ func (e *TaskValidator) ValidateTrigger(triggerData *types.TaskTriggerData, trac
 			return isValid, err
 		}
 	case 3, 4:
-		isValid, err := e.IsValidEventBasedTrigger(triggerData)
+		isValid, err := e.IsValidEventBasedTrigger(ctx, triggerData)
 		if !isValid {
 			return isValid, err
 		}
@@ -65,7 +63,7 @@ func (v *TaskValidator) IsValidTimeBasedTrigger(triggerData *types.TaskTriggerDa
 	return true, nil
 }
 
-func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerData) (bool, error) {
+func (v *TaskValidator) IsValidEventBasedTrigger(ctx context.Context, triggerData *types.TaskTriggerData) (bool, error) {
 	// check if expiration time is before trigger timestamp
 	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
@@ -79,7 +77,7 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 	defer client.Close()
 
 	// Check if the contract exists on chain
-	contractCode, err := client.CodeAt(context.Background(), common.HexToAddress(triggerData.EventTriggerContractAddress), nil)
+	contractCode, err := client.CodeAt(ctx, common.HexToAddress(triggerData.EventTriggerContractAddress), nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to check contract existence: %v", err)
 	}
@@ -90,9 +88,9 @@ func (v *TaskValidator) IsValidEventBasedTrigger(triggerData *types.TaskTriggerD
 
 	// check if the tx is successful
 	txHash := common.HexToHash(triggerData.EventTxHash)
-	receipt, err := client.TransactionReceipt(context.Background(), txHash)
+	receipt, err := client.TransactionReceipt(ctx, txHash)
 	if err != nil {
-		_, isPending, err := client.TransactionByHash(context.Background(), txHash)
+		_, isPending, err := client.TransactionByHash(ctx, txHash)
 		if err != nil {
 			return false, fmt.Errorf("failed to get transaction: %v", err)
 		}
@@ -133,8 +131,6 @@ func (v *TaskValidator) IsValidConditionBasedTrigger(triggerData *types.TaskTrig
 	if triggerData.ExpirationTime.Before(triggerData.NextTriggerTimestamp) {
 		return false, errors.New("expiration time is before trigger timestamp")
 	}
-	// v.logger.Infof("trigger data: %+v", triggerData)
-	v.logger.Infof("value: %v | upper limit: %v | lower limit: %v", triggerData.ConditionSatisfiedValue, triggerData.ConditionUpperLimit, triggerData.ConditionLowerLimit)
 
 	// check if the condition was satisfied by the value
 	if triggerData.ConditionType == ConditionEquals {

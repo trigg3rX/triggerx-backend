@@ -7,7 +7,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
@@ -40,7 +39,7 @@ func DefaultRetryConfig() *RetryConfig {
 }
 
 // RetryWithBackoff retries a function with exponential backoff using the retry package
-func RetryWithBackoff(ctx context.Context, fn func() error, config *RetryConfig, logger logging.Logger) error {
+func RetryWithBackoff(ctx context.Context, fn func() error, config *RetryConfig) error {
 	if config == nil {
 		config = DefaultRetryConfig()
 	}
@@ -52,14 +51,13 @@ func RetryWithBackoff(ctx context.Context, fn func() error, config *RetryConfig,
 		MaxDelay:        config.MaxDelay,
 		BackoffFactor:   config.BackoffFactor,
 		JitterFactor:    config.JitterFactor,
-		LogRetryAttempt: true,
 		ShouldRetry: func(err error, attempt int) bool {
 			return isRetryableError(err, config.RetryableCodes)
 		},
 	}
 
 	// Use the retry package
-	return retry.RetryFunc(ctx, fn, retryConfig, logger)
+	return retry.RetryFunc(ctx, fn, retryConfig)
 }
 
 // isRetryableError checks if an error is retryable

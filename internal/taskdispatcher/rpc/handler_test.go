@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -26,7 +26,7 @@ func (m *MockTaskDispatcherInterface) SubmitTaskFromScheduler(ctx context.Contex
 
 func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 	// Setup
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockDispatcher := &MockTaskDispatcherInterface{}
 	handler := NewTaskDispatcherHandler(logger, mockDispatcher)
 
@@ -78,7 +78,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_Success(t *testing.T) {
 
 func TestTaskDispatcherHandler_Handle_SubmitTask_InvalidRequestType(t *testing.T) {
 	// Setup
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockDispatcher := &MockTaskDispatcherInterface{}
 	handler := NewTaskDispatcherHandler(logger, mockDispatcher)
 
@@ -96,7 +96,7 @@ func TestTaskDispatcherHandler_Handle_SubmitTask_InvalidRequestType(t *testing.T
 
 func TestTaskDispatcherHandler_Handle_UnknownMethod(t *testing.T) {
 	// Setup
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockDispatcher := &MockTaskDispatcherInterface{}
 	handler := NewTaskDispatcherHandler(logger, mockDispatcher)
 
@@ -111,7 +111,7 @@ func TestTaskDispatcherHandler_Handle_UnknownMethod(t *testing.T) {
 
 func TestTaskDispatcherHandler_GetMethods(t *testing.T) {
 	// Setup
-	logger := logging.NewNoOpLogger()
+	logger := observability.NewNoOpLogger()
 	mockDispatcher := &MockTaskDispatcherInterface{}
 	handler := NewTaskDispatcherHandler(logger, mockDispatcher)
 

@@ -4,20 +4,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/execution"
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/core/validation"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 const TraceIDKey = "trace_id"
 
 // TaskHandler handles task-related requests
 type TaskHandler struct {
-	logger    logging.Logger
+	logger    observability.Logger
 	executor  *execution.TaskExecutor
 	validator *validation.TaskValidator
 }
 
 // NewTaskHandler creates a new task handler
-func NewTaskHandler(logger logging.Logger, executor *execution.TaskExecutor, validator *validation.TaskValidator) *TaskHandler {
+func NewTaskHandler(logger observability.Logger, executor *execution.TaskExecutor, validator *validation.TaskValidator) *TaskHandler {
 	return &TaskHandler{
 		logger:    logger,
 		executor:  executor,

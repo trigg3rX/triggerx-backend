@@ -17,8 +17,8 @@ help:
 
 # Setup ScyllaDB container
 db-setup:
-    docker compose -f docker/docker-compose.yaml down
-    docker compose -f docker/docker-compose.yaml up -d
+    docker compose -f docker/docker-compose.yaml --profile scylla down
+    docker compose -f docker/docker-compose.yaml --profile scylla up -d
     sleep 6
     ./scripts/database/setup-db.sh
 
@@ -30,6 +30,16 @@ db-shell:
 db-backup:
     docker exec -it triggerx-scylla nodetool snapshot -t triggerx_backup triggerx -cf keeper_data
 
+########################### OBSERVABILITY #########################
+
+# Start the Observability Services
+start-observability:
+    ./scripts/observability/start-observability.sh
+
+# Stop the Observability Services
+stop-observability:
+    ./scripts/observability/stop-observability.sh
+
 ############################# SERVICES #############################
 
 # Start the Othentic Node
@@ -37,36 +47,36 @@ start-othentic:
     ./scripts/services/start-othentic.sh
 
 # Start the Database Server
-start-db-server:
-    ./scripts/services/start-dbserver.sh
+start-db-server args="":
+    ./scripts/services/start-dbserver.sh {{args}}
 
 # Start the Health Check
-start-health:
-    ./scripts/services/start-health.sh
+start-health args="":
+    ./scripts/services/start-health.sh {{args}}
 
 # Start the Task Dispatcher
-start-taskdispatcher:
-    ./scripts/services/start-taskdispatcher.sh
+start-taskdispatcher args="":
+    ./scripts/services/start-taskdispatcher.sh {{args}}
 
 # Start the Task Monitor
-start-taskmonitor:
-    ./scripts/services/start-taskmonitor.sh
+start-taskmonitor args="":
+    ./scripts/services/start-taskmonitor.sh {{args}}
 
 # Start the Time Scheduler
-start-time-scheduler:
-    ./scripts/services/start-time-scheduler.sh
+start-time-scheduler args="":
+    ./scripts/services/start-time-scheduler.sh {{args}}
 
 # Start the Condition Scheduler
-start-condition-scheduler:
-    ./scripts/services/start-condition-scheduler.sh
+start-condition-scheduler args="":
+    ./scripts/services/start-condition-scheduler.sh {{args}}
 
 # Start the Event Monitor
-start-eventmonitor:
-    ./scripts/services/start-eventmonitor.sh
+start-eventmonitor args="":
+    ./scripts/services/start-eventmonitor.sh {{args}}
 
 # Start the Keeper
-start-keeper:
-    ./scripts/services/start-keeper.sh
+start-keeper args="":
+    ./scripts/services/start-keeper.sh {{args}}
 
 # Start the Imua Keeper
 start-imua-keeper:

@@ -2,17 +2,17 @@ package database
 
 import (
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
-	"github.com/trigg3rX/triggerx-backend/pkg/logging"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // DatabaseClient handles database operations
 type DatabaseClient struct {
-	logger logging.Logger
+	logger observability.Logger
 	db     *database.Connection
 }
 
 // NewDatabaseClient initializes the database manager with a logger
-func NewDatabaseClient(logger logging.Logger, connection *database.Connection) *DatabaseClient {
+func NewDatabaseClient(logger observability.Logger, connection *database.Connection) *DatabaseClient {
 	if logger == nil {
 		panic("logger cannot be nil")
 	}
@@ -21,7 +21,7 @@ func NewDatabaseClient(logger logging.Logger, connection *database.Connection) *
 	}
 
 	return &DatabaseClient{
-		logger: logger.With("component", "database"),
+		logger: logger,
 		db:     connection,
 	}
 }
