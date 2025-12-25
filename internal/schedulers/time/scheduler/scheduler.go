@@ -61,7 +61,7 @@ func NewTimeBasedScheduler(logger observability.Logger, tracer observability.Tra
 		RetryDelay:  time.Second,
 		PoolSize:    10,
 		PoolTimeout: 5 * time.Second,
-	}, logger)
+	}, logger, tracer)
 
 	scheduler := &TimeBasedScheduler{
 		ctx:                  ctx,

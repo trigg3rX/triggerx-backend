@@ -55,7 +55,7 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		RetryDelay:  time.Second,
 		PoolSize:    10,
 		PoolTimeout: 5 * time.Second,
-	}, logger)
+	}, logger, tracer)
 
 	// Initialize Event Monitor Service client
 	eventMonitorClient, err := eventmonitor.NewClient(config.GetEventMonitorServiceURL(), logger)

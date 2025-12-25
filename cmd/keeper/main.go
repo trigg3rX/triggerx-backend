@@ -131,7 +131,7 @@ func main() {
 
 	// Initialize taskmonitor client (optional - may not be configured)
 	var taskMonitorClient *taskmonitor.Client
-	taskMonitorClient, err = taskmonitor.NewClient(logger)
+	taskMonitorClient, err = taskmonitor.NewClient(logger, tracer)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize TaskMonitor client", observability.Error(err))
 	}

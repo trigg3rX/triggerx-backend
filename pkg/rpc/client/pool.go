@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
 )
 
 // ConnectionPool manages a pool of gRPC connections
@@ -18,18 +19,21 @@ type ConnectionPool struct {
 	maxSize int
 	timeout time.Duration
 	logger  observability.Logger
-
+	tracer  observability.Tracer
+	serviceName string
 	connections chan *grpc.ClientConn
 	mu          sync.RWMutex
 	closed      bool
 }
 
 // NewConnectionPool creates a new connection pool
-func NewConnectionPool(maxSize int, timeout time.Duration, logger observability.Logger) *ConnectionPool {
+func NewConnectionPool(maxSize int, timeout time.Duration, logger observability.Logger, tracer observability.Tracer, serviceName string) *ConnectionPool {
 	return &ConnectionPool{
 		maxSize:     maxSize,
 		timeout:     timeout,
 		logger:      logger,
+		tracer:      tracer,
+		serviceName: serviceName,
 		connections: make(chan *grpc.ClientConn, maxSize),
 	}
 }
@@ -109,9 +113,18 @@ func (p *ConnectionPool) ReturnConnection(ctx context.Context, conn *grpc.Client
 
 // createConnection creates a new gRPC connection
 func (p *ConnectionPool) createConnection(ctx context.Context, address string) (*grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(address,
+	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	}
+
+	// Add trace interceptor if tracer is available
+	if p.tracer != nil && p.serviceName != "" {
+		opts = append(opts, grpc.WithUnaryInterceptor(
+			tracing.TraceClientInterceptor(p.tracer, p.serviceName),
+		))
+	}
+
+	conn, err := grpc.NewClient(address, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC server: %w", err)
 	}

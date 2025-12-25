@@ -15,10 +15,11 @@ import (
 type Client struct {
 	rpcClient *client.Client
 	logger    observability.Logger
+	tracer    observability.Tracer
 }
 
 // NewClient creates a new taskmonitor client
-func NewClient(logger observability.Logger) (*Client, error) {
+func NewClient(logger observability.Logger, tracer observability.Tracer) (*Client, error) {
 	rpcUrl := config.GetTaskMonitorRPCUrl()
 	if rpcUrl == "" {
 		return nil, fmt.Errorf("task monitor RPC URL is not configured")
@@ -31,7 +32,7 @@ func NewClient(logger observability.Logger) (*Client, error) {
 		RetryDelay:  time.Second,
 		PoolSize:    10,
 		PoolTimeout: 5 * time.Second,
-	}, logger)
+	}, logger, tracer)
 
 	return &Client{
 		rpcClient: rpcClient,
