@@ -74,6 +74,22 @@ func main() {
 		ConnectWait:  time.Second * 10,
 		ProtoVersion: 4,
 	}
+
+	// Configure authentication if provided
+	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
+		dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
+	}
+
+	// Configure SSL/TLS if enabled
+	if config.GetDatabaseSSLEnabled() {
+		dbConfig.WithSSLCertificates(
+			config.GetDatabaseSSLCertPath(),
+			config.GetDatabaseSSLKeyPath(),
+			config.GetDatabaseSSLCAPath(),
+			config.GetDatabaseSSLInsecureSkipVerify(),
+		)
+	}
+
 	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))

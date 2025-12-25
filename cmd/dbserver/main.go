@@ -67,6 +67,21 @@ func main() {
 		RetryConfig: retry.DefaultRetryConfig(),
 	}
 
+	// Configure authentication if provided
+	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
+		dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
+	}
+
+	// Configure SSL/TLS if enabled
+	if config.GetDatabaseSSLEnabled() {
+		dbConfig.WithSSLCertificates(
+			config.GetDatabaseSSLCertPath(),
+			config.GetDatabaseSSLKeyPath(),
+			config.GetDatabaseSSLCAPath(),
+			config.GetDatabaseSSLInsecureSkipVerify(),
+		)
+	}
+
 	conn, err := database.NewConnection(dbConfig, logger)
 	if err != nil || conn == nil {
 		logger.Fatal(ctx, "Failed to initialize main database connection", observability.Error(err))

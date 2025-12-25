@@ -25,6 +25,17 @@ type Config struct {
 	databaseHostAddress string
 	databaseHostPort    string
 
+	// ScyllaDB Authentication
+	databaseUsername string
+	databasePassword string
+
+	// ScyllaDB SSL/TLS Configuration
+	databaseSSLEnabled        bool
+	databaseSSLCertPath       string
+	databaseSSLKeyPath        string
+	databaseSSLCAPath         string
+	databaseSSLInsecureSkipVerify bool
+
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
@@ -61,6 +72,13 @@ func Init() error {
 		emailPassword:            env.GetEnvString("EMAIL_PASS", ""),
 		databaseHostAddress:      env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:         env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		databaseUsername:         env.GetEnvString("DATABASE_USERNAME", ""),
+		databasePassword:         env.GetEnvString("DATABASE_PASSWORD", ""),
+		databaseSSLEnabled:       env.GetEnvBool("DATABASE_SSL_ENABLED", false),
+		databaseSSLCertPath:      env.GetEnvString("DATABASE_SSL_CERT_PATH", ""),
+		databaseSSLKeyPath:       env.GetEnvString("DATABASE_SSL_KEY_PATH", ""),
+		databaseSSLCAPath:       env.GetEnvString("DATABASE_SSL_CA_PATH", ""),
+		databaseSSLInsecureSkipVerify: env.GetEnvBool("DATABASE_SSL_INSECURE_SKIP_VERIFY", false),
 		otelExporterEndpoint:     env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
 		pinataHost:               env.GetEnvString("PINATA_HOST", ""),
 		pinataJWT:                env.GetEnvString("PINATA_JWT", ""),
@@ -196,4 +214,32 @@ func GetManagerSigningAddress() string {
 // TODO: This should be set from build flags or environment variable
 func GetVersion() string {
 	return "1.0.0"
+}
+
+func GetDatabaseUsername() string {
+	return cfg.databaseUsername
+}
+
+func GetDatabasePassword() string {
+	return cfg.databasePassword
+}
+
+func GetDatabaseSSLEnabled() bool {
+	return cfg.databaseSSLEnabled
+}
+
+func GetDatabaseSSLCertPath() string {
+	return cfg.databaseSSLCertPath
+}
+
+func GetDatabaseSSLKeyPath() string {
+	return cfg.databaseSSLKeyPath
+}
+
+func GetDatabaseSSLCAPath() string {
+	return cfg.databaseSSLCAPath
+}
+
+func GetDatabaseSSLInsecureSkipVerify() bool {
+	return cfg.databaseSSLInsecureSkipVerify
 }

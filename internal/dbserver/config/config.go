@@ -28,6 +28,17 @@ type Config struct {
 	databaseHostAddress string
 	databaseHostPort    string
 
+	// ScyllaDB Authentication
+	databaseUsername string
+	databasePassword string
+
+	// ScyllaDB SSL/TLS Configuration
+	databaseSSLEnabled        bool
+	databaseSSLCertPath       string
+	databaseSSLKeyPath        string
+	databaseSSLCAPath         string
+	databaseSSLInsecureSkipVerify bool
+
 	// Email User and Password
 	emailUser     string
 	emailPassword string
@@ -68,6 +79,13 @@ func Init() error {
 		dbserverRPCPort:               env.GetEnvString("DBSERVER_RPC_PORT", "9002"),
 		databaseHostAddress:           env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
 		databaseHostPort:              env.GetEnvString("DATABASE_HOST_PORT", "9042"),
+		databaseUsername:              env.GetEnvString("DATABASE_USERNAME", ""),
+		databasePassword:              env.GetEnvString("DATABASE_PASSWORD", ""),
+		databaseSSLEnabled:            env.GetEnvBool("DATABASE_SSL_ENABLED", false),
+		databaseSSLCertPath:           env.GetEnvString("DATABASE_SSL_CERT_PATH", ""),
+		databaseSSLKeyPath:            env.GetEnvString("DATABASE_SSL_KEY_PATH", ""),
+		databaseSSLCAPath:             env.GetEnvString("DATABASE_SSL_CA_PATH", ""),
+		databaseSSLInsecureSkipVerify:  env.GetEnvBool("DATABASE_SSL_INSECURE_SKIP_VERIFY", false),
 		emailUser:                     env.GetEnvString("EMAIL_USER", ""),
 		emailPassword:                 env.GetEnvString("EMAIL_PASS", ""),
 		botToken:                      env.GetEnvString("BOT_TOKEN", ""),
@@ -227,4 +245,32 @@ func IsDevMode() bool {
 
 func GetPollingLookAhead() int {
 	return cfg.timeSchedulerPollingLookAhead
+}
+
+func GetDatabaseUsername() string {
+	return cfg.databaseUsername
+}
+
+func GetDatabasePassword() string {
+	return cfg.databasePassword
+}
+
+func GetDatabaseSSLEnabled() bool {
+	return cfg.databaseSSLEnabled
+}
+
+func GetDatabaseSSLCertPath() string {
+	return cfg.databaseSSLCertPath
+}
+
+func GetDatabaseSSLKeyPath() string {
+	return cfg.databaseSSLKeyPath
+}
+
+func GetDatabaseSSLCAPath() string {
+	return cfg.databaseSSLCAPath
+}
+
+func GetDatabaseSSLInsecureSkipVerify() bool {
+	return cfg.databaseSSLInsecureSkipVerify
 }

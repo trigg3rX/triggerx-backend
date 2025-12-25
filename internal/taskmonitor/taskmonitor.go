@@ -77,6 +77,22 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 		ConnectWait: 5 * time.Second,
 		RetryConfig: retry.DefaultRetryConfig(),
 	}
+
+	// Configure authentication if provided
+	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
+		dbCfg.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
+	}
+
+	// Configure SSL/TLS if enabled
+	if config.GetDatabaseSSLEnabled() {
+		dbCfg.WithSSLCertificates(
+			config.GetDatabaseSSLCertPath(),
+			config.GetDatabaseSSLKeyPath(),
+			config.GetDatabaseSSLCAPath(),
+			config.GetDatabaseSSLInsecureSkipVerify(),
+		)
+	}
+
 	dbConn, err := dbClient.NewConnection(dbCfg, logger)
 	if err != nil {
 		cancel()
