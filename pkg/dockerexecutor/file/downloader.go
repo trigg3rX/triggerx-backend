@@ -98,7 +98,7 @@ func (d *downloader) downloadContent(ctx context.Context, url string) ([]byte, e
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			d.logger.Error(ctx, "Error closing response body", observability.Error(err))
+			d.logger.Error(ctx, "Error closing response body", observability.String("url", url), observability.Int("statusCode", resp.StatusCode), observability.Error(err))
 		}
 	}()
 

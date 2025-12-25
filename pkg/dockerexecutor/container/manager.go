@@ -97,7 +97,7 @@ func (m *containerManager) InitializeLanguagePools(ctx context.Context, language
 	for _, lang := range languages {
 		poolConfig, exists := m.config.GetLanguagePoolConfig(lang)
 		if !exists {
-			m.logger.Warn(ctx, "No configuration found for language, skipping", observability.String("language", string(lang)))
+			m.logger.Warn(ctx, "No configuration found for language, skipping", observability.String("language", string(lang)), observability.Int("totalLanguages", len(languages)))
 			continue
 		}
 
@@ -297,7 +297,7 @@ func (m *containerManager) PullImage(ctx context.Context, imageName string) erro
 	// Check if image already exists locally
 	images, err := m.dockerClient.ImageList(ctx, image.ListOptions{})
 	if err != nil {
-		m.logger.Warn(ctx, "Failed to list images", observability.Error(err))
+		m.logger.Warn(ctx, "Failed to list images", observability.String("imageName", imageName), observability.Error(err))
 	} else {
 		for _, img := range images {
 			for _, tag := range img.RepoTags {
@@ -312,20 +312,20 @@ func (m *containerManager) PullImage(ctx context.Context, imageName string) erro
 	// Image doesn't exist locally, pull it
 	reader, err := m.dockerClient.ImagePull(ctx, imageName, image.PullOptions{})
 	if err != nil {
-		m.logger.Error(ctx, "Failed to pull image", observability.Error(err))
+		m.logger.Error(ctx, "Failed to pull image", observability.String("imageName", imageName), observability.Error(err))
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 	defer func() {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Error(ctx, "Failed to close image pull reader", observability.Error(err))
+			m.logger.Error(ctx, "Failed to close image pull reader", observability.String("imageName", imageName), observability.Error(err))
 		}
 	}()
 
 	// Read the output to ensure the pull completes
 	buf := new(bytes.Buffer)
 	if _, err := io.Copy(buf, reader); err != nil {
-		m.logger.Error(ctx, "Error reading image pull response", observability.Error(err))
+		m.logger.Error(ctx, "Error reading image pull response", observability.String("imageName", imageName), observability.Error(err))
 		return fmt.Errorf("error reading image pull response: %w", err)
 	}
 
@@ -363,7 +363,7 @@ func (m *containerManager) KillExecProcess(ctx context.Context, execID string) e
 	// First, check if the exec process is still running
 	inspectResp, err := m.dockerClient.ContainerExecInspect(ctx, execID)
 	if err != nil {
-		m.logger.Warn(ctx, "Failed to inspect exec process", observability.String("exec_id", execID), observability.Error(err))
+		m.logger.Warn(ctx, "Failed to inspect exec process", observability.String("exec_id", execID), observability.Bool("running", false), observability.Error(err))
 		return fmt.Errorf("failed to inspect exec process: %w", err)
 	}
 
@@ -431,7 +431,7 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 	if result.Success {
 		resultContent, err := m.readResultFile(ctx, containerID)
 		if err != nil {
-			m.logger.Warn(ctx, "Failed to read result file from container", observability.String("container_id", containerID), observability.Error(err))
+			m.logger.Warn(ctx, "Failed to read result file from container", observability.String("container_id", containerID), observability.String("filePath", filePath), observability.String("language", string(language)), observability.Error(err))
 			// Fall back to stdout/stderr output
 			result.Output = outputBuffer.String()
 		} else {
@@ -446,7 +446,7 @@ func (m *containerManager) executeCodeWithFileCopy(ctx context.Context, containe
 	// Step 4: Run cleanup script asynchronously (don't wait for it)
 	go func() {
 		if err := m.runCleanupScript(context.Background(), containerID, language); err != nil {
-			m.logger.Warn(ctx, "Failed to run cleanup script for container", observability.String("container_id", containerID), observability.Error(err))
+			m.logger.Warn(ctx, "Failed to run cleanup script for container", observability.String("container_id", containerID), observability.String("filePath", filePath), observability.String("language", string(language)), observability.Error(err))
 		}
 	}()
 
@@ -634,7 +634,7 @@ func (m *containerManager) readResultFile(ctx context.Context, containerID strin
 	defer func() {
 		err := reader.Close()
 		if err != nil {
-			m.logger.Warn(ctx, "Failed to close reader", observability.Error(err))
+			m.logger.Warn(ctx, "Failed to close reader", observability.String("container_id", containerID), observability.Error(err))
 		}
 	}()
 
