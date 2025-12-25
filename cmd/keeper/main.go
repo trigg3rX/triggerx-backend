@@ -111,7 +111,7 @@ func main() {
 	}
 	logger.Info(ctx, "[3/7] Dependency: Aggregator Client Initialised")
 
-	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
+	dockerManager, err := dockerexecutor.NewDockerExecutorFromFile("config/services/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize code executor", observability.Error(err))
 	}

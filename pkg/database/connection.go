@@ -45,8 +45,6 @@ func NewConnection(config *Config, logger observability.Logger) (*Connection, er
 				Username: config.Username,
 				Password: config.Password,
 			}
-			logger.Info(context.Background(), "ScyllaDB authentication enabled",
-				observability.String("username", config.Username))
 		}
 
 		// Configure SSL/TLS if enabled

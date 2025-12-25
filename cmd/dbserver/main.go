@@ -98,7 +98,7 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
-	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
+	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/services/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Error(ctx, "Failed to create Docker manager", observability.Error(err))
 	} else {
