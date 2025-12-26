@@ -389,8 +389,8 @@ func (ep *executionPipeline) processResults(ctx context.Context, result *types.E
 		}
 	}
 
-	// Calculate fees
-	fees, currentFees := ep.calculateFees(ctx, execCtx, alchemyAPIKey)
+	// Calculate fees (pass result to check for execution failures)
+	fees, currentFees := ep.calculateFees(ctx, execCtx, result, alchemyAPIKey)
 	execCtx.Metadata["fees"] = fees.String()
 	execCtx.Metadata["current_fees"] = currentFees.String()
 	result.Stats.TotalCost = fees
@@ -498,7 +498,7 @@ func (ep *executionPipeline) getChainlinkETHUSDPrice(ctx context.Context, alchem
 	return price, nil
 }
 
-func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.ExecutionContext, alchemyAPIKey string) (*big.Int, *big.Int) {
+func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.ExecutionContext, result *types.ExecutionResult, alchemyAPIKey string) (*big.Int, *big.Int) {
 	feesConfig := ep.config.GetFeesConfig()
 
 	// Get task definition ID from metadata
@@ -717,43 +717,77 @@ func (ep *executionPipeline) calculateFees(ctx context.Context, execCtx *types.E
 		contractABI := execCtx.Metadata["abi"]
 
 		if contractAddr != "" && function != "" && contractABI != "" {
-			// Parse arguments from metadata if available
-			var args []interface{}
-			if argsStr, ok := execCtx.Metadata["on_chain_args"]; ok && argsStr != "" {
-				if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
-					ep.logger.Warn(ctx, "Failed to parse on_chain_args, using empty args", observability.String("argsStr", argsStr[:min(len(argsStr), 200)]), observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.Error(err))
-					args = []interface{}{}
-				}
-			} else {
-				args = []interface{}{}
+			// Check if execution failed or timed out - skip gas estimation in these cases
+			executionFailed := !result.Success
+			isTimeout := false
+			if result.Error != nil {
+				errorMsg := result.Error.Error()
+				isTimeout = strings.Contains(errorMsg, "timeout") || strings.Contains(errorMsg, "execution timeout")
 			}
 
-			// Get from address if provided
-			fromAddress := execCtx.Metadata["from_address"]
-
-			// Estimate gas for the on-chain transaction
-			gasLimit, gasPrice, currentGasPrice, err := ep.gasEstimator.EstimateGasForFunction(
-				ctx,
-				chainID,
-				contractAddr,
-				function,
-				contractABI,
-				args,
-				fromAddress,
-				alchemyAPIKey,
-			)
-
-			if err != nil {
-				ep.logger.Warn(ctx, "Failed to estimate gas, using default on-chain fee", observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.String("function", function), observability.Any("args", args), observability.Error(err))
-				// Use a default on-chain fee if estimation fails (e.g., 0.001 ETH)
-				defaultOnChainFee := big.NewFloat(0.001)
-				defaultOnChainFee.Mul(defaultOnChainFee, weiMultiplier)
-				onChainFeeWei, _ = defaultOnChainFee.Int(nil)
+			if executionFailed || isTimeout {
+				ep.logger.Warn(ctx, "Skipping gas estimation due to execution failure or timeout", observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.String("function", function), observability.Bool("execution_failed", executionFailed), observability.Bool("is_timeout", isTimeout), observability.Error(result.Error))
+				// Use zero on-chain fee when execution fails
+				onChainFeeWei = big.NewInt(0)
+				currentOnChainFeeWei = big.NewInt(0)
 			} else {
-				// Calculate gas cost in Wei
-				onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
-				currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
-				ep.logger.Debug(ctx, "Gas estimation", observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("currentGasPrice", currentGasPrice.String()), observability.String("gasCost", onChainFeeWei.String()), observability.String("currentGasCost", currentOnChainFeeWei.String()))
+				// Parse arguments from metadata if available
+				var args []interface{}
+				if argsStr, ok := execCtx.Metadata["on_chain_args"]; ok && argsStr != "" {
+					if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
+						ep.logger.Warn(ctx, "Failed to parse on_chain_args, using empty args", observability.String("argsStr", argsStr[:min(len(argsStr), 200)]), observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.Error(err))
+						args = []interface{}{}
+					}
+				} else {
+					args = []interface{}{}
+				}
+
+				// For dynamic tasks (2, 4, 6), check if args are empty - this indicates execution didn't produce output
+				var taskDefinitionID int
+				shouldSkipGasEstimation := false
+				if taskDefStr, ok := execCtx.Metadata["task_definition_id"]; ok {
+					if _, err := fmt.Sscanf(taskDefStr, "%d", &taskDefinitionID); err == nil {
+						// Dynamic tasks require arguments from execution output
+						if (taskDefinitionID == 2 || taskDefinitionID == 4 || taskDefinitionID == 6) && len(args) == 0 {
+							ep.logger.Warn(ctx, "Skipping gas estimation: dynamic task execution produced no arguments", observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.String("function", function), observability.Int("task_definition_id", taskDefinitionID))
+							shouldSkipGasEstimation = true
+						}
+					}
+				}
+
+				if shouldSkipGasEstimation {
+					// Use zero on-chain fee when no arguments are available
+					onChainFeeWei = big.NewInt(0)
+					currentOnChainFeeWei = big.NewInt(0)
+				} else {
+					// Get from address if provided
+					fromAddress := execCtx.Metadata["from_address"]
+
+					// Estimate gas for the on-chain transaction
+					gasLimit, gasPrice, currentGasPrice, err := ep.gasEstimator.EstimateGasForFunction(
+						ctx,
+						chainID,
+						contractAddr,
+						function,
+						contractABI,
+						args,
+						fromAddress,
+						alchemyAPIKey,
+					)
+
+					if err != nil {
+						ep.logger.Warn(ctx, "Failed to estimate gas, using default on-chain fee", observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.String("function", function), observability.Any("args", args), observability.Error(err))
+						// Use a default on-chain fee if estimation fails (e.g., 0.001 ETH)
+						defaultOnChainFee := big.NewFloat(0.001)
+						defaultOnChainFee.Mul(defaultOnChainFee, weiMultiplier)
+						onChainFeeWei, _ = defaultOnChainFee.Int(nil)
+					} else {
+						// Calculate gas cost in Wei
+						onChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, gasPrice)
+						currentOnChainFeeWei = ep.gasEstimator.CalculateGasCostInWei(gasLimit, currentGasPrice)
+						ep.logger.Debug(ctx, "Gas estimation", observability.Uint64("gasLimit", gasLimit), observability.String("gasPrice", gasPrice.String()), observability.String("currentGasPrice", currentGasPrice.String()), observability.String("gasCost", onChainFeeWei.String()), observability.String("currentGasCost", currentOnChainFeeWei.String()))
+					}
+				}
 			}
 		} else {
 			ep.logger.Warn(ctx, "Missing contract details for on-chain fee calculation", observability.String("chainID", chainID), observability.String("contractAddr", contractAddr), observability.String("function", function))
