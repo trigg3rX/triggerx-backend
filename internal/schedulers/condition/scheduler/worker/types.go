@@ -13,7 +13,6 @@ const (
 
 	// Event-specific constants
 	ConditionPollInterval = 1 * time.Second  // Poll every 1 second as requested
-	EventPollInterval     = 2 * time.Second  // Poll every 2 seconds for new blocks
 	DuplicateEventWindow  = 30 * time.Second // Window to prevent duplicate event processing
 )
 

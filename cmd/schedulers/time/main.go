@@ -144,12 +144,12 @@ func main() {
 
 func performGracefulShutdown(
 	cancel context.CancelFunc,
-	srv *api.Server,
+	apiSrv *api.Server,
 	timeScheduler *scheduler.TimeBasedScheduler,
 	dbConn *database.Connection,
 	obs *observability.Observability,
 ) {
-	// Create shutdown context with timeout (use background context, not the cancelled one)
+	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
@@ -158,27 +158,23 @@ func performGracefulShutdown(
 
 	// Stop scheduler gracefully (this also closes the RPC client)
 	timeScheduler.Stop(shutdownCtx)
+	log.Println("[1/4] Shutdown: Scheduler Stopped")
 
-	// Shutdown HTTP server gracefully
-	if err := srv.Stop(shutdownCtx); err != nil {
-		log.Fatalf("Server shutdown error: %v", err)
-	} else {
-		log.Println("[1/3] Shutdown: HTTP Server Stopped")
+	// Shutdown API server gracefully
+	if err := apiSrv.Stop(shutdownCtx); err != nil {
+		log.Fatalf("API server forced to shutdown: %v", err)
 	}
+	log.Println("[2/4] Shutdown: API Server Stopped")
 
 	// Close database connection
 	dbConn.Close()
-	log.Println("[2/3] Shutdown: Database Connection Closed")
+	log.Println("[3/4] Shutdown: Database Connection Closed")
 
 	// Shutdown observability (handles logger, tracer, metrics)
-	// Use a shorter timeout for observability shutdown
-	obsCtx, obsCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer obsCancel()
-	if err := obs.Shutdown(obsCtx); err != nil {
+	if err := obs.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Error shutting down observability: %v", err)
-	} else {
-		log.Println("[3/3] Shutdown: Observability Shutdown Complete")
 	}
+	log.Println("[4/4] Shutdown: Observability Shutdown Complete")
 
 	log.Println("Service shutdown completed successfully")
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
@@ -43,6 +42,7 @@ type Config struct {
 	databaseSSLCAPath             string
 	databaseSSLInsecureSkipVerify bool
 
+	// Polling Configuration
 	polling PollingConfig
 }
 
@@ -95,9 +95,6 @@ func Init(configPath string) error {
 	if err := yaml.ValidateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
-	if !cfg.devMode {
-		gin.SetMode(gin.ReleaseMode)
-	}
 	return nil
 }
 
@@ -111,6 +108,9 @@ func validateConfig() error {
 	if !env.IsValidPort(cfg.databaseHostPort) {
 		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
 	}
+	if !env.IsValidHostPort(cfg.taskDispatcherRPCUrl) {
+		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
+	}
 	// Validate polling configuration
 	if cfg.polling.Interval.ToDuration() <= 0 {
 		return fmt.Errorf("polling interval must be positive, got: %v", cfg.polling.Interval.ToDuration())
@@ -121,8 +121,6 @@ func validateConfig() error {
 	if cfg.polling.BatchSize <= 0 {
 		return fmt.Errorf("batch size must be positive, got: %d", cfg.polling.BatchSize)
 	}
-	// Note: taskDispatcherRPCUrl is a gRPC endpoint (host:port format), not an HTTP URL
-	// so we don't validate it as a URL
 	return nil
 }
 

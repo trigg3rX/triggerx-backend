@@ -11,8 +11,8 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/client/eventmonitor"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/repository"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
 	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	rpcclient "github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
@@ -26,16 +26,15 @@ type ConditionBasedScheduler struct {
 	logger               observability.Logger
 	tracer               observability.Tracer
 	conditionWorkers     map[*types.BigInt]*worker.ConditionWorker  // jobID -> condition worker
-	eventWorkers         map[*types.BigInt]*worker.EventWorker      // jobID -> event worker
 	jobDataStore         map[string]*types.ScheduleConditionJobData // jobID -> job data for trigger notifications
 	lastTriggerTime      map[string]time.Time                       // jobID -> last trigger timestamp for cooldown
 	workersMutex         sync.RWMutex
 	notificationMutex    sync.Mutex                        // Protect job data during notification processing
 	chainClients         map[string]*nodeclient.NodeClient // chainID -> client
 	HTTPClient           *httppkg.HTTPClient
-	dbClient             *dbserver.DBServerClient
-	taskDispatcherClient *rpcclient.Client    // RPC client for task dispatcher
-	eventMonitorClient   *eventmonitor.Client // Event Monitor Service client
+	taskRepository       repository.TaskRepository
+	taskDispatcherClient *rpcclient.Client        // RPC client for task dispatcher
+	eventMonitorClient   *eventmonitor.GRPCClient // Event Monitor Service gRPC client
 	metrics              *metrics.Collector
 	maxWorkers           int
 	schedulerID          int
@@ -44,7 +43,7 @@ type ConditionBasedScheduler struct {
 }
 
 // NewConditionBasedScheduler creates a new instance of ConditionBasedScheduler
-func NewConditionBasedScheduler(managerID string, logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, dbClient *dbserver.DBServerClient) (*ConditionBasedScheduler, error) {
+func NewConditionBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, taskRepo repository.TaskRepository) (*ConditionBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -57,15 +56,17 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		PoolTimeout: 5 * time.Second,
 	}, logger, tracer)
 
-	// Initialize Event Monitor Service client
-	eventMonitorClient, err := eventmonitor.NewClient(config.GetEventMonitorServiceURL(), logger)
+	// Initialize Event Monitor Service gRPC client
+	eventMonitorURL := config.GetEventMonitorRPCUrl()
+	eventMonitorClient, err := eventmonitor.NewGRPCClient(eventMonitorURL, logger, tracer)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to initialize Event Monitor Service client: %w", err)
+		return nil, fmt.Errorf("failed to initialize Event Monitor Service gRPC client: %w", err)
 	}
 
-	// Build webhook URL for receiving event notifications
-	webhookURL := fmt.Sprintf("http://localhost:%s/api/v1/events/notify", config.GetSchedulerRPCPort())
+	// Build gRPC service URL for receiving event notifications
+	// Format: host:port (e.g., localhost:9006)
+	webhookURL := fmt.Sprintf("localhost:%s", config.GetSchedulerRPCPort())
 
 	scheduler := &ConditionBasedScheduler{
 		ctx:                  ctx,
@@ -73,11 +74,10 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		logger:               logger,
 		tracer:               tracer,
 		conditionWorkers:     make(map[*types.BigInt]*worker.ConditionWorker),
-		eventWorkers:         make(map[*types.BigInt]*worker.EventWorker),
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
 		lastTriggerTime:      make(map[string]time.Time),
 		chainClients:         make(map[string]*nodeclient.NodeClient),
-		dbClient:             dbClient,
+		taskRepository:       taskRepo,
 		taskDispatcherClient: taskDispatcherClient,
 		eventMonitorClient:   eventMonitorClient,
 		metrics:              metrics.NewCollector(obsMetrics),
@@ -85,17 +85,6 @@ func NewConditionBasedScheduler(managerID string, logger observability.Logger, t
 		schedulerID:          config.GetSchedulerID(),
 		webhookURL:           webhookURL,
 		cooldownPeriod:       30 * time.Second, // Default 30 seconds cooldown between task creations
-	}
-
-	// Initialize chain clients for event workers
-	if err := scheduler.initChainClients(ctx); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to initialize chain clients: %w", err)
-	}
-
-	if err := scheduler.initRetryClient(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to initialize retry client: %w", err)
 	}
 
 	// Start metrics collection
@@ -128,17 +117,6 @@ func (s *ConditionBasedScheduler) Start(ctx context.Context) {
 
 // Stop gracefully stops all condition workers
 func (s *ConditionBasedScheduler) Stop(ctx context.Context) {
-	startTime := time.Now()
-	s.logger.Info(ctx, "Stopping condition-based scheduler")
-
-	// Capture statistics before shutdown
-	s.workersMutex.RLock()
-	totalConditionWorkers := len(s.conditionWorkers)
-	totalEventWorkers := len(s.eventWorkers)
-	s.workersMutex.RUnlock()
-
-	connectedChains := len(s.chainClients)
-
 	s.cancel()
 
 	// Stop all workers and unregister event jobs
@@ -149,24 +127,7 @@ func (s *ConditionBasedScheduler) Stop(ctx context.Context) {
 	}
 
 	// Unregister all event jobs from Event Monitor Service
-	for jobID, worker := range s.eventWorkers {
-		// If using Event Monitor Service (worker is nil), unregister
-		if worker == nil && s.eventMonitorClient != nil {
-			if err := s.eventMonitorClient.Unregister(ctx, jobID.String()); err != nil {
-				s.logger.Warn(ctx, "Failed to unregister event job from Event Monitor Service during shutdown",
-					observability.String("job_id", jobID.String()),
-					observability.Error(err))
-			} else {
-				s.logger.Info(ctx, "Unregistered event job from Event Monitor Service", observability.String("job_id", jobID.String()))
-			}
-		} else if worker != nil {
-			// Stop local worker if it exists (for backward compatibility)
-			worker.Stop(ctx)
-			s.logger.Info(ctx, "Stopped event worker", observability.String("job_id", jobID.String()))
-		}
-	}
 	s.conditionWorkers = make(map[*types.BigInt]*worker.ConditionWorker)
-	s.eventWorkers = make(map[*types.BigInt]*worker.EventWorker)
 	s.jobDataStore = make(map[string]*types.ScheduleConditionJobData)
 	s.workersMutex.Unlock()
 
@@ -186,20 +147,16 @@ func (s *ConditionBasedScheduler) Stop(ctx context.Context) {
 		}
 	}
 
-	// Close Event Monitor Service client
+	// Close Event Monitor Service gRPC client
 	if s.eventMonitorClient != nil {
 		s.eventMonitorClient.Close()
-		s.logger.Info(ctx, "Closed Event Monitor Service client")
+		s.logger.Info(ctx, "Closed Event Monitor Service gRPC client")
 	}
+}
 
-	duration := time.Since(startTime)
-
-	s.logger.Info(ctx, "Condition-based scheduler stopped",
-		observability.Duration("duration", duration),
-		observability.Int("total_condition_workers_stopped", totalConditionWorkers),
-		observability.Int("total_event_workers_stopped", totalEventWorkers),
-		observability.Int("chains_disconnected", connectedChains),
-	)
+// GetSchedulerID returns the scheduler ID
+func (s *ConditionBasedScheduler) GetSchedulerID() int {
+	return s.schedulerID
 }
 
 // cleanupExpiredEventJobs periodically checks for expired event jobs and unregisters them
@@ -220,37 +177,12 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 
 			// Find expired event jobs
 			s.workersMutex.RLock()
-			for jobIDBigInt, eventWorker := range s.eventWorkers {
-				// Only check jobs that are using Event Monitor Service (eventWorker is nil)
-				if eventWorker == nil {
-					jobIDStr := jobIDBigInt.String()
-					jobData, exists := s.jobDataStore[jobIDStr]
-					if exists && jobData != nil {
-						// Check if job has expired
-						if jobData.EventWorkerData.ExpirationTime.Before(now) {
-							expiredJobIDs = append(expiredJobIDs, jobIDBigInt)
-						}
-					}
+			for jobIDBigInt, conditionWorker := range s.conditionWorkers {
+				if conditionWorker.ConditionWorkerData.ExpirationTime.Before(now) {
+					expiredJobIDs = append(expiredJobIDs, jobIDBigInt)
 				}
 			}
 			s.workersMutex.RUnlock()
-
-			// Unregister expired jobs
-			for _, jobID := range expiredJobIDs {
-				s.logger.Info(ctx, "Found expired event job, unregistering from Event Monitor Service",
-					observability.String("job_id", jobID.String()))
-
-				if err := s.unregisterEventJobByPointer(ctx, jobID); err != nil {
-					// Only log as warning since the job may have been already unregistered
-					// by another goroutine (e.g., event notification handler)
-					s.logger.Warn(ctx, "Could not unregister expired event job (may already be unregistered)",
-						observability.String("job_id", jobID.String()),
-						observability.Error(err))
-				} else {
-					s.logger.Info(ctx, "Successfully unregistered expired event job",
-						observability.String("job_id", jobID.String()))
-				}
-			}
 
 			if len(expiredJobIDs) > 0 {
 				s.logger.Info(ctx, "Cleaned up expired event jobs",

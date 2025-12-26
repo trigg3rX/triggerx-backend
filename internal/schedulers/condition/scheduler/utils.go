@@ -1,16 +1,7 @@
 package scheduler
 
 import (
-	"fmt"
-	"context"
-	"strings"
-	"time"
-
-	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
-	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
-	httppkg "github.com/trigg3rX/triggerx-backend/pkg/http"
-	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
 // Helper functions
@@ -35,64 +26,4 @@ func isValidSourceType(sourceType string) bool {
 		}
 	}
 	return false
-}
-
-func (s *ConditionBasedScheduler) initRetryClient() error {
-	retryConfig := httppkg.DefaultHTTPRetryConfig()
-	var err error
-	s.HTTPClient, err = httppkg.NewHTTPClient(retryConfig)
-	if err != nil {
-		return fmt.Errorf("failed to initialize retry client: %w", err)
-	}
-	return nil
-}
-
-// initChainClients initializes blockchain clients for different chains
-func (s *ConditionBasedScheduler) initChainClients(ctx context.Context) error {
-	// Get chain RPC URLs from config
-	chainRPCs := config.GetChainRPCUrls()
-
-	for chainID, rpcURL := range chainRPCs {
-		// Extract API key from RPC URL if it's an Alchemy/Blast URL
-		apiKey := extractAPIKeyFromURL(rpcURL)
-
-		// Create node client config
-		nodeCfg := nodeclient.DefaultConfig(apiKey, "", s.logger)
-		nodeCfg.BaseURL = rpcURL
-		nodeCfg.RequestTimeout = 30 * time.Second
-
-		client, err := nodeclient.NewNodeClient(nodeCfg)
-		if err != nil {
-			s.logger.Warn(ctx, "Failed to create node client for chain",
-				observability.String("chain_id", chainID),
-				observability.String("rpc_url", rpcURL),
-				observability.Error(err),
-			)
-			continue
-		}
-
-		s.chainClients[chainID] = client
-		s.logger.Info(ctx, "Connected to chain",
-			observability.String("chain_id", chainID),
-			observability.String("rpc_url", rpcURL),
-		)
-	}
-
-	if len(s.chainClients) == 0 {
-		return fmt.Errorf("failed to connect to any blockchain networks")
-	}
-
-	return nil
-}
-
-// extractAPIKeyFromURL extracts API key from RPC URL
-func extractAPIKeyFromURL(url string) string {
-	// For Alchemy/Blast URLs, the API key is typically at the end
-	// Format: https://base-mainnet.g.alchemy.com/v2/API_KEY
-	// or: https://base-mainnet.blastapi.io/API_KEY
-	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-	return ""
 }
