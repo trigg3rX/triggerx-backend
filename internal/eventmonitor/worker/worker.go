@@ -24,7 +24,7 @@ import (
 type Worker struct {
 	entry         *types.RegistryEntry
 	nodeClient    *nodeclient.NodeClient
-	webhookClient *webhook.Client
+	webhookClient webhook.NotificationClient
 	logger        observability.Logger
 	tracer        observability.Tracer
 	ctx           context.Context
@@ -35,7 +35,7 @@ type Worker struct {
 func NewWorker(
 	entry *types.RegistryEntry,
 	nodeClient *nodeclient.NodeClient,
-	webhookClient *webhook.Client,
+	webhookClient webhook.NotificationClient,
 	logger observability.Logger,
 	tracer observability.Tracer,
 ) *Worker {

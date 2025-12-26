@@ -21,7 +21,7 @@ type Service struct {
 	registryManager *registry.RegistryManager
 	nodeClients     map[string]*nodeclient.NodeClient // chainID -> NodeClient
 	workers         map[string]*worker.Worker         // registry key -> Worker
-	webhookClient   *webhook.Client
+	webhookClient   *webhook.GRPCClient
 	logger          observability.Logger
 	tracer          observability.Tracer
 	mu              sync.RWMutex
@@ -35,7 +35,7 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 	ctx, cancel := context.WithCancel(ctx)
 
 	rm := registry.NewRegistryManager(ctx, logger)
-	wc := webhook.NewClient(logger)
+	wc := webhook.NewGRPCClient(logger, tracer)
 
 	// Initialize node clients for supported chains
 	nodeClients := make(map[string]*nodeclient.NodeClient)
@@ -96,8 +96,6 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 
 // Start starts the service
 func (s *Service) Start() error {
-	s.logger.Info(s.ctx, "Starting event monitor service")
-
 	// Start monitoring registry changes
 	go s.monitorRegistry()
 

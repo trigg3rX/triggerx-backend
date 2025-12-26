@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/api"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/service"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
@@ -20,7 +21,7 @@ const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
-	if err := config.Init(); err != nil {
+	if err := config.Init("config/services/event-monitor.yaml"); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -51,7 +52,8 @@ func main() {
 	// Initialize application metrics
 	metrics.InitializeMetrics(obsMetrics)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	logger.Info(ctx, "[1/3] Dependency: Observability Module Initialised")
 
 	// Initialize service
@@ -61,15 +63,13 @@ func main() {
 	}
 	logger.Info(ctx, "[2/3] Dependency: Service Initialised")
 
-	// Setup HTTP server
-	srv := api.NewServer(api.Config{
-		Port: config.GetPort(),
-	}, api.Dependencies{
-		Logger:          logger,
-		RegistryManager: svc.GetRegistryManager(),
-		Service:         svc,
-	})
+	// Setup API server
+	apiSrv := api.NewServer(config.GetEventMonitorRPCPort(), logger)
 	logger.Info(ctx, "[3/3] Dependency: API Server Initialised")
+
+	// Setup gRPC server
+	rpcSrv := rpc.NewServer(logger, tracer, svc.GetRegistryManager(), svc)
+	logger.Info(ctx, "[3/3] Dependency: gRPC Server Initialised")
 
 	metrics.StartMetricsCollection()
 	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
@@ -80,13 +80,13 @@ func main() {
 	}
 	logger.Info(ctx, "[2/3] Process: Service Started")
 
-	// Start HTTP server
+	// Start gRPC server
 	go func() {
-		if err := srv.Start(ctx); err != nil && err != http.ErrServerClosed {
-			logger.Error(ctx, "HTTP server error", observability.Error(err))
+		if err := rpcSrv.Start(ctx); err != nil {
+			logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: HTTP Server Started")
+	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("address", rpcSrv.GetServiceInfo().Address), observability.String("port", config.GetEventMonitorRPCPort()))
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -95,47 +95,44 @@ func main() {
 	sig := <-shutdown
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
-	performGracefulShutdown(ctx, srv, svc, logger, obs)
+	performGracefulShutdown(cancel, apiSrv, rpcSrv, svc, obs)
 }
 
 func performGracefulShutdown(
-	ctx context.Context,
-	srv *api.Server,
+	cancel context.CancelFunc,
+	apiSrv *api.Server,
+	rpcSrv *rpc.Server,
 	svc *service.Service,
-	logger observability.Logger,
 	obs *observability.Observability,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
 
-	// Start shutdown in a goroutine to handle timeout
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
+	// Cancel context to stop service and gRPC server
+	cancel()
 
-		// Stop service
-		svc.Stop()
+	// Stop service
+	svc.Stop()
+	log.Println("[1/3] Shutdown: Monitoring Service Stopped")
 
-		// Shutdown server gracefully
-		if err := srv.Stop(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
-		}
-
-		logger.Info(ctx, "Graceful shutdown completed successfully")
-
-		// Shutdown observability (handles logger, tracer, metrics)
-		if err := obs.Shutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down observability", observability.Error(err))
-		}
-	}()
-
-	// Wait for shutdown to complete or timeout
-	select {
-	case <-done:
-		// Shutdown completed successfully
-	case <-shutdownCtx.Done():
-		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
+	// Shutdown gRPC server gracefully
+	if err := rpcSrv.Stop(shutdownCtx); err != nil {
+		log.Fatalf("gRPC server forced to shutdown: %v", err)
 	}
-	os.Exit(0)
+	log.Println("[2/3] Shutdown: gRPC Server Stopped")
+
+	// Shutdown API server gracefully
+	if err := apiSrv.Stop(shutdownCtx); err != nil {
+		log.Fatalf("API server forced to shutdown: %v", err)
+	}
+	log.Println("[3/3] Shutdown: API Server Stopped")
+
+	// Shutdown observability (handles logger, tracer, metrics)
+	if err := obs.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Error shutting down observability: %v", err)
+	}
+	log.Println("[4/4] Shutdown: Observability Shutdown Complete")
+
+	log.Println("Service shutdown completed successfully")
 }

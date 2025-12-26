@@ -16,7 +16,12 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-// Client handles webhook delivery
+// NotificationClient is an interface for sending event notifications
+type NotificationClient interface {
+	Send(ctx context.Context, serviceURL string, notification *types.EventNotification) error
+}
+
+// Client handles webhook delivery (HTTP)
 type Client struct {
 	httpClient *http.Client
 	logger     observability.Logger
