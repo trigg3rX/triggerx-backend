@@ -90,7 +90,8 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 	// Execute task asynchronously in a goroutine
 	// Make a copy of requestData to avoid race conditions
 	taskData := requestData
-	go h.executeTaskAsync(ctx, taskData, traceID)
+	// Use WithoutCancel to detach from HTTP request context cancellation while preserving values (trace info)
+	go h.executeTaskAsync(context.WithoutCancel(ctx), taskData, traceID)
 }
 
 // executeTaskAsync executes the task in background and reports status to TaskMonitor

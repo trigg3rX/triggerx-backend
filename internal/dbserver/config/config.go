@@ -95,7 +95,7 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidURL(cfg.timeSchedulerRPCUrl) {
 		return fmt.Errorf("invalid time scheduler RPC URL: %s", cfg.timeSchedulerRPCUrl)
 	}
-	if !env.IsValidURL(cfg.conditionSchedulerRPCUrl) {
+	if !env.IsValidHostPort(cfg.conditionSchedulerRPCUrl) {
 		return fmt.Errorf("invalid condition scheduler RPC URL: %s", cfg.conditionSchedulerRPCUrl)
 	}
 	if !env.IsValidPort(cfg.dbserverRPCPort) {

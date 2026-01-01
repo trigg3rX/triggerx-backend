@@ -16,7 +16,6 @@ const (
 	colorRed    = "\033[31m"
 	colorGreen  = "\033[32m"
 	colorYellow = "\033[33m"
-	colorCyan   = "\033[36m"
 	colorWhite  = "\033[37m"
 	colorGray   = "\033[90m"
 )
@@ -88,27 +87,14 @@ func (e *ConsoleExporter) writeRecord(record sdklog.Record) {
 	})
 	attrStr := formatAttributes(attrs)
 
-	// Format trace context if available
-	traceStr := formatTraceContext(record)
-
 	// Build the log line
 	var logLine string
-	if traceStr != "" {
-		logLine = fmt.Sprintf("%s[%s]%s %s%s%s %s%s%s %s%s%s %s%s%s\n",
-			colorGray, timestamp, colorReset,
-			color, severityText, colorReset,
-			colorCyan, traceStr, colorReset,
-			colorWhite, message, colorReset,
-			colorGray, attrStr, colorReset,
-		)
-	} else {
-		logLine = fmt.Sprintf("%s[%s]%s %s%s%s %s%s%s %s%s%s\n",
-			colorGray, timestamp, colorReset,
-			color, severityText, colorReset,
-			colorWhite, message, colorReset,
-			colorGray, attrStr, colorReset,
-		)
-	}
+	logLine = fmt.Sprintf("%s[%s]%s %s%s%s %s%s%s %s%s%s\n",
+		colorGray, timestamp, colorReset,
+		color, severityText, colorReset,
+		colorWhite, message, colorReset,
+		colorGray, attrStr, colorReset,
+	)
 
 	_, _ = e.writer.Write([]byte(logLine))
 }
@@ -187,18 +173,6 @@ func formatSliceValue(value otellog.Value) string {
 	default:
 		return fmt.Sprintf("%v", value)
 	}
-}
-
-// formatTraceContext formats trace context if available
-func formatTraceContext(record sdklog.Record) string {
-	traceID := record.TraceID()
-	spanID := record.SpanID()
-
-	if traceID.IsValid() {
-		return fmt.Sprintf("trace_id=%s span_id=%s", traceID.String(), spanID.String())
-	}
-
-	return ""
 }
 
 // Ensure ConsoleExporter implements the sdklog.Exporter interface
