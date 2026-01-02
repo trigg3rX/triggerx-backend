@@ -97,7 +97,9 @@ func main() {
 
 	dbServer := dbserver.NewServer(ctx, conn, logger, obsMetrics)
 
-	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
+	if err := dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor); err != nil {
+		logger.Fatal(ctx, "Failed to register routes", observability.Error(err))
+	}
 	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
 
 	// Start metrics collector

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"runtime/debug"
 
@@ -23,8 +24,16 @@ func RecoveryMiddleware(logger observability.Logger) gin.HandlerFunc {
 				// Record panic recovery
 				metrics.PanicRecoveriesTotal.WithLabelValues(endpoint).Inc(c.Request.Context())
 
-				// Log the panic
-				logger.Error(c.Request.Context(), "Panic recovered", observability.Error(err.(error)), observability.String("stack", string(debug.Stack())))
+				// Safely convert to error and log
+				if e, ok := err.(error); ok {
+					logger.Error(c.Request.Context(), "Panic recovered",
+						observability.Error(e),
+						observability.String("stack", string(debug.Stack())))
+				} else {
+					logger.Error(c.Request.Context(), "Panic recovered (non-error)",
+						observability.String("panic_value", fmt.Sprintf("%v", err)),
+						observability.String("stack", string(debug.Stack())))
+				}
 
 				// Return 500 Internal Server Error
 				c.JSON(http.StatusInternalServerError, gin.H{

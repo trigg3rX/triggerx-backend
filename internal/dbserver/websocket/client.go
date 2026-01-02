@@ -266,7 +266,7 @@ func (c *Client) validateRoomAccess(room string, data map[string]interface{}) bo
 	}
 
 	// Check if it's a user-specific room
-	if room[:5] == "user:" {
+	if len(room) >= 5 && room[:5] == "user:" {
 		userID, ok := data["user_id"].(string)
 		if !ok || userID == "" {
 			return false

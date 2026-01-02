@@ -24,7 +24,7 @@ type ValidateCodeRequest struct {
 	IsSafe           bool   `json:"is_safe"`
 }
 
-type ValidateCodeResponse struct { 
+type ValidateCodeResponse struct {
 	Executable bool   `json:"executable"`
 	Output     string `json:"output"`
 	Error      string `json:"error,omitempty"`
@@ -54,8 +54,9 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 				// Return the cached response directly
 				return cachedResp, nil
 			}
-			// If unmarshal fails, continue with validation
-			h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to unmarshal cached result, proceeding with validation")
+			// If unmarshal fails, log the error and continue with validation
+			h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to unmarshal cached result, proceeding with validation",
+				observability.Error(err))
 		} else if err != nil {
 			h.logger.Warn(ctx, "[ValidateCodeInternal] Error checking cache", observability.Error(err))
 		}

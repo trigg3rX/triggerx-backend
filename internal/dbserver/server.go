@@ -252,7 +252,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 	return s
 }
 
-func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerExecutor dockerexecutor.DockerExecutorAPI) {
+func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerExecutor dockerexecutor.DockerExecutorAPI) error {
 	// Create event publisher
 	publisher := events.NewPublisher(s.hub, s.logger)
 
@@ -260,7 +260,7 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	httpClient, err := httpclientpkg.NewHTTPClient(httpclientpkg.DefaultHTTPRetryConfig())
 	if err != nil {
 		s.logger.Error(ctx, "Failed to create HTTP client", observability.Error(err))
-		panic(err)
+		return fmt.Errorf("failed to initialize HTTP client: %w", err)
 	}
 
 	// Create handler w/ HTTP client and Redis client
@@ -348,6 +348,8 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 
 	protected.GET("/users/safe-addresses/:user_address", handler.GetSafeAddressesByUser)
 	protected.GET("/jobs/safe-address/:safe_address", handler.GetJobsBySafeAddress)
+
+	return nil
 }
 
 func (s *Server) Start(ctx context.Context, port string) error {

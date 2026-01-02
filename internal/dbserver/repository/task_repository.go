@@ -52,13 +52,13 @@ func (r *taskRepository) CreateTaskDataInDB(ctx context.Context, task *types.Cre
 	var maxTaskID int64
 	err := r.db.Session().Query(queries.GetMaxTaskIDQuery).Scan(&maxTaskID)
 	if err != nil {
-		return -1, errors.New("error getting max task ID")
+		return -1, fmt.Errorf("error getting max task ID: %w", err)
 	}
 
 	taskID := maxTaskID + 1
 	err = r.db.Session().Query(queries.CreateTaskDataQuery, taskID, task.JobID, task.TaskDefinitionID, time.Now(), task.IsImua).Exec()
 	if err != nil {
-		return -1, errors.New("error creating task data")
+		return -1, fmt.Errorf("error creating task data: %w", err)
 	}
 
 	// Emit WebSocket event for task creation
@@ -74,7 +74,7 @@ func (r *taskRepository) CreateTaskDataInDB(ctx context.Context, task *types.Cre
 func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) error {
 	err := r.db.Session().Query(queries.AddTaskPerformerIDQuery, taskID, performerID).Exec()
 	if err != nil {
-		return errors.New("error adding task performer ID")
+		return fmt.Errorf("error adding task performer ID: %w", err)
 	}
 	return nil
 }
@@ -82,7 +82,7 @@ func (r *taskRepository) AddTaskPerformerID(taskID int64, performerID int64) err
 func (r *taskRepository) UpdateTaskExecutionDataInDB(ctx context.Context, task *types.UpdateTaskExecutionDataRequest) error {
 	err := r.db.Session().Query(queries.UpdateTaskExecutionDataQuery, task.TaskPerformerID, task.ExecutionTimestamp, task.ExecutionTxHash, task.ProofOfTask, task.TaskOpXCost, task.TaskID).Exec()
 	if err != nil {
-		return errors.New("error updating task execution data")
+		return fmt.Errorf("error updating task execution data: %w", err)
 	}
 
 	// Emit WebSocket event for task update
@@ -106,7 +106,7 @@ func (r *taskRepository) UpdateTaskExecutionDataInDB(ctx context.Context, task *
 func (r *taskRepository) UpdateTaskAttestationDataInDB(ctx context.Context, task *types.UpdateTaskAttestationDataRequest) error {
 	err := r.db.Session().Query(queries.UpdateTaskAttestationDataQuery, task.TaskNumber, task.TaskAttesterIDs, task.TpSignature, task.TaSignature, task.TaskSubmissionTxHash, task.IsSuccessful, task.TaskID).Exec()
 	if err != nil {
-		return errors.New("error updating task attestation data")
+		return fmt.Errorf("error updating task attestation data: %w", err)
 	}
 
 	// Emit WebSocket event for task attestation update
@@ -149,7 +149,7 @@ func (r *taskRepository) UpdateTaskNumberAndStatus(ctx context.Context, taskID i
 
 	err := r.db.Session().Query(queries.UpdateTaskNumberAndStatusQuery, taskNumber, status, txHash, taskID).Exec()
 	if err != nil {
-		return errors.New("error updating task number and status")
+		return fmt.Errorf("error updating task number and status: %w", err)
 	}
 
 	// Emit WebSocket event for task status change
@@ -168,7 +168,7 @@ func (r *taskRepository) GetTaskDataByID(taskID int64) (commonTypes.TaskData, er
 	var jobIDBigInt *big.Int
 	err := r.db.Session().Query(queries.GetTaskDataByIDQuery, taskID).Scan(&task.TaskID, &task.TaskNumber, &jobIDBigInt, &task.TaskDefinitionID, &task.CreatedAt, &task.TaskOpxCost, &task.ExecutionTimestamp, &task.ExecutionTxHash, &task.TaskPerformerID, &task.ProofOfTask, &task.ConvertedArguments, &task.TaskAttesterIDs, &task.TpSignature, &task.TaSignature, &task.TaskSubmissionTxHash, &task.IsAccepted, &task.TaskStatus, &task.TaskError, &task.IsImua)
 	if err != nil {
-		return commonTypes.TaskData{}, errors.New("error getting task data by ID")
+		return commonTypes.TaskData{}, fmt.Errorf("error getting task data by ID: %w", err)
 	}
 	task.JobID = commonTypes.NewBigInt(jobIDBigInt)
 	return task, nil
@@ -203,18 +203,21 @@ func (r *taskRepository) GetTasksByJobID(jobID *big.Int) ([]types.GetTasksByJobI
 }
 
 func (r *taskRepository) AddTaskIDToJob(jobID *big.Int, taskID int64) error {
-	var taskIDs []int64
-	iter := r.db.Session().Query(queries.GetTaskIDsByJobIDQuery, jobID).Iter()
-	for iter.Scan(&taskIDs) {
-		taskIDs = append(taskIDs, taskID)
-	}
-	if err := iter.Close(); err != nil {
-		return errors.New("error getting task IDs by job ID")
-	}
-	taskIDs = append(taskIDs, taskID)
-	err := r.db.Session().Query(queries.AddTaskIDToJobQuery, taskIDs, jobID).Exec()
+	var existingTaskIDs []int64
+	// First, get existing task IDs
+	err := r.db.Session().Query(queries.GetTaskIDsByJobIDQuery, jobID).Scan(&existingTaskIDs)
 	if err != nil {
-		return errors.New("error adding task ID to job")
+		// If no existing tasks, start with empty slice
+		existingTaskIDs = []int64{}
+	}
+
+	// Append the new task ID
+	existingTaskIDs = append(existingTaskIDs, taskID)
+
+	// Update the job with the new task IDs list
+	err = r.db.Session().Query(queries.AddTaskIDToJobQuery, existingTaskIDs, jobID).Exec()
+	if err != nil {
+		return fmt.Errorf("error adding task ID to job: %w", err)
 	}
 	return nil
 }
@@ -225,7 +228,7 @@ func (r *taskRepository) UpdateTaskFee(ctx context.Context, taskID int64, fee fl
 
 	err := r.db.Session().Query(queries.UpdateTaskFeeQuery, fee, taskID).Exec()
 	if err != nil {
-		return errors.New("error updating task fee")
+		return fmt.Errorf("error updating task fee: %w", err)
 	}
 
 	// Emit WebSocket event for task fee update
@@ -243,7 +246,7 @@ func (r *taskRepository) GetTaskFee(taskID int64) (float64, error) {
 	var fee float64
 	err := r.db.Session().Query(queries.GetTaskFeeQuery, taskID).Scan(&fee)
 	if err != nil {
-		return 0, errors.New("error getting task fee")
+		return 0, fmt.Errorf("error getting task fee: %w", err)
 	}
 	return fee, nil
 }
@@ -252,7 +255,7 @@ func (r *taskRepository) GetCreatedChainIDByJobID(jobID *big.Int) (string, error
 	var createdChainID string
 	err := r.db.Session().Query(queries.GetCreatedChainIDByJobIDQuery, jobID).Scan(&createdChainID)
 	if err != nil {
-		return "", errors.New("error getting created chain ID by job ID")
+		return "", fmt.Errorf("error getting created chain ID by job ID: %w", err)
 	}
 	return createdChainID, nil
 }
@@ -338,17 +341,25 @@ func getExplorerBaseURL(chainID string) string {
 func (r *taskRepository) getJobIDFromTaskID(taskID int64) *big.Int {
 	taskData, err := r.GetTaskDataByID(taskID)
 	if err != nil {
-		return big.NewInt(0)
+		return nil
 	}
 	return taskData.JobID.ToBigInt()
 }
 
 // getUserIDFromJobID retrieves user ID for a given job ID
 func (r *taskRepository) getUserIDFromJobID(jobID *big.Int) string {
-	// This is a simplified implementation
-	// In production, you would query the job_data table to get the user_id
-	// For now, we'll return a default value
-	return "system"
+	if jobID == nil || jobID.Cmp(big.NewInt(0)) == 0 {
+		return ""
+	}
+
+	// Query the job_data table to get the user_id
+	var userID int64
+	query := "SELECT user_id FROM triggerx.job_data WHERE job_id = ?"
+	err := r.db.Session().Query(query, jobID).Scan(&userID)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", userID)
 }
 
 // getTaskStatus retrieves the current status of a task
