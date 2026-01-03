@@ -116,6 +116,13 @@ func (l *otelLogger) Error(ctx context.Context, msg string, fields ...Field) {
 // Fatal logs a fatal message and exits
 func (l *otelLogger) Fatal(ctx context.Context, msg string, fields ...Field) {
 	l.log(ctx, otellog.SeverityFatal1, msg, fields...)
+	// Force flush logs before exiting to ensure the fatal message is visible
+	// Use a short timeout context to avoid hanging
+	flushCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if l.loggerProvider != nil {
+		_ = l.loggerProvider.ForceFlush(flushCtx)
+	}
 	os.Exit(1)
 }
 
