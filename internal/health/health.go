@@ -69,9 +69,19 @@ func RegisterRoutes(router *gin.Engine, logger observability.Logger) {
 	// Start metrics collection (metrics should already be initialized via InitializeMetrics)
 	metrics.StartMetricsCollection()
 
+	// Service status endpoint for Pulsate and nginx
+	router.GET("/status", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"service":   "health",
+			"version":   config.GetVersion(),
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
-	router.GET("/status", handler.GetKeeperStatus)
+	router.GET("/keeper-status", handler.GetKeeperStatus) // Renamed from /status to avoid conflict
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
 	router.GET("/performers", handler.GetActivePerformers) // New endpoint for taskmanager
 	// Note: /metrics endpoint removed - metrics are exported via OpenTelemetry collector

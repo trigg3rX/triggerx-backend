@@ -35,7 +35,7 @@ func NewServer(port string, logger observability.Logger) *Server {
 
 	return &Server{
 		httpServer: &http.Server{
-			Addr:    fmt.Sprintf(":%s", port),
+			Addr:    fmt.Sprintf("0.0.0.0:%s", port),
 			Handler: router,
 		},
 		logger: logger,

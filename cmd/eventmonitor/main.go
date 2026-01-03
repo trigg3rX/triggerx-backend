@@ -86,7 +86,7 @@ func main() {
 			logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("address", rpcSrv.GetServiceInfo().Address), observability.String("port", config.GetEventMonitorRPCPort()))
+	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("address", rpcSrv.GetServiceInfo().Address), observability.String("port", config.GetGRPCPort()))
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)

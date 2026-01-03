@@ -20,10 +20,7 @@ type Server struct {
 // NewServer creates a new RPC server for condition scheduler
 func NewServer(logger observability.Logger, tracer observability.Tracer, sched *scheduler.ConditionBasedScheduler) *Server {
 	// Parse port from string to int
-	port, err := strconv.Atoi(config.GetSchedulerRPCPort())
-	if err != nil {
-		port = 9006 // Default to 9006 if parsing fails
-	}
+	port, _ := strconv.Atoi(config.GetGRPCPort())
 
 	// Create RPC server config
 	serverConfig := rpcserver.Config{

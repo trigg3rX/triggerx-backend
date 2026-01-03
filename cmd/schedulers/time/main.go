@@ -130,7 +130,7 @@ func main() {
 			logger.Error(ctx, "HTTP server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: HTTP Server Started", observability.String("port", config.GetSchedulerRPCPort()))
+	logger.Info(ctx, "[3/3] Process: HTTP Server Started", observability.String("port", config.GetHTTPPort()))
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -150,7 +150,7 @@ func performGracefulShutdown(
 	obs *observability.Observability,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), config.GetShutdownTimeout())
 	defer shutdownCancel()
 
 	// Cancel context to stop scheduler and HTTP server

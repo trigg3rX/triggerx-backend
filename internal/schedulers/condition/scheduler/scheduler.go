@@ -66,7 +66,7 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 
 	// Build gRPC service URL for receiving event notifications
 	// Format: host:port (e.g., localhost:9006)
-	webhookURL := fmt.Sprintf("localhost:%s", config.GetSchedulerRPCPort())
+	webhookURL := fmt.Sprintf("localhost:%s", config.GetHTTPPort())
 
 	scheduler := &ConditionBasedScheduler{
 		ctx:                  ctx,

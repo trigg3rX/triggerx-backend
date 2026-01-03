@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 )
 
 // Server represents a simple HTTP server with only status endpoint
@@ -25,7 +25,7 @@ func NewServer(port string) *Server {
 	router.GET("/status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "healthy",
-			"service":   "event-monitor",
+			"service":   "task-dispatcher",
 			"version":   config.GetVersion(),
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 		})

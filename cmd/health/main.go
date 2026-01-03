@@ -118,28 +118,36 @@ func main() {
 	}
 
 	// Setup HTTP server with tracing
-	srv := setupHTTPServer(logger, obsTracer)
-	logger.Info(ctx, "[6/6] Dependency: API Server Initialised")
+	httpSrv := setupHTTPServer(logger, obsTracer)
+	logger.Info(ctx, "[6/7] Dependency: HTTP API Server Initialised")
+
+	// Setup gRPC server
+	rpcSrv := rpc.NewServer(logger, obsTracer, stateManager)
+	logger.Info(ctx, "[7/7] Dependency: gRPC Server Initialised")
 
 	// Initialize metrics using observability metrics
 	metrics.InitializeMetrics(obsMetrics)
-	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
+	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
 
 	// Start HTTP server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
-	logger.Info(ctx, "[1/1] Process: HTTP Server Started")
+	logger.Info(ctx, "[2/3] Process: HTTP Server Started")
 
-	// TODO: When adding gRPC server, use the tracing interceptor:
-	// import "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
-	// grpcServer := grpc.NewServer(
-	//     grpc.UnaryInterceptor(tracing.TraceInterceptor(obsTracer, "health")),
-	// )
+	// Start gRPC server
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := rpcSrv.Start(ctx); err != nil {
+			serverErrors <- fmt.Errorf("gRPC server error: %v", err)
+		}
+	}()
+	logger.Info(ctx, "[3/3] Process: gRPC Server Started")
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -154,7 +162,7 @@ func main() {
 		)
 	}
 
-	performGracefulShutdown(ctx, srv, &wg, obs, logger, stateManager)
+	performGracefulShutdown(ctx, httpSrv, rpcSrv, &wg, obs, logger, stateManager)
 }
 
 func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *http.Server {
@@ -173,21 +181,22 @@ func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *
 	health.RegisterRoutes(router, logger)
 
 	return &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetHealthRPCPort()),
+		Addr:    fmt.Sprintf("0.0.0.0:%s", config.GetHTTPPort()),
 		Handler: router,
 	}
 }
 
 func performGracefulShutdown(
 	ctx context.Context,
-	srv *http.Server,
+	httpSrv *http.Server,
+	rpcSrv *rpc.Server,
 	wg *sync.WaitGroup,
 	obs *observability.Observability,
 	logger observability.Logger,
 	stateManager *keeper.StateManager,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, config.GetShutdownTimeout())
 	defer cancel()
 
 	// Start shutdown in a goroutine to handle timeout
@@ -202,11 +211,20 @@ func performGracefulShutdown(
 			}
 		}
 
+		// Shutdown gRPC server
+		if rpcSrv != nil {
+			if err := rpcSrv.Stop(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "gRPC server shutdown error", observability.Error(err))
+			}
+		}
+
 		// Shutdown HTTP server
-		if err := srv.Shutdown(shutdownCtx); err != nil {
+		if httpSrv != nil {
+			if err := httpSrv.Shutdown(shutdownCtx); err != nil {
 			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
-			if err := srv.Close(); err != nil {
+				if err := httpSrv.Close(); err != nil {
 				logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+				}
 			}
 		}
 

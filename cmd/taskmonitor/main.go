@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/api"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/rpc"
@@ -64,22 +66,34 @@ func main() {
 	}
 	logger.Info(ctx, "[2/3] Dependency: TaskManager Initialised")
 
+	// Setup API server with only /status endpoint
+	apiSrv := api.NewServer(config.GetHTTPPort())
+	logger.Info(ctx, "[3/4] Dependency: API Server Initialised")
+
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Initialize and start gRPC server
-	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, "0.0.0.0", config.GetTaskMonitorRPCPort())
+	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, "0.0.0.0", config.GetGRPCPort())
 	if err != nil {
 		logger.Fatal(ctx, "Failed to start gRPC server", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/3] Dependency: RPC Server Initialised")
+	logger.Info(ctx, "[4/4] Dependency: RPC Server Initialised")
 
 	// Start metrics collector
 	collector := metrics.NewCollector(obsMetrics)
 	collector.Start()
-	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
-	logger.Info(ctx, "[2/2] Process: RPC Server Started")
+	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
+
+	// Start API server
+	go func() {
+		if err := apiSrv.Start(ctx); err != nil && err != http.ErrServerClosed {
+			logger.Error(ctx, "API server error", observability.Error(err))
+		}
+	}()
+	logger.Info(ctx, "[2/3] Process: API Server Started")
+	logger.Info(ctx, "[3/3] Process: RPC Server Started")
 
 	// Store RPC server in TaskManager for graceful shutdown
 	taskManager.SetRPCServer(rpcServer)
@@ -93,11 +107,12 @@ func main() {
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
 	// Perform graceful shutdown
-	performGracefulShutdown(ctx, taskManager, rpcServer, logger, obs)
+	performGracefulShutdown(ctx, apiSrv, taskManager, rpcServer, logger, obs)
 }
 
 func performGracefulShutdown(
 	ctx context.Context,
+	apiSrv *api.Server,
 	taskManager *taskmonitor.TaskManager,
 	rpcServer *rpcserver.Server,
 	logger observability.Logger,
@@ -111,6 +126,11 @@ func performGracefulShutdown(
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+
+		// Shutdown API server gracefully
+		if err := apiSrv.Stop(shutdownCtx); err != nil {
+			logger.Error(shutdownCtx, "API server forced to shutdown", observability.Error(err))
+		}
 
 		// Shutdown gRPC server gracefully
 		if err := rpcServer.Stop(shutdownCtx); err != nil {
