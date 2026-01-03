@@ -110,7 +110,8 @@ func main() {
 		}
 	}
 
-	dbServer := dbserver.NewServer(ctx, conn, logger, obsMetrics)
+	tracer := obs.Tracer()
+	dbServer := dbserver.NewServer(ctx, conn, logger, tracer, obsMetrics)
 
 	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
 	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
@@ -121,7 +122,7 @@ func main() {
 	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
+		Addr:    fmt.Sprintf("0.0.0.0:%s", config.GetHTTPPort()),
 		Handler: dbServer.GetRouter(),
 	}
 

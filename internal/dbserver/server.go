@@ -21,85 +21,13 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	gootel "go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
-
-const TraceIDHeader = "X-Trace-ID"
-const TraceIDKey = "trace_id"
-
-// InitTracer sets up OpenTelemetry tracing with OTLP exporter for Tempo
-func InitTracer() (func(context.Context) error, error) {
-	exporter, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpoint(config.GetOTTempoEndpoint()),
-		otlptracehttp.WithInsecure(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	tp := trace.NewTracerProvider(
-		trace.WithBatcher(exporter),
-		trace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("triggerx-backend"),
-		)),
-	)
-	gootel.SetTracerProvider(tp)
-	return tp.Shutdown, nil
-}
-
-// TraceMiddleware injects a trace ID into the Gin context and response headers
-func TraceMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Get the global tracer
-		tracer := gootel.Tracer("triggerx-backend")
-
-		// Start a new span for this request
-		ctx, span := tracer.Start(c.Request.Context(), c.Request.URL.Path)
-		defer span.End()
-
-		// Set span attributes
-		span.SetAttributes(
-			semconv.HTTPMethodKey.String(c.Request.Method),
-			semconv.HTTPURLKey.String(c.Request.URL.String()),
-			semconv.HTTPUserAgentKey.String(c.Request.UserAgent()),
-		)
-
-		// Get or generate trace ID
-		traceID := c.GetHeader(TraceIDHeader)
-		if traceID == "" {
-			// Extract trace ID from span context
-			spanContext := span.SpanContext()
-			if spanContext.HasTraceID() {
-				traceID = spanContext.TraceID().String()
-			} else {
-				traceID = uuid.New().String()
-			}
-		}
-
-		// Store in context
-		c.Set(TraceIDKey, traceID)
-		c.Header(TraceIDHeader, traceID)
-
-		// Update request context with span context
-		c.Request = c.Request.WithContext(ctx)
-
-		// Process request
-		c.Next()
-
-		// Set response status on span
-		span.SetAttributes(semconv.HTTPStatusCodeKey.Int(c.Writer.Status()))
-	}
-}
 
 type Server struct {
 	router             *gin.Engine
 	db                 *database.Connection
 	logger             observability.Logger
+	tracer             observability.Tracer
 	rateLimiter        *middleware.RateLimiter
 	apiKeyAuth         *middleware.ApiKeyAuth
 	validator          *middleware.Validator
@@ -113,22 +41,17 @@ type Server struct {
 	wsConnectionManager *websocket.WebSocketConnectionManager
 }
 
-func NewServer(ctx context.Context, db *database.Connection, logger observability.Logger, obsMetrics observability.Metrics) *Server {
+func NewServer(ctx context.Context, db *database.Connection, logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics) *Server {
 	if !config.IsDevMode() {
 		gin.SetMode(gin.ReleaseMode)
-	}
-
-	// Initialize OpenTelemetry tracer
-	_, err := InitTracer()
-	if err != nil {
-		logger.Error(context.Background(), "Failed to initialize OpenTelemetry tracer", observability.Error(err))
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
 
 	// Add tracing middleware before all others
-	router.Use(TraceMiddleware())
+	// This middleware requires X-Trace-ID header and rejects requests without it
+	router.Use(middleware.TraceMiddleware(tracer))
 
 	// Apply middleware in the correct order
 	router.Use(middleware.RecoveryMiddleware(logger))           // First, to catch panics
@@ -202,6 +125,7 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 		router:      router,
 		db:          db,
 		logger:      logger,
+		tracer:      tracer,
 		rateLimiter: rateLimiter,
 		redisClient: redisClient,
 		validator:   middleware.NewValidator(ctx, logger),
@@ -390,7 +314,7 @@ func (s *Server) Start(ctx context.Context, port string) error {
 		}
 	}()
 
-	return s.router.Run(fmt.Sprintf(":%s", port))
+	return s.router.Run(fmt.Sprintf("0.0.0.0:%s", port))
 }
 
 func (s *Server) GetRouter() *gin.Engine {
