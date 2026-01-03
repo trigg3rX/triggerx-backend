@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -23,14 +24,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
 	// Initialize configuration
 	configPath := "config/services/condition-scheduler.yaml"
 	if err := config.Init(configPath); err != nil {
-		log.Fatalf("Error loading configuration: %v", err)
-		os.Exit(1)
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
 	// Initialize observability (logger, tracer, metrics)

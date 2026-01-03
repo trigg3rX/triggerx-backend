@@ -1,0 +1,34 @@
+# Health Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+health_check:
+  keeper_timeout: "70s"                # Timeout for inactive keepers
+  check_interval: "30s"                # Interval for health check routine
+  sync_interval: "5m"                  # Database sync interval
+  max_retries: 3                       # Maximum retry attempts
+  retry_backoff: "1s"                  # Backoff duration between retries
+
+notification:
+  timeout: "30s"                        # Email sending timeout
+  retry_attempts: 3                     # Number of retry attempts
+  offline_delay: "10m"                  # Delay before sending offline notifications
+
+rpc:
+  get_performer_timeout: "10s"          # RPC get-performer method timeout
+  health_timeout: "5s"                  # RPC health method timeout
+
+# Common Configuration across all services
+database:
+  timeout: "10s"                    # Database operation timeout
+  connect_wait: "5s"                # Database connection wait time
+  retries: 3                        # Database retry attempts
+
+metrics:
+  update_interval: "30s"            # Metrics update interval
+
+shutdown:
+  timeout: "30s"                    # Graceful shutdown timeout
+
+version:
+  version: "1.0.0"                  # Service version

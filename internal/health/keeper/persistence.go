@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -83,7 +84,7 @@ func (sm *StateManager) DumpState(ctx context.Context) error {
 
 			if err := sm.retryWithBackoff(ctx, func() error {
 				return sm.updateKeeperStatusInDatabase(ctx, health, false)
-			}, maxRetries); err != nil {
+			}, config.GetHealthCheckMaxRetries()); err != nil {
 				sm.logger.Error(ctx, "Failed to update keeper status during state dump",
 					observability.Error(err),
 					observability.String("keeper", address),
@@ -109,7 +110,7 @@ func (sm *StateManager) retryWithBackoff(ctx context.Context, operation func() e
 		}
 
 		// Calculate backoff duration (exponential backoff with jitter)
-		backoff := time.Duration(i) * time.Second
+		backoff := config.GetHealthCheckRetryBackoff() * time.Duration(i+1)
 		// sm.logger.Warn(ctx, "Database operation failed, retrying...",
 		// 	observability.Error(err),
 		// 	observability.Int("attempt", i+1),

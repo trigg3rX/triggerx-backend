@@ -22,13 +22,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
 	// Initialize configuration
-	err := config.Init()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize configuration: %v", err))
+	configPath := "config/services/keeper.yaml"
+	if err := config.Init(configPath); err != nil {
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
 	// Initialize observability (logger, tracer, metrics)
@@ -82,7 +80,7 @@ func main() {
 		KeeperAddress:    config.GetKeeperAddress(),
 		PeerID:           config.GetPeerID(),
 		Version:          config.GetVersion(),
-		RequestTimeout:   10 * time.Second,
+		RequestTimeout:   config.GetHealthRequestTimeout(),
 	}
 	healthClient, err := health.NewClient(logger, healthCfg)
 	if err != nil {
@@ -144,8 +142,8 @@ func main() {
 	// Initialize API server
 	serverCfg := api.Config{
 		Port:           config.GetOperatorRPCPort(),
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
+		ReadTimeout:    config.GetAPIReadTimeout(),
+		WriteTimeout:   config.GetAPIWriteTimeout(),
 		MaxHeaderBytes: 1 << 20,
 	}
 
@@ -208,7 +206,7 @@ func startHealthCheckRoutine(
 	taskMonitorClient *taskmonitor.Client,
 	server *api.Server,
 ) {
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(config.GetHealthCheckInterval())
 	defer ticker.Stop()
 
 	// Skip initial check-in since we already did it during startup
@@ -245,7 +243,7 @@ func performGracefulShutdown(
 	server *api.Server,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, config.GetShutdownTimeout())
 	defer cancel()
 
 	// Start shutdown in a goroutine to handle timeout

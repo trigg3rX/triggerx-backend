@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/gocql/gocql"
 
@@ -22,10 +21,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
-	if err := config.Init(); err != nil {
+	// Initialize configuration
+	configPath := "config/services/dbserver.yaml"
+	if err := config.Init(configPath); err != nil {
+		os.Stderr.Sync()
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -61,9 +61,9 @@ func main() {
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:    "triggerx",
 		Consistency: gocql.Quorum,
-		Timeout:     10 * time.Second,
-		Retries:     3,
-		ConnectWait: 5 * time.Second,
+		Timeout:     config.GetDatabaseTimeout(),
+		Retries:     config.GetDatabaseRetries(),
+		ConnectWait: config.GetDatabaseConnectWait(),
 		RetryConfig: retry.DefaultRetryConfig(),
 	}
 
@@ -159,7 +159,7 @@ func performGracefulShutdown(
 	dockerExecutor dockerexecutor.DockerExecutorAPI,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, config.GetShutdownTimeout())
 	defer cancel()
 
 	// Start shutdown in a goroutine to handle timeout

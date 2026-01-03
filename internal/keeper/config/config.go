@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -11,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 const (
@@ -77,14 +79,47 @@ type Config struct {
 	// Observability configuration
 	otelExporterEndpoint   string
 	enablePrometheusExport bool
+
+	// YAML-loaded settings
+	api      APIConfig
+	health   HealthConfig
+	shutdown ShutdownConfig
+}
+
+type APIConfig struct {
+	ReadTimeout  yaml.Duration `yaml:"read_timeout"`
+	WriteTimeout yaml.Duration `yaml:"write_timeout"`
+}
+
+type HealthConfig struct {
+	CheckInterval  yaml.Duration `yaml:"check_interval"`
+	RequestTimeout yaml.Duration `yaml:"request_timeout"`
+}
+
+type ShutdownConfig struct {
+	Timeout yaml.Duration `yaml:"timeout"`
+}
+
+type YAMLConfig struct {
+	API      APIConfig      `yaml:"api"`
+	Health   HealthConfig   `yaml:"health"`
+	Shutdown ShutdownConfig `yaml:"shutdown"`
 }
 
 var cfg Config
 
-func Init() error {
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
+
+	// Load YAML config
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
 	cfg = Config{
 		devMode:              env.GetEnvBool("DEV_MODE", false),
 		ethRPCUrl:            env.GetEnvString("L1_RPC", ""),
@@ -112,9 +147,12 @@ func Init() error {
 		l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
 		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
 		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
-		othenticBootstrapID:	env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
-		otelExporterEndpoint:   env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "collector.triggerx.network:9051"),
-		enablePrometheusExport: env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
+		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		otelExporterEndpoint:     env.GetOTELExporterEndpoint(),
+		enablePrometheusExport:   env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
+		api:                      yamlConfig.API,
+		health:                   yamlConfig.Health,
+		shutdown:                 yamlConfig.Shutdown,
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -310,4 +348,24 @@ func GetOTELExporterEndpoint() string {
 
 func GetEnablePrometheusExport() bool {
 	return cfg.enablePrometheusExport
+}
+
+func GetAPIReadTimeout() time.Duration {
+	return cfg.api.ReadTimeout.ToDuration()
+}
+
+func GetAPIWriteTimeout() time.Duration {
+	return cfg.api.WriteTimeout.ToDuration()
+}
+
+func GetHealthCheckInterval() time.Duration {
+	return cfg.health.CheckInterval.ToDuration()
+}
+
+func GetHealthRequestTimeout() time.Duration {
+	return cfg.health.RequestTimeout.ToDuration()
+}
+
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }

@@ -20,7 +20,8 @@ import (
 
 func main() {
 	// Initialize configuration
-	if err := config.Init(); err != nil {
+	configPath := "config/services/task-monitor.yaml"
+	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 

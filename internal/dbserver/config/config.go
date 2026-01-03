@@ -2,42 +2,31 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
-)
-
-const (
-	version = "0.0.1"
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 type Config struct {
 	devMode bool
+
+	// Service ports
+	httpPort string
+	grpcPort string
+
+	// Database Connection Configuration (from env)
+	dbConnection env.DatabaseConfig
+
+	// OTel exporter endpoint
 	otelExporterEndpoint string
 
 	// Scheduler RPC URLs
 	timeSchedulerRPCUrl      string
 	conditionSchedulerRPCUrl string
-
-	// Database RPC Port
-	dbserverRPCPort string
-
-	// ScyllaDB Host and Port
-	databaseHostAddress string
-	databaseHostPort    string
-
-	// ScyllaDB Authentication
-	databaseUsername string
-	databasePassword string
-
-	// ScyllaDB SSL/TLS Configuration
-	databaseSSLEnabled        bool
-	databaseSSLCertPath       string
-	databaseSSLKeyPath        string
-	databaseSSLCAPath         string
-	databaseSSLInsecureSkipVerify bool
 
 	// Email User and Password
 	emailUser     string
@@ -54,54 +43,69 @@ type Config struct {
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
-	otTempoEndpoint       string
 
 	// Task Execution Address
-	taskExecutionAddress string
+	taskExecutionAddress     string
 	testTaskExecutionAddress string
 	imuaTaskExecutionAddress string
 
-	// Polling Look Ahead
-	timeSchedulerPollingLookAhead int
+	// YAML-loaded settings
+	databaseOperations   yaml.DatabaseOperationsConfig
+	metrics              yaml.MetricsConfig
+	shutdown             yaml.ShutdownConfig
+	version              yaml.VersionConfig
+}
+
+type YAMLConfig struct {
+	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database"`
+	Metrics              yaml.MetricsConfig          `yaml:"metrics"`
+	Shutdown             yaml.ShutdownConfig         `yaml:"shutdown"`
+	Version              yaml.VersionConfig          `yaml:"version"`
 }
 
 var cfg Config
 
-func Init() error {
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
+
+	// Load YAML config
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
 	cfg = Config{
 		devMode:                       env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
-		timeSchedulerRPCUrl:           env.GetEnvString("TIME_SCHEDULER_RPC_URL", "http://localhost:9005"),
-		conditionSchedulerRPCUrl:      env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "http://localhost:9006"),
-		dbserverRPCPort:               env.GetEnvString("DBSERVER_RPC_PORT", "9002"),
-		databaseHostAddress:           env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:              env.GetEnvString("DATABASE_HOST_PORT", "9042"),
-		databaseUsername:              env.GetEnvString("DATABASE_USERNAME", ""),
-		databasePassword:              env.GetEnvString("DATABASE_PASSWORD", ""),
-		databaseSSLEnabled:            env.GetEnvBool("DATABASE_SSL_ENABLED", false),
-		databaseSSLCertPath:           env.GetEnvString("DATABASE_SSL_CERT_PATH", ""),
-		databaseSSLKeyPath:            env.GetEnvString("DATABASE_SSL_KEY_PATH", ""),
-		databaseSSLCAPath:             env.GetEnvString("DATABASE_SSL_CA_PATH", ""),
-		databaseSSLInsecureSkipVerify:  env.GetEnvBool("DATABASE_SSL_INSECURE_SKIP_VERIFY", false),
+		httpPort:                      env.GetEnvString("DBSERVER_HTTP_PORT", "9002"),
+		grpcPort:                      env.GetEnvString("DBSERVER_GRPC_PORT", "9012"),
+		dbConnection:                  env.GetDatabaseConfig(),
+		otelExporterEndpoint:          env.GetOTELExporterEndpoint(),
+		timeSchedulerRPCUrl:           env.GetEnvString("TIME_SCHEDULER_RPC_URL", "localhost:9015"),
+		conditionSchedulerRPCUrl:      env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "localhost:9016"),
 		emailUser:                     env.GetEnvString("EMAIL_USER", ""),
 		emailPassword:                 env.GetEnvString("EMAIL_PASS", ""),
 		botToken:                      env.GetEnvString("BOT_TOKEN", ""),
-		alchemyAPIKey:                 env.GetEnvString("ALCHEMY_API_KEY", ""),
+		alchemyAPIKey:                 env.GetEnvString("DBSERVER_ALCHEMY_API_KEY", ""),
 		faucetPrivateKey:              env.GetEnvString("FAUCET_PRIVATE_KEY", ""),
 		faucetFundAmount:              env.GetEnvString("FAUCET_FUND_AMOUNT", "30000000000000000"),
 		upstashRedisUrl:               env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:         env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		otTempoEndpoint:               env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 		taskExecutionAddress:          env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
 		testTaskExecutionAddress:      env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
 		imuaTaskExecutionAddress:      env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
-		timeSchedulerPollingLookAhead: env.GetEnvInt("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40),
+		databaseOperations:            yamlConfig.DatabaseOperations,
+		metrics:                       yamlConfig.Metrics,
+		shutdown:                      yamlConfig.Shutdown,
+		version:                       yamlConfig.Version,
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
+	}
+	if err := yaml.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
@@ -110,20 +114,26 @@ func Init() error {
 }
 
 func validateConfig(cfg Config) error {
-	if !env.IsValidURL(cfg.timeSchedulerRPCUrl) {
-		return fmt.Errorf("invalid time scheduler RPC URL: %s", cfg.timeSchedulerRPCUrl)
+	if !env.IsValidPort(cfg.httpPort) {
+		return fmt.Errorf("invalid DB Server HTTP Port: %s", cfg.httpPort)
 	}
-	if !env.IsValidURL(cfg.conditionSchedulerRPCUrl) {
-		return fmt.Errorf("invalid condition scheduler RPC URL: %s", cfg.conditionSchedulerRPCUrl)
+	if !env.IsValidPort(cfg.grpcPort) {
+		return fmt.Errorf("invalid DB Server gRPC Port: %s", cfg.grpcPort)
 	}
-	if !env.IsValidPort(cfg.dbserverRPCPort) {
-		return fmt.Errorf("invalid database RPC port: %s", cfg.dbserverRPCPort)
+	if !env.IsValidIPAddress(cfg.dbConnection.HostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.dbConnection.HostAddress)
 	}
-	if !env.IsValidIPAddress(cfg.databaseHostAddress) {
-		return fmt.Errorf("invalid database host address: %s", cfg.databaseHostAddress)
+	if !env.IsValidPort(cfg.dbConnection.HostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
 	}
-	if !env.IsValidPort(cfg.databaseHostPort) {
-		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
+	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
+		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
+	}
+	if !env.IsValidHostPort(cfg.timeSchedulerRPCUrl) {
+		return fmt.Errorf("invalid time scheduler RPC URL (expected host:port): %s", cfg.timeSchedulerRPCUrl)
+	}
+	if !env.IsValidHostPort(cfg.conditionSchedulerRPCUrl) {
+		return fmt.Errorf("invalid condition scheduler RPC URL (expected host:port): %s", cfg.conditionSchedulerRPCUrl)
 	}
 	if env.IsEmpty(cfg.alchemyAPIKey) {
 		return fmt.Errorf("invalid alchemy api key: %s", cfg.alchemyAPIKey)
@@ -140,15 +150,12 @@ func validateConfig(cfg Config) error {
 	if !env.IsValidEthAddress(cfg.imuaTaskExecutionAddress) {
 		return fmt.Errorf("invalid Imua task execution address: %s", cfg.imuaTaskExecutionAddress)
 	}
-	if env.IsEmpty(cfg.otTempoEndpoint) {
-		return fmt.Errorf("invalid tempo otlp endpoint: %s", cfg.otTempoEndpoint)
+	if env.IsEmpty(cfg.upstashRedisUrl) {
+		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
 	}
-	// if env.IsEmpty(cfg.upstashRedisUrl) {
-	// 	return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
-	// }
-	// if env.IsEmpty(cfg.upstashRedisRestToken) {
-	// 	return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
-	// }
+	if env.IsEmpty(cfg.upstashRedisRestToken) {
+		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
+	}
 	if !cfg.devMode {
 		if !env.IsValidEmail(cfg.emailUser) {
 			return fmt.Errorf("invalid email user: %s", cfg.emailUser)
@@ -163,12 +170,80 @@ func validateConfig(cfg Config) error {
 	return nil
 }
 
+func IsDevMode() bool {
+	return cfg.devMode
+}
+
 func GetVersion() string {
-	return version
+	return cfg.version.Version
+}
+
+func GetHTTPPort() string {
+	return cfg.httpPort
+}
+
+func GetGRPCPort() string {
+	return cfg.grpcPort
 }
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
+}
+
+func GetDatabaseHostAddress() string {
+	return cfg.dbConnection.HostAddress
+}
+
+func GetDatabaseHostPort() string {
+	return cfg.dbConnection.HostPort
+}
+
+func GetDatabaseUsername() string {
+	return cfg.dbConnection.Username
+}
+
+func GetDatabasePassword() string {
+	return cfg.dbConnection.Password
+}
+
+func GetDatabaseSSLEnabled() bool {
+	return cfg.dbConnection.SSLEnabled
+}
+
+func GetDatabaseSSLCertPath() string {
+	return cfg.dbConnection.SSLCertPath
+}
+
+func GetDatabaseSSLKeyPath() string {
+	return cfg.dbConnection.SSLKeyPath
+}
+
+func GetDatabaseSSLCAPath() string {
+	return cfg.dbConnection.SSLCAPath
+}
+
+func GetDatabaseSSLInsecureSkipVerify() bool {
+	return cfg.dbConnection.SSLInsecureSkipVerify
+}
+
+func GetDatabaseTimeout() time.Duration {
+	return cfg.databaseOperations.Timeout.ToDuration()
+}
+
+func GetDatabaseConnectWait() time.Duration {
+	return cfg.databaseOperations.ConnectWait.ToDuration()
+}
+
+func GetDatabaseRetries() int {
+	return cfg.databaseOperations.Retries
+}
+
+func GetMetricsUpdateInterval() time.Duration {
+	return cfg.metrics.UpdateInterval.ToDuration()
+}
+
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }
 
 func GetTimeSchedulerRPCUrl() string {
@@ -177,18 +252,6 @@ func GetTimeSchedulerRPCUrl() string {
 
 func GetConditionSchedulerRPCUrl() string {
 	return cfg.conditionSchedulerRPCUrl
-}
-
-func GetDBServerRPCPort() string {
-	return cfg.dbserverRPCPort
-}
-
-func GetDatabaseHostAddress() string {
-	return cfg.databaseHostAddress
-}
-
-func GetDatabaseHostPort() string {
-	return cfg.databaseHostPort
 }
 
 func GetEmailUser() string {
@@ -233,44 +296,4 @@ func GetTestTaskExecutionAddress() string {
 
 func GetImuaTaskExecutionAddress() string {
 	return cfg.imuaTaskExecutionAddress
-}
-
-func GetOTTempoEndpoint() string {
-	return cfg.otTempoEndpoint
-}
-
-func IsDevMode() bool {
-	return cfg.devMode
-}
-
-func GetPollingLookAhead() int {
-	return cfg.timeSchedulerPollingLookAhead
-}
-
-func GetDatabaseUsername() string {
-	return cfg.databaseUsername
-}
-
-func GetDatabasePassword() string {
-	return cfg.databasePassword
-}
-
-func GetDatabaseSSLEnabled() bool {
-	return cfg.databaseSSLEnabled
-}
-
-func GetDatabaseSSLCertPath() string {
-	return cfg.databaseSSLCertPath
-}
-
-func GetDatabaseSSLKeyPath() string {
-	return cfg.databaseSSLKeyPath
-}
-
-func GetDatabaseSSLCAPath() string {
-	return cfg.databaseSSLCAPath
-}
-
-func GetDatabaseSSLInsecureSkipVerify() bool {
-	return cfg.databaseSSLInsecureSkipVerify
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
@@ -40,9 +41,9 @@ var (
 
 // StartMetricsCollection starts collecting metrics
 func StartMetricsCollection() {
-	// Update uptime every 15 seconds
+	// Update uptime
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(config.GetMetricsUpdateInterval())
 		defer ticker.Stop()
 
 		for range ticker.C {
@@ -50,9 +51,9 @@ func StartMetricsCollection() {
 		}
 	}()
 
-	// Update system metrics every 30 seconds
+	// Update system metrics
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(config.GetMetricsUpdateInterval())
 		defer ticker.Stop()
 
 		for range ticker.C {
@@ -74,9 +75,9 @@ func StartMetricsCollection() {
 		}
 	}()
 
-	// Calculate and update requests per second every 10 seconds
+	// Calculate and update requests per second
 	go func() {
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(config.GetMetricsUpdateInterval())
 		defer ticker.Stop()
 
 		for range ticker.C {

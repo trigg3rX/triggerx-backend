@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/api"
@@ -23,11 +23,10 @@ import (
 	rpctracing "github.com/trigg3rX/triggerx-backend/pkg/rpc/tracing"
 )
 
-const shutdownTimeout = 10 * time.Second
-
 func main() {
 	// Initialize configuration
-	if err := config.Init(); err != nil {
+	configPath := "config/services/task-dispatcher.yaml"
+	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 

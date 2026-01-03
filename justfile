@@ -16,6 +16,9 @@ help:
 ############################# DATABASE #############################
 
 # Setup ScyllaDB container
+# Uses the same database environment variables as the application config:
+# DATABASE_USERNAME, DATABASE_PASSWORD (from .env file)
+# See: internal/dbserver/config/config.go and pkg/env/common.go
 db-setup:
     docker compose -f docker/docker-compose.yaml --profile scylla down
     docker compose -f docker/docker-compose.yaml --profile scylla up -d

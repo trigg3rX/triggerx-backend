@@ -4,22 +4,22 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/env"
-)
 
-const (
-	version = "0.0.1"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 type Config struct {
 	devMode bool
-	otelExporterEndpoint string
 
-	// Task Dispatcher RPC port
-	taskDispatcherRPCPort int
+	// Service ports
+	httpPort string
+	grpcPort string
+
+	// OTel exporter endpoint
+	otelExporterEndpoint string
 
 	// Health RPC URL
 	healthRPCUrl string
@@ -39,66 +39,112 @@ type Config struct {
 	upstashURL   string
 	upstashToken string
 
-	// OpenTelemetry endpoint
-	ottempoEndpoint string
+	// YAML-loaded settings
+	redis    RedisConfig
+	metrics              yaml.MetricsConfig
+	shutdown             yaml.ShutdownConfig
+	version              yaml.VersionConfig
+}
 
-	// Common settings
-	poolSize     int
-	minIdleConns int
-	maxRetries   int
+type RedisConfig struct {
+	PoolSize              int           `yaml:"pool_size"`
+	MinIdleConns          int           `yaml:"min_idle_conns"`
+	MaxRetries            int           `yaml:"max_retries"`
+	DialTimeout           yaml.Duration `yaml:"dial_timeout"`
+	ReadTimeout           yaml.Duration `yaml:"read_timeout"`
+	WriteTimeout          yaml.Duration `yaml:"write_timeout"`
+	PoolTimeout           yaml.Duration `yaml:"pool_timeout"`
+	RetryDelay            yaml.Duration `yaml:"retry_delay"`
+	RequestTimeout        yaml.Duration `yaml:"request_timeout"`
+	InitializationTimeout yaml.Duration `yaml:"initialization_timeout"`
+	MaxRetryBackoff       yaml.Duration `yaml:"max_retry_backoff"`
+}
 
-	// Timeout settings
-	dialTimeout  time.Duration
-	readTimeout  time.Duration
-	writeTimeout time.Duration
-	poolTimeout  time.Duration
-
-	// Metrics settings
-	metricsUpdateInterval time.Duration
-
-	// Timeout and retry settings
-	retryDelay            time.Duration
-	requestTimeout        time.Duration
-	initializationTimeout time.Duration
-	maxRetryBackoff       time.Duration
+type YAMLConfig struct {
+	Redis    RedisConfig    `yaml:"redis"`
+	Metrics  yaml.MetricsConfig  `yaml:"metrics"`
+	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
+	Version  yaml.VersionConfig  `yaml:"version"`
 }
 
 var cfg Config
 
-func Init() error {
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
+
+	// Load YAML config
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
 	cfg = Config{
 		devMode:               env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
-		taskDispatcherRPCPort: env.GetEnvInt("TASK_DISPATCHER_RPC_PORT", 9003),
-		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "http://localhost:9004"),
-		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		performerAPIUrl:       env.GetEnvString("PERFORMER_API_URL", "http://localhost:9008"),
-		testPerformerAPIUrl:   env.GetEnvString("TEST_PERFORMER_API_URL", "http://localhost:9008"),
+		httpPort:              env.GetEnvString("TASK_DISPATCHER_HTTP_PORT", "9007"),
+		grpcPort:              env.GetEnvString("TASK_DISPATCHER_GRPC_PORT", "9017"),
+		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		healthRPCUrl:          env.GetEnvString("HEALTH_RPC_URL", "localhost:9014"),
+		aggregatorRPCUrl:      env.GetEnvString("AGGREGATOR_RPC_URL", "localhost:9001"),
+		testAggregatorRPCUrl:  env.GetEnvString("TEST_AGGREGATOR_RPC_URL", "localhost:9001"),
+		performerAPIUrl:       env.GetEnvString("PERFORMER_API_URL", "localhost:9021"),
+		testPerformerAPIUrl:   env.GetEnvString("TEST_PERFORMER_API_URL", "localhost:9021"),
 		signingKey:            env.GetEnvString("TASK_DISPATCHER_SIGNING_KEY", ""),
 		signingAddress:        env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
 		upstashURL:            env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashToken:          env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		poolSize:              env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		minIdleConns:          env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		maxRetries:            env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:           env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
-		readTimeout:           env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
-		writeTimeout:          env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
-		poolTimeout:           env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
-		metricsUpdateInterval: env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
-		retryDelay:            env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
-		requestTimeout:        env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
-		initializationTimeout: env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
-		maxRetryBackoff:       env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
-		ottempoEndpoint:       env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
+		redis:                 yamlConfig.Redis,
+		metrics:               yamlConfig.Metrics,
+		shutdown:              yamlConfig.Shutdown,
+		version:               yamlConfig.Version,
 	}
+	if err := validateConfig(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	if err := yaml.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	return nil
+}
 
-	if !cfg.devMode {
-		gin.SetMode(gin.ReleaseMode)
+func validateConfig() error {
+	if !env.IsValidPort(cfg.httpPort) {
+		return fmt.Errorf("invalid Task Dispatcher HTTP Port: %s", cfg.httpPort)
+	}
+	if !env.IsValidPort(cfg.grpcPort) {
+		return fmt.Errorf("invalid Task Dispatcher gRPC Port: %s", cfg.grpcPort)
+	}
+	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
+		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
+	}
+	if !env.IsValidHostPort(cfg.healthRPCUrl) {
+		return fmt.Errorf("invalid health RPC URL: %s", cfg.healthRPCUrl)
+	}
+	if !env.IsValidHostPort(cfg.aggregatorRPCUrl) {
+		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCUrl)
+	}
+	if !env.IsValidHostPort(cfg.testAggregatorRPCUrl) {
+		return fmt.Errorf("invalid test aggregator RPC URL: %s", cfg.testAggregatorRPCUrl)
+	}
+	if !env.IsValidURL(cfg.performerAPIUrl) {
+		return fmt.Errorf("invalid performer API URL: %s", cfg.performerAPIUrl)
+	}
+	if !env.IsValidURL(cfg.testPerformerAPIUrl) {
+		return fmt.Errorf("invalid test performer API URL: %s", cfg.testPerformerAPIUrl)
+	}
+	if !env.IsValidPrivateKey(cfg.signingKey) {
+		return fmt.Errorf("invalid signing key: %s", cfg.signingKey)
+	}
+	if !env.IsValidEthAddress(cfg.signingAddress) {
+		return fmt.Errorf("invalid signing address: %s", cfg.signingAddress)
+	}
+	if env.IsEmpty(cfg.upstashURL) {
+		return fmt.Errorf("invalid upstash URL: %s", cfg.upstashURL)
+	}
+	if env.IsEmpty(cfg.upstashToken) {
+		return fmt.Errorf("invalid upstash token: %s", cfg.upstashToken)
 	}
 	return nil
 }
@@ -108,7 +154,15 @@ func IsDevMode() bool {
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
+}
+
+func GetHTTPPort() string {
+	return cfg.httpPort
+}
+
+func GetGRPCPort() string {
+	return cfg.grpcPort
 }
 
 func GetOTELExporterEndpoint() string {
@@ -117,10 +171,6 @@ func GetOTELExporterEndpoint() string {
 
 func GetHealthRPCUrl() string {
 	return cfg.healthRPCUrl
-}
-
-func GetTaskDispatcherRPCPort() int {
-	return cfg.taskDispatcherRPCPort
 }
 
 func GetAggregatorRPCUrl() string {
@@ -156,55 +206,55 @@ func GetUpstashToken() string {
 }
 
 func GetPoolSize() int {
-	return cfg.poolSize
+	return cfg.redis.PoolSize
 }
 
 func GetMinIdleConns() int {
-	return cfg.minIdleConns
+	return cfg.redis.MinIdleConns
 }
 
 func GetMaxRetries() int {
-	return cfg.maxRetries
+	return cfg.redis.MaxRetries
 }
 
 func GetDialTimeout() time.Duration {
-	return cfg.dialTimeout
+	return cfg.redis.DialTimeout.ToDuration()
 }
 
 func GetReadTimeout() time.Duration {
-	return cfg.readTimeout
+	return cfg.redis.ReadTimeout.ToDuration()
 }
 
 func GetWriteTimeout() time.Duration {
-	return cfg.writeTimeout
+	return cfg.redis.WriteTimeout.ToDuration()
 }
 
 func GetPoolTimeout() time.Duration {
-	return cfg.poolTimeout
+	return cfg.redis.PoolTimeout.ToDuration()
 }
 
 func GetMetricsUpdateInterval() time.Duration {
-	return cfg.metricsUpdateInterval
+	return cfg.metrics.UpdateInterval.ToDuration()
 }
 
 func GetRetryDelay() time.Duration {
-	return cfg.retryDelay
+	return cfg.redis.RetryDelay.ToDuration()
 }
 
 func GetRequestTimeout() time.Duration {
-	return cfg.requestTimeout
+	return cfg.redis.RequestTimeout.ToDuration()
 }
 
 func GetInitializationTimeout() time.Duration {
-	return cfg.initializationTimeout
+	return cfg.redis.InitializationTimeout.ToDuration()
 }
 
 func GetMaxRetryBackoff() time.Duration {
-	return cfg.maxRetryBackoff
+	return cfg.redis.MaxRetryBackoff.ToDuration()
 }
 
-func GetOTTempoEndpoint() string {
-	return cfg.ottempoEndpoint
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }
 
 // GetRedisClientConfig returns a RedisConfig for the new Redis client
@@ -215,14 +265,14 @@ func GetRedisClientConfig() redisClient.RedisConfig {
 			Token: cfg.upstashToken,
 		},
 		ConnectionSettings: redisClient.ConnectionSettings{
-			PoolSize:         cfg.poolSize,
+			PoolSize:         cfg.redis.PoolSize,
 			MaxIdleConns:     0, // Let Redis client manage this
-			MinIdleConns:     cfg.minIdleConns,
-			MaxRetries:       cfg.maxRetries,
-			DialTimeout:      cfg.dialTimeout,
-			ReadTimeout:      cfg.readTimeout,
-			WriteTimeout:     cfg.writeTimeout,
-			PoolTimeout:      cfg.poolTimeout,
+			MinIdleConns:     cfg.redis.MinIdleConns,
+			MaxRetries:       cfg.redis.MaxRetries,
+			DialTimeout:      cfg.redis.DialTimeout.ToDuration(),
+			ReadTimeout:      cfg.redis.ReadTimeout.ToDuration(),
+			WriteTimeout:     cfg.redis.WriteTimeout.ToDuration(),
+			PoolTimeout:      cfg.redis.PoolTimeout.ToDuration(),
 			PingTimeout:      2 * time.Second,  // Default ping timeout
 			HealthTimeout:    5 * time.Second,  // Default health check timeout
 			OperationTimeout: 10 * time.Second, // Default operation timeout

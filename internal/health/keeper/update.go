@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-)
-
-const (
-	maxRetries = 3
 )
 
 // Custom error types
@@ -48,7 +45,7 @@ func (sm *StateManager) UpdateKeeperHealth(ctx context.Context, keeperHealth typ
 	// Update database
 	if err := sm.retryWithBackoff(ctx, func() error {
 		return sm.updateKeeperStatusInDatabase(ctx, keeperHealth, true)
-	}, maxRetries); err != nil {
+	}, config.GetHealthCheckMaxRetries()); err != nil {
 		return fmt.Errorf("failed to update keeper status in database: %w", err)
 	}
 

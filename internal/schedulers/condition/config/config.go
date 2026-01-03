@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -10,16 +11,18 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
-const (
-	version = "0.0.1"
-)
-
 type Config struct {
-	devMode              bool
-	otelExporterEndpoint string
+	devMode bool
 
-	// Scheduler RPC Port
-	conditionSchedulerRPCPort string
+	// Service ports
+	httpPort string
+	grpcPort string
+
+	// Database Connection Configuration (from env)
+	dbConnection env.DatabaseConfig
+
+	// OTel exporter endpoint
+	otelExporterEndpoint string
 
 	// Service RPC URL
 	taskDispatcherRPCUrl string
@@ -28,27 +31,22 @@ type Config struct {
 	// Scheduler ID for consumer groups
 	conditionSchedulerID int
 
-	// ScyllaDB Host and Port
-	databaseHostAddress string
-	databaseHostPort    string
-
-	// ScyllaDB Authentication
-	databaseUsername string
-	databasePassword string
-
-	// ScyllaDB SSL/TLS Configuration
-	databaseSSLEnabled            bool
-	databaseSSLCertPath           string
-	databaseSSLKeyPath            string
-	databaseSSLCAPath             string
-	databaseSSLInsecureSkipVerify bool
-
-	// Workers Config
+	// YAML-loaded settings
 	workers WorkersConfig
+	metrics              yaml.MetricsConfig
+	shutdown             yaml.ShutdownConfig
+	version              yaml.VersionConfig
 }
 
 type WorkersConfig struct {
 	MaxWorkers int `yaml:"max_workers"`
+}
+
+type YAMLConfig struct {
+	Workers  WorkersConfig  `yaml:"workers"`
+	Metrics  yaml.MetricsConfig `yaml:"metrics"`
+	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
+	Version  yaml.VersionConfig  `yaml:"version"`
 }
 
 var cfg *Config
@@ -60,32 +58,24 @@ func Init(configPath string) error {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
-	// Load YAML config - need wrapper struct to match YAML structure
-	type YAMLConfig struct {
-		Workers WorkersConfig `yaml:"workers"`
-	}
 	var yamlConfig YAMLConfig
 	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
 		return fmt.Errorf("error loading configuration file: %w", err)
 	}
 
 	cfg = &Config{
-		devMode:                       env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:          env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
-		conditionSchedulerRPCPort:     env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
-		taskDispatcherRPCUrl:          env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9003"),
-		eventMonitorRPCUrl:            env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9009"),
-		conditionSchedulerID:          env.GetEnvInt("CONDITION_SCHEDULER_ID", 1234),
-		databaseHostAddress:           env.GetEnvString("DATABASE_HOST_ADDRESS", "localhost"),
-		databaseHostPort:              env.GetEnvString("DATABASE_HOST_PORT", "9042"),
-		databaseUsername:              env.GetEnvString("DATABASE_USERNAME", ""),
-		databasePassword:              env.GetEnvString("DATABASE_PASSWORD", ""),
-		databaseSSLEnabled:            env.GetEnvBool("DATABASE_SSL_ENABLED", false),
-		databaseSSLCertPath:           env.GetEnvString("DATABASE_SSL_CERT_PATH", ""),
-		databaseSSLKeyPath:            env.GetEnvString("DATABASE_SSL_KEY_PATH", ""),
-		databaseSSLCAPath:             env.GetEnvString("DATABASE_SSL_CA_PATH", ""),
-		databaseSSLInsecureSkipVerify: env.GetEnvBool("DATABASE_SSL_INSECURE_SKIP_VERIFY", false),
-		workers:                       yamlConfig.Workers,
+		devMode:                   env.GetEnvBool("DEV_MODE", false),
+		httpPort:                  env.GetEnvString("CONDITION_SCHEDULER_HTTP_PORT", "9006"),
+		grpcPort:                  env.GetEnvString("CONDITION_SCHEDULER_GRPC_PORT", "9016"),
+		dbConnection:              env.GetDatabaseConfig(),
+		otelExporterEndpoint:      env.GetOTELExporterEndpoint(),
+		taskDispatcherRPCUrl:      env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
+		eventMonitorRPCUrl:        env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
+		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 1234),
+		workers:                   yamlConfig.Workers,
+		metrics:                   yamlConfig.Metrics,
+		shutdown:                  yamlConfig.Shutdown,
+		version:                   yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -100,23 +90,26 @@ func Init(configPath string) error {
 }
 
 func validateConfig() error {
-	if !env.IsValidPort(cfg.conditionSchedulerRPCPort) {
-		return fmt.Errorf("invalid condition scheduler RPC port: %s", cfg.conditionSchedulerRPCPort)
+	if !env.IsValidPort(cfg.httpPort) {
+		return fmt.Errorf("invalid condition scheduler HTTP Port: %s", cfg.httpPort)
 	}
-	if !env.IsValidIPAddress(cfg.databaseHostAddress) {
-		return fmt.Errorf("invalid database host address: %s", cfg.databaseHostAddress)
+	if !env.IsValidPort(cfg.grpcPort) {
+		return fmt.Errorf("invalid condition scheduler gRPC Port: %s", cfg.grpcPort)
 	}
-	if !env.IsValidPort(cfg.databaseHostPort) {
-		return fmt.Errorf("invalid database host port: %s", cfg.databaseHostPort)
+	if !env.IsValidIPAddress(cfg.dbConnection.HostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.dbConnection.HostAddress)
 	}
-	if cfg.workers.MaxWorkers <= 0 {
-		return fmt.Errorf("max workers must be positive, got: %d", cfg.workers.MaxWorkers)
+	if !env.IsValidPort(cfg.dbConnection.HostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
 	}
 	if !env.IsValidHostPort(cfg.taskDispatcherRPCUrl) {
 		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
 	}
 	if !env.IsValidHostPort(cfg.eventMonitorRPCUrl) {
 		return fmt.Errorf("invalid event monitor RPC URL: %s", cfg.eventMonitorRPCUrl)
+	}
+	if !env.IsValidInt(cfg.conditionSchedulerID) {
+		return fmt.Errorf("invalid condition scheduler ID: %d", cfg.conditionSchedulerID)
 	}
 	return nil
 }
@@ -126,51 +119,55 @@ func IsDevMode() bool {
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
 }
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
 }
 
-func GetSchedulerRPCPort() string {
-	return cfg.conditionSchedulerRPCPort
+func GetHTTPPort() string {
+	return cfg.httpPort
+}
+
+func GetGRPCPort() string {
+	return cfg.grpcPort
 }
 
 func GetDatabaseHostAddress() string {
-	return cfg.databaseHostAddress
+	return cfg.dbConnection.HostAddress
 }
 
 func GetDatabaseHostPort() string {
-	return cfg.databaseHostPort
+	return cfg.dbConnection.HostPort
 }
 
 func GetDatabaseUsername() string {
-	return cfg.databaseUsername
+	return cfg.dbConnection.Username
 }
 
 func GetDatabasePassword() string {
-	return cfg.databasePassword
+	return cfg.dbConnection.Password
 }
 
 func GetDatabaseSSLEnabled() bool {
-	return cfg.databaseSSLEnabled
+	return cfg.dbConnection.SSLEnabled
 }
 
 func GetDatabaseSSLCertPath() string {
-	return cfg.databaseSSLCertPath
+	return cfg.dbConnection.SSLCertPath
 }
 
 func GetDatabaseSSLKeyPath() string {
-	return cfg.databaseSSLKeyPath
+	return cfg.dbConnection.SSLKeyPath
 }
 
 func GetDatabaseSSLCAPath() string {
-	return cfg.databaseSSLCAPath
+	return cfg.dbConnection.SSLCAPath
 }
 
 func GetDatabaseSSLInsecureSkipVerify() bool {
-	return cfg.databaseSSLInsecureSkipVerify
+	return cfg.dbConnection.SSLInsecureSkipVerify
 }
 
 func GetTaskDispatcherRPCUrl() string {
@@ -187,4 +184,8 @@ func GetSchedulerID() int {
 
 func GetMaxWorkers() int {
 	return cfg.workers.MaxWorkers
+}
+
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }

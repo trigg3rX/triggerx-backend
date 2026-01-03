@@ -4,17 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-const (
-	inactivityThreshold  = 70 * time.Second
-	stateCleanupInterval = 5 * time.Second
-)
-
 func (sm *StateManager) startCleanupRoutine(ctx context.Context) {
-	ticker := time.NewTicker(stateCleanupInterval)
+	ticker := time.NewTicker(config.GetHealthCheckInterval())
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -28,7 +24,7 @@ func (sm *StateManager) checkInactiveKeepers(ctx context.Context) {
 
 	sm.mu.Lock()
 	for address, state := range sm.keepers {
-		if state.IsActive && now.Sub(state.LastCheckedIn) > inactivityThreshold {
+		if state.IsActive && now.Sub(state.LastCheckedIn) > config.GetHealthCheckKeeperTimeout() {
 			sm.logger.Info(ctx, "Keeper became inactive",
 				observability.String("keeper", address),
 				observability.String("last_seen", state.LastCheckedIn.Format(time.RFC3339)),

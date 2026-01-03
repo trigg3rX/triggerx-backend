@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -22,14 +23,11 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
 	// Initialize configuration
 	configPath := "config/services/time-scheduler.yaml"
 	if err := config.Init(configPath); err != nil {
-		log.Fatalf("Error loading configuration: %v", err)
-		os.Exit(1)
+		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
 	// Initialize observability (logger, tracer, metrics)
@@ -98,18 +96,19 @@ func main() {
 	// Initialize repositories
 	timeJobRepo := repository.NewTimeJobRepository(dbConn)
 	customJobRepo := repository.NewCustomJobRepository(dbConn)
+	scriptStorageRepo := repository.NewScriptStorageRepository(dbConn)
 	taskRepo := repository.NewTaskRepository(dbConn)
 	logger.Info(ctx, "[3/5] Dependency: Repositories Initialised")
 
 	// Initialize time-based scheduler
-	timeScheduler, err := scheduler.NewTimeBasedScheduler(logger, tracer, obsMetrics, timeJobRepo, customJobRepo, taskRepo)
+	timeScheduler, err := scheduler.NewTimeBasedScheduler(logger, tracer, obsMetrics, timeJobRepo, customJobRepo, scriptStorageRepo, taskRepo)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize time-based scheduler", observability.Error(err))
 	}
 	logger.Info(ctx, "[4/5] Dependency: Time Scheduler Initialised")
 
 	// Setup HTTP server with only status endpoint
-	srv := api.NewServer(config.GetSchedulerRPCPort(), logger)
+	srv := api.NewServer(config.GetHTTPPort(), logger)
 	logger.Info(ctx, "[5/5] Dependency: Status Server Initialised")
 
 	ctx, cancel := context.WithCancel(context.Background())

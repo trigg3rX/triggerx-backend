@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
@@ -18,16 +17,16 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/health/config"
 	"github.com/trigg3rX/triggerx-backend/internal/health/keeper"
 	"github.com/trigg3rX/triggerx-backend/internal/health/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/health/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/health/telegram"
 	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
 	// Initialize configuration
-	if err := config.Init(); err != nil {
+	configPath := "config/services/health.yaml"
+	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -69,9 +68,9 @@ func main() {
 		Hosts:        []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:     "triggerx",
 		Consistency:  gocql.Quorum,
-		Timeout:      time.Second * 30,
-		Retries:      5,
-		ConnectWait:  time.Second * 10,
+		Timeout:      config.GetDatabaseTimeout(),
+		Retries:      config.GetDatabaseRetries(),
+		ConnectWait:  config.GetDatabaseConnectWait(),
 		ProtoVersion: 4,
 	}
 
@@ -221,9 +220,9 @@ func performGracefulShutdown(
 		// Shutdown HTTP server
 		if httpSrv != nil {
 			if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
+				logger.Error(shutdownCtx, "HTTP server shutdown error", observability.Error(err))
 				if err := httpSrv.Close(); err != nil {
-				logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
+					logger.Error(shutdownCtx, "Forced HTTP server close error", observability.Error(err))
 				}
 			}
 		}

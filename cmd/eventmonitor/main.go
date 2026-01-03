@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
@@ -17,11 +16,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
 	// Initialize configuration
-	if err := config.Init("config/services/event-monitor.yaml"); err != nil {
+	configPath := "config/services/event-monitor.yaml"
+	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -64,7 +62,7 @@ func main() {
 	logger.Info(ctx, "[2/3] Dependency: Service Initialised")
 
 	// Setup API server
-	apiSrv := api.NewServer(config.GetEventMonitorRPCPort(), logger)
+	apiSrv := api.NewServer(config.GetHTTPPort())
 	logger.Info(ctx, "[3/3] Dependency: API Server Initialised")
 
 	// Setup gRPC server
@@ -106,7 +104,7 @@ func performGracefulShutdown(
 	obs *observability.Observability,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), config.GetShutdownTimeout())
 	defer shutdownCancel()
 
 	// Cancel context to stop service and gRPC server

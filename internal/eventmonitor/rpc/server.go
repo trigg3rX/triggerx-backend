@@ -22,7 +22,7 @@ type Server struct {
 // NewServer creates a new RPC server for event monitor
 func NewServer(logger observability.Logger, tracer observability.Tracer, registryManager *registry.RegistryManager, svc *service.Service) *Server {
 	// Parse port from string to int
-	port, err := strconv.Atoi(config.GetEventMonitorRPCPort())
+	port, err := strconv.Atoi(config.GetGRPCPort())
 	if err != nil {
 		port = 9009 // Default to 9009 if parsing fails
 	}

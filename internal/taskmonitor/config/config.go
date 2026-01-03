@@ -4,45 +4,32 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
-	"github.com/trigg3rX/triggerx-backend/pkg/env"
-)
 
-const (
-	version = "0.0.1"
+	"github.com/trigg3rX/triggerx-backend/pkg/env"
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 type Config struct {
 	devMode bool
-	otelExporterEndpoint string
 
-	// Task Monitor RPC port
-	taskMonitorRPCPort string
+	// Service ports
+	httpPort string
+	grpcPort string
+
+	// Database Connection Configuration (from env)
+	dbConnection env.DatabaseConfig
+
+	// OTel exporter endpoint
+	otelExporterEndpoint string
 
 	// Contract Addresses to listen for events
 	attestationCenterAddress     string
 	testAttestationCenterAddress string
 
 	// RPC URLs for Ethereum and Base
-	rpcProvider string
-	rpcAPIKey   string
-
-	// ScyllaDB Host and Port
-	databaseHostAddress string
-	databaseHostPort    string
-
-	// ScyllaDB Authentication
-	databaseUsername string
-	databasePassword string
-
-	// ScyllaDB SSL/TLS Configuration
-	databaseSSLEnabled        bool
-	databaseSSLCertPath       string
-	databaseSSLKeyPath        string
-	databaseSSLCAPath         string
-	databaseSSLInsecureSkipVerify bool
+	alchemyAPIKey   string
 
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
@@ -54,9 +41,6 @@ type Config struct {
 	// Pinata JWT and Host
 	pinataJWT  string
 	pinataHost string
-
-	// OpenTelemetry endpoint
-	ottempoEndpoint string
 
 	// Notification webhook
 	notifyWebhookURL   string
@@ -70,79 +54,73 @@ type Config struct {
 	smtpFrom     string
 	smtpStartTLS bool
 
-	// Common settings
-	poolSize     int
-	minIdleConns int
-	maxRetries   int
+	// YAML-loaded settings
+	redis   RedisConfig
+	stream  StreamConfig
+	metrics MetricsConfig
+	version              yaml.VersionConfig
+}
 
-	// Timeout settings
-	dialTimeout  time.Duration
-	readTimeout  time.Duration
-	writeTimeout time.Duration
-	poolTimeout  time.Duration
+type RedisConfig struct {
+	PoolSize              int           `yaml:"pool_size"`
+	MinIdleConns          int           `yaml:"min_idle_conns"`
+	MaxRetries            int           `yaml:"max_retries"`
+	DialTimeout           yaml.Duration `yaml:"dial_timeout"`
+	ReadTimeout           yaml.Duration `yaml:"read_timeout"`
+	WriteTimeout          yaml.Duration `yaml:"write_timeout"`
+	PoolTimeout           yaml.Duration `yaml:"pool_timeout"`
+	RetryDelay            yaml.Duration `yaml:"retry_delay"`
+	RequestTimeout        yaml.Duration `yaml:"request_timeout"`
+	InitializationTimeout yaml.Duration `yaml:"initialization_timeout"`
+	MaxRetryBackoff       yaml.Duration `yaml:"max_retry_backoff"`
+}
 
-	// Stream settings
-	streamMaxLen    int
-	jobStreamTTL    time.Duration
-	taskStreamTTL   time.Duration
-	cacheTTL        time.Duration
-	cleanupInterval time.Duration
+type StreamConfig struct {
+	MaxLen          int           `yaml:"max_len"`
+	JobStreamTTL    yaml.Duration `yaml:"job_stream_ttl"`
+	TaskStreamTTL   yaml.Duration `yaml:"task_stream_ttl"`
+	CacheTTL        yaml.Duration `yaml:"cache_ttl"`
+	CleanupInterval yaml.Duration `yaml:"cleanup_interval"`
+}
 
-	// Metrics settings
-	metricsUpdateInterval time.Duration
+type MetricsConfig struct {
+	UpdateInterval yaml.Duration `yaml:"update_interval"`
+}
 
-	// Timeout and retry settings
-	retryDelay            time.Duration
-	requestTimeout        time.Duration
-	initializationTimeout time.Duration
-	maxRetryBackoff       time.Duration
+type YAMLConfig struct {
+	Redis   RedisConfig   `yaml:"redis"`
+	Stream  StreamConfig  `yaml:"stream"`
+	Metrics MetricsConfig `yaml:"metrics"`
+	Version yaml.VersionConfig `yaml:"version"`
 }
 
 var cfg Config
 
-func Init() error {
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
+
+	// Load YAML config
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
 	cfg = Config{
 		devMode:                      env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
-		taskMonitorRPCPort:           env.GetEnvString("TASK_MONITOR_RPC_PORT", "9007"),
+		httpPort:                     env.GetEnvString("TASK_MONITOR_HTTP_PORT", "9003"),
+		grpcPort:                     env.GetEnvString("TASK_MONITOR_GRPC_PORT", "9013"),
+		dbConnection:                 env.GetDatabaseConfig(),
+		otelExporterEndpoint:         env.GetOTELExporterEndpoint(),
 		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
 		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
-		rpcProvider:                  env.GetEnvString("RPC_PROVIDER", ""),
-		rpcAPIKey:                    env.GetEnvString("RPC_API_KEY", ""),
-		databaseHostAddress:          env.GetEnvString("DATABASE_HOST_ADDRESS", ""),
-		databaseHostPort:             env.GetEnvString("DATABASE_HOST_PORT", ""),
-		databaseUsername:             env.GetEnvString("DATABASE_USERNAME", ""),
-		databasePassword:             env.GetEnvString("DATABASE_PASSWORD", ""),
-		databaseSSLEnabled:           env.GetEnvBool("DATABASE_SSL_ENABLED", false),
-		databaseSSLCertPath:          env.GetEnvString("DATABASE_SSL_CERT_PATH", ""),
-		databaseSSLKeyPath:           env.GetEnvString("DATABASE_SSL_KEY_PATH", ""),
-		databaseSSLCAPath:            env.GetEnvString("DATABASE_SSL_CA_PATH", ""),
-		databaseSSLInsecureSkipVerify: env.GetEnvBool("DATABASE_SSL_INSECURE_SKIP_VERIFY", false),
+		alchemyAPIKey:                 env.GetEnvString("TASK_MONITOR_ALCHEMY_API_KEY", ""),
 		upstashRedisUrl:              env.GetEnvString("UPSTASH_REDIS_URL", ""),
 		upstashRedisRestToken:        env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
 		pinataJWT:                    env.GetEnvString("PINATA_JWT", ""),
 		pinataHost:                   env.GetEnvString("PINATA_HOST", ""),
-		poolSize:                     env.GetEnvInt("REDIS_POOL_SIZE", 10),
-		minIdleConns:                 env.GetEnvInt("REDIS_MIN_IDLE_CONNS", 2),
-		maxRetries:                   env.GetEnvInt("REDIS_MAX_RETRIES", 3),
-		dialTimeout:                  env.GetEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second),
-		readTimeout:                  env.GetEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second),
-		writeTimeout:                 env.GetEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second),
-		poolTimeout:                  env.GetEnvDuration("REDIS_POOL_TIMEOUT", 4*time.Second),
-		streamMaxLen:                 env.GetEnvInt("REDIS_STREAM_MAX_LEN", 10000),
-		jobStreamTTL:                 env.GetEnvDuration("REDIS_JOB_STREAM_TTL", 120*time.Hour),
-		taskStreamTTL:                env.GetEnvDuration("REDIS_TASK_STREAM_TTL", 1*time.Hour),
-		cacheTTL:                     env.GetEnvDuration("REDIS_CACHE_TTL", 24*time.Hour),
-		cleanupInterval:              env.GetEnvDuration("REDIS_CLEANUP_INTERVAL", 10*time.Minute),
-		metricsUpdateInterval:        env.GetEnvDuration("REDIS_METRICS_UPDATE_INTERVAL", 30*time.Second),
-		retryDelay:                   env.GetEnvDuration("REDIS_RETRY_DELAY", 2*time.Second),
-		requestTimeout:               env.GetEnvDuration("REDIS_REQUEST_TIMEOUT", 10*time.Second),
-		initializationTimeout:        env.GetEnvDuration("REDIS_INITIALIZATION_TIMEOUT", 10*time.Second),
-		maxRetryBackoff:              env.GetEnvDuration("REDIS_MAX_RETRY_BACKOFF", 5*time.Minute),
-		ottempoEndpoint:              env.GetEnvString("TEMPO_OTLP_ENDPOINT", "localhost:4318"),
 		notifyWebhookURL:             env.GetEnvString("TASK_NOTIFY_WEBHOOK_URL", ""),
 		notifyWebhookToken:           env.GetEnvString("TASK_NOTIFY_WEBHOOK_TOKEN", ""),
 		smtpHost:                     env.GetEnvString("SMTP_HOST", ""),
@@ -151,10 +129,63 @@ func Init() error {
 		smtpPass:                     env.GetEnvString("SMTP_PASS", ""),
 		smtpFrom:                     env.GetEnvString("SMTP_FROM", ""),
 		smtpStartTLS:                 env.GetEnvBool("SMTP_STARTTLS", true),
+		redis:                        yamlConfig.Redis,
+		stream:                       yamlConfig.Stream,
+		metrics:                      yamlConfig.Metrics,
+		version:                      yamlConfig.Version,
 	}
 
-	if !cfg.devMode {
-		gin.SetMode(gin.ReleaseMode)
+	if err := validateConfig(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	if err := yaml.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	return nil
+}
+
+func validateConfig() error {
+	if !env.IsValidPort(cfg.httpPort) {
+		return fmt.Errorf("invalid Task Monitor HTTP Port: %s", cfg.httpPort)
+	}
+	if !env.IsValidPort(cfg.grpcPort) {
+		return fmt.Errorf("invalid Task Monitor gRPC Port: %s", cfg.grpcPort)
+	}
+	if !env.IsValidIPAddress(cfg.dbConnection.HostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.dbConnection.HostAddress)
+	}
+	if !env.IsValidPort(cfg.dbConnection.HostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
+	}
+	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
+		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
+	}
+	if !env.IsValidEthAddress(cfg.attestationCenterAddress) {
+		return fmt.Errorf("invalid attestation center address: %s", cfg.attestationCenterAddress)
+	}
+	if !env.IsValidEthAddress(cfg.testAttestationCenterAddress) {
+		return fmt.Errorf("invalid test attestation center address: %s", cfg.testAttestationCenterAddress)
+	}
+	if env.IsEmpty(cfg.alchemyAPIKey) {
+		return fmt.Errorf("invalid alchemy API key: %s", cfg.alchemyAPIKey)
+	}
+	if env.IsEmpty(cfg.pinataJWT) {
+		return fmt.Errorf("invalid pinata JWT: %s", cfg.pinataJWT)
+	}
+	if env.IsEmpty(cfg.pinataHost) {
+		return fmt.Errorf("invalid pinata host: %s", cfg.pinataHost)
+	}
+	if env.IsEmpty(cfg.notifyWebhookURL) {
+		return fmt.Errorf("invalid notify webhook URL: %s", cfg.notifyWebhookURL)
+	}
+	if env.IsEmpty(cfg.notifyWebhookToken) {
+		return fmt.Errorf("invalid notify webhook token: %s", cfg.notifyWebhookToken)
+	}
+	if env.IsEmpty(cfg.upstashRedisUrl) {
+		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
+	}
+	if env.IsEmpty(cfg.upstashRedisRestToken) {
+		return fmt.Errorf("invalid upstash redis rest token: %s", cfg.upstashRedisRestToken)
 	}
 	return nil
 }
@@ -164,7 +195,15 @@ func IsDevMode() bool {
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
+}
+
+func GetHTTPPort() string {
+	return cfg.httpPort
+}
+
+func GetGRPCPort() string {
+	return cfg.grpcPort
 }
 
 func GetOTELExporterEndpoint() string {
@@ -172,11 +211,11 @@ func GetOTELExporterEndpoint() string {
 }
 
 func GetDatabaseHostAddress() string {
-	return cfg.databaseHostAddress
+	return cfg.dbConnection.HostAddress
 }
 
 func GetDatabaseHostPort() string {
-	return cfg.databaseHostPort
+	return cfg.dbConnection.HostPort
 }
 
 func SetLastBaseBlockUpdated(blockNumber uint64) {
@@ -195,12 +234,8 @@ func GetTestAttestationCenterAddress() string {
 	return cfg.testAttestationCenterAddress
 }
 
-func GetRPCProvider() string {
-	return cfg.rpcProvider
-}
-
-func GetRPCAPIKey() string {
-	return cfg.rpcAPIKey
+func GetAlchemyAPIKey() string {
+	return cfg.alchemyAPIKey
 }
 
 func GetPinataHost() string {
@@ -209,10 +244,6 @@ func GetPinataHost() string {
 
 func GetPinataJWT() string {
 	return cfg.pinataJWT
-}
-
-func GetTaskMonitorRPCPort() string {
-	return cfg.taskMonitorRPCPort
 }
 
 func GetUpstashRedisUrl() string {
@@ -224,75 +255,71 @@ func GetUpstashRedisRestToken() string {
 }
 
 func GetStreamMaxLen() int {
-	return cfg.streamMaxLen
+	return cfg.stream.MaxLen
 }
 
 func GetJobStreamTTL() time.Duration {
-	return cfg.jobStreamTTL
+	return cfg.stream.JobStreamTTL.ToDuration()
 }
 
 func GetTaskStreamTTL() time.Duration {
-	return cfg.taskStreamTTL
+	return cfg.stream.TaskStreamTTL.ToDuration()
 }
 
 func GetPoolSize() int {
-	return cfg.poolSize
+	return cfg.redis.PoolSize
 }
 
 func GetMinIdleConns() int {
-	return cfg.minIdleConns
+	return cfg.redis.MinIdleConns
 }
 
 func GetMaxRetries() int {
-	return cfg.maxRetries
+	return cfg.redis.MaxRetries
 }
 
 func GetDialTimeout() time.Duration {
-	return cfg.dialTimeout
+	return cfg.redis.DialTimeout.ToDuration()
 }
 
 func GetReadTimeout() time.Duration {
-	return cfg.readTimeout
+	return cfg.redis.ReadTimeout.ToDuration()
 }
 
 func GetWriteTimeout() time.Duration {
-	return cfg.writeTimeout
+	return cfg.redis.WriteTimeout.ToDuration()
 }
 
 func GetPoolTimeout() time.Duration {
-	return cfg.poolTimeout
+	return cfg.redis.PoolTimeout.ToDuration()
 }
 
 func GetCacheTTL() time.Duration {
-	return cfg.cacheTTL
+	return cfg.stream.CacheTTL.ToDuration()
 }
 
 func GetCleanupInterval() time.Duration {
-	return cfg.cleanupInterval
+	return cfg.stream.CleanupInterval.ToDuration()
 }
 
 func GetMetricsUpdateInterval() time.Duration {
-	return cfg.metricsUpdateInterval
+	return cfg.metrics.UpdateInterval.ToDuration()
 }
 
 func GetRetryDelay() time.Duration {
-	return cfg.retryDelay
+	return cfg.redis.RetryDelay.ToDuration()
 }
 
 func GetRequestTimeout() time.Duration {
-	return cfg.requestTimeout
+	return cfg.redis.RequestTimeout.ToDuration()
 }
 
 func GetInitializationTimeout() time.Duration {
-	return cfg.initializationTimeout
+	return cfg.redis.InitializationTimeout.ToDuration()
 }
 
 func GetMaxRetryBackoff() time.Duration {
-	return cfg.maxRetryBackoff
-}
-
-func GetOTTempoEndpoint() string {
-	return cfg.ottempoEndpoint
+	return cfg.redis.MaxRetryBackoff.ToDuration()
 }
 
 func GetNotifyWebhookURL() string {
@@ -318,14 +345,14 @@ func GetRedisClientConfig() redisClient.RedisConfig {
 			Token: cfg.upstashRedisRestToken,
 		},
 		ConnectionSettings: redisClient.ConnectionSettings{
-			PoolSize:         cfg.poolSize,
+			PoolSize:         cfg.redis.PoolSize,
 			MaxIdleConns:     0, // Let Redis client manage this
-			MinIdleConns:     cfg.minIdleConns,
-			MaxRetries:       cfg.maxRetries,
-			DialTimeout:      cfg.dialTimeout,
-			ReadTimeout:      cfg.readTimeout,
-			WriteTimeout:     cfg.writeTimeout,
-			PoolTimeout:      cfg.poolTimeout,
+			MinIdleConns:     cfg.redis.MinIdleConns,
+			MaxRetries:       cfg.redis.MaxRetries,
+			DialTimeout:      cfg.redis.DialTimeout.ToDuration(),
+			ReadTimeout:      cfg.redis.ReadTimeout.ToDuration(),
+			WriteTimeout:     cfg.redis.WriteTimeout.ToDuration(),
+			PoolTimeout:      cfg.redis.PoolTimeout.ToDuration(),
 			PingTimeout:      2 * time.Second,  // Default ping timeout
 			HealthTimeout:    5 * time.Second,  // Default health check timeout
 			OperationTimeout: 10 * time.Second, // Default operation timeout
@@ -342,87 +369,58 @@ func GetChainRPCUrl(isRPC bool, chainID string) string {
 		protocol = "wss://"
 	}
 	var domain string
-	if cfg.rpcProvider == "alchemy" {
-		switch chainID {
-		// Testnets
-		case "17000":
-			domain = "eth-holesky.g.alchemy.com/v2/"
-		case "11155111":
-			domain = "eth-sepolia.g.alchemy.com/v2/"
-		case "11155420":
-			domain = "opt-sepolia.g.alchemy.com/v2/"
-		case "84532":
-			domain = "base-sepolia.g.alchemy.com/v2/"
-		case "421614":
-			domain = "arb-sepolia.g.alchemy.com/v2/"
+	switch chainID {
+	// Testnets
+	case "17000":
+		domain = "eth-holesky.g.alchemy.com/v2/"
+	case "11155111":
+		domain = "eth-sepolia.g.alchemy.com/v2/"
+	case "11155420":
+		domain = "opt-sepolia.g.alchemy.com/v2/"
+	case "84532":
+		domain = "base-sepolia.g.alchemy.com/v2/"
+	case "421614":
+		domain = "arb-sepolia.g.alchemy.com/v2/"
 
-		// Mainnets
-		case "1":
-			domain = "eth-mainnet.g.alchemy.com/v2/"
-		case "10":
-			domain = "opt-mainnet.g.alchemy.com/v2/"
-		case "8453":
-			domain = "base-mainnet.g.alchemy.com/v2/"
-		case "42161":
-			domain = "arb-mainnet.g.alchemy.com/v2/"
-		default:
-			return ""
-		}
+	// Mainnets
+	case "1":
+		domain = "eth-mainnet.g.alchemy.com/v2/"
+	case "10":
+		domain = "opt-mainnet.g.alchemy.com/v2/"
+	case "8453":
+		domain = "base-mainnet.g.alchemy.com/v2/"
+	case "42161":
+		domain = "arb-mainnet.g.alchemy.com/v2/"
+	default:
+		return ""
 	}
-	if cfg.rpcProvider == "blast" {
-		switch chainID {
-		// Testnets
-		case "17000":
-			domain = "eth-holesky.blastapi.io/"
-		case "11155111":
-			domain = "eth-sepolia.blastapi.io/"
-		case "11155420":
-			domain = "optimism-sepolia.blastapi.io/"
-		case "84532":
-			domain = "base-sepolia.blastapi.io/"
-		case "421614":
-			domain = "arb-sepolia.blastapi.io/"
-
-		// Mainnets
-		case "1":
-			domain = "eth-mainnet.blastapi.io/"
-		case "10":
-			domain = "optimism-mainnet.blastapi.io/"
-		case "8453":
-			domain = "base-mainnet.blastapi.io/"
-		case "42161":
-			domain = "arbitrum-one.blastapi.io/"
-		default:
-			return ""
-		}
-	}
-	return fmt.Sprintf("%s%s%s", protocol, domain, cfg.rpcAPIKey)
+	return fmt.Sprintf("%s%s%s", protocol, domain, cfg.alchemyAPIKey)
 }
 
 func GetDatabaseUsername() string {
-	return cfg.databaseUsername
+	return cfg.dbConnection.Username
 }
 
 func GetDatabasePassword() string {
-	return cfg.databasePassword
+	return cfg.dbConnection.Password
 }
 
 func GetDatabaseSSLEnabled() bool {
-	return cfg.databaseSSLEnabled
+	return cfg.dbConnection.SSLEnabled
 }
 
 func GetDatabaseSSLCertPath() string {
-	return cfg.databaseSSLCertPath
+	return cfg.dbConnection.SSLCertPath
 }
 
 func GetDatabaseSSLKeyPath() string {
-	return cfg.databaseSSLKeyPath
+	return cfg.dbConnection.SSLKeyPath
 }
 
 func GetDatabaseSSLCAPath() string {
-	return cfg.databaseSSLCAPath
+	return cfg.dbConnection.SSLCAPath
 }
 
 func GetDatabaseSSLInsecureSkipVerify() bool {
-	return cfg.databaseSSLInsecureSkipVerify
+	return cfg.dbConnection.SSLInsecureSkipVerify
 }
