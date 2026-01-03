@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/tasks"
 	"github.com/trigg3rX/triggerx-backend/pkg/cryptography"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -21,7 +22,7 @@ type TaskDispatcher struct {
 	logger            observability.Logger
 	tracer            observability.Tracer
 	taskStreamManager *tasks.TaskStreamManager
-	healthClient      *HealthClient
+	healthClient      *health.Client
 	signingKey        string
 	signingAddress    string
 }
@@ -31,7 +32,7 @@ func NewTaskDispatcher(
 	logger observability.Logger,
 	tracer observability.Tracer,
 	taskStreamManager *tasks.TaskStreamManager,
-	healthClient *HealthClient,
+	healthClient *health.Client,
 	signingKey string,
 	signingAddress string) (*TaskDispatcher, error) {
 
@@ -248,5 +249,10 @@ func (d *TaskDispatcher) SubmitTaskFromScheduler(ctx context.Context, req *types
 }
 
 func (d *TaskDispatcher) Close(ctx context.Context) error {
+	if d.healthClient != nil {
+		if err := d.healthClient.Close(ctx); err != nil {
+			d.logger.Warn(ctx, "Failed to close health client", observability.Error(err))
+		}
+	}
 	return d.taskStreamManager.Close(ctx)
 }

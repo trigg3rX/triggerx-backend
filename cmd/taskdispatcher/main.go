@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher"
+	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/client/health"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskdispatcher/rpc"
@@ -94,7 +95,10 @@ func main() {
 	}
 	logger.Info(ctx, "[4/7] Dependency: Test Aggregator Client Initialised")
 
-	healthClient := taskdispatcher.NewHealthClient(logger, config.GetHealthRPCUrl())
+	healthClient, err := health.NewClient(config.GetHealthRPCUrl(), logger, tracer)
+	if err != nil {
+		logger.Fatal(ctx, "Failed to create health client", observability.Error(err))
+	}
 	logger.Info(ctx, "[5/7] Dependency: Health Client Initialised")
 
 	// Initialize task stream manager for orchestration

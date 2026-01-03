@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/client/conditionscheduler"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/handlers"
@@ -263,8 +264,19 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 		panic(err)
 	}
 
-	// Create handler w/ HTTP client and Redis client
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient)
+	// Initialize condition scheduler gRPC client
+	conditionSchedulerClient, err := conditionscheduler.NewClient(
+		config.GetConditionSchedulerRPCUrl(),
+		s.logger,
+		s.tracer,
+	)
+	if err != nil {
+		s.logger.Error(ctx, "Failed to create condition scheduler gRPC client", observability.Error(err))
+		panic(err)
+	}
+
+	// Create handler w/ HTTP client, Redis client, and condition scheduler gRPC client
+	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient, conditionSchedulerClient)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(metrics.NewCollector(s.obsMetrics).Handler()))

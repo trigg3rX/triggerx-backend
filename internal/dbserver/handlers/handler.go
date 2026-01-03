@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/dbserver/client/conditionscheduler"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/events"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/redis"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/repository"
@@ -37,6 +38,7 @@ type Handler struct {
 	safeAddressRepository   repository.SafeAddressRepository
 	httpClient              http.HTTPClientInterface
 	redisClient             *redis.Client
+	conditionSchedulerClient *conditionscheduler.Client
 	// WebSocket components
 	hub       *websocket.Hub
 	publisher *events.Publisher
@@ -44,7 +46,7 @@ type Handler struct {
 	scanNowQuery func(*time.Time) error // for testability
 }
 
-func NewHandler(db *database.Connection, logger observability.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher, httpClient http.HTTPClientInterface, redisClient *redis.Client) *Handler {
+func NewHandler(db *database.Connection, logger observability.Logger, config NotificationConfig, dockerExecutor dockerexecutor.DockerExecutorAPI, hub *websocket.Hub, publisher *events.Publisher, httpClient http.HTTPClientInterface, redisClient *redis.Client, conditionSchedulerClient *conditionscheduler.Client) *Handler {
 	h := &Handler{
 		db:                      db,
 		logger:                  logger,
@@ -65,6 +67,7 @@ func NewHandler(db *database.Connection, logger observability.Logger, config Not
 		publisher:               publisher,
 		httpClient:              httpClient,
 		redisClient:             redisClient,
+		conditionSchedulerClient: conditionSchedulerClient,
 	}
 	h.scanNowQuery = h.defaultScanNowQuery
 
