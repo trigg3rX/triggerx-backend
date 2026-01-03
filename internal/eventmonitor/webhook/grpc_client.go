@@ -11,6 +11,11 @@ import (
 	rpcclient "github.com/trigg3rX/triggerx-backend/pkg/rpc/client"
 )
 
+// NotificationClient is an interface for sending event notifications
+type NotificationClient interface {
+	Send(ctx context.Context, serviceURL string, notification *types.EventNotification) error
+}
+
 // GRPCClient handles gRPC notification delivery
 type GRPCClient struct {
 	logger observability.Logger

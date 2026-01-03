@@ -33,7 +33,6 @@ type Server struct {
 	validator          *middleware.Validator
 	redisClient        *redis.Client
 	notificationConfig handlers.NotificationConfig
-	jobStatusChecker   *handlers.JobStatusChecker
 	obsMetrics         observability.Metrics
 
 	// WebSocket components
@@ -163,17 +162,6 @@ func NewServer(ctx context.Context, db *database.Connection, logger observabilit
 	// Apply retry middleware only to API routes
 	apiGroup := router.Group("/api")
 	apiGroup.Use(middleware.RetryMiddleware(ctx, retryConfig, logger))
-
-	// Initialize repositories
-	eventJobRepo := repository.NewEventJobRepository(db)
-	conditionJobRepo := repository.NewConditionJobRepository(db)
-	timeJobRepo := repository.NewTimeJobRepository(db) // NEW
-
-	// Initialize and start job status checker
-	s.jobStatusChecker = handlers.NewJobStatusChecker(eventJobRepo, conditionJobRepo, timeJobRepo, logger)
-	go s.jobStatusChecker.StartStatusCheckLoop(ctx)
-	logger.Info(ctx, "Job status checker started successfully")
-
 	return s
 }
 
@@ -233,7 +221,6 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	// api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	api.POST("/jobs", s.validator.GinMiddleware(), handler.CreateJobData)
 	protected.GET("/jobs/by-apikey", handler.GetJobsByApiKey)
-	api.GET("/jobs/time", handler.GetTimeBasedTasks)
 	api.PUT("/jobs/update/:id", handler.UpdateJobDataFromUser)
 	api.PUT("/jobs/:id/status/:status", handler.UpdateJobStatus)
 	api.PUT("/jobs/:id/lastexecuted", handler.UpdateJobLastExecutedAt)
@@ -243,11 +230,7 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	protected.GET("/jobs/user/:user_address/:job_id", handler.GetJobDataByJobIDForUser)
 	api.GET("/jobs/:job_id/task-fees", handler.GetTaskFeesByJobID)
 
-	api.POST("/tasks", s.validator.GinMiddleware(), handler.CreateTaskData)
 	api.GET("/tasks/:id", handler.GetTaskDataByID)
-	// api.PUT("/tasks/:id/fee", handler.UpdateTaskFee)
-	// api.PUT("/tasks/:id/attestation", handler.UpdateTaskAttestationData)
-	api.PUT("/tasks/execution/:id", handler.UpdateTaskExecutionData)
 	api.GET("/tasks/job/:job_id", handler.GetTasksByJobID)
 	protected.GET("/tasks/recent", handler.GetRecentTasks)
 	protected.GET("/tasks/user/:user_address", handler.GetTasksByUserAddress)

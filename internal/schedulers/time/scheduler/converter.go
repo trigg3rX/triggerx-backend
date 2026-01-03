@@ -1,15 +1,27 @@
 package scheduler
 
 import (
+	"context"
+
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // convertCustomJobToScheduleTimeTaskData converts a CustomJobData to ScheduleTimeTaskData format.
 // This allows custom jobs to be processed using the same scheduling pipeline as time-based jobs.
-func (s *TimeBasedScheduler) convertCustomJobToScheduleTimeTaskData(customJob *types.CustomJobData) types.ScheduleTimeTaskData {
-	// For custom jobs, we don't have script storage repository in scheduler
-	// The storage will be fetched by the executor when needed
-	storage := make(map[string]string)
+func (s *TimeBasedScheduler) convertCustomJobToScheduleTimeTaskData(ctx context.Context, customJob *types.CustomJobData) types.ScheduleTimeTaskData {
+	// Fetch storage for this custom job
+	var storage map[string]string
+	if s.scriptStorageRepository != nil {
+		var err error
+		storage, err = s.scriptStorageRepository.GetStorageByJobID(customJob.JobID.ToBigInt())
+		if err != nil {
+			s.logger.Warn(ctx, "Failed to get storage for job", observability.String("job_id", customJob.JobID.String()), observability.Error(err))
+			storage = make(map[string]string) // Continue with empty storage
+		}
+	} else {
+		storage = make(map[string]string)
+	}
 
 	return types.ScheduleTimeTaskData{
 		TaskID:                 0, // Will be assigned during task creation

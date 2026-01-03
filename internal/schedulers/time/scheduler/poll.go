@@ -60,7 +60,7 @@ func (s *TimeBasedScheduler) pollAndScheduleTasks(ctx context.Context) {
 		} else {
 			// Convert custom jobs to ScheduleTimeTaskData format
 			for _, customJob := range customJobs {
-				taskData := s.convertCustomJobToScheduleTimeTaskData(&customJob)
+				taskData := s.convertCustomJobToScheduleTimeTaskData(ctx, &customJob)
 				tasks = append(tasks, taskData)
 			}
 		}

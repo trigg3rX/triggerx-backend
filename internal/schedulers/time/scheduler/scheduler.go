@@ -27,6 +27,7 @@ type TimeBasedScheduler struct {
 	timeJobRepository    repository.TimeJobRepository
 	customJobRepository  repository.CustomJobRepository
 	taskRepository       repository.TaskRepository
+	scriptStorageRepository repository.ScriptStorageRepository
 	taskDispatcherClient TaskDispatcherClient // RPC client for task dispatcher
 	metrics              *metrics.Collector
 	schedulerID          int
@@ -47,10 +48,11 @@ type TimeBasedScheduler struct {
 //   - obsMetrics: Metrics collector for observability
 //   - timeJobRepo: Repository for time-based jobs
 //   - customJobRepo: Repository for custom jobs (can be nil)
+//   - scriptStorageRepo: Repository for script storage (can be nil)
 //   - taskRepo: Repository for task data operations
 //
 // Returns a configured scheduler instance ready to start, or an error if initialization fails.
-func NewTimeBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, timeJobRepo repository.TimeJobRepository, customJobRepo repository.CustomJobRepository, taskRepo repository.TaskRepository) (*TimeBasedScheduler, error) {
+func NewTimeBasedScheduler(logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics, timeJobRepo repository.TimeJobRepository, customJobRepo repository.CustomJobRepository, scriptStorageRepo repository.ScriptStorageRepository, taskRepo repository.TaskRepository) (*TimeBasedScheduler, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Initialize RPC client for task dispatcher
@@ -71,6 +73,7 @@ func NewTimeBasedScheduler(logger observability.Logger, tracer observability.Tra
 		timeJobRepository:    timeJobRepo,
 		customJobRepository:  customJobRepo,
 		taskRepository:       taskRepo,
+		scriptStorageRepository: scriptStorageRepo,
 		taskDispatcherClient: taskDispatcherClient,
 		metrics:              metrics.NewCollector(obsMetrics),
 		schedulerID:          config.GetSchedulerID(),
