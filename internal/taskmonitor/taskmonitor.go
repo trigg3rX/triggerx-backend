@@ -6,13 +6,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/gocql/gocql"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
+	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/events"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/tasks"
-	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
+	taskmonitorTypes "github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	redisClient "github.com/trigg3rX/triggerx-backend/pkg/client/redis"
 	dbClient "github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
@@ -31,14 +33,13 @@ type TaskManager struct {
 	tracer              observability.Tracer
 	redisClient         *redisClient.Client
 	taskStreamManager   *tasks.TaskStreamManager
-	eventListener       *events.ContractEventListener
-	testEventListener   *events.ContractEventListener
 	metricsUpdateTicker *time.Ticker
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	shutdownWg          sync.WaitGroup
 	startTime           time.Time
 	dbClient            *database.DatabaseClient
+	ipfsClient          ipfs.IPFSClient
 	rpcServer           interface {
 		Stop(ctx context.Context) error
 	}
@@ -122,22 +123,17 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 		return nil, fmt.Errorf("failed to create task stream manager: %w", err)
 	}
 
-	// Initialize event listener
-	eventListener := events.NewContractEventListener(logger, tracer, events.GetMainnetConfig(), databaseClient, ipfsClient, taskStreamManager)
-	testEventListener := events.NewContractEventListener(logger, tracer, events.GetTestnetConfig(), databaseClient, ipfsClient, taskStreamManager)
-
 	tm := &TaskManager{
 		logger:              logger,
 		tracer:              tracer,
 		redisClient:         client,
 		taskStreamManager:   taskStreamManager,
-		eventListener:       eventListener,
-		testEventListener:   testEventListener,
 		metricsUpdateTicker: time.NewTicker(config.GetMetricsUpdateInterval()),
 		ctx:                 ctx,
 		cancel:              cancel,
 		startTime:           time.Now(),
 		dbClient:            databaseClient,
+		ipfsClient:          ipfsClient,
 	}
 
 	logger.Info(ctx, "TaskManager initialized successfully",
@@ -156,17 +152,6 @@ func (tm *TaskManager) Initialize() error {
 	// Initialize task streams
 	if err := tm.taskStreamManager.Initialize(tm.ctx); err != nil {
 		return fmt.Errorf("failed to initialize task stream manager: %w", err)
-	}
-
-	// Start event listener
-	if err := tm.eventListener.Start(tm.ctx); err != nil {
-		tm.logger.Error(tm.ctx, "Failed to start event listener", observability.Error(err))
-		tm.logger.Info(tm.ctx, "Falling back to polling mode")
-	}
-
-	if err := tm.testEventListener.Start(tm.ctx); err != nil {
-		tm.logger.Error(tm.ctx, "Failed to start test event listener", observability.Error(err))
-		tm.logger.Info(tm.ctx, "Falling back to polling mode")
 	}
 
 	// Start background workers with proper synchronization
@@ -189,7 +174,7 @@ func (tm *TaskManager) Initialize() error {
 // ReportTaskStatus handles task status reports from keepers
 // This is called after the aggregator submission attempt (regardless of success or failure)
 // ProofCID contains all execution data (task data, action data, proof, signatures)
-func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error) {
+func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTypes.ReportTaskStatusRequest) (*taskmonitorTypes.ReportTaskStatusResponse, error) {
 	tm.logger.Info(ctx, "Received task status report",
 		observability.Int64("task_id", req.TaskID),
 		observability.String("keeper_address", req.KeeperAddress),
@@ -205,7 +190,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 			tm.logger.Error(ctx, "Failed to update task failure in database",
 				observability.Int64("task_id", req.TaskID),
 				observability.Error(err))
-			return &types.ReportTaskStatusResponse{
+			return &taskmonitorTypes.ReportTaskStatusResponse{
 				Success: false,
 				Message: fmt.Sprintf("failed to update task failure: %v", err),
 			}, nil
@@ -222,7 +207,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 			observability.String("execution_tx_hash", req.ExecutionTxHash),
 			observability.String("error", req.Error))
 
-		return &types.ReportTaskStatusResponse{
+		return &taskmonitorTypes.ReportTaskStatusResponse{
 			Success: true,
 			Message: "Task failure recorded",
 		}, nil
@@ -234,7 +219,7 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		tm.logger.Error(ctx, "Failed to update task success in database",
 			observability.Int64("task_id", req.TaskID),
 			observability.Error(err))
-		return &types.ReportTaskStatusResponse{
+		return &taskmonitorTypes.ReportTaskStatusResponse{
 			Success: false,
 			Message: fmt.Sprintf("failed to update task success: %v", err),
 		}, nil
@@ -246,10 +231,75 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *types.ReportTa
 		observability.String("execution_tx_hash", req.ExecutionTxHash),
 		observability.String("proof_cid", req.ProofCID))
 
-	return &types.ReportTaskStatusResponse{
+	return &taskmonitorTypes.ReportTaskStatusResponse{
 		Success: true,
 		Message: "Task status updated, pending on-chain confirmation",
 	}, nil
+}
+
+// ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
+func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *taskmonitorTypes.ReportConsensusEventRequest) (*taskmonitorTypes.ReportConsensusEventResponse, error) {
+	tm.logger.Info(ctx, "Received consensus event report",
+		observability.String("chain_id", req.ChainID),
+		observability.String("event_name", req.EventName),
+		observability.String("tx_hash", req.TxHash),
+		observability.Int64("task_number", req.TaskData.TaskNumber))
+
+	// Create a ChainEvent from the request to reuse existing processing logic
+	contractEventData := &events.ContractEventData{
+		EventType:    req.EventName,
+		ContractType: events.ContractTypeAttestationCenter,
+		ParsedData:   nil, // Not needed, we have TaskData
+		RawData:      []byte{},
+		Topics:       []string{},
+		BlockNumber:  0,
+		TxHash:       req.TxHash,
+		LogIndex:     0,
+	}
+
+	chainEvent := &events.ChainEvent{
+		ChainID:      req.ChainID,
+		ChainName:    getChainName(req.ChainID),
+		ContractAddr: "",
+		ContractType: events.ContractTypeAttestationCenter,
+		EventName:    req.EventName,
+		BlockNumber:  0,
+		TxHash:       req.TxHash,
+		LogIndex:     0,
+		Data:         contractEventData,
+		RawLog:       types.Log{},
+		ProcessedAt:  time.Now(),
+	}
+
+	// Create a task handler instance to process the event
+	taskHandler := tm.createTaskEventHandler()
+	// Process the event with the already-parsed TaskData
+	taskHandler.ProcessConsensusEvent(ctx, chainEvent, req.TaskData)
+
+	return &taskmonitorTypes.ReportConsensusEventResponse{
+		Success: true,
+		Message: "Consensus event processed",
+	}, nil
+}
+
+// createTaskEventHandler creates a TaskEventHandler instance for processing events
+func (tm *TaskManager) createTaskEventHandler() *events.TaskEventHandler {
+	// Create notifier similar to how it's done in the event listener
+	notifier := notify.NewCompositeNotifier(tm.logger, notify.NewWebhookNotifier(tm.logger), notify.NewSMTPNotifier(tm.logger))
+
+	return events.NewTaskEventHandler(tm.logger, tm.tracer, tm.dbClient, tm.ipfsClient, tm.taskStreamManager, notifier)
+}
+
+// getChainName returns the chain name for a given chain ID
+func getChainName(chainID string) string {
+	switch chainID {
+	case "8453":
+		return "Base Mainnet"
+	case "84532":
+		return "Base Sepolia"
+	default:
+		return "Unknown"
+	}
 }
 
 // SetRPCServer sets the RPC server for graceful shutdown
@@ -385,15 +435,6 @@ func (tm *TaskManager) Close() error {
 		tm.logger.Info(tm.ctx, "All background workers stopped successfully")
 	case <-shutdownCtx.Done():
 		tm.logger.Warn(tm.ctx, "Timeout waiting for background workers to stop")
-	}
-
-	// Stop event listener
-	if err := tm.eventListener.Stop(tm.ctx); err != nil {
-		tm.logger.Error(tm.ctx, "Error stopping event listener", observability.Error(err))
-	}
-
-	if err := tm.testEventListener.Stop(tm.ctx); err != nil {
-		tm.logger.Error(tm.ctx, "Error stopping test event listener", observability.Error(err))
 	}
 
 	// Stop metrics ticker

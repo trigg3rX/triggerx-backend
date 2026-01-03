@@ -23,15 +23,22 @@ type Config struct {
 	// Condition Scheduler RPC URL
 	conditionSchedulerRPCUrl string
 
+	// Task Monitor RPC URL
+	taskMonitorRPCUrl string
+
+	// Attestation Center contract addresses (Base mainnet and sepolia)
+	attestationCenterAddress     string // Base mainnet (8453)
+	testAttestationCenterAddress string // Base sepolia (84532)
+
 	// Alchemy API Key
 	alchemyAPIKey string
 
 	// YAML-loaded settings
-	polling PollingConfig
-	webhook WebhookConfig
-	metrics              yaml.MetricsConfig
-	shutdown             yaml.ShutdownConfig
-	version              yaml.VersionConfig
+	polling  PollingConfig
+	webhook  WebhookConfig
+	metrics  yaml.MetricsConfig
+	shutdown yaml.ShutdownConfig
+	version  yaml.VersionConfig
 }
 
 type PollingConfig struct {
@@ -47,9 +54,9 @@ type WebhookConfig struct {
 }
 
 type YAMLConfig struct {
-	Polling  PollingConfig  `yaml:"polling"`
-	Webhook  WebhookConfig  `yaml:"webhook"`
-	Metrics  yaml.MetricsConfig `yaml:"metrics"`
+	Polling  PollingConfig       `yaml:"polling"`
+	Webhook  WebhookConfig       `yaml:"webhook"`
+	Metrics  yaml.MetricsConfig  `yaml:"metrics"`
 	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
 	Version  yaml.VersionConfig  `yaml:"version"`
 }
@@ -69,17 +76,20 @@ func Init(configPath string) error {
 	}
 
 	cfg = Config{
-		devMode:                       env.GetEnvBool("DEV_MODE", false),
-		httpPort:                      env.GetEnvString("EVENT_MONITOR_HTTP_PORT", "9008"),
-		grpcPort:                      env.GetEnvString("EVENT_MONITOR_GRPC_PORT", "9018"),
-		otelExporterEndpoint:          env.GetOTELExporterEndpoint(),
-		conditionSchedulerRPCUrl: env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "localhost:9016"),
-		alchemyAPIKey:            env.GetEnvString("EVENT_MONITOR_ALCHEMY_API_KEY", ""),
-		polling:                  yamlConfig.Polling,
-		webhook:                  yamlConfig.Webhook,
-		metrics:                  yamlConfig.Metrics,
-		shutdown:                 yamlConfig.Shutdown,
-		version:                  yamlConfig.Version,
+		devMode:                      env.GetEnvBool("DEV_MODE", false),
+		httpPort:                     env.GetEnvString("EVENT_MONITOR_HTTP_PORT", "9008"),
+		grpcPort:                     env.GetEnvString("EVENT_MONITOR_GRPC_PORT", "9018"),
+		otelExporterEndpoint:         env.GetOTELExporterEndpoint(),
+		conditionSchedulerRPCUrl:     env.GetEnvString("CONDITION_SCHEDULER_RPC_URL", "localhost:9016"),
+		taskMonitorRPCUrl:            env.GetEnvString("TASK_MONITOR_RPC_URL", "localhost:9013"),
+		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
+		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
+		alchemyAPIKey:                env.GetEnvString("EVENT_MONITOR_ALCHEMY_API_KEY", ""),
+		polling:                      yamlConfig.Polling,
+		webhook:                      yamlConfig.Webhook,
+		metrics:                      yamlConfig.Metrics,
+		shutdown:                     yamlConfig.Shutdown,
+		version:                      yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -102,6 +112,15 @@ func validateConfig() error {
 	}
 	if !env.IsValidHostPort(cfg.conditionSchedulerRPCUrl) {
 		return fmt.Errorf("invalid condition scheduler RPC URL: %s", cfg.conditionSchedulerRPCUrl)
+	}
+	if !env.IsValidHostPort(cfg.taskMonitorRPCUrl) {
+		return fmt.Errorf("invalid task monitor RPC URL: %s", cfg.taskMonitorRPCUrl)
+	}
+	if !env.IsValidEthAddress(cfg.attestationCenterAddress) {
+		return fmt.Errorf("invalid attestation center address: %s", cfg.attestationCenterAddress)
+	}
+	if !env.IsValidEthAddress(cfg.testAttestationCenterAddress) {
+		return fmt.Errorf("invalid test attestation center address: %s", cfg.testAttestationCenterAddress)
 	}
 	if env.IsEmpty(cfg.alchemyAPIKey) {
 		return fmt.Errorf("invalid alchemy API key: %s", cfg.alchemyAPIKey)
@@ -165,6 +184,18 @@ func GetWebhookRetryDelay() time.Duration {
 	return cfg.webhook.RetryDelay.ToDuration()
 }
 
+func GetTaskMonitorRPCUrl() string {
+	return cfg.taskMonitorRPCUrl
+}
+
+func GetAttestationCenterAddress() string {
+	return cfg.attestationCenterAddress
+}
+
+func GetTestAttestationCenterAddress() string {
+	return cfg.testAttestationCenterAddress
+}
+
 func GetChainRPCUrls() map[string]string {
 	if cfg.alchemyAPIKey == "" {
 		return map[string]string{
@@ -172,6 +203,8 @@ func GetChainRPCUrls() map[string]string {
 			"84532":    "https://sepolia.base.org",
 			"11155111": "https://ethereum-sepolia.publicnode.com",
 			"421614":   "https://sepolia-rollup.arbitrum.io/rpc",
+			"8453":     "https://mainnet.base.org",
+			"42161":    "https://mainnet.arbitrum.io/rpc",
 		}
 	}
 
@@ -180,5 +213,7 @@ func GetChainRPCUrls() map[string]string {
 		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
 		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
 		"421614":   fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
+		"8453":     fmt.Sprintf("https://base-mainnet.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
+		"42161":    fmt.Sprintf("https://arb-mainnet.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),
 	}
 }

@@ -19,6 +19,22 @@ type ReportTaskStatusResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+// ReportConsensusEventRequest represents a request to report a consensus event (TaskSubmitted or TaskRejected)
+// This is called by eventmonitor when it detects on-chain consensus events
+// EventMonitor parses the event data and sends the structured TaskSubmissionData
+type ReportConsensusEventRequest struct {
+	ChainID   string              `json:"chain_id" validate:"required"`
+	EventName string              `json:"event_name" validate:"required"` // "TaskSubmitted" or "TaskRejected"
+	TxHash    string              `json:"tx_hash" validate:"required"`
+	TaskData  *TaskSubmissionData `json:"task_data" validate:"required"`
+}
+
+// ReportConsensusEventResponse represents the response to a consensus event report
+type ReportConsensusEventResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
 // --- DEPRECATED: ---
 // These types were used for the old report-task-error endpoint.
 // Since executor and validator are controlled by us, backward compatibility is unnecessary.

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/attestation"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
@@ -22,6 +23,7 @@ type Service struct {
 	nodeClients     map[string]*nodeclient.NodeClient // chainID -> NodeClient
 	workers         map[string]*worker.Worker         // registry key -> Worker
 	webhookClient   *webhook.GRPCClient
+	permanentPoller *attestation.PermanentPoller
 	logger          observability.Logger
 	tracer          observability.Tracer
 	mu              sync.RWMutex
@@ -36,6 +38,13 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 
 	rm := registry.NewRegistryManager(ctx, logger)
 	wc := webhook.NewGRPCClient(logger, tracer)
+
+	// Initialize permanent poller for Base networks
+	permanentPoller, err := attestation.NewPermanentPoller(ctx, logger, tracer)
+	if err != nil {
+		cancel() // Clean up context on error
+		return nil, fmt.Errorf("failed to create permanent poller: %w", err)
+	}
 
 	// Initialize node clients for supported chains
 	nodeClients := make(map[string]*nodeclient.NodeClient)
@@ -87,6 +96,7 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 		nodeClients:     nodeClients,
 		workers:         make(map[string]*worker.Worker),
 		webhookClient:   wc,
+		permanentPoller: permanentPoller,
 		logger:          logger,
 		tracer:          tracer,
 		ctx:             ctx,
@@ -96,6 +106,11 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 
 // Start starts the service
 func (s *Service) Start() error {
+	// Start permanent poller for Base networks
+	if err := s.permanentPoller.Start(); err != nil {
+		return fmt.Errorf("failed to start permanent poller: %w", err)
+	}
+
 	// Start monitoring registry changes
 	go s.monitorRegistry()
 
@@ -108,6 +123,11 @@ func (s *Service) Stop() {
 
 	// Cancel context
 	s.cancel()
+
+	// Stop permanent poller
+	if s.permanentPoller != nil {
+		s.permanentPoller.Stop()
+	}
 
 	// Stop all workers
 	s.mu.Lock()

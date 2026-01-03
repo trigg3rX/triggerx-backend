@@ -24,19 +24,9 @@ type Config struct {
 	// OTel exporter endpoint
 	otelExporterEndpoint string
 
-	// Contract Addresses to listen for events
-	attestationCenterAddress     string
-	testAttestationCenterAddress string
-
-	// RPC URLs for Ethereum and Base
-	alchemyAPIKey   string
-
 	// Upstash Redis URL and Rest Token
 	upstashRedisUrl       string
 	upstashRedisRestToken string
-
-	// Sync Configs Update
-	lastBaseBlockUpdated uint64
 
 	// Pinata JWT and Host
 	pinataJWT  string
@@ -58,7 +48,7 @@ type Config struct {
 	redis   RedisConfig
 	stream  StreamConfig
 	metrics MetricsConfig
-	version              yaml.VersionConfig
+	version yaml.VersionConfig
 }
 
 type RedisConfig struct {
@@ -88,9 +78,9 @@ type MetricsConfig struct {
 }
 
 type YAMLConfig struct {
-	Redis   RedisConfig   `yaml:"redis"`
-	Stream  StreamConfig  `yaml:"stream"`
-	Metrics MetricsConfig `yaml:"metrics"`
+	Redis   RedisConfig        `yaml:"redis"`
+	Stream  StreamConfig       `yaml:"stream"`
+	Metrics MetricsConfig      `yaml:"metrics"`
 	Version yaml.VersionConfig `yaml:"version"`
 }
 
@@ -109,30 +99,27 @@ func Init(configPath string) error {
 	}
 
 	cfg = Config{
-		devMode:                      env.GetEnvBool("DEV_MODE", false),
-		httpPort:                     env.GetEnvString("TASK_MONITOR_HTTP_PORT", "9003"),
-		grpcPort:                     env.GetEnvString("TASK_MONITOR_GRPC_PORT", "9013"),
-		dbConnection:                 env.GetDatabaseConfig(),
-		otelExporterEndpoint:         env.GetOTELExporterEndpoint(),
-		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", ""),
-		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", ""),
-		alchemyAPIKey:                 env.GetEnvString("TASK_MONITOR_ALCHEMY_API_KEY", ""),
-		upstashRedisUrl:              env.GetEnvString("UPSTASH_REDIS_URL", ""),
-		upstashRedisRestToken:        env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
-		pinataJWT:                    env.GetEnvString("PINATA_JWT", ""),
-		pinataHost:                   env.GetEnvString("PINATA_HOST", ""),
-		notifyWebhookURL:             env.GetEnvString("TASK_NOTIFY_WEBHOOK_URL", ""),
-		notifyWebhookToken:           env.GetEnvString("TASK_NOTIFY_WEBHOOK_TOKEN", ""),
-		smtpHost:                     env.GetEnvString("SMTP_HOST", ""),
-		smtpPort:                     env.GetEnvInt("SMTP_PORT", 587),
-		smtpUser:                     env.GetEnvString("SMTP_USER", ""),
-		smtpPass:                     env.GetEnvString("SMTP_PASS", ""),
-		smtpFrom:                     env.GetEnvString("SMTP_FROM", ""),
-		smtpStartTLS:                 env.GetEnvBool("SMTP_STARTTLS", true),
-		redis:                        yamlConfig.Redis,
-		stream:                       yamlConfig.Stream,
-		metrics:                      yamlConfig.Metrics,
-		version:                      yamlConfig.Version,
+		devMode:               env.GetEnvBool("DEV_MODE", false),
+		httpPort:              env.GetEnvString("TASK_MONITOR_HTTP_PORT", "9003"),
+		grpcPort:              env.GetEnvString("TASK_MONITOR_GRPC_PORT", "9013"),
+		dbConnection:          env.GetDatabaseConfig(),
+		otelExporterEndpoint:  env.GetOTELExporterEndpoint(),
+		upstashRedisUrl:       env.GetEnvString("UPSTASH_REDIS_URL", ""),
+		upstashRedisRestToken: env.GetEnvString("UPSTASH_REDIS_REST_TOKEN", ""),
+		pinataJWT:             env.GetEnvString("PINATA_JWT", ""),
+		pinataHost:            env.GetEnvString("PINATA_HOST", ""),
+		notifyWebhookURL:      env.GetEnvString("TASK_NOTIFY_WEBHOOK_URL", ""),
+		notifyWebhookToken:    env.GetEnvString("TASK_NOTIFY_WEBHOOK_TOKEN", ""),
+		smtpHost:              env.GetEnvString("SMTP_HOST", ""),
+		smtpPort:              env.GetEnvInt("SMTP_PORT", 587),
+		smtpUser:              env.GetEnvString("SMTP_USER", ""),
+		smtpPass:              env.GetEnvString("SMTP_PASS", ""),
+		smtpFrom:              env.GetEnvString("SMTP_FROM", ""),
+		smtpStartTLS:          env.GetEnvBool("SMTP_STARTTLS", true),
+		redis:                 yamlConfig.Redis,
+		stream:                yamlConfig.Stream,
+		metrics:               yamlConfig.Metrics,
+		version:               yamlConfig.Version,
 	}
 
 	if err := validateConfig(); err != nil {
@@ -159,15 +146,6 @@ func validateConfig() error {
 	}
 	if !env.IsValidHostPort(cfg.otelExporterEndpoint) {
 		return fmt.Errorf("invalid OTEL exporter endpoint: %s (must be a valid host:port, e.g., localhost:4318)", cfg.otelExporterEndpoint)
-	}
-	if !env.IsValidEthAddress(cfg.attestationCenterAddress) {
-		return fmt.Errorf("invalid attestation center address: %s", cfg.attestationCenterAddress)
-	}
-	if !env.IsValidEthAddress(cfg.testAttestationCenterAddress) {
-		return fmt.Errorf("invalid test attestation center address: %s", cfg.testAttestationCenterAddress)
-	}
-	if env.IsEmpty(cfg.alchemyAPIKey) {
-		return fmt.Errorf("invalid alchemy API key: %s", cfg.alchemyAPIKey)
 	}
 	if env.IsEmpty(cfg.pinataJWT) {
 		return fmt.Errorf("invalid pinata JWT: %s", cfg.pinataJWT)
@@ -216,26 +194,6 @@ func GetDatabaseHostAddress() string {
 
 func GetDatabaseHostPort() string {
 	return cfg.dbConnection.HostPort
-}
-
-func SetLastBaseBlockUpdated(blockNumber uint64) {
-	cfg.lastBaseBlockUpdated = blockNumber
-}
-
-func GetLastBaseBlockUpdated() uint64 {
-	return cfg.lastBaseBlockUpdated
-}
-
-func GetAttestationCenterAddress() string {
-	return cfg.attestationCenterAddress
-}
-
-func GetTestAttestationCenterAddress() string {
-	return cfg.testAttestationCenterAddress
-}
-
-func GetAlchemyAPIKey() string {
-	return cfg.alchemyAPIKey
 }
 
 func GetPinataHost() string {
@@ -358,43 +316,6 @@ func GetRedisClientConfig() redisClient.RedisConfig {
 			OperationTimeout: 10 * time.Second, // Default operation timeout
 		},
 	}
-}
-
-// Get Chain Configs
-func GetChainRPCUrl(isRPC bool, chainID string) string {
-	var protocol string
-	if isRPC {
-		protocol = "https://"
-	} else {
-		protocol = "wss://"
-	}
-	var domain string
-	switch chainID {
-	// Testnets
-	case "17000":
-		domain = "eth-holesky.g.alchemy.com/v2/"
-	case "11155111":
-		domain = "eth-sepolia.g.alchemy.com/v2/"
-	case "11155420":
-		domain = "opt-sepolia.g.alchemy.com/v2/"
-	case "84532":
-		domain = "base-sepolia.g.alchemy.com/v2/"
-	case "421614":
-		domain = "arb-sepolia.g.alchemy.com/v2/"
-
-	// Mainnets
-	case "1":
-		domain = "eth-mainnet.g.alchemy.com/v2/"
-	case "10":
-		domain = "opt-mainnet.g.alchemy.com/v2/"
-	case "8453":
-		domain = "base-mainnet.g.alchemy.com/v2/"
-	case "42161":
-		domain = "arb-mainnet.g.alchemy.com/v2/"
-	default:
-		return ""
-	}
-	return fmt.Sprintf("%s%s%s", protocol, domain, cfg.alchemyAPIKey)
 }
 
 func GetDatabaseUsername() string {

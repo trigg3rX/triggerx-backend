@@ -22,6 +22,8 @@ type TaskMonitorHandler struct {
 type TaskMonitorInterface interface {
 	// ReportTaskStatus handles task status reports from keepers (both success and failure)
 	ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error)
+	// ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
+	ReportConsensusEvent(ctx context.Context, req *types.ReportConsensusEventRequest) (*types.ReportConsensusEventResponse, error)
 }
 
 // NewTaskMonitorHandler creates a new RPC handler
@@ -67,6 +69,28 @@ func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request 
 		}
 		return resp, nil
 
+	case "report-consensus-event":
+		// Convert request to the expected type
+		consensusReq, ok := request.(*types.ReportConsensusEventRequest)
+		if !ok {
+			// Try to convert from map if it's JSON-decoded
+			if reqMap, ok := request.(map[string]interface{}); ok {
+				var err error
+				consensusReq, err = h.convertMapToConsensusRequest(reqMap)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert request: %w", err)
+				}
+			} else {
+				return nil, fmt.Errorf("invalid request type for report-consensus-event: %T", request)
+			}
+		}
+
+		resp, err := h.monitor.ReportConsensusEvent(ctx, consensusReq)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+
 	default:
 		return nil, fmt.Errorf("unknown method: %s", method)
 	}
@@ -80,6 +104,13 @@ func (h *TaskMonitorHandler) GetMethods() []rpcpkg.RPCMethod {
 			Description:  "Report task execution status from a keeper (success or failure)",
 			RequestType:  &types.ReportTaskStatusRequest{},
 			ResponseType: &types.ReportTaskStatusResponse{},
+			Timeout:      30 * time.Second,
+		},
+		{
+			Name:         "report-consensus-event",
+			Description:  "Report consensus event from eventmonitor (TaskSubmitted or TaskRejected)",
+			RequestType:  &types.ReportConsensusEventRequest{},
+			ResponseType: &types.ReportConsensusEventResponse{},
 			Timeout:      30 * time.Second,
 		},
 	}
@@ -134,4 +165,19 @@ func (h *TaskMonitorHandler) validateStatusSignature(req *types.ReportTaskStatus
 	}
 
 	return nil
+}
+
+// convertMapToConsensusRequest converts a map to ReportConsensusEventRequest
+func (h *TaskMonitorHandler) convertMapToConsensusRequest(reqMap map[string]interface{}) (*types.ReportConsensusEventRequest, error) {
+	jsonData, err := json.Marshal(reqMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request map: %w", err)
+	}
+
+	var req types.ReportConsensusEventRequest
+	if err := json.Unmarshal(jsonData, &req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	return &req, nil
 }
