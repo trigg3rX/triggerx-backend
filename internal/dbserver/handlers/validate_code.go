@@ -62,7 +62,11 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 		}
 	}
 
-	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language, alchemyAPIKey)
+	// Pass task_definition_id in metadata so fee calculation knows the correct task type
+	metadata := map[string]string{
+		"task_definition_id": fmt.Sprintf("%d", req.TaskDefinitionID),
+	}
+	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language, alchemyAPIKey, metadata)
 	if err != nil {
 		// If IsSafe is false, SafeMatch is always true
 		safeMatch := !req.IsSafe
