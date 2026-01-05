@@ -20,7 +20,7 @@ import (
 
 func main() {
 	// Initialize configuration
-	configPath := "config/services/task-monitor.yaml"
+	configPath := "config/services/taskmonitor.yaml"
 	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
@@ -75,8 +75,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Get database client for handler
+	dbClient := taskManager.GetDatabaseClient()
+
 	// Initialize and start gRPC server
-	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, "0.0.0.0", config.GetGRPCPort())
+	rpcServer, err := rpc.StartRPCServer(ctx, logger, taskManager, dbClient, "0.0.0.0", config.GetGRPCPort())
 	if err != nil {
 		logger.Fatal(ctx, "Failed to start gRPC server", observability.Error(err))
 	}

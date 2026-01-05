@@ -165,9 +165,7 @@ func main() {
 }
 
 func setupHTTPServer(logger observability.Logger, tracer observability.Tracer) *http.Server {
-	if !config.IsDevMode() {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
 	router.Use(gin.Recovery())

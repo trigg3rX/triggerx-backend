@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
@@ -193,10 +192,10 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 		return fmt.Errorf("failed to parse block number: %w", err)
 	}
 
-	logIndex, err := hexToUint(log.LogIndex)
-	if err != nil {
-		return fmt.Errorf("failed to parse log index: %w", err)
-	}
+	// logIndex, err := hexToUint(log.LogIndex)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to parse log index: %w", err)
+	// }
 
 	// Get subscribers
 	w.entry.Mu.RLock()
@@ -231,34 +230,45 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			attribute.Int64("block", int64(blockNumber)),
 		))
 
-		notification := &types.EventNotification{
-			RequestID:    subscriber.RequestID,
-			ChainID:      w.entry.ChainID,
-			ContractAddr: w.entry.ContractAddr.Hex(),
-			EventSig:     w.entry.EventSig.Hex(),
-			BlockNumber:  blockNumber,
-			TxHash:       log.TransactionHash,
-			LogIndex:     logIndex,
-			Topics:       log.Topics,
-			Data:         log.Data,
-			Timestamp:    time.Now(),
-		}
+		// Create notification (currently not sent - webhook notifications temporarily disabled)
+		// notification := &types.EventNotification{
+		// 	RequestID:    subscriber.RequestID,
+		// 	ChainID:      w.entry.ChainID,
+		// 	ContractAddr: w.entry.ContractAddr.Hex(),
+		// 	EventSig:     w.entry.EventSig.Hex(),
+		// 	BlockNumber:  blockNumber,
+		// 	TxHash:       log.TransactionHash,
+		// 	LogIndex:     logIndex,
+		// 	Topics:       log.Topics,
+		// 	Data:         log.Data,
+		// 	Timestamp:    time.Now(),
+		// }
 
 		// Send webhook with trace context (non-blocking)
-		go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
-			if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
-				triggerSpan.RecordError(err, observability.WithErrorAttributes(
-					attribute.String("error.type", "webhook_delivery_failed"),
-				))
-				triggerSpan.SetStatus(codes.Error, "failed to send webhook")
-				w.logger.Error(traceCtx, "Failed to send webhook",
-					observability.String("request_id", sub.RequestID),
-					observability.String("webhook_url", sub.WebhookURL),
-					observability.Error(err))
-			} else {
-				triggerSpan.AddEvent("notification.sent")
-			}
-		}(subscriber, notification, ctx)
+		// TODO: Re-enable webhook notifications when fully implemented
+		// Temporarily disabled until webhook URL notifier is fully implemented
+		triggerSpan.AddEvent("notification.skipped", observability.WithEventAttributes(
+			attribute.String("reason", "webhook_notifications_temporarily_disabled"),
+		))
+		w.logger.Debug(ctx, "Webhook notification skipped (temporarily disabled)",
+			observability.String("request_id", subscriber.RequestID),
+			observability.String("webhook_url", subscriber.WebhookURL))
+		/*
+			go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
+				if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
+					triggerSpan.RecordError(err, observability.WithErrorAttributes(
+						attribute.String("error.type", "webhook_delivery_failed"),
+					))
+					triggerSpan.SetStatus(codes.Error, "failed to send webhook")
+					w.logger.Error(traceCtx, "Failed to send webhook",
+						observability.String("request_id", sub.RequestID),
+						observability.String("webhook_url", sub.WebhookURL),
+						observability.Error(err))
+				} else {
+					triggerSpan.AddEvent("notification.sent")
+				}
+			}(subscriber, notification, ctx)
+		*/
 	}
 
 	return nil
@@ -376,14 +386,14 @@ func hexToUint64(hexStr string) (uint64, error) {
 	return value.Uint64(), nil
 }
 
-// hexToUint converts hex string to uint
-func hexToUint(hexStr string) (uint, error) {
-	val, err := hexToUint64(hexStr)
-	if err != nil {
-		return 0, err
-	}
-	return uint(val), nil
-}
+// hexToUint converts hex string to uint (needed for webhook notifier)
+// func hexToUint(hexStr string) (uint, error) {
+// 	val, err := hexToUint64(hexStr)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	return uint(val), nil
+// }
 
 // uint64ToHex converts uint64 to hex string with 0x prefix
 func uint64ToHex(val uint64) string {

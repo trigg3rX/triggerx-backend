@@ -25,7 +25,7 @@ import (
 
 func main() {
 	// Initialize configuration
-	configPath := "config/services/task-dispatcher.yaml"
+	configPath := "config/services/taskdispatcher.yaml"
 	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}

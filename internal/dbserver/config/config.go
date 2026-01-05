@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
@@ -106,9 +105,6 @@ func Init(configPath string) error {
 	}
 	if err := yaml.ValidateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
-	}
-	if !cfg.devMode {
-		gin.SetMode(gin.ReleaseMode)
 	}
 	return nil
 }

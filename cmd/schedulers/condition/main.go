@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/gocql/gocql"
 
@@ -57,44 +55,20 @@ func main() {
 	logger.Info(ctx, "[1/6] Dependency: Observability Module Initialised")
 
 	// Initialize database connection (using same defaults as time scheduler for now)
-	// TODO: Add database config to condition scheduler config
-	dbHost := os.Getenv("DATABASE_HOST_ADDRESS")
-	if dbHost == "" {
-		dbHost = "localhost"
-	}
-	dbPort := os.Getenv("DATABASE_HOST_PORT")
-	if dbPort == "" {
-		dbPort = "9042"
-	}
-	dbConfig := database.NewConfig(dbHost, dbPort)
+	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
 	dbConfig.Consistency = gocql.Quorum
-	dbConfig.Timeout = 10 * time.Second
-	dbConfig.Retries = 3
-	dbConfig.ConnectWait = 5 * time.Second
+	dbConfig.Timeout = config.GetDatabaseTimeout()
+	dbConfig.Retries = config.GetDatabaseRetries()
+	dbConfig.ConnectWait = config.GetDatabaseConnectWait()
 	dbConfig.RetryConfig = retry.DefaultRetryConfig()
+	dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
 
-	// Configure authentication if provided
-	if username := os.Getenv("DATABASE_USERNAME"); username != "" {
-		if password := os.Getenv("DATABASE_PASSWORD"); password != "" {
-			dbConfig.WithAuthentication(username, password)
-		}
-	}
-
-	// Configure SSL/TLS if enabled
-	if os.Getenv("DATABASE_SSL_ENABLED") == "true" {
-		if certPath := os.Getenv("DATABASE_SSL_CERT_PATH"); certPath != "" {
-			dbConfig.WithSSLCertificates(
-				certPath,
-				os.Getenv("DATABASE_SSL_KEY_PATH"),
-				os.Getenv("DATABASE_SSL_CA_PATH"),
-				os.Getenv("DATABASE_SSL_INSECURE_SKIP_VERIFY") == "true",
-			)
-		} else {
-			dbConfig.WithSSL(&tls.Config{
-				InsecureSkipVerify: os.Getenv("DATABASE_SSL_INSECURE_SKIP_VERIFY") == "true",
-			})
-		}
-	}
+	// dbConfig.WithSSLCertificates(
+	// 	config.GetDatabaseSSLCertPath(),
+	// 	config.GetDatabaseSSLKeyPath(),
+	// 	config.GetDatabaseSSLCAPath(),
+	// 	config.GetDatabaseSSLInsecureSkipVerify(),
+	// )
 
 	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
@@ -114,7 +88,7 @@ func main() {
 	logger.Info(ctx, "[4/6] Dependency: Condition Scheduler Initialised")
 
 	// Setup API server (only /status endpoint and event webhook)
-	apiPort := "9007" // Different port from RPC server
+	apiPort := config.GetHTTPPort()
 	apiSrv := api.NewServer(apiPort, logger, conditionScheduler)
 	logger.Info(ctx, "[5/6] Dependency: API Server Initialised", observability.String("port", apiPort))
 

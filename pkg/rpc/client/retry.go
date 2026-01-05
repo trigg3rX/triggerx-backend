@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -66,8 +67,18 @@ func isRetryableError(err error, retryableCodes []codes.Code) bool {
 		return false
 	}
 
+	// Check for protocol mismatch errors (non-retryable)
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "http2: frame too large") ||
+		strings.Contains(errMsg, "frame header looked like an http/1.1 header") ||
+		strings.Contains(errMsg, "protocol mismatch") ||
+		strings.Contains(errMsg, "malformed http response") {
+		return false // Protocol mismatch - don't retry
+	}
+
 	// Check if it's a gRPC status error
 	if st, ok := status.FromError(err); ok {
+		// Protocol mismatch errors often come as Unavailable, but we check the message first
 		for _, code := range retryableCodes {
 			if st.Code() == code {
 				return true
@@ -75,9 +86,10 @@ func isRetryableError(err error, retryableCodes []codes.Code) bool {
 		}
 	}
 
-	// Check for connection errors
+	// Check for connection errors (only retry on canceled if it's a temporary issue)
 	if st, ok := status.FromError(err); ok && st.Code() == codes.Canceled {
-		return true
+		// Don't retry canceled errors by default - they're usually intentional
+		return false
 	}
 
 	return false

@@ -62,6 +62,10 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 			network = nodeclient.NetworkOptimismSepolia
 		case "421614":
 			network = nodeclient.NetworkArbitrumSepolia
+		case "8453":
+			network = nodeclient.NetworkBase
+		case "42161":
+			network = nodeclient.NetworkArbitrum
 		default:
 			logger.Warn(ctx, "Unknown chain ID, using custom URL", observability.String("chain_id", chainID))
 			// Create custom config with base URL

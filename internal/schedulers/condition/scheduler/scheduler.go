@@ -64,9 +64,16 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 		return nil, fmt.Errorf("failed to initialize Event Monitor Service gRPC client: %w", err)
 	}
 
+	// Initialize HTTP client for condition workers
+	httpClient, err := httppkg.NewHTTPClient(httppkg.DefaultHTTPRetryConfig())
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize HTTP client: %w", err)
+	}
+
 	// Build gRPC service URL for receiving event notifications
-	// Format: host:port (e.g., localhost:9006)
-	webhookURL := fmt.Sprintf("localhost:%s", config.GetHTTPPort())
+	// Format: host:port (e.g., localhost:9016)
+	webhookURL := fmt.Sprintf("localhost:%s", config.GetGRPCPort())
 
 	scheduler := &ConditionBasedScheduler{
 		ctx:                  ctx,
@@ -77,6 +84,7 @@ func NewConditionBasedScheduler(logger observability.Logger, tracer observabilit
 		jobDataStore:         make(map[string]*types.ScheduleConditionJobData),
 		lastTriggerTime:      make(map[string]time.Time),
 		chainClients:         make(map[string]*nodeclient.NodeClient),
+		HTTPClient:           httpClient,
 		taskRepository:       taskRepo,
 		taskDispatcherClient: taskDispatcherClient,
 		eventMonitorClient:   eventMonitorClient,
@@ -172,21 +180,36 @@ func (s *ConditionBasedScheduler) cleanupExpiredEventJobs(ctx context.Context) {
 			return
 		case <-ticker.C:
 			now := time.Now()
-			// Store original *types.BigInt pointers to properly key into maps later
-			expiredJobIDs := make([]*types.BigInt, 0)
+			// Store expired job data
+			expiredJobData := make([]*types.ScheduleConditionJobData, 0)
 
-			// Find expired event jobs
+			// Find expired event jobs from jobDataStore (event jobs are stored there, not in conditionWorkers)
 			s.workersMutex.RLock()
-			for jobIDBigInt, conditionWorker := range s.conditionWorkers {
-				if conditionWorker.ConditionWorkerData.ExpirationTime.Before(now) {
-					expiredJobIDs = append(expiredJobIDs, jobIDBigInt)
+			for _, jobData := range s.jobDataStore {
+				// Only process event jobs (task definition ID 3 or 4)
+				if (jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4) &&
+					!jobData.EventWorkerData.ExpirationTime.IsZero() &&
+					jobData.EventWorkerData.ExpirationTime.Before(now) {
+					expiredJobData = append(expiredJobData, jobData)
 				}
 			}
 			s.workersMutex.RUnlock()
 
-			if len(expiredJobIDs) > 0 {
+			// Unregister expired jobs
+			if len(expiredJobData) > 0 {
+				for _, jobData := range expiredJobData {
+					jobIDBigInt := jobData.JobID.ToBigInt()
+					if err := s.UnregisterEventJob(ctx, jobIDBigInt); err != nil {
+						s.logger.Warn(ctx, "Failed to unregister expired event job",
+							observability.String("job_id", jobData.JobID.String()),
+							observability.Error(err))
+					} else {
+						s.logger.Debug(ctx, "Unregistered expired event job",
+							observability.String("job_id", jobData.JobID.String()))
+					}
+				}
 				s.logger.Info(ctx, "Cleaned up expired event jobs",
-					observability.Int("count", len(expiredJobIDs)))
+					observability.Int("count", len(expiredJobData)))
 			}
 		}
 	}

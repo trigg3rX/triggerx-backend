@@ -153,12 +153,6 @@ func validateConfig() error {
 	if env.IsEmpty(cfg.pinataHost) {
 		return fmt.Errorf("invalid pinata host: %s", cfg.pinataHost)
 	}
-	if env.IsEmpty(cfg.notifyWebhookURL) {
-		return fmt.Errorf("invalid notify webhook URL: %s", cfg.notifyWebhookURL)
-	}
-	if env.IsEmpty(cfg.notifyWebhookToken) {
-		return fmt.Errorf("invalid notify webhook token: %s", cfg.notifyWebhookToken)
-	}
 	if env.IsEmpty(cfg.upstashRedisUrl) {
 		return fmt.Errorf("invalid upstash redis url: %s", cfg.upstashRedisUrl)
 	}

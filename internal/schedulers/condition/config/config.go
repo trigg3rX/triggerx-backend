@@ -33,6 +33,7 @@ type Config struct {
 
 	// YAML-loaded settings
 	workers WorkersConfig
+	databaseOperations yaml.DatabaseOperationsConfig
 	metrics              yaml.MetricsConfig
 	shutdown             yaml.ShutdownConfig
 	version              yaml.VersionConfig
@@ -44,6 +45,7 @@ type WorkersConfig struct {
 
 type YAMLConfig struct {
 	Workers  WorkersConfig  `yaml:"workers"`
+	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database_operations"`
 	Metrics  yaml.MetricsConfig `yaml:"metrics"`
 	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
 	Version  yaml.VersionConfig  `yaml:"version"`
@@ -73,6 +75,7 @@ func Init(configPath string) error {
 		eventMonitorRPCUrl:        env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
 		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 1234),
 		workers:                   yamlConfig.Workers,
+		databaseOperations:        yamlConfig.DatabaseOperations,
 		metrics:                   yamlConfig.Metrics,
 		shutdown:                  yamlConfig.Shutdown,
 		version:                   yamlConfig.Version,
@@ -140,6 +143,18 @@ func GetDatabaseHostAddress() string {
 
 func GetDatabaseHostPort() string {
 	return cfg.dbConnection.HostPort
+}
+
+func GetDatabaseTimeout() time.Duration {
+	return cfg.databaseOperations.Timeout.ToDuration()
+}
+
+func GetDatabaseRetries() int {
+	return cfg.databaseOperations.Retries
+}
+
+func GetDatabaseConnectWait() time.Duration {
+	return cfg.databaseOperations.ConnectWait.ToDuration()
 }
 
 func GetDatabaseUsername() string {

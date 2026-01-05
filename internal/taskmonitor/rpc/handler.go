@@ -12,10 +12,16 @@ import (
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 )
 
+// DatabaseClientInterface defines the interface for database operations needed by the handler
+type DatabaseClientInterface interface {
+	GetConsensusAddressByKeeperAddress(ctx context.Context, keeperAddress string) (string, error)
+}
+
 // TaskMonitorHandler implements the generic RPC handler interface
 type TaskMonitorHandler struct {
-	logger  observability.Logger
-	monitor TaskMonitorInterface
+	logger   observability.Logger
+	monitor  TaskMonitorInterface
+	dbClient DatabaseClientInterface
 }
 
 // TaskMonitorInterface defines the interface for task monitor operations
@@ -27,10 +33,11 @@ type TaskMonitorInterface interface {
 }
 
 // NewTaskMonitorHandler creates a new RPC handler
-func NewTaskMonitorHandler(logger observability.Logger, monitor TaskMonitorInterface) *TaskMonitorHandler {
+func NewTaskMonitorHandler(logger observability.Logger, monitor TaskMonitorInterface, dbClient DatabaseClientInterface) *TaskMonitorHandler {
 	return &TaskMonitorHandler{
-		logger:  logger,
-		monitor: monitor,
+		logger:   logger,
+		monitor:  monitor,
+		dbClient: dbClient,
 	}
 }
 
@@ -154,14 +161,22 @@ func (h *TaskMonitorHandler) validateStatusSignature(req *types.ReportTaskStatus
 		Error:               req.Error,
 	}
 
-	// Verify signature using JSON verification (same as other services)
-	isValid, err := cryptography.VerifySignatureFromJSON(signData, req.Signature, req.KeeperAddress)
+	// Get consensus address from keeper address
+	// The keeper signs with the consensus private key, so we need to verify against the consensus address
+	consensusAddress, err := h.dbClient.GetConsensusAddressByKeeperAddress(context.Background(), req.KeeperAddress)
+	if err != nil {
+		return fmt.Errorf("failed to get consensus address for keeper %s: %w", req.KeeperAddress, err)
+	}
+
+	// Verify signature using JSON verification with consensus address
+	// The signature was created with the consensus private key, so we verify against the consensus address
+	isValid, err := cryptography.VerifySignatureFromJSON(signData, req.Signature, consensusAddress)
 	if err != nil {
 		return fmt.Errorf("signature verification failed: %w", err)
 	}
 
 	if !isValid {
-		return fmt.Errorf("invalid signature for keeper %s", req.KeeperAddress)
+		return fmt.Errorf("invalid signature for keeper %s (consensus address: %s)", req.KeeperAddress, consensusAddress)
 	}
 
 	return nil

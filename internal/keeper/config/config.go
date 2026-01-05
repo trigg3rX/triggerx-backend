@@ -65,9 +65,6 @@ type Config struct {
 	healthRPCUrl      string
 	taskMonitorRPCUrl string
 
-	l1Chain string
-	l2Chain string
-
 	// AVS Contract Address
 	avsGovernanceAddress     string
 	attestationCenterAddress string
@@ -139,14 +136,10 @@ func Init(configPath string) error {
 		taskMonitorRPCUrl:    env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
 		tlsProofHost:         "www.google.com",
 		tlsProofPort:         "443",
-		// l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
-		// l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		// avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
-		// attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0x21B099554F6D27E47D57991D2B44251DaFa9323b"),
-		l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
-		l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
-		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
-		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
+		// Test Attestation Center Address for Base Sepolia
+		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
+		// Base Mainnet Attestation Center Address
+		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
 		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
 		otelExporterEndpoint:     env.GetOTELExporterEndpoint(),
 		enablePrometheusExport:   env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),

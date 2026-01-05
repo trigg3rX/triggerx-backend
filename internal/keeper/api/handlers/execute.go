@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/keeper/config"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -87,10 +88,33 @@ func (h *TaskHandler) ExecuteTask(c *gin.Context) {
 		"message":  "Task accepted for processing. Status will be reported to TaskMonitor.",
 	})
 
+	// Create a detached context that preserves trace context but isn't tied to HTTP request lifecycle
+	// This prevents the context from being canceled when the HTTP handler returns
+	asyncCtx := h.createDetachedContext(ctx)
+
 	// Execute task asynchronously in a goroutine
 	// Make a copy of requestData to avoid race conditions
 	taskData := requestData
-	go h.executeTaskAsync(ctx, taskData, traceID)
+	go h.executeTaskAsync(asyncCtx, taskData, traceID)
+}
+
+// createDetachedContext creates a new context that preserves the trace context
+// but is not tied to the HTTP request lifecycle. This allows async operations
+// to continue even after the HTTP handler returns.
+func (h *TaskHandler) createDetachedContext(ctx context.Context) context.Context {
+	// Extract span context from the current context
+	span := trace.SpanFromContext(ctx)
+	spanContext := span.SpanContext()
+
+	// Create a new background context (not tied to HTTP request)
+	detachedCtx := context.Background()
+
+	// Inject the span context into the new context to preserve tracing
+	if spanContext.HasTraceID() {
+		detachedCtx = trace.ContextWithSpanContext(detachedCtx, spanContext)
+	}
+
+	return detachedCtx
 }
 
 // executeTaskAsync executes the task in background and reports status to TaskMonitor

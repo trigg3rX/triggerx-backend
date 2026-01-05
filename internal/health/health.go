@@ -185,7 +185,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 				config.GetAlchemyAPIKey(),
 				config.GetPinataHost(),
 				config.GetPinataJWT(),
-				config.GetManagerSigningAddress(),
+				config.GetDispatcherSigningAddress(),
 				config.GetImuaTaskExecutionAddress(),
 			)
 		} else {
@@ -195,7 +195,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 					config.GetAlchemyAPIKey(),
 					config.GetPinataHost(),
 					config.GetPinataJWT(),
-					config.GetManagerSigningAddress(),
+					config.GetDispatcherSigningAddress(),
 					config.GetTaskExecutionAddress(),
 				)
 			} else {
@@ -204,7 +204,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 					config.GetAlchemyAPIKey(),
 					config.GetPinataHost(),
 					config.GetPinataJWT(),
-					config.GetManagerSigningAddress(),
+					config.GetDispatcherSigningAddress(),
 					config.GetTestTaskExecutionAddress(),
 				)
 			}

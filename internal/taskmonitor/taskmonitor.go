@@ -379,6 +379,11 @@ func (tm *TaskManager) GetTaskStreamManager() *tasks.TaskStreamManager {
 	return tm.taskStreamManager
 }
 
+// GetDatabaseClient returns the database client
+func (tm *TaskManager) GetDatabaseClient() *database.DatabaseClient {
+	return tm.dbClient
+}
+
 // HealthCheck performs a comprehensive health check
 func (tm *TaskManager) HealthCheck() map[string]interface{} {
 	tm.logger.Debug(tm.ctx, "Performing TaskManager health check")

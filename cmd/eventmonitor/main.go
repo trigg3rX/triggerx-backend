@@ -18,7 +18,7 @@ import (
 
 func main() {
 	// Initialize configuration
-	configPath := "config/services/event-monitor.yaml"
+	configPath := "config/services/eventmonitor.yaml"
 	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}

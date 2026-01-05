@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
@@ -34,8 +33,8 @@ type Config struct {
 	pinataHost string
 	pinataJWT  string
 
-	// Manager Signing Address
-	managerSigningAddress string
+	// Dispatcher Signing Address
+	dispatcherSigningAddress string
 
 	// Etherscan API Key
 	etherscanAPIKey string
@@ -112,7 +111,7 @@ func Init(configPath string) error {
 		emailPassword:            env.GetEnvString("EMAIL_PASS", ""),
 		pinataHost:               env.GetEnvString("PINATA_HOST", ""),
 		pinataJWT:                env.GetEnvString("PINATA_JWT", ""),
-		managerSigningAddress:    env.GetEnvString("MANAGER_SIGNING_ADDRESS", ""),
+		dispatcherSigningAddress:    env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
 		etherscanAPIKey:          env.GetEnvString("ETHERSCAN_API_KEY", ""),
 		alchemyAPIKey:            env.GetEnvString("HEALTH_ALCHEMY_API_KEY", ""),
 		taskExecutionAddress:     env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
@@ -128,9 +127,6 @@ func Init(configPath string) error {
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
-	}
-	if !cfg.devMode {
-		gin.SetMode(gin.ReleaseMode)
 	}
 	return nil
 }
@@ -171,6 +167,9 @@ func validateConfig() error {
 	}
 	if !env.IsValidEthAddress(cfg.imuaTaskExecutionAddress) {
 		return fmt.Errorf("invalid Imua task execution address: %s", cfg.imuaTaskExecutionAddress)
+	}
+	if !env.IsValidEthAddress(cfg.dispatcherSigningAddress) {
+		return fmt.Errorf("invalid dispatcher signing address: %s", cfg.dispatcherSigningAddress)
 	}
 	if !cfg.devMode {
 		if !env.IsValidEmail(cfg.emailUser) {
@@ -302,8 +301,8 @@ func GetImuaTaskExecutionAddress() string {
 	return cfg.imuaTaskExecutionAddress
 }
 
-func GetManagerSigningAddress() string {
-	return cfg.managerSigningAddress
+func GetDispatcherSigningAddress() string {
+	return cfg.dispatcherSigningAddress
 }
 
 func GetHealthCheckKeeperTimeout() time.Duration {

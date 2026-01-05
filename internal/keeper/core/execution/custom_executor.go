@@ -66,9 +66,47 @@ func (e *TaskExecutor) ExecuteCustomScript(
 	}
 
 	// Parse script output (JSON from stdout)
+	// Trim whitespace and extract JSON (may have extra content before/after)
+	cleanOutput := strings.TrimSpace(result.Output)
+	
+	// Try to find JSON object in the output (handle cases where there's extra text)
+	jsonStart := strings.Index(cleanOutput, "{")
+	if jsonStart == -1 {
+		return nil, nil, nil, fmt.Errorf("failed to parse script output: no JSON object found in output")
+	}
+	// Extract from first '{' to the end, then find matching closing brace
+	jsonStr := cleanOutput[jsonStart:]
+	// Find the last '}' that matches the first '{'
+	braceCount := 0
+	jsonEnd := -1
+	for i, char := range jsonStr {
+		if char == '{' {
+			braceCount++
+		} else if char == '}' {
+			braceCount--
+			if braceCount == 0 {
+				jsonEnd = i + 1
+				break
+			}
+		}
+	}
+	if jsonEnd == -1 {
+		// Fallback: try parsing the entire string from jsonStart
+		jsonEnd = len(jsonStr)
+	}
+	jsonStr = jsonStr[:jsonEnd]
+	
 	var scriptOutput types.CustomScriptOutput
-	err = json.Unmarshal([]byte(result.Output), &scriptOutput)
+	err = json.Unmarshal([]byte(jsonStr), &scriptOutput)
 	if err != nil {
+		// Log the actual output for debugging (first 500 chars)
+		outputPreview := cleanOutput
+		if len(outputPreview) > 500 {
+			outputPreview = outputPreview[:500] + "..."
+		}
+		e.logger.Error(ctx, "Failed to parse script output", 
+			observability.String("output_preview", outputPreview),
+			observability.Error(err))
 		return nil, nil, nil, fmt.Errorf("failed to parse script output: %w", err)
 	}
 

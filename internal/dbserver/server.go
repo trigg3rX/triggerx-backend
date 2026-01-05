@@ -41,9 +41,7 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, db *database.Connection, logger observability.Logger, tracer observability.Tracer, obsMetrics observability.Metrics) *Server {
-	if !config.IsDevMode() {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
 	router.Use(gin.Recovery())

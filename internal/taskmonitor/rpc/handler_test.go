@@ -34,7 +34,7 @@ func (m *MockTaskMonitor) ReportConsensusEvent(ctx context.Context, req *types.R
 func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor)
+	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
 
 	tests := []struct {
 		name          string
@@ -170,7 +170,7 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor)
+	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
 
 	methods := handler.GetMethods()
 
@@ -183,7 +183,7 @@ func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 func TestConvertMapToStatusRequest(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor)
+	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
 
 	tests := []struct {
 		name        string

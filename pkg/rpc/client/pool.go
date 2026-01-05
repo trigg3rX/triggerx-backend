@@ -15,11 +15,11 @@ import (
 
 // ConnectionPool manages a pool of gRPC connections
 type ConnectionPool struct {
-	address string
-	maxSize int
-	timeout time.Duration
-	logger  observability.Logger
-	tracer  observability.Tracer
+	address     string
+	maxSize     int
+	timeout     time.Duration
+	logger      observability.Logger
+	tracer      observability.Tracer
 	serviceName string
 	connections chan *grpc.ClientConn
 	mu          sync.RWMutex
@@ -41,9 +41,9 @@ func NewConnectionPool(maxSize int, timeout time.Duration, logger observability.
 // GetConnection gets a connection from the pool
 func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*grpc.ClientConn, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	if p.closed {
+		p.mu.Unlock()
 		return nil, fmt.Errorf("connection pool is closed")
 	}
 
@@ -55,27 +55,49 @@ func (p *ConnectionPool) GetConnection(ctx context.Context, address string) (*gr
 	// Try to get existing connection
 	select {
 	case conn := <-p.connections:
-		// Test connection health
+		p.mu.Unlock()
+		// Test connection health (outside lock to avoid deadlock)
 		if p.isConnectionHealthy(conn) {
 			return conn, nil
 		}
 		// Connection is unhealthy, close it and create new one
 		if err := conn.Close(); err != nil {
-			p.logger.Error(ctx, "Failed to close connection", observability.Error(err))
+			p.logger.Error(ctx, "Failed to close unhealthy connection", observability.Error(err))
 		}
+		// Recursively try again (will create new connection if pool not full)
+		return p.GetConnection(ctx, address)
 	default:
 		// No connection available, create new one if under limit
-		if len(p.connections) < p.maxSize {
+		poolSize := len(p.connections)
+		if poolSize < p.maxSize {
+			p.mu.Unlock()
 			return p.createConnection(ctx, address)
 		}
+		// Pool is full, unlock and wait
+		p.mu.Unlock()
 	}
 
-	// Wait for available connection
+	// Wait for available connection with pool timeout (outside lock)
+	poolCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
 	select {
 	case conn := <-p.connections:
-		return conn, nil
-	case <-ctx.Done():
-		return nil, fmt.Errorf("timeout waiting for connection: %w", ctx.Err())
+		// Verify connection is healthy before returning
+		if p.isConnectionHealthy(conn) {
+			return conn, nil
+		}
+		// Connection is unhealthy, close it and try again
+		if err := conn.Close(); err != nil {
+			p.logger.Error(ctx, "Failed to close unhealthy connection", observability.Error(err))
+		}
+		// Recursively try again
+		return p.GetConnection(ctx, address)
+	case <-poolCtx.Done():
+		if poolCtx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("timeout waiting for connection from pool (timeout: %v)", p.timeout)
+		}
+		return nil, fmt.Errorf("timeout waiting for connection: %w", poolCtx.Err())
 	}
 }
 

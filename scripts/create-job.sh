@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ $# -ne 1 ]; then
-  echo "Usage: $0 <job_type (1-6)>"
+  echo "Usage: $0 <job_type (1-7)>"
   exit 1
 fi
 
@@ -12,6 +12,7 @@ TEST_CONTRACT_ADDRESS=0xa92f95FDeF3DB6B2aA115548376c7a2429711497
 ALCHEMY_API_KEY=
 RPC_URL=https://arb-sepolia.g.alchemy.com/v2/$ALCHEMY_API_KEY
 IPFS_URL=https://teal-random-koala-993.mypinata.cloud/ipfs/bafkreif426p7t7takzhw3g6we2h6wsvf27p5jxj3gaiynqf22p3jvhx4la
+CUSTOM_IPFS_URL=https://aqua-tough-swift-909.mypinata.cloud/ipfs/bafkreidvy5nosknw2aqp7dgtdw3cipgxas3fo2ae5q7ttuak5nnoaaluge
 
 read -r -d '' TEST_EVENT_ABI <<'EOF'
 [
@@ -59,8 +60,8 @@ EOF
 
 TASK_DEFINITION_ID=$1
 
-if ! [[ "$TASK_DEFINITION_ID" =~ ^[1-6]$ ]]; then
-  echo "Error: job_type must be an integer between 1 and 6."
+if ! [[ "$TASK_DEFINITION_ID" =~ ^[1-7]$ ]]; then
+  echo "Error: job_type must be an integer between 1 and 7."
   exit 1
 fi
 
@@ -79,6 +80,7 @@ case $TASK_DEFINITION_ID in
     TIME_FRAME=35
     TIME_INTERVAL=32
     ARG_TYPE=1
+    LANGUAGE="go"
     echo "Creating Time-based Static Args Job..."
     ;;
   2)
@@ -86,21 +88,24 @@ case $TASK_DEFINITION_ID in
     TIME_FRAME=35
     TIME_INTERVAL=32
     ARG_TYPE=2
+    LANGUAGE="go"
     DYNAMIC_ARGUMENTS_SCRIPT_URL=$IPFS_URL
     echo "Creating Time-based Dynamic Args Job..."
     ;;
   3)
     TASK_DEFINITION_ID=3 # Event Based, Static Args
-    TIME_FRAME=2500
+    TIME_FRAME=60
     TIME_INTERVAL=0
     ARG_TYPE=1
+    LANGUAGE="go"
     echo "Creating Event-based Static Args Job..."
     ;;
   4)
     TASK_DEFINITION_ID=4 # Event Based, Dynamic Args
-    TIME_FRAME=2500
+    TIME_FRAME=60
     TIME_INTERVAL=0
     ARG_TYPE=2
+    LANGUAGE="go"
     DYNAMIC_ARGUMENTS_SCRIPT_URL=$IPFS_URL
     echo "Creating Event-based Dynamic Args Job..."
     ;;
@@ -109,6 +114,7 @@ case $TASK_DEFINITION_ID in
     TIME_FRAME=20
     TIME_INTERVAL=0
     ARG_TYPE=1
+    LANGUAGE="go"
     echo "Creating Condition-based Static Args Job..."
     ;;
   6)
@@ -118,6 +124,15 @@ case $TASK_DEFINITION_ID in
     ARG_TYPE=2
     DYNAMIC_ARGUMENTS_SCRIPT_URL=$IPFS_URL
     echo "Creating Condition-based Dynamic Args Job..."
+    ;;
+  7)
+    TASK_DEFINITION_ID=7 # Custom
+    TIME_FRAME=36
+    TIME_INTERVAL=30
+    ARG_TYPE=2
+    LANGUAGE="ts"
+    DYNAMIC_ARGUMENTS_SCRIPT_URL=$CUSTOM_IPFS_URL
+    echo "Creating Custom Script Job..."
     ;;
 esac
 
@@ -140,9 +155,9 @@ case $TASK_DEFINITION_ID in
   1)
     JOB_DATA=$(cast abi-encode "encode(uint256)" $TIME_INTERVAL)
     ;;
-  2)
+  2|7)
     if [ -z "$IPFS_HASH_BYTES32" ]; then
-      echo "Error: dynamic arguments script URL required for job type 2"
+      echo "Error: dynamic arguments script URL required for job type $TASK_DEFINITION_ID"
       exit 1
     fi
     JOB_DATA=$(cast abi-encode "encode(uint256,bytes32)" $TIME_INTERVAL $IPFS_HASH_BYTES32)
@@ -213,9 +228,18 @@ echo "Job created with ID: $JOB_ID"
 
 sleep 3
 
+# Generate trace ID (UUID format if uuidgen is available, otherwise use random hex)
+if command -v uuidgen >/dev/null 2>&1; then
+  TRACE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+else
+  # Generate a random 32-character hex string as fallback
+  TRACE_ID=$(openssl rand -hex 16)
+fi
+
 curl -X POST http://localhost:9002/api/jobs \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: ADMIN" \
+  -H "X-Trace-ID: $TRACE_ID" \
   -d "[
     {
       \"user_address\": \"0x7db951c0e6d8906687b459427ea3f3f2b456473b\",
@@ -226,6 +250,7 @@ curl -X POST http://localhost:9002/api/jobs \
       \"job_title\": \"$JOB_TITLE\",
       \"task_definition_id\": $TASK_DEFINITION_ID,
       \"custom\": true,
+      \"language\": \"$LANGUAGE\",
       \"time_frame\": $TIME_FRAME,
       \"recurring\": false,
       \"job_cost_prediction\": 0.1,
@@ -236,9 +261,9 @@ curl -X POST http://localhost:9002/api/jobs \
       \"specific_schedule\": \"2025-01-01 00:00:00\",
       \"trigger_chain_id\": \"421614\",
       \"trigger_contract_address\": \"$TEST_CONTRACT_ADDRESS\",
-      \"trigger_event\": \"Transfer(address,address,uint256)\",
-      \"event_filter_para_name\": \"to\",
-      \"event_filter_value\": \"0xC9dC9c361c248fFA0890d7E1a263247670914980\",
+      \"trigger_event\": \"CounterIncremented(uint256,uint256,uint256)\",
+      \"event_filter_para_name\": \"\",
+      \"event_filter_value\": \"\",
       \"condition_type\": \"less_than\",
       \"upper_limit\": 92,
       \"lower_limit\": 89,
@@ -259,16 +284,14 @@ curl -X POST http://localhost:9002/api/jobs \
 echo "\n"
 
 if [ $TASK_DEFINITION_ID -eq 3 ] || [ $TASK_DEFINITION_ID -eq 4 ]; then
-  sleep 5 
+  sleep 10 
   echo "\nCalling increment() to trigger the event..."
 
   cast send \
-    --async \
     --chain $CHAIN_ID \
     --rpc-url https://arb-sepolia.g.alchemy.com/v2/$ALCHEMY_API_KEY \
     --private-key $PRIVATE_KEY \
-    $TEST_CONTRACT_ADDRESS "increment()" \
-    -- --broadcast
+    $TEST_CONTRACT_ADDRESS "increment()"
 fi
 
 echo "\n"
