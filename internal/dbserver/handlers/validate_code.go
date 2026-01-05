@@ -24,7 +24,7 @@ type ValidateCodeRequest struct {
 	IsSafe           bool   `json:"is_safe"`
 }
 
-type ValidateCodeResponse struct { 
+type ValidateCodeResponse struct {
 	Executable bool   `json:"executable"`
 	Output     string `json:"output"`
 	Error      string `json:"error,omitempty"`
@@ -54,14 +54,19 @@ func (h *Handler) ValidateCodeInternal(ctx context.Context, req ValidateCodeRequ
 				// Return the cached response directly
 				return cachedResp, nil
 			}
-			// If unmarshal fails, continue with validation
-			h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to unmarshal cached result, proceeding with validation")
+			// If unmarshal fails, log the error and continue with validation
+			h.logger.Warn(ctx, "[ValidateCodeInternal] Failed to unmarshal cached result, proceeding with validation",
+				observability.Error(err))
 		} else if err != nil {
 			h.logger.Warn(ctx, "[ValidateCodeInternal] Error checking cache", observability.Error(err))
 		}
 	}
 
-	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language, alchemyAPIKey)
+	// Pass task_definition_id in metadata so fee calculation knows the correct task type
+	metadata := map[string]string{
+		"task_definition_id": fmt.Sprintf("%d", req.TaskDefinitionID),
+	}
+	result, err := h.dockerExecutor.ExecuteSource(ctx, req.Code, req.Language, alchemyAPIKey, metadata)
 	if err != nil {
 		// If IsSafe is false, SafeMatch is always true
 		safeMatch := !req.IsSafe

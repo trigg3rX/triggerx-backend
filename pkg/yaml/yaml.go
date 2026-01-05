@@ -36,7 +36,7 @@ func (d *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // MarshalYAML implements custom YAML marshaling for Duration
 func (d Duration) MarshalYAML() (interface{}, error) {
-	return d.Duration.String(), nil
+	return d.String(), nil
 }
 
 // ToDuration returns the underlying time.Duration

@@ -37,6 +37,7 @@ func NewClient(logger observability.Logger, tracer observability.Tracer) (*Clien
 	return &Client{
 		rpcClient: rpcClient,
 		logger:    logger,
+		tracer:    tracer,
 	}, nil
 }
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -48,7 +49,7 @@ func (h *TaskHandler) ValidateTask(c *gin.Context) {
 	isValid := false
 	var validationErr error
 
-	isValid, validationErr = h.validator.ValidateTask(c.Request.Context(), taskRequest.Data, traceID)
+	isValid, validationErr = h.validator.ValidateTask(context.WithoutCancel(c.Request.Context()), taskRequest.Data, traceID)
 
 	if validationErr != nil {
 		h.logger.Error(c.Request.Context(), "Validation error", observability.Error(validationErr), observability.String("trace_id", traceID))

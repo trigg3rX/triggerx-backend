@@ -122,7 +122,7 @@ func (h *Handler) GetTaskFees(c *gin.Context) {
 		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Validation failed: Invalid task_definition_id", observability.String("task_definition_id", taskDefID))
 	}
 
-	totalFee, currentTotalFee, err := h.CalculateTaskFees(c.Request.Context(), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
+	totalFee, currentTotalFee, err := h.CalculateTaskFees(context.WithoutCancel(c.Request.Context()), ipfsURLs, taskDefinitionID, targetChainID, targetContractAddress, targetFunction, abi, args, fromAddress)
 	if err != nil {
 		h.logger.Warn(c.Request.Context(), "[GetTaskFees] Failed to calculate fees", observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

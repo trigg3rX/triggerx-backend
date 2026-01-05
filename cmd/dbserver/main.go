@@ -25,7 +25,6 @@ func main() {
 	// Initialize configuration
 	configPath := "config/services/dbserver.yaml"
 	if err := config.Init(configPath); err != nil {
-		os.Stderr.Sync()
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -113,7 +112,9 @@ func main() {
 	tracer := obs.Tracer()
 	dbServer := dbserver.NewServer(ctx, conn, logger, tracer, obsMetrics)
 
-	dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor)
+	if err := dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor); err != nil {
+		logger.Fatal(ctx, "Failed to register routes", observability.Error(err))
+	}
 	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
 
 	// Start metrics collector

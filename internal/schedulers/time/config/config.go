@@ -74,6 +74,7 @@ func Init(configPath string) error {
 		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
 		timeSchedulerID:      env.GetEnvInt("TIME_SCHEDULER_ID", 1234),
 		polling:              yamlConfig.Polling,
+		metrics:              yamlConfig.Metrics,
 		shutdown:             yamlConfig.Shutdown,
 		version:              yamlConfig.Version,
 	}
@@ -194,6 +195,10 @@ func GetTaskCacheTTL() time.Duration {
 
 func GetDuplicateTaskWindow() time.Duration {
 	return cfg.polling.DuplicateTaskWindow.ToDuration()
+}
+
+func GetMetricsUpdateInterval() time.Duration {
+	return cfg.metrics.UpdateInterval.ToDuration()
 }
 
 func GetShutdownTimeout() time.Duration {

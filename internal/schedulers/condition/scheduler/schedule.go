@@ -344,7 +344,8 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 	originalJobID := jobData.JobID
 
 	// Determine job type and handle accordingly
-	if jobData.TaskDefinitionID == 3 || jobData.TaskDefinitionID == 4 {
+	switch jobData.TaskDefinitionID {
+	case 3, 4:
 		// Event-based job: unregister from Event Monitor Service
 		if s.eventMonitorClient != nil {
 			if err := s.eventMonitorClient.Unregister(ctx, jobIDStr); err != nil {
@@ -356,7 +357,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 		}
 		delete(s.jobDataStore, jobIDStr)    // Clean up job data
 		delete(s.lastTriggerTime, jobIDStr) // Clean up last trigger time tracking
-	} else if jobData.TaskDefinitionID == 5 || jobData.TaskDefinitionID == 6 {
+	case 5, 6:
 		// Condition-based job: stop the worker
 		if conditionWorker, exists := s.conditionWorkers[originalJobID]; exists {
 			// Handle websocket workers (stored as nil) - they stop via context cancellation
@@ -374,7 +375,7 @@ func (s *ConditionBasedScheduler) UnscheduleJob(ctx context.Context, jobID *big.
 		}
 		delete(s.jobDataStore, jobIDStr)    // Clean up job data
 		delete(s.lastTriggerTime, jobIDStr) // Clean up last trigger time tracking
-	} else {
+	default:
 		metrics.TrackCriticalError("job_not_found")
 		return fmt.Errorf("job %d has unsupported task definition id: %d", jobID, jobData.TaskDefinitionID)
 	}
