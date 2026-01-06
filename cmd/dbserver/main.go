@@ -134,7 +134,7 @@ func main() {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
-	logger.Info(ctx, "[2/2] Process: HTTP Server Started")
+	logger.Info(ctx, "[2/2] Process: HTTP Server Started", observability.String("port", config.GetHTTPPort()))
 
 	close(ready)
 

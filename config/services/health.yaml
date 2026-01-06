@@ -31,4 +31,29 @@ shutdown:
   timeout: "30s"                    # Graceful shutdown timeout
 
 version:
-  version: "1.0.0"                  # Service version
+  version: "0.3.0"                  # Service version
+
+# Keeper version compatibility configuration
+keeper_versions:
+  # Latest versions with full functionality (return msgData with no warning)
+  latest:
+    - "1.1.0"
+    - "1.1.1"
+    - "1.1.2"
+    - "0.3.0"
+    - "0.3.1"
+    - "0.3.2"
+    - "0.3.3"
+    - "0.3.4"
+    - "0.3.5"
+    - "0.3.6"
+  
+  # Versions that use TaskExecutionAddress instead of TestTaskExecutionAddress
+  use_task_execution_address:
+    - "1.0.0"
+    - "1.0.1"
+    - "1.1.1"
+    - "1.1.2"
+  
+  # Default upgrade message for very old versions
+  upgrade_message: "UPGRADE TO v1.1.1 for full functionality"

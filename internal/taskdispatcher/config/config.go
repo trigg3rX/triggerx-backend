@@ -174,11 +174,40 @@ func GetHealthRPCUrl() string {
 }
 
 func GetAggregatorRPCUrl() string {
-	return cfg.aggregatorRPCUrl
+	url := cfg.aggregatorRPCUrl
+	// Auto-prepend http:// if scheme is missing (for backward compatibility)
+	if url != "" && !hasScheme(url) {
+		return "http://" + url
+	}
+	return url
 }
 
 func GetTestAggregatorRPCUrl() string {
-	return cfg.testAggregatorRPCUrl
+	url := cfg.testAggregatorRPCUrl
+	// Auto-prepend http:// if scheme is missing (for backward compatibility)
+	if url != "" && !hasScheme(url) {
+		return "http://" + url
+	}
+	return url
+}
+
+// hasScheme checks if a URL string has a scheme (http://, https://, etc.)
+func hasScheme(url string) bool {
+	for i := 0; i < len(url); i++ {
+		if url[i] == ':' {
+			// Check if it's followed by // (scheme separator)
+			if i+2 < len(url) && url[i+1] == '/' && url[i+2] == '/' {
+				return true
+			}
+			// If we hit a colon before //, it's likely a port, not a scheme
+			return false
+		}
+		if url[i] == '/' {
+			// If we hit / before :, no scheme
+			return false
+		}
+	}
+	return false
 }
 
 func GetPerformerAPIUrl() string {

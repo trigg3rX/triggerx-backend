@@ -10,17 +10,8 @@ health:
   check_interval: "60s"             # Health check interval
   request_timeout: "10s"             # Health client request timeout
 
-# Common Configuration across all services
-database:
-  timeout: "10s"                    # Database operation timeout
-  connect_wait: "5s"                # Database connection wait time
-  retries: 3                        # Database retry attempts
-
-metrics:
-  update_interval: "30s"            # Metrics update interval
-
 shutdown:
   timeout: "30s"                    # Graceful shutdown timeout
 
 version:
-  version: "1.0.0"                  # Service version
+  version: "0.3.6"                  # Service version

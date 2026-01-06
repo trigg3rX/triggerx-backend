@@ -14,11 +14,6 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
-const (
-	version = "1.1.0"
-	isImua  = false
-)
-
 type Config struct {
 	devMode bool
 
@@ -80,6 +75,7 @@ type Config struct {
 	api      APIConfig
 	health   HealthConfig
 	shutdown ShutdownConfig
+	version  yaml.VersionConfig
 }
 
 type APIConfig struct {
@@ -97,9 +93,10 @@ type ShutdownConfig struct {
 }
 
 type YAMLConfig struct {
-	API      APIConfig      `yaml:"api"`
-	Health   HealthConfig   `yaml:"health"`
-	Shutdown ShutdownConfig `yaml:"shutdown"`
+	API      APIConfig          `yaml:"api"`
+	Health   HealthConfig       `yaml:"health"`
+	Shutdown ShutdownConfig     `yaml:"shutdown"`
+	Version  yaml.VersionConfig `yaml:"version"`
 }
 
 var cfg Config
@@ -136,7 +133,7 @@ func Init(configPath string) error {
 		tlsProofHost:         "www.google.com",
 		tlsProofPort:         "443",
 		// Test Attestation Center Address for Base Sepolia
-		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
+		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
 		// Base Mainnet Attestation Center Address
 		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
 		othenticBootstrapID:    env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
@@ -145,9 +142,13 @@ func Init(configPath string) error {
 		api:                    yamlConfig.API,
 		health:                 yamlConfig.Health,
 		shutdown:               yamlConfig.Shutdown,
+		version:                yamlConfig.Version,
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
+	}
+	if err := yaml.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
@@ -249,7 +250,31 @@ func GetKeeperRPCPort() string {
 }
 
 func GetAggregatorRPCUrl() string {
-	return cfg.aggregatorRPCUrl
+	url := cfg.aggregatorRPCUrl
+	// Auto-prepend http:// if scheme is missing (for backward compatibility)
+	if url != "" && !hasScheme(url) {
+		return "http://" + url
+	}
+	return url
+}
+
+// hasScheme checks if a URL string has a scheme (http://, https://, etc.)
+func hasScheme(url string) bool {
+	for i := 0; i < len(url); i++ {
+		if url[i] == ':' {
+			// Check if it's followed by // (scheme separator)
+			if i+2 < len(url) && url[i+1] == '/' && url[i+2] == '/' {
+				return true
+			}
+			// If we hit a colon before //, it's likely a port, not a scheme
+			return false
+		}
+		if url[i] == '/' {
+			// If we hit / before :, no scheme
+			return false
+		}
+	}
+	return false
 }
 
 func GetHealthRPCUrl() string {
@@ -269,11 +294,12 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
 }
 
 func IsImua() bool {
-	return isImua
+	// Check environment variable, default to false
+	return env.GetEnvBool("IS_IMUA", false)
 }
 
 // IPFS configuration

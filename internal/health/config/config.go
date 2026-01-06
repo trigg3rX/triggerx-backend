@@ -48,13 +48,14 @@ type Config struct {
 	imuaTaskExecutionAddress string
 
 	// YAML-loaded settings
-	healthCheck  HealthCheckConfig
-	notification NotificationConfig
-	rpc          RPCConfig
-	databaseOperations   yaml.DatabaseOperationsConfig
-	metrics              yaml.MetricsConfig
-	shutdown             yaml.ShutdownConfig
-	version              yaml.VersionConfig
+	healthCheck        HealthCheckConfig
+	notification       NotificationConfig
+	rpc                RPCConfig
+	databaseOperations yaml.DatabaseOperationsConfig
+	metrics            yaml.MetricsConfig
+	shutdown           yaml.ShutdownConfig
+	version            yaml.VersionConfig
+	keeperVersions     KeeperVersionsConfig
 }
 
 type HealthCheckConfig struct {
@@ -76,14 +77,21 @@ type RPCConfig struct {
 	HealthTimeout       yaml.Duration `yaml:"health_timeout"`
 }
 
+type KeeperVersionsConfig struct {
+	Latest                  []string `yaml:"latest"`
+	UseTaskExecutionAddress []string `yaml:"use_task_execution_address"`
+	UpgradeMessage          string   `yaml:"upgrade_message"`
+}
+
 type YAMLConfig struct {
-	HealthCheck  HealthCheckConfig  `yaml:"health_check"`
-	Notification NotificationConfig `yaml:"notification"`
-	RPC          RPCConfig          `yaml:"rpc"`
-	DatabaseOperations yaml.DatabaseOperationsConfig     `yaml:"database"`
-	Metrics      yaml.MetricsConfig      `yaml:"metrics"`
-	Shutdown     yaml.ShutdownConfig     `yaml:"shutdown"`
-	Version      yaml.VersionConfig      `yaml:"version"`
+	HealthCheck        HealthCheckConfig             `yaml:"health_check"`
+	Notification       NotificationConfig            `yaml:"notification"`
+	RPC                RPCConfig                     `yaml:"rpc"`
+	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database"`
+	Metrics            yaml.MetricsConfig            `yaml:"metrics"`
+	Shutdown           yaml.ShutdownConfig           `yaml:"shutdown"`
+	Version            yaml.VersionConfig            `yaml:"version"`
+	KeeperVersions     KeeperVersionsConfig          `yaml:"keeper_versions"`
 }
 
 var cfg Config
@@ -104,26 +112,27 @@ func Init(configPath string) error {
 		devMode:                  env.GetEnvBool("DEV_MODE", false),
 		httpPort:                 env.GetEnvString("HEALTH_HTTP_PORT", "9004"),
 		grpcPort:                 env.GetEnvString("HEALTH_GRPC_PORT", "9014"),
-		dbConnection:              env.GetDatabaseConfig(),
+		dbConnection:             env.GetDatabaseConfig(),
 		otelExporterEndpoint:     env.GetOTELExporterEndpoint(),
 		botToken:                 env.GetEnvString("BOT_TOKEN", ""),
 		emailUser:                env.GetEnvString("EMAIL_USER", ""),
 		emailPassword:            env.GetEnvString("EMAIL_PASS", ""),
 		pinataHost:               env.GetEnvString("PINATA_HOST", ""),
 		pinataJWT:                env.GetEnvString("PINATA_JWT", ""),
-		dispatcherSigningAddress:    env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
+		dispatcherSigningAddress: env.GetEnvString("TASK_DISPATCHER_SIGNING_ADDRESS", ""),
 		etherscanAPIKey:          env.GetEnvString("ETHERSCAN_API_KEY", ""),
 		alchemyAPIKey:            env.GetEnvString("HEALTH_ALCHEMY_API_KEY", ""),
 		taskExecutionAddress:     env.GetEnvString("TASK_EXECUTION_ADDRESS", ""),
 		testTaskExecutionAddress: env.GetEnvString("TEST_TASK_EXECUTION_ADDRESS", ""),
 		imuaTaskExecutionAddress: env.GetEnvString("IMUA_TASK_EXECUTION_ADDRESS", ""),
-		healthCheck:               yamlConfig.HealthCheck,
-		notification:              yamlConfig.Notification,
-		rpc:                       yamlConfig.RPC,
-		databaseOperations:        yamlConfig.DatabaseOperations,
-		metrics:                   yamlConfig.Metrics,
-		shutdown:                  yamlConfig.Shutdown,
-		version:                   yamlConfig.Version,
+		healthCheck:              yamlConfig.HealthCheck,
+		notification:             yamlConfig.Notification,
+		rpc:                      yamlConfig.RPC,
+		databaseOperations:       yamlConfig.DatabaseOperations,
+		metrics:                  yamlConfig.Metrics,
+		shutdown:                 yamlConfig.Shutdown,
+		version:                  yamlConfig.Version,
+		keeperVersions:           yamlConfig.KeeperVersions,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
@@ -343,4 +352,27 @@ func GetRPCGetPerformerTimeout() time.Duration {
 
 func GetRPCHealthTimeout() time.Duration {
 	return cfg.rpc.HealthTimeout.ToDuration()
+}
+
+// Keeper version configuration getters
+func GetKeeperLatestVersions() []string {
+	return cfg.keeperVersions.Latest
+}
+
+func GetKeeperVersionsWithTaskExecutionAddress() []string {
+	return cfg.keeperVersions.UseTaskExecutionAddress
+}
+
+func GetKeeperUpgradeMessage() string {
+	return cfg.keeperVersions.UpgradeMessage
+}
+
+// Helper function to check if a version is in a list
+func IsKeeperVersionInList(version string, versionList []string) bool {
+	for _, v := range versionList {
+		if v == version {
+			return true
+		}
+	}
+	return false
 }

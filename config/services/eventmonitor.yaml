@@ -25,4 +25,4 @@ shutdown:
   timeout: "30s"                    # Graceful shutdown timeout
 
 version:
-  version: "1.0.0"                  # Service version
+  version: "0.3.0"                  # Service version

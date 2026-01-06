@@ -136,7 +136,7 @@ func main() {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
-	logger.Info(ctx, "[2/3] Process: HTTP Server Started")
+	logger.Info(ctx, "[2/3] Process: HTTP Server Started", observability.String("port", config.GetHTTPPort()))
 
 	// Start gRPC server
 	wg.Add(1)
@@ -146,7 +146,7 @@ func main() {
 			serverErrors <- fmt.Errorf("gRPC server error: %v", err)
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: gRPC Server Started")
+	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("port", config.GetGRPCPort()))
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)

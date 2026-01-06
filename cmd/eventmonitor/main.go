@@ -83,6 +83,7 @@ func main() {
 			logger.Error(ctx, "gRPC server error", observability.Error(err))
 		}
 	}()
+	logger.Info(ctx, "[3/3] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
 	logger.Info(ctx, "[3/3] Process: gRPC Server Started", observability.String("address", rpcSrv.GetServiceInfo().Address), observability.String("port", config.GetGRPCPort()))
 
 	// Handle graceful shutdown

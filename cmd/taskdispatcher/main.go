@@ -165,14 +165,14 @@ func main() {
 			logger.Error(ctx, "API server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[2/3] Process: API Server Started")
+	logger.Info(ctx, "[2/3] Process: API Server Started", observability.String("port", config.GetHTTPPort()))
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
 			logger.Fatal(ctx, "Failed to start RPC server", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: RPC Server Started")
+	logger.Info(ctx, "[3/3] Process: RPC Server Started", observability.String("port", config.GetGRPCPort()))
 
 	// Wait for interrupt signal
 	shutdown := make(chan os.Signal, 1)

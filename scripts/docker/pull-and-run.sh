@@ -91,17 +91,6 @@ else
     ENV_FILE=""
 fi
 
-# Set up config volume mount for YAML config files (allows updates without rebuilding)
-# Mount as read-write so configs can be updated via docker cp or direct file edits
-if [ -d "config/services" ]; then
-    echo "Found config/services directory, mounting it to container..."
-    CONFIG_VOLUME="-v $(pwd)/config/services:/home/appuser/config/services"
-else
-    echo "Warning: config/services directory not found. Creating it..."
-    mkdir -p "config/services"
-    CONFIG_VOLUME="-v $(pwd)/config/services:/home/appuser/config/services"
-fi
-
 # Ensure the log directory exists and has proper permissions
 echo "Setting up log directory: ./data/logs/${DOCKER_NAME}"
 mkdir -p "./data/logs/${DOCKER_NAME}"
@@ -214,7 +203,6 @@ if [[ "$SERVICE" == "dbserver" ]]; then
         --name triggerx-${DOCKER_NAME} \
         ${DBSERVER_USER_MAPPING} \
         ${ENV_FILE} \
-        ${CONFIG_VOLUME} \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
         -v ./data/cache:/home/appuser/data/cache \
@@ -227,7 +215,6 @@ else
         --name triggerx-${DOCKER_NAME} \
         ${USER_MAPPING} \
         ${ENV_FILE} \
-        ${CONFIG_VOLUME} \
         --network host \
         -v ./data/logs/${DOCKER_NAME}:/home/appuser/data/logs/${DOCKER_NAME} \
         -v ./data/cache:/home/appuser/data/cache \

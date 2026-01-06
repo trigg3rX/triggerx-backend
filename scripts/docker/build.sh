@@ -218,6 +218,9 @@ if [[ "$SERVICE" == "all" ]]; then
         local version=$2
         local docker_name=$(echo $service | sed 's/\//-/g')
         
+        # Update version in YAML file BEFORE building
+        update_yaml_version "$docker_name" "$version"
+        
         echo "[$(date '+%H:%M:%S')] Starting build for $service..."
         if docker build --no-cache \
             -f docker/Dockerfile.backend \
@@ -225,8 +228,6 @@ if [[ "$SERVICE" == "all" ]]; then
             --build-arg DOCKER_NAME=${docker_name} \
             -t triggerx-${docker_name}:${version} . > "build_${docker_name}.log" 2>&1; then
             echo "[$(date '+%H:%M:%S')] ✅ Successfully built $service"
-            # Update version in YAML file
-            update_yaml_version "$docker_name" "$version"
             return 0
         else
             echo "[$(date '+%H:%M:%S')] ❌ Failed to build $service (check build_${docker_name}.log)"
@@ -270,34 +271,39 @@ if [[ "$SERVICE" == "all" ]]; then
         docker_name=$(echo $service | sed 's/\//-/g')
         rm -f "build_${docker_name}.log"
     done
+    echo "Successfully built all services: ${VERSION}"
+    exit 0
 elif [[ "$SERVICE" == "keeper" ]]; then
+    # Update version in YAML file BEFORE building
+    update_yaml_version "keeper" "$VERSION"
+    
     echo "Building $SERVICE..."
     if docker build --no-cache \
         -f docker/Dockerfile.keeper \
         -t triggerx-keeper:${VERSION} .; then
-        # Update version in YAML file
-        update_yaml_version "keeper" "$VERSION"
+        echo "Successfully built keeper:${VERSION}"
+        echo "Successfully built: ${VERSION}"
+        exit 0
     else
         exit 1
     fi
 else
-    echo "Building $SERVICE..."
     # Convert service name to Docker-compatible name
     DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
 
-    echo "DOCKER_NAME: $DOCKER_NAME"
-    # Build a single service
+    # Update version in YAML file BEFORE building
+    update_yaml_version "$DOCKER_NAME" "$VERSION"
+    
     echo "Building $SERVICE..."
     if docker build --no-cache \
         -f docker/Dockerfile.backend \
         --build-arg SERVICE=${SERVICE} \
         --build-arg DOCKER_NAME=${DOCKER_NAME} \
         -t triggerx-${DOCKER_NAME}:${VERSION} .; then
-        # Update version in YAML file
-        update_yaml_version "$DOCKER_NAME" "$VERSION"
+        echo "Successfully built ${DOCKER_NAME}:${VERSION}"
+        echo "Successfully built: ${VERSION}"
+        exit 0
     else
         exit 1
     fi
 fi
-
-echo "Successfully built: ${VERSION}"

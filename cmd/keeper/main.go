@@ -178,7 +178,7 @@ func main() {
 			logger.Fatal(ctx, "Failed to start server", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: API Server Started")
+	logger.Info(ctx, "[3/3] Process: API Server Started", observability.String("port", config.GetOperatorRPCPort()))
 	logger.Info(ctx, "Keeper node initialized and ready to serve requests")
 
 	// Wait for interrupt signal
