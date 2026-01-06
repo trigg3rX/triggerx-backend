@@ -189,7 +189,7 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient, conditionSchedulerClient)
 
 	// Register metrics endpoint at root level without middleware
-	router.GET("/metrics", gin.WrapH(metrics.NewCollector(s.obsMetrics).Handler()))
+	router.GET("/metrics", gin.WrapH(metrics.NewCollector(s.obsMetrics, s.logger).Handler()))
 
 	// Register status endpoint for Pulsate and nginx
 	router.GET("/status", func(c *gin.Context) {

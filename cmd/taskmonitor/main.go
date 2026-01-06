@@ -86,7 +86,7 @@ func main() {
 	logger.Info(ctx, "[4/4] Dependency: RPC Server Initialised")
 
 	// Start metrics collector
-	collector := metrics.NewCollector(obsMetrics)
+	collector := metrics.NewCollector(obsMetrics, logger)
 	collector.Start()
 	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
 

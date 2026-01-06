@@ -118,7 +118,7 @@ func main() {
 	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
 
 	// Start metrics collector
-	collector := metrics.NewCollector(obsMetrics)
+	collector := metrics.NewCollector(obsMetrics, logger)
 	collector.Start()
 	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 

@@ -1,6 +1,7 @@
 package proof
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -11,8 +12,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
+
+// testLogger is a no-op logger for tests
+var testLogger = observability.NewNoOpLogger()
+var testCtx = context.Background()
 
 // Test helper functions
 func createMockCertificate(notBefore, notAfter time.Time, rawData []byte) *x509.Certificate {
@@ -144,7 +150,7 @@ func TestEstablishTLSConnection_ValidConfig(t *testing.T) {
 	// Test with a reliable host (Google)
 	config := DefaultTLSProofConfig("www.google.com")
 
-	connState, err := EstablishTLSConnection(config)
+	connState, err := EstablishTLSConnection(testCtx, testLogger, config)
 	require.NoError(t, err)
 	require.NotNil(t, connState)
 	require.Greater(t, len(connState.PeerCertificates), 0)
@@ -177,7 +183,7 @@ func TestEstablishTLSConnection_InvalidConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := EstablishTLSConnection(tt.config)
+			_, err := EstablishTLSConnection(testCtx, testLogger, tt.config)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})
@@ -191,7 +197,7 @@ func TestEstablishTLSConnection_ConfigDefaults(t *testing.T) {
 		// Leave other fields empty to test defaults
 	}
 
-	connState, err := EstablishTLSConnection(config)
+	connState, err := EstablishTLSConnection(testCtx, testLogger, config)
 	require.NoError(t, err)
 	require.NotNil(t, connState)
 
@@ -528,7 +534,7 @@ func TestGenerateProofWithTLSConnection_ValidConfig(t *testing.T) {
 	ipfsData := createSampleIPFSData(456)
 	config := DefaultTLSProofConfig("www.google.com")
 
-	proofData, err := GenerateProofWithTLSConnection(ipfsData, config)
+	proofData, err := GenerateProofWithTLSConnection(testCtx, testLogger, ipfsData, config)
 	require.NoError(t, err)
 
 	// Validate proof data
@@ -560,7 +566,7 @@ func TestGenerateProofWithTLSConnection_InvalidConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := GenerateProofWithTLSConnection(ipfsData, tt.config)
+			_, err := GenerateProofWithTLSConnection(testCtx, testLogger, ipfsData, tt.config)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.expectedErr)
 		})
@@ -574,7 +580,7 @@ func TestProofGeneration_EndToEnd(t *testing.T) {
 	config := DefaultTLSProofConfig("www.google.com")
 
 	// Step 1: Establish TLS connection
-	connState, err := EstablishTLSConnection(config)
+	connState, err := EstablishTLSConnection(testCtx, testLogger, config)
 	require.NoError(t, err)
 	require.NotNil(t, connState)
 

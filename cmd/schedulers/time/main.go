@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -41,7 +40,7 @@ func main() {
 	// Initialize observability (all three pillars)
 	obs, err := observability.Initialize(obsCfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize observability: %v", err)
+		panic(fmt.Sprintf("Failed to initialize observability: %v", err))
 	}
 
 	// Extract individual components
@@ -138,15 +137,17 @@ func main() {
 	sig := <-shutdown
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
-	performGracefulShutdown(cancel, srv, timeScheduler, dbConn, obs)
+	performGracefulShutdown(ctx, cancel, srv, timeScheduler, dbConn, obs, logger)
 }
 
 func performGracefulShutdown(
+	ctx context.Context,
 	cancel context.CancelFunc,
 	apiSrv *api.Server,
 	timeScheduler *scheduler.TimeBasedScheduler,
 	dbConn *database.Connection,
 	obs *observability.Observability,
+	logger observability.Logger,
 ) {
 	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), config.GetShutdownTimeout())
@@ -157,23 +158,25 @@ func performGracefulShutdown(
 
 	// Stop scheduler gracefully (this also closes the RPC client)
 	timeScheduler.Stop(shutdownCtx)
-	log.Println("[1/4] Shutdown: Scheduler Stopped")
+	logger.Info(ctx, "[1/4] Shutdown: Scheduler Stopped")
 
 	// Shutdown API server gracefully
 	if err := apiSrv.Stop(shutdownCtx); err != nil {
-		log.Fatalf("API server forced to shutdown: %v", err)
+		logger.Error(ctx, "[2/4] Shutdown: API server forced to shutdown", observability.Error(err))
+	} else {
+		logger.Info(ctx, "[2/4] Shutdown: API Server Stopped")
 	}
-	log.Println("[2/4] Shutdown: API Server Stopped")
 
 	// Close database connection
 	dbConn.Close()
-	log.Println("[3/4] Shutdown: Database Connection Closed")
+	logger.Info(ctx, "[3/4] Shutdown: Database Connection Closed")
 
 	// Shutdown observability (handles logger, tracer, metrics)
 	if err := obs.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Error shutting down observability: %v", err)
+		// Use fmt here since logger is being shut down
+		fmt.Printf("Error shutting down observability: %v\n", err)
 	}
-	log.Println("[4/4] Shutdown: Observability Shutdown Complete")
+	fmt.Println("[4/4] Shutdown: Observability Shutdown Complete")
 
-	log.Println("Service shutdown completed successfully")
+	fmt.Println("Service shutdown completed successfully")
 }

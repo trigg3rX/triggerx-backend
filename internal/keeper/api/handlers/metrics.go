@@ -14,7 +14,7 @@ type MetricsHandler struct {
 
 // NewMetricsHandler creates a new metrics handler
 func NewMetricsHandler(logger observability.Logger, metricsInstance observability.Metrics) *MetricsHandler {
-	collector := metrics.NewCollector(metricsInstance)
+	collector := metrics.NewCollector(metricsInstance, logger)
 	collector.Start()
 
 	return &MetricsHandler{

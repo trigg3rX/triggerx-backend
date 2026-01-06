@@ -29,7 +29,7 @@ func (v *TaskValidator) ValidateProof(ctx context.Context, ipfsData types.IPFSDa
 	tlsConfig := proof.DefaultTLSProofConfig(config.GetTLSProofHost())
 	tlsConfig.TargetPort = config.GetTLSProofPort()
 
-	connState, err := proof.EstablishTLSConnection(tlsConfig)
+	connState, err := proof.EstablishTLSConnection(ctx, v.logger, tlsConfig)
 	if err != nil {
 		v.logger.Warn(ctx, "Failed to establish TLS connection for validation", observability.String("trace_id", traceID), observability.Error(err))
 	}

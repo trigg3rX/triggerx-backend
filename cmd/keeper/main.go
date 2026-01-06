@@ -69,7 +69,7 @@ func main() {
 	metrics.InitializeMetrics(obsMetrics)
 
 	// Create metrics collector with observability Metrics
-	collector := metrics.NewCollector(obsMetrics)
+	collector := metrics.NewCollector(obsMetrics, logger)
 
 	logger.Info(ctx, "[1/7] Dependency: Observability Module Initialised")
 

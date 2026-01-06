@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -140,12 +139,12 @@ func Init(configPath string) error {
 		attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
 		// Base Mainnet Attestation Center Address
 		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
-		othenticBootstrapID:      env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
-		otelExporterEndpoint:     env.GetOTELExporterEndpoint(),
-		enablePrometheusExport:   env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
-		api:                      yamlConfig.API,
-		health:                   yamlConfig.Health,
-		shutdown:                 yamlConfig.Shutdown,
+		othenticBootstrapID:    env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		otelExporterEndpoint:   env.GetOTELExporterEndpoint(),
+		enablePrometheusExport: env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
+		api:                    yamlConfig.API,
+		health:                 yamlConfig.Health,
+		shutdown:               yamlConfig.Shutdown,
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -153,10 +152,9 @@ func Init(configPath string) error {
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	isRegistered := checkKeeperRegistration()
-	if !isRegistered {
-		log.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
-		log.Fatal("Keeper address is not registered on L2")
+	if err := checkKeeperRegistration(); err != nil {
+		fmt.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
+		return fmt.Errorf("keeper address is not registered on L2")
 	}
 	return nil
 }
