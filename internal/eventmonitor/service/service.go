@@ -14,6 +14,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/worker"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
@@ -24,6 +25,7 @@ type Service struct {
 	workers         map[string]*worker.Worker         // registry key -> Worker
 	webhookClient   *webhook.GRPCClient
 	permanentPoller *attestation.PermanentPoller
+	ipfsClient      ipfs.IPFSClient
 	logger          observability.Logger
 	tracer          observability.Tracer
 	mu              sync.RWMutex
@@ -39,8 +41,16 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 	rm := registry.NewRegistryManager(ctx, logger)
 	wc := webhook.NewGRPCClient(logger, tracer)
 
+	// Initialize IPFS client for fetching task data
+	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())
+	ipfsClient, err := ipfs.NewClient(ipfsCfg)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create IPFS client: %w", err)
+	}
+
 	// Initialize permanent poller for Base networks
-	permanentPoller, err := attestation.NewPermanentPoller(ctx, logger, tracer)
+	permanentPoller, err := attestation.NewPermanentPoller(ctx, logger, tracer, ipfsClient)
 	if err != nil {
 		cancel() // Clean up context on error
 		return nil, fmt.Errorf("failed to create permanent poller: %w", err)
@@ -101,6 +111,7 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 		workers:         make(map[string]*worker.Worker),
 		webhookClient:   wc,
 		permanentPoller: permanentPoller,
+		ipfsClient:      ipfsClient,
 		logger:          logger,
 		tracer:          tracer,
 		ctx:             ctx,

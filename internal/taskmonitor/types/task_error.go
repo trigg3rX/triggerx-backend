@@ -1,5 +1,7 @@
 package types
 
+import pkgTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
+
 // ReportTaskStatusRequest represents a request to report task execution status from a keeper
 // This is called after the aggregator submission attempt (regardless of success or failure)
 type ReportTaskStatusRequest struct {
@@ -21,12 +23,11 @@ type ReportTaskStatusResponse struct {
 
 // ReportConsensusEventRequest represents a request to report a consensus event (TaskSubmitted or TaskRejected)
 // This is called by eventmonitor when it detects on-chain consensus events
-// EventMonitor parses the event data and sends the structured TaskSubmissionData
+// EventMonitor fetches IPFS data (which contains trace context) and sends it along with minimal event data
 type ReportConsensusEventRequest struct {
-	ChainID   string              `json:"chain_id" validate:"required"`
-	EventName string              `json:"event_name" validate:"required"` // "TaskSubmitted" or "TaskRejected"
-	TxHash    string              `json:"tx_hash" validate:"required"`
-	TaskData  *TaskSubmissionData `json:"task_data" validate:"required"`
+	TxHash     string             `json:"tx_hash" validate:"required"`   // Task submission transaction hash
+	IsAccepted bool               `json:"is_accepted"`                   // true for TaskSubmitted, false for TaskRejected
+	IPFSData   *pkgTypes.IPFSData `json:"ipfs_data" validate:"required"` // Full IPFS data including trace context
 }
 
 // ReportConsensusEventResponse represents the response to a consensus event report

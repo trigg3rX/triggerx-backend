@@ -6,8 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/gocql/gocql"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/database"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/config"
@@ -112,7 +115,7 @@ func NewTaskManager(ctx context.Context, logger observability.Logger, tracer obs
 	}
 
 	// Initialize task stream manager
-	taskStreamManager, err := tasks.NewTaskStreamManager(ctx, client, databaseClient, logger)
+	taskStreamManager, err := tasks.NewTaskStreamManager(ctx, client, databaseClient, logger, tracer)
 	if err != nil {
 		// Clean up resources on error
 		cancel()
@@ -238,44 +241,48 @@ func (tm *TaskManager) ReportTaskStatus(ctx context.Context, req *taskmonitorTyp
 }
 
 // ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
+// The request now contains IPFS data (with trace context) directly from eventmonitor
 func (tm *TaskManager) ReportConsensusEvent(ctx context.Context, req *taskmonitorTypes.ReportConsensusEventRequest) (*taskmonitorTypes.ReportConsensusEventResponse, error) {
-	tm.logger.Info(ctx, "Received consensus event report",
-		observability.String("chain_id", req.ChainID),
-		observability.String("event_name", req.EventName),
+	// Extract task ID from IPFS data (ActionData has single task ID)
+	taskID := int64(0)
+	if req.IPFSData != nil && req.IPFSData.ActionData != nil {
+		taskID = req.IPFSData.ActionData.TaskID
+	}
+
+	tm.logger.Info(ctx, "Received consensus event report from eventmonitor",
 		observability.String("tx_hash", req.TxHash),
-		observability.Int64("task_number", req.TaskData.TaskNumber))
+		observability.Bool("is_accepted", req.IsAccepted),
+		observability.Int64("task_id", taskID))
 
-	// Create a ChainEvent from the request to reuse existing processing logic
-	contractEventData := &events.ContractEventData{
-		EventType:    req.EventName,
-		ContractType: events.ContractTypeAttestationCenter,
-		ParsedData:   nil, // Not needed, we have TaskData
-		RawData:      []byte{},
-		Topics:       []string{},
-		BlockNumber:  0,
-		TxHash:       req.TxHash,
-		LogIndex:     0,
+	// Continue the trace from IPFS data if available
+	if req.IPFSData != nil && req.IPFSData.TraceID != "" {
+		ctx = observability.ContinueTrace(ctx, req.IPFSData.TraceID, req.IPFSData.SpanID)
 	}
 
-	chainEvent := &events.ChainEvent{
-		ChainID:      req.ChainID,
-		ChainName:    getChainName(req.ChainID),
-		ContractAddr: "",
-		ContractType: events.ContractTypeAttestationCenter,
-		EventName:    req.EventName,
-		BlockNumber:  0,
-		TxHash:       req.TxHash,
-		LogIndex:     0,
-		Data:         contractEventData,
-		RawLog:       types.Log{},
-		ProcessedAt:  time.Now(),
-	}
+	// Create span for consensus event processing
+	ctx, span := tm.tracer.Start(ctx, "task.consensus.process",
+		observability.WithSpanKind(trace.SpanKindServer),
+		observability.WithAttributes(
+			attribute.String("tx.hash", req.TxHash),
+			attribute.Bool("is.accepted", req.IsAccepted),
+			attribute.Int64("task.id", taskID),
+		),
+	)
+	defer span.End()
 
 	// Create a task handler instance to process the event
 	taskHandler := tm.createTaskEventHandler()
-	// Process the event with the already-parsed TaskData
-	taskHandler.ProcessConsensusEvent(ctx, chainEvent, req.TaskData)
+	// Process the consensus event with IPFS data
+	if err := taskHandler.ProcessConsensusEventFromIPFS(ctx, req.TxHash, req.IsAccepted, req.IPFSData); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to process consensus event")
+		return &taskmonitorTypes.ReportConsensusEventResponse{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
 
+	span.SetStatus(codes.Ok, "consensus event processed")
 	return &taskmonitorTypes.ReportConsensusEventResponse{
 		Success: true,
 		Message: "Consensus event processed",
@@ -288,18 +295,6 @@ func (tm *TaskManager) createTaskEventHandler() *events.TaskEventHandler {
 	notifier := notify.NewCompositeNotifier(tm.logger, notify.NewWebhookNotifier(tm.logger), notify.NewSMTPNotifier(tm.logger))
 
 	return events.NewTaskEventHandler(tm.logger, tm.tracer, tm.dbClient, tm.ipfsClient, tm.taskStreamManager, notifier)
-}
-
-// getChainName returns the chain name for a given chain ID
-func getChainName(chainID string) string {
-	switch chainID {
-	case "8453":
-		return "Base Mainnet"
-	case "84532":
-		return "Base Sepolia"
-	default:
-		return "Unknown"
-	}
 }
 
 // SetRPCServer sets the RPC server for graceful shutdown

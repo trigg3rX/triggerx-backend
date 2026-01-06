@@ -19,8 +19,8 @@ import (
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/taskmonitor"
-	tmTypes "github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 
 	// Contract bindings
@@ -32,6 +32,7 @@ type PermanentPoller struct {
 	logger            observability.Logger
 	tracer            observability.Tracer
 	taskMonitorClient *taskmonitor.Client
+	ipfsClient        ipfs.IPFSClient
 	ctx               context.Context
 	cancel            context.CancelFunc
 	wg                sync.WaitGroup
@@ -41,7 +42,7 @@ type PermanentPoller struct {
 }
 
 // NewPermanentPoller creates a new permanent poller for Base networks
-func NewPermanentPoller(ctx context.Context, logger observability.Logger, tracer observability.Tracer) (*PermanentPoller, error) {
+func NewPermanentPoller(ctx context.Context, logger observability.Logger, tracer observability.Tracer, ipfsClient ipfs.IPFSClient) (*PermanentPoller, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Create TaskMonitor RPC client
@@ -55,6 +56,7 @@ func NewPermanentPoller(ctx context.Context, logger observability.Logger, tracer
 		logger:            logger,
 		tracer:            tracer,
 		taskMonitorClient: taskMonitorClient,
+		ipfsClient:        ipfsClient,
 		ctx:               ctx,
 		cancel:            cancel,
 		lastBlocks:        make(map[string]uint64),
@@ -293,33 +295,67 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 		return fmt.Errorf("failed to convert log: %w", err)
 	}
 
-	// Parse event data
+	// Parse event data to get the IPFS CID from the data field
 	parsedData, err := p.parseEventData(event, lg)
 	if err != nil {
 		return fmt.Errorf("failed to parse event data: %w", err)
 	}
 
-	// Parse into TaskSubmissionData
-	taskData, err := p.parseTaskSubmissionData(p.ctx, parsedData, lg.TxHash.Hex())
+	// Extract IPFS CID from the data field
+	ipfsCID, err := p.extractIPFSCID(parsedData)
 	if err != nil {
-		return fmt.Errorf("failed to parse task submission data: %w", err)
+		return fmt.Errorf("failed to extract IPFS CID: %w", err)
 	}
 
-	// Create trace span
-	ctx, span := p.tracer.Start(p.ctx, "attestation.event.detected",
-		observability.WithSpanKind(trace.SpanKindProducer),
+	// Skip internal tasks (no IPFS data needed)
+	taskDefinitionIdStr, ok := parsedData["taskDefinitionId"].(string)
+	if ok {
+		taskDefID, _ := strconv.ParseInt(taskDefinitionIdStr, 0, 64)
+		if taskDefID == 10001 || taskDefID == 10002 {
+			p.logger.Debug(p.ctx, "Skipping internal task", observability.Int64("task_definition_id", taskDefID))
+			return nil
+		}
+	}
+
+	// Fetch IPFS data
+	ipfsData, err := p.ipfsClient.Fetch(p.ctx, ipfsCID)
+	if err != nil {
+		p.logger.Error(p.ctx, "Failed to fetch IPFS data",
+			observability.String("ipfs_cid", ipfsCID),
+			observability.String("tx_hash", lg.TxHash.Hex()),
+			observability.Error(err))
+		return fmt.Errorf("failed to fetch IPFS data: %w", err)
+	}
+
+	// Extract trace context from IPFS data and continue the trace
+	ctx := p.ctx
+	if ipfsData.TraceID != "" {
+		ctx = observability.ContinueTrace(ctx, ipfsData.TraceID, ipfsData.SpanID)
+	}
+
+	// Create span for on-chain event processing (continues the task cycle trace)
+	ctx, span := p.tracer.Start(ctx, "task.onchain.received",
+		observability.WithSpanKind(trace.SpanKindConsumer),
 		observability.WithAttributes(
 			attribute.String("chain.id", chainID),
 			attribute.String("chain.name", chainName),
 			attribute.String("event.name", eventName),
 			attribute.String("tx.hash", lg.TxHash.Hex()),
 			attribute.Int64("block.number", int64(lg.BlockNumber)),
+			attribute.String("ipfs.cid", ipfsCID),
 		),
 	)
 	defer span.End()
 
-	// Send to TaskMonitor via RPC
-	if err := p.taskMonitorClient.ReportConsensusEvent(ctx, chainID, eventName, lg.TxHash.Hex(), taskData); err != nil {
+	span.AddEvent("ipfs.data.fetched", observability.WithEventAttributes(
+		attribute.String("ipfs.cid", ipfsCID),
+	))
+
+	// Determine if task was accepted based on event name
+	isAccepted := eventName != "TaskRejected"
+
+	// Send to TaskMonitor via RPC with IPFS data
+	if err := p.taskMonitorClient.ReportConsensusEvent(ctx, lg.TxHash.Hex(), isAccepted, &ipfsData); err != nil {
 		span.RecordError(err, observability.WithErrorAttributes(
 			attribute.String("error.type", "rpc_call_failed"),
 		))
@@ -330,7 +366,34 @@ func (p *PermanentPoller) processLog(chainID, chainName string, event abi.Event,
 	span.AddEvent("consensus.event.sent")
 	span.SetStatus(codes.Ok, "consensus event sent successfully")
 
+	p.logger.Info(ctx, "Consensus event processed and sent to TaskMonitor",
+		observability.String("tx_hash", lg.TxHash.Hex()),
+		observability.String("event_name", eventName),
+		observability.Bool("is_accepted", isAccepted),
+		observability.String("ipfs_cid", ipfsCID))
+
 	return nil
+}
+
+// extractIPFSCID extracts the IPFS CID from the parsed event data
+func (p *PermanentPoller) extractIPFSCID(parsedData map[string]interface{}) (string, error) {
+	// The data field contains the IPFS CID as bytes
+	switch v := parsedData["data"].(type) {
+	case []byte:
+		return string(v), nil
+	case string:
+		// If it's a hex string, decode it
+		if len(v) > 2 && v[:2] == "0x" {
+			decoded, err := hex.DecodeString(v[2:])
+			if err != nil {
+				return "", fmt.Errorf("failed to decode hex data: %w", err)
+			}
+			return string(decoded), nil
+		}
+		return v, nil
+	default:
+		return "", fmt.Errorf("data field has unexpected type: %T", v)
+	}
 }
 
 // parseEventData parses event data from log
@@ -377,162 +440,6 @@ func (p *PermanentPoller) parseEventData(event abi.Event, lg ethtypes.Log) (map[
 	}
 
 	return parsedData, nil
-}
-
-// parseTaskSubmissionData parses the event data into TaskSubmissionData
-func (p *PermanentPoller) parseTaskSubmissionData(ctx context.Context, parsedData map[string]interface{}, txHash string) (*tmTypes.TaskSubmissionData, error) {
-	// Extract taskDefinitionId - it's indexed, so it comes as a string (hex-encoded)
-	taskDefinitionIdStr, ok := parsedData["taskDefinitionId"].(string)
-	if !ok {
-		return nil, fmt.Errorf("taskDefinitionId not found or invalid type")
-	}
-
-	// Convert hex string to integer
-	taskDefinitionIdInt64, err := strconv.ParseInt(taskDefinitionIdStr, 0, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse taskDefinitionId: %v", err)
-	}
-	taskDefinitionId := int(taskDefinitionIdInt64)
-
-	if taskDefinitionId == 10001 || taskDefinitionId == 10002 {
-		taskData := &tmTypes.TaskSubmissionData{
-			TaskID: 0,
-		}
-		return taskData, nil
-	}
-
-	// Extract task number - it's already parsed as uint32, so we need to handle it as a number
-	var taskNumber int64
-	switch v := parsedData["taskNumber"].(type) {
-	case string:
-		// If it's a string, parse it
-		var err error
-		taskNumber, err = strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse taskNumber: %v", err)
-		}
-	case float64:
-		// If it's a float64 (from JSON unmarshaling), convert to int64
-		taskNumber = int64(v)
-	case int64:
-		taskNumber = v
-	case int:
-		taskNumber = int64(v)
-	case uint32:
-		taskNumber = int64(v)
-	case uint64:
-		taskNumber = int64(v)
-	default:
-		return nil, fmt.Errorf("taskNumber has unexpected type: %T", v)
-	}
-
-	// Extract proof of task
-	proofOfTask, ok := parsedData["proofOfTask"].(string)
-	if !ok {
-		return nil, fmt.Errorf("proofOfTask not found or invalid type")
-	}
-
-	// Extract data field - it's bytes, so it could be []byte or string
-	var data string
-	switch v := parsedData["data"].(type) {
-	case []byte:
-		data = hex.EncodeToString(v)
-	default:
-		return nil, fmt.Errorf("data field has unexpected type: %T", v)
-	}
-
-	// Extract operator address
-	performerAddress, ok := parsedData["operator"].(string)
-	if !ok {
-		return nil, fmt.Errorf("operator not found or invalid type")
-	}
-
-	// Extract attesters IDs
-	attestersIdsInterface, ok := parsedData["attestersIds"]
-	if !ok {
-		// Try alternative field names that might be used
-		if altInterface, altOk := parsedData["attesterIds"]; altOk {
-			p.logger.Info(ctx, "Found attesterIds with alternative spelling")
-			attestersIdsInterface = altInterface
-		} else if altInterface, altOk := parsedData["attesters"]; altOk {
-			p.logger.Info(ctx, "Found attesters field")
-			attestersIdsInterface = altInterface
-		} else {
-			// Don't return error, just log and continue with empty slice
-			attestersIdsInterface = []interface{}{}
-		}
-	}
-
-	// Convert attestersIds to int64 slice
-	var attestersIds []int64
-	switch v := attestersIdsInterface.(type) {
-	case []string:
-		// Handle the corrected format from formatValue ([]*big.Int -> []string)
-		for _, av := range v {
-			if n, err := strconv.ParseInt(av, 10, 64); err == nil {
-				attestersIds = append(attestersIds, n)
-			} else {
-				p.logger.Warn(ctx, "Failed to parse attester ID as string", observability.String("value", av), observability.Error(err))
-			}
-		}
-	case []interface{}:
-		// Fallback for legacy format
-		for i, av := range v {
-			switch vv := av.(type) {
-			case float64:
-				attestersIds = append(attestersIds, int64(vv))
-			case string:
-				// attempt parse decimal
-				if n, err := strconv.ParseInt(vv, 10, 64); err == nil {
-					attestersIds = append(attestersIds, n)
-				} else {
-					p.logger.Warn(ctx, "Failed to parse attester ID as string", observability.Int("index", i), observability.String("value", vv), observability.Error(err))
-				}
-			case *big.Int:
-				attestersIds = append(attestersIds, vv.Int64())
-			default:
-				p.logger.Warn(ctx, "Unknown attester ID type", observability.Int("index", i), observability.String("type", fmt.Sprintf("%T", vv)), observability.String("value", fmt.Sprintf("%v", vv)))
-			}
-		}
-	case []*big.Int:
-		// Direct handling of []*big.Int
-		for _, id := range v {
-			attestersIds = append(attestersIds, id.Int64())
-		}
-	default:
-		// Try to manually parse if it's a slice of unknown interface{}
-		if slice, ok := v.([]interface{}); ok {
-			for i, item := range slice {
-				switch itemVal := item.(type) {
-				case *big.Int:
-					attestersIds = append(attestersIds, itemVal.Int64())
-				case string:
-					if n, err := strconv.ParseInt(itemVal, 10, 64); err == nil {
-						attestersIds = append(attestersIds, n)
-					} else {
-						p.logger.Warn(ctx, "Failed to parse attester ID from string", observability.Int("index", i), observability.String("value", itemVal), observability.Error(err))
-					}
-				case float64:
-					attestersIds = append(attestersIds, int64(itemVal))
-				default:
-					p.logger.Warn(ctx, "Unknown attester ID type in slice", observability.Int("index", i), observability.String("type", fmt.Sprintf("%T", itemVal)), observability.String("value", fmt.Sprintf("%v", itemVal)))
-				}
-			}
-		}
-	}
-
-	// Create task submission data
-	return &tmTypes.TaskSubmissionData{
-		TaskID:               0,
-		TaskNumber:           taskNumber,
-		TaskDefinitionID:     taskDefinitionId,
-		IsAccepted:           true, // Will be set based on event name in client
-		TaskSubmissionTxHash: txHash,
-		PerformerAddress:     performerAddress,
-		AttesterIds:          attestersIds,
-		ProofOfTask:          proofOfTask,
-		Data:                 data,
-	}, nil
 }
 
 // parseTopicData parses topic data based on the input type

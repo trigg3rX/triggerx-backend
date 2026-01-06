@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	pkgTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // ContractType represents the type of contract
@@ -283,6 +285,164 @@ func (h *TaskEventHandler) ProcessConsensusEvent(ctx context.Context, event *Cha
 	default:
 		return
 	}
+}
+
+// ProcessConsensusEventFromIPFS processes consensus events with IPFS data directly from eventmonitor
+// This is the new flow where eventmonitor fetches IPFS data and passes it with trace context
+func (h *TaskEventHandler) ProcessConsensusEventFromIPFS(ctx context.Context, txHash string, isAccepted bool, ipfsData *pkgTypes.IPFSData) error {
+	if ipfsData == nil {
+		return fmt.Errorf("ipfs data is nil")
+	}
+
+	// Get task ID from ActionData (single task ID per execution)
+	taskID := int64(0)
+	if ipfsData.ActionData != nil {
+		taskID = ipfsData.ActionData.TaskID
+	}
+
+	// Get task definition ID from PerformerData in TaskData
+	taskDefinitionID := 0
+	if ipfsData.TaskData != nil && len(ipfsData.TaskData.TargetData) > 0 {
+		taskDefinitionID = ipfsData.TaskData.TargetData[0].TaskDefinitionID
+	}
+
+	h.logger.Info(ctx, "Processing consensus event from IPFS data",
+		observability.Int64("task_id", taskID),
+		observability.String("tx_hash", txHash),
+		observability.Bool("is_accepted", isAccepted))
+
+	// Calculate task OpX cost from IPFS data
+	taskOpxCostFloat := float64(0)
+	if ipfsData.ActionData != nil && ipfsData.ActionData.TotalFee != nil {
+		taskOpxCostFloat, _ = ipfsData.ActionData.TotalFee.Float64()
+		taskOpxCostFloat = taskOpxCostFloat / 1e18
+	}
+
+	// Build TaskSubmissionData from IPFS data
+	taskData := &types.TaskSubmissionData{
+		TaskID:               taskID,
+		TaskDefinitionID:     taskDefinitionID,
+		IsAccepted:           isAccepted,
+		TaskSubmissionTxHash: txHash,
+		TaskOpxCost:          taskOpxCostFloat,
+	}
+
+	// Populate from ActionData
+	if ipfsData.ActionData != nil {
+		taskData.ExecutionTxHash = ipfsData.ActionData.ActionTxHash
+		taskData.ExecutionTimestamp = ipfsData.ActionData.ExecutionTimestamp
+		taskData.ConvertedArguments = ipfsData.ActionData.ConvertedArguments
+	}
+
+	// Populate from ProofData
+	if ipfsData.ProofData != nil {
+		taskData.ProofOfTask = ipfsData.ProofData.ProofOfTask
+	}
+
+	// Populate from PerformerSignature
+	if ipfsData.PerformerSignature != nil {
+		taskData.PerformerAddress = ipfsData.PerformerSignature.PerformerSigningAddress
+	}
+
+	// Create span for task processing
+	ctx, span := h.tracer.Start(ctx, "task.monitor.process",
+		observability.WithSpanKind(trace.SpanKindInternal),
+		observability.WithAttributes(
+			attribute.Int64("task.id", taskID),
+			attribute.String("task.submission.tx_hash", txHash),
+			attribute.Bool("task.is_accepted", isAccepted),
+		),
+	)
+	defer span.End()
+
+	span.AddEvent("ipfs.data.received", observability.WithEventAttributes(
+		attribute.String("tx.hash", txHash),
+	))
+
+	// Move task from dispatched to completed stream
+	if err := h.moveTaskToCompleted(ctx, taskID); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "stream_move_failed"),
+		))
+		h.logger.Error(ctx, "Failed to move task to completed stream", observability.Error(err))
+		// Continue processing even if stream move fails
+	}
+
+	// Update task submission data in database
+	if err := h.db.UpdateTaskSubmissionData(ctx, *taskData); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "database_update_failed"),
+		))
+		span.SetStatus(codes.Error, "failed to update execution data")
+		h.logger.Error(ctx, "Failed to update task submission data in database", observability.Error(err))
+		return err
+	}
+
+	span.AddEvent("task.data.updated", observability.WithEventAttributes(
+		attribute.String("database.table", "tasks"),
+	))
+
+	// For custom script jobs (TaskDefinitionID = 7), update storage
+	if taskData.TaskDefinitionID == 7 && ipfsData.ActionData != nil && ipfsData.ActionData.StorageUpdates != nil && len(ipfsData.ActionData.StorageUpdates) > 0 {
+		jobID, err := h.db.GetJobIDByTaskID(ctx, taskID)
+		if err != nil {
+			span.RecordError(err, observability.WithErrorAttributes(
+				attribute.String("error.type", "job_id_lookup_failed"),
+			))
+			h.logger.Error(ctx, "Failed to get job ID for task", observability.Int64("task_id", taskID), observability.Error(err))
+		} else {
+			if err := h.db.UpdateScriptStorage(ctx, jobID, ipfsData.ActionData.StorageUpdates); err != nil {
+				span.RecordError(err, observability.WithErrorAttributes(
+					attribute.String("error.type", "storage_update_failed"),
+				))
+				h.logger.Error(ctx, "Failed to update script storage for job", observability.String("job_id", jobID.String()), observability.Error(err))
+			} else {
+				h.logger.Info(ctx, "Successfully updated storage keys for job", observability.Int("storage_keys", len(ipfsData.ActionData.StorageUpdates)), observability.String("job_id", jobID.String()))
+			}
+		}
+	}
+
+	// Update keeper points in database
+	if err := h.db.UpdateKeeperPointsInDatabase(ctx, *taskData); err != nil {
+		span.RecordError(err, observability.WithErrorAttributes(
+			attribute.String("error.type", "keeper_points_update_failed"),
+		))
+		h.logger.Error(ctx, "Failed to update keeper points in database", observability.Error(err))
+		// Don't return, continue processing
+	}
+
+	// Notify user about task completion/rejection
+	if h.notifier != nil {
+		email, err := h.db.GetUserEmailByTaskID(ctx, taskID)
+		if err != nil {
+			h.logger.Warn(ctx, "Could not fetch user email for task", observability.Int64("task_id", taskID), observability.Error(err))
+		} else if email != "" {
+			payload := notify.TaskStatusPayload{
+				TaskID:          taskID,
+				JobID:           0,
+				Status:          "completed",
+				IsAccepted:      isAccepted,
+				SubmissionTx:    txHash,
+				ExecutionTxHash: taskData.ExecutionTxHash,
+				ProofOfTask:     taskData.ProofOfTask,
+				OccurredAt:      time.Now(),
+			}
+			if !isAccepted {
+				payload.Status = "failed"
+			}
+			if err := h.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
+				h.logger.Warn(ctx, "Failed to notify user", observability.String("email", email), observability.Int64("task_id", taskID), observability.Error(err))
+			}
+		}
+	}
+
+	span.SetStatus(codes.Ok, "consensus event processed")
+	h.logger.Info(ctx, "Consensus event processed successfully",
+		observability.Int64("task_id", taskID),
+		observability.String("tx_hash", txHash),
+		observability.Bool("is_accepted", isAccepted))
+
+	return nil
 }
 
 // moveTaskToCompleted moves a task from dispatched to completed stream

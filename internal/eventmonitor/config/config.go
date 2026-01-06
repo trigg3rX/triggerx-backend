@@ -33,6 +33,10 @@ type Config struct {
 	// Alchemy API Key
 	alchemyAPIKey string
 
+	// Pinata IPFS configuration
+	pinataHost string
+	pinataJWT  string
+
 	// YAML-loaded settings
 	polling  PollingConfig
 	webhook  WebhookConfig
@@ -85,6 +89,8 @@ func Init(configPath string) error {
 		attestationCenterAddress:     env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
 		testAttestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
 		alchemyAPIKey:                env.GetEnvString("EVENT_MONITOR_ALCHEMY_API_KEY", ""),
+		pinataHost:                   env.GetEnvString("PINATA_HOST", "https://api.pinata.cloud"),
+		pinataJWT:                    env.GetEnvString("PINATA_JWT", ""),
 		polling:                      yamlConfig.Polling,
 		webhook:                      yamlConfig.Webhook,
 		metrics:                      yamlConfig.Metrics,
@@ -194,6 +200,14 @@ func GetAttestationCenterAddress() string {
 
 func GetTestAttestationCenterAddress() string {
 	return cfg.testAttestationCenterAddress
+}
+
+func GetPinataHost() string {
+	return cfg.pinataHost
+}
+
+func GetPinataJWT() string {
+	return cfg.pinataJWT
 }
 
 func GetChainRPCUrls() map[string]string {
