@@ -1,6 +1,7 @@
 package proof
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	"github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
@@ -36,8 +38,8 @@ func DefaultTLSProofConfig(host string) *TLSProofConfig {
 }
 
 // GenerateProofWithTLSConnection generates a proof using a real TLS connection
-func GenerateProofWithTLSConnection(ipfsData types.IPFSData, config *TLSProofConfig) (types.ProofData, error) {
-	connState, err := EstablishTLSConnection(config)
+func GenerateProofWithTLSConnection(ctx context.Context, logger observability.Logger, ipfsData types.IPFSData, config *TLSProofConfig) (types.ProofData, error) {
+	connState, err := EstablishTLSConnection(ctx, logger, config)
 	if err != nil {
 		return types.ProofData{}, fmt.Errorf("failed to establish TLS connection: %w", err)
 	}
@@ -46,7 +48,7 @@ func GenerateProofWithTLSConnection(ipfsData types.IPFSData, config *TLSProofCon
 }
 
 // EstablishTLSConnection creates a real TLS connection and returns the connection state
-func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error) {
+func EstablishTLSConnection(ctx context.Context, logger observability.Logger, config *TLSProofConfig) (*tls.ConnectionState, error) {
 	if config == nil {
 		return nil, errors.New("TLS proof config cannot be nil")
 	}
@@ -85,7 +87,10 @@ func EstablishTLSConnection(config *TLSProofConfig) (*tls.ConnectionState, error
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			fmt.Printf("Warning: failed to close connection: %v\n", err)
+			logger.Warn(ctx, "Failed to close TLS connection",
+				observability.Error(err),
+				observability.String("address", address),
+			)
 		}
 	}()
 

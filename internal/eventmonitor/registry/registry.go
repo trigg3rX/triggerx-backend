@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	// "time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
@@ -87,6 +87,9 @@ func (rm *RegistryManager) Register(req *types.MonitoringRequest) error {
 		observability.String("key", key),
 		observability.Int("subscribers", len(entry.Subscribers)))
 
+	// Update metrics
+	rm.updateMetrics()
+
 	return nil
 }
 
@@ -132,7 +135,23 @@ func (rm *RegistryManager) Unregister(requestID string) error {
 		rm.logger.Debug(rm.ctx, "Removed registry entry (no subscribers)", observability.String("key", foundKey))
 	}
 
+	// Update metrics
+	rm.updateMetrics()
+
 	return nil
+}
+
+// updateMetrics updates the metrics based on current registry state
+func (rm *RegistryManager) updateMetrics() {
+	totalSubscribers := 0
+	for _, entry := range rm.registry {
+		entry.Mu.RLock()
+		totalSubscribers += len(entry.Subscribers)
+		entry.Mu.RUnlock()
+	}
+
+	metrics.UpdateActiveWorkers(len(rm.registry))
+	metrics.UpdateSubscribersTotal(totalSubscribers)
 }
 
 // GetEntry returns a registry entry by key

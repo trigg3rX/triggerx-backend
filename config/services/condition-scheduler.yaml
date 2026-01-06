@@ -1,0 +1,21 @@
+# Condition Scheduler Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+workers:
+  max_workers: 10                     # Maximum number of workers
+
+# Common Configuration across all services
+database:
+  timeout: "10s"                    # Database operation timeout
+  connect_wait: "5s"                # Database connection wait time
+  retries: 3                        # Database retry attempts
+
+metrics:
+  update_interval: "30s"            # Metrics update interval
+
+shutdown:
+  timeout: "30s"                    # Graceful shutdown timeout
+
+version:
+  version: "0.3.0"                  # Service version

@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/attestation"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/registry"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/worker"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
+	"github.com/trigg3rX/triggerx-backend/pkg/ipfs"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 )
 
@@ -21,7 +23,9 @@ type Service struct {
 	registryManager *registry.RegistryManager
 	nodeClients     map[string]*nodeclient.NodeClient // chainID -> NodeClient
 	workers         map[string]*worker.Worker         // registry key -> Worker
-	webhookClient   *webhook.Client
+	webhookClient   *webhook.GRPCClient
+	permanentPoller *attestation.PermanentPoller
+	ipfsClient      ipfs.IPFSClient
 	logger          observability.Logger
 	tracer          observability.Tracer
 	mu              sync.RWMutex
@@ -35,7 +39,22 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 	ctx, cancel := context.WithCancel(ctx)
 
 	rm := registry.NewRegistryManager(ctx, logger)
-	wc := webhook.NewClient(logger)
+	wc := webhook.NewGRPCClient(logger, tracer)
+
+	// Initialize IPFS client for fetching task data
+	ipfsCfg := ipfs.NewConfig(config.GetPinataHost(), config.GetPinataJWT())
+	ipfsClient, err := ipfs.NewClient(ipfsCfg)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create IPFS client: %w", err)
+	}
+
+	// Initialize permanent poller for Base networks
+	permanentPoller, err := attestation.NewPermanentPoller(ctx, logger, tracer, ipfsClient)
+	if err != nil {
+		cancel() // Clean up context on error
+		return nil, fmt.Errorf("failed to create permanent poller: %w", err)
+	}
 
 	// Initialize node clients for supported chains
 	nodeClients := make(map[string]*nodeclient.NodeClient)
@@ -53,6 +72,10 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 			network = nodeclient.NetworkOptimismSepolia
 		case "421614":
 			network = nodeclient.NetworkArbitrumSepolia
+		case "8453":
+			network = nodeclient.NetworkBase
+		case "42161":
+			network = nodeclient.NetworkArbitrum
 		default:
 			logger.Warn(ctx, "Unknown chain ID, using custom URL", observability.String("chain_id", chainID))
 			// Create custom config with base URL
@@ -87,6 +110,8 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 		nodeClients:     nodeClients,
 		workers:         make(map[string]*worker.Worker),
 		webhookClient:   wc,
+		permanentPoller: permanentPoller,
+		ipfsClient:      ipfsClient,
 		logger:          logger,
 		tracer:          tracer,
 		ctx:             ctx,
@@ -96,7 +121,10 @@ func NewService(ctx context.Context, logger observability.Logger, tracer observa
 
 // Start starts the service
 func (s *Service) Start() error {
-	s.logger.Info(s.ctx, "Starting event monitor service")
+	// Start permanent poller for Base networks
+	if err := s.permanentPoller.Start(); err != nil {
+		return fmt.Errorf("failed to start permanent poller: %w", err)
+	}
 
 	// Start monitoring registry changes
 	go s.monitorRegistry()
@@ -110,6 +138,11 @@ func (s *Service) Stop() {
 
 	// Cancel context
 	s.cancel()
+
+	// Stop permanent poller
+	if s.permanentPoller != nil {
+		s.permanentPoller.Stop()
+	}
 
 	// Stop all workers
 	s.mu.Lock()

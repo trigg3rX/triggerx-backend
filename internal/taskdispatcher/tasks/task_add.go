@@ -98,7 +98,7 @@ func (tsm *TaskStreamManager) AddTaskToDispatchedStream(ctx context.Context, tas
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			fmt.Println("Failed to close response body:", err)
+			tsm.logger.Warn(ctx, "Failed to close response body", observability.Error(err))
 		}
 	}()
 

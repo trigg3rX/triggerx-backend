@@ -10,10 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/config"
+	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/types"
 	"github.com/trigg3rX/triggerx-backend/internal/eventmonitor/webhook"
 	nodeclient "github.com/trigg3rX/triggerx-backend/pkg/client/nodeclient"
@@ -24,7 +24,7 @@ import (
 type Worker struct {
 	entry         *types.RegistryEntry
 	nodeClient    *nodeclient.NodeClient
-	webhookClient *webhook.Client
+	webhookClient webhook.NotificationClient
 	logger        observability.Logger
 	tracer        observability.Tracer
 	ctx           context.Context
@@ -35,7 +35,7 @@ type Worker struct {
 func NewWorker(
 	entry *types.RegistryEntry,
 	nodeClient *nodeclient.NodeClient,
-	webhookClient *webhook.Client,
+	webhookClient webhook.NotificationClient,
 	logger observability.Logger,
 	tracer observability.Tracer,
 ) *Worker {
@@ -102,10 +102,18 @@ func (w *Worker) Stop() {
 
 // pollEvents polls for new events
 func (w *Worker) pollEvents() error {
+	pollStart := time.Now()
+
 	// Get current block number
 	currentBlock, err := w.getCurrentBlock()
 	if err != nil {
+		metrics.TrackPollError(w.entry.ChainID, "get_block_number")
 		return fmt.Errorf("failed to get current block number: %w", err)
+	}
+
+	// Track block lag
+	if currentBlock > w.entry.LastBlock {
+		metrics.UpdateBlockLag(w.entry.ChainID, currentBlock-w.entry.LastBlock)
 	}
 
 	// Check if there are new blocks to process
@@ -116,6 +124,7 @@ func (w *Worker) pollEvents() error {
 	// Query logs in chunks
 	maxBlockRange := config.GetMaxBlockRange()
 	fromBlock := w.entry.LastBlock + 1
+	blocksPolled := uint64(0)
 
 	for fromBlock <= currentBlock {
 		toBlock := fromBlock + maxBlockRange - 1
@@ -126,6 +135,7 @@ func (w *Worker) pollEvents() error {
 		// Query logs for this range
 		logs, err := w.queryLogs(fromBlock, toBlock)
 		if err != nil {
+			metrics.TrackPollError(w.entry.ChainID, "query_logs")
 			w.logger.Error(w.ctx, "Failed to query logs",
 				observability.String("key", w.entry.Key),
 				observability.Uint64("from_block", fromBlock),
@@ -136,14 +146,25 @@ func (w *Worker) pollEvents() error {
 			continue
 		}
 
+		// Track blocks polled
+		blocksPolled += toBlock - fromBlock + 1
+
+		// Track events detected
+		for range logs {
+			metrics.TrackEventDetected(w.entry.ChainID, w.entry.EventSig.Hex())
+		}
+
 		// Process logs and notify subscribers
 		for _, log := range logs {
 			if err := w.processLog(log); err != nil {
+				metrics.TrackEventProcessed(w.entry.ChainID, false)
 				w.logger.Error(w.ctx, "Failed to process log",
 					observability.String("key", w.entry.Key),
 					observability.String("tx_hash", log.TransactionHash),
 					observability.String("log_index", log.LogIndex),
 					observability.Error(err))
+			} else {
+				metrics.TrackEventProcessed(w.entry.ChainID, true)
 			}
 		}
 
@@ -151,6 +172,10 @@ func (w *Worker) pollEvents() error {
 		w.entry.LastBlock = toBlock
 		fromBlock = toBlock + 1
 	}
+
+	// Track metrics
+	metrics.TrackBlocksPolled(w.entry.ChainID, int(blocksPolled))
+	metrics.TrackPollDuration(w.entry.ChainID, time.Since(pollStart))
 
 	return nil
 }
@@ -193,10 +218,10 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 		return fmt.Errorf("failed to parse block number: %w", err)
 	}
 
-	logIndex, err := hexToUint(log.LogIndex)
-	if err != nil {
-		return fmt.Errorf("failed to parse log index: %w", err)
-	}
+	// logIndex, err := hexToUint(log.LogIndex)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to parse log index: %w", err)
+	// }
 
 	// Get subscribers
 	w.entry.Mu.RLock()
@@ -231,34 +256,45 @@ func (w *Worker) processLog(log nodeclient.Log) error {
 			attribute.Int64("block", int64(blockNumber)),
 		))
 
-		notification := &types.EventNotification{
-			RequestID:    subscriber.RequestID,
-			ChainID:      w.entry.ChainID,
-			ContractAddr: w.entry.ContractAddr.Hex(),
-			EventSig:     w.entry.EventSig.Hex(),
-			BlockNumber:  blockNumber,
-			TxHash:       log.TransactionHash,
-			LogIndex:     logIndex,
-			Topics:       log.Topics,
-			Data:         log.Data,
-			Timestamp:    time.Now(),
-		}
+		// Create notification (currently not sent - webhook notifications temporarily disabled)
+		// notification := &types.EventNotification{
+		// 	RequestID:    subscriber.RequestID,
+		// 	ChainID:      w.entry.ChainID,
+		// 	ContractAddr: w.entry.ContractAddr.Hex(),
+		// 	EventSig:     w.entry.EventSig.Hex(),
+		// 	BlockNumber:  blockNumber,
+		// 	TxHash:       log.TransactionHash,
+		// 	LogIndex:     logIndex,
+		// 	Topics:       log.Topics,
+		// 	Data:         log.Data,
+		// 	Timestamp:    time.Now(),
+		// }
 
 		// Send webhook with trace context (non-blocking)
-		go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
-			if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
-				triggerSpan.RecordError(err, observability.WithErrorAttributes(
-					attribute.String("error.type", "webhook_delivery_failed"),
-				))
-				triggerSpan.SetStatus(codes.Error, "failed to send webhook")
-				w.logger.Error(traceCtx, "Failed to send webhook",
-					observability.String("request_id", sub.RequestID),
-					observability.String("webhook_url", sub.WebhookURL),
-					observability.Error(err))
-			} else {
-				triggerSpan.AddEvent("notification.sent")
-			}
-		}(subscriber, notification, ctx)
+		// TODO: Re-enable webhook notifications when fully implemented
+		// Temporarily disabled until webhook URL notifier is fully implemented
+		triggerSpan.AddEvent("notification.skipped", observability.WithEventAttributes(
+			attribute.String("reason", "webhook_notifications_temporarily_disabled"),
+		))
+		w.logger.Debug(ctx, "Webhook notification skipped (temporarily disabled)",
+			observability.String("request_id", subscriber.RequestID),
+			observability.String("webhook_url", subscriber.WebhookURL))
+		/*
+			go func(sub *types.Subscriber, notif *types.EventNotification, traceCtx context.Context) {
+				if err := w.webhookClient.Send(traceCtx, sub.WebhookURL, notif); err != nil {
+					triggerSpan.RecordError(err, observability.WithErrorAttributes(
+						attribute.String("error.type", "webhook_delivery_failed"),
+					))
+					triggerSpan.SetStatus(codes.Error, "failed to send webhook")
+					w.logger.Error(traceCtx, "Failed to send webhook",
+						observability.String("request_id", sub.RequestID),
+						observability.String("webhook_url", sub.WebhookURL),
+						observability.Error(err))
+				} else {
+					triggerSpan.AddEvent("notification.sent")
+				}
+			}(subscriber, notification, ctx)
+		*/
 	}
 
 	return nil
@@ -376,14 +412,14 @@ func hexToUint64(hexStr string) (uint64, error) {
 	return value.Uint64(), nil
 }
 
-// hexToUint converts hex string to uint
-func hexToUint(hexStr string) (uint, error) {
-	val, err := hexToUint64(hexStr)
-	if err != nil {
-		return 0, err
-	}
-	return uint(val), nil
-}
+// hexToUint converts hex string to uint (needed for webhook notifier)
+// func hexToUint(hexStr string) (uint, error) {
+// 	val, err := hexToUint64(hexStr)
+// 	if err != nil {
+// 		return 0, err
+// 	}
+// 	return uint(val), nil
+// }
 
 // uint64ToHex converts uint64 to hex string with 0x prefix
 func uint64ToHex(val uint64) string {

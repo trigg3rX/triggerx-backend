@@ -88,8 +88,7 @@ func (e *ConsoleExporter) writeRecord(record sdklog.Record) {
 	attrStr := formatAttributes(attrs)
 
 	// Build the log line
-	var logLine string
-	logLine = fmt.Sprintf("%s[%s]%s %s%s%s %s%s%s %s%s%s\n",
+	var logLine = fmt.Sprintf("%s[%s]%s %s%s%s %s%s%s %s%s%s\n",
 		colorGray, timestamp, colorReset,
 		color, severityText, colorReset,
 		colorWhite, message, colorReset,

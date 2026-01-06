@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/clients/notify"
 	"github.com/trigg3rX/triggerx-backend/internal/taskmonitor/metrics"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -31,17 +35,24 @@ func (tsm *TaskStreamManager) StartTimeoutWorker(ctx context.Context) {
 
 // checkDispatchedTimeouts checks for tasks that have been dispatched too long
 func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
-	// tsm.logger.Debug("Checking for dispatched timeouts")
+	// Span: Timeout check cycle
+	ctx, span := tsm.tracer.Start(ctx, "worker.timeout_check",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
 
 	// Get expired tasks efficiently using sorted set
 	expiredTaskIDs, err := tsm.expirationManager.GetExpiredTasks(ctx)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get expired tasks")
 		tsm.logger.Error(ctx, "Failed to get expired tasks", observability.Error(err))
 		return
 	}
 
+	span.SetAttributes(attribute.Int("expired_tasks.count", len(expiredTaskIDs)))
+
 	if len(expiredTaskIDs) == 0 {
-		// tsm.logger.Debug("No expired tasks found")
 		return
 	}
 
@@ -52,16 +63,29 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 	var processedTaskIDs []int64
 
 	for _, taskID := range expiredTaskIDs {
+		// Span: Process individual expired task
+		taskCtx, taskSpan := tsm.tracer.Start(ctx, "worker.process_expired_task",
+			observability.WithSpanKind(trace.SpanKindInternal),
+			observability.WithAttributes(
+				attribute.Int64("task.id", taskID),
+			),
+		)
+
 		// Find the task using the efficient index lookup
-		task, messageID, err := tsm.taskIndex.FindTaskByID(ctx, taskID)
+		task, messageID, err := tsm.taskIndex.FindTaskByID(taskCtx, taskID)
 		if err != nil {
-			tsm.logger.Error(ctx, "Failed to find expired task",
+			taskSpan.RecordError(err)
+			taskSpan.SetStatus(codes.Error, "failed to find task")
+			taskSpan.End()
+			tsm.logger.Error(taskCtx, "Failed to find expired task",
 				observability.Int64("task_id", taskID),
 				observability.Error(err))
 			// Still remove from timeout tracking to prevent reprocessing
 			processedTaskIDs = append(processedTaskIDs, taskID)
 			continue
 		}
+
+		taskSpan.AddEvent("task.found")
 
 		// Log task timeout with dispatched_at if available
 		logFields := []observability.Field{
@@ -70,36 +94,44 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 		}
 		if task.DispatchedAt != nil {
 			logFields = append(logFields, observability.Time("dispatched_at", *task.DispatchedAt))
+			taskSpan.SetAttributes(attribute.String("task.dispatched_at", task.DispatchedAt.Format(time.RFC3339)))
 		}
-		tsm.logger.Warn(ctx, "Task timeout detected", logFields...)
+		tsm.logger.Warn(taskCtx, "Task timeout detected", logFields...)
 
 		// Move to failed stream
-		if err := tsm.moveTaskToFailed(ctx, *task, "dispatched timeout"); err != nil {
-			tsm.logger.Error(ctx, "Failed to handle timeout task",
+		if err := tsm.moveTaskToFailed(taskCtx, *task, "dispatched timeout"); err != nil {
+			taskSpan.RecordError(err)
+			taskSpan.SetStatus(codes.Error, "failed to move task to failed")
+			taskSpan.End()
+			tsm.logger.Error(taskCtx, "Failed to handle timeout task",
 				observability.Int64("task_id", taskID),
 				observability.Error(err))
 			continue // Don't acknowledge if we failed to move to failed stream
 		}
 
+		taskSpan.AddEvent("task.moved_to_failed")
+
 		// Acknowledge the timed-out task if we have the messageID
 		if messageID != "" {
-			err := tsm.AckTaskProcessed(ctx, StreamTaskDispatched, "timeout-checker", messageID)
+			err := tsm.AckTaskProcessed(taskCtx, StreamTaskDispatched, "timeout-checker", messageID)
 			if err != nil {
-				tsm.logger.Error(ctx, "Failed to acknowledge timed-out task",
+				taskSpan.RecordError(err)
+				tsm.logger.Error(taskCtx, "Failed to acknowledge timed-out task",
 					observability.Int64("task_id", taskID),
 					observability.String("message_id", messageID),
 					observability.Error(err))
 			} else {
-				tsm.logger.Info(ctx, "Task timeout processed and acknowledged successfully",
+				taskSpan.AddEvent("task.acknowledged")
+				tsm.logger.Info(taskCtx, "Task timeout processed and acknowledged successfully",
 					observability.Int64("task_id", taskID),
 					observability.String("message_id", messageID))
 			}
 		}
 
 		// Remove from task index since it's been processed
-		err = tsm.taskIndex.RemoveTaskIndex(ctx, taskID)
+		err = tsm.taskIndex.RemoveTaskIndex(taskCtx, taskID)
 		if err != nil {
-			tsm.logger.Warn(ctx, "failed to remove timed-out task from index",
+			tsm.logger.Warn(taskCtx, "failed to remove timed-out task from index",
 				observability.Int64("task_id", taskID),
 				observability.Error(err))
 		}
@@ -107,18 +139,21 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 		processedCount++
 		processedTaskIDs = append(processedTaskIDs, taskID)
 
-		err = tsm.dbClient.UpdateTaskFailed(ctx, taskID)
+		err = tsm.dbClient.UpdateTaskFailed(taskCtx, taskID)
 		if err != nil {
-			tsm.logger.Error(ctx, "Failed to update task failed",
+			taskSpan.RecordError(err)
+			tsm.logger.Error(taskCtx, "Failed to update task failed",
 				observability.Int64("task_id", taskID),
 				observability.Error(err))
+		} else {
+			taskSpan.AddEvent("db.updated")
 		}
 
 		// Notify user on failure
 		if tsm.notifier != nil {
-			email, e := tsm.dbClient.GetUserEmailByTaskID(ctx, taskID)
+			email, e := tsm.dbClient.GetUserEmailByTaskID(taskCtx, taskID)
 			if e != nil {
-				tsm.logger.Warn(ctx, "Could not fetch user email for task failure",
+				tsm.logger.Warn(taskCtx, "Could not fetch user email for task failure",
 					observability.Int64("task_id", taskID),
 					observability.Error(e))
 			} else if email != "" {
@@ -131,19 +166,25 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 					OccurredAt: time.Now(),
 				}
 				if err := tsm.notifier.NotifyTaskStatus(context.Background(), email, payload); err != nil {
-					tsm.logger.Warn(ctx, "Failed to notify user for task failure",
+					tsm.logger.Warn(taskCtx, "Failed to notify user for task failure",
 						observability.String("email", email),
 						observability.Int64("task_id", taskID),
 						observability.Error(err))
+				} else {
+					taskSpan.AddEvent("user.notified")
 				}
 			}
 		}
+
+		taskSpan.SetStatus(codes.Ok, "")
+		taskSpan.End()
 	}
 
 	// Remove all processed tasks from timeout tracking in batch
 	if len(processedTaskIDs) > 0 {
 		err = tsm.expirationManager.RemoveMultipleTaskTimeouts(ctx, processedTaskIDs)
 		if err != nil {
+			span.RecordError(err)
 			tsm.logger.Error(ctx, "Failed to remove processed tasks from timeout tracking",
 				observability.Int("task_count", len(processedTaskIDs)),
 				observability.Error(err))
@@ -153,6 +194,7 @@ func (tsm *TaskStreamManager) checkDispatchedTimeouts(ctx context.Context) {
 		}
 	}
 
+	span.SetAttributes(attribute.Int("processed_count", processedCount))
 	if processedCount > 0 {
 		tsm.logger.Info(ctx, "Processed task timeouts", observability.Int("processed_count", processedCount))
 	}

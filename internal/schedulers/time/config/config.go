@@ -4,83 +4,108 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
-)
-
-const (
-	version = "0.0.1"
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 type Config struct {
 	devMode bool
+
+	// Service ports
+	httpPort string
+	grpcPort string
+
+	// Database Connection Configuration (from env)
+	dbConnection env.DatabaseConfig
+
+	// OTel exporter endpoint
 	otelExporterEndpoint string
 
-	// Scheduler RPC Port
-	timeSchedulerRPCPort string
-
-	// Database RPC URL
-	dbServerURL string
-	// Aggregator RPC URL
-	aggregatorRPCUrl string
-	// Task Dispatcher RPC URL (renamed from Redis API URL)
+	// Task Dispatcher RPC URL
 	taskDispatcherRPCUrl string
 
 	// Scheduler ID
 	timeSchedulerID int
 
-	// Time Durations
-	pollingInterval     time.Duration
-	pollingLookAhead    time.Duration
-	taskBatchSize       int
-	performerLockTTL    time.Duration
-	taskCacheTTL        time.Duration
-	duplicateTaskWindow time.Duration
+	// YAML-loaded settings	
+	polling PollingConfig
+	metrics              yaml.MetricsConfig
+	shutdown             yaml.ShutdownConfig
+	version              yaml.VersionConfig
 }
 
-var cfg Config
+type PollingConfig struct {
+	Interval            yaml.Duration `yaml:"interval"`
+	LookAhead           yaml.Duration `yaml:"look_ahead"`
+	BatchSize           int           `yaml:"batch_size"`
+	PerformerLockTTL    yaml.Duration `yaml:"performer_lock_ttl"`
+	TaskCacheTTL        yaml.Duration `yaml:"task_cache_ttl"`
+	DuplicateTaskWindow yaml.Duration `yaml:"duplicate_task_window"`
+}
 
-func Init() error {
+type YAMLConfig struct {
+	Polling  PollingConfig  `yaml:"polling"`
+	Metrics  yaml.MetricsConfig  `yaml:"metrics"`
+	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
+	Version  yaml.VersionConfig  `yaml:"version"`
+}
+
+var cfg *Config
+
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-	cfg = Config{
+
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
+	cfg = &Config{
 		devMode:              env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
-		timeSchedulerRPCPort: env.GetEnvString("TIME_SCHEDULER_RPC_PORT", "9005"),
-		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9003"),
-		dbServerURL:          env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCUrl:     env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		pollingInterval:      env.GetEnvDuration("TIME_SCHEDULER_POLLING_INTERVAL", 30*time.Second),
-		pollingLookAhead:     env.GetEnvDuration("TIME_SCHEDULER_POLLING_LOOKAHEAD", 40*time.Minute),
-		taskBatchSize:        env.GetEnvInt("TIME_SCHEDULER_TASK_BATCH_SIZE", 15),
-		performerLockTTL:     env.GetEnvDuration("TIME_SCHEDULER_PERFORMER_LOCK_TTL", 31*time.Second),
-		taskCacheTTL:         env.GetEnvDuration("TIME_SCHEDULER_TASK_CACHE_TTL", 1*time.Minute),
-		duplicateTaskWindow:  env.GetEnvDuration("TIME_SCHEDULER_DUPLICATE_TASK_WINDOW", 1*time.Minute),
+		httpPort:             env.GetEnvString("TIME_SCHEDULER_HTTP_PORT", "9005"),
+		grpcPort:             env.GetEnvString("TIME_SCHEDULER_GRPC_PORT", "9015"),
+		dbConnection:         env.GetDatabaseConfig(),
+		otelExporterEndpoint: env.GetOTELExporterEndpoint(),
+		taskDispatcherRPCUrl: env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
+		timeSchedulerID:      env.GetEnvInt("TIME_SCHEDULER_ID", 1234),
+		polling:              yamlConfig.Polling,
+		metrics:              yamlConfig.Metrics,
+		shutdown:             yamlConfig.Shutdown,
+		version:              yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
-	if !cfg.devMode {
-		gin.SetMode(gin.ReleaseMode)
+	if err := yaml.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 	return nil
 }
 
 func validateConfig() error {
-	if !env.IsValidPort(cfg.timeSchedulerRPCPort) {
-		return fmt.Errorf("invalid time scheduler RPC port: %s", cfg.timeSchedulerRPCPort)
+	if !env.IsValidPort(cfg.httpPort) {
+		return fmt.Errorf("invalid time scheduler HTTP Port: %s", cfg.httpPort)
 	}
-	if !env.IsValidURL(cfg.dbServerURL) {
-		return fmt.Errorf("invalid database server URL: %s", cfg.dbServerURL)
+	if !env.IsValidPort(cfg.grpcPort) {
+		return fmt.Errorf("invalid time scheduler gRPC Port: %s", cfg.grpcPort)
 	}
-	if !env.IsValidURL(cfg.aggregatorRPCUrl) {
-		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCUrl)
+	if !env.IsValidIPAddress(cfg.dbConnection.HostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.dbConnection.HostAddress)
 	}
-	// Note: taskDispatcherRPCUrl is a gRPC endpoint (host:port format), not an HTTP URL
-	// so we don't validate it as a URL
+	if !env.IsValidPort(cfg.dbConnection.HostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
+	}
+	if !env.IsValidHostPort(cfg.taskDispatcherRPCUrl) {
+		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
+	}
+	if !env.IsValidInt(cfg.timeSchedulerID) {
+		return fmt.Errorf("invalid time scheduler ID: %d", cfg.timeSchedulerID)
+	}
 	return nil
 }
 
@@ -89,23 +114,55 @@ func IsDevMode() bool {
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
+}
+
+func GetHTTPPort() string {
+	return cfg.httpPort
+}
+
+func GetGRPCPort() string {
+	return cfg.grpcPort
 }
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
 }
 
-func GetSchedulerRPCPort() string {
-	return cfg.timeSchedulerRPCPort
+func GetDatabaseHostAddress() string {
+	return cfg.dbConnection.HostAddress
 }
 
-func GetDBServerURL() string {
-	return cfg.dbServerURL
+func GetDatabaseHostPort() string {
+	return cfg.dbConnection.HostPort
 }
 
-func GetAggregatorRPCUrl() string {
-	return cfg.aggregatorRPCUrl
+func GetDatabaseUsername() string {
+	return cfg.dbConnection.Username
+}
+
+func GetDatabasePassword() string {
+	return cfg.dbConnection.Password
+}
+
+func GetDatabaseSSLEnabled() bool {
+	return cfg.dbConnection.SSLEnabled
+}
+
+func GetDatabaseSSLCertPath() string {
+	return cfg.dbConnection.SSLCertPath
+}
+
+func GetDatabaseSSLKeyPath() string {
+	return cfg.dbConnection.SSLKeyPath
+}
+
+func GetDatabaseSSLCAPath() string {
+	return cfg.dbConnection.SSLCAPath
+}
+
+func GetDatabaseSSLInsecureSkipVerify() bool {
+	return cfg.dbConnection.SSLInsecureSkipVerify
 }
 
 func GetTaskDispatcherRPCUrl() string {
@@ -117,25 +174,33 @@ func GetSchedulerID() int {
 }
 
 func GetPollingInterval() time.Duration {
-	return cfg.pollingInterval
+	return cfg.polling.Interval.ToDuration()
 }
 
 func GetPollingLookAhead() time.Duration {
-	return cfg.pollingLookAhead
+	return cfg.polling.LookAhead.ToDuration()
 }
 
 func GetTaskBatchSize() int {
-	return cfg.taskBatchSize
+	return cfg.polling.BatchSize
 }
 
 func GetPerformerLockTTL() time.Duration {
-	return cfg.performerLockTTL
+	return cfg.polling.PerformerLockTTL.ToDuration()
 }
 
 func GetTaskCacheTTL() time.Duration {
-	return cfg.taskCacheTTL
+	return cfg.polling.TaskCacheTTL.ToDuration()
 }
 
 func GetDuplicateTaskWindow() time.Duration {
-	return cfg.duplicateTaskWindow
+	return cfg.polling.DuplicateTaskWindow.ToDuration()
+}
+
+func GetMetricsUpdateInterval() time.Duration {
+	return cfg.metrics.UpdateInterval.ToDuration()
+}
+
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }

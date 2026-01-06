@@ -1,6 +1,7 @@
 package types
 
 import (
+	"math/big"
 	"time"
 )
 
@@ -136,4 +137,10 @@ type BroadcastDataForPerformer struct {
 	TaskDefinitionID int    `json:"task_definition_id"`
 	PerformerAddress string `json:"performer_address"`
 	Data             []byte `json:"data"`
+}
+
+type CreateTaskDataRequest struct {
+	JobID            *big.Int `json:"job_id" validate:"required"`
+	TaskDefinitionID int      `json:"task_definition_id" validate:"required"`
+	IsImua           bool     `json:"is_imua"`
 }

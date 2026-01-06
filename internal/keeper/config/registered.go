@@ -2,13 +2,14 @@ package config
 
 import (
 	"context"
+	"fmt"
+	"math/big"
+	"strings"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"log"
-	"math/big"
-	"strings"
 )
 
 const AttestationCenterABI = `[{
@@ -31,25 +32,22 @@ const AttestationCenterABI = `[{
 	"type": "function"
 }]`
 
-func checkKeeperRegistration() bool {
+func checkKeeperRegistration() error {
 	client, err := ethclient.Dial(GetBaseRPCUrl())
 	if err != nil {
-		log.Fatal("Failed to connect to L2 network", "error", err)
-		return false
+		return fmt.Errorf("failed to connect to L2 network: %w", err)
 	}
 	defer client.Close()
 
 	parsedABI, err := abi.JSON(strings.NewReader(AttestationCenterABI))
 	if err != nil {
-		log.Fatal("Failed to parse AttestationCenter ABI", "error", err)
-		return false
+		return fmt.Errorf("failed to parse AttestationCenter ABI: %w", err)
 	}
 
 	keeperAddr := common.HexToAddress(GetKeeperAddress())
 	data, err := parsedABI.Pack("operatorsIdsByAddress", keeperAddr)
 	if err != nil {
-		log.Fatal("Failed to pack function call data", "error", err)
-		return false
+		return fmt.Errorf("failed to pack function call data: %w", err)
 	}
 
 	attestationCenterAddr := common.HexToAddress(GetAttestationCenterAddress())
@@ -58,23 +56,20 @@ func checkKeeperRegistration() bool {
 		Data: data,
 	}, nil)
 	if err != nil {
-		log.Fatal("Failed to call AttestationCenter contract", "error", err)
-		return false
+		return fmt.Errorf("failed to call AttestationCenter contract: %w", err)
 	}
 
 	if len(result) == 0 {
-		log.Fatal("Empty result from contract call")
-		return false
+		return fmt.Errorf("empty result from contract call")
 	}
 
 	operatorID := new(big.Int).SetBytes(result)
 
 	if operatorID.Cmp(big.NewInt(0)) == 0 {
-		log.Fatal("Keeper address is not registered on L2")
-		return false
+		return fmt.Errorf("keeper address %s is not registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed", GetKeeperAddress())
 	}
 
-	log.Println("Keeper address", GetKeeperAddress(), "is registered on L2 with operator ID", operatorID)
+	fmt.Printf("Keeper address %s is registered on L2 with operator ID %s\n", GetKeeperAddress(), operatorID.String())
 
-	return true
+	return nil
 }

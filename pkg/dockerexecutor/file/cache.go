@@ -119,7 +119,7 @@ func (c *fileCache) accessCachedFile(ctx context.Context, cachedFile *cachedFile
 
 		// Save updated metadata
 		if saveErr := c.saveMetadata(); saveErr != nil {
-			c.logger.Warn(ctx, "Failed to save cache metadata after removal", observability.Error(saveErr))
+			c.logger.Warn(ctx, "Failed to save cache metadata after removal", observability.String("filePath", cachedFile.Path), observability.String("key", cachedFile.Hash), observability.Error(saveErr))
 		}
 
 		return "", fmt.Errorf("cached file not found on disk: %s", cachedFile.Path)
@@ -135,7 +135,7 @@ func (c *fileCache) accessCachedFile(ctx context.Context, cachedFile *cachedFile
 
 	// Save metadata to persist access time
 	if err := c.saveMetadata(); err != nil {
-		c.logger.Warn(ctx, "Failed to save cache metadata after access", observability.Error(err))
+		c.logger.Warn(ctx, "Failed to save cache metadata after access", observability.String("filePath", cachedFile.Path), observability.String("key", cachedFile.Hash), observability.Error(err))
 	}
 
 	return cachedFile.Path, nil
@@ -176,7 +176,7 @@ func (c *fileCache) storeFile(ctx context.Context, key string, fileLanguage stri
 
 	// Save metadata to persist cache information
 	if err := c.saveMetadata(); err != nil {
-		c.logger.Warn(ctx, "Failed to save cache metadata", observability.Error(err))
+		c.logger.Warn(ctx, "Failed to save cache metadata", observability.String("filePath", filePath), observability.String("key", key), observability.Error(err))
 	}
 
 	c.logger.Debug(ctx, "Stored file in cache", observability.Int64("size", fileInfo.Size()))
@@ -239,7 +239,7 @@ func (c *fileCache) ensureSpace(ctx context.Context, requiredSize int64) error {
 
 		// Remove file from disk
 		if err := c.fs.Remove(entry.file.Path); err != nil {
-			c.logger.Warn(ctx, "Failed to remove cached file", observability.Error(err))
+			c.logger.Warn(ctx, "Failed to remove cached file", observability.String("filePath", entry.file.Path), observability.String("key", entry.hash), observability.Int64("size", entry.file.Size), observability.Error(err))
 			continue
 		}
 
@@ -255,7 +255,7 @@ func (c *fileCache) ensureSpace(ctx context.Context, requiredSize int64) error {
 
 	// Save updated metadata after eviction
 	if err := c.saveMetadata(); err != nil {
-		c.logger.Warn(ctx, "Failed to save cache metadata after eviction", observability.Error(err))
+		c.logger.Warn(ctx, "Failed to save cache metadata after eviction", observability.Int64("evictedSize", evictedSize), observability.Int("evictionCount", int(c.stats.EvictionCount)), observability.Error(err))
 	}
 
 	return nil
@@ -266,7 +266,7 @@ func (c *fileCache) loadExistingFiles(ctx context.Context) error {
 	metadataPath := filepath.Join(c.cacheDir, "cache_metadata.json")
 	if _, err := c.fs.Stat(metadataPath); err == nil {
 		if err := c.loadMetadata(metadataPath); err != nil {
-			c.logger.Warn(ctx, "Failed to load cache metadata", observability.Error(err))
+			c.logger.Warn(ctx, "Failed to load cache metadata", observability.String("metadataPath", metadataPath), observability.Error(err))
 		}
 	}
 

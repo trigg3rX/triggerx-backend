@@ -19,7 +19,6 @@ func TestNewTaskManager(t *testing.T) {
 
 	// Test that all components are initialized
 	assert.NotNil(t, tm.taskStreamManager)
-	assert.NotNil(t, tm.eventListener)
 	assert.NotNil(t, tm.redisClient)
 
 	// Clean up

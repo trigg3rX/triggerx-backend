@@ -69,12 +69,21 @@ func RegisterRoutes(router *gin.Engine, logger observability.Logger) {
 	// Start metrics collection (metrics should already be initialized via InitializeMetrics)
 	metrics.StartMetricsCollection()
 
+	// Service status endpoint for Pulsate and nginx
+	router.GET("/status", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"service":   "health",
+			"version":   config.GetVersion(),
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
 	router.GET("/", handler.handleRoot)
 	router.POST("/health", handler.HandleCheckInEvent)
-	router.GET("/status", handler.GetKeeperStatus)
+	router.GET("/keeper-status", handler.GetKeeperStatus)
 	router.GET("/operators", handler.GetDetailedKeeperStatus)
-	router.GET("/performers", handler.GetActivePerformers) // New endpoint for taskmanager
-	// Note: /metrics endpoint removed - metrics are exported via OpenTelemetry collector
+	router.GET("/performers", handler.GetActivePerformers)
 }
 
 func (h *Handler) handleRoot(c *gin.Context) {
@@ -107,33 +116,17 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		keeperHealth.Version = "0.1.0"
 	}
 
-	// h.logger.Debug("Received keeper health check-in",
-	// 	"keeper", keeperHealth.KeeperAddress,
-	// 	"version", keeperHealth.Version,
-	// 	"peer_id", keeperHealth.PeerID,
-	// )
-
 	// Record check-in by version metric
 	metrics.RecordKeeperCheckIn(ctx, keeperHealth.Version)
 
 	// Verify signature for all versions
 	ok, _ := cryptography.VerifySignature(keeperHealth.KeeperAddress, keeperHealth.Signature, keeperHealth.ConsensusAddress)
 	if !ok {
-		// h.logger.Error(ctx, "Invalid keeper signature",
-		// 	observability.String("keeper", keeperHealth.KeeperAddress),
-		// 	observability.Error(err),
-		// )
 		c.JSON(http.StatusPreconditionFailed, gin.H{
 			"error": "Invalid signature",
 		})
 		return
 	}
-
-	// h.logger.Debug("Valid keeper signature verified",
-	// 	"keeper", keeperHealth.KeeperAddress,
-	// 	"version", keeperHealth.Version,
-	// 	"ip", c.ClientIP(),
-	// )
 
 	keeperHealth.KeeperAddress = strings.ToLower(keeperHealth.KeeperAddress)
 	keeperHealth.ConsensusAddress = strings.ToLower(keeperHealth.ConsensusAddress)
@@ -165,8 +158,10 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 	)
 
 	// Handle different versions according to requirements
-	switch keeperHealth.Version {
-	case "0.1.6", "0.2.0", "0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5", "0.2.6", "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "0.3.0", "1.1.0", "1.1.1":
+	latestVersions := config.GetKeeperLatestVersions()
+	versionsWithTaskExecutionAddress := config.GetKeeperVersionsWithTaskExecutionAddress()
+
+	if config.IsKeeperVersionInList(keeperHealth.Version, latestVersions) {
 		// Latest version - return msgData with no warning
 		var message string
 		if keeperHealth.IsImua {
@@ -175,17 +170,17 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 				config.GetAlchemyAPIKey(),
 				config.GetPinataHost(),
 				config.GetPinataJWT(),
-				config.GetManagerSigningAddress(),
+				config.GetDispatcherSigningAddress(),
 				config.GetImuaTaskExecutionAddress(),
 			)
 		} else {
-			if keeperHealth.Version == "1.0.0" || keeperHealth.Version == "1.0.1" || keeperHealth.Version == "1.1.1" {
+			if config.IsKeeperVersionInList(keeperHealth.Version, versionsWithTaskExecutionAddress) {
 				message = fmt.Sprintf("%s:%s:%s:%s:%s:%s",
 					config.GetEtherscanAPIKey(),
 					config.GetAlchemyAPIKey(),
 					config.GetPinataHost(),
 					config.GetPinataJWT(),
-					config.GetManagerSigningAddress(),
+					config.GetDispatcherSigningAddress(),
 					config.GetTaskExecutionAddress(),
 				)
 			} else {
@@ -194,7 +189,7 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 					config.GetAlchemyAPIKey(),
 					config.GetPinataHost(),
 					config.GetPinataJWT(),
-					config.GetManagerSigningAddress(),
+					config.GetDispatcherSigningAddress(),
 					config.GetTestTaskExecutionAddress(),
 				)
 			}
@@ -213,41 +208,11 @@ func (h *Handler) HandleCheckInEvent(c *gin.Context) {
 		response.Status = true
 		response.Data = msgData
 		c.JSON(http.StatusOK, response)
-
-	case "0.1.5", "0.1.4", "0.1.3":
-		// Old versions that can handle msgData - return msgData with warning
-		// h.logger.Warn("Keeper using outdated version, recommend upgrade to latest",
-		// 	"keeper", keeperHealth.KeeperAddress,
-		// 	"version", keeperHealth.Version,
-		// 	"recommended_version", "0.1.6",
-		// )
-
-		message := fmt.Sprintf("%s:%s:%s:%s", config.GetEtherscanAPIKey(), config.GetAlchemyAPIKey(), config.GetPinataHost(), config.GetPinataJWT())
-		msgData, err := cryptography.EncryptMessage(keeperHealth.ConsensusPubKey, message)
-		if err != nil {
-			h.logger.Error(ctx, "Failed to encrypt message for keeper",
-				observability.Error(err),
-			)
-			response.Status = false
-			response.Data = err.Error()
-			c.JSON(http.StatusInternalServerError, response)
-			return
-		}
+	} else {
+		// Return warning only, no msgData
 
 		response.Status = true
-		response.Data = msgData
-		c.JSON(http.StatusOK, response)
-
-	default:
-		// Oldest versions (0.1.0-0.1.2) - return warning only, no msgData
-		// h.logger.Warn("Keeper using very outdated version, recommend upgrade to latest",
-		// 	"keeper", keeperHealth.KeeperAddress,
-		// 	"version", keeperHealth.Version,
-		// 	"recommended_version", "0.1.6",
-		// )
-
-		response.Status = true
-		response.Data = "UPGRADE TO v0.1.6 for full functionality"
+		response.Data = config.GetKeeperUpgradeMessage()
 		c.JSON(http.StatusOK, response)
 	}
 }

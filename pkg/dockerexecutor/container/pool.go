@@ -191,12 +191,20 @@ func (p *containerPool) returnContainer(ctx context.Context, container *types.Po
 				p.logger.Warn(ctx, "Failed to cleanup failed container", observability.String("container_id", container.ID), observability.Error(cleanupErr))
 			} else {
 				delete(p.containers, container.ID)
+				currentCount := len(p.containers)
+				shouldReplenish := currentCount < p.config.BasePoolConfig.MinContainers
+
 				// Release a token back to the semaphore since we removed a container
 				select {
 				case p.creationSemaphore <- struct{}{}:
 				default:
 					// Semaphore is full, which shouldn't happen but handle gracefully
 					p.logger.Warn(ctx, "Creation semaphore is full when trying to release token for removed container", observability.String("container_id", container.ID))
+				}
+
+				// Replenish pool if needed (async, don't block)
+				if shouldReplenish {
+					go p.replenishPool(context.Background(), currentCount)
 				}
 			}
 
@@ -652,10 +660,19 @@ func (p *containerPool) healthCheck(ctx context.Context) {
 		}
 	}
 
+	// Check if we need to replenish the pool after removing unhealthy containers
+	currentCount := len(p.containers)
+	shouldReplenish := currentCount < p.config.BasePoolConfig.MinContainers
+
 	if containersChecked > 0 {
 		totalContainers := len(p.containers)
 		checkPercentage := float64(containersChecked) / float64(totalContainers+len(containersToRemove)) * 100
 		p.logger.Debug(ctx, "Health check completed for pool", observability.String("language", string(p.language)), observability.Int("containers_checked", containersChecked), observability.Float64("check_percentage", checkPercentage), observability.Int("containers_with_issues", containersWithIssues), observability.Int("containers_removed", len(containersToRemove)))
+	}
+
+	// Replenish pool if needed (async, don't block)
+	if shouldReplenish {
+		go p.replenishPool(context.Background(), currentCount)
 	}
 
 	p.updateStats(ctx)
@@ -687,7 +704,8 @@ func (p *containerPool) getHealthCheckStats() (int, int, int) {
 // This should be called when a container fails during command execution
 func (p *containerPool) markContainerAsFailed(ctx context.Context, containerID string, err error) {
 	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	shouldReplenish := false
+	currentCount := 0
 
 	if container, exists := p.containers[containerID]; exists {
 		p.logger.Warn(ctx, "Marking container as failed due to execution error", observability.String("container_id", containerID), observability.Error(err))
@@ -697,7 +715,11 @@ func (p *containerPool) markContainerAsFailed(ctx context.Context, containerID s
 
 		// Remove from pool immediately
 		delete(p.containers, containerID)
+		currentCount = len(p.containers)
 		p.updateStats(ctx)
+
+		// Check if we need to replenish the pool
+		shouldReplenish = currentCount < p.config.BasePoolConfig.MinContainers
 
 		// Release a token back to the semaphore since we removed a container
 		select {
@@ -706,13 +728,19 @@ func (p *containerPool) markContainerAsFailed(ctx context.Context, containerID s
 			// Semaphore is full, which shouldn't happen but handle gracefully
 			p.logger.Warn(ctx, "Creation semaphore is full when trying to release token for failed container", observability.String("container_id", containerID))
 		}
+	}
+	p.mutex.Unlock()
 
-		// Cleanup the failed container
-		go func() {
-			if cleanupErr := p.manager.CleanupContainer(context.Background(), containerID); cleanupErr != nil {
-				p.logger.Warn(ctx, "Failed to cleanup failed container", observability.String("container_id", containerID), observability.Error(cleanupErr))
-			}
-		}()
+	// Cleanup the failed container
+	go func() {
+		if cleanupErr := p.manager.CleanupContainer(context.Background(), containerID); cleanupErr != nil {
+			p.logger.Warn(ctx, "Failed to cleanup failed container", observability.String("container_id", containerID), observability.Error(cleanupErr))
+		}
+	}()
+
+	// Replenish pool if needed (async, don't block)
+	if shouldReplenish {
+		go p.replenishPool(context.Background(), currentCount)
 	}
 }
 
@@ -751,6 +779,69 @@ func (p *containerPool) getStats() *types.PoolStats {
 	// Create a copy to avoid race conditions
 	stats := *p.stats
 	return &stats
+}
+
+// replenishPool creates new containers to bring the pool up to MinContainers
+// This is called asynchronously when containers are removed and the pool is below MinContainers
+func (p *containerPool) replenishPool(ctx context.Context, currentCount int) {
+	needed := p.config.BasePoolConfig.MinContainers - currentCount
+	if needed <= 0 {
+		return
+	}
+
+	p.logger.Debug(ctx, "Replenishing pool", observability.String("language", string(p.language)), observability.Int("current_count", currentCount), observability.Int("min_containers", p.config.BasePoolConfig.MinContainers), observability.Int("needed", needed))
+
+	// Create containers in parallel, but limit concurrency to avoid overwhelming the system
+	maxConcurrent := 3
+	if needed < maxConcurrent {
+		maxConcurrent = needed
+	}
+
+	semaphore := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	successCount := 0
+	var successMutex sync.Mutex
+
+	for i := 0; i < needed; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// Try to acquire a creation token
+			select {
+			case <-p.creationSemaphore:
+				// We have permission to create a container
+				container, err := p.createPreparedContainer(ctx)
+				if err != nil {
+					p.logger.Warn(ctx, "Failed to create container during pool replenishment", observability.Int("index", index), observability.String("language", string(p.language)), observability.Error(err))
+					// Return the token since creation failed
+					p.creationSemaphore <- struct{}{}
+					return
+				}
+
+				successMutex.Lock()
+				successCount++
+				successMutex.Unlock()
+
+				p.logger.Debug(ctx, "Successfully created container during pool replenishment", observability.Int("index", index), observability.String("container_id", container.ID), observability.String("language", string(p.language)))
+			case <-ctx.Done():
+				p.logger.Debug(ctx, "Context cancelled during pool replenishment", observability.String("language", string(p.language)))
+				return
+			default:
+				// No creation tokens available, pool is at capacity
+				p.logger.Debug(ctx, "No creation tokens available during pool replenishment", observability.String("language", string(p.language)))
+				return
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	p.logger.Debug(ctx, "Pool replenishment completed", observability.String("language", string(p.language)), observability.Int("requested", needed), observability.Int("created", successCount))
 }
 
 func (p *containerPool) close(ctx context.Context) error {

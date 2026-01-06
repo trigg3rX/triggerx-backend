@@ -20,6 +20,7 @@ type TaskStreamManager struct {
 	dbClient          *database.DatabaseClient
 	notifier          notify.Notifier
 	logger            observability.Logger
+	tracer            observability.Tracer
 	consumerGroups    map[string]bool
 	mu                sync.RWMutex
 	startTime         time.Time
@@ -27,12 +28,13 @@ type TaskStreamManager struct {
 	expirationManager *ExpirationManager
 }
 
-func NewTaskStreamManager(ctx context.Context, redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger observability.Logger) (*TaskStreamManager, error) {
+func NewTaskStreamManager(ctx context.Context, redisClient redisClient.RedisClientInterface, dbClient *database.DatabaseClient, logger observability.Logger, tracer observability.Tracer) (*TaskStreamManager, error) {
 	tsm := &TaskStreamManager{
 		redisClient:    redisClient,
 		dbClient:       dbClient,
 		notifier:       notify.NewCompositeNotifier(logger, notify.NewWebhookNotifier(logger), notify.NewSMTPNotifier(logger)),
 		logger:         logger,
+		tracer:         tracer,
 		consumerGroups: make(map[string]bool),
 		startTime:      time.Now(),
 	}

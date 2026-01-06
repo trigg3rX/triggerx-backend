@@ -2,6 +2,9 @@ package database
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"os"
 	"sync"
 
 	"github.com/gocql/gocql"
@@ -36,6 +39,41 @@ func NewConnection(config *Config, logger observability.Logger) (*Connection, er
 		cluster.MaxPreparedStmts = config.MaxPreparedStmts
 		cluster.DefaultIdempotence = config.DefaultIdempotence
 
+		// Configure authentication if provided
+		if config.Username != "" && config.Password != "" {
+			cluster.Authenticator = gocql.PasswordAuthenticator{
+				Username: config.Username,
+				Password: config.Password,
+			}
+		}
+
+		// Configure SSL/TLS if enabled
+		if config.EnableSSL {
+			var tlsConfig *tls.Config
+
+			if config.SSLConfig != nil {
+				// Use provided TLS config
+				tlsConfig = config.SSLConfig
+			} else if config.CertPath != "" && config.KeyPath != "" {
+				// Load certificates from files
+				tlsConfig, err = loadTLSConfigFromFiles(config.CertPath, config.KeyPath, config.CAPath, config.InsecureSkipVerify)
+				if err != nil {
+					logger.Error(context.Background(), "Failed to load SSL certificates", observability.Error(err))
+					return
+				}
+			} else {
+				// Basic TLS config without client certificates
+				tlsConfig = &tls.Config{
+					InsecureSkipVerify: config.InsecureSkipVerify,
+				}
+			}
+
+			cluster.SslOpts = &gocql.SslOptions{
+				Config: tlsConfig,
+			}
+			logger.Info(context.Background(), "ScyllaDB SSL/TLS encryption enabled")
+		}
+
 		session, sessionErr := cluster.CreateSession()
 		if sessionErr != nil {
 			err = sessionErr
@@ -50,6 +88,37 @@ func NewConnection(config *Config, logger observability.Logger) (*Connection, er
 	})
 
 	return instance, err
+}
+
+// loadTLSConfigFromFiles loads TLS configuration from certificate files.
+func loadTLSConfigFromFiles(certPath, keyPath, caPath string, insecureSkipVerify bool) (*tls.Config, error) {
+	config := &tls.Config{
+		InsecureSkipVerify: insecureSkipVerify,
+	}
+
+	// Load client certificate and key if provided
+	if certPath != "" && keyPath != "" {
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, err
+		}
+		config.Certificates = []tls.Certificate{cert}
+	}
+
+	// Load CA certificate if provided
+	if caPath != "" {
+		caCert, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, err
+		}
+		config.RootCAs = caCertPool
+	}
+
+	return config, nil
 }
 
 // Session returns the underlying gocql session.

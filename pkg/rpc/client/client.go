@@ -19,6 +19,7 @@ import (
 type Client struct {
 	config   Config
 	logger   observability.Logger
+	tracer   observability.Tracer
 	registry rpcpkg.ServiceRegistry
 	pool     *ConnectionPool
 }
@@ -33,8 +34,8 @@ type Config struct {
 	PoolTimeout time.Duration
 }
 
-// NewClient creates a new gRPC client
-func NewClient(config Config, logger observability.Logger) *Client {
+// NewClientWithTracing creates a new gRPC client with trace propagation support
+func NewClient(config Config, logger observability.Logger, tracer observability.Tracer) *Client {
 	if config.Timeout == 0 {
 		config.Timeout = 30 * time.Second
 	}
@@ -54,7 +55,8 @@ func NewClient(config Config, logger observability.Logger) *Client {
 	return &Client{
 		config: config,
 		logger: logger,
-		pool:   NewConnectionPool(config.PoolSize, config.PoolTimeout, logger),
+		tracer: tracer,
+		pool:   NewConnectionPool(config.PoolSize, config.PoolTimeout, logger, tracer, config.ServiceName),
 	}
 }
 

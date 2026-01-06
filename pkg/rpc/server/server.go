@@ -140,7 +140,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start server
 	s.isRunning = true
-	s.logger.Info(ctx, "Starting gRPC server", observability.String("address", s.listener.Addr().String()), observability.Int("services", len(s.handlers)))
 
 	go func() {
 		if err := s.grpcServer.Serve(listener); err != nil {

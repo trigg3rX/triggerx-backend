@@ -1,0 +1,26 @@
+# Time Scheduler Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+polling:
+  interval: "30s"                      # Polling interval
+  look_ahead: "40s"                    # Polling look ahead
+  batch_size: 15                        # Batch size
+  performer_lock_ttl: "31s"             # Performer lock TTL
+  task_cache_ttl: "1m"                  # Task cache TTL
+  duplicate_task_window: "1m"           # Duplicate task window
+
+# Common Configuration across all services
+database:
+  timeout: "10s"                    # Database operation timeout
+  connect_wait: "5s"                # Database connection wait time
+  retries: 3                        # Database retry attempts
+
+metrics:
+  update_interval: "30s"            # Metrics update interval
+
+shutdown:
+  timeout: "30s"                    # Graceful shutdown timeout
+
+version:
+  version: "0.3.0"                  # Service version

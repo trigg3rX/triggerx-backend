@@ -1,0 +1,28 @@
+# Event Monitor Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+polling:
+  interval: "30s"                      # Polling interval
+  block_range: 6                    # Polling look ahead
+  lookback_blocks: 100                        # Batch size
+
+webhook:
+  timeout: "30s"                      # Webhook timeout
+  max_retries: 3                      # Webhook max retries
+  retry_delay: "1s"                    # Webhook retry delay
+
+# Common Configuration across all services
+database:
+  timeout: "10s"                    # Database operation timeout
+  connect_wait: "5s"                # Database connection wait time
+  retries: 3                        # Database retry attempts
+
+metrics:
+  update_interval: "30s"            # Metrics update interval
+
+shutdown:
+  timeout: "30s"                    # Graceful shutdown timeout
+
+version:
+  version: "0.3.0"                  # Service version

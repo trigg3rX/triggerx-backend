@@ -7,21 +7,24 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
+
+	"github.com/gocql/gocql"
 
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/api"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/config"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
+	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/repository"
+	conditionrpc "github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/rpc"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler"
-	"github.com/trigg3rX/triggerx-backend/pkg/client/dbserver"
+	"github.com/trigg3rX/triggerx-backend/pkg/database"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
+	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
-
-const shutdownTimeout = 30 * time.Second
 
 func main() {
 	// Initialize configuration
-	if err := config.Init(); err != nil {
+	configPath := "config/services/condition-scheduler.yaml"
+	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -38,11 +41,6 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to initialize observability: %v", err))
 	}
-	defer func() {
-		if err := obs.Shutdown(context.Background()); err != nil {
-			panic(fmt.Sprintf("Failed to shutdown observability: %v", err))
-		}
-	}()
 
 	// Extract individual components
 	logger := obs.Logger()
@@ -53,57 +51,77 @@ func main() {
 	metrics.InitializeMetrics(obsMetrics)
 
 	ctx := context.Background()
-	logger.Info(ctx, "[1/4] Dependency: Observability Module Initialised")
+	logger.Info(ctx, "[1/6] Dependency: Observability Module Initialised")
 
-	// Initialize database client
-	dbClient, err := dbserver.NewDBServerClient(logger, config.GetDBServerURL())
+	// Initialize database connection (using same defaults as time scheduler for now)
+	dbConfig := database.NewConfig(config.GetDatabaseHostAddress(), config.GetDatabaseHostPort())
+	dbConfig.Consistency = gocql.Quorum
+	dbConfig.Timeout = config.GetDatabaseTimeout()
+	dbConfig.Retries = config.GetDatabaseRetries()
+	dbConfig.ConnectWait = config.GetDatabaseConnectWait()
+	dbConfig.RetryConfig = retry.DefaultRetryConfig()
+	dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
+
+	// dbConfig.WithSSLCertificates(
+	// 	config.GetDatabaseSSLCertPath(),
+	// 	config.GetDatabaseSSLKeyPath(),
+	// 	config.GetDatabaseSSLCAPath(),
+	// 	config.GetDatabaseSSLInsecureSkipVerify(),
+	// )
+
+	dbConn, err := database.NewConnection(dbConfig, logger)
 	if err != nil {
-		logger.Fatal(ctx, "Failed to initialize database client", observability.Error(err))
+		logger.Fatal(ctx, "Failed to initialize database connection", observability.Error(err))
 	}
-	logger.Info(ctx, "[2/4] Dependency: Database Client Initialised")
+	logger.Info(ctx, "[2/6] Dependency: Database Connection Initialised")
 
-	// Perform initial health check
-	if err := dbClient.HealthCheck(); err != nil {
-		logger.Warn(ctx, "Database server health check failed", observability.Error(err))
-	}
+	// Initialize repositories
+	taskRepo := repository.NewTaskRepository(dbConn)
+	logger.Info(ctx, "[3/6] Dependency: Repositories Initialised")
 
-	// Initialize condition-based scheduler with Redis integration
-	managerID := fmt.Sprintf("condition-scheduler-%d", time.Now().Unix())
-	conditionScheduler, err := scheduler.NewConditionBasedScheduler(managerID, logger, tracer, obsMetrics, dbClient)
+	// Initialize condition-based scheduler
+	conditionScheduler, err := scheduler.NewConditionBasedScheduler(logger, tracer, obsMetrics, taskRepo)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize condition-based scheduler", observability.Error(err))
 	}
-	logger.Info(ctx, "[3/4] Dependency: Condition Scheduler Initialised")
+	logger.Info(ctx, "[4/6] Dependency: Condition Scheduler Initialised")
 
-	// Setup HTTP server with scheduler integration
-	srv := api.NewServer(api.Config{
-		Port: config.GetSchedulerRPCPort(),
-	}, api.Dependencies{
-		Logger:    logger,
-		Metrics:   obsMetrics,
-		Scheduler: conditionScheduler,
-	})
-	logger.Info(ctx, "[4/4] Dependency: API Server Initialised")
+	// Setup API server (only /status endpoint and event webhook)
+	apiPort := config.GetHTTPPort()
+	apiSrv := api.NewServer(apiPort, logger, conditionScheduler)
+	logger.Info(ctx, "[5/6] Dependency: API Server Initialised", observability.String("port", apiPort))
+
+	// Setup RPC server (for schedule/unschedule operations)
+	rpcSrv := conditionrpc.NewServer(logger, tracer, conditionScheduler)
+	logger.Info(ctx, "[6/6] Dependency: RPC Server Initialised")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	metrics.StartMetricsCollection()
-	logger.Info(ctx, "[1/3] Process: Metrics Collector Started")
+	// Metrics collection is started in NewConditionBasedScheduler
+	logger.Info(ctx, "[1/4] Process: Metrics Collector Started")
 
 	// Start scheduler in background
 	go func() {
 		conditionScheduler.Start(ctx)
 	}()
-	logger.Info(ctx, "[2/3] Process: Scheduler Background Job Started")
+	logger.Info(ctx, "[2/4] Process: Scheduler Background Job Started")
 
-	// Start HTTP server
+	// Start API server
 	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			logger.Error(ctx, "HTTP server error", observability.Error(err))
+		if err := apiSrv.Start(ctx); err != nil && err != http.ErrServerClosed {
+			logger.Error(ctx, "API server error", observability.Error(err))
 		}
 	}()
-	logger.Info(ctx, "[3/3] Process: HTTP Server Started")
+	logger.Info(ctx, "[3/4] Process: API Server Started", observability.String("port", apiPort))
+
+	// Start RPC server
+	go func() {
+		if err := rpcSrv.Start(ctx); err != nil {
+			logger.Error(ctx, "RPC server error", observability.Error(err))
+		}
+	}()
+	logger.Info(ctx, "[4/4] Process: RPC Server Started", observability.String("port", config.GetGRPCPort()))
 
 	// Handle graceful shutdown
 	shutdown := make(chan os.Signal, 1)
@@ -112,55 +130,54 @@ func main() {
 	sig := <-shutdown
 	logger.Info(ctx, "Received shutdown signal", observability.String("signal", sig.String()))
 
-	performGracefulShutdown(ctx, cancel, srv, conditionScheduler, dbClient, logger, obs)
+	performGracefulShutdown(ctx, cancel, apiSrv, rpcSrv, conditionScheduler, dbConn, obs, logger)
 }
 
 func performGracefulShutdown(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	srv *api.Server,
+	apiSrv *api.Server,
+	rpcSrv *conditionrpc.Server,
 	conditionScheduler *scheduler.ConditionBasedScheduler,
-	dbClient *dbserver.DBServerClient,
-	logger observability.Logger,
+	dbConn *database.Connection,
 	obs *observability.Observability,
+	logger observability.Logger,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, shutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), config.GetShutdownTimeout())
 	defer shutdownCancel()
 
-	// Start shutdown in a goroutine to handle timeout
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
+	// Cancel context to stop scheduler
+	cancel()
 
-		// Cancel context to stop scheduler
-		cancel()
+	// Stop scheduler gracefully (this will stop all condition workers)
+	conditionScheduler.Stop(shutdownCtx)
+	logger.Info(ctx, "[1/5] Shutdown: Scheduler Stopped")
 
-		// Stop scheduler gracefully (this will stop all condition workers)
-		conditionScheduler.Stop(ctx)
-
-		// Close database client
-		dbClient.Close()
-
-		// Shutdown server gracefully
-		if err := srv.Stop(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Server forced to shutdown", observability.Error(err))
-		}
-
-		logger.Info(ctx, "Graceful shutdown completed successfully")
-
-		// Shutdown observability (handles logger, tracer, metrics)
-		if err := obs.Shutdown(shutdownCtx); err != nil {
-			logger.Error(shutdownCtx, "Error shutting down observability", observability.Error(err))
-		}
-	}()
-
-	// Wait for shutdown to complete or timeout
-	select {
-	case <-done:
-		// Shutdown completed successfully
-	case <-shutdownCtx.Done():
-		logger.Warn(ctx, "Shutdown timeout reached, forcing exit")
+	// Stop RPC server gracefully
+	if err := rpcSrv.Stop(shutdownCtx); err != nil {
+		logger.Error(ctx, "[2/5] Shutdown: RPC server forced to shutdown", observability.Error(err))
+	} else {
+		logger.Info(ctx, "[2/5] Shutdown: RPC Server Stopped")
 	}
-	os.Exit(0)
+
+	// Stop API server gracefully
+	if err := apiSrv.Stop(shutdownCtx); err != nil {
+		logger.Error(ctx, "[3/5] Shutdown: API server forced to shutdown", observability.Error(err))
+	} else {
+		logger.Info(ctx, "[3/5] Shutdown: API Server Stopped")
+	}
+
+	// Close database connection
+	dbConn.Close()
+	logger.Info(ctx, "[4/5] Shutdown: Database Connection Closed")
+
+	// Shutdown observability (handles logger, tracer, metrics)
+	if err := obs.Shutdown(shutdownCtx); err != nil {
+		// Use fmt here since logger is being shut down
+		fmt.Printf("Error shutting down observability: %v\n", err)
+	}
+	fmt.Println("[5/5] Shutdown: Observability Shutdown Complete")
+
+	fmt.Println("Service shutdown completed successfully")
 }

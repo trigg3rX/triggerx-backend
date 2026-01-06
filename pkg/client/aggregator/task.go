@@ -60,7 +60,13 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 	sig[64] += 27
 	serializedSignature := hexutil.Encode(sig)
 
-	// c.logger.Debug(ctx, "Task data signed successfully")
+	var targetChainID int
+	switch taskResult.TargetChainID {
+		case 42161, 8453:
+			targetChainID = 8453
+		default:
+			targetChainID = 84532
+	}
 
 	// Prepare parameters using consistent structure
 	params := CallParams{
@@ -70,7 +76,7 @@ func (c *AggregatorClient) SendTaskToValidators(ctx context.Context, taskResult 
 		PerformerAddress: performerAddress,
 		Signature:        serializedSignature,
 		SignatureType:    "ecdsa",
-		TargetChainID:    8453,
+		TargetChainID:    targetChainID,
 	}
 
 	var response interface{}

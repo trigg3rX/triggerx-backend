@@ -1,0 +1,17 @@
+# Keeper Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+api:
+  read_timeout: "10s"              # API server read timeout
+  write_timeout: "10s"              # API server write timeout
+
+health:
+  check_interval: "60s"             # Health check interval
+  request_timeout: "10s"             # Health client request timeout
+
+shutdown:
+  timeout: "30s"                    # Graceful shutdown timeout
+
+version:
+  version: "0.3.6"                  # Service version

@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	dbserverTypes "github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/schedulers/condition/scheduler/worker"
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
@@ -93,17 +92,24 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 		}
 	}
 
-	createTaskRequest := dbserverTypes.CreateTaskDataRequest{
+	// Create Task in Database
+	taskID, err := s.taskRepository.CreateTaskDataInDB(ctx, &types.CreateTaskDataRequest{
 		JobID:            jobData.JobID.ToBigInt(),
 		TaskDefinitionID: jobData.TaskDefinitionID,
-	}
-
-	// Create Task in Database
-	taskID, err := s.dbClient.CreateTask(ctx, createTaskRequest)
+		IsImua:           jobData.IsImua,
+	})
 	if err != nil {
 		s.logger.Error(ctx, "Failed to create task in database", observability.String("job_id", notification.JobID.String()), observability.Error(err))
 		return fmt.Errorf("failed to create task in database: %w", err)
 	}
+
+	// Add task ID to job
+	err = s.taskRepository.AddTaskIDToJob(jobData.JobID.ToBigInt(), taskID)
+	if err != nil {
+		s.logger.Error(ctx, "Failed to add task ID to job", observability.String("job_id", notification.JobID.String()), observability.Error(err))
+		// Continue anyway as task was created
+	}
+
 	jobData.TaskTargetData.TaskID = taskID
 
 	// Update last trigger time for recurring condition-based jobs (after successful task creation)
@@ -130,7 +136,6 @@ func (s *ConditionBasedScheduler) HandleTriggerNotification(ctx context.Context,
 			observability.String("job_id", notification.JobID.String()),
 			observability.Duration("duration", duration),
 		)
-		metrics.TrackActionExecution(duration)
 	} else {
 		s.logger.Error(ctx, "Failed to submit triggered task to task dispatcher",
 			observability.String("job_id", notification.JobID.String()),

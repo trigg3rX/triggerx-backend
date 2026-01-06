@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/gocql/gocql"
 
@@ -22,10 +21,10 @@ import (
 	"github.com/trigg3rX/triggerx-backend/pkg/retry"
 )
 
-const shutdownTimeout = 30 * time.Second
-
 func main() {
-	if err := config.Init(); err != nil {
+	// Initialize configuration
+	configPath := "config/services/dbserver.yaml"
+	if err := config.Init(configPath); err != nil {
 		panic(fmt.Sprintf("Failed to initialize config: %v", err))
 	}
 
@@ -61,10 +60,25 @@ func main() {
 		Hosts:       []string{config.GetDatabaseHostAddress() + ":" + config.GetDatabaseHostPort()},
 		Keyspace:    "triggerx",
 		Consistency: gocql.Quorum,
-		Timeout:     10 * time.Second,
-		Retries:     3,
-		ConnectWait: 5 * time.Second,
+		Timeout:     config.GetDatabaseTimeout(),
+		Retries:     config.GetDatabaseRetries(),
+		ConnectWait: config.GetDatabaseConnectWait(),
 		RetryConfig: retry.DefaultRetryConfig(),
+	}
+
+	// Configure authentication if provided
+	if config.GetDatabaseUsername() != "" && config.GetDatabasePassword() != "" {
+		dbConfig.WithAuthentication(config.GetDatabaseUsername(), config.GetDatabasePassword())
+	}
+
+	// Configure SSL/TLS if enabled
+	if config.GetDatabaseSSLEnabled() {
+		dbConfig.WithSSLCertificates(
+			config.GetDatabaseSSLCertPath(),
+			config.GetDatabaseSSLKeyPath(),
+			config.GetDatabaseSSLCAPath(),
+			config.GetDatabaseSSLInsecureSkipVerify(),
+		)
 	}
 
 	conn, err := database.NewConnection(dbConfig, logger)
@@ -83,7 +97,7 @@ func main() {
 	serverErrors := make(chan error, 1)
 	ready := make(chan struct{})
 
-	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/docker-executor.yaml", logger)
+	dockerExecutor, err := dockerexecutor.NewDockerExecutorFromFile("config/services/docker-executor.yaml", logger)
 	if err != nil {
 		logger.Error(ctx, "Failed to create Docker manager", observability.Error(err))
 	} else {
@@ -95,7 +109,8 @@ func main() {
 		}
 	}
 
-	dbServer := dbserver.NewServer(ctx, conn, logger, obsMetrics)
+	tracer := obs.Tracer()
+	dbServer := dbserver.NewServer(ctx, conn, logger, tracer, obsMetrics)
 
 	if err := dbServer.RegisterRoutes(ctx, dbServer.GetRouter(), dockerExecutor); err != nil {
 		logger.Fatal(ctx, "Failed to register routes", observability.Error(err))
@@ -103,12 +118,12 @@ func main() {
 	logger.Info(ctx, "[4/4] Dependency: API server Initialised")
 
 	// Start metrics collector
-	collector := metrics.NewCollector(obsMetrics)
+	collector := metrics.NewCollector(obsMetrics, logger)
 	collector.Start()
 	logger.Info(ctx, "[1/2] Process: Metrics Collector Started")
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", config.GetDBServerRPCPort()),
+		Addr:    fmt.Sprintf("0.0.0.0:%s", config.GetHTTPPort()),
 		Handler: dbServer.GetRouter(),
 	}
 
@@ -119,7 +134,7 @@ func main() {
 			serverErrors <- fmt.Errorf("HTTP server error: %v", err)
 		}
 	}()
-	logger.Info(ctx, "[2/2] Process: HTTP Server Started")
+	logger.Info(ctx, "[2/2] Process: HTTP Server Started", observability.String("port", config.GetHTTPPort()))
 
 	close(ready)
 
@@ -145,7 +160,7 @@ func performGracefulShutdown(
 	dockerExecutor dockerexecutor.DockerExecutorAPI,
 ) {
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, config.GetShutdownTimeout())
 	defer cancel()
 
 	// Start shutdown in a goroutine to handle timeout

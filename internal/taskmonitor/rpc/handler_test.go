@@ -23,10 +23,18 @@ func (m *MockTaskMonitor) ReportTaskStatus(ctx context.Context, req *types.Repor
 	return args.Get(0).(*types.ReportTaskStatusResponse), args.Error(1)
 }
 
+func (m *MockTaskMonitor) ReportConsensusEvent(ctx context.Context, req *types.ReportConsensusEventRequest) (*types.ReportConsensusEventResponse, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.ReportConsensusEventResponse), args.Error(1)
+}
+
 func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor)
+	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
 
 	tests := []struct {
 		name          string
@@ -162,7 +170,7 @@ func TestTaskMonitorHandler_Handle_ReportTaskStatus(t *testing.T) {
 func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor)
+	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
 
 	methods := handler.GetMethods()
 
@@ -175,7 +183,7 @@ func TestTaskMonitorHandler_GetMethods(t *testing.T) {
 func TestConvertMapToStatusRequest(t *testing.T) {
 	logger := observability.NewNoOpLogger()
 	mockMonitor := new(MockTaskMonitor)
-	handler := NewTaskMonitorHandler(logger, mockMonitor)
+	handler := NewTaskMonitorHandler(logger, mockMonitor, nil)
 
 	tests := []struct {
 		name        string

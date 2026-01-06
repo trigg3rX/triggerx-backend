@@ -129,3 +129,7 @@ func IsValidPeerID(peerID string) bool {
 	}
 	return len(peerID) == len("12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB")
 }
+
+func IsValidInt(value int) bool {
+	return value >= 0
+}

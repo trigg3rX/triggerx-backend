@@ -114,7 +114,7 @@ func (v *codeValidator) validateFileExtension(filePath string, result *types.Val
 func (v *codeValidator) calculateComplexity(ctx context.Context, filePath string) float64 {
 	content, err := v.fs.ReadFile(filePath)
 	if err != nil {
-		v.logger.Warn(ctx, "Failed to read file for complexity calculation", observability.Error(err))
+		v.logger.Warn(ctx, "Failed to read file for complexity calculation", observability.String("filePath", filePath), observability.Error(err))
 		return 0.0
 	}
 

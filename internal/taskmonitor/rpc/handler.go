@@ -12,23 +12,32 @@ import (
 	rpcpkg "github.com/trigg3rX/triggerx-backend/pkg/rpc"
 )
 
+// DatabaseClientInterface defines the interface for database operations needed by the handler
+type DatabaseClientInterface interface {
+	GetConsensusAddressByKeeperAddress(ctx context.Context, keeperAddress string) (string, error)
+}
+
 // TaskMonitorHandler implements the generic RPC handler interface
 type TaskMonitorHandler struct {
-	logger  observability.Logger
-	monitor TaskMonitorInterface
+	logger   observability.Logger
+	monitor  TaskMonitorInterface
+	dbClient DatabaseClientInterface
 }
 
 // TaskMonitorInterface defines the interface for task monitor operations
 type TaskMonitorInterface interface {
 	// ReportTaskStatus handles task status reports from keepers (both success and failure)
 	ReportTaskStatus(ctx context.Context, req *types.ReportTaskStatusRequest) (*types.ReportTaskStatusResponse, error)
+	// ReportConsensusEvent handles consensus event reports from eventmonitor (TaskSubmitted or TaskRejected)
+	ReportConsensusEvent(ctx context.Context, req *types.ReportConsensusEventRequest) (*types.ReportConsensusEventResponse, error)
 }
 
 // NewTaskMonitorHandler creates a new RPC handler
-func NewTaskMonitorHandler(logger observability.Logger, monitor TaskMonitorInterface) *TaskMonitorHandler {
+func NewTaskMonitorHandler(logger observability.Logger, monitor TaskMonitorInterface, dbClient DatabaseClientInterface) *TaskMonitorHandler {
 	return &TaskMonitorHandler{
-		logger:  logger,
-		monitor: monitor,
+		logger:   logger,
+		monitor:  monitor,
+		dbClient: dbClient,
 	}
 }
 
@@ -67,6 +76,28 @@ func (h *TaskMonitorHandler) Handle(ctx context.Context, method string, request 
 		}
 		return resp, nil
 
+	case "report-consensus-event":
+		// Convert request to the expected type
+		consensusReq, ok := request.(*types.ReportConsensusEventRequest)
+		if !ok {
+			// Try to convert from map if it's JSON-decoded
+			if reqMap, ok := request.(map[string]interface{}); ok {
+				var err error
+				consensusReq, err = h.convertMapToConsensusRequest(reqMap)
+				if err != nil {
+					return nil, fmt.Errorf("failed to convert request: %w", err)
+				}
+			} else {
+				return nil, fmt.Errorf("invalid request type for report-consensus-event: %T", request)
+			}
+		}
+
+		resp, err := h.monitor.ReportConsensusEvent(ctx, consensusReq)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
+
 	default:
 		return nil, fmt.Errorf("unknown method: %s", method)
 	}
@@ -80,6 +111,13 @@ func (h *TaskMonitorHandler) GetMethods() []rpcpkg.RPCMethod {
 			Description:  "Report task execution status from a keeper (success or failure)",
 			RequestType:  &types.ReportTaskStatusRequest{},
 			ResponseType: &types.ReportTaskStatusResponse{},
+			Timeout:      30 * time.Second,
+		},
+		{
+			Name:         "report-consensus-event",
+			Description:  "Report consensus event from eventmonitor (TaskSubmitted or TaskRejected)",
+			RequestType:  &types.ReportConsensusEventRequest{},
+			ResponseType: &types.ReportConsensusEventResponse{},
 			Timeout:      30 * time.Second,
 		},
 	}
@@ -123,15 +161,38 @@ func (h *TaskMonitorHandler) validateStatusSignature(req *types.ReportTaskStatus
 		Error:               req.Error,
 	}
 
-	// Verify signature using JSON verification (same as other services)
-	isValid, err := cryptography.VerifySignatureFromJSON(signData, req.Signature, req.KeeperAddress)
+	// Get consensus address from keeper address
+	// The keeper signs with the consensus private key, so we need to verify against the consensus address
+	consensusAddress, err := h.dbClient.GetConsensusAddressByKeeperAddress(context.Background(), req.KeeperAddress)
+	if err != nil {
+		return fmt.Errorf("failed to get consensus address for keeper %s: %w", req.KeeperAddress, err)
+	}
+
+	// Verify signature using JSON verification with consensus address
+	// The signature was created with the consensus private key, so we verify against the consensus address
+	isValid, err := cryptography.VerifySignatureFromJSON(signData, req.Signature, consensusAddress)
 	if err != nil {
 		return fmt.Errorf("signature verification failed: %w", err)
 	}
 
 	if !isValid {
-		return fmt.Errorf("invalid signature for keeper %s", req.KeeperAddress)
+		return fmt.Errorf("invalid signature for keeper %s (consensus address: %s)", req.KeeperAddress, consensusAddress)
 	}
 
 	return nil
+}
+
+// convertMapToConsensusRequest converts a map to ReportConsensusEventRequest
+func (h *TaskMonitorHandler) convertMapToConsensusRequest(reqMap map[string]interface{}) (*types.ReportConsensusEventRequest, error) {
+	jsonData, err := json.Marshal(reqMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request map: %w", err)
+	}
+
+	var req types.ReportConsensusEventRequest
+	if err := json.Unmarshal(jsonData, &req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	return &req, nil
 }

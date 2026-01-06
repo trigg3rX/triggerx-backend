@@ -10,6 +10,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/config"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/types"
@@ -38,34 +42,56 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
 	var existingUser commonTypes.UserData
 	var err error
 
-	// Track user lookup
+	// Span: Get or create user
+	ctx, userSpan := h.tracer.Start(ctx, "db.get_user",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "select"),
+			attribute.String("db.collection", "users"),
+			attribute.String("user.address", tempJobs[0].UserAddress),
+		),
+	)
 	trackDBOp := metrics.TrackDBOperation("read", "users")
 	_, existingUser, err = h.userRepository.GetUserDataByAddress(strings.ToLower(tempJobs[0].UserAddress))
 	trackDBOp(err)
+	userSpan.End()
 
 	if err != nil && err != gocql.ErrNotFound {
-		h.logger.Error(c.Request.Context(), "[CreateJobData] Error getting user ID for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+		h.logger.Error(ctx, "[CreateJobData] Error getting user ID for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
 	if err == gocql.ErrNotFound {
+		// Span: Create new user
+		ctx, createUserSpan := h.tracer.Start(ctx, "db.create_user",
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
+				attribute.String("db.system", "cassandra"),
+				attribute.String("db.operation", "insert"),
+				attribute.String("db.collection", "users"),
+				attribute.String("user.address", tempJobs[0].UserAddress),
+			),
+		)
+
 		var newUser types.CreateUserDataRequest
 		newUser.UserAddress = strings.ToLower(tempJobs[0].UserAddress)
 		newUser.EtherBalance = commonTypes.NewBigInt(tempJobs[0].EtherBalance)
 		newUser.TokenBalance = commonTypes.NewBigInt(tempJobs[0].TokenBalance)
 		newUser.UserPoints = 0.0
 
-		// Track user creation
 		trackDBOp = metrics.TrackDBOperation("create", "users")
 		existingUser, err = h.userRepository.CreateNewUser(&newUser)
 		trackDBOp(err)
+		createUserSpan.End()
 
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating new user for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
+			h.logger.Error(ctx, "[CreateJobData] Error creating new user for address", observability.String("user_address", tempJobs[0].UserAddress), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
@@ -119,7 +145,6 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		if (tempJobs[i].TaskDefinitionID == 2 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 6 || tempJobs[i].TaskDefinitionID == 7) && tempJobs[i].DynamicArgumentsScriptUrl != "" {
 			// Parse CID or gateway URL if needed
 			ipfsUrl := tempJobs[i].DynamicArgumentsScriptUrl
-			ctx := c.Request.Context()
 			resp, err := h.httpClient.Get(ctx, ipfsUrl)
 			if err != nil {
 				h.logger.Error(c.Request.Context(), "[CreateJobData] Failed to download file", observability.Error(err))
@@ -201,13 +226,28 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 			jobData.SafeAddress = safeAddr
 		}
 
-		// Track job creation
+		// Span: Create job
+		jobCtx, createJobSpan := h.tracer.Start(ctx, "db.create_job",
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
+				attribute.String("db.system", "cassandra"),
+				attribute.String("db.operation", "insert"),
+				attribute.String("db.collection", "jobs"),
+				attribute.Int("task_definition_id", tempJobs[i].TaskDefinitionID),
+			),
+		)
 		trackDBOp = metrics.TrackDBOperation("create", "jobs")
 		jobID, err := h.jobRepository.CreateNewJob(jobData)
 		trackDBOp(err)
+		if err != nil {
+			createJobSpan.RecordError(err)
+			createJobSpan.SetStatus(codes.Error, "failed to create job")
+		}
+		createJobSpan.SetAttributes(attribute.String("job.id", jobID.String()))
+		createJobSpan.End()
 
 		if err != nil {
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Error creating job", observability.String("job_id", jobID.String()), observability.Error(err))
+			h.logger.Error(jobCtx, "[CreateJobData] Error creating job", observability.String("job_id", jobID.String()), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
@@ -248,15 +288,28 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				IsActive:                  true,
 			}
 
-			// Track time job creation
+			// Span: Create time job
+			_, timeJobSpan := h.tracer.Start(jobCtx, "db.create_time_job",
+				observability.WithSpanKind(trace.SpanKindClient),
+				observability.WithAttributes(
+					attribute.String("db.system", "cassandra"),
+					attribute.String("db.operation", "insert"),
+					attribute.String("db.collection", "time_jobs"),
+					attribute.String("job.id", jobID.String()),
+				),
+			)
 			trackDBOp = metrics.TrackDBOperation("create", "time_jobs")
 			if err := h.timeJobRepository.CreateTimeJob(&timeJobData); err != nil {
 				trackDBOp(err)
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting time job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				timeJobSpan.RecordError(err)
+				timeJobSpan.SetStatus(codes.Error, "failed to create time job")
+				timeJobSpan.End()
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting time job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
+			timeJobSpan.End()
 
 		case 3, 4:
 			// Event-based job
@@ -281,11 +334,25 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				IsActive:                  true,
 			}
 
+			// Span: Create event job
+			_, eventJobSpan := h.tracer.Start(jobCtx, "db.create_event_job",
+				observability.WithSpanKind(trace.SpanKindClient),
+				observability.WithAttributes(
+					attribute.String("db.system", "cassandra"),
+					attribute.String("db.operation", "insert"),
+					attribute.String("db.collection", "event_jobs"),
+					attribute.String("job.id", jobID.String()),
+				),
+			)
 			if err := h.eventJobRepository.CreateEventJob(&eventJobData); err != nil {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting event job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				eventJobSpan.RecordError(err)
+				eventJobSpan.SetStatus(codes.Error, "failed to create event job")
+				eventJobSpan.End()
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting event job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
+			eventJobSpan.End()
 			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
@@ -335,11 +402,25 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				SelectedKeyRoute:          tempJobs[i].SelectedKeyRoute,
 			}
 
+			// Span: Create condition job
+			_, conditionJobSpan := h.tracer.Start(jobCtx, "db.create_condition_job",
+				observability.WithSpanKind(trace.SpanKindClient),
+				observability.WithAttributes(
+					attribute.String("db.system", "cassandra"),
+					attribute.String("db.operation", "insert"),
+					attribute.String("db.collection", "condition_jobs"),
+					attribute.String("job.id", jobID.String()),
+				),
+			)
 			if err := h.conditionJobRepository.CreateConditionJob(&conditionJobData); err != nil {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting condition job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				conditionJobSpan.RecordError(err)
+				conditionJobSpan.SetStatus(codes.Error, "failed to create condition job")
+				conditionJobSpan.End()
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting condition job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
+			conditionJobSpan.End()
 			scheduleConditionJobData.JobID = commonTypes.NewBigInt(jobID)
 			scheduleConditionJobData.TaskDefinitionID = tempJobs[i].TaskDefinitionID
 			scheduleConditionJobData.LastExecutedAt = time.Now()
@@ -390,15 +471,28 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 				IsActive:          true,
 			}
 
-			// Track custom job creation
+			// Span: Create custom job
+			_, customJobSpan := h.tracer.Start(jobCtx, "db.create_custom_job",
+				observability.WithSpanKind(trace.SpanKindClient),
+				observability.WithAttributes(
+					attribute.String("db.system", "cassandra"),
+					attribute.String("db.operation", "insert"),
+					attribute.String("db.collection", "custom_jobs"),
+					attribute.String("job.id", jobID.String()),
+				),
+			)
 			trackDBOp = metrics.TrackDBOperation("create", "custom_jobs")
 			if err := h.customJobRepository.CreateCustomJob(&customJobData); err != nil {
 				trackDBOp(err)
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error inserting custom job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				customJobSpan.RecordError(err)
+				customJobSpan.SetStatus(codes.Error, "failed to create custom job")
+				customJobSpan.End()
+				h.logger.Error(jobCtx, "[CreateJobData] Error inserting custom job data for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
 			}
 			trackDBOp(nil)
+			customJobSpan.End()
 
 		default:
 			h.logger.Error(c.Request.Context(), "[CreateJobData] Invalid task definition ID for job", observability.Int("task_definition_id", tempJobs[i].TaskDefinitionID), observability.Int("job_index", i))
@@ -407,9 +501,9 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 		}
 
 		if tempJobs[i].TaskDefinitionID == 3 || tempJobs[i].TaskDefinitionID == 4 || tempJobs[i].TaskDefinitionID == 5 || tempJobs[i].TaskDefinitionID == 6 {
-			success, err := h.notifyConditionScheduler(c.Request.Context(), jobID, scheduleConditionJobData)
+			success, err := h.notifyConditionScheduler(jobCtx, jobID, scheduleConditionJobData)
 			if !success {
-				h.logger.Error(c.Request.Context(), "[CreateJobData] Error notifying condition scheduler for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
+				h.logger.Error(jobCtx, "[CreateJobData] Error notifying condition scheduler for jobID", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 			}
 		}
 
@@ -420,21 +514,45 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 
 		var currentPoints = existingUser.UserPoints
 		newPoints := currentPoints + pointsToAdd
+		// Span: Update user points
+		_, updatePointsSpan := h.tracer.Start(jobCtx, "db.update_user_points",
+			observability.WithSpanKind(trace.SpanKindClient),
+			observability.WithAttributes(
+				attribute.String("db.system", "cassandra"),
+				attribute.String("db.operation", "update"),
+				attribute.String("db.collection", "users"),
+				attribute.Int64("user.id", existingUser.UserID),
+			),
+		)
 		trackDBOp = metrics.TrackDBOperation("update", "users")
 		if err := h.userRepository.UpdateUserTasksAndPoints(existingUser.UserID, 0, newPoints); err != nil {
 			trackDBOp(err)
-			h.logger.Error(c.Request.Context(), "[CreateJobData] Error updating user points for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
+			updatePointsSpan.RecordError(err)
+			updatePointsSpan.SetStatus(codes.Error, "failed to update user points")
+			updatePointsSpan.End()
+			h.logger.Error(jobCtx, "[CreateJobData] Error updating user points for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 		trackDBOp(nil)
+		updatePointsSpan.End()
 
 		createdJobs.JobIDs[i] = commonTypes.NewBigInt(jobID)
 		createdJobs.TaskDefinitionIDs[i] = tempJobs[i].TaskDefinitionID
 		createdJobs.TimeFrames[i] = tempJobs[i].TimeFrame
 	}
 
-	// Update user's job_ids
+	// Span: Update user's job_ids
+	_, updateJobIDsSpan := h.tracer.Start(ctx, "db.update_user_job_ids",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("db.system", "cassandra"),
+			attribute.String("db.operation", "update"),
+			attribute.String("db.collection", "users"),
+			attribute.Int64("user.id", existingUser.UserID),
+			attribute.Int("jobs.count", len(createdJobs.JobIDs)),
+		),
+	)
 	allJobIDs := append(existingUser.JobIDs, createdJobs.JobIDs...)
 	// Convert BigInt slice to big.Int slice for repository
 	bigIntJobIDs := make([]*big.Int, len(allJobIDs))
@@ -444,16 +562,16 @@ func (h *Handler) CreateJobData(c *gin.Context) {
 	trackDBOp = metrics.TrackDBOperation("update", "users")
 	if err := h.userRepository.UpdateUserJobIDs(existingUser.UserID, bigIntJobIDs); err != nil {
 		trackDBOp(err)
-		h.logger.Error(c.Request.Context(), "[CreateJobData] Error updating user job IDs for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
+		updateJobIDsSpan.RecordError(err)
+		updateJobIDsSpan.SetStatus(codes.Error, "failed to update user job IDs")
+		updateJobIDsSpan.End()
+		h.logger.Error(ctx, "[CreateJobData] Error updating user job IDs for userID", observability.Int64("user_id", existingUser.UserID), observability.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 	trackDBOp(nil)
-
-	// Track total operation duration
-	trackDBOp = metrics.TrackDBOperation("create", "jobs")
-	trackDBOp(nil)
+	updateJobIDsSpan.End()
 
 	c.JSON(http.StatusOK, createdJobs)
-	h.logger.Info(c.Request.Context(), "[CreateJobData] Successfully created jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("jobs_count", len(tempJobs)))
+	h.logger.Info(ctx, "[CreateJobData] Successfully created jobs", observability.Int64("user_id", existingUser.UserID), observability.Int("jobs_count", len(tempJobs)))
 }

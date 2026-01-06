@@ -230,7 +230,7 @@ func (e *TaskExecutor) ExecuteTask(ctx context.Context, task *types.SendTaskData
 
 			tlsConfig := proof.DefaultTLSProofConfig(config.GetTLSProofHost())
 			tlsConfig.TargetPort = config.GetTLSProofPort()
-			proofData, err := proof.GenerateProofWithTLSConnection(ipfsData, tlsConfig)
+			proofData, err := proof.GenerateProofWithTLSConnection(taskCtx, e.logger, ipfsData, tlsConfig)
 			if err != nil {
 				e.logger.Error(taskCtx, "Failed to generate TLS proof, falling back to mock", observability.Int64("task_id", task.TaskID[0]), observability.String("trace_id", traceID), observability.Error(err))
 			} else {

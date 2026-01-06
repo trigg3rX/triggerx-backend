@@ -51,8 +51,8 @@ WORKDIR /home/appuser/
 ARG DOCKER_NAME
 COPY --from=builder /app/${DOCKER_NAME} .
 
-# Copy the config files
-RUN mkdir -p /home/appuser/config/
+# Copy the config files (these will be overridden by volume mounts in production)
+RUN mkdir -p /home/appuser/config/services
 COPY ./config/ /home/appuser/config/
 RUN chown -R appuser:appgroup /home/appuser/config/
 

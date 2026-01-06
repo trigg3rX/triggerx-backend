@@ -16,6 +16,9 @@ help:
 ############################# DATABASE #############################
 
 # Setup ScyllaDB container
+# Uses the same database environment variables as the application config:
+# DATABASE_USERNAME, DATABASE_PASSWORD (from .env file)
+# See: internal/dbserver/config/config.go and pkg/env/common.go
 db-setup:
     docker compose -f docker/docker-compose.yaml --profile scylla down
     docker compose -f docker/docker-compose.yaml --profile scylla up -d
@@ -131,7 +134,7 @@ install-tools:
 # Format the Go code (active)
 format-go:
     @which golangci-lint > /dev/null 2>&1 || (echo "Error: golangci-lint is not installed. Please install it first using install-tools." && exit 1)
-    golangci-lint run --fix
+    golangci-lint run --fix ./cmd/... ./internal/... ./pkg/...
 
 # Build the Go code (active)
 build-go:

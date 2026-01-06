@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -11,11 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
-)
-
-const (
-	version = "1.1.0"
-	isImua  = false
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 type Config struct {
@@ -63,9 +59,6 @@ type Config struct {
 	healthRPCUrl      string
 	taskMonitorRPCUrl string
 
-	l1Chain string
-	l2Chain string
-
 	// AVS Contract Address
 	avsGovernanceAddress     string
 	attestationCenterAddress string
@@ -77,14 +70,49 @@ type Config struct {
 	// Observability configuration
 	otelExporterEndpoint   string
 	enablePrometheusExport bool
+
+	// YAML-loaded settings
+	api      APIConfig
+	health   HealthConfig
+	shutdown ShutdownConfig
+	version  yaml.VersionConfig
+}
+
+type APIConfig struct {
+	ReadTimeout  yaml.Duration `yaml:"read_timeout"`
+	WriteTimeout yaml.Duration `yaml:"write_timeout"`
+}
+
+type HealthConfig struct {
+	CheckInterval  yaml.Duration `yaml:"check_interval"`
+	RequestTimeout yaml.Duration `yaml:"request_timeout"`
+}
+
+type ShutdownConfig struct {
+	Timeout yaml.Duration `yaml:"timeout"`
+}
+
+type YAMLConfig struct {
+	API      APIConfig          `yaml:"api"`
+	Health   HealthConfig       `yaml:"health"`
+	Shutdown ShutdownConfig     `yaml:"shutdown"`
+	Version  yaml.VersionConfig `yaml:"version"`
 }
 
 var cfg Config
 
-func Init() error {
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
+
+	// Load YAML config
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
 	cfg = Config{
 		devMode:              env.GetEnvBool("DEV_MODE", false),
 		ethRPCUrl:            env.GetEnvString("L1_RPC", ""),
@@ -104,28 +132,30 @@ func Init() error {
 		taskMonitorRPCUrl:    env.GetEnvString("TASK_MONITOR_RPC_URL", "https://task.triggerx.network"),
 		tlsProofHost:         "www.google.com",
 		tlsProofPort:         "443",
-		// l1Chain:                  env.GetEnvString("L1_CHAIN", "11155111"),
-		// l2Chain:                  env.GetEnvString("L2_CHAIN", "84532"),
-		// avsGovernanceAddress:     env.GetEnvString("TEST_AVS_GOVERNANCE_ADDRESS", "0xaaE90bE86cec5E6c34D584917FFfCE7C379fFEE1"),
-		// attestationCenterAddress: env.GetEnvString("TEST_ATTESTATION_CENTER_ADDRESS", "0x21B099554F6D27E47D57991D2B44251DaFa9323b"),
-		l1Chain:                  env.GetEnvString("L1_CHAIN", "1"),
-		l2Chain:                  env.GetEnvString("L2_CHAIN", "8453"),
-		avsGovernanceAddress:     env.GetEnvString("AVS_GOVERNANCE_ADDRESS", "0x875B5ff698B74B26f39C223c4996871F28AcDdea"),
-		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
-		othenticBootstrapID:	env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
-		otelExporterEndpoint:   env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "collector.triggerx.network:9051"),
+		// Test Attestation Center Address for Base Sepolia
+		attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0xB3c01C8BaEF65436B0d01F891d00B25CA9d7D383"),
+		// Base Mainnet Attestation Center Address
+		// attestationCenterAddress: env.GetEnvString("ATTESTATION_CENTER_ADDRESS", "0x6DFee10D13d5B43AaF97bDA908C1D76d4313aF5f"),
+		othenticBootstrapID:    env.GetEnvString("OTHENTIC_BOOTSTRAP_ID", "12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB"),
+		otelExporterEndpoint:   env.GetOTELExporterEndpoint(),
 		enablePrometheusExport: env.GetEnvBool("ENABLE_PROMETHEUS_EXPORT", true),
+		api:                    yamlConfig.API,
+		health:                 yamlConfig.Health,
+		shutdown:               yamlConfig.Shutdown,
+		version:                yamlConfig.Version,
 	}
 	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
+	if err := yaml.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
 	if !cfg.devMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	isRegistered := checkKeeperRegistration()
-	if !isRegistered {
-		log.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
-		log.Fatal("Keeper address is not registered on L2")
+	if err := checkKeeperRegistration(); err != nil {
+		fmt.Println("Keeper address is not yet registered on L2. Please register the address before continuing. If registered, please wait for the registration to be confirmed.")
+		return fmt.Errorf("keeper address is not registered on L2")
 	}
 	return nil
 }
@@ -220,7 +250,31 @@ func GetKeeperRPCPort() string {
 }
 
 func GetAggregatorRPCUrl() string {
-	return cfg.aggregatorRPCUrl
+	url := cfg.aggregatorRPCUrl
+	// Auto-prepend http:// if scheme is missing (for backward compatibility)
+	if url != "" && !hasScheme(url) {
+		return "http://" + url
+	}
+	return url
+}
+
+// hasScheme checks if a URL string has a scheme (http://, https://, etc.)
+func hasScheme(url string) bool {
+	for i := 0; i < len(url); i++ {
+		if url[i] == ':' {
+			// Check if it's followed by // (scheme separator)
+			if i+2 < len(url) && url[i+1] == '/' && url[i+2] == '/' {
+				return true
+			}
+			// If we hit a colon before //, it's likely a port, not a scheme
+			return false
+		}
+		if url[i] == '/' {
+			// If we hit / before :, no scheme
+			return false
+		}
+	}
+	return false
 }
 
 func GetHealthRPCUrl() string {
@@ -240,11 +294,12 @@ func GetAttestationCenterAddress() string {
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
 }
 
 func IsImua() bool {
-	return isImua
+	// Check environment variable, default to false
+	return env.GetEnvBool("IS_IMUA", false)
 }
 
 // IPFS configuration
@@ -310,4 +365,24 @@ func GetOTELExporterEndpoint() string {
 
 func GetEnablePrometheusExport() bool {
 	return cfg.enablePrometheusExport
+}
+
+func GetAPIReadTimeout() time.Duration {
+	return cfg.api.ReadTimeout.ToDuration()
+}
+
+func GetAPIWriteTimeout() time.Duration {
+	return cfg.api.WriteTimeout.ToDuration()
+}
+
+func GetHealthCheckInterval() time.Duration {
+	return cfg.health.CheckInterval.ToDuration()
+}
+
+func GetHealthRequestTimeout() time.Duration {
+	return cfg.health.RequestTimeout.ToDuration()
+}
+
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }

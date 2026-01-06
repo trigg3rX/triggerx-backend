@@ -1,9 +1,9 @@
 package middleware
 
 import (
+	"strconv"
 	"time"
 
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/trigg3rX/triggerx-backend/internal/dbserver/metrics"
 )
@@ -13,14 +13,15 @@ func MetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
 		path := c.FullPath()
-		method := c.Request.Method
-		ctx := c.Request.Context() // Use request context, though background context is also acceptable for metrics usually
-
-		// Increment active requests
-		if metrics.ActiveRequests != nil {
-			metrics.ActiveRequests.WithLabelValues(path).Set(ctx, 1)
-			defer metrics.ActiveRequests.WithLabelValues(path).Set(ctx, -1) // Use background context for defer to ensure execution
+		if path == "" {
+			path = c.Request.URL.Path // Fallback for unmatched routes
 		}
+		method := c.Request.Method
+		ctx := c.Request.Context()
+
+		// Track active requests (increment on start, decrement on end)
+		metrics.IncrementActiveRequests(path)
+		defer metrics.DecrementActiveRequests(path)
 
 		// Process request
 		c.Next()
@@ -31,26 +32,15 @@ func MetricsMiddleware() gin.HandlerFunc {
 			metrics.HTTPRequestDuration.WithLabelValues(method, path).Record(ctx, duration)
 		}
 
-		// Record total requests with status code
+		// Record total requests with status code (properly formatted)
 		status := c.Writer.Status()
+		statusStr := strconv.Itoa(status)
 		if metrics.HTTPRequestsTotal != nil {
-			metrics.HTTPRequestsTotal.WithLabelValues(method, path, fmt.Sprint(rune(status))).Inc(ctx)
+			metrics.HTTPRequestsTotal.WithLabelValues(method, path, statusStr).Inc(ctx)
 		}
 
-		// Update average response time
-		if metrics.AverageResponseTime != nil {
-			metrics.AverageResponseTime.WithLabelValues(path).Set(ctx, duration)
-		}
-
-		// Update requests per second
-		// Note: RequestsPerSecond in Prometheus was likely a Gauge calculated/set periodically or a Counter.
-		// In the new definition it is a GaugeVec. Incrementing a Gauge directly as a rate is unusual but we follow the pattern.
-		// If it was meant to be a rate, usually we use a Counter and let Prometheus calculate rate().
-		// The original code had `.Inc()`, which suggests it might have been a Counter or a Gauge treated as one?
-		// Checking previous definition: `RequestsPerSecond = promauto.NewGaugeVec(...)`
-		// So it was a Gauge. Incrementing a Gauge... okay.
-		if metrics.RequestsPerSecond != nil {
-			metrics.RequestsPerSecond.WithLabelValues(path).Set(ctx, 1)
-		}
+		// Track request for RPS and average response time calculation
+		metrics.TrackRequest(path)
+		metrics.TrackResponseTime(path, duration)
 	}
 }

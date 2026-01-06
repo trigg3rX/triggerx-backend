@@ -264,7 +264,7 @@ func (dm *DatabaseManager) UpdateKeeperHealth(ctx context.Context, keeperHealth 
 }
 
 func (dm *DatabaseManager) checkAndNotifyOfflineKeeper(ctx context.Context, keeperID int64) {
-	time.Sleep(10 * time.Minute)
+	time.Sleep(config.GetNotificationOfflineDelay())
 
 	// dm.logger.Debug(ctx, "Checking current status for offline keeper",
 	// 	observability.Int64("keeper_id", keeperID),

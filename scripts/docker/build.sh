@@ -44,6 +44,97 @@ usage() {
     exit 1
 }
 
+# Function to get YAML file name from docker name
+get_yaml_filename() {
+    local docker_name=$1
+    # Map docker names to YAML file names
+    # For most services, they match directly
+    # For scheduler services, handle special cases if needed
+    case "$docker_name" in
+        schedulers-time)
+            # Check if schedulers-time.yaml exists, otherwise use time-scheduler.yaml
+            if [ -f "config/services/schedulers-time.yaml" ]; then
+                echo "schedulers-time.yaml"
+            else
+                echo "time-scheduler.yaml"
+            fi
+            ;;
+        schedulers-condition)
+            # Check if schedulers-condition.yaml exists, otherwise use condition-scheduler.yaml
+            if [ -f "config/services/schedulers-condition.yaml" ]; then
+                echo "schedulers-condition.yaml"
+            else
+                echo "condition-scheduler.yaml"
+            fi
+            ;;
+        *)
+            echo "${docker_name}.yaml"
+            ;;
+    esac
+}
+
+# Function to update version in YAML file
+update_yaml_version() {
+    local docker_name=$1
+    local version=$2
+    local yaml_filename=$(get_yaml_filename "$docker_name")
+    local yaml_file="config/services/${yaml_filename}"
+    
+    # Check if YAML file exists
+    if [ ! -f "$yaml_file" ]; then
+        echo "Warning: YAML file $yaml_file not found, skipping version update" 1>&2
+        return 1
+    fi
+    
+    # Use awk to update or add version section
+    awk -v version="$version" 'BEGIN {
+        in_version = 0
+        version_updated = 0
+    }
+    {
+        if (/^version:/) {
+            in_version = 1
+            print $0
+            next
+        }
+        if (in_version && /^  version:/) {
+            printf "  version: \"%s\"                  # Service version\n", version
+            version_updated = 1
+            in_version = 0
+            next
+        }
+        if (in_version && /^[^ ]/) {
+            printf "  version: \"%s\"                  # Service version\n", version
+            version_updated = 1
+            in_version = 0
+            print $0
+            next
+        }
+        if (in_version && /^$/) {
+            print $0
+            next
+        }
+        if (in_version) {
+            in_version = 0
+        }
+        print $0
+    }
+    END {
+        if (!version_updated) {
+            print ""
+            print "version:"
+            printf "  version: \"%s\"                  # Service version\n", version
+        }
+    }' "$yaml_file" > "${yaml_file}.tmp" && mv "${yaml_file}.tmp" "$yaml_file"
+    
+    if [ $? -eq 0 ]; then
+        echo "Updated version in $yaml_file to $version"
+    else
+        echo "Error: Failed to update version in $yaml_file" 1>&2
+        return 1
+    fi
+}
+
 # Parse command-line arguments
 while getopts ":n:v:h-:" opt; do
     case ${opt} in
@@ -127,6 +218,9 @@ if [[ "$SERVICE" == "all" ]]; then
         local version=$2
         local docker_name=$(echo $service | sed 's/\//-/g')
         
+        # Update version in YAML file BEFORE building
+        update_yaml_version "$docker_name" "$version"
+        
         echo "[$(date '+%H:%M:%S')] Starting build for $service..."
         if docker build --no-cache \
             -f docker/Dockerfile.backend \
@@ -177,24 +271,39 @@ if [[ "$SERVICE" == "all" ]]; then
         docker_name=$(echo $service | sed 's/\//-/g')
         rm -f "build_${docker_name}.log"
     done
+    echo "Successfully built all services: ${VERSION}"
+    exit 0
 elif [[ "$SERVICE" == "keeper" ]]; then
+    # Update version in YAML file BEFORE building
+    update_yaml_version "keeper" "$VERSION"
+    
     echo "Building $SERVICE..."
-    docker build --no-cache \
+    if docker build --no-cache \
         -f docker/Dockerfile.keeper \
-        -t triggerx-keeper:${VERSION} .
+        -t triggerx-keeper:${VERSION} .; then
+        echo "Successfully built keeper:${VERSION}"
+        echo "Successfully built: ${VERSION}"
+        exit 0
+    else
+        exit 1
+    fi
 else
-    echo "Building $SERVICE..."
     # Convert service name to Docker-compatible name
     DOCKER_NAME=$(echo $SERVICE | sed 's/\//-/g')
 
-    echo "DOCKER_NAME: $DOCKER_NAME"
-    # Build a single service
+    # Update version in YAML file BEFORE building
+    update_yaml_version "$DOCKER_NAME" "$VERSION"
+    
     echo "Building $SERVICE..."
-    docker build --no-cache \
+    if docker build --no-cache \
         -f docker/Dockerfile.backend \
         --build-arg SERVICE=${SERVICE} \
         --build-arg DOCKER_NAME=${DOCKER_NAME} \
-        -t triggerx-${DOCKER_NAME}:${VERSION} .
+        -t triggerx-${DOCKER_NAME}:${VERSION} .; then
+        echo "Successfully built ${DOCKER_NAME}:${VERSION}"
+        echo "Successfully built: ${VERSION}"
+        exit 0
+    else
+        exit 1
+    fi
 fi
-
-echo "Successfully built: ${VERSION}"

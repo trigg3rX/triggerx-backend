@@ -2,69 +2,88 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"github.com/trigg3rX/triggerx-backend/pkg/env"
-)
-
-const (
-	version = "0.0.1"
+	"github.com/trigg3rX/triggerx-backend/pkg/yaml"
 )
 
 type Config struct {
 	devMode bool
+
+	// Service ports
+	httpPort string
+	grpcPort string
+
+	// Database Connection Configuration (from env)
+	dbConnection env.DatabaseConfig
+
+	// OTel exporter endpoint
 	otelExporterEndpoint string
 
-	// Scheduler RPC Port
-	conditionSchedulerRPCPort string
-
-	// Database RPC URL
-	dbServerURL string
-	// Aggregator RPC URL
-	aggregatorRPCURL string
-	// Task Dispatcher RPC URL
+	// Service RPC URL
 	taskDispatcherRPCUrl string
+	eventMonitorRPCUrl   string
 
 	// Scheduler ID for consumer groups
 	conditionSchedulerID int
 
-	// Maximum number of workers
-	maxWorkers int
-
-	// API Keys for Alchemy
-	alchemyAPIKey string
-
-	// Event Monitor Service URL
-	eventMonitorServiceURL string
+	// YAML-loaded settings
+	workers WorkersConfig
+	databaseOperations yaml.DatabaseOperationsConfig
+	metrics              yaml.MetricsConfig
+	shutdown             yaml.ShutdownConfig
+	version              yaml.VersionConfig
 }
 
-var cfg Config
-
-// Helper to detect test environment
-func isTestEnv() bool {
-	return env.GetEnvString("APP_ENV", "") == "test"
+type WorkersConfig struct {
+	MaxWorkers int `yaml:"max_workers"`
 }
+
+type YAMLConfig struct {
+	Workers  WorkersConfig  `yaml:"workers"`
+	DatabaseOperations yaml.DatabaseOperationsConfig `yaml:"database_operations"`
+	Metrics  yaml.MetricsConfig `yaml:"metrics"`
+	Shutdown yaml.ShutdownConfig `yaml:"shutdown"`
+	Version  yaml.VersionConfig  `yaml:"version"`
+}
+
+var cfg *Config
 
 // Init initializes the configuration
-func Init() error {
+func Init(configPath string) error {
+	// Load secrets from .env file
 	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
-	cfg = Config{
+
+	var yamlConfig YAMLConfig
+	if err := yaml.LoadYAML(configPath, &yamlConfig); err != nil {
+		return fmt.Errorf("error loading configuration file: %w", err)
+	}
+
+	cfg = &Config{
 		devMode:                   env.GetEnvBool("DEV_MODE", false),
-		otelExporterEndpoint:         env.GetEnvString("OTEL_EXPORTER_ENDPOINT", "localhost:4318"),
-		conditionSchedulerRPCPort: env.GetEnvString("CONDITION_SCHEDULER_RPC_PORT", "9006"),
-		dbServerURL:               env.GetEnvString("DBSERVER_RPC_URL", "http://localhost:9002"),
-		aggregatorRPCURL:          env.GetEnvString("AGGREGATOR_RPC_URL", "http://localhost:9001"),
-		taskDispatcherRPCUrl:      env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9003"),
-		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 5678),
-		maxWorkers:                env.GetEnvInt("CONDITION_SCHEDULER_MAX_WORKERS", 100),
-		alchemyAPIKey:             env.GetEnvString("ALCHEMY_API_KEY", ""),
-		eventMonitorServiceURL:    env.GetEnvString("EVENT_MONITOR_SERVICE_URL", "http://localhost:9009"),
+		httpPort:                  env.GetEnvString("CONDITION_SCHEDULER_HTTP_PORT", "9006"),
+		grpcPort:                  env.GetEnvString("CONDITION_SCHEDULER_GRPC_PORT", "9016"),
+		dbConnection:              env.GetDatabaseConfig(),
+		otelExporterEndpoint:      env.GetOTELExporterEndpoint(),
+		taskDispatcherRPCUrl:      env.GetEnvString("TASK_DISPATCHER_RPC_URL", "localhost:9017"),
+		eventMonitorRPCUrl:        env.GetEnvString("EVENT_MONITOR_RPC_URL", "localhost:9018"),
+		conditionSchedulerID:      env.GetEnvInt("CONDITION_SCHEDULER_ID", 1234),
+		workers:                   yamlConfig.Workers,
+		databaseOperations:        yamlConfig.DatabaseOperations,
+		metrics:                   yamlConfig.Metrics,
+		shutdown:                  yamlConfig.Shutdown,
+		version:                   yamlConfig.Version,
 	}
 	if err := validateConfig(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	if err := yaml.ValidateConfig(cfg); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 	if !cfg.devMode {
@@ -74,98 +93,114 @@ func Init() error {
 }
 
 func validateConfig() error {
-	if !env.IsValidPort(cfg.conditionSchedulerRPCPort) {
-		return fmt.Errorf("invalid condition scheduler RPC port: %s", cfg.conditionSchedulerRPCPort)
+	if !env.IsValidPort(cfg.httpPort) {
+		return fmt.Errorf("invalid condition scheduler HTTP Port: %s", cfg.httpPort)
 	}
-	if !env.IsValidURL(cfg.dbServerURL) {
-		return fmt.Errorf("invalid database server URL: %s", cfg.dbServerURL)
+	if !env.IsValidPort(cfg.grpcPort) {
+		return fmt.Errorf("invalid condition scheduler gRPC Port: %s", cfg.grpcPort)
 	}
-	if !env.IsValidURL(cfg.aggregatorRPCURL) {
-		return fmt.Errorf("invalid aggregator RPC URL: %s", cfg.aggregatorRPCURL)
+	if !env.IsValidIPAddress(cfg.dbConnection.HostAddress) {
+		return fmt.Errorf("invalid database host address: %s", cfg.dbConnection.HostAddress)
 	}
-	// Note: taskDispatcherRPCUrl is a gRPC endpoint (host:port format), not an HTTP URL
-	// so we don't validate it as a URL
+	if !env.IsValidPort(cfg.dbConnection.HostPort) {
+		return fmt.Errorf("invalid database host port: %s", cfg.dbConnection.HostPort)
+	}
+	if !env.IsValidHostPort(cfg.taskDispatcherRPCUrl) {
+		return fmt.Errorf("invalid task dispatcher RPC URL: %s", cfg.taskDispatcherRPCUrl)
+	}
+	if !env.IsValidHostPort(cfg.eventMonitorRPCUrl) {
+		return fmt.Errorf("invalid event monitor RPC URL: %s", cfg.eventMonitorRPCUrl)
+	}
+	if !env.IsValidInt(cfg.conditionSchedulerID) {
+		return fmt.Errorf("invalid condition scheduler ID: %d", cfg.conditionSchedulerID)
+	}
 	return nil
 }
 
-// IsDevMode returns whether the service is running in development mode
 func IsDevMode() bool {
 	return cfg.devMode
 }
 
 func GetVersion() string {
-	return version
+	return cfg.version.Version
 }
 
 func GetOTELExporterEndpoint() string {
 	return cfg.otelExporterEndpoint
 }
 
-// GetSchedulerRPCPort returns the scheduler RPC port
-func GetSchedulerRPCPort() string {
-	return cfg.conditionSchedulerRPCPort
+func GetHTTPPort() string {
+	return cfg.httpPort
 }
 
-// GetDBServerURL returns the database server URL
-func GetDBServerURL() string {
-	return cfg.dbServerURL
+func GetGRPCPort() string {
+	return cfg.grpcPort
 }
 
-// GetAggregatorRPCURL returns the aggregator RPC URL
-func GetAggregatorRPCURL() string {
-	return cfg.aggregatorRPCURL
+func GetDatabaseHostAddress() string {
+	return cfg.dbConnection.HostAddress
 }
 
-// GetTaskDispatcherRPCUrl returns the task dispatcher RPC URL
+func GetDatabaseHostPort() string {
+	return cfg.dbConnection.HostPort
+}
+
+func GetDatabaseTimeout() time.Duration {
+	return cfg.databaseOperations.Timeout.ToDuration()
+}
+
+func GetDatabaseRetries() int {
+	return cfg.databaseOperations.Retries
+}
+
+func GetDatabaseConnectWait() time.Duration {
+	return cfg.databaseOperations.ConnectWait.ToDuration()
+}
+
+func GetDatabaseUsername() string {
+	return cfg.dbConnection.Username
+}
+
+func GetDatabasePassword() string {
+	return cfg.dbConnection.Password
+}
+
+func GetDatabaseSSLEnabled() bool {
+	return cfg.dbConnection.SSLEnabled
+}
+
+func GetDatabaseSSLCertPath() string {
+	return cfg.dbConnection.SSLCertPath
+}
+
+func GetDatabaseSSLKeyPath() string {
+	return cfg.dbConnection.SSLKeyPath
+}
+
+func GetDatabaseSSLCAPath() string {
+	return cfg.dbConnection.SSLCAPath
+}
+
+func GetDatabaseSSLInsecureSkipVerify() bool {
+	return cfg.dbConnection.SSLInsecureSkipVerify
+}
+
 func GetTaskDispatcherRPCUrl() string {
 	return cfg.taskDispatcherRPCUrl
 }
 
-// GetMaxWorkers returns the maximum number of concurrent workers allowed
-func GetMaxWorkers() int {
-	return cfg.maxWorkers
+func GetEventMonitorRPCUrl() string {
+	return cfg.eventMonitorRPCUrl
 }
 
 func GetSchedulerID() int {
 	return cfg.conditionSchedulerID
 }
 
-// GetChainRPCUrlsTest returns local/test chain RPC URLs
-func GetChainRPCUrlsTest() map[string]string {
-	local := "http://127.0.0.1:8545"
-	return map[string]string{
-		"11155420": local, // OP Sepolia
-		"84532":    local, // Base Sepolia
-		"11155111": local, // Ethereum Sepolia
-		"421614":   local, // Arbitrum Sepolia
-	}
+func GetMaxWorkers() int {
+	return cfg.workers.MaxWorkers
 }
 
-// GetChainRPCUrls returns chain RPC URLs for production or test
-func GetChainRPCUrls() map[string]string {
-	if isTestEnv() {
-		return GetChainRPCUrlsTest()
-	}
-
-	if cfg.alchemyAPIKey == "" {
-		// Fallback to public endpoints if no Alchemy key
-		return map[string]string{
-			"11155420": "https://sepolia.optimism.io",
-			"84532":    "https://sepolia.base.org",
-			"11155111": "https://ethereum-sepolia.publicnode.com",
-			"421614":   "https://sepolia-rollup.arbitrum.io/rpc",
-		}
-	}
-
-	return map[string]string{
-		"11155420": fmt.Sprintf("https://opt-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // OP Sepolia
-		"84532":    fmt.Sprintf("https://base-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey), // Base Sepolia
-		"11155111": fmt.Sprintf("https://eth-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Ethereum Sepolia
-		"421614":   fmt.Sprintf("https://arb-sepolia.g.alchemy.com/v2/%s", cfg.alchemyAPIKey),  // Arbitrum Sepolia
-	}
-}
-
-// GetEventMonitorServiceURL returns the Event Monitor Service URL
-func GetEventMonitorServiceURL() string {
-	return cfg.eventMonitorServiceURL
+func GetShutdownTimeout() time.Duration {
+	return cfg.shutdown.Timeout.ToDuration()
 }

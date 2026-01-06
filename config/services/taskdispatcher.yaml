@@ -1,0 +1,31 @@
+# Task Dispatcher Service Configuration
+# This file contains non-sensitive configuration settings
+# Sensitive values (API keys, passwords, etc.) are loaded from .env
+
+redis:
+  pool_size: 10                    # Redis connection pool size
+  min_idle_conns: 2                 # Minimum idle connections
+  max_retries: 3                    # Maximum retry attempts
+  dial_timeout: "5s"                # Dial timeout
+  read_timeout: "3s"                # Read timeout
+  write_timeout: "3s"               # Write timeout
+  pool_timeout: "4s"                # Pool timeout
+  retry_delay: "2s"                 # Retry delay
+  request_timeout: "10s"            # Request timeout
+  initialization_timeout: "10s"     # Initialization timeout
+  max_retry_backoff: "5m"           # Maximum retry backoff
+
+# Common Configuration across all services
+database:
+  timeout: "10s"                    # Database operation timeout
+  connect_wait: "5s"                # Database connection wait time
+  retries: 3                        # Database retry attempts
+
+metrics:
+  update_interval: "30s"            # Metrics update interval
+
+shutdown:
+  timeout: "30s"                    # Graceful shutdown timeout
+
+version:
+  version: "0.3.0"                  # Service version

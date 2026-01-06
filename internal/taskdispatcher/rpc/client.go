@@ -17,7 +17,7 @@ type TaskDispatcherClient struct {
 }
 
 // NewTaskDispatcherClient creates a new TaskDispatcherClient
-func NewTaskDispatcherClient(address string, logger observability.Logger) (*TaskDispatcherClient, error) {
+func NewTaskDispatcherClient(address string, logger observability.Logger, tracer observability.Tracer) (*TaskDispatcherClient, error) {
 	config := rpcclient.Config{
 		ServiceName: "TaskDispatcher",
 		Timeout:     30 * time.Second,
@@ -27,7 +27,7 @@ func NewTaskDispatcherClient(address string, logger observability.Logger) (*Task
 		PoolTimeout: 5 * time.Second,
 	}
 
-	client := rpcclient.NewClient(config, logger)
+	client := rpcclient.NewClient(config, logger, tracer)
 
 	return &TaskDispatcherClient{
 		client: client,

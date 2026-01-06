@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"fmt"
 	"net/http"
 	"runtime"
 	"time"
@@ -21,11 +20,12 @@ type prometheusMetrics interface {
 type Collector struct {
 	handler http.Handler
 	metrics observability.Metrics
+	logger  observability.Logger
 }
 
 // NewCollector creates a new metrics collector
 // If metrics is nil, it falls back to a not-implemented handler
-func NewCollector(metrics observability.Metrics) *Collector {
+func NewCollector(metrics observability.Metrics, logger observability.Logger) *Collector {
 	var handler http.Handler
 
 	if metrics != nil {
@@ -40,8 +40,8 @@ func NewCollector(metrics observability.Metrics) *Collector {
 				handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusNotImplemented)
 					_, err := w.Write([]byte("Prometheus export is not enabled"))
-					if err != nil {
-						fmt.Println("Failed to write response:", err)
+					if err != nil && logger != nil {
+						logger.Error(r.Context(), "Failed to write response", observability.Error(err))
 					}
 				})
 			}
@@ -50,8 +50,8 @@ func NewCollector(metrics observability.Metrics) *Collector {
 			handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotImplemented)
 				_, err := w.Write([]byte("Metrics does not support Prometheus export"))
-				if err != nil {
-					fmt.Println("Failed to write response:", err)
+				if err != nil && logger != nil {
+					logger.Error(r.Context(), "Failed to write response", observability.Error(err))
 				}
 			})
 		}
@@ -60,8 +60,8 @@ func NewCollector(metrics observability.Metrics) *Collector {
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotImplemented)
 			_, err := w.Write([]byte("Metrics not initialized"))
-			if err != nil {
-				fmt.Println("Failed to write response:", err)
+			if err != nil && logger != nil {
+				logger.Error(r.Context(), "Failed to write response", observability.Error(err))
 			}
 		})
 	}
@@ -69,6 +69,7 @@ func NewCollector(metrics observability.Metrics) *Collector {
 	return &Collector{
 		handler: handler,
 		metrics: metrics,
+		logger:  logger,
 	}
 }
 

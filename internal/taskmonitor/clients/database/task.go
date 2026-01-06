@@ -364,6 +364,26 @@ func (dm *DatabaseClient) GetKeeperIds(ctx context.Context, keeperAddresses []st
 	return keeperIds, nil
 }
 
+// GetConsensusAddressByKeeperAddress gets the consensus address for a given keeper address
+func (dm *DatabaseClient) GetConsensusAddressByKeeperAddress(ctx context.Context, keeperAddress string) (string, error) {
+	keeperAddress = strings.ToLower(keeperAddress)
+	var consensusAddress string
+
+	iter := dm.db.NewQuery(queries.GetConsensusAddressByKeeperAddress, keeperAddress).Iter()
+	defer func() {
+		if cerr := iter.Close(); cerr != nil {
+			dm.logger.Error(ctx, "Error closing iterator", observability.Error(cerr))
+		}
+	}()
+
+	if !iter.Scan(&consensusAddress) {
+		dm.logger.Error(ctx, "Failed to get consensus address for keeper", observability.String("keeper_address", keeperAddress))
+		return "", fmt.Errorf("keeper not found for address %s", keeperAddress)
+	}
+
+	return consensusAddress, nil
+}
+
 // UpdateScriptStorage updates script storage for a custom job (TaskDefinitionID = 7)
 // This is called after task execution to persist storage updates from the custom script
 func (dm *DatabaseClient) UpdateScriptStorage(ctx context.Context, jobID *big.Int, storageUpdates map[string]string) error {
