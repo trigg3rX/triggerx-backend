@@ -186,7 +186,7 @@ func (s *Server) RegisterRoutes(ctx context.Context, router *gin.Engine, dockerE
 	}
 
 	// Create handler w/ HTTP client, Redis client, and condition scheduler gRPC client
-	handler := handlers.NewHandler(s.db, s.logger, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient, conditionSchedulerClient)
+	handler := handlers.NewHandler(s.db, s.logger, s.tracer, s.notificationConfig, dockerExecutor, s.hub, publisher, httpClient, s.redisClient, conditionSchedulerClient)
 
 	// Register metrics endpoint at root level without middleware
 	router.GET("/metrics", gin.WrapH(metrics.NewCollector(s.obsMetrics, s.logger).Handler()))

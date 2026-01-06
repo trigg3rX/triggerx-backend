@@ -5,37 +5,74 @@ import (
 	"fmt"
 	"math/big"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/trigg3rX/triggerx-backend/pkg/observability"
 	commonTypes "github.com/trigg3rX/triggerx-backend/pkg/types"
 )
 
 // notifyConditionScheduler sends a notification to the condition scheduler via gRPC
 func (h *Handler) notifyConditionScheduler(ctx context.Context, jobID *big.Int, scheduleConditionJobData commonTypes.ScheduleConditionJobData) (bool, error) {
+	ctx, span := h.tracer.Start(ctx, "rpc.schedule_condition_job",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("rpc.service", "condition-scheduler"),
+			attribute.String("rpc.method", "schedule-job"),
+			attribute.String("job.id", jobID.String()),
+			attribute.Int("task_definition_id", scheduleConditionJobData.TaskDefinitionID),
+		),
+	)
+	defer span.End()
+
 	if h.conditionSchedulerClient == nil {
-		return false, fmt.Errorf("condition scheduler gRPC client not initialized")
+		err := fmt.Errorf("condition scheduler gRPC client not initialized")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return false, err
 	}
 
 	if err := h.conditionSchedulerClient.ScheduleJob(ctx, &scheduleConditionJobData); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to schedule job")
 		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to notify condition scheduler for job", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return false, err
 	}
 
+	span.SetStatus(codes.Ok, "")
 	h.logger.Info(ctx, "Successfully sent data to condition scheduler via gRPC", observability.String("job_id", jobID.String()))
 	return true, nil
 }
 
 // notifyPauseToConditionScheduler sends an unschedule notification to the condition scheduler via gRPC
 func (h *Handler) notifyPauseToConditionScheduler(ctx context.Context, jobID *big.Int) (bool, error) {
+	ctx, span := h.tracer.Start(ctx, "rpc.unschedule_condition_job",
+		observability.WithSpanKind(trace.SpanKindClient),
+		observability.WithAttributes(
+			attribute.String("rpc.service", "condition-scheduler"),
+			attribute.String("rpc.method", "unschedule-job"),
+			attribute.String("job.id", jobID.String()),
+		),
+	)
+	defer span.End()
+
 	if h.conditionSchedulerClient == nil {
-		return false, fmt.Errorf("condition scheduler gRPC client not initialized")
+		err := fmt.Errorf("condition scheduler gRPC client not initialized")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return false, err
 	}
 
 	jobIDBigInt := commonTypes.NewBigInt(jobID)
 	if err := h.conditionSchedulerClient.UnscheduleJob(ctx, jobIDBigInt); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to unschedule job")
 		h.logger.Error(ctx, "[NotifyConditionScheduler] Failed to unschedule job in condition scheduler", observability.Int64("job_id", jobID.Int64()), observability.Error(err))
 		return false, err
 	}
 
+	span.SetStatus(codes.Ok, "")
 	h.logger.Info(ctx, "Successfully unscheduled job in condition scheduler via gRPC", observability.String("job_id", jobID.String()))
 	return true, nil
 }
